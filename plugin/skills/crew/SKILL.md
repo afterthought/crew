@@ -5,7 +5,7 @@ description: Manage Chuck's teams of Claude agents running in herdr: see which t
 
 # Managing teams with crew
 
-A team is a set of Claude agents in one herdr tab or workspace: a conductor that keeps the coders fed and reports status, fable for design, an explorer that writes OpenSpec changes and the backlog, ops for everything live, and a pool of coders. A coder builds one change at a time inside that change's own worktree and merges each finished group to main through the repository's gate, so main is always a tested state and two changes can be built at once. Each agent's whole brief is its system prompt, rendered from `plugin/roles/<role>.md` and the team's folder under `teams/<org>/<team>/`. Nothing a team needs lives in an agent's head: the work list and the commits are the state. That is why restarting an agent is cheap and is the normal cure.
+A team is a set of Claude agents in one herdr tab or workspace: a conductor that keeps the coders fed and reports status, fable for design, an explorer that writes OpenSpec changes and the backlog, ops for everything live, a pool of coders, and a verifier that runs only when called. A coder builds one change at a time inside that change's own worktree, with unit tests only. A finished group is checked against its change by a fresh verifier (`/opsx:verify`), the conductor and the user decide what to do with any findings, and only then does the coder merge to main through the repository's full gate. Main is always a verified, tested state, and two changes can be built at once. The second coder onward and the verifier have a pane only while they hold a change. Each agent's whole brief is its system prompt, rendered from `plugin/roles/<role>.md` and the team's folder under `teams/<org>/<team>/`. Nothing a team needs lives in an agent's head: the work list and the commits are the state. That is why restarting an agent is cheap and is the normal cure.
 
 The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`.
 
@@ -17,6 +17,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`.
 | bring back agents that died, conversations intact | `crew resume <team> [role...]` |
 | clear one agent and restore its name | `crew clear <team> <role>` |
 | give a coder a change: makes its worktree, starts the coder fresh inside it | `crew assign <team> <coder-n> <change>` |
+| start the verifier inside the worktree a coder built in | `crew assign <team> verifier <change>` |
 | free a coder whose change is merged; its worktree goes | `crew release <team> <coder-n>` |
 | end a team's sessions | `crew down <team>` |
 

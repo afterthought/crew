@@ -16,8 +16,8 @@ DESIGN=$ORG_ROOT/$DESIGN_REPO
 TEAM_CMD=$CREW_HOME/plugin/bin/crew
 state=$HOME/.local/state/$TEAM-team
 # Agent names are unique across a herdr session, so every one carries its team.
-CONDUCTOR=$TEAM-conductor FABLE=$TEAM-fable EXPLORER=$TEAM-explorer OPS=$TEAM-ops
+CONDUCTOR=$TEAM-conductor FABLE=$TEAM-fable EXPLORER=$TEAM-explorer OPS=$TEAM-ops VERIFIER=$TEAM-verifier
 coder_roles=(); CODER_NAMES=
 for n in $(seq "$CODERS"); do coder_roles+=("coder-$n"); CODER_NAMES+="${CODER_NAMES:+, }\`$TEAM-coder-$n\`"; done
 SELF=${CREW_SELF:-}
-export TEAM ORG MACHINE SESSION KIT DESIGN TEAM_CMD ORG_ROOT CREW_HOME CODERS CODER_NAMES CONDUCTOR FABLE EXPLORER OPS SELF
+export TEAM ORG MACHINE SESSION KIT DESIGN TEAM_CMD ORG_ROOT CREW_HOME CODERS CODER_NAMES CONDUCTOR FABLE EXPLORER OPS VERIFIER SELF

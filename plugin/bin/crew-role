@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Run one team role in the current pane: crew-role <team> conductor|fable|explorer|ops|coder-N [resume]
+# Run one team role in the current pane: crew-role <team> conductor|fable|explorer|ops|coder-N|verifier [resume]
 # With "resume" the role picks its last conversation back up, by the name it was started under, with its brief and tools intact.
 set -euo pipefail
-team=${1:?usage: crew-role <team> conductor|fable|explorer|ops|coder-N}
-role=${2:?usage: crew-role <team> conductor|fable|explorer|ops|coder-N}
+team=${1:?usage: crew-role <team> conductor|fable|explorer|ops|coder-N|verifier}
+role=${2:?usage: crew-role <team> conductor|fable|explorer|ops|coder-N|verifier}
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/../lib/team-env.sh"
 wb=$DESIGN
@@ -30,6 +30,13 @@ case $role in
     [[ -n $work && -d $work ]] || { echo "$TEAM-$role holds no change. Give it one with: crew assign $team $role <change>" >&2; exit 2; }
     cd "$work"; name=$TEAM-$role
     args=(--model 'opus[1m]' --effort xhigh --add-dir "$wb" --add-dir "$KIT")
+    ;;
+  verifier)
+    work=$(awk '$1=="verifier"{print $3}' "$state/assignments" 2>/dev/null)
+    [[ -n $work && -d $work ]] || { echo "$VERIFIER holds no change. Give it one with: crew assign $team verifier <change>" >&2; exit 2; }
+    cd "$work"; name=$VERIFIER
+    args=(--model 'opus[1m]' --effort high --add-dir "$wb" --add-dir "$KIT"
+      --allowed-tools 'Bash(openspec:*)' "${git_read[@]}")
     ;;
   ops)
     cd "$KIT"; name=$OPS
