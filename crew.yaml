@@ -1,0 +1,73 @@
+# Every machine and every team, as data. The role briefs are built from this file; nothing about a team lives anywhere else.
+
+machines:
+  - name: mac-studio
+    ssh: ""                     # empty: crew runs here when `hostname -s` is this name
+    crew_home: /Users/chuck/Code/github_afterthought/crew/main
+    org_roots:
+      willdan: /Users/chuck/Code/clients/github_willdan
+      agentplot: /Users/chuck/Code/github_agentplot
+
+teams:
+  - name: switchboard
+    system: Switchboard
+    org: willdan
+    machine: mac-studio
+    session: willdan            # the herdr session the team's workspace lives in
+    coders: 2
+    kit:    { name: switchboard-kit,    path: switchboard-kit/main }
+    design: { name: willdan-blueprints, path: willdan-blueprints/main }
+    record:                     # what the conductor treats as the whole record
+      - { repo: kit,    path: docs/spec/,            holds: "how Switchboard behaves; contracts are in `docs/spec/contracts/`" }
+      - { repo: kit,    path: openspec/changes/,     holds: "the work list" }
+      - { repo: kit,    path: openspec/backlog.md,   holds: "what is waiting for a later change" }
+      - { repo: kit,    path: plan-mvp-stage1.md,    holds: "the stage 1 plan" }
+      - { repo: design, path: books/switchboard-kit/, holds: "where Switchboard is going, and the context map" }
+    design_homes:               # where fable writes, first match wins
+      - { repo: kit,    path: docs/spec/,                 holds: "how Switchboard behaves and what it is built from, including a plan the user has talked through; contracts go in `docs/spec/contracts/`" }
+      - { repo: design, path: books/switchboard-kit/src/, holds: "where Switchboard is going", style: books/CLAUDE.md, only_when: "a report changes the destination, not for build detail" }
+    plans: [plan-mvp-stage1.md]
+    proof_tiers: docs/spec/self-hosting.md
+    unit_tests: "devenv shell -- env -u AWS_ENDPOINT_URL suite-test"
+    full_suite: "devenv shell -- suite-verify"
+    merge: "wt merge --no-squash --no-remove"
+    worktree:
+      prepare: "PATH=$KIT/.devenv/profile/bin:$PATH bun install --frozen-lockfile"
+      commit: "git -c core.hooksPath=/dev/null commit"
+      commit_why: "the commit hook is bound to the main checkout's path; the merge runs the unit tests on what lands"
+    emulator:
+      what: "the local AWS emulator on `:4566`"
+      owner: "the main checkout's `devenv up`"
+      never_from_a_worktree: ["devenv up", "ministack-seed"]
+    dev_servers: dev-servers
+    console: { mockup: prototype/, more_mocks: docs/design/, says_what_is_true: docs/spec/ }
+    known_red: []
+
+  - name: breadboard
+    system: Breadboard
+    org: willdan
+    machine: mac-studio
+    session: willdan
+    coders: 2
+    kit:    { name: breadboard-kit,     path: breadboard-kit/main }
+    design: { name: willdan-blueprints, path: willdan-blueprints/main }
+    record:
+      - { repo: kit,    path: openspec/changes/,     holds: "the work list" }
+      - { repo: kit,    path: openspec/backlog.md,   holds: "what is waiting for a later change" }
+      - { repo: kit,    path: books/commissioning/,  holds: "how the deployment is stood up and proven" }
+      - { repo: design, path: books/breadboard-kit/, holds: "how Breadboard behaves and where it is going, and the context map" }
+    design_homes:
+      - { repo: design, path: books/breadboard-kit/src/, holds: "how Breadboard behaves and where it is going, including a plan the user has talked through", style: books/CLAUDE.md }
+      - { repo: kit,    path: books/commissioning/src/,  holds: "how the deployment is stood up and proven" }
+    plans: []
+    proof_tiers: ""
+    unit_tests: ""              # breadboard-kit has no unit-only command yet; its merge check is the kit's own
+    full_suite: "devenv shell -- suite-verify"
+    merge: "wt merge --no-squash --no-remove"
+    worktree: { prepare: "", commit: "", commit_why: "" }
+    emulator: {}
+    dev_servers: dev-servers
+    console: { mockup: node-bun/apps/brd-console, more_mocks: "", says_what_is_true: "the book" }
+    known_red:
+      - check: suite-manifest
+        why: "Switchboard's manifest schema does not yet accept the `implicit` key; it waits on switchboard-kit's change `the-executors-leg-for-a-domain-setting` and turns green with no edit here"
