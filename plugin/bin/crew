@@ -1,28 +1,29 @@
 #!/usr/bin/env bash
 # crew: run teams of agents in herdr.
 #
-#   crew list                      the teams that are defined
-#   crew status  [team]            each agent's state, context use, compactions and session age
-#   crew up      <team>            open the team's workspace and start every role
-#   crew restart <team> [role...]  end the session and start a fresh one in the same pane (all roles by default)
-#   crew resume  <team> [role...]  bring back roles that are not up, each with its last conversation
-#   crew clear   <team> <role>     /clear the agent and give it its name back
-#   crew down    <team>            end every role's session; the panes stay
+#   crew list                          the teams that are defined
+#   crew status  [team]                each agent's state, context use, compactions, age, and the change a coder holds
+#   crew up      <team>                open the team's panes and start every role that has work to be in
+#   crew restart <team> [role...]      end the session and start a fresh one in the same pane (all roles by default)
+#   crew resume  <team> [role...]      bring back roles that are not up, each with its last conversation
+#   crew clear   <team> <role>         /clear the agent and give it its name back
+#   crew assign  <team> <coder-n> <change>   make the change's worktree and start that coder fresh inside it
+#   crew release <team> <coder-n>      end that coder and free it; the merged worktree is removed
+#   crew down    <team>                end every role's session; the panes stay
 #
-# A role is conductor, fable, explorer, coder or ops. Add --force to restart or clear an agent that is working.
-# A fresh session gets its whole brief from the role template as its system prompt, so nothing is carried over
-# and nothing needs to be: the work list and the commits are the state.
+# A role is conductor, fable, explorer, ops or coder-1 … coder-N. Add --force to act on an agent that is working.
+# A fresh session gets its whole brief as its system prompt, so nothing is carried over and nothing needs to be:
+# the work list and the commits are the state. A coder runs only while it holds a change.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-# Every herdr call goes to the team's session on the team's machine. A team on another machine is reached over SSH,
-# where the same herdr commands run against that machine's own server: pane and agent ids exist only there.
-h() {
-  if [[ -z ${SSH_TARGET:-} || $(hostname -s) == "$MACHINE" ]]; then herdr --session "$SESSION" "$@"
-  else ssh -o BatchMode=yes "$SSH_TARGET" herdr --session "$SESSION" "$(printf '%q ' "$@")"; fi
-}
+# Every call goes to the team's herdr session on the team's machine. A team on another machine is reached over SSH,
+# where the same commands run against that machine's own server: pane and agent ids exist only there.
+local_team() { [[ -z ${SSH_TARGET:-} || $(hostname -s) == "$MACHINE" ]]; }
+on_machine() { if local_team; then "$@"; else ssh -o BatchMode=yes "$SSH_TARGET" "$(printf '%q ' "$@")"; fi; }
+h() { on_machine herdr --session "$SESSION" "$@"; }
+in_kit() { on_machine env -C "$KIT" "$@"; }
 teams() { (cd "$here/../../teams" && ls -d */* 2>/dev/null); }
-roles=(conductor fable explorer coder ops)
 
 force=0; args=()
 for a in "$@"; do [[ $a == --force ]] && force=1 || args+=("$a"); done
@@ -31,14 +32,23 @@ cmd=${1:-}; team=${2:-}
 
 load() {
   [[ -n $team ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }
-  . "$here/../lib/team-env.sh"; wb=$DESIGN; panes=$state/panes; mkdir -p "$state"
-  mkdir -p "${REPORTS/#\~/$HOME}"; touch "$panes"
+  . "$here/../lib/team-env.sh"
+  panes=$state/panes; held=$state/assignments; roles=(conductor fable explorer ops "${coder_roles[@]}")
+  mkdir -p "$state" "${REPORTS/#\~/$HOME}"; touch "$panes" "$held"
 }
-name_of() { local v; v=$(tr a-z A-Z <<<"$1"); echo "${!v}"; }
-pane_of() { awk -v r="$1" '$1==r{print $2}' "$panes"; }
+name_of() { echo "$TEAM-$1"; }
+pane_of() {  # a team started before it had a pool knows its first coder as "coder"
+  local p; p=$(awk -v r="$1" '$1==r{print $2}' "$panes")
+  [[ -z $p && $1 == coder-1 ]] && p=$(awk '$1=="coder"{print $2}' "$panes")
+  echo "$p"
+}
 set_pane() { { grep -v "^$1 " "$panes" || true; echo "$1 $2"; } > "$panes.new"; mv "$panes.new" "$panes"; }
-pane_live() { [[ -n $1 ]] && h pane get "$1" >/dev/null 2>&1; }
+change_of() { awk -v r="$1" '$1==r{print $2}' "$held"; }
+path_of() { awk -v r="$1" '$1==r{print $3}' "$held"; }
+is_coder() { [[ $1 == coder-* ]]; }
+pane_live() { [[ -n ${1:-} ]] && h pane get "$1" >/dev/null 2>&1; }
 agent_status() { [[ -n ${1:-} ]] || return 0; h agent get "$1" 2>/dev/null | jq -r '.result.agent.agent_status // empty' 2>/dev/null || true; }
+known_role() { local r; for r in "${roles[@]}"; do [[ $r == "$1" ]] && return 0; done; echo "no role '$1' on $TEAM. roles: ${roles[*]}" >&2; exit 2; }
 
 give_name() {  # herdr drops an agent's name whenever its session changes
   local pane=$1 name=$2
@@ -55,30 +65,47 @@ stop() {
   h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true; sleep 2
 }
 
-start() {
+start() {  # start <role> [resume]
   local role=$1 pane name; pane=$(pane_of "$role"); name=$(name_of "$role")
+  if is_coder "$role" && [[ -z $(change_of "$role") ]]; then echo "$name holds no change; it starts when one is assigned"; return 0; fi
   # A Claude that died badly leaves the pane reporting mouse movement, which types escape codes into the shell
   # and into whatever is run next. Clear the line and switch the reporting off first.
   h pane send-keys "$pane" ctrl+c >/dev/null 2>&1 || true
   h pane run "$pane" "printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?2004l'; clear" >/dev/null 2>&1 || true
   sleep 1
   h pane run "$pane" "bash $CREW_HOME/plugin/bin/crew-role $team $role ${2:-}" >/dev/null
-  give_name "$pane" "$name" && echo "$name ${2:+resumed }${2:-started} in $pane" | sed 's/resumed resume/resumed/' 
+  give_name "$pane" "$name" || return 1
+  # Claude asks whether a folder it has not seen is trusted. A coder's folder is a worktree crew made from the
+  # team's own repository, which is trusted on main, so that one question is answered for it. Nothing else is.
+  if is_coder "$role"; then
+    for _ in $(seq 15); do
+      sleep 2
+      if h pane read "$pane" --source visible --lines 30 2>/dev/null | command grep -q "Yes, I trust this folder"; then
+        h agent send-keys "$pane" down enter >/dev/null 2>&1 || true; sleep 3; break
+      fi
+      [[ $(agent_status "$pane") == idle ]] && break
+    done
+  fi
+  if [[ -n ${2:-} ]]; then echo "$name resumed in $pane"; else echo "$name started in $pane"; fi
 }
 
 ensure_panes() {  # a role with no live pane gets one beside its neighbour
-  local c f e k o
+  local c f e k o prev p r
+  split() { h pane split "$1" --direction "$2" --cwd "$3" --no-focus | jq -r '.result.pane.pane_id'; }
   c=$(pane_of conductor)
   if ! pane_live "$c"; then
-    local ws; ws=$(h workspace create --cwd "$wb" --label "$TEAM" --no-focus)
+    local ws; ws=$(h workspace create --cwd "$DESIGN" --label "$TEAM" --no-focus)
     c=$(jq -r '.result.root_pane.pane_id' <<<"$ws"); set_pane conductor "$c"
     h tab rename "$(jq -r '.result.tab.tab_id' <<<"$ws")" "$TEAM" >/dev/null
   fi
-  split() { h pane split "$1" --direction "$2" --cwd "$3" --no-focus | jq -r '.result.pane.pane_id'; }
-  f=$(pane_of fable);    pane_live "$f" || { f=$(split "$c" right "$wb");  set_pane fable "$f"; }
-  k=$(pane_of coder);    pane_live "$k" || { k=$(split "$c" down  "$KIT"); set_pane coder "$k"; }
-  e=$(pane_of explorer); pane_live "$e" || { e=$(split "$f" down  "$KIT"); set_pane explorer "$e"; }
+  f=$(pane_of fable);    pane_live "$f" || { f=$(split "$c" right "$DESIGN"); set_pane fable "$f"; }
+  k=$(pane_of coder-1);  pane_live "$k" || { k=$(split "$c" down "$KIT"); }; set_pane coder-1 "$k"
+  e=$(pane_of explorer); pane_live "$e" || { e=$(split "$f" down "$KIT"); set_pane explorer "$e"; }
   o=$(pane_of ops);      pane_live "$o" || { o=$(split "$e" right "$KIT"); set_pane ops "$o"; }
+  prev=$k
+  for r in "${coder_roles[@]:1}"; do
+    p=$(pane_of "$r"); pane_live "$p" || { p=$(split "$prev" right "$KIT"); set_pane "$r" "$p"; }; prev=$p
+  done
 }
 
 refresh_builder() { python3 "$here/../lib/render.py" "$team" builder > "$state/builder.md"; }
@@ -86,17 +113,20 @@ refresh_builder() { python3 "$here/../lib/render.py" "$team" builder > "$state/b
 greet_conductor() {  # a fresh conductor reads the record before anyone asks it anything
   local pane; pane=$(pane_of conductor)
   h agent wait "$pane" --timeout 60000 >/dev/null 2>&1 || true
-  [[ $(agent_status "$pane") == blocked ]] && { echo "$(name_of conductor) is waiting on a prompt in its pane." >&2; return; }
+  [[ $(agent_status "$pane") == blocked ]] && { echo "$(name_of conductor) is waiting on a prompt in its pane." >&2; return 0; }
   h agent prompt "$pane" "Read the record and tell me where things stand." >/dev/null 2>&1 || true
 }
 
+worktree_of() { in_kit wt list --format=json 2>/dev/null | jq -r --arg b "build/$1" '.[] | select(.branch==$b) | .path' | head -1; }
+
 status() {
   load
-  printf '%-24s %-9s %-9s %9s %5s %8s  %s\n' "$TEAM@$MACHINE" pane state context pct compacts started
+  printf '%-26s %-8s %-9s %8s %5s %8s  %-12s %s\n' "$TEAM@$MACHINE" pane state context pct compacts started holds
   for role in "${roles[@]}"; do
-    local pane st sid f tok=- pct=- comp=- born=-
-    pane=$(pane_of "$role"); st=$(agent_status "$pane" 2>/dev/null || true)
-    if [[ -n $st ]]; then
+    local pane st sid f tok=- pct=- comp=- born=- holds=
+    pane=$(pane_of "$role"); st=$(agent_status "$pane")
+    is_coder "$role" && { holds=$(change_of "$role"); [[ -z $st ]] && st=${holds:+not up}; [[ -z $st ]] && st=free; }
+    if [[ -n $(agent_status "$pane") ]] && local_team; then
       sid=$(h agent get "$pane" | jq -r '.result.agent.agent_session.value // empty' || true)
       f=$(ls "$HOME"/.claude*/projects/*/"$sid".jsonl 2>/dev/null | head -1 || true)
       if [[ -n $f ]]; then
@@ -106,9 +136,11 @@ status() {
         born=$(command grep -m1 -o '"timestamp":"[^"]*"' "$f" | cut -d'"' -f4 | cut -c6-16 || true)
       fi
     fi
-    printf '%-24s %-9s %-9s %9s %5s %8s  %s\n' "$(name_of "$role")" "${pane:--}" "${st:-not up}" "$tok" "$pct" "$comp" "$born"
+    printf '%-26s %-8s %-9s %8s %5s %8s  %-12s %s\n' "$(name_of "$role")" "${pane:--}" "${st:-not up}" "$tok" "$pct" "$comp" "$born" "$holds"
   done
 }
+
+pick_roles() { shift 2 || true; picked=("$@"); [[ ${#picked[@]} -eq 0 || -z ${picked[0]:-} ]] && picked=("${roles[@]}"); local r; for r in "${picked[@]}"; do known_role "$r"; done; }
 
 case $cmd in
   list) teams ;;
@@ -117,31 +149,58 @@ case $cmd in
   up)
     load
     for role in "${roles[@]}"; do
-      [[ -n $(agent_status "$(pane_of "$role")" 2>/dev/null || true) ]] && { echo "$(name_of "$role") is already up; use: crew restart $team" >&2; exit 1; }
+      [[ -n $(agent_status "$(pane_of "$role")") ]] && { echo "$(name_of "$role") is already up; use: crew restart $team" >&2; exit 1; }
     done
     ensure_panes; refresh_builder
     for role in "${roles[@]}"; do start "$role"; done
     greet_conductor ;;
   restart)
-    load; shift 2 || true; picked=("$@"); [[ ${#picked[@]} -eq 0 || -z ${picked[0]:-} ]] && picked=("${roles[@]}")
+    load; pick_roles "$@"
     for role in "${picked[@]}"; do stop "$role"; done
     ensure_panes; refresh_builder
     for role in "${picked[@]}"; do start "$role"; done
     [[ " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
-    load; shift 2 || true; picked=("$@"); [[ ${#picked[@]} -eq 0 || -z ${picked[0]:-} ]] && picked=("${roles[@]}")
+    load; pick_roles "$@"
     ensure_panes; refresh_builder
     for role in "${picked[@]}"; do
-      if [[ -n $(agent_status "$(pane_of "$role")" 2>/dev/null || true) ]]; then echo "$(name_of "$role") is already up"; continue; fi
+      if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
       start "$role" resume || { echo "$(name_of "$role") has no conversation to resume; starting it fresh"; start "$role"; }
     done ;;
   clear)
-    load; role=${3:?usage: crew clear <team> <role>}; pane=$(pane_of "$role"); st=$(agent_status "$pane")
+    load; role=${3:?usage: crew clear <team> <role>}; known_role "$role"; pane=$(pane_of "$role"); st=$(agent_status "$pane")
     [[ -z $st ]] && { echo "$(name_of "$role") is not up." >&2; exit 1; }
     [[ $st == working && $force == 0 ]] && { echo "$(name_of "$role") is working; add --force to clear it anyway." >&2; exit 1; }
     h agent prompt "$pane" "/clear" >/dev/null; sleep 2
     give_name "$pane" "$(name_of "$role")" && echo "$(name_of "$role") cleared" ;;
+  assign)
+    load; role=${3:?usage: crew assign <team> <coder-n> <change>}; slug=${4:?usage: crew assign <team> <coder-n> <change>}
+    known_role "$role"; is_coder "$role" || { echo "only a coder holds a change" >&2; exit 2; }
+    in_kit test -d "openspec/changes/$slug" || { echo "no change '$slug' in $KIT_REPO" >&2; exit 2; }
+    other=$(awk -v s="$slug" -v r="$role" '$2==s && $1!=r{print $1}' "$held")
+    [[ -n $other ]] && { echo "$(name_of "$other") already holds $slug" >&2; exit 1; }
+    now=$(change_of "$role"); [[ -n $now && $now != "$slug" ]] && { echo "$(name_of "$role") holds $now; release it first" >&2; exit 1; }
+    stop "$role"
+    path=$(worktree_of "$slug")
+    if [[ -z $path ]]; then
+      in_kit wt switch --create "build/$slug" --no-cd >/dev/null
+      path=$(worktree_of "$slug"); [[ -n $path ]] || { echo "the worktree for build/$slug did not appear; run 'wt list' in $KIT" >&2; exit 1; }
+      [[ -n ${WORKTREE_PREPARE:-} ]] && on_machine env -C "$path" KIT="$KIT" bash -c "$WORKTREE_PREPARE" >/dev/null
+      echo "worktree $path"
+    fi
+    { grep -v "^$role " "$held" || true; echo "$role $slug $path"; } > "$held.new"; mv "$held.new" "$held"
+    ensure_panes; start "$role" ;;
+  release)
+    load; role=${3:?usage: crew release <team> <coder-n>}; known_role "$role"
+    slug=$(change_of "$role"); [[ -n $slug ]] || { echo "$(name_of "$role") holds nothing"; exit 0; }
+    path=$(path_of "$role")
+    ahead=$(in_kit git rev-list --count "main..build/$slug" 2>/dev/null || echo 0)
+    if [[ $ahead != 0 && $force == 0 ]]; then echo "build/$slug has $ahead commits that are not on main. Have the coder merge them, or add --force to free the coder and keep the worktree." >&2; exit 1; fi
+    stop "$role"
+    [[ $ahead == 0 ]] && { on_machine env -C "$path" wt remove >/dev/null 2>&1 || true; }
+    { grep -v "^$role " "$held" || true; } > "$held.new"; mv "$held.new" "$held"
+    echo "$(name_of "$role") is free" ;;
   down)
-    load; for role in "${roles[@]}"; do stop "$role"; done; echo "$team team is down; its panes are still there." ;;
-  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    load; for role in "${roles[@]}"; do stop "$role"; done; echo "$TEAM is down; its panes are still there." ;;
+  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

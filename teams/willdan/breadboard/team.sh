@@ -7,13 +7,8 @@ MACHINE=mac-studio
 SESSION=willdan
 KIT_REPO=breadboard-kit/main
 DESIGN_REPO=willdan-blueprints/main
-CODERS=1
-# Agent names are unique across the herdr session, so every team's carry its name.
-CONDUCTOR=breadboard-conductor
-FABLE=breadboard-fable
-EXPLORER=breadboard-explorer
-CODER=breadboard-coder
-OPS=breadboard-ops
+# How many coders the team has. Each builds one change at a time, in that change's own worktree.
+CODERS=2
 REPORTS=~/.local/state/breadboard-team/reports
 FABLE_RECORDS='in the blueprints book (`books/breadboard-kit/`)'
 DESIGN_DOCS='the book'
@@ -21,3 +16,5 @@ CITE='the book chapters'
 DONT_EDIT="Don't edit \`books/breadboard-kit/\` or breadboard-kit's \`openspec/\` yourself."
 PLAN_EXAMPLE=''
 TIER='how it is proven (`suite-verify`, the local dev loop, or by hand)'
+# Run once inside a new worktree before a coder starts in it. Empty when the repository's own hooks do it.
+WORKTREE_PREPARE=''

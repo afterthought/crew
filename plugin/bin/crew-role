@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Run one team role in the current pane: crew-role <team> conductor|fable|explorer|coder|ops [resume]
+# Run one team role in the current pane: crew-role <team> conductor|fable|explorer|ops|coder-N [resume]
 # With "resume" the role picks its last conversation back up, by the name it was started under, with its brief and tools intact.
 set -euo pipefail
-team=${1:?usage: crew-role <team> conductor|fable|explorer|coder|ops}
-role=${2:?usage: crew-role <team> conductor|fable|explorer|coder|ops}
+team=${1:?usage: crew-role <team> conductor|fable|explorer|ops|coder-N}
+role=${2:?usage: crew-role <team> conductor|fable|explorer|ops|coder-N}
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/../lib/team-env.sh"
 wb=$DESIGN
@@ -13,7 +13,7 @@ case $role in
   conductor)
     cd "$wb"; name=$CONDUCTOR
     args=(--model 'opus[1m]' --effort medium --add-dir "$KIT"
-      --allowed-tools 'Bash(herdr agent:*)' "Bash($TEAM_CMD status:*)" "Bash($TEAM_CMD clear:*)" 'Bash(openspec list:*)' 'Bash(openspec status:*)' 'Bash(openspec show:*)' "${git_read[@]}")
+      --allowed-tools 'Bash(herdr agent:*)' "Bash($TEAM_CMD status:*)" "Bash($TEAM_CMD clear:*)" "Bash($TEAM_CMD assign:*)" "Bash($TEAM_CMD release:*)" 'Bash(openspec list:*)' 'Bash(openspec status:*)' 'Bash(openspec show:*)' "${git_read[@]}")
     ;;
   fable)
     cd "$wb"; name=$FABLE
@@ -25,9 +25,11 @@ case $role in
     args=(--model 'opus[1m]' --effort high --add-dir "$wb" --permission-mode acceptEdits
       --allowed-tools 'Bash(openspec:*)' "${git_read[@]}" "${git_write[@]}")
     ;;
-  coder)
-    cd "$KIT"; name=$CODER
-    args=(--model 'opus[1m]' --effort xhigh --add-dir "$wb")
+  coder-*)
+    work=$(awk -v r="$role" '$1==r{print $3}' "$state/assignments" 2>/dev/null)
+    [[ -n $work && -d $work ]] || { echo "$TEAM-$role holds no change. Give it one with: crew assign $team $role <change>" >&2; exit 2; }
+    cd "$work"; name=$TEAM-$role
+    args=(--model 'opus[1m]' --effort xhigh --add-dir "$wb" --add-dir "$KIT")
     ;;
   ops)
     cd "$KIT"; name=$OPS
@@ -36,5 +38,6 @@ case $role in
   *) echo "unknown role: $role" >&2; exit 2 ;;
 esac
 [[ ${3:-} == resume ]] && args+=(--resume "$name")
-prompt=$(python3 "$here/../lib/render.py" "$team" "$role")
+brief=$role; [[ $role == coder-* ]] && brief=coder
+prompt=$(CREW_SELF=$name python3 "$here/../lib/render.py" "$team" "$brief")
 exec claude "${args[@]}" --name "$name" --append-system-prompt "$prompt"
