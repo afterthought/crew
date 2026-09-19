@@ -23,7 +23,7 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-local_team() { [[ -z ${SSH_TARGET:-} || $(hostname -s) == "$MACHINE" ]]; }
+local_team() { [[ $(hostname -s) == "$MACHINE" ]]; }
 on_machine() { if local_team; then "$@"; else ssh -o BatchMode=yes "$SSH_TARGET" "$(printf '%q ' "$@")"; fi; }
 h() { on_machine herdr --session "$SESSION" "$@"; }
 in_kit() { on_machine env -C "$KIT" "$@"; }

@@ -1,8 +1,9 @@
 # Every machine and every team, as data. The role briefs are built from this file; nothing about a team lives anywhere else.
 
+# Where crew's own folders sit on each machine. Which machines exist, their ssh names and their herdr sessions come
+# from ~/.config/swancloud/herdr-hosts.json; a team's machine and session must both be listed there.
 machines:
   - name: mac-studio
-    ssh: ""                     # empty: crew runs here when `hostname -s` is this name
     crew_home: /Users/chuck/Code/github_afterthought/crew/main
     org_roots:
       willdan: /Users/chuck/Code/clients/github_willdan

@@ -12,11 +12,23 @@ import json, pathlib, re, shlex, subprocess, sys
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
 ROLES = ("conductor", "fable", "explorer", "ops", "coder", "verifier", "builder")
+HOSTS = pathlib.Path.home() / ".config/swancloud/herdr-hosts.json"
 
 
 def load():
     out = subprocess.run(["yq", "-o=json", "explode(.)", str(HOME / "crew.yaml")], check=True, capture_output=True).stdout
     return json.loads(out)
+
+
+def host_of(name, machine, session):
+    """The machine's entry in swancloud's generated list of herdr hosts, which owns every ssh name and session."""
+    if not HOSTS.exists():
+        sys.exit(f"{HOSTS} is missing; swancloud's home-manager writes it")
+    hosts = json.loads(HOSTS.read_text())["hosts"]
+    host = hosts.get(machine) or sys.exit(f"team {name} runs on {machine}, which {HOSTS} does not list. hosts: " + " ".join(hosts))
+    if session not in host["sessions"]:
+        sys.exit(f"team {name} uses herdr session {session}, which {HOSTS} does not list on {machine}. sessions: " + " ".join(host["sessions"]))
+    return host
 
 
 def name_of(t):
@@ -32,7 +44,8 @@ def team_of(data, name):
             if machine is None:
                 sys.exit(f"team {name} runs on {t['machine']}, which crew.yaml does not define")
             root = machine["org_roots"].get(t["org"]) or sys.exit(f"machine {machine['name']} has no org root for {t['org']}")
-            t = dict(t, _machine=machine, _root=root)
+            host = host_of(name, t["machine"], t["session"])
+            t = dict(t, _machine=dict(machine, ssh=host["ssh"]), _root=root)
             for repo in ("kit", "design"):
                 t[repo] = dict(t[repo], abs=f"{root}/{t[repo]['path']}")
             return t
