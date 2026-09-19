@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# crew: run teams of agents in herdr.
+#
+#   crew list                      the teams that are defined
+#   crew status  [team]            each agent's state, context use, compactions and session age
+#   crew up      <team>            open the team's workspace and start every role
+#   crew restart <team> [role...]  end the session and start a fresh one in the same pane (all roles by default)
+#   crew resume  <team> [role...]  bring back roles that are not up, each with its last conversation
+#   crew clear   <team> <role>     /clear the agent and give it its name back
+#   crew down    <team>            end every role's session; the panes stay
+#
+# A role is conductor, fable, explorer, coder or ops. Add --force to restart or clear an agent that is working.
+# A fresh session gets its whole brief from the role template as its system prompt, so nothing is carried over
+# and nothing needs to be: the work list and the commits are the state.
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+# Every herdr call goes to the team's session on the team's machine. A team on another machine is reached over SSH,
+# where the same herdr commands run against that machine's own server: pane and agent ids exist only there.
+h() {
+  if [[ -z ${SSH_TARGET:-} || $(hostname -s) == "$MACHINE" ]]; then herdr --session "$SESSION" "$@"
+  else ssh -o BatchMode=yes "$SSH_TARGET" herdr --session "$SESSION" "$(printf '%q ' "$@")"; fi
+}
+teams() { (cd "$here/../../teams" && ls -d */* 2>/dev/null); }
+roles=(conductor fable explorer coder ops)
+
+force=0; args=()
+for a in "$@"; do [[ $a == --force ]] && force=1 || args+=("$a"); done
+set -- "${args[@]:-}"
+cmd=${1:-}; team=${2:-}
+
+load() {
+  [[ -n $team ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }
+  . "$here/../lib/team-env.sh"; wb=$DESIGN; panes=$state/panes; mkdir -p "$state"
+  mkdir -p "${REPORTS/#\~/$HOME}"; touch "$panes"
+}
+name_of() { local v; v=$(tr a-z A-Z <<<"$1"); echo "${!v}"; }
+pane_of() { awk -v r="$1" '$1==r{print $2}' "$panes"; }
+set_pane() { { grep -v "^$1 " "$panes" || true; echo "$1 $2"; } > "$panes.new"; mv "$panes.new" "$panes"; }
+pane_live() { [[ -n $1 ]] && h pane get "$1" >/dev/null 2>&1; }
+agent_status() { [[ -n ${1:-} ]] || return 0; h agent get "$1" 2>/dev/null | jq -r '.result.agent.agent_status // empty' 2>/dev/null || true; }
+
+give_name() {  # herdr drops an agent's name whenever its session changes
+  local pane=$1 name=$2
+  for _ in $(seq 60); do h agent rename "$pane" "$name" >/dev/null 2>&1 && return 0; sleep 1; done
+  echo "$name did not come up in $pane; look at that pane." >&2; return 1
+}
+
+stop() {
+  local role=$1 pane st; pane=$(pane_of "$role"); pane_live "$pane" || return 0
+  st=$(agent_status "$pane"); [[ -z $st ]] && return 0
+  if [[ $st == working && $force == 0 ]]; then echo "$(name_of "$role") is working; add --force to end it anyway." >&2; return 1; fi
+  h agent prompt "$pane" "/exit" >/dev/null 2>&1 || h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true
+  for _ in $(seq 30); do [[ -z $(agent_status "$pane") ]] && return 0; sleep 1; done
+  h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true; sleep 2
+}
+
+start() {
+  local role=$1 pane name; pane=$(pane_of "$role"); name=$(name_of "$role")
+  # A Claude that died badly leaves the pane reporting mouse movement, which types escape codes into the shell
+  # and into whatever is run next. Clear the line and switch the reporting off first.
+  h pane send-keys "$pane" ctrl+c >/dev/null 2>&1 || true
+  h pane run "$pane" "printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?2004l'; clear" >/dev/null 2>&1 || true
+  sleep 1
+  h pane run "$pane" "bash $CREW_HOME/plugin/bin/crew-role $team $role ${2:-}" >/dev/null
+  give_name "$pane" "$name" && echo "$name ${2:+resumed }${2:-started} in $pane" | sed 's/resumed resume/resumed/' 
+}
+
+ensure_panes() {  # a role with no live pane gets one beside its neighbour
+  local c f e k o
+  c=$(pane_of conductor)
+  if ! pane_live "$c"; then
+    local ws; ws=$(h workspace create --cwd "$wb" --label "$TEAM" --no-focus)
+    c=$(jq -r '.result.root_pane.pane_id' <<<"$ws"); set_pane conductor "$c"
+    h tab rename "$(jq -r '.result.tab.tab_id' <<<"$ws")" "$TEAM" >/dev/null
+  fi
+  split() { h pane split "$1" --direction "$2" --cwd "$3" --no-focus | jq -r '.result.pane.pane_id'; }
+  f=$(pane_of fable);    pane_live "$f" || { f=$(split "$c" right "$wb");  set_pane fable "$f"; }
+  k=$(pane_of coder);    pane_live "$k" || { k=$(split "$c" down  "$KIT"); set_pane coder "$k"; }
+  e=$(pane_of explorer); pane_live "$e" || { e=$(split "$f" down  "$KIT"); set_pane explorer "$e"; }
+  o=$(pane_of ops);      pane_live "$o" || { o=$(split "$e" right "$KIT"); set_pane ops "$o"; }
+}
+
+refresh_builder() { python3 "$here/../lib/render.py" "$team" builder > "$state/builder.md"; }
+
+greet_conductor() {  # a fresh conductor reads the record before anyone asks it anything
+  local pane; pane=$(pane_of conductor)
+  h agent wait "$pane" --timeout 60000 >/dev/null 2>&1 || true
+  [[ $(agent_status "$pane") == blocked ]] && { echo "$(name_of conductor) is waiting on a prompt in its pane." >&2; return; }
+  h agent prompt "$pane" "Read the record and tell me where things stand." >/dev/null 2>&1 || true
+}
+
+status() {
+  load
+  printf '%-24s %-9s %-9s %9s %5s %8s  %s\n' "$TEAM@$MACHINE" pane state context pct compacts started
+  for role in "${roles[@]}"; do
+    local pane st sid f tok=- pct=- comp=- born=-
+    pane=$(pane_of "$role"); st=$(agent_status "$pane" 2>/dev/null || true)
+    if [[ -n $st ]]; then
+      sid=$(h agent get "$pane" | jq -r '.result.agent.agent_session.value // empty' || true)
+      f=$(ls "$HOME"/.claude*/projects/*/"$sid".jsonl 2>/dev/null | head -1 || true)
+      if [[ -n $f ]]; then
+        tok=$(command grep '"usage"' "$f" | tail -40 | jq -rs '[.[] | select(.isSidechain|not) | .message.usage | select(.) | (.input_tokens + (.cache_read_input_tokens//0) + (.cache_creation_input_tokens//0))] | last // 0' 2>/dev/null || true); tok=${tok:-0}
+        pct=$(( tok * 100 / ${WINDOW:-1000000} ))%; tok=$(( tok / 1000 ))k
+        comp=$(command grep -c '"isCompactSummary":true' "$f" || true)
+        born=$(command grep -m1 -o '"timestamp":"[^"]*"' "$f" | cut -d'"' -f4 | cut -c6-16 || true)
+      fi
+    fi
+    printf '%-24s %-9s %-9s %9s %5s %8s  %s\n' "$(name_of "$role")" "${pane:--}" "${st:-not up}" "$tok" "$pct" "$comp" "$born"
+  done
+}
+
+case $cmd in
+  list) teams ;;
+  status)
+    if [[ -n $team ]]; then status; else for team in $(teams); do status; echo; done; fi ;;
+  up)
+    load
+    for role in "${roles[@]}"; do
+      [[ -n $(agent_status "$(pane_of "$role")" 2>/dev/null || true) ]] && { echo "$(name_of "$role") is already up; use: crew restart $team" >&2; exit 1; }
+    done
+    ensure_panes; refresh_builder
+    for role in "${roles[@]}"; do start "$role"; done
+    greet_conductor ;;
+  restart)
+    load; shift 2 || true; picked=("$@"); [[ ${#picked[@]} -eq 0 || -z ${picked[0]:-} ]] && picked=("${roles[@]}")
+    for role in "${picked[@]}"; do stop "$role"; done
+    ensure_panes; refresh_builder
+    for role in "${picked[@]}"; do start "$role"; done
+    [[ " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
+  resume)
+    load; shift 2 || true; picked=("$@"); [[ ${#picked[@]} -eq 0 || -z ${picked[0]:-} ]] && picked=("${roles[@]}")
+    ensure_panes; refresh_builder
+    for role in "${picked[@]}"; do
+      if [[ -n $(agent_status "$(pane_of "$role")" 2>/dev/null || true) ]]; then echo "$(name_of "$role") is already up"; continue; fi
+      start "$role" resume || { echo "$(name_of "$role") has no conversation to resume; starting it fresh"; start "$role"; }
+    done ;;
+  clear)
+    load; role=${3:?usage: crew clear <team> <role>}; pane=$(pane_of "$role"); st=$(agent_status "$pane")
+    [[ -z $st ]] && { echo "$(name_of "$role") is not up." >&2; exit 1; }
+    [[ $st == working && $force == 0 ]] && { echo "$(name_of "$role") is working; add --force to clear it anyway." >&2; exit 1; }
+    h agent prompt "$pane" "/clear" >/dev/null; sleep 2
+    give_name "$pane" "$(name_of "$role")" && echo "$(name_of "$role") cleared" ;;
+  down)
+    load; for role in "${roles[@]}"; do stop "$role"; done; echo "$team team is down; its panes are still there." ;;
+  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

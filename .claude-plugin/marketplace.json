@@ -1,0 +1,7 @@
+{
+  "name": "crew",
+  "owner": { "name": "Chuck Swanberg" },
+  "plugins": [
+    { "name": "crew", "source": "./plugin", "description": "Run teams of Claude agents in herdr: role briefs, the crew command, and the skill for managing teams." }
+  ]
+}

@@ -1,0 +1,2 @@
+- switchboard-kit, `{{KIT}}`: `docs/spec/` (how Switchboard behaves; contracts in `docs/spec/contracts/`), `openspec/changes/` (the work list), `plan-mvp-stage1.md` (the stage 1 plan) and the code. Its CLAUDE.md says how work is done there. Run `openspec` commands from that directory.
+- willdan-blueprints (this directory): `books/switchboard-kit/` (where Switchboard is going) and the context map.

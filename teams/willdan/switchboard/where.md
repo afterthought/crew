@@ -1,0 +1,3 @@
+- How Switchboard behaves and what it is built from, including a plan the user has talked through: the page of `docs/spec/` in switchboard-kit (`{{KIT}}`) that covers it, and `docs/spec/contracts/` for a contract. Amend the page that already covers the behavior before adding a new one.
+- Where Switchboard is going: the chapter of `books/switchboard-kit/src/` in willdan-blueprints (this directory) that covers it, written the way `books/CLAUDE.md` says. Change a chapter only when a report changes the destination, not for build detail.
+- If you edit `context-map/maps/`, run `node context-map/bin/map-check.mjs --write` afterwards.

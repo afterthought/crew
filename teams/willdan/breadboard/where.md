@@ -1,0 +1,3 @@
+- How Breadboard behaves and where it is going, including a plan the user has talked through: the chapter of `books/breadboard-kit/src/` in willdan-blueprints (this directory) that covers it, written the way `books/CLAUDE.md` says. Amend the chapter that already covers the behavior before adding a new one.
+- How the deployment is stood up and proven: the page of `books/commissioning/src/` in breadboard-kit (`{{KIT}}`) that covers it.
+- If you edit `context-map/maps/`, run `node context-map/bin/map-check.mjs --write` afterwards.

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Run one team role in the current pane: crew-role <team> conductor|fable|explorer|coder|ops [resume]
+# With "resume" the role picks its last conversation back up, by the name it was started under, with its brief and tools intact.
+set -euo pipefail
+team=${1:?usage: crew-role <team> conductor|fable|explorer|coder|ops}
+role=${2:?usage: crew-role <team> conductor|fable|explorer|coder|ops}
+here=$(cd "$(dirname "$0")" && pwd)
+. "$here/../lib/team-env.sh"
+wb=$DESIGN
+git_read=('Bash(git log:*)' 'Bash(git show:*)' 'Bash(git diff:*)' 'Bash(git status:*)')
+git_write=('Bash(git add:*)' 'Bash(git commit:*)')
+case $role in
+  conductor)
+    cd "$wb"; name=$CONDUCTOR
+    args=(--model 'opus[1m]' --effort medium --add-dir "$KIT"
+      --allowed-tools 'Bash(herdr agent:*)' "Bash($TEAM_CMD status:*)" "Bash($TEAM_CMD clear:*)" 'Bash(openspec list:*)' 'Bash(openspec status:*)' 'Bash(openspec show:*)' "${git_read[@]}")
+    ;;
+  fable)
+    cd "$wb"; name=$FABLE
+    args=(--model fable --effort high --add-dir "$KIT" --permission-mode acceptEdits
+      --allowed-tools 'Bash(git -C:*)' 'Bash(herdr agent prompt:*)' "${git_read[@]}" "${git_write[@]}")
+    ;;
+  explorer)
+    cd "$KIT"; name=$EXPLORER
+    args=(--model 'opus[1m]' --effort high --add-dir "$wb" --permission-mode acceptEdits
+      --allowed-tools 'Bash(openspec:*)' "${git_read[@]}" "${git_write[@]}")
+    ;;
+  coder)
+    cd "$KIT"; name=$CODER
+    args=(--model 'opus[1m]' --effort xhigh --add-dir "$wb")
+    ;;
+  ops)
+    cd "$KIT"; name=$OPS
+    args=(--model 'opus[1m]' --effort high --add-dir "$wb")
+    ;;
+  *) echo "unknown role: $role" >&2; exit 2 ;;
+esac
+[[ ${3:-} == resume ]] && args+=(--resume "$name")
+prompt=$(python3 "$here/../lib/render.py" "$team" "$role")
+exec claude "${args[@]}" --name "$name" --append-system-prompt "$prompt"

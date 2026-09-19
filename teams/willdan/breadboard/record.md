@@ -1,0 +1,2 @@
+- breadboard-kit, `{{KIT}}`: `openspec/changes/` (the work list), `books/commissioning/` (how the deployment is stood up and proven) and the code. Its CLAUDE.md says how work is done there. Run `openspec` commands from that directory.
+- willdan-blueprints (this directory): `books/breadboard-kit/` (how Breadboard behaves and where it is going) and the context map.

@@ -1,0 +1,1 @@
+Prove work at T0 and T1 (`docs/spec/self-hosting.md`): `devenv shell -- suite-verify`, and the local world from `devenv up` and `ministack-seed`. Never deploy to AWS, touch a real account or change a credential. Start a server only the way CLAUDE.md says (`wt step tether`), probe before starting one, and never stop a server you didn't start.
