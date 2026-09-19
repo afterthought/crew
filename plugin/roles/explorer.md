@@ -12,7 +12,7 @@ These rules are the same for every agent on the team.
 - **A change is frozen once {{FABLE}} has reviewed it and a coder has been given it.** After that nobody adds a task, rewrites a task or edits its specs or design. The only edit is ticking a finished task.
 - **Everything new goes to the backlog**, `openspec/backlog.md` in {{KIT_NAME}}: a finding, an idea from the user, a nitpick, a defect that is not in the way of the task in hand. One line each, with a pointer. {{EXPLORER}} writes it. Later changes are proposed from it.
 - If a change cannot be finished as written because its premise is wrong, stop and tell the user. Don't patch the task list.
-- **A red suite on main is never backlog.** It is fixed now, as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
+- **A red suite on {{BASE}} is never backlog.** It is fixed now, as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
 - **Tasks under a heading that starts *Proof in dev* are {{OPS}}'s**, not a coder's: anything that needs a deploy, a live account, a credential, a vendor's console or the user.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. The full brief sits under *Task notes* in the change's `design.md`.
 

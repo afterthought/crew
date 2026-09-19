@@ -15,13 +15,19 @@ ROLES = ("conductor", "fable", "explorer", "ops", "coder", "verifier", "builder"
 
 
 def load():
-    out = subprocess.run(["yq", "-o=json", ".", str(HOME / "crew.yaml")], check=True, capture_output=True).stdout
+    out = subprocess.run(["yq", "-o=json", "explode(.)", str(HOME / "crew.yaml")], check=True, capture_output=True).stdout
     return json.loads(out)
+
+
+def name_of(t):
+    """<system code>-<team number>, so several teams can serve one system: brd-1, brd-2."""
+    return t.get("name") or f"{t['code']}-{t['number']}"
 
 
 def team_of(data, name):
     for t in data["teams"]:
-        if t["name"] == name:
+        if name_of(t) == name:
+            t = dict(t, name=name_of(t), base=t.get("base") or "main")
             machine = next((m for m in data["machines"] if m["name"] == t["machine"]), None)
             if machine is None:
                 sys.exit(f"team {name} runs on {t['machine']}, which crew.yaml does not define")
@@ -30,7 +36,7 @@ def team_of(data, name):
             for repo in ("kit", "design"):
                 t[repo] = dict(t[repo], abs=f"{root}/{t[repo]['path']}")
             return t
-    sys.exit(f"no team '{name}'. teams: " + " ".join(t["name"] for t in data["teams"]))
+    sys.exit(f"no team '{name}'. teams: " + " ".join(name_of(t) for t in data["teams"]))
 
 
 def names(t):
@@ -49,7 +55,7 @@ def env(t):
         "TEAM": t["name"], "SYSTEM": t["system"], "ORG": t["org"], "MACHINE": m["name"], "SSH_TARGET": m.get("ssh") or "",
         "SESSION": t["session"], "CREW_HOME": m["crew_home"], "KIT": t["kit"]["abs"], "KIT_NAME": t["kit"]["name"],
         "DESIGN": t["design"]["abs"], "CODERS": str(int(t.get("coders", 1))), "WORKTREE_PREPARE": w.get("prepare") or "",
-        "REPORTS": reports(t),
+        "REPORTS": reports(t), "BASE": t["base"],
     }
     return "\n".join(f"{k}={shlex.quote(v)}" for k, v in pairs.items()) + f'\nSTATE="$HOME/.local/state/{t["name"]}-team"'
 
@@ -67,7 +73,7 @@ def build_tokens(t, self_name):
         "DESIGN_NAME": design["name"], "CONDUCTOR": n["conductor"], "FABLE": n["fable"], "EXPLORER": n["explorer"],
         "OPS": n["ops"], "VERIFIER": n["verifier"], "CODER_NAMES": coders, "CODERS": str(len(n["coders"])),
         "TEAM_CMD": f"{t['_machine']['crew_home']}/plugin/bin/crew", "REPORTS": reports(t),
-        "FULL_SUITE": t["full_suite"], "MERGE": t["merge"],
+        "FULL_SUITE": t["full_suite"], "BASE": t["base"],
     }
     tok["ROSTER"] = (
         f"The team: `{n['conductor']}` (Opus) keeps the coders building and reports where things stand; `{n['fable']}` (Fable) owns "
@@ -122,7 +128,8 @@ def build_tokens(t, self_name):
                  "reports, patch around it or soften the check to get a green run. Any other red line is a broken build.")
     tok["PROVE"] = text
 
-    merge = f"```\n{t['merge']}\n```\n\nThe merge checks what lands with the unit tests. Never add `--no-hooks` or `--yes`."
+    cmd = t["merge"] if t["base"] == "main" else t["merge"].replace("wt merge", f"wt merge {t['base']}", 1)
+    merge = f"```\n{cmd}\n```\n\nThe merge checks what lands with the unit tests. Never add `--no-hooks` or `--yes`."
     if w.get("commit"):
         merge += f" In a worktree of this repository, commit with `{w['commit']}`: {w['commit_why']}."
     tok["WORKTREE"] = merge
@@ -160,7 +167,7 @@ if __name__ == "__main__":
     a = sys.argv[1:]
     data = load()
     if a[:1] == ["teams"]:
-        print("\n".join(t["name"] for t in data["teams"]))
+        print("\n".join(name_of(t) for t in data["teams"]))
     elif a[:1] == ["env"] and len(a) == 2:
         print(env(team_of(data, a[1])))
     elif a[:1] == ["brief"] and len(a) >= 3:

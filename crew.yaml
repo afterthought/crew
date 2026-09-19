@@ -8,8 +8,13 @@ machines:
       willdan: /Users/chuck/Code/clients/github_willdan
       agentplot: /Users/chuck/Code/github_agentplot
 
+# A team's name is <code>-<number>: brd-1, brd-2. Its agents are <name>-conductor, <name>-coder-1, and so on, and its
+# herdr workspace carries the name. Several teams may serve one system; each gives its own number, and a team that is
+# not the only one on its repository sets `base:` to the branch its coders branch from and merge to (default main).
 teams:
-  - name: switchboard
+  - &swb1
+    code: swb
+    number: 1
     system: Switchboard
     org: willdan
     machine: mac-studio
@@ -43,7 +48,8 @@ teams:
     console: { mockup: prototype/, more_mocks: docs/design/, says_what_is_true: docs/spec/ }
     known_red: []
 
-  - name: breadboard
+  - code: brd
+    number: 1
     system: Breadboard
     org: willdan
     machine: mac-studio
@@ -71,3 +77,8 @@ teams:
     known_red:
       - check: suite-manifest
         why: "Switchboard's manifest schema does not yet accept the `implicit` key; it waits on switchboard-kit's change `the-executors-leg-for-a-domain-setting` and turns green with no edit here"
+
+  # The switchboard team that was started before teams had codes. It is the same team as swb-1 under its old name,
+  # so crew can still reach it. Close it and bring up swb-1 in its place.
+  - <<: *swb1
+    name: switchboard

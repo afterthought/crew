@@ -5,6 +5,7 @@
 #   crew status  [team]                each agent's state, context use, compactions, age, and the change it holds
 #   crew up      <team>                open the team's workspace and start its standing roles
 #   crew rebuild <team>                end everything the team has, close its old panes, and stand it up fresh
+#   crew close   <team>                end everything the team has and close its panes; nothing is started
 #   crew restart <team> [role...]      end the session and start a fresh one in the same pane (standing roles by default)
 #   crew resume  <team> [role...]      bring back roles that are not up, each with its last conversation
 #   crew clear   <team> <role>         /clear the agent and give it its name back
@@ -128,6 +129,13 @@ close_pane() { local pane; pane=$(pane_of "$1"); pane_live "$pane" && h pane clo
 refresh_builder() { python3 "$here/../lib/crew.py" brief "$team" builder > "$state/builder.md"; }
 worktree_of() { in_kit wt list --format=json 2>/dev/null | jq -r --arg b "build/$1" '.[] | select(.branch==$b) | .path' | head -1; }
 
+teardown() {  # end every session the team has and give its panes back
+  local role pane
+  for role in $(awk '{print $1}' "$panes"); do stop "$role" || true; done
+  for pane in $(awk '{print $2}' "$panes"); do pane_live "$pane" && h pane close "$pane" >/dev/null 2>&1 || true; done
+  : > "$panes"; : > "$held"; : > "$layout"
+}
+
 greet_conductor() {  # a fresh conductor reads the record before anyone asks it anything
   local pane; pane=$(pane_of conductor)
   h agent wait "$pane" --timeout 60000 >/dev/null 2>&1 || true
@@ -174,11 +182,10 @@ case $cmd in
     ensure_standing; refresh_builder
     for role in "${standing[@]}"; do start "$role"; done
     greet_conductor ;;
+  close)
+    load; force=1; teardown; echo "$TEAM is closed" ;;
   rebuild)
-    load; force=1
-    for role in $(awk '{print $1}' "$panes"); do stop "$role" || true; done
-    for pane in $(awk '{print $2}' "$panes"); do pane_live "$pane" && h pane close "$pane" >/dev/null 2>&1 || true; done
-    : > "$panes"; : > "$held"; : > "$layout"
+    load; force=1; teardown
     ensure_standing; refresh_builder
     for role in "${standing[@]}"; do start "$role"; done
     greet_conductor ;;
@@ -215,7 +222,7 @@ case $cmd in
     path=$(worktree_of "$slug")
     if [[ -z $path && $role == verifier ]]; then echo "change $slug has no worktree: verify runs where a coder built" >&2; exit 1; fi
     if [[ -z $path ]]; then
-      in_kit wt switch --create "build/$slug" --no-cd >/dev/null
+      in_kit wt switch --create "build/$slug" --base "$BASE" --no-cd >/dev/null
       path=$(worktree_of "$slug"); [[ -n $path ]] || { echo "the worktree for build/$slug did not appear; run 'wt list' in $KIT" >&2; exit 1; }
       [[ -n ${WORKTREE_PREPARE:-} ]] && on_machine env -C "$path" KIT="$KIT" bash -c "$WORKTREE_PREPARE" >/dev/null
     fi
@@ -226,13 +233,13 @@ case $cmd in
     slug=$(change_of "$role"); [[ -n $slug ]] || { echo "$(name_of "$role") holds nothing"; exit 0; }
     path=$(path_of "$role"); ahead=0
     if [[ $role == coder-* ]]; then
-      ahead=$(in_kit git rev-list --count "main..build/$slug" 2>/dev/null || echo 0)
-      if [[ $ahead != 0 && $force == 0 ]]; then echo "build/$slug has $ahead commits that are not on main. Have the coder merge them, or add --force to free the coder and keep the worktree." >&2; exit 1; fi
+      ahead=$(in_kit git rev-list --count "$BASE..build/$slug" 2>/dev/null || echo 0)
+      if [[ $ahead != 0 && $force == 0 ]]; then echo "build/$slug has $ahead commits that are not on $BASE. Have the coder merge them, or add --force to free the coder and keep the worktree." >&2; exit 1; fi
     fi
     stop "$role"; close_pane "$role"
     [[ $role == coder-* && $ahead == 0 ]] && { on_machine env -C "$path" wt remove >/dev/null 2>&1 || true; }
     drop "$held" "$role"; echo "$(name_of "$role") is free" ;;
   down)
     load; for role in "${roles[@]}"; do stop "$role"; done; echo "$TEAM is down; its panes are still there." ;;
-  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

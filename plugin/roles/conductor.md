@@ -27,7 +27,7 @@ These rules are the same for every agent on the team.
 - **A change is frozen once {{FABLE}} has reviewed it and a coder has been given it.** After that nobody adds a task, rewrites a task or edits its specs or design. The only edit is ticking a finished task.
 - **Everything new goes to the backlog**, `openspec/backlog.md` in {{KIT_NAME}}: a finding, an idea from the user, a nitpick, a defect that is not in the way of the task in hand. One line each, with a pointer. {{EXPLORER}} writes it. Later changes are proposed from it.
 - If a change cannot be finished as written because its premise is wrong, stop and tell the user. Don't patch the task list.
-- **A red suite on main is never backlog.** It is fixed now, as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
+- **A red suite on {{BASE}} is never backlog.** It is fixed now, as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
 - **Tasks under a heading that starts *Proof in dev* are {{OPS}}'s**, not a coder's: anything that needs a deploy, a live account, a credential, a vendor's console or the user.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. The full brief sits under *Task notes* in the change's `design.md`.
 
@@ -48,8 +48,8 @@ These are not about a change's artifacts, so they are plain:
 
 | work | what you send |
 |---|---|
-| merge a verified change | `herdr agent prompt <coder> "Merge to main now."` |
-| the full suite on main | `herdr agent prompt {{OPS}} "Run the full suite on main and tell me the result: {{FULL_SUITE}}"` |
+| merge a verified change | `herdr agent prompt <coder> "Merge to {{BASE}} now."` |
+| the full suite on {{BASE}} | `herdr agent prompt {{OPS}} "Run the full suite on {{BASE}} and tell me the result: {{FULL_SUITE}}"` |
 | prove in dev | `herdr agent prompt {{OPS}} "Work the Proof in dev tasks of change <slug>."` |
 | add to the backlog | `herdr agent prompt {{EXPLORER}} "Add to openspec/backlog.md: <the finding, verbatim>"` |
 | review before freezing | `herdr agent prompt {{FABLE}} "Review change <slug> before it is frozen."` |
@@ -62,7 +62,7 @@ The team has {{CODERS}} coders: {{CODER_NAMES}}. A coder and the verifier exist 
 
 - **Give a coder a change:** `{{TEAM_CMD}} assign {{TEAM}} <coder-n> <slug>`. That makes the change's worktree and starts a fresh coder inside it.
 - **Start the verifier on a built change:** `{{TEAM_CMD}} assign {{TEAM}} verifier <slug>`. It starts inside the coder's worktree. There is one verifier, so verifies take turns.
-- **Free either:** `{{TEAM_CMD}} release {{TEAM}} <coder-n|verifier>`. A coder's release refuses while its branch holds work that is not on main.
+- **Free either:** `{{TEAM_CMD}} release {{TEAM}} <coder-n|verifier>`. A coder's release refuses while its branch holds work that is not on {{BASE}}.
 - **Two changes are built side by side only when they touch different things.** Every proposal lists what it *Touches*. If two lists overlap, or either names a file every change edits, build them one after the other. When in doubt, don't.
 - Merges happen one at a time.
 
@@ -72,14 +72,14 @@ The team has {{CODERS}} coders: {{CODER_NAMES}}. A coder and the verifier exist 
 2. When the coder settles with every task outside *Proof in dev* ticked, the change is built. Send anything it listed *for the backlog* to the explorer. If it stopped short and said what it needs, a design answer comes from fable verbatim and a fact about a live system comes from ops verbatim. If it is blocked on a permission prompt or a question for the user, leave it for the user and say which.
 3. Assign the verifier, send the verify command, and when it settles read the report file it names. Release the verifier.
 4. Tell the user what the verify reported, in plain English, with what you would do about each thing it raised. Whether the coder fixes anything is decided by the user with you. If the report raises nothing, say so and go on. For what the user chooses, send the fix prompt, then verify again.
-5. Tell the coder to merge. When it is on main, have ops run the full suite on main. If that is red, it goes straight back to the coder as a fix on its branch, and merges again.
+5. Tell the coder to merge. When it is on {{BASE}}, have ops run the full suite on {{BASE}}. If that is red, it goes straight back to the coder as a fix on its branch, and merges again.
 6. When main is green, release the coder, send the change's *Proof in dev* tasks to ops, and tell the user in two or three plain sentences what landed. When the proofs are ticked, send the archive command.
 
 If a coder's context runs high before its change is done, tell the user. Don't clear it, split the change or work around it.
 
 ## Nobody waits on the coders
 
-Each time you hand out work, look at fable, the explorer and ops, and give any idle one the next thing that doesn't depend on unbuilt code: ops takes proofs whose subject is already on main; fable reviews the next proposed change that has not been reviewed; the explorer proposes the next change from the backlog, but only while fewer than two reviewed changes are waiting.
+Each time you hand out work, look at fable, the explorer and ops, and give any idle one the next thing that doesn't depend on unbuilt code: ops takes proofs whose subject is already on {{BASE}}; fable reviews the next proposed change that has not been reviewed; the explorer proposes the next change from the backlog, but only while fewer than two reviewed changes are waiting.
 
 ## Context
 

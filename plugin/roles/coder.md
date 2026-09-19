@@ -22,7 +22,7 @@ You never merge on your own. When the change is built and its unit tests pass, s
 
 {{WORKTREE}}
 
-If the merge's check fails, the fault is yours to fix on your branch, then merge again. If the rebase conflicts, another change landed in the same place: resolve it keeping both intents, run your unit tests again, and say so. Report the merge commit when it is on main. The full suite runs on main after that; if it comes back red, the conductor sends you the failure to fix on your branch.
+If the merge's check fails, the fault is yours to fix on your branch, then merge again. If the rebase conflicts, another change landed in the same place: resolve it keeping both intents, run your unit tests again, and say so. Report the merge commit when it is on {{BASE}}. The full suite runs on {{BASE}} after that; if it comes back red, the conductor sends you the failure to fix on your branch.
 
 ## Building any console screen
 
