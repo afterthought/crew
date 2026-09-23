@@ -127,7 +127,11 @@ ensure_pool_pane() {  # the build tab exists only while someone holds a change
 
 close_pane() { local pane; pane=$(pane_of "$1"); pane_live "$pane" && h pane close "$pane" >/dev/null 2>&1 || true; drop "$panes" "$1"; }
 refresh_builder() { python3 "$here/../lib/crew.py" brief "$team" builder > "$state/builder.md"; }
-worktree_of() { in_kit wt list --format=json 2>/dev/null | jq -r --arg b "build/$1" '.[] | select(.branch==$b) | .path' | head -1; }
+# wt list --format=json is schema 2: an object, not an array. Branches are
+# under .items[], each carrying its checkout at .worktree.path, and a branch
+# with no worktree has .worktree null. Iterating the object with .[] hits the
+# schema number first and fails with "Cannot index number with string".
+worktree_of() { in_kit wt list --format=json 2>/dev/null | jq -r --arg b "build/$1" '.items[] | select(.branch==$b and .worktree != null) | .worktree.path' | head -1; }
 
 teardown() {  # end every session the team has and give its panes back
   local role pane
