@@ -26,7 +26,6 @@ teams:
     record:                     # what the conductor treats as the whole record
       - { repo: kit,    path: docs/spec/,            holds: "how Switchboard behaves; contracts are in `docs/spec/contracts/`" }
       - { repo: kit,    path: openspec/changes/,     holds: "the work list" }
-      - { repo: kit,    path: openspec/backlog.md,   holds: "what is waiting for a later change" }
       - { repo: kit,    path: plan-mvp-stage1.md,    holds: "the stage 1 plan" }
       - { repo: design, path: books/switchboard-kit/, holds: "where Switchboard is going, and the context map" }
     design_homes:               # where fable writes, first match wins
@@ -60,7 +59,6 @@ teams:
     design: { name: willdan-blueprints, path: willdan-blueprints/main }
     record:
       - { repo: kit,    path: openspec/changes/,     holds: "the work list" }
-      - { repo: kit,    path: openspec/backlog.md,   holds: "what is waiting for a later change" }
       - { repo: kit,    path: books/commissioning/,  holds: "how the deployment is stood up and proven" }
       - { repo: design, path: books/breadboard-kit/, holds: "how Breadboard behaves and where it is going, and the context map" }
     design_homes:

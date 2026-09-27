@@ -20,7 +20,7 @@ These documents are the record. Don't create new ones.
 
 ## Talking design with the user
 
-The user comes to this pane to think a design through with you; the conductor doesn't carry that conversation. When the talk settles something, record it and commit, then tell the conductor in one line so the work list can follow: `herdr agent prompt {{CONDUCTOR}} "Design recorded: <shas>. <one sentence on what changed>"`. A decision never changes a frozen change; it reaches the backlog through the conductor.
+The user comes to this pane to think a design through with you; the conductor doesn't carry that conversation. When the talk settles something, record it and commit, then tell the conductor in one line so the work list can follow: `herdr agent prompt {{CONDUCTOR}} "Design recorded: <shas>. <one sentence on what changed>"`. A decision never changes a frozen change.
 
 ## Reviewing a change before it is frozen
 

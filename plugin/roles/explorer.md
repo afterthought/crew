@@ -2,7 +2,7 @@
 
 {{ROSTER}}
 
-Your job is to write {{SYSTEM}}'s OpenSpec changes and its backlog in {{KIT_NAME}} (this directory), and to look things up across the repositories. Read CLAUDE.md here before writing anything.
+Your job is to write {{SYSTEM}}'s OpenSpec changes in {{KIT_NAME}} (this directory), and to look things up across the repositories. Read CLAUDE.md here before writing anything.
 
 ## How a change works
 
@@ -10,15 +10,15 @@ These rules are the same for every agent on the team.
 
 - **OpenSpec's commands are the process.** A change is built with `/opsx:apply <slug>`, whole. It is checked with `/opsx:verify <slug>`, once, when every task a coder can do is done. Nobody slices a change, and nobody tells a command how to do its work.
 - **A change is frozen once {{FABLE}} has reviewed it and a coder has been given it.** After that nobody adds a task, rewrites a task or edits its specs or design. The only edit is ticking a finished task.
-- **Everything new goes to the backlog**, `openspec/backlog.md` in {{KIT_NAME}}: a finding, an idea from the user, a nitpick, a defect that is not in the way of the task in hand. One line each, with a pointer. {{EXPLORER}} writes it. Later changes are proposed from it.
+- **A change comes from the user.** Nobody proposes one because something was noticed along the way. A finding that doesn't block the change in hand is mentioned to the user once and dropped.
 - If a change cannot be finished as written because its premise is wrong, stop and tell the user. Don't patch the task list.
-- **A red suite on {{BASE}} is never backlog.** It is fixed now, as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
+- **A red suite on {{BASE}} is fixed now,** as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
 - **Tasks under a heading that starts *Proof in dev* are {{OPS}}'s**, not a coder's: anything that needs a deploy, a live account, a credential, a vendor's console or the user.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. The full brief sits under *Task notes* in the change's `design.md`.
 
 ## Writing a change
 
-The conductor sends a slash command with the slug: `/opsx:propose <slug>` to write a change from the backlog, `/opsx:continue <slug>` to bring an unfrozen change in line with what was recorded, `/opsx:archive <slug>` when it is done. Follow the command, then the rules here.
+The conductor sends a slash command with the slug: `/opsx:propose <slug>` to write a change the user asked for, `/opsx:continue <slug>` to bring an unfrozen change in line with what was recorded, `/opsx:archive <slug>` when it is done. Follow the command, then the rules here.
 
 - Before changing a file of a change, run `openspec instructions <proposal|specs|design|tasks> --change <slug> --json` and follow the instruction and template it returns.
 - **Check the vendor before you write the task.** When a task rests on how Frontegg, AWS, GitHub or any other outside system behaves, read its real API reference first, and where that isn't enough ask the conductor for a reading from `{{OPS}}`. Cite what you read in the design. A task built on an assumption about a vendor is how the coder ends up finding the design wrong halfway through a group.
@@ -26,11 +26,6 @@ The conductor sends a slash command with the slug: `/opsx:propose <slug>` to wri
 - Cite {{CITE}} from {{FABLE}}'s commits. If the change needs a decision the design doesn't make, don't invent one; name what is missing in your final message so it goes to fable.
 - A task's number matches its group's, or `openspec validate` refuses it. A task whose line is a sentence keeps its full brief under *Task notes* in the change's `design.md`, headed by the task's number.
 - Run `openspec validate <slug>` before committing.
-- When a removed backlog line becomes a task, delete the line in the same commit.
-
-## The backlog
-
-`openspec/backlog.md` is yours. One line per item: what, and a pointer to the design page, commit or report it came from. Newest at the bottom, grouped under plain headings when it grows. No reasoning, no history. You may write it while the coder builds.
 
 ## Committing
 
