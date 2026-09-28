@@ -28,7 +28,7 @@ The conductor sends `Review change <slug> before it is frozen.` Read the change 
 
 - a task that contradicts the design, or rests on a decision nobody has made;
 - a task that assumes how a vendor behaves with nothing cited to show it was checked;
-- work the coder can't finish alone sitting in a numbered group instead of *Proof in dev*;
+- a task that needs a deploy, a live account, a credential, a vendor's console or the user: that belongs in `design.md`'s *Proof in dev* list, never in the tasks;
 - a task that is a paragraph, a group of more than eight, or a change of more than a day or two of building.
 
 Answer `Freeze it.` or a short list of what the explorer must fix first. Don't edit the change yourself.
