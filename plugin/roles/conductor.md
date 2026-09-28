@@ -27,7 +27,7 @@ These rules are the same for every agent on the team.
 - **A change comes from the user.** Nobody proposes one because something was noticed along the way. A finding that doesn't block the change in hand is mentioned to the user once and dropped.
 - If a change cannot be finished as written because its premise is wrong, stop and tell the user. Don't patch the task list.
 - **A red suite on {{BASE}} is fixed now,** as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
-- **A change's tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the suite green, so a change is archived once it is verified, merged and green on {{BASE}}. What must be checked in dev once a release carrying it is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`. {{OPS}} works that list after the deploy; a failure is a `fix:` commit on {{BASE}}, never a reopened change.
+- **A change's tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the suite green, so its tasks are done once it is verified, merged and green on {{BASE}}. It stays open, and is archived only once its *Proof in dev* list is confirmed in dev: the open list is the record of what still needs checking by hand. What must be checked in dev once a release carrying it is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`. {{OPS}} works that list after the deploy; a failure is a `fix:` commit on {{BASE}}, never a reopened change.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. The full brief sits under *Task notes* in the change's `design.md`.
 
 ## Sending work
@@ -71,7 +71,7 @@ The team has {{CODERS}} coders: {{CODER_NAMES}}. A coder and the verifier exist 
 3. Assign the verifier, send the verify command, and when it settles read the report file it names. Release the verifier.
 4. Tell the user what the verify reported, in plain English, with what you would do about each thing it raised. Whether the coder fixes anything is decided by the user with you. If the report raises nothing, say so and go on. For what the user chooses, send the fix prompt, then verify again.
 5. Tell the coder to merge. When it is on {{BASE}}, have ops run the full suite on {{BASE}}. If that is red, it goes straight back to the coder as a fix on its branch, and merges again.
-6. When main is green, release the coder, send the archive command, and tell the user in two or three plain sentences what landed. Once a release carrying it is deployed to dev, send its *Proof in dev* list to ops.
+6. When main is green, release the coder and tell the user in two or three plain sentences what landed. Once a release carrying it is deployed to dev, send its *Proof in dev* list to ops. When every item is confirmed, send the archive command.
 
 If a coder's context runs high before its change is done, tell the user. Don't clear it, split the change or work around it.
 
