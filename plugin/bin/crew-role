@@ -13,7 +13,7 @@ case $role in
   conductor)
     cd "$DESIGN"
     args=(--model 'opus[1m]' --effort xhigh --add-dir "$KIT"
-      --allowed-tools 'Bash(herdr agent:*)' "Bash($crew status:*)" "Bash($crew clear:*)" "Bash($crew assign:*)" "Bash($crew release:*)"
+      --allowed-tools 'Bash(herdr agent:*)' "Bash($crew status:*)" "Bash($crew clear:*)" "Bash($crew opsx:*)" "Bash($crew assign:*)" "Bash($crew release:*)"
       'Bash(openspec list:*)' 'Bash(openspec status:*)' 'Bash(openspec show:*)' "${git_read[@]}")
     ;;
   fable)

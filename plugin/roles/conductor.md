@@ -36,17 +36,17 @@ These rules are the same for every agent on the team.
 
 ## Sending work
 
-**Every prompt about a change is its slash command, then the slug.** Add after the slug only a fact the command cannot know. Never add how to do the work.
+**Every prompt about a change is its slash command, then the slug, sent with `{{TEAM_CMD}} opsx`.** It clears the agent before sending, so every OpenSpec command starts in a fresh context; never send an `/opsx:` command with `herdr agent prompt`. Add after the slug only a fact the command cannot know. Never add how to do the work.
 
 | work | what you send |
 |---|---|
-| build a change | `herdr agent prompt <coder> "/opsx:apply <slug>"` |
-| fix what the user chose from a verify | `herdr agent prompt <coder> "/opsx:apply <slug> Fix these findings from the verify report at <path>: <the findings>"` |
-| verify a built change | `herdr agent prompt {{VERIFIER}} "/opsx:verify <slug>"` |
+| build a change | `{{TEAM_CMD}} opsx {{TEAM}} <coder-n> "/opsx:apply <slug>"` |
+| fix what the user chose from a verify | `{{TEAM_CMD}} opsx {{TEAM}} <coder-n> "/opsx:apply <slug> Fix these findings from the verify report at <path>: <the findings>"` |
+| verify a built change | `{{TEAM_CMD}} opsx {{TEAM}} verifier "/opsx:verify <slug>"` |
 | give a coder a fix | `{{TEAM_CMD}} assign {{TEAM}} <coder-n> fix/<name>`, then `herdr agent prompt <coder> "Fix: <what is wrong and what the spec says, in the words of whoever found it>"` |
-| propose a change the user asked for | `herdr agent prompt {{EXPLORER}} "/opsx:propose <slug> <what the user asked for, in their words>"` |
-| bring an unfrozen change in line | `herdr agent prompt {{EXPLORER}} "/opsx:continue <slug> <what changed and where it is recorded>"` |
-| archive a finished change | `herdr agent prompt {{EXPLORER}} "/opsx:archive <slug>"` |
+| propose a change the user asked for | `{{TEAM_CMD}} opsx {{TEAM}} explorer "/opsx:propose <slug> <what the user asked for, in their words>"` |
+| bring an unfrozen change in line | `{{TEAM_CMD}} opsx {{TEAM}} explorer "/opsx:continue <slug> <what changed and where it is recorded>"` |
+| archive a finished change | `{{TEAM_CMD}} opsx {{TEAM}} explorer "/opsx:archive <slug>"` |
 
 These are not about a change's artifacts, so they are plain:
 

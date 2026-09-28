@@ -9,6 +9,7 @@
 #   crew restart <team> [role...]      end the session and start a fresh one in the same pane (standing roles by default)
 #   crew resume  <team> [role...]      bring back roles that are not up, each with its last conversation
 #   crew clear   <team> <role>         /clear the agent and give it its name back
+#   crew opsx    <team> <role> "/opsx:…" clear the agent, then send it the OpenSpec command: every one starts fresh
 #   crew assign  <team> <coder-n|verifier> <change|fix/name>
 #                                      a coder: make the change's worktree (or the fix's) and start fresh inside it;
 #                                      the verifier: start fresh inside the worktree a coder built a change in
@@ -218,6 +219,16 @@ case $cmd in
     [[ $st == working && $force == 0 ]] && { echo "$(name_of "$role") is working; add --force to clear it anyway." >&2; exit 1; }
     h agent prompt "$pane" "/clear" >/dev/null; sleep 2
     give_name "$pane" "$(name_of "$role")" && echo "$(name_of "$role") cleared" ;;
+  opsx)
+    # Every OpenSpec command starts in a clean context: clear the agent, give it its name back, then send.
+    load; role=${3:?usage: crew opsx <team> <role> "/opsx:<command> <slug> [...]"}; cmd=${4:?usage: crew opsx <team> <role> "/opsx:<command> <slug> [...]"}
+    known_role "$role"; [[ $cmd == /opsx:* ]] || { echo "crew opsx sends only /opsx: commands" >&2; exit 2; }
+    pane=$(pane_of "$role"); st=$(agent_status "$pane")
+    [[ -z $st ]] && { echo "$(name_of "$role") is not up." >&2; exit 1; }
+    [[ $st == working && $force == 0 ]] && { echo "$(name_of "$role") is working; wait for it, or add --force." >&2; exit 1; }
+    h agent prompt "$pane" "/clear" >/dev/null; sleep 2
+    give_name "$pane" "$(name_of "$role")" >/dev/null
+    h agent prompt "$pane" "$cmd" >/dev/null && echo "$(name_of "$role") cleared and given: $cmd" ;;
   assign)
     load; role=${3:?usage: crew assign <team> <coder-n|verifier> <change|fix/name>}; slug=${4:?usage: crew assign <team> <coder-n|verifier> <change|fix/name>}
     known_role "$role"; in_pool "$role" || { echo "only a coder or the verifier holds a change" >&2; exit 2; }
