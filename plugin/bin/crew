@@ -69,11 +69,14 @@ stop() {
   h agent prompt "$pane" "/exit" >/dev/null 2>&1 || h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true
   for _ in $(seq 30); do [[ -z $(agent_status "$pane") ]] && return 0; sleep 1; done
   h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true; sleep 2
+  # Still running means anything started next would be typed into it as a message. Say so and leave it be.
+  [[ -z $(agent_status "$pane") ]] || { echo "$(name_of "$role") did not exit (busy or waiting on the user); it was left running" >&2; return 1; }
 }
 
 start() {  # start <role> [resume]
   local role=$1 pane name; pane=$(pane_of "$role"); name=$(name_of "$role")
   if in_pool "$role" && [[ -z $(change_of "$role") ]]; then return 0; fi
+  [[ -z $(agent_status "$pane") ]] || { echo "$name is still running; not starting another over it" >&2; return 1; }
   # A Claude that died badly leaves the pane reporting mouse movement, which types escape codes into the shell
   # and into whatever is run next. Clear the line and switch the reporting off first.
   h pane send-keys "$pane" ctrl+c >/dev/null 2>&1 || true
@@ -197,9 +200,9 @@ case $cmd in
     greet_conductor ;;
   restart)
     load; pick_roles "$@"
-    for role in "${picked[@]}"; do stop "$role"; done
+    stopped=(); for role in "${picked[@]}"; do stop "$role" && stopped+=("$role"); done
     ensure_standing; refresh_builder
-    for role in "${picked[@]}"; do in_pool "$role" && ensure_pool_pane "$role" "$(path_of "$role")"; start "$role"; done
+    for role in "${stopped[@]}"; do in_pool "$role" && ensure_pool_pane "$role" "$(path_of "$role")"; start "$role"; done
     [[ " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
     load; pick_roles "$@"
@@ -253,6 +256,6 @@ case $cmd in
     [[ $role == coder-* && $ahead == 0 ]] && { on_machine env -C "$path" wt remove >/dev/null 2>&1 || true; }
     drop "$held" "$role"; echo "$(name_of "$role") is free" ;;
   down)
-    load; for role in "${roles[@]}"; do stop "$role"; done; echo "$TEAM is down; its panes are still there." ;;
+    load; for role in "${roles[@]}"; do stop "$role" || true; done; echo "$TEAM is down; its panes are still there." ;;
   *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
