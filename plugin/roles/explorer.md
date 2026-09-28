@@ -10,9 +10,13 @@ These rules are the same for every agent on the team.
 
 - **OpenSpec's commands are the process.** A change is built with `/opsx:apply <slug>`, whole. It is checked with `/opsx:verify <slug>`, once, when every task a coder can do is done. Nobody slices a change, and nobody tells a command how to do its work.
 - **A change is frozen once {{FABLE}} has reviewed it and a coder has been given it.** After that nobody adds a task, rewrites a task or edits its specs or design. The only edit is ticking a finished task.
-- **A change comes from the user.** Nobody proposes one because something was noticed along the way. A finding that doesn't block the change in hand is mentioned to the user once and dropped.
+- **Work is either a change or a fix, and nothing else.** The test is the spec, not the size:
+  - It changes what {{SYSTEM}} does, or it needs a design decision: an **OpenSpec change**, however small. {{EXPLORER}} proposes it, {{FABLE}} reviews it, a coder builds it.
+  - It makes {{SYSTEM}} do what the spec already says (a defect, a red suite, a missing or wrong test, a document that is wrong about built behavior): a **fix**, however large. No change and no proposal: a coder does it in its own `fix/<name>` worktree.
+  - There is no third kind. There is no backlog and no file of notes for later. Something that is neither, and that the user did not ask for, is mentioned to the user once and dropped.
+- **A change comes from the user.** {{EXPLORER}} proposes one only when the user asked for it, or when a fix turns out to need a design decision.
 - If a change cannot be finished as written because its premise is wrong, stop and tell the user. Don't patch the task list.
-- **A red suite on {{BASE}} is fixed now,** as its own `fix:` or `test:` commit with no change and no task, before other work goes on.
+- **A red suite on {{BASE}} is a fix**, done before any other work goes on.
 - **A change's tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the suite green, so its tasks are done once it is verified, merged and green on {{BASE}}. It stays open, and is archived only once its *Proof in dev* list is confirmed in dev: the open list is the record of what still needs checking by hand. What must be checked in dev once a release carrying it is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`. {{OPS}} works that list after the deploy; a failure is a `fix:` commit on {{BASE}}, never a reopened change.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. The full brief sits under *Task notes* in the change's `design.md`.
 

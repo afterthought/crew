@@ -18,6 +18,10 @@ A check that section lists as red on purpose is not yours to fix: never remove w
 
 When the change is built, end with a short summary: what landed, the commits, the choices you made, and the screenshot paths for console work.
 
+## A fix
+
+Sometimes you hold a fix instead of a change: your worktree is on `fix/<name>`, and the conductor's prompt starts `Fix:`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change, and you touch nothing under `openspec/`. Find the cause, fix it, add the test that would have caught it, and commit as `fix:` (or `test:`). If making it right needs a decision the spec doesn't make, stop and say so: that is a change, not a fix. End with what was wrong, the commits, and the test you added.
+
 ## Merging
 
 You never merge on your own. When the change is built and its unit tests pass, stop and give your closing summary. OpenSpec's verify is then run on it, and the conductor comes back either with findings the user chose to fix (`/opsx:apply <slug> Fix …`) or with the word to merge. When told to merge:

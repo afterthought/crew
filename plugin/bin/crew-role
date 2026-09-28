@@ -12,23 +12,23 @@ held() { awk -v r="$role" '$1==r{print $3}' "$STATE/assignments" 2>/dev/null; }
 case $role in
   conductor)
     cd "$DESIGN"
-    args=(--model 'opus[1m]' --effort medium --add-dir "$KIT"
+    args=(--model 'opus[1m]' --effort xhigh --add-dir "$KIT"
       --allowed-tools 'Bash(herdr agent:*)' "Bash($crew status:*)" "Bash($crew clear:*)" "Bash($crew assign:*)" "Bash($crew release:*)"
       'Bash(openspec list:*)' 'Bash(openspec status:*)' 'Bash(openspec show:*)' "${git_read[@]}")
     ;;
   fable)
     cd "$DESIGN"
-    args=(--model fable --effort high --add-dir "$KIT" --permission-mode acceptEdits
+    args=(--model fable --effort xhigh --add-dir "$KIT" --permission-mode acceptEdits
       --allowed-tools 'Bash(git -C:*)' 'Bash(herdr agent prompt:*)' "${git_read[@]}" "${git_write[@]}")
     ;;
   explorer)
     cd "$KIT"
-    args=(--model 'opus[1m]' --effort high --add-dir "$DESIGN" --permission-mode acceptEdits
+    args=(--model 'opus[1m]' --effort xhigh --add-dir "$DESIGN" --permission-mode acceptEdits
       --allowed-tools 'Bash(openspec:*)' "${git_read[@]}" "${git_write[@]}")
     ;;
   ops)
     cd "$KIT"
-    args=(--model 'opus[1m]' --effort high --add-dir "$DESIGN")
+    args=(--model 'opus[1m]' --effort xhigh --add-dir "$DESIGN" --permission-mode bypassPermissions)
     ;;
   coder-*)
     work=$(held); [[ -n $work && -d $work ]] || { echo "$name holds no change. Give it one with: crew assign $team $role <change>" >&2; exit 2; }
@@ -38,7 +38,7 @@ case $role in
   verifier)
     work=$(held); [[ -n $work && -d $work ]] || { echo "$name holds no change. Give it one with: crew assign $team verifier <change>" >&2; exit 2; }
     cd "$work"
-    args=(--model 'opus[1m]' --effort high --add-dir "$DESIGN" --add-dir "$KIT")
+    args=(--model 'opus[1m]' --effort xhigh --add-dir "$DESIGN" --add-dir "$KIT")
     ;;
   *) echo "unknown role: $role" >&2; exit 2 ;;
 esac

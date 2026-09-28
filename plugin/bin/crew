@@ -9,9 +9,9 @@
 #   crew restart <team> [role...]      end the session and start a fresh one in the same pane (standing roles by default)
 #   crew resume  <team> [role...]      bring back roles that are not up, each with its last conversation
 #   crew clear   <team> <role>         /clear the agent and give it its name back
-#   crew assign  <team> <coder-n|verifier> <change>
-#                                      a coder: make the change's worktree and start fresh inside it;
-#                                      the verifier: start fresh inside the worktree a coder built in
+#   crew assign  <team> <coder-n|verifier> <change|fix/name>
+#                                      a coder: make the change's worktree (or the fix's) and start fresh inside it;
+#                                      the verifier: start fresh inside the worktree a coder built a change in
 #   crew release <team> <coder-n|verifier>
 #                                      end it, close its pane, and free it; a coder's merged worktree is removed
 #   crew down    <team>                end every role's session; the panes stay
@@ -131,7 +131,9 @@ refresh_builder() { python3 "$here/../lib/crew.py" brief "$team" builder > "$sta
 # under .items[], each carrying its checkout at .worktree.path, and a branch
 # with no worktree has .worktree null. Iterating the object with .[] hits the
 # schema number first and fails with "Cannot index number with string".
-worktree_of() { in_kit wt list --format=json 2>/dev/null | jq -r --arg b "build/$1" '.items[] | select(.branch==$b and .worktree != null) | .worktree.path' | head -1; }
+worktree_of() { in_kit wt list --format=json 2>/dev/null | jq -r --arg b "$(branch_of "$1")" '.items[] | select(.branch==$b and .worktree != null) | .worktree.path' | head -1; }
+# A change is built on build/<change>; a fix, which has no change, is held as fix/<name> and built on that branch.
+branch_of() { if [[ $1 == fix/* ]]; then echo "$1"; else echo "build/$1"; fi; }
 
 teardown() {  # end every session the team has and give its panes back
   local role pane
@@ -214,9 +216,14 @@ case $cmd in
     h agent prompt "$pane" "/clear" >/dev/null; sleep 2
     give_name "$pane" "$(name_of "$role")" && echo "$(name_of "$role") cleared" ;;
   assign)
-    load; role=${3:?usage: crew assign <team> <coder-n|verifier> <change>}; slug=${4:?usage: crew assign <team> <coder-n|verifier> <change>}
+    load; role=${3:?usage: crew assign <team> <coder-n|verifier> <change|fix/name>}; slug=${4:?usage: crew assign <team> <coder-n|verifier> <change|fix/name>}
     known_role "$role"; in_pool "$role" || { echo "only a coder or the verifier holds a change" >&2; exit 2; }
-    in_kit test -d "openspec/changes/$slug" || { echo "no change '$slug' in $KIT_NAME" >&2; exit 2; }
+    if [[ $slug == fix/* ]]; then
+      [[ $role == coder-* ]] || { echo "a fix goes to a coder; the verifier only verifies OpenSpec changes" >&2; exit 2; }
+      [[ $slug =~ ^fix/[a-z0-9][a-z0-9-]*$ ]] || { echo "a fix is named fix/<words-with-dashes>" >&2; exit 2; }
+    else
+      in_kit test -d "openspec/changes/$slug" || { echo "no change '$slug' in $KIT_NAME" >&2; exit 2; }
+    fi
     if [[ $role == coder-* ]]; then
       other=$(awk -v s="$slug" -v r="$role" '$2==s && $1!=r && $1!="verifier"{print $1}' "$held")
       [[ -n $other ]] && { echo "$(name_of "$other") already holds $slug" >&2; exit 1; }
@@ -226,8 +233,8 @@ case $cmd in
     path=$(worktree_of "$slug")
     if [[ -z $path && $role == verifier ]]; then echo "change $slug has no worktree: verify runs where a coder built" >&2; exit 1; fi
     if [[ -z $path ]]; then
-      in_kit wt switch --create "build/$slug" --base "$BASE" --no-cd >/dev/null
-      path=$(worktree_of "$slug"); [[ -n $path ]] || { echo "the worktree for build/$slug did not appear; run 'wt list' in $KIT" >&2; exit 1; }
+      in_kit wt switch --create "$(branch_of "$slug")" --base "$BASE" --no-cd >/dev/null
+      path=$(worktree_of "$slug"); [[ -n $path ]] || { echo "the worktree for $(branch_of "$slug") did not appear; run 'wt list' in $KIT" >&2; exit 1; }
       # A kit that needs a new worktree prepared (dependencies installed) gives its devenv a `crew-prepare` script,
       # run here from the main checkout's profile since a worktree has no devenv of its own.
       on_machine env -C "$path" KIT="$KIT" bash -c 'p="$KIT/.devenv/profile/bin"; [ -x "$p/crew-prepare" ] || exit 0; PATH="$p:$PATH" crew-prepare' >/dev/null
@@ -239,8 +246,8 @@ case $cmd in
     slug=$(change_of "$role"); [[ -n $slug ]] || { echo "$(name_of "$role") holds nothing"; exit 0; }
     path=$(path_of "$role"); ahead=0
     if [[ $role == coder-* ]]; then
-      ahead=$(in_kit git rev-list --count "$BASE..build/$slug" 2>/dev/null || echo 0)
-      if [[ $ahead != 0 && $force == 0 ]]; then echo "build/$slug has $ahead commits that are not on $BASE. Have the coder merge them, or add --force to free the coder and keep the worktree." >&2; exit 1; fi
+      ahead=$(in_kit git rev-list --count "$BASE..$(branch_of "$slug")" 2>/dev/null || echo 0)
+      if [[ $ahead != 0 && $force == 0 ]]; then echo "$(branch_of "$slug") has $ahead commits that are not on $BASE. Have the coder merge them, or add --force to free the coder and keep the worktree." >&2; exit 1; fi
     fi
     stop "$role"; close_pane "$role"
     [[ $role == coder-* && $ahead == 0 ]] && { on_machine env -C "$path" wt remove >/dev/null 2>&1 || true; }
