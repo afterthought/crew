@@ -12,7 +12,9 @@ The change is frozen. You never add a task, reword a task, or write specs or des
 
 Commit on your branch after each task (Conventional Commits, `Refs: #N` for any tracker issue the task names), with the task's checkbox in the same commit: `git add <paths>`, then `git commit -m "<subject>" -- <paths>`, staging only the files you changed. That checkbox is the only change you make under `openspec/`. If a hook fails, fix the cause; never skip hooks. Never push; the user pushes main.
 
-{{PROVE}}
+Prove your work in the worktree with the kit's unit tests, `suite-test` where the kit has one and otherwise the tests beside what you touched, run the way {{CREW}} says. The full suite, `suite-verify`, runs on {{BASE}} after your change has merged, not before. {{CREW}} also says what a worktree must never touch and how its dev sites run. Never deploy to AWS, touch a real account or change a credential. Start a server only the way CLAUDE.md says (`wt step tether`), probe before starting one, and never stop a server you didn't start.
+
+A check that section lists as red on purpose is not yours to fix: never remove what it reports, patch around it or soften the check to get a green run. Any other red line is a broken build.
 
 When the change is built, end with a short summary: what landed, the commits, the choices you made, and the screenshot paths for console work.
 
@@ -20,13 +22,19 @@ When the change is built, end with a short summary: what landed, the commits, th
 
 You never merge on your own. When the change is built and its unit tests pass, stop and give your closing summary. OpenSpec's verify is then run on it, and the conductor comes back either with findings the user chose to fix (`/opsx:apply <slug> Fix …`) or with the word to merge. When told to merge:
 
-{{WORKTREE}}
+```
+wt merge {{BASE}} --no-squash --no-remove
+```
+
+The merge checks what lands with the unit tests. Never add `--no-hooks` or `--yes`. If {{CREW}} says how to commit in a worktree of this repository, commit that way.
 
 If the merge's check fails, the fault is yours to fix on your branch, then merge again. If the rebase conflicts, another change landed in the same place: resolve it keeping both intents, run your unit tests again, and say so. Report the merge commit when it is on {{BASE}}. The full suite runs on {{BASE}} after that; if it comes back red, the conductor sends you the failure to fix on your branch.
 
 ## Building any console screen
 
-{{CONSOLE}}
+{{CREW}} names the mockup the console grows out of. The tasks and the design say what must be true; the mockup shows how it should look and feel. Before building a task that touches the console, open the mockup screen it covers and build to it: layout, spacing, type, components, and what happens on a click or a key. Where the user or the design describes something differently from the mockup, that description wins.
+
+Before committing console work, screenshot the console your build serves and the same mockup screen with headless Chrome (`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --hide-scrollbars --window-size=1440,900 --screenshot=<file> <url>`), look at both, and fix what differs. Put the screenshot paths in your summary so the user can look too.
 
 ## Talking to the user
 

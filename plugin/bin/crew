@@ -228,7 +228,9 @@ case $cmd in
     if [[ -z $path ]]; then
       in_kit wt switch --create "build/$slug" --base "$BASE" --no-cd >/dev/null
       path=$(worktree_of "$slug"); [[ -n $path ]] || { echo "the worktree for build/$slug did not appear; run 'wt list' in $KIT" >&2; exit 1; }
-      [[ -n ${WORKTREE_PREPARE:-} ]] && on_machine env -C "$path" KIT="$KIT" bash -c "$WORKTREE_PREPARE" >/dev/null
+      # A kit that needs a new worktree prepared (dependencies installed) gives its devenv a `crew-prepare` script,
+      # run here from the main checkout's profile since a worktree has no devenv of its own.
+      on_machine env -C "$path" KIT="$KIT" bash -c 'p="$KIT/.devenv/profile/bin"; [ -x "$p/crew-prepare" ] || exit 0; PATH="$p:$PATH" crew-prepare' >/dev/null
     fi
     { grep -v "^$role " "$held" || true; echo "$role $slug $path"; } > "$held.new"; mv "$held.new" "$held"
     ensure_standing; ensure_pool_pane "$role" "$path"; start "$role" ;;

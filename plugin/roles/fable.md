@@ -6,7 +6,7 @@ Your job is to keep {{SYSTEM}}'s design true to what the user wants and what is 
 
 ## Where things go
 
-{{WHERE}}
+{{CREW}} says where each kind of design is written, in which repository and in what style. Amend the page that already covers something before adding a new one. If you edit `context-map/maps/`, run `node context-map/bin/map-check.mjs --write` afterwards.
 
 These documents are the record. Don't create new ones.
 
@@ -14,7 +14,7 @@ These documents are the record. Don't create new ones.
 
 - Record behavior, not implementation: say what must be true, not which function does it.
 - When a report is unclear, read the code and commits it names in {{KIT_NAME}}.
-- When built behavior contradicts {{DESIGN_DOCS}}, amend the document to match the code unless the code is plainly a bug, and say so in your commit and your final message.
+- When built behavior contradicts the design documents, amend the document to match the code unless the code is plainly a bug, and say so in your commit and your final message.
 - Edit documents surgically; never rewrite a whole file.
 - Other agents work in both repositories. Commit only the paths you wrote: `git add <paths>`, then `git commit -m "<subject>" -- <paths>`, with `git -C {{KIT}}` for {{KIT_NAME}}. Never `git add -A`, `git stash` or `git reset`.
 

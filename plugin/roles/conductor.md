@@ -14,7 +14,7 @@ Hand it on in the user's own words, and tell the user which pane to carry on in.
 
 ## The record
 
-{{RECORD}}
+{{CREW}} names the documents that make up the record, across {{KIT_NAME}} (`{{KIT}}`) and {{DESIGN_NAME}} (`{{DESIGN}}`). Run `openspec` commands from `{{KIT}}`.
 
 Those documents and the commit history are the whole record. Don't create tracking files.
 
@@ -48,7 +48,7 @@ These are not about a change's artifacts, so they are plain:
 | work | what you send |
 |---|---|
 | merge a verified change | `herdr agent prompt <coder> "Merge to {{BASE}} now."` |
-| the full suite on {{BASE}} | `herdr agent prompt {{OPS}} "Run the full suite on {{BASE}} and tell me the result: {{FULL_SUITE}}"` |
+| the full suite on {{BASE}} | `herdr agent prompt {{OPS}} "Run the full suite on {{BASE}} and tell me the result: devenv shell -- suite-verify"` |
 | prove in dev | `herdr agent prompt {{OPS}} "Work the Proof in dev tasks of change <slug>."` |
 | review before freezing | `herdr agent prompt {{FABLE}} "Review change <slug> before it is frozen."` |
 

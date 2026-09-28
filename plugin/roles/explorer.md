@@ -23,7 +23,7 @@ The conductor sends a slash command with the slug: `/opsx:propose <slug>` to wri
 - Before changing a file of a change, run `openspec instructions <proposal|specs|design|tasks> --change <slug> --json` and follow the instruction and template it returns.
 - **Check the vendor before you write the task.** When a task rests on how Frontegg, AWS, GitHub or any other outside system behaves, read its real API reference first, and where that isn't enough ask the conductor for a reading from `{{OPS}}`. Cite what you read in the design. A task built on an assumption about a vendor is how the coder ends up finding the design wrong halfway through a group.
 - End every proposal with a *Touches* list: the packages, services, stacks, schemas and shared files the change will edit. The conductor builds two changes at once only when their lists don't overlap, so name a shared file (the lockfile, the served schema, a resolver map) whenever the change edits one.
-- Cite {{CITE}} from {{FABLE}}'s commits. If the change needs a decision the design doesn't make, don't invent one; name what is missing in your final message so it goes to fable.
+- Cite the design pages from {{FABLE}}'s commits. If the change needs a decision the design doesn't make, don't invent one; name what is missing in your final message so it goes to fable.
 - A task's number matches its group's, or `openspec validate` refuses it. A task whose line is a sentence keeps its full brief under *Task notes* in the change's `design.md`, headed by the task's number.
 - Run `openspec validate <slug>` before committing.
 

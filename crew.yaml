@@ -1,83 +1,23 @@
-# Every machine and every team, as data. The role briefs are built from this file; nothing about a team lives anywhere else.
-
-# Where crew's own folders sit on each machine. Which machines exist, their ssh names and their herdr sessions come
-# from ~/.config/swancloud/herdr-hosts.json; a team's machine and session must both be listed there.
-machines:
-  - name: mac-studio
-    crew_home: /Users/chuck/Code/github_afterthought/crew/main
-    org_roots:
-      willdan: /Users/chuck/Code/clients/github_willdan
-      agentplot: /Users/chuck/Code/github_agentplot
-
-# A team's name is <code>-<number>: brd-1, brd-2. Its agents are <name>-conductor, <name>-coder-1, and so on, and its
-# herdr workspace carries the name. Several teams may serve one system; each gives its own number, and a team that is
-# not the only one on its repository sets `base:` to the branch its coders branch from and merge to (default main).
+# The teams. A team is where it runs and which repositories it works in; everything about how work is done in a
+# repository is in that repository's CLAUDE.md, whose `## Crew` section the briefs point every role to.
+#
+#   name     <code>-<number>: brd-1, brd-2. Its agents are <name>-conductor, <name>-coder-1, and so on, and its herdr
+#            workspace carries the name
+#   machine  a host in ~/.config/swancloud/herdr-hosts.json
+#   session  a herdr session on that host; the repositories are <session folder>/<repo>/main
+#   repos    the kit, where changes are written and built, then the design repository fable writes in
+#   base     the branch coders branch from and merge to, when a team is not the only one on its kit (default main)
 teams:
-  - &swb1
-    code: swb
-    number: 1
+  - name: swb-1
     system: Switchboard
-    org: willdan
-    machine: mac-studio
-    session: willdan            # the herdr session the team's workspace lives in
-    coders: 2
-    kit:    { name: switchboard-kit,    path: switchboard-kit/main }
-    design: { name: willdan-blueprints, path: willdan-blueprints/main }
-    record:                     # what the conductor treats as the whole record
-      - { repo: kit,    path: docs/spec/,            holds: "how Switchboard behaves; contracts are in `docs/spec/contracts/`" }
-      - { repo: kit,    path: openspec/changes/,     holds: "the work list" }
-      - { repo: kit,    path: plan-mvp-stage1.md,    holds: "the stage 1 plan" }
-      - { repo: design, path: books/switchboard-kit/, holds: "where Switchboard is going, and the context map" }
-    design_homes:               # where fable writes, first match wins
-      - { repo: kit,    path: docs/spec/,                 holds: "how Switchboard behaves and what it is built from, including a plan the user has talked through; contracts go in `docs/spec/contracts/`" }
-      - { repo: design, path: books/switchboard-kit/src/, holds: "where Switchboard is going", style: books/CLAUDE.md, only_when: "a report changes the destination, not for build detail" }
-    plans: [plan-mvp-stage1.md]
-    proof_tiers: docs/spec/self-hosting.md
-    unit_tests: "devenv shell -- env -u AWS_ENDPOINT_URL suite-test"
-    full_suite: "devenv shell -- suite-verify"
-    merge: "wt merge --no-squash --no-remove"
-    worktree:
-      prepare: "PATH=$KIT/.devenv/profile/bin:$PATH bun install --frozen-lockfile"
-      commit: "git -c core.hooksPath=/dev/null commit"
-      commit_why: "the commit hook is bound to the main checkout's path; the merge runs the unit tests on what lands"
-    emulator:
-      what: "the local AWS emulator on `:4566`"
-      owner: "the main checkout's `devenv up`"
-      never_from_a_worktree: ["devenv up", "ministack-seed"]
-    dev_servers: dev-servers
-    console: { mockup: prototype/, more_mocks: docs/design/, says_what_is_true: docs/spec/ }
-    known_red: []
-
-  - code: brd
-    number: 1
-    system: Breadboard
-    org: willdan
     machine: mac-studio
     session: willdan
     coders: 2
-    kit:    { name: breadboard-kit,     path: breadboard-kit/main }
-    design: { name: willdan-blueprints, path: willdan-blueprints/main }
-    record:
-      - { repo: kit,    path: openspec/changes/,     holds: "the work list" }
-      - { repo: kit,    path: books/commissioning/,  holds: "how the deployment is stood up and proven" }
-      - { repo: design, path: books/breadboard-kit/, holds: "how Breadboard behaves and where it is going, and the context map" }
-    design_homes:
-      - { repo: design, path: books/breadboard-kit/src/, holds: "how Breadboard behaves and where it is going, including a plan the user has talked through", style: books/CLAUDE.md }
-      - { repo: kit,    path: books/commissioning/src/,  holds: "how the deployment is stood up and proven" }
-    plans: []
-    proof_tiers: ""
-    unit_tests: ""              # breadboard-kit has no unit-only command yet; its merge check is the kit's own
-    full_suite: "devenv shell -- suite-verify"
-    merge: "wt merge --no-squash --no-remove"
-    worktree: { prepare: "", commit: "", commit_why: "" }
-    emulator: {}
-    dev_servers: dev-servers
-    console: { mockup: node-bun/apps/brd-console, more_mocks: "", says_what_is_true: "the book" }
-    known_red:
-      - check: suite-manifest
-        why: "Switchboard's manifest schema does not yet accept the `implicit` key; it waits on switchboard-kit's change `the-executors-leg-for-a-domain-setting` and turns green with no edit here"
+    repos: [switchboard-kit, willdan-blueprints]
 
-  # The switchboard team that was started before teams had codes. It is the same team as swb-1 under its old name,
-  # so crew can still reach it. Close it and bring up swb-1 in its place.
-  - <<: *swb1
-    name: switchboard
+  - name: brd-1
+    system: Breadboard
+    machine: mac-studio
+    session: willdan
+    coders: 2
+    repos: [breadboard-kit, willdan-blueprints]
