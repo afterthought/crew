@@ -9,16 +9,18 @@
 #   crew restart <team> [role...]      end the session and start a fresh one in the same pane (standing roles by default)
 #   crew resume  <team> [role...]      bring back roles that are not up, each with its last conversation
 #   crew clear   <team> <role>         /clear the agent and give it its name back
-#   crew opsx    <team> <role> "/opsx:…" clear the agent, then send it the OpenSpec command: every one starts fresh
-#   crew assign  <team> <coder-n|verifier> <change|fix/name>
+#   crew opsx    <team> <role> "/opsx:…" clear the agent, then send it the OpenSpec command: every one starts fresh.
+#                                      The explorer is started for it when it is not up
+#   crew assign  <team> <coder-n|verifier|explorer> <change|fix/name|lookup>
 #                                      a coder: make the change's worktree (or the fix's) and start fresh inside it;
-#                                      the verifier: start fresh inside the worktree a coder built a change in
-#   crew release <team> <coder-n|verifier>
+#                                      the verifier: start fresh inside the worktree a coder built a change in;
+#                                      the explorer: start fresh in the main checkout, for one piece of work
+#   crew release <team> <coder-n|verifier|explorer>
 #                                      end it, close its pane, and free it; a coder's merged worktree is removed
 #   crew down    <team>                end every role's session; the panes stay
 #
-# A team is one herdr workspace with three tabs: "conductor" (the conductor and ops), "explore" (the explorer and
-# fable), and "build", which exists only while a coder or the verifier holds a change. Add --force to act on an
+# A team is one herdr workspace with three tabs: "conductor" (the conductor and ops), "design" (fable), and
+# "build", which exists only while a coder, the verifier or the explorer holds work. Add --force to act on an
 # agent that is working. A fresh session gets its whole brief as its system prompt: the work list and the commits
 # are the state.
 set -euo pipefail
@@ -39,7 +41,7 @@ load() {
   [[ -n $team ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }
   eval "$(python3 "$here/../lib/crew.py" env "$team")"
   state=$STATE; panes=$state/panes; held=$state/assignments; layout=$state/layout
-  standing=(conductor ops explorer fable); pool=(); for n in $(seq "$CODERS"); do pool+=("coder-$n"); done; pool+=(verifier)
+  standing=(conductor ops fable); pool=(); for n in $(seq "$CODERS"); do pool+=("coder-$n"); done; pool+=(verifier explorer)
   roles=("${standing[@]}" "${pool[@]}")
   mkdir -p "$state" "${REPORTS/#\~/$HOME}"; touch "$panes" "$held" "$layout"
 }
@@ -50,7 +52,7 @@ drop() { { grep -v "^$2 " "$1" || true; } > "$1.new"; mv "$1.new" "$1"; }
 pane_of() { get "$panes" "$1"; }
 change_of() { get "$held" "$1"; }
 path_of() { awk -v r="$1" '$1==r{print $3}' "$held"; }
-in_pool() { [[ $1 == coder-* || $1 == verifier ]]; }
+in_pool() { [[ $1 == coder-* || $1 == verifier || $1 == explorer ]]; }
 pane_live() { [[ -n ${1:-} ]] && h pane get "$1" >/dev/null 2>&1; }
 tab_live() { [[ -n ${1:-} ]] && h tab get "$1" >/dev/null 2>&1; }
 agent_status() { [[ -n ${1:-} ]] || return 0; h agent get "$1" 2>/dev/null | jq -r '.result.agent.agent_status // empty' 2>/dev/null || true; }
@@ -100,7 +102,7 @@ start() {  # start <role> [resume]
 }
 
 ensure_standing() {  # the workspace, and the two tabs that always exist
-  local ws w c o e f tab
+  local ws w c o f tab
   c=$(pane_of conductor)
   if ! pane_live "$c"; then
     ws=$(h workspace create --cwd "$DESIGN" --label "$TEAM" --no-focus)
@@ -110,12 +112,11 @@ ensure_standing() {  # the workspace, and the two tabs that always exist
   fi
   w=$(get "$layout" workspace)
   o=$(pane_of ops); pane_live "$o" || { o=$(split "$c" right "$KIT"); put "$panes" ops "$o"; }
-  e=$(pane_of explorer)
-  if ! pane_live "$e"; then
-    tab=$(h tab create --workspace "$w" --cwd "$KIT" --label explore --no-focus)
-    e=$(jq -r '.result.root_pane.pane_id' <<<"$tab"); put "$panes" explorer "$e"
+  f=$(pane_of fable)
+  if ! pane_live "$f"; then
+    tab=$(h tab create --workspace "$w" --cwd "$DESIGN" --label design --no-focus)
+    f=$(jq -r '.result.root_pane.pane_id' <<<"$tab"); put "$panes" fable "$f"
   fi
-  f=$(pane_of fable); pane_live "$f" || { f=$(split "$e" right "$DESIGN"); put "$panes" fable "$f"; }
 }
 
 ensure_pool_pane() {  # the build tab exists only while someone holds a change
@@ -130,7 +131,11 @@ ensure_pool_pane() {  # the build tab exists only while someone holds a change
 }
 
 close_pane() { local pane; pane=$(pane_of "$1"); pane_live "$pane" && h pane close "$pane" >/dev/null 2>&1 || true; drop "$panes" "$1"; }
-refresh_builder() { python3 "$here/../lib/crew.py" brief "$team" builder > "$state/builder.md"; }
+hold() { { grep -v "^$1 " "$held" || true; echo "$1 $2 $3"; } > "$held.new"; mv "$held.new" "$held"; }
+start_explorer() {  # the explorer works in the main checkout, started fresh for one piece of work and released after
+  hold explorer "$1" "$KIT"; ensure_standing; ensure_pool_pane explorer "$KIT"; start explorer
+  h agent wait "$(pane_of explorer)" --timeout 60000 >/dev/null 2>&1 || true
+}
 # wt list --format=json is schema 2: an object, not an array. Branches are
 # under .items[], each carrying its checkout at .worktree.path, and a branch
 # with no worktree has .worktree null. Iterating the object with .[] hits the
@@ -189,25 +194,25 @@ case $cmd in
     for role in "${standing[@]}"; do
       [[ -n $(agent_status "$(pane_of "$role")") ]] && { echo "$(name_of "$role") is already up; use: crew restart $team" >&2; exit 1; }
     done
-    ensure_standing; refresh_builder
+    ensure_standing
     for role in "${standing[@]}"; do start "$role"; done
     greet_conductor ;;
   close)
     load; force=1; teardown; echo "$TEAM is closed" ;;
   rebuild)
     load; force=1; teardown
-    ensure_standing; refresh_builder
+    ensure_standing
     for role in "${standing[@]}"; do start "$role"; done
     greet_conductor ;;
   restart)
     load; pick_roles "$@"
     stopped=(); for role in "${picked[@]}"; do stop "$role" && stopped+=("$role"); done
-    ensure_standing; refresh_builder
+    ensure_standing
     for role in "${stopped[@]}"; do in_pool "$role" && ensure_pool_pane "$role" "$(path_of "$role")"; start "$role"; done
     [[ " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
     load; pick_roles "$@"
-    ensure_standing; refresh_builder
+    ensure_standing
     for role in "${picked[@]}"; do
       if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
       in_pool "$role" && ensure_pool_pane "$role" "$(path_of "$role")"
@@ -224,14 +229,22 @@ case $cmd in
     load; role=${3:?usage: crew opsx <team> <role> "/opsx:<command> <slug> [...]"}; cmd=${4:?usage: crew opsx <team> <role> "/opsx:<command> <slug> [...]"}
     known_role "$role"; [[ $cmd == /opsx:* ]] || { echo "crew opsx sends only /opsx: commands" >&2; exit 2; }
     pane=$(pane_of "$role"); st=$(agent_status "$pane")
+    if [[ $role == explorer && -z $st ]]; then
+      slug=$(awk '{print $2}' <<<"$cmd"); start_explorer "${slug:-opsx}"
+      h agent prompt "$(pane_of explorer)" "$cmd" >/dev/null && echo "$(name_of explorer) started and given: $cmd"; exit 0
+    fi
     [[ -z $st ]] && { echo "$(name_of "$role") is not up." >&2; exit 1; }
     [[ $st == working && $force == 0 ]] && { echo "$(name_of "$role") is working; wait for it, or add --force." >&2; exit 1; }
     h agent prompt "$pane" "/clear" >/dev/null; sleep 2
     give_name "$pane" "$(name_of "$role")" >/dev/null
     h agent prompt "$pane" "$cmd" >/dev/null && echo "$(name_of "$role") cleared and given: $cmd" ;;
   assign)
-    load; role=${3:?usage: crew assign <team> <coder-n|verifier> <change|fix/name>}; slug=${4:?usage: crew assign <team> <coder-n|verifier> <change|fix/name>}
-    known_role "$role"; in_pool "$role" || { echo "only a coder or the verifier holds a change" >&2; exit 2; }
+    load; role=${3:?usage: crew assign <team> <coder-n|verifier|explorer> <change|fix/name|lookup>}; slug=${4:?usage: crew assign <team> <coder-n|verifier|explorer> <change|fix/name|lookup>}
+    known_role "$role"; in_pool "$role" || { echo "only a coder, the verifier or the explorer holds work" >&2; exit 2; }
+    if [[ $role == explorer ]]; then
+      [[ -z $(agent_status "$(pane_of explorer)") ]] || { echo "$(name_of explorer) is up, holding $(change_of explorer); release it first" >&2; exit 1; }
+      start_explorer "$slug"; exit 0
+    fi
     if [[ $slug == fix/* ]]; then
       [[ $role == coder-* ]] || { echo "a fix goes to a coder; the verifier only verifies OpenSpec changes" >&2; exit 2; }
       [[ $slug =~ ^fix/[a-z0-9][a-z0-9-]*$ ]] || { echo "a fix is named fix/<words-with-dashes>" >&2; exit 2; }
@@ -253,10 +266,10 @@ case $cmd in
       # run here from the main checkout's profile since a worktree has no devenv of its own.
       on_machine env -C "$path" KIT="$KIT" bash -c 'p="$KIT/.devenv/profile/bin"; [ -x "$p/crew-prepare" ] || exit 0; PATH="$p:$PATH" crew-prepare' >/dev/null
     fi
-    { grep -v "^$role " "$held" || true; echo "$role $slug $path"; } > "$held.new"; mv "$held.new" "$held"
+    hold "$role" "$slug" "$path"
     ensure_standing; ensure_pool_pane "$role" "$path"; start "$role" ;;
   release)
-    load; role=${3:?usage: crew release <team> <coder-n|verifier>}; known_role "$role"
+    load; role=${3:?usage: crew release <team> <coder-n|verifier|explorer>}; known_role "$role"
     slug=$(change_of "$role"); [[ -n $slug ]] || { echo "$(name_of "$role") holds nothing"; exit 0; }
     path=$(path_of "$role"); ahead=0
     if [[ $role == coder-* ]]; then
@@ -268,5 +281,5 @@ case $cmd in
     drop "$held" "$role"; echo "$(name_of "$role") is free" ;;
   down)
     load; for role in "${roles[@]}"; do stop "$role" || true; done; echo "$TEAM is down; its panes are still there." ;;
-  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

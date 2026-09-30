@@ -11,7 +11,7 @@ import json, pathlib, re, shlex, sys
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
-ROLES = ("conductor", "fable", "explorer", "ops", "coder", "verifier", "builder")
+ROLES = ("conductor", "fable", "explorer", "ops", "coder", "verifier")
 HOSTS = pathlib.Path.home() / ".config/swancloud/herdr-hosts.json"
 TEAMS = pathlib.Path.home() / ".config/crew/teams.json"
 
@@ -68,8 +68,8 @@ def build_tokens(t, self_name):
     }
     tok["ROSTER"] = (
         f"The team: `{n['conductor']}` (Opus) keeps the coders building and reports where things stand; `{n['fable']}` (Fable) owns "
-        f"{t['system']}'s design and reviews each change before it is built; `{n['explorer']}` (Opus) writes the OpenSpec changes "
-        f"in {kit['name']}; the coders ({coders}, Opus) each build one whole change at a time in that change's own worktree; "
+        f"{t['system']}'s design and reviews each change before it is built; `{n['explorer']}` (Opus) is started for one OpenSpec "
+        f"command or lookup at a time in {kit['name']}; the coders ({coders}, Opus) each build one whole change at a time in that change's own worktree; "
         f"`{n['verifier']}` (Opus) is started only to run OpenSpec's verify on a finished change; and `{n['ops']}` (Opus) does everything "
         f"that touches a live system: dev AWS, GitHub, the vendors' consoles and APIs, sign-in, debugging and proofs in dev.")
     return tok

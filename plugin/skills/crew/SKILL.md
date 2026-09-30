@@ -7,7 +7,7 @@ description: Manage teams of Claude agents running in herdr: see which teams exi
 
 Teams are data in `~/.config/crew/teams.json`, which the machine's configuration writes. A team's briefs are built from that data and the role templates in `plugin/roles/`; nothing about a team lives anywhere else. Each agent's whole brief is its system prompt, and the work list and the commits are the state, so restarting an agent is cheap and is the normal cure.
 
-A team is one herdr workspace with three tabs: **conductor** (the conductor and ops), **explore** (the explorer and fable), and **build**, which exists only while a coder or the verifier holds a change. A coder builds one whole change in that change's own worktree with `/opsx:apply <slug>`. When it is built, the verifier runs `/opsx:verify <slug>` in the same worktree. The conductor and the user decide what to fix. The coder then merges. Tests run as the repository's worktrunk hooks, never as an agent's step: `wt merge` gates the merge, and main runs its full verification afterwards.
+A team is one herdr workspace with three tabs: **conductor** (the conductor and ops), **design** (fable), and **build**, which exists only while a coder, the verifier or the explorer holds work. The explorer is started for one OpenSpec command or lookup and released after it. A coder builds one whole change in that change's own worktree with `/opsx:apply <slug>`. When it is built, the verifier runs `/opsx:verify <slug>` in the same worktree. The conductor and the user decide what to fix. The coder then merges. Tests run as the repository's worktrunk hooks, never as an agent's step: `wt merge` gates the merge, and main runs its full verification afterwards.
 
 The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`.
 
@@ -19,15 +19,15 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`.
 | give agents fresh sessions, same panes | `crew restart <team> [role...]` |
 | bring back agents that died, conversations intact | `crew resume <team> [role...]` |
 | clear one agent and restore its name | `crew clear <team> <role>` |
-| give a coder a change, or start the verifier on a built one | `crew assign <team> <coder-n\|verifier> <change>` |
-| free a coder or the verifier | `crew release <team> <coder-n\|verifier>` |
+| give a coder a change, start the verifier on a built one, or start the explorer | `crew assign <team> <coder-n\|verifier\|explorer> <change>` |
+| free a coder, the verifier or the explorer | `crew release <team> <coder-n\|verifier\|explorer>` |
 | end a team's sessions | `crew down <team>` |
 
 ## Keeping a team healthy
 
-- **Context.** A standing agent above 40% context, or with any compaction, is due. The explorer and the conductor restart fresh with no loss. Ops and fable hold findings and conversations that may not be committed yet: read the pane first, prefer `resume` after a crash, and `clear` only once what they know is written down. **Never clear or restart a coder that is mid-change**; if its context runs high, tell the user.
+- **Context.** A standing agent above 40% context, or with any compaction, is due. The conductor restarts fresh with no loss. Ops and fable hold findings and conversations that may not be committed yet: read the pane first, prefer `resume` after a crash, and `clear` only once what they know is written down. **Never clear or restart a coder that is mid-change**; if its context runs high, tell the user.
 - **A dead agent** shows `not up`. `crew resume` brings it back with its conversation; if there is none it starts fresh. The command resets the pane first, because a Claude that dies badly leaves the terminal reporting mouse movement, which types escape codes into the shell.
-- **`free`** means a coder or the verifier holds no change. That is normal, and assigning is the conductor's call, not yours.
+- **`free`** means a coder, the verifier or the explorer holds no work. That is normal, and assigning is the conductor's call, not yours.
 - **Never act on an agent that is `working`** unless the user says so. `--force` exists for that.
 - **A brief or the teams file changed.** Agents take their brief at launch, so a change reaches an agent on its next restart, not on a clear. When a lot has changed, `crew rebuild`.
 - **Blocked** means a question for the user. Read the pane and tell the user which agent is waiting and on what. Do not answer it for them.

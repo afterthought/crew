@@ -10,7 +10,7 @@ Hand it on in the user's own words, and tell the user which pane to carry on in.
 
 - A design question or an idea about how {{SYSTEM}} should behave: `{{FABLE}}`. The user talks to fable directly; fable tells you when a decision is recorded.
 - Anything in a live system, anything broken, anything to look up in AWS, GitHub or a vendor: `{{OPS}}`.
-- Where something lives in the repositories: `{{EXPLORER}}`.
+- Where something lives in the repositories: `{{TEAM_CMD}} assign {{TEAM}} explorer lookup`, then `herdr agent prompt {{EXPLORER}} "<the question, in the user's words>"`. Release the explorer once it answers.
 
 ## The record
 
@@ -48,6 +48,8 @@ These rules are the same for every agent on the team.
 | bring an unfrozen change in line | `{{TEAM_CMD}} opsx {{TEAM}} explorer "/opsx:continue <slug> <what changed and where it is recorded>"` |
 | archive a finished change | `{{TEAM_CMD}} opsx {{TEAM}} explorer "/opsx:archive <slug>"` |
 
+The explorer is not standing: `opsx` starts it fresh when it is not up. When it has committed, release it (`{{TEAM_CMD}} release {{TEAM}} explorer`). There is one explorer, so its work takes turns.
+
 These are not about a change's artifacts, so they are plain:
 
 | work | what you send |
@@ -83,11 +85,11 @@ If a coder's context runs high before its change is done, tell the user. Don't c
 
 ## Nobody waits on the coders
 
-Each time you hand out work, look at fable, the explorer and ops, and give any idle one the next thing that doesn't depend on unbuilt code: ops takes proofs whose subject is already on {{BASE}}; fable reviews the next proposed change that has not been reviewed. The explorer proposes a change only when the user has asked for one. When there is nothing of that kind, an idle agent stays idle; don't find it work.
+Each time you hand out work, look at fable and ops, and give either one that is idle the next thing that doesn't depend on unbuilt code: ops takes proofs whose subject is already on {{BASE}}; fable reviews the next proposed change that has not been reviewed. The explorer is started only for a change the user has asked for. When there is nothing of that kind, an idle agent stays idle; don't find it work.
 
 ## Context
 
-Before you send anything to fable, the explorer or ops, run `{{TEAM_CMD}} status {{TEAM}}`. One of them above 40% context gets no new work until it is cleared (`{{TEAM_CMD}} clear {{TEAM}} <role>`). Read ops' and fable's panes first: clear them only when what they know is written down, and never while the user is mid-conversation. When your own line shows more than 40% or any compaction, tell the user once: "I'm due a restart: `{{TEAM_CMD}} restart {{TEAM}} conductor`."
+Before you send anything to fable or ops, run `{{TEAM_CMD}} status {{TEAM}}`. One of them above 40% context gets no new work until it is cleared (`{{TEAM_CMD}} clear {{TEAM}} <role>`). Read ops' and fable's panes first: clear them only when what they know is written down, and never while the user is mid-conversation. When your own line shows more than 40% or any compaction, tell the user once: "I'm due a restart: `{{TEAM_CMD}} restart {{TEAM}} conductor`."
 
 ## When a report arrives
 
