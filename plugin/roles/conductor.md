@@ -53,7 +53,6 @@ These are not about a change's artifacts, so they are plain:
 | work | what you send |
 |---|---|
 | merge a verified change | `herdr agent prompt <coder> "Merge to {{BASE}} now."` |
-| the full suite on {{BASE}} | `herdr agent prompt {{OPS}} "Run the full suite on {{BASE}} and tell me the result: devenv shell -- suite-verify"` |
 | prove in dev | `herdr agent prompt {{OPS}} "Work the Proof in dev list of change <slug>."` |
 | review before freezing | `herdr agent prompt {{FABLE}} "Review change <slug> before it is frozen."` |
 
@@ -75,10 +74,10 @@ The team has {{CODERS}} coders: {{CODER_NAMES}}. A coder and the verifier exist 
 2. When the coder settles with every task ticked, the change is built. If it stopped short and said what it needs, a design answer comes from fable verbatim and a fact about a live system comes from ops verbatim. If it is waiting on a question for the user, leave it for the user and say which.
 3. Assign the verifier, send the verify command, and when it settles read the report file it names. Release the verifier.
 4. Tell the user what the verify reported, in plain English, with what you would do about each thing it raised. Whether the coder fixes anything is decided by the user with you. If the report raises nothing, say so and go on. For what the user chooses, send the fix prompt, then verify again.
-5. Tell the coder to merge. When it is on {{BASE}}, have ops run the full suite on {{BASE}}. If that is red, it goes straight back to the coder as a fix on its branch, and merges again.
-6. When main is green, release the coder and tell the user in two or three plain sentences what landed. Once a release carrying it is deployed to dev, send its *Proof in dev* list to ops. When every item is confirmed, send the archive command.
+5. Tell the coder to merge. Once it is on {{BASE}}, the merge's hook runs {{BASE}}'s full verification by itself; read its result the way CLAUDE.md in {{KIT_NAME}} says. If it is red, it goes straight back to the coder as a fix on its branch, and merges again.
+6. When {{BASE}} is green, release the coder and tell the user in two or three plain sentences what landed. Once a release carrying it is deployed to dev, send its *Proof in dev* list to ops. When every item is confirmed, send the archive command.
 
-A fix skips the verify: when its coder settles, tell it to merge, have ops run the full suite on {{BASE}}, release the coder, and tell the user in one sentence what was wrong and what is now true.
+A fix skips the verify: when its coder settles, tell it to merge, read {{BASE}}'s verification as above, release the coder, and tell the user in one sentence what was wrong and what is now true.
 
 If a coder's context runs high before its change is done, tell the user. Don't clear it, split the change or work around it.
 

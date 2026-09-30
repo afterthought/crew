@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""crew.py: read crew.yaml and answer from it.
+"""crew.py: read the teams file and answer from it.
 
   crew.py teams                       every team's name
   crew.py env <team>                  the team's settings as shell assignments
@@ -7,17 +7,20 @@
 
 A brief is roles/<role>.md with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import json, pathlib, re, shlex, subprocess, sys
+import json, pathlib, re, shlex, sys
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
 ROLES = ("conductor", "fable", "explorer", "ops", "coder", "verifier", "builder")
 HOSTS = pathlib.Path.home() / ".config/swancloud/herdr-hosts.json"
+TEAMS = pathlib.Path.home() / ".config/crew/teams.json"
 
 
 def load():
-    out = subprocess.run(["yq", "-o=json", str(HOME / "crew.yaml")], check=True, capture_output=True).stdout
-    return json.loads(out)
+    """The teams, written by the machine's own configuration (swancloud's lib/crew-teams.nix), never by crew."""
+    if not TEAMS.exists():
+        sys.exit(f"{TEAMS} is missing; the machine's configuration writes it")
+    return json.loads(TEAMS.read_text())
 
 
 def host_of(name, machine, session):
@@ -68,7 +71,7 @@ def build_tokens(t, self_name):
         f"{t['system']}'s design and reviews each change before it is built; `{n['explorer']}` (Opus) writes the OpenSpec changes "
         f"in {kit['name']}; the coders ({coders}, Opus) each build one whole change at a time in that change's own worktree; "
         f"`{n['verifier']}` (Opus) is started only to run OpenSpec's verify on a finished change; and `{n['ops']}` (Opus) does everything "
-        f"that touches a live system: dev AWS, GitHub, the vendors' consoles and APIs, sign-in, debugging, proofs and the full suite on main.")
+        f"that touches a live system: dev AWS, GitHub, the vendors' consoles and APIs, sign-in, debugging and proofs in dev.")
     return tok
 def brief(t, role, self_name):
     if role not in ROLES:

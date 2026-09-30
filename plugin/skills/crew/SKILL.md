@@ -1,13 +1,13 @@
 ---
 name: crew
-description: Manage Chuck's teams of Claude agents running in herdr: see which teams exist and how healthy each agent is, start, rebuild, restart, resume or clear them, recover a team after a crash, and define a new team. Use when asked about "the teams", a named team (switchboard, breadboard), a team's conductor, coder, fable, explorer, ops or verifier, or to keep teams running.
+description: Manage teams of Claude agents running in herdr: see which teams exist and how healthy each agent is, start, rebuild, restart, resume or clear them, recover a team after a crash, and define a new team. Use when asked about "the teams", a named team, a team's conductor, coder, fable, explorer, ops or verifier, or to keep teams running.
 ---
 
 # Managing teams with crew
 
-Teams and machines are data in `crew.yaml` at the root of the crew repository. A team's briefs are built from that data and the role templates in `plugin/roles/`; nothing about a team lives anywhere else. Each agent's whole brief is its system prompt, and the work list and the commits are the state, so restarting an agent is cheap and is the normal cure.
+Teams are data in `~/.config/crew/teams.json`, which the machine's configuration writes. A team's briefs are built from that data and the role templates in `plugin/roles/`; nothing about a team lives anywhere else. Each agent's whole brief is its system prompt, and the work list and the commits are the state, so restarting an agent is cheap and is the normal cure.
 
-A team is one herdr workspace with three tabs: **conductor** (the conductor and ops), **explore** (the explorer and fable), and **build**, which exists only while a coder or the verifier holds a change. A coder builds one whole change in that change's own worktree with `/opsx:apply <slug>`. When it is built, the verifier runs `/opsx:verify <slug>` in the same worktree. The conductor and the user decide what to fix. The coder then merges, which checks the unit tests, and ops runs the full suite on main.
+A team is one herdr workspace with three tabs: **conductor** (the conductor and ops), **explore** (the explorer and fable), and **build**, which exists only while a coder or the verifier holds a change. A coder builds one whole change in that change's own worktree with `/opsx:apply <slug>`. When it is built, the verifier runs `/opsx:verify <slug>` in the same worktree. The conductor and the user decide what to fix. The coder then merges. Tests run as the repository's worktrunk hooks, never as an agent's step: `wt merge` gates the merge, and main runs its full verification afterwards.
 
 The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`.
 
@@ -29,7 +29,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`.
 - **A dead agent** shows `not up`. `crew resume` brings it back with its conversation; if there is none it starts fresh. The command resets the pane first, because a Claude that dies badly leaves the terminal reporting mouse movement, which types escape codes into the shell.
 - **`free`** means a coder or the verifier holds no change. That is normal, and assigning is the conductor's call, not yours.
 - **Never act on an agent that is `working`** unless the user says so. `--force` exists for that.
-- **A brief or `crew.yaml` changed.** Agents take their brief at launch, so a change reaches an agent on its next restart, not on a clear. When a lot has changed, `crew rebuild`.
+- **A brief or the teams file changed.** Agents take their brief at launch, so a change reaches an agent on its next restart, not on a clear. When a lot has changed, `crew rebuild`.
 - **Blocked** means a question for the user. Read the pane and tell the user which agent is waiting and on what. Do not answer it for them.
 - **`release` refuses** while a coder's branch has commits that are not on main. That is unmerged work: tell the conductor, don't force it.
 
@@ -39,4 +39,4 @@ You keep teams running. You do not do a team's work or steer it: no sending chan
 
 ## Defining a team
 
-Add an entry to `teams:` in `crew.yaml`, and its machine to `machines:` if it is new. Every field is read by `plugin/lib/crew.py`; `python3 plugin/lib/crew.py brief <team> <role>` prints a brief, and missing data is an error, never blank text.
+A team is declared in the machine's configuration, which writes `~/.config/crew/teams.json`; crew never edits that file. The team names a machine and a herdr session, and both must already be declared there as herdr hosts: a team does not create either. Every field is read by `plugin/lib/crew.py`; `python3 plugin/lib/crew.py brief <team> <role>` prints a brief, and missing data is an error, never blank text.

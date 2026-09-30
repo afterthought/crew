@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# crew: run teams of agents in herdr. Teams and machines are data in crew.yaml.
+# crew: run teams of agents in herdr. Teams are data in ~/.config/crew/teams.json.
 #
 #   crew list                          the teams that are defined
 #   crew status  [team]                each agent's state, context use, compactions, age, and the change it holds
