@@ -19,8 +19,9 @@
 #                                      end it, close its pane, and free it; a coder's merged worktree is removed
 #   crew down    <team>                end every role's session; the panes stay
 #
-# A team is one herdr workspace with three tabs: "conductor" (the conductor and ops), "design" (fable), and
-# "build", which exists only while a coder, the verifier or the explorer holds work. Add --force to act on an
+# A team is one herdr workspace with four tabs: "conductor" (the conductor and ops), "design" (fable), "git"
+# (gitgui in each of the team's repositories), and "build", which exists only while a coder, the verifier or the
+# explorer holds work. Add --force to act on an
 # agent that is working. A fresh session gets its whole brief as its system prompt: the work list and the commits
 # are the state.
 set -euo pipefail
@@ -101,8 +102,8 @@ start() {  # start <role> [resume]
   if [[ -n ${2:-} ]]; then echo "$name resumed in $pane"; else echo "$name started in $pane"; fi
 }
 
-ensure_standing() {  # the workspace, and the two tabs that always exist
-  local ws w c o f tab
+ensure_standing() {  # the workspace, and the three tabs that always exist
+  local ws w c o f g d tab
   c=$(pane_of conductor)
   if ! pane_live "$c"; then
     ws=$(h workspace create --cwd "$DESIGN" --label "$TEAM" --no-focus)
@@ -117,6 +118,14 @@ ensure_standing() {  # the workspace, and the two tabs that always exist
     tab=$(h tab create --workspace "$w" --cwd "$DESIGN" --label design --no-focus)
     f=$(jq -r '.result.root_pane.pane_id' <<<"$tab"); put "$panes" fable "$f"
   fi
+  # gitgui, one pane per repository, for the user to watch the work land. No agent runs here.
+  g=$(pane_of git-kit)
+  if ! pane_live "$g"; then
+    tab=$(h tab create --workspace "$w" --cwd "$KIT" --label git --no-focus)
+    g=$(jq -r '.result.root_pane.pane_id' <<<"$tab"); put "$panes" git-kit "$g"; h pane run "$g" gitgui >/dev/null
+  fi
+  d=$(pane_of git-design)
+  pane_live "$d" || { d=$(split "$g" right "$DESIGN"); put "$panes" git-design "$d"; h pane run "$d" gitgui >/dev/null; }
 }
 
 ensure_pool_pane() {  # the build tab exists only while someone holds a change
