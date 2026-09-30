@@ -72,7 +72,7 @@ The team has {{CODERS}} coders: {{CODER_NAMES}}. A coder and the verifier exist 
 ## The building loop
 
 1. For each free coder, take the next frozen change that may be built beside what is in hand. Assign it, send the apply command, and wait in the background.
-2. When the coder settles with every task ticked, the change is built. If it stopped short and said what it needs, a design answer comes from fable verbatim and a fact about a live system comes from ops verbatim. If it is blocked on a permission prompt or a question for the user, leave it for the user and say which.
+2. When the coder settles with every task ticked, the change is built. If it stopped short and said what it needs, a design answer comes from fable verbatim and a fact about a live system comes from ops verbatim. If it is waiting on a question for the user, leave it for the user and say which.
 3. Assign the verifier, send the verify command, and when it settles read the report file it names. Release the verifier.
 4. Tell the user what the verify reported, in plain English, with what you would do about each thing it raised. Whether the coder fixes anything is decided by the user with you. If the report raises nothing, say so and go on. For what the user chooses, send the fix prompt, then verify again.
 5. Tell the coder to merge. When it is on {{BASE}}, have ops run the full suite on {{BASE}}. If that is red, it goes straight back to the coder as a fix on its branch, and merges again.

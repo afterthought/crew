@@ -30,7 +30,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`.
 - **`free`** means a coder or the verifier holds no change. That is normal, and assigning is the conductor's call, not yours.
 - **Never act on an agent that is `working`** unless the user says so. `--force` exists for that.
 - **A brief or `crew.yaml` changed.** Agents take their brief at launch, so a change reaches an agent on its next restart, not on a clear. When a lot has changed, `crew rebuild`.
-- **Blocked** means a permission prompt or a question. Read the pane and tell the user which agent is waiting and on what. Do not answer it for them.
+- **Blocked** means a question for the user. Read the pane and tell the user which agent is waiting and on what. Do not answer it for them.
 - **`release` refuses** while a coder's branch has commits that are not on main. That is unmerged work: tell the conductor, don't force it.
 
 ## What is not yours

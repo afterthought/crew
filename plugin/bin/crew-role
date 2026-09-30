@@ -5,43 +5,39 @@ set -euo pipefail
 team=${1:?usage: crew-role <team> <role> [resume]}; role=${2:?usage: crew-role <team> <role> [resume]}
 here=$(cd "$(dirname "$0")" && pwd)
 eval "$(python3 "$here/../lib/crew.py" env "$team")"
-crew=$CREW_HOME/plugin/bin/crew; name=$TEAM-$role; brief=$role
-git_read=('Bash(git log:*)' 'Bash(git show:*)' 'Bash(git diff:*)' 'Bash(git status:*)')
-git_write=('Bash(git add:*)' 'Bash(git commit:*)')
+name=$TEAM-$role; brief=$role
 held() { awk -v r="$role" '$1==r{print $3}' "$STATE/assignments" 2>/dev/null; }
 case $role in
   conductor)
     cd "$DESIGN"
-    args=(--model 'opus[1m]' --effort xhigh --add-dir "$KIT"
-      --allowed-tools 'Bash(herdr agent:*)' "Bash($crew status:*)" "Bash($crew clear:*)" "Bash($crew opsx:*)" "Bash($crew assign:*)" "Bash($crew release:*)"
-      'Bash(openspec list:*)' 'Bash(openspec status:*)' 'Bash(openspec show:*)' "${git_read[@]}")
+    args=(--model 'opus[1m]' --add-dir "$KIT")
     ;;
   fable)
     cd "$DESIGN"
-    args=(--model fable --effort xhigh --add-dir "$KIT" --permission-mode acceptEdits
-      --allowed-tools 'Bash(git -C:*)' 'Bash(herdr agent prompt:*)' "${git_read[@]}" "${git_write[@]}")
+    args=(--model fable --add-dir "$KIT")
     ;;
   explorer)
     cd "$KIT"
-    args=(--model 'opus[1m]' --effort xhigh --add-dir "$DESIGN" --permission-mode acceptEdits
-      --allowed-tools 'Bash(openspec:*)' "${git_read[@]}" "${git_write[@]}")
+    args=(--model 'opus[1m]' --add-dir "$DESIGN")
     ;;
   ops)
     cd "$KIT"
-    args=(--model 'opus[1m]' --effort xhigh --add-dir "$DESIGN" --permission-mode bypassPermissions)
+    args=(--model 'opus[1m]' --add-dir "$DESIGN")
     ;;
   coder-*)
     work=$(held); [[ -n $work && -d $work ]] || { echo "$name holds no change. Give it one with: crew assign $team $role <change>" >&2; exit 2; }
     cd "$work"; brief=coder
-    args=(--model 'opus[1m]' --effort xhigh --add-dir "$DESIGN" --add-dir "$KIT")
+    args=(--model 'opus[1m]' --add-dir "$DESIGN" --add-dir "$KIT")
     ;;
   verifier)
     work=$(held); [[ -n $work && -d $work ]] || { echo "$name holds no change. Give it one with: crew assign $team verifier <change>" >&2; exit 2; }
     cd "$work"
-    args=(--model 'opus[1m]' --effort xhigh --add-dir "$DESIGN" --add-dir "$KIT")
+    args=(--model 'opus[1m]' --add-dir "$DESIGN" --add-dir "$KIT")
     ;;
   *) echo "unknown role: $role" >&2; exit 2 ;;
 esac
+# Every role runs unprompted: a mix of modes left some agents stalled on prompts no one was watching.
+args+=(--effort xhigh --permission-mode bypassPermissions)
 [[ ${3:-} == resume ]] && args+=(--resume "$name")
 prompt=$(python3 "$here/../lib/crew.py" brief "$team" "$brief" "$name")
 exec claude "${args[@]}" --name "$name" --append-system-prompt "$prompt"
