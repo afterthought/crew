@@ -128,10 +128,15 @@ ensure_standing() {  # the workspace, and the three tabs that always exist
   pane_live "$d" || { d=$(split "$g" right "$DESIGN"); put "$panes" git-design "$d"; h pane run "$d" gitgui >/dev/null; }
 }
 
-ensure_pool_pane() {  # the build tab exists only while someone holds a change
-  local role=$1 path=$2 p tab other r w; p=$(pane_of "$role"); pane_live "$p" && return 0
-  for r in "${pool[@]}"; do other=$(pane_of "$r"); [[ $r != "$role" ]] && pane_live "$other" && break; other=; done
-  if [[ -n $other ]]; then p=$(split "$other" right "$path")
+ensure_pool_pane() {  # the build tab exists only while someone holds a change, and fills as tiles
+  local role=$1 path=$2 p tab q r newest= open=0 w; p=$(pane_of "$role"); pane_live "$p" && return 0
+  # The panes file lists roles in the order their panes opened, so the last live pool pane in it is the newest.
+  # A new pane halves the newest: to its right when an odd number are open, below it when an even number are.
+  for r in $(awk '{print $1}' "$panes"); do
+    q=$(pane_of "$r"); if in_pool "$r" && pane_live "$q"; then newest=$q; open=$((open + 1)); fi
+  done
+  if [[ -n $newest ]]; then
+    if (( open % 2 )); then p=$(split "$newest" right "$path"); else p=$(split "$newest" down "$path"); fi
   else
     w=$(get "$layout" workspace)
     tab=$(h tab create --workspace "$w" --cwd "$path" --label build --no-focus); p=$(jq -r '.result.root_pane.pane_id' <<<"$tab")
