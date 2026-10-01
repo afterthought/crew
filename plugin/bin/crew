@@ -13,7 +13,8 @@
 #                                      The explorer is started for it when it is not up
 #   crew assign  <team> <coder-n|verifier|explorer> <change|fix/name|lookup>
 #                                      a coder: make the change's worktree (or the fix's) and start fresh inside it;
-#                                      the verifier: start fresh inside the worktree a coder built a change in;
+#                                      the verifier: start fresh inside the worktree a coder built a change in,
+#                                      named by the change or by the fix whose worktree it was built in;
 #                                      the explorer: start fresh in the main checkout, for one piece of work
 #   crew release <team> <coder-n|verifier|explorer>
 #                                      end it, close its pane, and free it; a coder's merged worktree is removed
@@ -260,7 +261,6 @@ case $cmd in
       start_explorer "$slug"; exit 0
     fi
     if [[ $slug == fix/* ]]; then
-      [[ $role == coder-* ]] || { echo "a fix goes to a coder; the verifier only verifies OpenSpec changes" >&2; exit 2; }
       [[ $slug =~ ^fix/[a-z0-9][a-z0-9-]*$ ]] || { echo "a fix is named fix/<words-with-dashes>" >&2; exit 2; }
     else
       in_kit test -d "openspec/changes/$slug" || { echo "no change '$slug' in $KIT_NAME" >&2; exit 2; }
@@ -272,7 +272,7 @@ case $cmd in
     now=$(change_of "$role"); [[ -n $now && $now != "$slug" ]] && { echo "$(name_of "$role") holds $now; release it first" >&2; exit 1; }
     stop "$role"
     path=$(worktree_of "$slug")
-    if [[ -z $path && $role == verifier ]]; then echo "change $slug has no worktree: verify runs where a coder built" >&2; exit 1; fi
+    if [[ -z $path && $role == verifier ]]; then echo "$slug has no worktree: verify runs where a coder built" >&2; exit 1; fi
     if [[ -z $path ]]; then
       in_kit wt switch --create "$(branch_of "$slug")" --base "$BASE" --no-cd >/dev/null
       path=$(worktree_of "$slug"); [[ -n $path ]] || { echo "the worktree for $(branch_of "$slug") did not appear; run 'wt list' in $KIT" >&2; exit 1; }
