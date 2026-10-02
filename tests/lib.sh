@@ -229,3 +229,12 @@ exit 0
 HOOK
   chmod +x "$r/hooks/pre-receive"
 }
+
+# place <kit main> <bolt> <unit>: the unit's worktree, made the way construct makes it
+place() {
+  local kd; kd=$(dirname "$1")
+  git -C "$1" worktree add -q --track -b "unit/$3" "$kd/places/$3" "bolt/$2"
+  echo "$kd/places/$3"
+}
+# stage <unit> [label]: the unit's stage as crew bolts reads it
+stage() { crew bolts --label "${2:-wldn}" --json | jq -r --arg u "$1" '[.partitions[].plans[].bolts[].units[] | select(.unit == $u) | .stage] | first // "none"'; }
