@@ -147,13 +147,14 @@ start() {  # start <role> [stage|resume]
 
 # ------------------------------------------------------------------------------------------- the workspaces
 
+ws_key() { echo "ws:${1// /_}"; }  # a workspace's label as a key of the layout file, which splits on spaces
 workspace() {  # workspace <label> <cwd>: a new workspace; its id goes in the layout, its root pane is printed
   local ws; ws=$(h workspace create --cwd "$2" --label "$1" --no-focus)
-  put "$layout" "ws:$1" "$(jq -r '.result.workspace.workspace_id' <<<"$ws")"
+  put "$layout" "$(ws_key "$1")" "$(jq -r '.result.workspace.workspace_id' <<<"$ws")"
   echo "$(jq -r '.result.tab.tab_id' <<<"$ws") $(jq -r '.result.root_pane.pane_id' <<<"$ws")"
 }
 tab() {  # tab <workspace label> <tab label> <cwd> <role>: a tab with one pane for the role
-  local t; t=$(h tab create --workspace "$(get "$layout" "ws:$1")" --cwd "$3" --label "$2" --no-focus)
+  local t; t=$(h tab create --workspace "$(get "$layout" "$(ws_key "$1")")" --cwd "$3" --label "$2" --no-focus)
   put "$panes" "$4" "$(jq -r '.result.root_pane.pane_id' <<<"$t")"
 }
 first_tab() {  # first_tab <workspace label> <tab label> <cwd> <role>: the workspace, its first tab holding the role
@@ -232,8 +233,8 @@ free() {  # end a slot's agent, close its pane and give the slot back; the units
   local slot=$1 s w; stop "$slot" || return 1
   drop "$held" "$slot"
   if [[ -n $(awk 'NF' "$held") ]]; then close_pane "$slot"; return 0; fi
-  w=$(get "$layout" "ws:$TEAM units"); [[ -n $w ]] && { h workspace close "$w" >/dev/null 2>&1 || true; }
-  drop "$layout" "ws:$TEAM units"; for s in "${slots[@]}"; do drop "$panes" "$s"; done
+  w=$(get "$layout" "$(ws_key "$TEAM units")"); [[ -n $w ]] && { h workspace close "$w" >/dev/null 2>&1 || true; }
+  drop "$layout" "$(ws_key "$TEAM units")"; for s in "${slots[@]}"; do drop "$panes" "$s"; done
 }
 remove_place() {  # remove_place <kind> <name>: a merged unit's or fix's worktree and branch
   local path branch
