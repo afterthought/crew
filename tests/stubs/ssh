@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Stub ssh for crew's tests: `ssh [-o opt]... <target> <command...>` runs the command at once, as if on <target>:
+# its HOME is that host's scratch home and `hostname -s` answers its name (each fixture host's ssh name is its
+# own name). A target listed in $CREW_TEST_ROOT/down does not answer, the way a stopped host doesn't.
+while [[ ${1:-} == -* ]]; do [[ $1 == -o || $1 == -i || $1 == -p ]] && shift; shift; done
+target=${1:?ssh stub: no target}; shift
+[[ -n ${CREW_TEST_LOG:-} ]] && printf '%s ssh %s %s\n' "${CREW_TEST_HOST:-?}" "$target" "$*" >> "$CREW_TEST_LOG"
+if [[ -f ${CREW_TEST_ROOT:?}/down ]] && grep -qx "$target" "$CREW_TEST_ROOT/down"; then
+  echo "ssh: connect to host $target port 22: Operation timed out" >&2; exit 255
+fi
+[[ -d $CREW_TEST_ROOT/hosts/$target/home ]] || { echo "ssh: Could not resolve hostname $target" >&2; exit 255; }
+export CREW_TEST_HOST=$target HOME=$CREW_TEST_ROOT/hosts/$target/home
+cd "$HOME" && exec bash -c "$*"

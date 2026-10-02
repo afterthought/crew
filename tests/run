@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Run crew's tests: tests/run [name...]. Each test is tests/t-<name>.sh, run by bash in a scratch directory of
+# its own ($T) with tests/lib.sh to source. lib.sh gives each simulated host a scratch HOME holding fixture
+# teams.json and herdr-hosts.json files, makes bare git remotes, and puts stub herdr, ssh, hostname, sleep and
+# claude commands first on PATH. The stubs record their calls in $T/calls.log and $T/claude.log, so no test
+# ever reaches a real herdr session, a real host or a real agent.
+set -uo pipefail
+TESTS=$(cd "$(dirname "$0")" && pwd -P); export TESTS
+
+# A test must never reach the real herdr or ssh: refuse to run if the stubs would not be the ones found.
+for c in herdr ssh hostname claude; do
+  [[ $(PATH="$TESTS/stubs:$PATH" command -v "$c") == "$TESTS/stubs/$c" ]] || { echo "tests/stubs/$c would not shadow $c" >&2; exit 2; }
+done
+for c in recsel recfix git python3 jq; do
+  command -v "$c" >/dev/null || { echo "tests need $c on PATH (recutils comes with crew's devenv: devenv shell)" >&2; exit 2; }
+done
+
+# Written for bash 3.2 as well, the one macOS ships: an empty array is expanded as ${a[@]+"${a[@]}"}.
+tests=()
+if (( $# )); then for n in "$@"; do n=${n#t-}; tests+=("$TESTS/t-${n%.sh}.sh"); done
+else for t in "$TESTS"/t-*.sh; do [[ -e $t ]] && tests+=("$t"); done; fi
+
+pass=0; failed=()
+for t in ${tests[@]+"${tests[@]}"}; do
+  name=$(basename "$t" .sh)
+  [[ -f $t ]] || { echo "no test $name" >&2; failed+=("$name"); continue; }
+  T=$(cd "$(mktemp -d "${TMPDIR:-/tmp}/crew-test.XXXXXX")" && pwd -P)
+  if (cd "$T" && T=$T bash "$t") >"$T/out" 2>&1; then
+    pass=$((pass + 1)); echo "ok    $name"; rm -rf "$T"
+  else
+    failed+=("$name"); echo "FAIL  $name   (scratch kept: $T)"; tail -25 "$T/out" | sed 's/^/      /'
+  fi
+done
+echo "${pass} passed, ${#failed[@]} failed"
+(( ${#failed[@]} == 0 ))

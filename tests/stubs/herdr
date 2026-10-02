@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""Stub herdr for crew's tests: enough of herdr's socket API for crew, and nothing real.
+
+Every call is logged to $CREW_TEST_LOG as `<host> <session> <args...>`. State lives in
+$HOME/.stub-herdr/<session>.json, so each simulated host (its own HOME) has its own servers.
+`pane run` of a crew-role command runs it at once, in the pane's folder; when it exits 0 (the stub
+claude has recorded its launch), the pane holds an idle agent with no name, as herdr has it after
+a new session. `agent prompt <pane> /exit` ends that agent.
+
+Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status, and
+`herdr --session S stub agent <pane> [name]` puts an agent in a pane."""
+import fcntl, json, os, pathlib, shlex, subprocess, sys
+
+args = sys.argv[1:]
+session = "default"
+if args[:1] == ["--session"]:
+    session, args = args[1], args[2:]
+host = os.environ.get("CREW_TEST_HOST", "?")
+if os.environ.get("CREW_TEST_LOG"):
+    with open(os.environ["CREW_TEST_LOG"], "a") as f:
+        f.write(f"{host} {session} {shlex.join(args)}\n")
+
+path = pathlib.Path(os.environ["HOME"]) / ".stub-herdr" / f"{session}.json"
+path.parent.mkdir(parents=True, exist_ok=True)
+lock = open(str(path) + ".lock", "w")
+fcntl.flock(lock, fcntl.LOCK_EX)
+st = json.loads(path.read_text()) if path.exists() else {"n": 0, "workspaces": {}, "tabs": {}, "panes": {}, "agents": {}}
+
+
+def save():
+    path.write_text(json.dumps(st, indent=1))
+
+
+def out(obj):
+    print(json.dumps({"result": obj}))
+
+
+def die(msg, code=1):
+    save()
+    print(json.dumps({"error": msg}), file=sys.stderr)
+    sys.exit(code)
+
+
+def opt(name, default=None):
+    if name in args:
+        i = args.index(name)
+        return args[i + 1]
+    return default
+
+
+def new_id():
+    st["n"] += 1
+    return st["n"]
+
+
+def new_pane(ws, tab, cwd):
+    pid = f"{ws}:p{new_id()}"
+    st["panes"][pid] = {"workspace": ws, "tab": tab, "cwd": cwd, "output": ""}
+    return pid
+
+
+def agent_pane(target):
+    if target in st["agents"]:
+        return target
+    for p, a in st["agents"].items():
+        if a.get("name") == target:
+            return p
+    return None
+
+
+def close_pane(p):
+    st["panes"].pop(p, None)
+    st["agents"].pop(p, None)
+
+
+group, cmd, rest = (args + ["", ""])[0], (args + ["", ""])[1], args[2:]
+
+if group == "workspace" and cmd == "create":
+    ws = f"w{new_id()}"
+    st["workspaces"][ws] = {"label": opt("--label", ws)}
+    tab = f"{ws}:t{new_id()}"
+    st["tabs"][tab] = {"workspace": ws, "label": "1"}
+    p = new_pane(ws, tab, opt("--cwd", os.environ["HOME"]))
+    out({"workspace": {"workspace_id": ws, "label": st["workspaces"][ws]["label"]}, "tab": {"tab_id": tab}, "root_pane": {"pane_id": p}})
+elif group == "workspace" and cmd == "list":
+    out({"workspaces": [{"workspace_id": w, "label": v["label"]} for w, v in st["workspaces"].items()]})
+elif group == "workspace" and cmd == "get":
+    w = rest[0]
+    w in st["workspaces"] or die(f"no workspace {w}")
+    out({"workspace": {"workspace_id": w, "label": st["workspaces"][w]["label"]}})
+elif group == "workspace" and cmd == "close":
+    w = rest[0]
+    w in st["workspaces"] or die(f"no workspace {w}")
+    del st["workspaces"][w]
+    for t in [t for t, v in st["tabs"].items() if v["workspace"] == w]:
+        del st["tabs"][t]
+    for p in [p for p, v in st["panes"].items() if v["workspace"] == w]:
+        close_pane(p)
+    out({})
+elif group == "tab" and cmd == "create":
+    ws = opt("--workspace")
+    ws in st["workspaces"] or die(f"no workspace {ws}")
+    tab = f"{ws}:t{new_id()}"
+    st["tabs"][tab] = {"workspace": ws, "label": opt("--label", tab)}
+    p = new_pane(ws, tab, opt("--cwd", os.environ["HOME"]))
+    out({"tab": {"tab_id": tab, "label": st["tabs"][tab]["label"]}, "root_pane": {"pane_id": p}})
+elif group == "tab" and cmd == "rename":
+    rest[0] in st["tabs"] or die(f"no tab {rest[0]}")
+    st["tabs"][rest[0]]["label"] = rest[1]
+    out({})
+elif group == "tab" and cmd == "get":
+    rest[0] in st["tabs"] or die(f"no tab {rest[0]}")
+    out({"tab": dict(st["tabs"][rest[0]], tab_id=rest[0])})
+elif group == "tab" and cmd == "list":
+    ws = opt("--workspace")
+    out({"tabs": [dict(v, tab_id=t) for t, v in st["tabs"].items() if ws in (None, v["workspace"])]})
+elif group == "pane" and cmd == "split":
+    src = rest[0]
+    src in st["panes"] or die(f"no pane {src}")
+    p = new_pane(st["panes"][src]["workspace"], st["panes"][src]["tab"], opt("--cwd", st["panes"][src]["cwd"]))
+    out({"pane": {"pane_id": p}})
+elif group == "pane" and cmd == "get":
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    out({"pane": dict(st["panes"][rest[0]], pane_id=rest[0])})
+elif group == "pane" and cmd == "list":
+    ws = opt("--workspace")
+    out({"panes": [dict(v, pane_id=p) for p, v in st["panes"].items() if ws in (None, v["workspace"])]})
+elif group == "pane" and cmd == "close":
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    close_pane(rest[0])
+    out({})
+elif group == "pane" and cmd == "run":
+    p, line = rest[0], rest[1]
+    p in st["panes"] or die(f"no pane {p}")
+    if "crew-role" in line:
+        save()
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        r = subprocess.run(["bash", "-c", line], cwd=st["panes"][p]["cwd"], capture_output=True, text=True,
+                           env=dict(os.environ, HERDR_PANE_ID=p))
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        st = json.loads(path.read_text())
+        st["panes"][p]["output"] = r.stdout + r.stderr
+        if r.returncode == 0:
+            st["agents"][p] = {"status": "idle", "name": None}
+    out({})
+elif group == "pane" and cmd == "send-keys":
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    out({})
+elif group == "pane" and cmd == "read":
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    print(st["panes"][rest[0]]["output"])
+elif group == "agent" and cmd == "get":
+    p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
+    a = st["agents"][p]
+    out({"agent": {"pane_id": p, "name": a["name"], "agent_status": a["status"], "agent_session": {"value": f"sid-{p}"}}})
+elif group == "agent" and cmd == "list":
+    out({"agents": [{"pane_id": p, "name": a["name"], "agent_status": a["status"]} for p, a in st["agents"].items()]})
+elif group == "agent" and cmd == "rename":
+    p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
+    st["agents"][p]["name"] = rest[1]
+    out({})
+elif group == "agent" and cmd == "prompt":
+    p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
+    if rest[1] == "/exit":
+        del st["agents"][p]
+    else:
+        st["agents"][p].setdefault("prompts", []).append(rest[1])
+    out({})
+elif group == "agent" and cmd in ("wait", "send-keys"):
+    agent_pane(rest[0]) or die(f"no agent {rest[0]}")
+    out({})
+elif group == "stub" and cmd == "status":
+    p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
+    st["agents"][p]["status"] = rest[1]
+elif group == "stub" and cmd == "agent":
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    st["agents"][rest[0]] = {"status": "idle", "name": rest[1] if len(rest) > 1 else None}
+else:
+    die(f"the stub herdr has no '{group} {cmd}'", 2)
+save()

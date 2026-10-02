@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Stub hostname for crew's tests: the simulated host a command runs on.
+echo "${CREW_TEST_HOST:?hostname stub: CREW_TEST_HOST is not set}"

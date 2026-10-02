@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Stub sleep for crew's tests: crew's waits for herdr are answered at once by the stub herdr.
+exit 0

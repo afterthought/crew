@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Stub claude for crew's tests: records how it was launched in $CREW_TEST_CLAUDE_LOG, one JSON line each."""
+import json, os, sys
+with open(os.environ["CREW_TEST_CLAUDE_LOG"], "a") as f:
+    f.write(json.dumps({"host": os.environ.get("CREW_TEST_HOST"), "cwd": os.getcwd(), "argv": sys.argv[1:],
+                        "agent": os.environ.get("CREW_AGENT"), "label": os.environ.get("CREW_LABEL")}) + "\n")
