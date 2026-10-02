@@ -41,7 +41,7 @@
 
   Verify each refusal and the launch arguments with the stubs.
 - [x] 3.3 The merge stage runs `wt merge bolt/<bolt> --no-squash --no-remove` from the place. When the bolt holds the change, crew removes the place and frees the slot. Verify in a scratch kit that a merged unit reads `merged` and its slot is free.
-- [ ] 3.4 `crew fix <team> <name> "<what is wrong>"` makes `places/fix-<name>` on `fix/<name>` from the bolt, starts a code agent in a free slot, and merges like a unit. Verify with the stubs and a scratch kit.
+- [x] 3.4 `crew fix <team> <name> "<what is wrong>"` makes `places/fix-<name>` on `fix/<name>` from the bolt, starts a code agent in a free slot, and merges like a unit. Verify with the stubs and a scratch kit.
 - [ ] 3.5 `<team> units` workspace: created with the first unit or fix in flight, one tiled pane per slot, closed when the last one frees. `crew status` lists the standing roles and each slot's unit and stage. Verify with the stub `herdr`.
 - [ ] 3.6 Briefs:
   - `conductor.md` and `ops.md` rewritten for a bolt team;
