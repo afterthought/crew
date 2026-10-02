@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Stub devurl for crew sites' tests: names a worktree <branch>--<kit>, as swancloud's devurl does. A host
+# publishes when its HOME holds .devurl-label, the label its dev.swancloud.net names carry.
+branch=$(git branch --show-current | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
+kit=$(basename "$(dirname "$(cd "$(git rev-parse --git-common-dir)/.." && pwd)")")
+if [[ -f $HOME/.devurl-label ]]; then
+  printf 'here     https://%s--%s.local\ntailnet  https://%s--%s--%s.dev.swancloud.net\n' "$branch" "$kit" "$branch" "$kit" "$(cat "$HOME/.devurl-label")"
+else
+  printf 'here     https://%s--%s.localhost\ntailnet  (this host does not publish; devUrls.publish is false)\n' "$branch" "$kit"
+fi

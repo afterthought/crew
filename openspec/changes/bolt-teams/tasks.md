@@ -71,7 +71,7 @@
 
 - [x] 5.1 `crew operator up <label>` on the host itself: the `operator` workspace in the session named `<label>`, the agent `<label>-operator-<host>` started in the session's folder, nothing done when it is already up, and a non-zero exit naming a missing session or partition. Verify by running it twice with the stub `herdr`.
 - [x] 5.2 `operator.md`: where things stand from `crew bolts`, `crew status` and `crew sites`; requests carried to the planner, the design agent, a dispatcher or a conductor; sites opened in terminal-browser, or the Mac URL given on a box. Verify it prints for the `wldn` fixture.
-- [ ] 5.3 `crew sites [<label>] [--json]`: each host's bolts, places and fixes, names from `devurl` run in each worktree, running servers from the host's portless routes, the URL rule of the `crew-sites` spec, and unreachable hosts named. Verify on mac-studio with a scratch kit whose place runs `devurl-serve`.
+- [x] 5.3 `crew sites [<label>] [--json]`: each host's bolts, places and fixes, names from `devurl` run in each worktree, running servers from the host's portless routes, the URL rule of the `crew-sites` spec, and unreachable hosts named. Verify on mac-studio with a scratch kit whose place runs `devurl-serve`.
 
 ## 6. Documents and the blueprints repos
 

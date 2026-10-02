@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Stub portless for crew sites' tests: `portless list` shows the names in $HOME/.portless-routes as running.
+[[ ${1:-} == list ]] || exit 2
+echo; echo "Active routes:"; echo
+tld=localhost; [[ -f $HOME/.devurl-label ]] && tld=local
+while read -r n; do [[ -n $n ]] && printf '  https://%s.%s  ->  localhost:4%03d\n' "$n" "$tld" "$RANDOM"; done < "${HOME}/.portless-routes" 2>/dev/null || true

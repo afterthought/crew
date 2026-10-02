@@ -3,17 +3,21 @@
 
   python3 gather.py '<request>'      or, sent over ssh:  python3 - '<request>' < gather.py
 
-The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...]}]}.
+The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...]}],
+"sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
 for each bolt whether bolt/<bolt> exists, the changes it holds and its worktree; each place under <dir>/places
 with its branch, its change's tasks, whether its planning is complete and whether it has a review since the bolt;
 and each fix branched from a bolt. It reads with git and openspec only, and changes nothing. It needs nothing
 but python3's standard library, since it is sent to hosts whose crew may be older."""
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 
 def run(args, cwd):
-    r = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    try:
+        r = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    except FileNotFoundError:
+        return None
     return r.stdout if r.returncode == 0 else None
 
 
@@ -75,7 +79,33 @@ def place(path, unit, bolt):
     return info
 
 
-def kit(req):
+def devurl(path):
+    """The worktree's names as swancloud's devurl gives them: here (this host's local name) and tailnet (its
+    dev.swancloud.net name, None when the host does not publish)."""
+    out = run(["devurl"], path)
+    if out is None:
+        return {"here": None, "tailnet": None, "error": "devurl did not answer"}
+    names = {}
+    for line in out.splitlines():
+        key, _, rest = line.strip().partition(" ")
+        rest = rest.strip()
+        names[key] = rest if rest.startswith("https://") else None
+    return {"here": names.get("here"), "tailnet": names.get("tailnet")}
+
+
+def routes():
+    """The host's running dev servers, from portless's active routes: each URL and the name it serves."""
+    out, found = run(["portless", "list"], None), []
+    for line in (out or "").splitlines():
+        m = re.match(r"\s*(https?://(\S+?))(:\d+)?\s+->\s+", line)
+        if m:
+            host = m.group(2)
+            name = host.rsplit(".", 1)[0] if host.rsplit(".", 1)[-1] in ("local", "localhost") else host
+            found.append({"url": m.group(1) + (m.group(3) or ""), "name": name})
+    return found if out is not None else None
+
+
+def kit(req, sites=False, running=None):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
         return {"ok": False, "error": f"no checkout at {main}"}
@@ -105,9 +135,14 @@ def kit(req):
             merged = bool(bolt) and bool(born) and tip != born[-1] and subprocess.run(
                 ["git", "merge-base", "--is-ancestor", branch, f"bolt/{bolt}"], cwd=main).returncode == 0
             out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": merged})
+    if sites:
+        out["sites"] = {path: devurl(path) for path, branch in at.items()
+                        if os.path.dirname(path) in (places, os.path.join(kdir, "bolts")) and branch}
+        out["routes"] = running
     return out
 
 
 if __name__ == "__main__":
     request = json.loads(sys.argv[1])
-    print(json.dumps({k["main"]: kit(k) for k in request["kits"]}))
+    running = routes() if request.get("sites") else None
+    print(json.dumps({k["main"]: kit(k, request.get("sites"), running) for k in request["kits"]}))

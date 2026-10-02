@@ -421,9 +421,10 @@ GATHER = (LIB / "gather.py").read_text()
 LATER = ("code", "verify", "merged", "landed")
 
 
-def survey(fleet, held):
+def survey(fleet, held, sites=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)]. The answer is
-    per host: its kits by main checkout, or why it did not answer."""
+    per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
+    the host's running portless routes too."""
     hosts = {}
     for team, bolt in held:
         t = fleet["teams"].get(team)
@@ -434,7 +435,7 @@ def survey(fleet, held):
             k["bolts"].append(bolt)
     out = {}
     for host, kits in sorted(hosts.items()):
-        r = crew.on_machine(fleet, host, ["python3", "-", json.dumps({"kits": list(kits.values())})], input=GATHER)
+        r = crew.on_machine(fleet, host, ["python3", "-", json.dumps({"kits": list(kits.values()), "sites": sites})], input=GATHER)
         if r.returncode == 0:
             out[host] = {"ok": True, "kits": json.loads(r.stdout)}
         else:
