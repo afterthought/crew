@@ -84,7 +84,7 @@
 
 ## 7. Rollout
 
-- [ ] 7.1 After swancloud's deploy writes `teams.json` version 2:
+- [x] 7.1 After swancloud's deploy writes `teams.json` version 2:
   - run `crew plan init` for each partition's blueprints repos, once afterthought/blueprints exists with the user's go;
   - merge `bolt-teams` into crew's main, and pull it on the box.
 
