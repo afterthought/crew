@@ -58,7 +58,7 @@
 
 ## 4. The main level
 
-- [ ] 4.1 `crew main up|down|status <label>`: the `<label>` workspace with `design`, `planner` and `ops` tabs in the main level's session, and a dispatcher in `<label> dispatch` on each host with a team of the partition, placed as design.md says. Verify with the stubs for a partition with teams on two hosts.
+- [x] 4.1 `crew main up|down|status <label>`: the `<label>` workspace with `design`, `planner` and `ops` tabs in the main level's session, and a dispatcher in `<label> dispatch` on each host with a team of the partition, placed as design.md says. Verify with the stubs for a partition with teams on two hosts.
 - [ ] 4.2 Briefs `design.md` (elaboration on main, curation's five moves, answering conductors, queuing work), `planner.md` (the only writer of bolts and placements, routing signals, agreeing changes with conductors), `dispatcher.md` (giving bolts, starting and stopping teams, watching accounts) and `main-ops.md` (landing and deploying main). Verify each prints for the `wldn` fixture with no unfilled token.
 - [ ] 4.3 A finding written as a signal in the partition's first blueprints repo, by path on main, pushed with a rebase on rejection. Verify against the test remote with two hosts appending moves under `merge=union`.
 
