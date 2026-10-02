@@ -157,7 +157,7 @@ blueprints() {
   mkdir -p "$(dirname "$r")"; git init -q --bare "$r"
   git init -q "$w"; mkdir -p "$w/signals"
   cat > "$w/signals/moves.rec" <<'EOF'
-# Curation moves — append-only. One record per curated signal.
+# One move per signal, appended through crew.
 
 %rec: Move
 %mandatory: Signal Move Date By

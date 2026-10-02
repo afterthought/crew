@@ -1027,7 +1027,7 @@ def signal(fleet, a):
         subject = "[" + ", ".join(x.strip() for x in a.subject.split(",") if x.strip()) + "]" if a.subject else None
         body = "---\n" + f"signal: {sid}\nkind: {a.kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "") + "---\n\n"
         body += a.asserts.strip() + "\n" + (f"\n> {a.excerpt.strip()}\n" if a.excerpt else "")
-        cap = (f"---\ncapture: {capture}\nsource: crew\nagent: {who}\nevent_date: {today}\nimported: {today}\nstatus: read\n"
+        cap = (f"---\ncapture: {capture}\nsource: crew\ncaptured_by: {who}\nevent_date: {today}\nimported: {today}\nstatus: read\n"
                f"signals: {nn}\n---\n\n# Findings of {who}, {today}\n\nFindings {who} recorded with crew signal while building, "
                f"each about something outside its own work.\n")
         seen["id"] = sid
