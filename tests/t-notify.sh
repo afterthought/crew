@@ -37,3 +37,10 @@ CREW_AGENT=wldn-planner crew unit move a-tenant-creates-its-environments console
 has "$(prompts swb-1)" "plan(console-pages): move a-tenant-creates-its-environments from tenant-environments (wldn-planner)"
 has "$(prompts swb-2)" "plan(console-pages): move a-tenant-creates-its-environments from tenant-environments (wldn-planner)"
 ok "a move between two teams' bolts tells both conductors"
+
+: > "$CREW_TEST_LOG"
+CREW_AGENT=wldn-design expect_ok crew tell swb-1-conductor "The tenant's zone is its own."
+grep -q "^chuck-herdr-alpha wldn-1 agent prompt swb-1-conductor 'The tenant'\"'\"'s zone is its own.'" "$CREW_TEST_LOG" || fail "crew tell sent nothing"
+expect_fail "could not tell wldn-design on chuck-herdr-alpha" crew tell wldn-design "anyone there?"
+expect_fail "no agent somebody: crew starts none by that name" crew tell somebody "hello"
+ok "crew tell reaches an agent by name on its host, and says when it is not up"

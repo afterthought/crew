@@ -22,6 +22,8 @@ that is refused because someone wrote first is applied again to the new tip, up 
   crew unit approve <unit>                   the user's review, an empty Reviewed-by: commit on unit/<unit>
   crew signal <slug> "<what it asserts>" [--kind K] [--subject a,b] [--excerpt "<text>"]
                                              a finding, as a signal in the partition's first blueprints repo
+  crew signal move <id> attach|challenge|new-territory|answered|drop [--target T] [--reason R]
+                                             curation's move for a signal, in that repo's signals/moves.rec
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
@@ -962,13 +964,13 @@ def route_move(sig, unit):
 
 def append(repo, path, rec_lines, message, check=None):
     """Append a record to a recutils file on main, by path, pushed without force and replayed on the new tip
-    when someone pushed first."""
+    when someone pushed first: never merged. check(text, tip) runs again on each tip."""
     def make(tip):
         tip or fail(f"{repo} has no main")
         text = show(repo, tip, path)
         text is not None or fail(f"{repo} has no {path} on main")
         if check:
-            check(text)
+            check(text, tip)
         new = text.rstrip("\n") + "\n\n" + "\n".join(rec_lines) + "\n"
         recfix(new, path)
         return new, message
@@ -979,8 +981,29 @@ def route(fleet, label, sig, unit):
     """A signal's one move, route, targeting the unit it became, in signals/moves.rec."""
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
     sha = append(srepo, "signals/moves.rec", route_move(sig, unit).lines(), f"signals({sig}): route to unit/{unit} ({agent()})\n",
-                 lambda text: unmoved(text, sig))
+                 lambda text, tip: unmoved(text, sig))
     print(f"{srepo} main {sha[:7]}: signal {sig} routed to unit/{unit}")
+
+
+CURATION = ("attach", "challenge", "new-territory", "answered", "drop")
+
+
+def signal_move(fleet, a):
+    """Curation's five moves, each written through crew the way the route is: one move per signal, appended to
+    signals/moves.rec in the partition's first blueprints repo, never merged."""
+    label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
+    repo = crew.partition_of(fleet, label)["blueprints"][0]
+    a.move not in ("attach", "challenge", "answered") or a.target or fail(
+        f"a {a.move} move names its target (--target): the intent, claim or record it " + {"attach": "lands on", "challenge": "argues with", "answered": "was settled by"}[a.move])
+    a.move != "drop" or a.reason or fail("a drop gives its reason (--reason)")
+
+    def present(text, tip):
+        show(repo, tip, f"signals/{a.signal}.md") is not None or fail(f"no signal {a.signal} in {repo}: signals/{a.signal}.md is not on main")
+        unmoved(text, a.signal)
+    rec = Rec("Move", [("Signal", a.signal), ("Move", a.move)] + ([("Target", a.target)] if a.target else [])
+              + ([("Reason", a.reason)] if a.reason else []) + [("Date", datetime.date.today().isoformat()), ("By", agent())])
+    sha = append(repo, "signals/moves.rec", rec.lines(), f"signals({a.signal}): {a.move} ({agent()})\n", present)
+    print(f"{repo} main {sha[:7]}: signal {a.signal} moved: {a.move}")
 
 
 def signal(fleet, a):
@@ -989,6 +1012,7 @@ def signal(fleet, a):
     Committed by those paths alone on main, and pushed; replayed on the new tip when main moved."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
     crew.NAME.match(a.slug) or fail(f"a signal's slug is lowercase words with dashes, not {a.slug}")
+    a.slug != "move" or fail("a signal's slug can't be 'move'")
     repo, who, today = crew.partition_of(fleet, label)["blueprints"][0], agent(), datetime.date.today().isoformat()
     capture = f"{today}-" + re.sub(r"[^a-z0-9]+", "-", who.lower()).strip("-")
     seen = {}
@@ -1248,6 +1272,12 @@ def parser():
     x.add_argument("unit")
     x.add_argument("--label")
 
+    x = sub.add_parser("signal-move", prog="crew signal move")
+    x.add_argument("signal", metavar="id")
+    x.add_argument("move", choices=CURATION)
+    x.add_argument("--target")
+    x.add_argument("--reason")
+    x.add_argument("--label")
     x = sub.add_parser("signal")
     x.add_argument("slug")
     x.add_argument("asserts")
@@ -1284,12 +1314,14 @@ COMMANDS = {
     ("unit", "add"): unit_add, ("unit", "split"): unit_split, ("unit", "order"): unit_order, ("unit", "after"): unit_after,
     ("unit", "move"): unit_move, ("unit", "drop"): unit_drop, ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_slots", None): slots_cmd, ("signal", None): signal,
+    ("_slots", None): slots_cmd, ("signal", None): signal, ("signal-move", None): signal_move,
 }
 
 
 def main(argv):
     need_recutils()
+    if argv[:2] == ["signal", "move"]:  # crew signal move <id> <move>, beside crew signal <slug> "<asserts>"
+        argv = ["signal-move"] + argv[2:]
     args = parser().parse_args(argv)
     fleet = crew.load()
     COMMANDS[(args.cmd, getattr(args, "sub", None))](fleet, args)

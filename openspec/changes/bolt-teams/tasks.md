@@ -60,7 +60,7 @@
 
 - [x] 4.1 `crew main up|down|status <label>`: the `<label>` workspace with `design`, `planner` and `ops` tabs in the main level's session, and a dispatcher in `<label> dispatch` on each host with a team of the partition, placed as design.md says. Verify with the stubs for a partition with teams on two hosts.
 - [x] 4.2 Briefs `design.md` (elaboration on main, curation's five moves, answering conductors, queuing work), `planner.md` (the only writer of bolts and placements, routing signals, agreeing changes with conductors), `dispatcher.md` (giving bolts, starting and stopping teams, watching accounts) and `main-ops.md` (landing and deploying main). Verify each prints for the `wldn` fixture with no unfilled token.
-- [ ] 4.3 Signals and moves through crew, on the partition's first blueprints repo's main, by path, applied again to the new tip on a refused push and never merged:
+- [x] 4.3 Signals and moves through crew, on the partition's first blueprints repo's main, by path, applied again to the new tip on a refused push and never merged:
   - `crew signal <slug> "<what it asserts>"`: a finding written as a signal and its capture;
   - `crew signal move <id> attach|challenge|new-territory|answered|drop`, beside the route move, refusing a signal that already has its move;
   - the design agent's brief curates only through it.

@@ -220,7 +220,9 @@ race() {
   printf ' %q' "$@" >> "$T/race"
   cat > "$r/hooks/pre-receive" <<'HOOK'
 #!/usr/bin/env bash
-cat >/dev/null
+refs=$(cat)
+# With $CREW_TEST_ROOT/race.ref, only a push to that ref lets the competing write in.
+if [ -f "$CREW_TEST_ROOT/race.ref" ] && ! grep -q " $(cat "$CREW_TEST_ROOT/race.ref")\$" <<<"$refs"; then exit 0; fi
 if [ -f "$CREW_TEST_ROOT/race" ]; then
   cmd=$(cat "$CREW_TEST_ROOT/race"); rm "$CREW_TEST_ROOT/race"
   (unset $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); cd /; eval "$cmd") >> "$CREW_TEST_ROOT/race.log" 2>&1

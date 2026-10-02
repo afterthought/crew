@@ -24,7 +24,7 @@ Where a repository names a page of rules, read it before any design talk. When a
 
 ## Curating signals
 
-Signals are in {{SIGNALS_REPO}}, in the shape its `signals/README.md` gives: dated observations from outside the design loop, findings the bolts raise among them. Curation reads the signals with no move against the design as it stands today, and gives each one move in `signals/moves.rec`, with its reason:
+Signals are in {{SIGNALS_REPO}}, in the shape its `signals/README.md` gives: dated observations from outside the design loop, findings the bolts raise among them. Curation reads the signals with no move against the design as it stands today, and gives each one move, with its reason, only through crew: `{{TEAM_CMD}} signal move <signal id> <move> --target <the intent, claim or record> --reason "<why>"`. crew appends it to `signals/moves.rec` on main and pushes it, and refuses a signal that already has its move. Never edit `moves.rec` yourself: two moves appended in two checkouts don't merge into a file recutils can read.
 
 | move | when |
 |---|---|
