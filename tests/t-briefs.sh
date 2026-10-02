@@ -17,3 +17,22 @@ for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" 
   has "$out" "$want"
 done
 ok "the conductor takes units through review, asks the design agent, records signals, and writes the plan only through crew"
+
+for role in design planner dispatcher main-ops; do
+  expect_ok crewpy brief wldn $role
+  [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/$role.md left ${BASH_REMATCH[0]} unfilled"
+  has "$out" "of wldn"; lacks "$out" "fable"
+  echo "$role: $(wc -c <<<"$out" | tr -d ' ') characters"
+done
+expect_ok crewpy brief wldn design
+for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
+expect_ok crewpy brief wldn planner
+for want in "only agent that creates bolts" "--signal" "Agree any change to it with that bolt's conductor" "plan/wldn"; do has "$out" "$want"; done
+has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
+expect_ok crewpy brief wldn dispatcher
+for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time"; do has "$out" "$want"; done
+has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
+expect_ok crewpy brief wldn main-ops
+for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main"; do has "$out" "$want"; done
+expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
+ok "every main-level brief prints for wldn with no unfilled token"

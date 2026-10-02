@@ -351,9 +351,37 @@ def team_tokens(fleet, t, role, self_name):
     return tok
 
 
-def main_tokens(fleet, p, self_name):
-    return {"SELF": self_name or "", "LABEL": p["label"], "PARTITION": p["partition"], "HOST": this_host(),
-            "TEAM_CMD": f"{HOME}/plugin/bin/crew"}
+def main_tokens(fleet, p, role, self_name):
+    label, host, cmd = p["label"], this_host(), f"{HOME}/plugin/bin/crew"
+    teams = [fleet["teams"][n] for n in sorted(p["teams"])]
+    hosts = partition_hosts(fleet, label)
+    here = [t for t in teams if t["machine"] == host]
+    team_line = lambda t: (f"- `{t['name']}` builds {t['system']} in {t['kit']['name']}, from {t['blueprints']['repo']}'s plan, on "
+                           f"{t['machine']} in session {t['session']} (account {fleet['hosts'][t['machine']]['sessions'][t['session']]['account']}), "
+                           f"with {t['units']} unit slots; its conductor is `{t['name']}-conductor`")
+    kits = sorted({t["kit"]["name"] for t in teams})
+    names = {"design": f"{label}-design", "planner": f"{label}-planner", "main-ops": f"{label}-ops",
+             "dispatcher": f"{label}-dispatch-{host}", "operator": f"{label}-operator-{host}"}
+    tok = {
+        "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
+        "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
+        "PLANS": ", ".join(f"`plan/{label}` of {b}" for b in p["blueprints"]),
+        "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
+        "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
+        "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",
+        "KIT_CHECKOUTS": ", ".join(f"`{c}`" for c in kits_on(fleet, label, p["machine"])) or "none on this host",
+        "TEAMS": "\n".join(team_line(t) for t in teams) or "- no team yet",
+        "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
+        "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
+        "OPERATORS": ", ".join(f"`{label}-operator-{h}` on {h}" for h, v in sorted(fleet["hosts"].items()) if label in v.get("sessions", {})),
+    }
+    tok["ROSTER"] = (
+        f"{label}'s main level ({p['partition']}) runs in {tok['MAIN_PLACE']}, in the `{label}` workspace: `{label}-design`, the design "
+        f"agent, keeps the design true on main and curates signals; `{label}-planner` plans the partition's bolts; `{label}-ops` lands "
+        f"proven bolts and deploys main. A dispatcher on each host the partition's teams run on gives that host's teams their bolts: "
+        f"{tok['DISPATCHERS']}. The operator agent in each of the partition's operator sessions works for the user: {tok['OPERATORS'] or 'none'}. "
+        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs.")
+    return tok
 
 
 def brief(fleet, scope, role, self_name=""):
@@ -363,7 +391,7 @@ def brief(fleet, scope, role, self_name=""):
         tok = team_tokens(fleet, fleet["teams"][scope], role, self_name)
     else:
         role in MAIN_ROLES or fail(f"no definition '{role}' for a main level. definitions: " + " ".join(MAIN_ROLES))
-        tok = main_tokens(fleet, partition_of(fleet, scope), self_name)
+        tok = main_tokens(fleet, partition_of(fleet, scope), role, self_name)
     def fill(m):
         k = m.group(1)
         if k not in tok:
