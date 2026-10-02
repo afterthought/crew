@@ -16,7 +16,7 @@
 
 ## 2. The plan
 
-- [ ] 2.1 A plan module beside `crew.py`. It reads `plan.rec` from `origin/plan/<label>` of a blueprints repo over https. `crew plan init <blueprints> <label>` creates the orphan branch with the schema header from `tracking.md`. Verify against the bare test remote: `recfix --check` passes on the initialized file.
+- [x] 2.1 A plan module beside `crew.py`. It reads `plan.rec` from `origin/plan/<label>` of a blueprints repo over https. `crew plan init <blueprints> <label>` creates the orphan branch with the schema header from `tracking.md`. Verify against the bare test remote: `recfix --check` passes on the initialized file.
 - [ ] 2.2 The write path:
   - fetch, apply to the tip;
   - check with `recfix --check` and crew's rules (the bolt exists in the same repo, `After` stays inside the bolt with no cycle, the unit name is free in the kit);

@@ -12,7 +12,7 @@
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import json, pathlib, re, shlex, subprocess, sys
+import functools, json, pathlib, re, shlex, subprocess, sys
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -153,9 +153,47 @@ def partition_of(fleet, label):
     return fleet["partitions"].get(label) or fail(f"no partition '{label}'. partitions: " + " ".join(fleet["partitions"]))
 
 
+@functools.lru_cache(maxsize=None)
 def this_host():
     """The host crew runs on, as `hostname -s` names it: the same name the hosts file and the teams file use."""
     return subprocess.run(["hostname", "-s"], capture_output=True, text=True, check=True).stdout.strip()
+
+
+def on_machine(fleet, host, argv, input=None):
+    """Run a command on a host: here when it is this host, else over ssh, never prompting. A host that does not
+    answer exits 255, as ssh does."""
+    if host == this_host():
+        return subprocess.run(argv, input=input, capture_output=True, text=True)
+    return subprocess.run(["ssh", "-o", "BatchMode=yes", fleet["hosts"][host]["ssh"], shlex.join(argv)],
+                          input=input, capture_output=True, text=True)
+
+
+def place_of_agent(fleet, name):
+    """The host and herdr session an agent crew starts runs in, from its name alone."""
+    for t in fleet["teams"].values():
+        if name in (f"{t['name']}-conductor", f"{t['name']}-ops") or re.match(rf"^{re.escape(t['name'])}-unit-[1-9][0-9]*$", name):
+            return t["machine"], t["session"]
+    for p in fleet["partitions"].values():
+        l = p["label"]
+        if name in (f"{l}-design", f"{l}-planner", f"{l}-ops"):
+            return p["machine"], p["session"]
+        m = re.match(rf"^{re.escape(l)}-dispatch-(.+)$", name)
+        if m:
+            return m.group(1), dispatch_place(fleet, l, m.group(1))
+        m = re.match(rf"^{re.escape(l)}-operator-(.+)$", name)
+        if m:
+            operator_session(fleet, l, m.group(1))
+            return m.group(1), l
+    fail(f"no agent {name}: crew starts none by that name")
+
+
+def tell(fleet, name, text):
+    """Send an agent a prompt wherever it runs. An agent that is not up is reported, not an error."""
+    host, session = place_of_agent(fleet, name)
+    r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, text])
+    if r.returncode:
+        print(f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
+    return r.returncode == 0
 
 
 def kept_on(fleet, host, repo):
