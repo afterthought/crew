@@ -747,7 +747,7 @@ def unit_add(fleet, a):
     name_free(fleet, label, kit, [a.unit])
     sources = list(a.source)
     if a.signal:
-        sources.insert(0, signal_source(fleet, label, repo, a.signal))
+        sources.insert(0, signal_source(fleet, label, repo, a.signal, a.unit))
 
     def change(w):
         w.plan.unit(a.unit) is None or fail(f"plan/{label} already has unit {a.unit}")
@@ -931,15 +931,28 @@ def unit_approve(fleet, a):
 
 # -------------------------------------------------------------------------------------------------- signals
 
-def signal_source(fleet, label, repo, sig):
-    """A signal's path as a unit's Source, checked to exist and to have no move yet in the partition's first
-    blueprints repo, where its signals are."""
+def signal_source(fleet, label, repo, sig, unit):
+    """A signal's path as a unit's Source, checked before anything is written: the signal exists in the
+    partition's first blueprints repo, where its signals are, it has no move yet, and its route move would pass
+    recfix there."""
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
     tip = fetch(srepo, "main") or fail(f"{srepo} has no main")
     show(srepo, tip, f"signals/{sig}.md") is not None or fail(f"no signal {sig} in {srepo}: signals/{sig}.md is not on main")
-    moved = [m for m in Plan(show(srepo, tip, "signals/moves.rec") or "").recs("Move") if m.get("Signal") == sig]
-    not moved or fail(f"signal {sig} already has its move: {moved[0].get('Move')}")
+    moves = show(srepo, tip, "signals/moves.rec")
+    moves is not None or fail(f"{srepo} has no signals/moves.rec on main")
+    unmoved(moves, sig)
+    recfix(moves.rstrip("\n") + "\n\n" + "\n".join(route_move(sig, unit).lines()) + "\n", f"{srepo}'s signals/moves.rec")
     return f"signals/{sig}" if srepo == repo else f"{srepo}:signals/{sig}"
+
+
+def unmoved(text, sig):
+    moved = [m for m in Plan(text).recs("Move") if m.get("Signal") == sig]
+    not moved or fail(f"signal {sig} already has its move: {moved[0].get('Move')}")
+
+
+def route_move(sig, unit):
+    return Rec("Move", [("Signal", sig), ("Move", "route"), ("Target", f"unit/{unit}"),
+                        ("Date", datetime.date.today().isoformat()), ("By", agent())])
 
 
 def append(repo, path, rec_lines, message, check=None):
@@ -960,13 +973,8 @@ def append(repo, path, rec_lines, message, check=None):
 def route(fleet, label, sig, unit):
     """A signal's one move, route, targeting the unit it became, in signals/moves.rec."""
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
-
-    def unmoved(text):
-        moved = [m for m in Plan(text).recs("Move") if m.get("Signal") == sig]
-        not moved or fail(f"signal {sig} already has its move: {moved[0].get('Move')}")
-    rec = Rec("Move", [("Signal", sig), ("Move", "route"), ("Target", f"unit/{unit}"),
-                       ("Date", datetime.date.today().isoformat()), ("By", agent())])
-    sha = append(srepo, "signals/moves.rec", rec.lines(), f"signals({sig}): route to unit/{unit} ({agent()})\n", unmoved)
+    sha = append(srepo, "signals/moves.rec", route_move(sig, unit).lines(), f"signals({sig}): route to unit/{unit} ({agent()})\n",
+                 lambda text: unmoved(text, sig))
     print(f"{srepo} main {sha[:7]}: signal {sig} routed to unit/{unit}")
 
 
