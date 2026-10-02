@@ -29,7 +29,7 @@ A bolt's units SHALL be built in the order they appear in the file, and bolts SH
 - **THEN** `crew bolts` lists it under the queue of its repo
 
 ### Requirement: Writes go through crew and are never merged
-Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Each write SHALL fetch the plan branch over https and apply the change to its tip. It SHALL then check the result with `recfix --check` and crew's own rules, commit it without touching any working tree, and push without force. A push that is rejected SHALL have its write applied again to the new tip, up to five times.
+Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Each write SHALL fetch the plan branch over https into crew's own bare cache of the repo, with no working tree, and apply the change to its tip. It SHALL then check the result with `recfix --check` and crew's own rules, commit it without touching any working tree, and push without force. A push that is rejected SHALL have its write applied again to the new tip, up to five times.
 
 #### Scenario: Two writes race
 - **WHEN** the planner moves a unit while a conductor narrows the same unit's intent, from different hosts
@@ -105,11 +105,15 @@ crew SHALL derive each unit's stage from its kit on the team's host. The first r
 - **THEN** its bolts are listed from the plan, with every stage shown as unknown and the host named
 
 ### Requirement: Work is queued from a signal
-`crew unit add … --signal <id>` SHALL queue the unit with the signal as its source, and SHALL record the signal's one move, `route`, targeting the unit in the blueprints repo's `signals/moves.rec`.
+`crew unit add … --signal <id>` SHALL queue the unit with the signal as its source, and SHALL record the signal's one move, `route`, targeting the unit in the `signals/moves.rec` of the partition's first blueprints repo, where its signals are. The source SHALL be `signals/<id>` when the plan is in that repo, else `<owner/name>:signals/<id>`. A signal that is missing, already moved, or whose move would fail `recfix --check` SHALL be refused before the plan is written.
 
 #### Scenario: A signal routed to work
 - **WHEN** the planner queues a unit from a signal
 - **THEN** the unit's `Source` is `signals/<id>`, and `moves.rec` gains a `route` move for that signal
+
+#### Scenario: A signal in another blueprints repo
+- **WHEN** madswan's planner queues a flywheel-next unit in agentplot/blueprints' plan from a signal in afterthought/blueprints
+- **THEN** the unit's `Source` is `afterthought/blueprints:signals/<id>`, and the route move is in afterthought/blueprints
 
 ### Requirement: A conductor hears about writes to its bolt
 When anyone other than a bolt's conductor writes to an active bolt or its units, crew SHALL send that conductor the commit's subject.

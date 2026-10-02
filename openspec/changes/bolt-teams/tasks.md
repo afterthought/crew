@@ -40,8 +40,8 @@
   - code is refused before approval, and verify before every task is ticked.
 
   Verify each refusal and the launch arguments with the stubs.
-- [x] 3.3 The merge stage runs `wt merge bolt/<bolt> --no-squash --no-remove` from the place. When the bolt holds the change, crew removes the place and frees the slot. Verify in a scratch kit that a merged unit reads `merged` and its slot is free.
-- [x] 3.4 `crew fix <team> <name> "<what is wrong>"` makes `places/fix-<name>` on `fix/<name>` from the bolt, starts a code agent in a free slot, and merges like a unit. Verify with the stubs and a scratch kit.
+- [x] 3.3 The merge stage runs `wt merge bolt/<bolt> --no-squash --no-remove` from the place. When the bolt holds the change, crew removes the place and frees the slot the next time it reads the team, once the slot's agent is not working. Verify in a scratch kit that a merged unit reads `merged` and its slot is free.
+- [x] 3.4 `crew fix <team> <name> "<what is wrong>"` makes `places/fix-<name>` on `fix/<name>` from the bolt and starts a code agent in a free slot; `crew fix <team> <name> --merge` starts its merge stage, and it merges like a unit. Verify with the stubs and a scratch kit.
 - [x] 3.5 `<team> units` workspace: created with the first unit or fix in flight, one tiled pane per slot, closed when the last one frees. `crew status` lists the standing roles and each slot's unit and stage. Verify with the stub `herdr`.
 - [x] 3.6 Briefs:
   - `conductor.md` and `ops.md` rewritten for a bolt team;
@@ -60,7 +60,12 @@
 
 - [x] 4.1 `crew main up|down|status <label>`: the `<label>` workspace with `design`, `planner` and `ops` tabs in the main level's session, and a dispatcher in `<label> dispatch` on each host with a team of the partition, placed as design.md says. Verify with the stubs for a partition with teams on two hosts.
 - [x] 4.2 Briefs `design.md` (elaboration on main, curation's five moves, answering conductors, queuing work), `planner.md` (the only writer of bolts and placements, routing signals, agreeing changes with conductors), `dispatcher.md` (giving bolts, starting and stopping teams, watching accounts) and `main-ops.md` (landing and deploying main). Verify each prints for the `wldn` fixture with no unfilled token.
-- [ ] 4.3 A finding written as a signal in the partition's first blueprints repo, by path on main, pushed with a rebase on rejection. Verify against the test remote with two hosts appending moves under `merge=union`.
+- [ ] 4.3 Signals and moves through crew, on the partition's first blueprints repo's main, by path, applied again to the new tip on a refused push and never merged:
+  - `crew signal <slug> "<what it asserts>"`: a finding written as a signal and its capture;
+  - `crew signal move <id> attach|challenge|new-territory|answered|drop`, beside the route move, refusing a signal that already has its move;
+  - the design agent's brief curates only through it.
+
+  Verify against the test remote that a route written on the box and a drop written on mac-studio at the same time both land, unmerged, and `moves.rec` passes `recfix --check`.
 
 ## 5. The operator agent and sites
 
@@ -71,12 +76,11 @@
 ## 6. Documents and the blueprints repos
 
 - [ ] 6.1 Update `README.md`, `plugin/skills/crew/SKILL.md` and the usage header of `plugin/bin/crew` to the commands above. Verify every command in the README appears in `crew`'s usage, and none that was removed.
-- [ ] 6.2 In willdan-blueprints and agentplot/blueprints:
-  - add `route` to the `Move` enum in `signals/moves.rec`, and to the README's move table;
-  - change the README's line that work reaches the tracker only through an intent;
-  - add `signals/moves.rec merge=union` to `.gitattributes`.
+- [ ] 6.2 The blueprints repos, each as a local commit on a `bolt-teams` branch of a scratch clone, not pushed:
+  - willdan-blueprints: add `route` to the `Move` enum in `signals/moves.rec` and to the README's move table, change the README's line that work reaches the tracker only through an intent, and add `signals/moves.rec merge=union` to `.gitattributes`;
+  - afterthought/blueprints (new and empty) and agentplot/blueprints: a `signals/` scaffold written from flywheel-next's capture and signal model (`definitions/signal.yaml`, `capture.yaml`): a README, `moves.rec` with `route` in its `Move` enum, and the `.gitattributes` line.
 
-  Verify `recfix --check signals/moves.rec` passes in each.
+  Verify `recfix --check signals/moves.rec` passes in each, and that `crew signal`, `crew signal move` and `crew unit add --signal` work against each scaffold.
 
 ## 7. Rollout
 

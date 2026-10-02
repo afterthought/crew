@@ -36,20 +36,23 @@ Everything else follows tracking.md:
 - each stage derived from the kits;
 - the approval as an empty `Reviewed-by:` commit.
 
-*Alternatives:* tracking.md's comparison weighs the others, with a JSON file edited by `jq` as runner-up. A single `plan` branch per repo was set aside for the reason above.
+The write path runs in crew's own bare cache of the repo, `~/.cache/crew/git/<owner>/<name>.git` on the host the command runs on. It fetches into the cache, builds the commit there through a temporary index, and pushes from there, so no checkout of the blueprints repo is needed, read or changed, and one cache serves every partition's plan in that repo.
+
+*Alternatives:* tracking.md's comparison weighs the others, with a JSON file edited by `jq` as runner-up. A single `plan` branch per repo was set aside for the reason above. Writing through a checkout of the blueprints repo was set aside because the host running the command may keep none, and a checkout someone is working in must not be touched.
 
 ### `teams.json` version 2
 ```json
 { "version": 2,
   "partitions": [
-    { "label": "wldn", "partition": "clients/willdan", "blueprints": ["willdan-blueprints"],
+    { "label": "wldn", "partition": "clients/willdan", "blueprints": ["WilldanGroup/willdan-blueprints"],
       "machine": "chuck-herdr-alpha", "session": "wldn-3" } ],
   "teams": [
     { "name": "swb-1", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
       "units": 4, "repos": ["switchboard-kit", "willdan-blueprints"] } ] }
 ```
 - **A team's partition** is its session's partition in `herdr-hosts.json`, so the team does not repeat it.
-- **`repos`** stays `[kit, blueprints]`. swancloud's check that a team's repos are in its session's space keeps working, and crew checks that the second repo is one of the partition's blueprints repos.
+- **A partition's `blueprints`** are GitHub `owner/name`, since afterthought/blueprints and agentplot/blueprints share a name. The first is the partition's default: its signals and elaboration go there.
+- **`repos`** stays `[kit, blueprints]`, as names. `herdr-hosts.json` gives each session the repos of its space as `owner/name`, so crew resolves a team's names to `owner/name` through its session, and checks that the second is one of the partition's blueprints repos. swancloud's check that a team's repos are in its session's space keeps working. crew finds a repo's checkout on a host through the sessions there: `<dir>/<name>/main` of the first session whose space keeps it.
 - **`units`** replaces `coders`.
 - **`base`** goes: a unit's base is its bolt, and a bolt's base is main.
 - **`roles`** (optional, on a team or a partition): per role, a `model` or `effort` that overrides its definition, e.g. `"roles": { "planner": { "effort": "max" } }`.
@@ -74,7 +77,13 @@ The explorer and the verifier go. A lookup the conductor needs is asked of the d
 ### Places are made by crew at fixed paths
 `crew bolt give` runs `git worktree add <kit>/bolts/<bolt> -b bolt/<bolt> main`. Construct runs `git worktree add <kit>/places/<unit> -b unit/<unit> bolt/<bolt>`. A fix gets `places/fix-<name>` on `fix/<name>` from the bolt. Each new worktree then runs the kit's `crew-prepare` script, as `assign` does now. These paths are tracking.md's layout. Making them with git directly keeps them from depending on worktrunk's path template, and `wt` still works inside them.
 
-The merge stage runs `wt merge bolt/<bolt> --no-squash --no-remove` from the unit's place, so the kit's merge hooks gate it. crew then removes the place and frees the slot. *Alternative:* `wt switch --create` with a path template set in each kit. Rejected: it would spread the layout across every kit's config.
+The merge stage runs `wt merge bolt/<bolt> --no-squash --no-remove` from the unit's place, so the kit's merge hooks gate it. A fix's merge stage is started with `crew fix <team> <name> --merge`. crew cannot wait on an agent, so it frees a slot the next time it reads the team (`crew status`, `crew unit run`, `crew fix`): a slot whose unit's change the bolt now holds, or whose fix the bolt now contains, and whose agent is not working, is freed, and its place and branch removed. *Alternative:* `wt switch --create` with a path template set in each kit. Rejected: it would spread the layout across every kit's config.
+
+### A team's commands run on its host
+A team's panes and its state (which pane holds which role, which slot holds which unit) live on the team's host. A command about a team (`up`, `down`, `status`, `unit run`, `fix` and the rest) run anywhere else is run again there over ssh, with the crew checkout that host's sessions keep (`afterthought/crew`, found like any repo), carrying the caller's `CREW_AGENT` and `CREW_LABEL`. `crew main` goes to the main level's host, which reaches each dispatcher's host the same way. *Alternative:* keep a team's state on whichever host crew runs on, as crew did. Rejected: `crew status` from an operator agent on a Mac would see nothing of a team on the box.
+
+### Agents reach each other with `crew tell`
+herdr's agent names are scoped to one session, and a partition's agents sit in several sessions and hosts. `crew tell <agent> "<text>"` finds the agent's host and session from its name and the teams file, and prompts it there with `herdr --session <session> agent prompt`. The briefs use it for every agent outside the team, and crew uses it to send a conductor the subject of a plan write to its bolt. An agent that is not up is reported; a plan write whose conductor is not up still lands.
 
 ### Status from the work, read once per host
 `crew bolts` reads the plan, then reads the kits on each host holding active bolts, all in one `on_machine` call:
@@ -90,8 +99,14 @@ Each partition entry names the machine and session of its main level. The design
 
 A dispatcher runs on each host that has a team of the partition. It runs in the main level's session when that is on the host, otherwise in the session of the host's first team by name, in a workspace `<label> dispatch`. Deriving the dispatcher's place keeps the teams file to what the user decides.
 
-### Signals are written by path and pushed
-A finding becomes a signal file in the partition's first blueprints repo, in the shape its `signals/README.md` gives. A `route` move goes into `signals/moves.rec`. crew commits only those paths on that repo's main and pushes over https, pulling with rebase on a rejected push. `signals/moves.rec merge=union` in `.gitattributes` keeps two hosts' appended moves from conflicting, and its `%key: Signal` lets `recfix` catch a signal moved twice. *Alternative:* keep signals on a branch like the plan. Rejected: the sweep and curation already write them on main.
+### Signals and their moves are written through crew, never merged
+A finding becomes a signal with `crew signal <slug> "<what it asserts>"`: a signal file in the partition's first blueprints repo, in the shape its `signals/README.md` gives, under one capture per agent and day. Every move goes into `signals/moves.rec` through crew too: `route` with `crew unit add --signal`, curation's five (`attach`, `challenge`, `new-territory`, `answered`, `drop`) with `crew signal move <id> <move>`. The design agent curates only through it. Each write takes the plan's write path on that repo's main: fetch, apply to the tip, check with `recfix --check`, commit only its own paths through a temporary index, push without force, and apply again to the new tip when the push is refused, up to five times. So moves are never merged, and `%key: Signal` lets `recfix` refuse a signal moved twice. `signals/moves.rec merge=union` stays in `.gitattributes` only as a fallback for a hand edit.
+
+A unit queued from a signal names it as its `Source`: `signals/<id>` when the plan is in the signal's repo, else `<owner/name>:signals/<id>`, since two blueprints repos share a name.
+
+*Alternatives:*
+- Appending moves in checkouts and relying on `merge=union`. Rejected: git trims the lines two appended records share (the blank line between records, a shared `Date` or `By`) out of the conflict and joins the records into one. The merge reports no conflict, and the file fails `recfix --check`. Tested with merge, `pull --rebase` and zdiff3; only the diff3 conflict style keeps them apart, and that is each host's own git setting.
+- Keeping signals on a branch like the plan. Rejected: the sweep already writes them on main.
 
 ### Each role is an agent definition
 Each file in `plugin/roles/` is an agent definition in Claude Code's format: frontmatter with `name`, `description`, `model` and `effort`, and the role's brief as the body, filled from `teams.json` at launch. Each unit stage has its own definition. Each definition starts with the model and effort in the `agent-models` table, which is plan.md's table with fix and merge added at code's level: `claude-fable-5-1` for the design agent and the planner, whose judgment the bolts depend on and which number one each per partition, and `claude-opus-5-5[1m]` for the rest, which do the volume. Fable 5.1's 1M context is its default, so its name carries no suffix.
@@ -131,10 +146,9 @@ The team's ops proves the bolt. The main-level ops merges it into main on the us
 
 1. Build this change on a `bolt-teams` branch of crew, in its own worktree. The main checkout, which every session loads, keeps today's crew.
 2. In the blueprints repos:
-   - create the `plan/<label>` branches with `crew plan init`;
-   - add `route` to the `Move` enum and the README;
-   - add the `merge=union` line;
-   - create afterthought/blueprints, which needs the user's go.
+   - willdan-blueprints: add `route` to the `Move` enum and the README, say that work reaches the plan through a route, and add the `merge=union` line;
+   - afterthought/blueprints, which is new and needs the user's go to create, and agentplot/blueprints, which has no signals yet: a `signals/` scaffold (a README, `moves.rec` with `route` in its `Move` enum, the `.gitattributes` line), written from flywheel-next's capture and signal model;
+   - create the `plan/<label>` branches with `crew plan init`.
 3. swancloud's one deploy writes `teams.json` version 2 and puts recutils on every host.
 4. Merge `bolt-teams` into crew's main and pull it on every host that keeps a crew checkout. New sessions load it. Running agents keep their old briefs until they are restarted.
 5. Move swb-1: give it its first bolt with `crew bolt give swb-1`, and `crew up swb-1` on the box.
@@ -143,4 +157,4 @@ Rollback: revert crew's main to the commit before the merge. `teams.json` versio
 
 ## Open Questions
 
-- Which session each partition's main level runs in is swancloud's to write in `lib/crew-teams.nix`. The example uses `wldn-3` for wldn; madswan's and swancloud's would be `madswan-1` and `swancloud-1`.
+(none) The main levels run in `wldn-3` on chuck-herdr-alpha, `madswan-1` on mac-studio and `swancloud-1` on mac-studio, written by swancloud in `lib/crew-teams.nix`.

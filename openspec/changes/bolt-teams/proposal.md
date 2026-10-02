@@ -16,7 +16,7 @@ A crew team today builds whole OpenSpec changes one after another on main, with 
   - a dispatcher on each host where the partition's bolts run, which allocates that host's work;
   - ops, which lands bolts and deploys main.
 
-  Signals stay in the partition's blueprints repo. Queuing work from a signal is a new `route` move.
+  Signals stay in the partition's blueprints repo. Queuing work from a signal is a new `route` move, and every move, curation's included, is written through crew (`crew signal move`), never merged. A finding is recorded with `crew signal`.
 - **The operator agent** stands in each operator session. It is started with `crew operator up <label>` and works for the user. It finds what is running with `crew sites` and opens it in terminal-browser.
 - **`crew sites`:** every host's bolts and units, with the URL of each running dev server.
 - **Agents:** each role is an agent definition, `plugin/roles/<role>.md` in Claude Code's agent format, whose frontmatter sets its model and effort: Fable 5.1 for the design agent and the planner, Opus 5.5 for every other role, each at its effort, to start. The teams file can override either for a team or for a partition's main level. The design agent replaces fable.
@@ -45,13 +45,13 @@ A crew team today builds whole OpenSpec changes one after another on main, with 
   - `construct.md`, `verify.md`, `design.md`, `planner.md`, `dispatcher.md`, `main-ops.md` and `operator.md` added;
   - `fable.md`, `explorer.md` and `verifier.md` removed.
 - `plugin/skills/crew/SKILL.md`, `README.md`, `devenv.nix` (recutils)
-- The blueprints repos (willdan-blueprints, agentplot/blueprints, a new afterthought/blueprints):
-  - a `plan/<label>` branch;
-  - the `route` move in `signals/moves.rec` and its README;
-  - `signals/moves.rec merge=union` in `.gitattributes`.
+- The blueprints repos:
+  - a `plan/<label>` branch in each;
+  - willdan-blueprints: the `route` move in `signals/moves.rec` and its README, and `signals/moves.rec merge=union` in `.gitattributes`;
+  - agentplot/blueprints and a new afterthought/blueprints: a `signals/` scaffold (README, `moves.rec` with `route`, the `.gitattributes` line) from flywheel-next's capture and signal model.
 - swancloud: `lib/crew-teams.nix` in the version 2 shape, and recutils on every host (its `herdr-partitions` change).
 - Running teams keep their sessions until restarted: a brief is read at launch. apk-1 takes the bolt model the next time it is rebuilt.
 
 ## Touches
 
-`plugin/bin/crew`, `plugin/bin/crew-role`, `plugin/lib/`, `plugin/roles/`, `plugin/skills/crew/SKILL.md`, `README.md`, `devenv.nix`; in each blueprints repo `signals/moves.rec`, `signals/README.md`, `.gitattributes` and the `plan/<label>` branch.
+`plugin/bin/crew`, `plugin/bin/crew-role`, `plugin/lib/`, `plugin/roles/`, `plugin/skills/crew/SKILL.md`, `README.md`, `devenv.nix`, `tests/`; in each blueprints repo `signals/` (its `moves.rec` and `README.md`), `.gitattributes` and the `plan/<label>` branch.

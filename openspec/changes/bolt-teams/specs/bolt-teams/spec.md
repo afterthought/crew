@@ -25,7 +25,7 @@ crew SHALL read its teams from `~/.config/crew/teams.json` version 2, which the 
 - **THEN** `swb-1-conductor` and `swb-1-ops` start, and no other agent of the team is running
 
 ### Requirement: Units run in slots
-A team SHALL have at most `units` units in flight, each held by a slot named `<team>-unit-<n>` with its own pane. A slot SHALL be taken when a unit's first stage starts, and freed when the unit merges into the bolt or is dropped.
+A team SHALL have at most `units` units in flight, each held by a slot named `<team>-unit-<n>` with its own pane. A slot SHALL be taken when a unit's first stage starts, and freed when the unit merges into the bolt or is dropped. A merged unit's slot SHALL be freed, and its place and branch removed, the next time crew reads the team (`crew status`, `crew unit run`, `crew fix`), once the slot's agent is not working.
 
 #### Scenario: Every slot is taken
 - **WHEN** the conductor starts a fifth unit on a team with `units = 4`, all four in flight
@@ -66,7 +66,7 @@ A bolt SHALL be built on `bolt/<bolt>`, branched from main, in the worktree `<ki
 - **THEN** `bolt/<bolt>` holds the unit's change, `places/<unit>` is gone, and the unit's slot is free
 
 ### Requirement: Fixes during a bolt are built beside its units
-`crew fix <team> <name> "<what is wrong>"` SHALL make `fix/<name>` from the team's bolt at `<kit>/places/fix-<name>`. It SHALL start a fresh code agent there in a free slot with the words given, and the fix SHALL merge into the bolt like a unit. A fix SHALL have no OpenSpec change and no plan record.
+`crew fix <team> <name> "<what is wrong>"` SHALL make `fix/<name>` from the team's bolt at `<kit>/places/fix-<name>`. It SHALL start a fresh code agent there in a free slot with the words given. `crew fix <team> <name> --merge` SHALL start its merge stage, and the fix SHALL merge into the bolt like a unit. A fix SHALL have no OpenSpec change and no plan record.
 
 #### Scenario: A red suite on the bolt
 - **WHEN** the bolt's verification is red after a merge
@@ -92,6 +92,13 @@ Giving a team its next bolt SHALL be `crew bolt give <team>`. A team's base bran
 #### Scenario: swb-1 finishes a bolt
 - **WHEN** swb-1's bolt has landed and the dispatcher runs `crew bolt give swb-1`
 - **THEN** swb-1 holds the next planned bolt in switchboard-kit, its bolt worktree exists, and nothing was deployed
+
+### Requirement: A team's commands run on its host
+A team's panes and state SHALL live on the team's host. A command about a team run on another host SHALL be run on the team's host, over ssh, by the crew checkout that host's sessions keep.
+
+#### Scenario: Status from a Mac
+- **WHEN** `crew status swb-1` runs on mac-studio
+- **THEN** it reads swb-1's panes and slots on the box, and shows them
 
 ### Requirement: A team is two herdr workspaces
 A team SHALL have two herdr workspaces in its session:
