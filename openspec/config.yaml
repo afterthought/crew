@@ -1,0 +1,24 @@
+schema: spec-driven
+
+context: |
+  crew — teams of Claude Code agents run in herdr sessions. A Claude Code
+  plugin (plugin/): the `crew` command (bash, plugin/bin/crew), its builder
+  (python3, plugin/lib/crew.py), the role briefs (plugin/roles/*.md, filled
+  from {{TOKENS}}) and skills. Needs only herdr, jq, python3, git, wt and
+  openspec on the machine; no service of its own.
+
+  Teams are data written by swancloud (lib/crew-teams.nix →
+  ~/.config/crew/teams.json); hosts and sessions come from swancloud's
+  ~/.config/swancloud/herdr-hosts.json. crew never edits either file. A crew
+  commit is live in the next session without a deploy: swancloud loads the
+  plugin from this checkout.
+
+  Runs on the Macs (mac-studio, macbook-pro) and on NixOS workspace boxes
+  (chuck-herdr-alpha), reached over ssh. Every agent runs on Opus 5.5.
+
+  Vocabulary: partition, session (a herdr server), connection (a session in
+  a window's sidebar), operator session, operator agent, herdr workspace (a
+  sidebar entry), bolt, unit, design agent, planner, dispatcher.
+
+  Conventions: conventional commits; plain English in briefs and messages;
+  simplicity over abstraction.
