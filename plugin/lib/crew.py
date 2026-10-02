@@ -204,6 +204,14 @@ def kept_on(fleet, host, repo):
     return None
 
 
+def crew_at(fleet, host):
+    """The crew command on a host: this checkout here, else the crew checkout the host's spaces keep."""
+    if host == this_host():
+        return str(HOME / "plugin/bin/crew")
+    c = kept_on(fleet, host, "afterthought/crew") or fail(f"none of {host}'s sessions keeps afterthought/crew, so crew can't run there")
+    return f"{c}/plugin/bin/crew"
+
+
 def partition_hosts(fleet, label):
     """The hosts where a partition's teams run, each once, by name."""
     return sorted({fleet["teams"][t]["machine"] for t in partition_of(fleet, label)["teams"]})

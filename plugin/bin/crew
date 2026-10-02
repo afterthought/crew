@@ -202,7 +202,8 @@ pick_roles() {  # with no role named, the standing four plus whoever holds a cha
 
 case $cmd in
   list) teams ;;
-  bolts|bolt|plan) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  bolts|bolt|plan|signal) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  unit) [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"; echo "crew unit run comes with the bolt teams" >&2; exit 2 ;;
   status)
     if [[ -n $team ]]; then status; else for team in $(teams); do status; echo; done; fi ;;
   up)

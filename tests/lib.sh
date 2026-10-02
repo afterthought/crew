@@ -15,6 +15,8 @@ export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
 unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV GIT_DIR GIT_WORK_TREE
 HOST=${HOST:-mac-studio}
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
+# The test's own commands (making kits and remotes) run with a scratch HOME too, never the user's.
+export HOME=$T/home; mkdir -p "$HOME"
 
 home_of() { echo "$T/hosts/$1/home"; }
 space() { echo "$T/hosts/$1/work/$2"; }
@@ -129,6 +131,7 @@ EOF
 
 world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
   local h
+  gitconfig "$HOME"
   for h in mac-studio chuck-herdr-alpha; do mkdir -p "$(home_of $h)" "$T/hosts/$h/work"; gitconfig "$(home_of $h)"; done
   fixtures "${1:-2}"
   mkdir -p "$(space chuck-herdr-alpha willdan)/crew" "$(space mac-studio madswan)/crew"
@@ -207,3 +210,22 @@ json.dump(d, open(f, "w"), indent=1)' "$f" "$2"
 }
 team() { echo "[t for t in d['teams'] if t['name'] == '$1'][0]"; }
 part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }
+
+# race <owner/name> <host> <agent> <crew args...>: the next push to that remote first lets this crew write land,
+# run as <agent> on <host> from the remote's pre-receive hook, so the push in flight finds the branch moved.
+race() {
+  local r; r=$(remote "$1"); shift
+  local host=$1 who=$2; shift 2
+  printf 'CREW_TEST_HOST=%q HOME=%q CREW_AGENT=%q %q' "$host" "$(home_of "$host")" "$who" "$CREW/plugin/bin/crew" > "$T/race"
+  printf ' %q' "$@" >> "$T/race"
+  cat > "$r/hooks/pre-receive" <<'HOOK'
+#!/usr/bin/env bash
+cat >/dev/null
+if [ -f "$CREW_TEST_ROOT/race" ]; then
+  cmd=$(cat "$CREW_TEST_ROOT/race"); rm "$CREW_TEST_ROOT/race"
+  (unset $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); cd /; eval "$cmd") >> "$CREW_TEST_ROOT/race.log" 2>&1
+fi
+exit 0
+HOOK
+  chmod +x "$r/hooks/pre-receive"
+}
