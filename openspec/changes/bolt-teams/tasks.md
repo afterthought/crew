@@ -24,7 +24,7 @@
   - push without force, replaying up to five times on rejection.
 
   Verify with a test where two writes race: both land in order, and a write whose unit was dropped is refused, naming the commit.
-- [ ] 2.3 `crew bolt new|give|order|drop|land`, with `give` making `bolt/<bolt>` and `<kit>/bolts/<bolt>` on the team's host, and its refusals. Verify each refusal in the `bolt-plan` spec's scenarios with tests.
+- [x] 2.3 `crew bolt new|give|order|drop|land`, with `give` making `bolt/<bolt>` and `<kit>/bolts/<bolt>` on the team's host, and its refusals. Verify each refusal in the `bolt-plan` spec's scenarios with tests.
 - [ ] 2.4 `crew unit add|split|order|after|move|drop|approve`. A move rebases a unit that has a worktree. The approval is an empty `Reviewed-by:` commit. Verify each scenario of the `bolt-plan` spec with tests, including the approval surviving a rebase.
 - [ ] 2.5 Derive each unit's stage from the kits in one `on_machine` call per host, and add `crew bolts [<bolt>] [--json]` with an unreachable host shown as unknown. Verify with a fixture kit holding a unit at each stage, and a squashed merge still reading `merged`.
 - [ ] 2.6 `crew unit add … --signal <id>`: the unit's source is the signal, and a `route` move is committed by path on blueprints main and pushed. Verify against the test remote that `moves.rec` gains the move and passes `recfix --check`.
