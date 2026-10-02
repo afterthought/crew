@@ -36,3 +36,10 @@ expect_ok crewpy brief wldn main-ops
 for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main"; do has "$out" "$want"; done
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
+
+expect_ok crewpy brief wldn operator
+[[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/operator.md left ${BASH_REMATCH[0]} unfilled"
+for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
+HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
+has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
+ok "the operator brief prints for wldn, opening sites on a Mac and giving the Mac URL on a box"
