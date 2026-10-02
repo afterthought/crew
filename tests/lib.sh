@@ -181,3 +181,15 @@ change() {
   printf '## ADDED Requirements\n\n### Requirement: X\nThe system SHALL x.\n\n#### Scenario: s\n- **WHEN** a\n- **THEN** b\n' > "$c/specs/x/spec.md"
   { echo "## 1. Work"; echo; for ((i = 1; i <= n; i++)); do if ((i <= d)); then echo "- [x] 1.$i task $i"; else echo "- [ ] 1.$i task $i"; fi; done; } > "$c/tasks.md"
 }
+
+# path_without <cmd>: this PATH less every directory holding <cmd>, with the tools crew needs kept by link
+path_without() {
+  local keep=$T/keep-$1 d c p=
+  mkdir -p "$keep"
+  for c in bash env python3 git jq awk sed grep tr cat head tail sort cut mkdir mktemp rm mv ls dirname basename seq; do
+    d=$(command -v "$c" 2>/dev/null) && [[ $d == /* ]] && ln -sf "$d" "$keep/$c"
+  done
+  local IFS=:
+  for d in $PATH; do [[ -x $d/$1 ]] || p=$p:$d; done
+  echo "$keep$p"
+}
