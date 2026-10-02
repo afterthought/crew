@@ -1007,7 +1007,7 @@ def bolts_view(fleet, a):
         fail(f"no bolt {a.bolt} in the plans of " + ", ".join(labels))
     if a.json:
         print(json.dumps(data, indent=1))
-        return
+        sys.exit(1 if errors else 0)
     lines = []
     for p in data["partitions"]:
         for pl in p["plans"]:
@@ -1029,11 +1029,11 @@ def bolts_view(fleet, a):
                 lines.append(f"queue  {r}")
                 for u in (x for x in pl["queue"] if x["repo"] == r):
                     lines.append(f"  {u['unit']:<40} {'queued':<12} {', '.join(u['sources'])}".rstrip())
-    for what, why in errors.items():
-        lines.append(f"{what} could not be read: {why}")
     for h, why in data["unreachable"].items():
         lines.append(f"{h} did not answer ({why}): the stages of its bolts are unknown")
     print("\n".join(lines))
+    if errors:
+        sys.exit("\n".join(errors.values()))
 
 
 # ----------------------------------------------------------------------------------------------------- the CLI
