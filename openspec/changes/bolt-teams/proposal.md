@@ -19,7 +19,7 @@ A crew team today builds whole OpenSpec changes one after another on main, with 
   Signals stay in the partition's blueprints repo. Queuing work from a signal is a new `route` move.
 - **The operator agent** stands in each operator session. It is started with `crew operator up <label>` and works for the user. It finds what is running with `crew sites` and opens it in terminal-browser.
 - **`crew sites`:** every host's bolts and units, with the URL of each running dev server.
-- **Agents:** every role runs on Opus 5.5, with an effort level set per role. The design agent replaces fable.
+- **Agents:** each role is an agent definition, `plugin/roles/<role>.md` in Claude Code's agent format, whose frontmatter sets its model and effort: Opus 5.5 at the effort per role, to start. The teams file can override either for a team or for a partition's main level. The design agent replaces fable.
 - **BREAKING** `teams.json` becomes version 2. It gains the partitions and their main levels, `units` replaces `coders`, and `base` goes. swancloud's `lib/crew-teams.nix` follows in its `herdr-partitions` change.
 
 ## Capabilities
@@ -31,7 +31,7 @@ A crew team today builds whole OpenSpec changes one after another on main, with 
 - `main-level`: a partition's design agent, planner, dispatchers and ops, where they run, and how signals reach the plan.
 - `operator-agent`: the standing agent in an operator session, how it is started, and what it does for the user.
 - `crew-sites`: the listing of every host's bolts, units and running dev servers, with the URL to open each from.
-- `agent-models`: the model and effort level each role runs with.
+- `agent-models`: each role's agent definition, the model and effort it sets, and the teams file's overrides.
 
 ### Modified Capabilities
 
@@ -40,7 +40,7 @@ A crew team today builds whole OpenSpec changes one after another on main, with 
 ## Impact
 
 - `plugin/bin/crew`, `plugin/bin/crew-role`, `plugin/lib/crew.py`; a new plan module beside `crew.py`
-- `plugin/roles/`:
+- `plugin/roles/`, each role now an agent definition:
   - `conductor.md`, `ops.md` and `coder.md` rewritten;
   - `construct.md`, `verify.md`, `design.md`, `planner.md`, `dispatcher.md`, `main-ops.md` and `operator.md` added;
   - `fable.md`, `explorer.md` and `verifier.md` removed.

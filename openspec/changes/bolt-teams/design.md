@@ -52,6 +52,7 @@ Everything else follows tracking.md:
 - **`repos`** stays `[kit, blueprints]`. swancloud's check that a team's repos are in its session's space keeps working, and crew checks that the second repo is one of the partition's blueprints repos.
 - **`units`** replaces `coders`.
 - **`base`** goes: a unit's base is its bolt, and a bolt's base is main.
+- **`roles`** (optional, on a team or a partition): per role, a `model` or `effort` that overrides its definition, e.g. `"roles": { "planner": { "effort": "max" } }`.
 
 crew refuses version 1 with a message naming the fix, never a guess. *Alternative:* keep reading version 1 alongside 2. Rejected: the briefs and roles change together, so an old file cannot describe a bolt team.
 
@@ -92,8 +93,15 @@ A dispatcher runs on each host that has a team of the partition. It runs in the 
 ### Signals are written by path and pushed
 A finding becomes a signal file in the partition's first blueprints repo, in the shape its `signals/README.md` gives. A `route` move goes into `signals/moves.rec`. crew commits only those paths on that repo's main and pushes over https, pulling with rebase on a rejected push. `signals/moves.rec merge=union` in `.gitattributes` keeps two hosts' appended moves from conflicting, and its `%key: Signal` lets `recfix` catch a signal moved twice. *Alternative:* keep signals on a branch like the plan. Rejected: the sweep and curation already write them on main.
 
-### One model, an effort per role
-`crew.py` names the model once, `claude-opus-5-5[1m]`, and the effort per role in one table: the one in the `agent-models` spec, which is plan.md's table with fix and merge added at code's level. `crew-role` reads both, and no brief names a model.
+### Each role is an agent definition
+Each file in `plugin/roles/` is an agent definition in Claude Code's format: frontmatter with `name`, `description`, `model` and `effort`, and the role's brief as the body, filled from `teams.json` at launch. Each unit stage has its own definition. Every definition starts with `model: claude-opus-5-5[1m]` and the effort in the `agent-models` table, which is plan.md's table with fix and merge added at code's level.
+
+`crew-role` reads the role's definition, applies the teams file's override for that role if there is one, and starts `claude --model <model> --effort <effort> --append-system-prompt <filled body>`. So changing a role for everyone is one edit to its definition, live from crew's checkout with no deploy. Changing it for one team, or for one partition's main level, is a `roles` entry in swancloud's `lib/crew-teams.nix`.
+
+*Alternatives:*
+- `claude --agent crew:<role>`, which applies a definition's model and effort itself. Rejected: Claude Code's docs say an agent's body replaces the default system prompt in the main session, so every agent would lose Claude Code's own instructions. The docs also don't say the `[1m]` context suffix works in a definition.
+- The definitions in the plugin's `agents/` folder. Rejected: crew's plugin loads into every session, so every session would offer each role as a subagent to spawn.
+- One model and one effort table in `crew.py`. Rejected: neither could change for one team without a crew commit.
 
 ### The operator agent
 `crew operator up <label>` runs on the host itself and works in four steps:

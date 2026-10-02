@@ -1,6 +1,6 @@
 # Tasks
 
-## 1. The teams file, the model and effort
+## 1. The teams file and the agent definitions
 
 - [ ] 1.1 A small test harness, `tests/run`, that gives each test a scratch `HOME` holding fixture `teams.json` and `herdr-hosts.json` files, a bare git remote, and stub `herdr` and `ssh` commands that record their calls. Verify `tests/run` passes with no tests.
 - [ ] 1.2 Add `recutils` to `devenv.nix`, and have every plan command check for `recsel` first and name the missing package. Verify `recsel --version` resolves in the devenv, and a test with `recsel` off `PATH` gets the message.
@@ -8,10 +8,11 @@
   - partitions with their label, partition, blueprints repos and main-level place;
   - teams with `units` and `[kit, blueprints]`;
   - a team's partition taken from its session in `herdr-hosts.json`;
+  - optional `roles` overrides on a team or a partition;
   - errors for version 1, a missing field, or a blueprints repo outside the partition.
 
   Verify with fixtures in `tests/`.
-- [ ] 1.4 Name the model (`claude-opus-5-5[1m]`) once, and add the effort table from the `agent-models` spec, both in `crew.py`. `crew-role` takes both from it for every role and stage. Verify a test prints each role's launch arguments with the right model and effort.
+- [ ] 1.4 Each role in `plugin/roles/` becomes an agent definition: frontmatter `name`, `description`, `model` (`claude-opus-5-5[1m]`) and `effort` from the `agent-models` table, with the brief as its body. `crew-role` reads the definition, applies a `roles` override from `teams.json`, and starts `claude --model … --effort … --append-system-prompt <filled brief>`. An override naming an unknown role or effort level is refused. Verify a test prints each role's launch arguments, with and without an override.
 
 ## 2. The plan
 
