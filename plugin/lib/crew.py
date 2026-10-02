@@ -272,10 +272,6 @@ def slot_of(t, slot):
 
 # A unit's stages and the definition each is started from.
 STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "merge": "coder", "fix": "coder"}
-# The definitions being retired with the bolt model; their briefs still print until they go.
-RETIRING = ("fable", "explorer", "verifier")
-
-
 def launch(fleet, scope, role, extra=None):
     """How crew-role starts a role: its folder, agent name, partition, the definition it comes from, the
     folders it may also reach, and the model and effort after the teams file's override."""
@@ -321,37 +317,40 @@ def operator_session(fleet, label, host):
     return sess
 
 
-def names(t):
-    n = {r: f"{t['name']}-{r}" for r in ("conductor", "fable", "explorer", "ops", "verifier")}
-    n["coders"] = [f"{t['name']}-coder-{i}" for i in range(1, t["units"] + 1)]
-    return n
-def reports(t):
-    return f"~/.local/state/{t['name']}-team/reports"
 def env(t):
     pairs = {
         "TEAM": t["name"], "SYSTEM": t["system"], "MACHINE": t["machine"], "SSH_TARGET": t["ssh"], "SESSION": t["session"],
         "LABEL": t["label"], "CREW_HOME": str(HOME), "KIT": t["kit"]["main"], "KIT_DIR": t["kit"]["dir"], "KIT_NAME": t["kit"]["name"],
         "BLUEPRINTS": t["blueprints"]["main"], "UNITS": str(t["units"]),
-        "DESIGN": t["blueprints"]["main"], "CODERS": str(t["units"]), "REPORTS": reports(t), "BASE": "main",
     }
     return "\n".join(f"{k}={shlex.quote(v)}" for k, v in pairs.items()) + f'\nSTATE="$HOME/.local/state/{t["name"]}-team"'
-def team_tokens(t, self_name):
-    n, kit, design = names(t), t["kit"], t["blueprints"]
-    coders = ", ".join(f"`{c}`" for c in n["coders"])
+
+
+def team_tokens(fleet, t, role, self_name):
+    kit, bp, n, label = t["kit"], t["blueprints"], t["name"], t["label"]
+    p = fleet["partitions"][label]
+    slots = [f"`{n}-unit-{i}`" for i in range(1, t["units"] + 1)]
     tok = {
-        "SELF": self_name or "", "TEAM": t["name"], "SYSTEM": t["system"], "KIT": kit["main"], "KIT_NAME": kit["name"],
-        "DESIGN": design["main"], "DESIGN_NAME": design["name"], "CONDUCTOR": n["conductor"], "FABLE": n["fable"],
-        "EXPLORER": n["explorer"], "OPS": n["ops"], "VERIFIER": n["verifier"], "CODER_NAMES": coders,
-        "CODERS": str(len(n["coders"])), "TEAM_CMD": f"{HOME}/plugin/bin/crew", "REPORTS": reports(t), "BASE": "main",
+        "SELF": self_name or {"conductor": f"{n}-conductor", "ops": f"{n}-ops"}.get(role, f"{n}-unit-<n>"),
+        "TEAM": n, "SYSTEM": t["system"], "LABEL": label, "KIT": kit["main"], "KIT_NAME": kit["name"], "KIT_DIR": kit["dir"],
+        "BLUEPRINTS": bp["main"], "BLUEPRINTS_NAME": bp["name"], "BLUEPRINTS_REPO": bp["repo"], "SIGNALS_REPO": p["blueprints"][0],
+        "CONDUCTOR": f"{n}-conductor", "OPS": f"{n}-ops", "UNITS": str(t["units"]), "SLOTS": ", ".join(slots),
+        "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
+        "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
+        "REPORTS": f"~/.local/state/{n}-team/reports",
         "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
     }
     tok["ROSTER"] = (
-        f"The team: `{n['conductor']}` (Opus) keeps the coders building and reports where things stand; `{n['fable']}` (Fable) owns "
-        f"{t['system']}'s design and reviews each change before it is built; `{n['explorer']}` (Opus) is started for one OpenSpec "
-        f"command or lookup at a time in {kit['name']}; the coders ({coders}, Opus) each build one whole change at a time in that change's own worktree; "
-        f"`{n['verifier']}` (Opus) is started only to run OpenSpec's verify on a finished change; and `{n['ops']}` (Opus) does everything "
-        f"that touches a live system: dev AWS, GitHub, the vendors' consoles and APIs, sign-in, debugging and proofs in dev.")
+        f"The team: `{n}-conductor` keeps the bolt's units moving through their stages and tells the user where the bolt stands; "
+        f"`{n}-ops` does everything that touches a live system, the bolt's deploys and tests among it; and the unit slots "
+        f"({', '.join(slots)}), each holding one unit or fix in flight, where every stage of it (construct, code, verify, merge) "
+        f"is a fresh agent in that unit's own worktree. Above the team, at {label}'s main level: `{label}-design`, the design agent, "
+        f"answers design questions; `{label}-planner` plans the partition's bolts; `{label}-dispatch-{t['machine']}` gives this "
+        f"host's teams their bolts; and `{label}-ops` lands a proven bolt on main. Agents outside the team are reached with "
+        f"`{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run.")
     return tok
+
+
 def main_tokens(fleet, p, self_name):
     return {"SELF": self_name or "", "LABEL": p["label"], "PARTITION": p["partition"], "HOST": this_host(),
             "TEAM_CMD": f"{HOME}/plugin/bin/crew"}
@@ -360,8 +359,8 @@ def main_tokens(fleet, p, self_name):
 def brief(fleet, scope, role, self_name=""):
     """A definition's body, filled from the teams file for a team or for a partition's main level."""
     if scope in fleet["teams"]:
-        role in TEAM_ROLES + RETIRING or fail(f"no definition '{role}' for a team. definitions: " + " ".join(TEAM_ROLES))
-        tok = team_tokens(fleet["teams"][scope], self_name)
+        role in TEAM_ROLES or fail(f"no definition '{role}' for a team. definitions: " + " ".join(TEAM_ROLES))
+        tok = team_tokens(fleet, fleet["teams"][scope], role, self_name)
     else:
         role in MAIN_ROLES or fail(f"no definition '{role}' for a main level. definitions: " + " ".join(MAIN_ROLES))
         tok = main_tokens(fleet, partition_of(fleet, scope), self_name)
