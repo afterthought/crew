@@ -1,43 +1,19 @@
 #!/usr/bin/env bash
-# Run one team role in the current pane: crew-role <team> conductor|fable|explorer|ops|coder-N|verifier [resume]
-# With "resume" the role picks its last conversation back up, by the name it was started under, brief and tools intact.
+# Run one role in the current pane, started from its agent definition (plugin/roles/<role>.md):
+#
+#   crew-role <team> conductor|ops [resume]
+#   crew-role <team> unit-<n> construct|code|verify|merge|fix
+#   crew-role <label> design|planner|ops|dispatcher|operator [resume]
+#
+# The definition's frontmatter gives the model and effort, unless the teams file's `roles` overrides them for
+# that team or partition; its body, filled from the teams file, is appended to Claude Code's own system prompt.
+# With "resume" the role picks its last conversation back up, by the name it was started under.
 set -euo pipefail
-team=${1:?usage: crew-role <team> <role> [resume]}; role=${2:?usage: crew-role <team> <role> [resume]}
+scope=${1:?usage: crew-role <team|label> <role> [stage|resume]}; role=${2:?usage: crew-role <team|label> <role> [stage|resume]}
 here=$(cd "$(dirname "$0")" && pwd)
-eval "$(python3 "$here/../lib/crew.py" env "$team")"
-name=$TEAM-$role; brief=$role
-held() { awk -v r="$role" '$1==r{print $3}' "$STATE/assignments" 2>/dev/null; }
-case $role in
-  conductor)
-    cd "$DESIGN"
-    args=(--model 'opus[1m]' --add-dir "$KIT")
-    ;;
-  fable)
-    cd "$DESIGN"
-    args=(--model fable --add-dir "$KIT")
-    ;;
-  explorer)
-    cd "$KIT"
-    args=(--model 'opus[1m]' --add-dir "$DESIGN")
-    ;;
-  ops)
-    cd "$KIT"
-    args=(--model 'opus[1m]' --add-dir "$DESIGN")
-    ;;
-  coder-*)
-    work=$(held); [[ -n $work && -d $work ]] || { echo "$name holds no change. Give it one with: crew assign $team $role <change>" >&2; exit 2; }
-    cd "$work"; brief=coder
-    args=(--model 'opus[1m]' --add-dir "$DESIGN" --add-dir "$KIT")
-    ;;
-  verifier)
-    work=$(held); [[ -n $work && -d $work ]] || { echo "$name holds no change. Give it one with: crew assign $team verifier <change>" >&2; exit 2; }
-    cd "$work"
-    args=(--model 'opus[1m]' --add-dir "$DESIGN" --add-dir "$KIT")
-    ;;
-  *) echo "unknown role: $role" >&2; exit 2 ;;
-esac
-# Every role runs unprompted: a mix of modes left some agents stalled on prompts no one was watching.
-args+=(--effort xhigh --permission-mode bypassPermissions)
-[[ ${3:-} == resume ]] && args+=(--resume "$name")
-prompt=$(python3 "$here/../lib/crew.py" brief "$team" "$brief" "$name")
-exec claude "${args[@]}" --name "$name" --append-system-prompt "$prompt"
+spec=$(python3 "$here/../lib/crew.py" launch "$scope" "$role" ${3:+"$3"}) || exit 2
+eval "$spec"
+cd "$CWD"
+# What the agent's own crew commands read: who is writing to the plan, and in which partition.
+export CREW_AGENT=$NAME CREW_LABEL=$LABEL
+exec claude "${args[@]}"

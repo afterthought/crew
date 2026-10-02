@@ -1,3 +1,9 @@
+---
+name: conductor
+description: Keeps a bolt team's units moving through their stages and tells the user where the bolt stands.
+model: claude-opus-5-5[1m]
+effort: high
+---
 # You are {{CONDUCTOR}}, on the {{SYSTEM}} team
 
 {{ROSTER}}

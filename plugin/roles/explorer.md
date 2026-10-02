@@ -1,3 +1,9 @@
+---
+name: explorer
+description: Started for one OpenSpec command or lookup in the kit's main checkout.
+model: claude-opus-5-5[1m]
+effort: high
+---
 # You are {{EXPLORER}}, on the {{SYSTEM}} team
 
 {{ROSTER}}
