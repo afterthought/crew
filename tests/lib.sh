@@ -193,3 +193,17 @@ path_without() {
   for d in $PATH; do [[ -x $d/$1 ]] || p=$p:$d; done
   echo "$keep$p"
 }
+
+# edit <teams|hosts> <python>: change a fixture on every host; the python statement changes `d` in place
+edit() {
+  local f h
+  for h in mac-studio chuck-herdr-alpha; do
+    case $1 in teams) f=$(home_of $h)/.config/crew/teams.json ;; hosts) f=$(home_of $h)/.config/swancloud/herdr-hosts.json ;; esac
+    python3 -c 'import json, sys
+f = sys.argv[1]; d = json.load(open(f))
+exec(sys.argv[2])
+json.dump(d, open(f, "w"), indent=1)' "$f" "$2"
+  done
+}
+team() { echo "[t for t in d['teams'] if t['name'] == '$1'][0]"; }
+part() { echo "[p for p in d['partitions'] if p['label'] == '$1'][0]"; }

@@ -4,7 +4,7 @@
 
 - [x] 1.1 A small test harness, `tests/run`, that gives each test a scratch `HOME` holding fixture `teams.json` and `herdr-hosts.json` files, a bare git remote, and stub `herdr` and `ssh` commands that record their calls. Verify `tests/run` passes with no tests.
 - [x] 1.2 Add `recutils` to `devenv.nix`, and have every plan command check for `recsel` first and name the missing package. Verify `recsel --version` resolves in the devenv, and a test with `recsel` off `PATH` gets the message.
-- [ ] 1.3 `crew.py` loads `teams.json` version 2:
+- [x] 1.3 `crew.py` loads `teams.json` version 2:
   - partitions with their label, partition, blueprints repos and main-level place;
   - teams with `units` and `[kit, blueprints]`;
   - a team's partition taken from its session in `herdr-hosts.json`;

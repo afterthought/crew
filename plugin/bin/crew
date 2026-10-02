@@ -32,7 +32,7 @@ local_team() { [[ $(hostname -s) == "$MACHINE" ]]; }
 on_machine() { if local_team; then "$@"; else ssh -o BatchMode=yes "$SSH_TARGET" "$(printf '%q ' "$@")"; fi; }
 h() { on_machine herdr --session "$SESSION" "$@"; }
 in_kit() { on_machine env -C "$KIT" "$@"; }
-teams() { python3 "$here/../lib/crew.py" teams; }
+teams() { python3 "$here/../lib/crew.py" teams || exit 1; }
 
 force=0; args=()
 for a in "$@"; do [[ $a == --force ]] && force=1 || args+=("$a"); done
@@ -41,7 +41,7 @@ cmd=${1:-}; team=${2:-}
 
 load() {
   [[ -n $team ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }
-  eval "$(python3 "$here/../lib/crew.py" env "$team")"
+  local e; e=$(python3 "$here/../lib/crew.py" env "$team") || exit 1; eval "$e"
   state=$STATE; panes=$state/panes; held=$state/assignments; layout=$state/layout
   standing=(conductor ops fable); pool=(); for n in $(seq "$CODERS"); do pool+=("coder-$n"); done; pool+=(verifier explorer)
   roles=("${standing[@]}" "${pool[@]}")
