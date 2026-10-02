@@ -20,13 +20,23 @@ tests=()
 if (( $# )); then for n in "$@"; do n=${n#t-}; tests+=("$TESTS/t-${n%.sh}.sh"); done
 else for t in "$TESTS"/t-*.sh; do [[ -e $t ]] && tests+=("$t"); done; fi
 
+# A scratch directory is made by mktemp under the temp dir, and only such a directory is ever removed: a failed
+# mktemp stops the run rather than leaving T empty or pointing anywhere else.
+tmp=$(cd "${TMPDIR:-/tmp}" && pwd -P) || exit 2
+scratch() {
+  local d; d=$(mktemp -d "$tmp/crew-test.XXXXXX") || return 1
+  d=$(cd "$d" && pwd -P) || return 1
+  case $d in "$tmp"/crew-test.??????) echo "$d" ;; *) echo "mktemp gave $d, not a crew-test directory under $tmp" >&2; return 1 ;; esac
+}
+unscratch() { case ${1:?} in "$tmp"/crew-test.??????) rm -rf -- "$1" ;; *) echo "not removing $1" >&2 ;; esac; }
+
 pass=0; failed=()
 for t in ${tests[@]+"${tests[@]}"}; do
   name=$(basename "$t" .sh)
   [[ -f $t ]] || { echo "no test $name" >&2; failed+=("$name"); continue; }
-  T=$(cd "$(mktemp -d "${TMPDIR:-/tmp}/crew-test.XXXXXX")" && pwd -P)
+  T=$(scratch) || { echo "could not make a scratch directory under $tmp" >&2; exit 2; }
   if (cd "$T" && T=$T bash "$t") >"$T/out" 2>&1; then
-    pass=$((pass + 1)); echo "ok    $name"; rm -rf "$T"
+    pass=$((pass + 1)); echo "ok    $name"; [[ -n ${CREW_TEST_SHOW:-} ]] && sed 's/^/      /' "$T/out"; unscratch "$T"
   else
     failed+=("$name"); echo "FAIL  $name   (scratch kept: $T)"; tail -25 "$T/out" | sed 's/^/      /'
   fi
