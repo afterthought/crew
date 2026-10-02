@@ -20,6 +20,8 @@ that is refused because someone wrote first is applied again to the new tip, up 
   crew unit move <unit> <bolt>|queue
   crew unit drop <unit> "<reason>"
   crew unit approve <unit>                   the user's review, an empty Reviewed-by: commit on unit/<unit>
+  crew signal <slug> "<what it asserts>" [--kind K] [--subject a,b] [--excerpt "<text>"]
+                                             a finding, as a signal in the partition's first blueprints repo
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
@@ -292,24 +294,27 @@ def show(repo, tip, path):
     return r.stdout if r.returncode == 0 else None
 
 
-def commit(repo, parent, path, text, message):
-    """A commit of one file's new text on top of parent, made through a temporary index: no working tree is touched."""
-    blob = git(repo, "hash-object", "-w", "--stdin", input=text)
+def commit(repo, parent, files, message):
+    """A commit of files' new text ({path: text}) on top of parent, made through a temporary index: no working tree
+    is touched, and no other path changes."""
     with tempfile.TemporaryDirectory() as d:
         idx = {"GIT_INDEX_FILE": str(pathlib.Path(d) / "index")}
         git(repo, "read-tree", *([parent] if parent else ["--empty"]), env=idx)
-        git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=idx)
+        for path, text in files.items():
+            blob = git(repo, "hash-object", "-w", "--stdin", input=text)
+            git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=idx)
         tree = git(repo, "write-tree", env=idx)
     return git(repo, "commit-tree", tree, *(["-p", parent] if parent else []), "-F", "-", input=message)
 
 
 def land(repo, ref, path, make):
-    """make(tip) gives a file's new text and the commit message, or refuses. The commit is pushed without force;
-    when the push is refused because the branch moved, make runs again on the new tip, up to five times."""
+    """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses. The
+    commit is pushed without force; when the push is refused because the branch moved, make runs again on the new
+    tip, up to five times."""
     for _ in range(1 + REPLAYS):
         tip = fetch(repo, ref)
         text, message = make(tip)
-        sha = commit(repo, tip, path, text, message)
+        sha = commit(repo, tip, text if path is None else {path: text}, message)
         r = git(repo, "push", "--quiet", url(repo), f"{sha}:refs/heads/{ref}", check=False)
         if r.returncode == 0:
             git(repo, "update-ref", f"refs/crew/{ref}", sha)
@@ -978,6 +983,34 @@ def route(fleet, label, sig, unit):
     print(f"{srepo} main {sha[:7]}: signal {sig} routed to unit/{unit}")
 
 
+def signal(fleet, a):
+    """A finding written as a signal in the partition's first blueprints repo, in the shape its signals/README.md
+    gives: one capture per agent and day, signals/<date>-<agent>/, holding capture.md and one file per signal.
+    Committed by those paths alone on main, and pushed; replayed on the new tip when main moved."""
+    label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
+    crew.NAME.match(a.slug) or fail(f"a signal's slug is lowercase words with dashes, not {a.slug}")
+    repo, who, today = crew.partition_of(fleet, label)["blueprints"][0], agent(), datetime.date.today().isoformat()
+    capture = f"{today}-" + re.sub(r"[^a-z0-9]+", "-", who.lower()).strip("-")
+    seen = {}
+
+    def make(tip):
+        tip or fail(f"{repo} has no main")
+        listed = git(repo, "ls-tree", "--name-only", f"{tip}:signals/{capture}", check=False)
+        names = listed.stdout.split() if listed.returncode == 0 else []
+        nn = 1 + max([int(n[:2]) for n in names if re.match(r"^[0-9]{2}-", n)] or [0])
+        sid = f"{capture}/{nn:02d}-{a.slug}"
+        subject = "[" + ", ".join(x.strip() for x in a.subject.split(",") if x.strip()) + "]" if a.subject else None
+        body = "---\n" + f"signal: {sid}\nkind: {a.kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "") + "---\n\n"
+        body += a.asserts.strip() + "\n" + (f"\n> {a.excerpt.strip()}\n" if a.excerpt else "")
+        cap = (f"---\ncapture: {capture}\nsource: crew\nagent: {who}\nevent_date: {today}\nimported: {today}\nstatus: read\n"
+               f"signals: {nn}\n---\n\n# Findings of {who}, {today}\n\nFindings {who} recorded with crew signal while building, "
+               f"each about something outside its own work.\n")
+        seen["id"] = sid
+        return {f"signals/{capture}/capture.md": cap, f"signals/{sid}.md": body}, f"signals({sid}): {a.slug} ({who})\n"
+    sha = land(repo, "main", None, make)
+    print(f"{repo} main {sha[:7]}: signal {seen['id']}")
+
+
 # ------------------------------------------------------------------------------------- what bash crew asks
 
 def sh(**pairs):
@@ -1215,6 +1248,14 @@ def parser():
     x.add_argument("unit")
     x.add_argument("--label")
 
+    x = sub.add_parser("signal")
+    x.add_argument("slug")
+    x.add_argument("asserts")
+    x.add_argument("--kind", choices=("constraint", "ask", "question", "commitment", "reaction"), default="constraint")
+    x.add_argument("--subject", help="tags, separated by commas")
+    x.add_argument("--excerpt")
+    x.add_argument("--label")
+
     # What bash crew asks, on the host it has forwarded to.
     x = sub.add_parser("_team-of")
     x.add_argument("unit")
@@ -1243,7 +1284,7 @@ COMMANDS = {
     ("unit", "add"): unit_add, ("unit", "split"): unit_split, ("unit", "order"): unit_order, ("unit", "after"): unit_after,
     ("unit", "move"): unit_move, ("unit", "drop"): unit_drop, ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_slots", None): slots_cmd,
+    ("_slots", None): slots_cmd, ("signal", None): signal,
 }
 
 
