@@ -12,7 +12,7 @@
   - errors for version 1, a missing field, or a blueprints repo outside the partition.
 
   Verify with fixtures in `tests/`.
-- [ ] 1.4 Each role in `plugin/roles/` becomes an agent definition: frontmatter `name`, `description`, `model` (`claude-opus-5-5[1m]`) and `effort` from the `agent-models` table, with the brief as its body. `crew-role` reads the definition, applies a `roles` override from `teams.json`, and starts `claude --model … --effort … --append-system-prompt <filled brief>`. An override naming an unknown role or effort level is refused. Verify a test prints each role's launch arguments, with and without an override.
+- [ ] 1.4 Each role in `plugin/roles/` becomes an agent definition: frontmatter `name`, `description`, `model` and `effort` from the `agent-models` table (`claude-fable-5-1` for the design agent and the planner, `claude-opus-5-5[1m]` for the rest), with the brief as its body. `crew-role` reads the definition, applies a `roles` override from `teams.json`, and starts `claude --model … --effort … --append-system-prompt <filled brief>`. An override naming an unknown role or effort level is refused. Verify a test prints each role's launch arguments, with and without an override.
 
 ## 2. The plan
 

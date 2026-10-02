@@ -11,27 +11,27 @@ Each role crew starts SHALL be an agent definition, `plugin/roles/<role>.md` in 
 
 #### Scenario: The design agent
 - **WHEN** `crew main up wldn` starts the design agent
-- **THEN** it runs with the model and effort in `roles/design.md`
+- **THEN** it runs with the model and effort in `roles/design.md`, Fable 5.1 at xhigh
 
 #### Scenario: A role changes for everyone
 - **WHEN** a role's `effort` is edited in its definition and crew's checkout is pulled
 - **THEN** that role's next start uses it, with no deploy
 
-### Requirement: Every role starts on Opus 5.5 at its effort level
-Every definition SHALL set Opus 5.5 with its 1M-token context, and this effort:
+### Requirement: Every role starts on its model at its effort level
+Every definition SHALL set this model, each with its 1M-token context, and this effort:
 
-| role | effort |
-|---|---|
-| design agent | xhigh |
-| planner | xhigh |
-| conductor | high |
-| ops (team and main level) | high |
-| unit: construct | high |
-| unit: code and merge | xhigh |
-| unit: verify | high |
-| fix | xhigh |
-| dispatcher | medium |
-| operator agent | medium |
+| role | model | effort |
+|---|---|---|
+| design agent | Fable 5.1 | xhigh |
+| planner | Fable 5.1 | xhigh |
+| conductor | Opus 5.5 | high |
+| ops (team and main level) | Opus 5.5 | high |
+| unit: construct | Opus 5.5 | high |
+| unit: code and merge | Opus 5.5 | xhigh |
+| unit: verify | Opus 5.5 | high |
+| fix | Opus 5.5 | xhigh |
+| dispatcher | Opus 5.5 | medium |
+| operator agent | Opus 5.5 | medium |
 
 #### Scenario: A unit moves from construct to code
 - **WHEN** a unit's construct stage at high effort is followed by its code stage
@@ -44,8 +44,8 @@ A team, or a partition's main level, in `teams.json` MAY set `roles.<role>.model
 - **WHEN** wldn's partition entry sets `roles.planner.effort` to `max`
 - **THEN** wldn's planner starts at max, and madswan's at its definition's xhigh
 
-### Requirement: Fable is gone
-No role SHALL be called fable or run on the Fable model. The design agent at the main level SHALL take over what fable did, and a team SHALL have no design role of its own.
+### Requirement: The design agent replaces fable
+No role SHALL be called fable. The design agent at the main level SHALL take over what fable did, and a team SHALL have no design role of its own.
 
 #### Scenario: A team's design question
 - **WHEN** a conductor needs a design answer

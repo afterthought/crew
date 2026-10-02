@@ -19,7 +19,7 @@ A crew team today builds whole OpenSpec changes one after another on main, with 
   Signals stay in the partition's blueprints repo. Queuing work from a signal is a new `route` move.
 - **The operator agent** stands in each operator session. It is started with `crew operator up <label>` and works for the user. It finds what is running with `crew sites` and opens it in terminal-browser.
 - **`crew sites`:** every host's bolts and units, with the URL of each running dev server.
-- **Agents:** each role is an agent definition, `plugin/roles/<role>.md` in Claude Code's agent format, whose frontmatter sets its model and effort: Opus 5.5 at the effort per role, to start. The teams file can override either for a team or for a partition's main level. The design agent replaces fable.
+- **Agents:** each role is an agent definition, `plugin/roles/<role>.md` in Claude Code's agent format, whose frontmatter sets its model and effort: Fable 5.1 for the design agent and the planner, Opus 5.5 for every other role, each at its effort, to start. The teams file can override either for a team or for a partition's main level. The design agent replaces fable.
 - **BREAKING** `teams.json` becomes version 2. It gains the partitions and their main levels, `units` replaces `coders`, and `base` goes. swancloud's `lib/crew-teams.nix` follows in its `herdr-partitions` change.
 
 ## Capabilities
