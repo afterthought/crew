@@ -41,5 +41,5 @@ for gone in "assign swb-1 coder-1 x" "release swb-1 coder-1" "opsx swb-1 explore
   if out=$(crew $gone 2>&1); then fail "crew $gone still works"; fi
   has "$out" "A team builds one bolt at a time"
 done
-lacks "$(sed -n '2,42p' "$CREW/plugin/bin/crew")" "fable"
+lacks "$(crew 2>&1 || true)" "fable"
 ok "assign, release and opsx are gone"

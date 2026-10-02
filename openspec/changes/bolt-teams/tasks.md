@@ -75,7 +75,7 @@
 
 ## 6. Documents and the blueprints repos
 
-- [ ] 6.1 Update `README.md`, `plugin/skills/crew/SKILL.md` and the usage header of `plugin/bin/crew` to the commands above. Verify every command in the README appears in `crew`'s usage, and none that was removed.
+- [x] 6.1 Update `README.md`, `plugin/skills/crew/SKILL.md` and the usage header of `plugin/bin/crew` to the commands above. Verify every command in the README appears in `crew`'s usage, and none that was removed.
 - [ ] 6.2 The blueprints repos, each as a local commit on a `bolt-teams` branch of a scratch clone, not pushed:
   - willdan-blueprints: add `route` to the `Move` enum in `signals/moves.rec` and to the README's move table, change the README's line that work reaches the tracker only through an intent, and add `signals/moves.rec merge=union` to `.gitattributes`;
   - afterthought/blueprints (new and empty) and agentplot/blueprints: a `signals/` scaffold written from flywheel-next's capture and signal model (`definitions/signal.yaml`, `capture.yaml`): a README, `moves.rec` with `route` in its `Move` enum, and the `.gitattributes` line.

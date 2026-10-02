@@ -21,11 +21,17 @@
 #                                      a fix on the team's bolt, at places/fix-<name>, built by a fresh code agent
 #   crew fix     <team> <name> --merge merge the fix into the bolt
 #
-# The plan, kept on plan/<label> of each blueprints repo (crew plan --help for more):
+# The plan, kept on plan/<label> of each blueprints repo, and the signals in the partition's first one:
 #   crew bolts [<bolt>] [--label L] [--json]
+#                                      every bolt and unit of the plans, each unit's stage read from its kit
 #   crew bolt  new|give|order|drop|land ...
 #   crew unit  add|split|order|after|move|drop|approve ...
 #   crew plan  init <blueprints> <label>
+#   crew signal <slug> "<what it asserts>" ...
+#                                      record a finding as a signal
+#   crew signal move <id> attach|challenge|new-territory|answered|drop ...
+#                                      curation's move for a signal
+#   (crew bolt|unit|signal --help says more)
 #
 # Each partition's main level, and the operator agent in each operator session:
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
@@ -33,7 +39,6 @@
 #   crew operator up <label>           the operator agent in this host's operator session <label>
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
-#   crew signal   ...                  record a finding as a signal in the partition's first blueprints repo
 #
 # A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
 # "git" tab (gitgui in the kit and the blueprints repo), and "<team> units", one pane per slot in flight, which
@@ -47,6 +52,7 @@ plan() { python3 "$here/../lib/plan.py" "$@"; }
 h() { herdr --session "$SESSION" "$@"; }
 teams() { py teams || exit 1; }
 this_host() { hostname -s; }
+usage() { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 orig=("$@"); force=0; args=()
 for a in "$@"; do if [[ $a == --force ]]; then force=1; else args+=("$a"); fi; done
@@ -411,5 +417,5 @@ case $cmd in
     load_operator "${3:?usage: crew operator up <label>}"; ensure_state
     ensure_single operator operator
     if [[ -n $(agent_status "$(pane_of operator)") ]]; then echo "$(name_of operator) is already up"; else start operator; fi ;;
-  *) sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) usage; exit 2 ;;
 esac
