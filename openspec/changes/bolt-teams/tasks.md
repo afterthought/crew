@@ -32,7 +32,7 @@
 
 ## 3. Bolt teams
 
-- [ ] 3.1 `crew up|down|rebuild|close|restart|resume` act on the conductor and ops only, in a workspace `<team>` with a `conductor` tab and a `git` tab (gitgui in the kit and the blueprints repo). Remove fable, the explorer, the verifier, `assign`, `release` and `opsx`. Verify with the stub `herdr` that `crew up` creates one workspace with those two tabs and starts two agents.
+- [x] 3.1 `crew up|down|rebuild|close|restart|resume` act on the conductor and ops only, in a workspace `<team>` with a `conductor` tab and a `git` tab (gitgui in the kit and the blueprints repo). Remove fable, the explorer, the verifier, `assign`, `release` and `opsx`. Verify with the stub `herdr` that `crew up` creates one workspace with those two tabs and starts two agents.
 - [ ] 3.2 Unit slots, and `crew unit run <unit> construct|code|verify|merge`:
   - a free slot is taken, refused when all `units` are in flight;
   - construct makes `places/<unit>` on `unit/<unit>` from the bolt and runs the kit's `crew-prepare`;

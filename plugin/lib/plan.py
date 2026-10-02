@@ -978,6 +978,95 @@ def route(fleet, label, sig, unit):
     print(f"{srepo} main {sha[:7]}: signal {sig} routed to unit/{unit}")
 
 
+# ------------------------------------------------------------------------------------- what bash crew asks
+
+def sh(**pairs):
+    return "\n".join(f"{k}={__import__('shlex').quote(str(v))}" for k, v in pairs.items())
+
+
+def team_of_unit(fleet, a):
+    """The team whose bolt holds a unit: crew unit run goes to that team's host."""
+    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
+    u = plan.unit(a.unit)
+    u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first (crew unit move {a.unit} <bolt>)")
+    team = plan.bolt(u.get("Bolt")).get("Team") or fail(f"bolt {u.get('Bolt')} is held by no team yet: crew bolt give <team> {u.get('Bolt')}")
+    print(sh(TEAM=team))
+
+
+def run_check(fleet, a):
+    """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent."""
+    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
+    u = plan.unit(a.unit)
+    bolt = u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first")
+    t = fleet["teams"][plan.bolt(bolt).get("Team")]
+    s = Stages(fleet, plan, survey(fleet, [(t["name"], bolt)])).of(a.unit)
+    st, place = s["stage"], f"{t['kit']['dir']}/places/{a.unit}"
+    st != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
+    words = f" {a.words}" if a.words else ""
+    if a.stage == "construct":
+        if st == "waiting":
+            deps = [d for d in u.all("After") if Stages(fleet, plan, survey(fleet, [(t["name"], bolt)])).of(d)["stage"] not in ("merged", "landed")]
+            fail(f"unit {a.unit} is waiting: it comes after " + ", ".join(deps) + ", not yet merged into its bolt")
+        st in ("ready", "construct", "review") or fail(f"unit {a.unit} is in {st}; construct is behind it")
+        make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        sources = u.all("Source")
+        prompt = f"/opsx:propose {a.unit} {u.get('Intent')}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + words
+    elif a.stage == "code":
+        st != "review" or fail(f"unit {a.unit} is in review: code waits until the user approves it (crew unit approve {a.unit})")
+        st in ("approved", "code", "verify") or fail(f"unit {a.unit} is in {st}, with no approved change to code yet")
+        prompt = f"/opsx:apply {a.unit}{words}"
+    elif a.stage == "verify":
+        st != "code" or fail(f"unit {a.unit} is in code, with these tasks still open: " + "; ".join(s["open"]))
+        st == "verify" or fail(f"unit {a.unit} is in {st}: verify waits until every task is ticked")
+        prompt = f"/opsx:verify {a.unit}{words}"
+    else:
+        st == "verify" or fail(f"unit {a.unit} is in {st}: it merges once every task is ticked and verify has run")
+        prompt = f"Merge {a.unit} into bolt/{bolt}: wt merge bolt/{bolt} --no-squash --no-remove{words}"
+    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt))
+
+
+def bolt_of_team(fleet, a):
+    t = crew.team_of(fleet, a.team)
+    tip = fetch(t["blueprints"]["repo"], f"plan/{t['label']}") or fail(f"{t['blueprints']['repo']} has no plan/{t['label']} yet")
+    held = held_by(read(t["blueprints"]["repo"], t["label"], tip), t["name"])
+    held or fail(f"{t['name']} holds no bolt: crew bolt give {t['name']}")
+    print(sh(BOLT=held[0].name()))
+
+
+def place_cmd(fleet, a):
+    make_place(fleet, crew.team_of(fleet, a.team), a.path, a.branch, a.base, track=True)
+
+
+def slots_cmd(fleet, a):
+    """Each slot of the team on this host: what it holds and that work's stage, read from the kit alone."""
+    t = crew.team_of(fleet, a.team)
+    path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
+    held = [l.split() for l in (path.read_text().splitlines() if path.exists() else []) if l.strip()]
+    if not held:
+        return
+    k = survey(fleet, [(t["name"], None)]).get(t["machine"], {})
+    kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
+    for slot, kind, name, place in held:
+        stage, tasks = "unknown", ""
+        if kit.get("ok") and kind == "fix":
+            f = next((f for f in kit["fixes"] if f["fix"] == name), None)
+            stage = ("merged" if f["merged"] else "fix") if f else "none"
+        elif kit.get("ok"):
+            pl = kit["places"].get(name)
+            if name in kit["main"]:
+                stage = "landed"
+            elif pl and pl["bolt"] and name in kit["bolts"].get(pl["bolt"], {}).get("changes", []):
+                stage = "merged"
+            elif pl:
+                done, total = pl["tasks"] or (0, 0)
+                stage = ("verify" if total and done == total else "code" if done else
+                         "approved" if pl["planning"] and pl["reviewed"] else "review" if pl["planning"] else "construct")
+                tasks = f"{done}/{total}" if pl["tasks"] and stage in ("code", "verify") else ""
+            else:
+                stage = "none"
+        print(slot, kind, name, stage, tasks or "-", place)
+
+
 # ----------------------------------------------------------------------------------------------- crew bolts
 
 def bolts_view(fleet, a):
@@ -1125,6 +1214,25 @@ def parser():
     x = un.add_parser("approve")
     x.add_argument("unit")
     x.add_argument("--label")
+
+    # What bash crew asks, on the host it has forwarded to.
+    x = sub.add_parser("_team-of")
+    x.add_argument("unit")
+    x.add_argument("--label")
+    x = sub.add_parser("_run")
+    x.add_argument("unit")
+    x.add_argument("stage", choices=("construct", "code", "verify", "merge"))
+    x.add_argument("words", nargs="?", default="")
+    x.add_argument("--label")
+    x = sub.add_parser("_bolt-of")
+    x.add_argument("team")
+    x = sub.add_parser("_place")
+    x.add_argument("team")
+    x.add_argument("path")
+    x.add_argument("branch")
+    x.add_argument("base")
+    x = sub.add_parser("_slots")
+    x.add_argument("team")
     return ap
 
 
@@ -1134,6 +1242,8 @@ COMMANDS = {
     ("bolt", "land"): bolt_land,
     ("unit", "add"): unit_add, ("unit", "split"): unit_split, ("unit", "order"): unit_order, ("unit", "after"): unit_after,
     ("unit", "move"): unit_move, ("unit", "drop"): unit_drop, ("unit", "approve"): unit_approve,
+    ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
+    ("_slots", None): slots_cmd,
 }
 
 

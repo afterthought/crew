@@ -238,3 +238,14 @@ place() {
 }
 # stage <unit> [label]: the unit's stage as crew bolts reads it
 stage() { crew bolts --label "${2:-wldn}" --json | jq -r --arg u "$1" '[.partitions[].plans[].bolts[].units[] | select(.unit == $u) | .stage] | first // "none"'; }
+
+# herdr_state <host> <session> <jq>: what the stub herdr holds there
+herdr_state() { jq -r "$3" "$(home_of "$1")/.stub-herdr/$2.json"; }
+# team_world: the box's switchboard-kit and willdan-blueprints checkouts, and the plan with swb-1 holding a bolt
+team_world() {
+  world
+  wb=$(blueprints WilldanGroup/willdan-blueprints)
+  k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
+  clone WilldanGroup/willdan-blueprints "$(space chuck-herdr-alpha willdan)/willdan-blueprints/main"
+  crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null
+}

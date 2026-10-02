@@ -8,6 +8,11 @@
                                       a definition's brief for a team or a partition's main level; name is the agent's own
   crew.py launch <team|label> <role> [stage|resume]
                                       how crew-role starts the role, as shell assignments
+  crew.py env-main|env-dispatch|env-operator <label>
+                                      a main level's, this host's dispatcher's or operator agent's settings
+  crew.py hosts <label>               the hosts where the partition's teams run: name, ssh name, crew there
+  crew.py crew-at <host>              the crew command on a host
+  crew.py tell <agent> "<text>"       prompt an agent wherever it runs
 
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
@@ -385,6 +390,30 @@ def launch_shell(fleet, scope, role, extra):
             f"args=({' '.join(shlex.quote(a) for a in args)})")
 
 
+def env_main(fleet, label):
+    p = partition_of(fleet, label)
+    return shell(KIND="main", LABEL=label, MACHINE=p["machine"], SSH_TARGET=p["ssh"], SESSION=p["session"], CWD=p["checkout"],
+                 STATE=f"$HOME/.local/state/crew/{label}-main")
+
+
+def env_dispatch(fleet, label, host):
+    session = dispatch_place(fleet, label, host)
+    bps = blueprints_on(fleet, label, host)
+    return shell(KIND="dispatch", LABEL=label, HOST=host, MACHINE=host, SSH_TARGET=fleet["hosts"][host]["ssh"], SESSION=session,
+                 CWD=bps[0] if bps else fleet["hosts"][host]["sessions"][session]["dir"], STATE=f"$HOME/.local/state/crew/{label}-dispatch")
+
+
+def env_operator(fleet, label, host):
+    sess = operator_session(fleet, label, host)
+    return shell(KIND="operator", LABEL=label, HOST=host, MACHINE=host, SSH_TARGET=fleet["hosts"][host]["ssh"], SESSION=label,
+                 CWD=sess["dir"], STATE=f"$HOME/.local/state/crew/{label}-operator")
+
+
+def shell(**pairs):
+    """Shell assignments; STATE is left for the shell to expand, on the host it runs on."""
+    return "\n".join(f'{k}="{v}"' if k == "STATE" else f"{k}={shlex.quote(v)}" for k, v in pairs.items())
+
+
 def main(a):
     fleet = load()
     if a[:1] == ["teams"]:
@@ -397,6 +426,18 @@ def main(a):
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:
         print(launch_shell(fleet, a[1], a[2], a[3] if len(a) > 3 else None))
+    elif a[:1] == ["env-main"] and len(a) == 2:
+        print(env_main(fleet, a[1]))
+    elif a[:1] == ["env-dispatch"] and len(a) in (2, 3):
+        print(env_dispatch(fleet, a[1], a[2] if len(a) > 2 else this_host()))
+    elif a[:1] == ["env-operator"] and len(a) == 2:
+        print(env_operator(fleet, a[1], this_host()))
+    elif a[:1] == ["hosts"] and len(a) == 2:
+        print("\n".join(f"{h} {fleet['hosts'][h]['ssh']} {crew_at(fleet, h)}" for h in partition_hosts(fleet, a[1])))
+    elif a[:1] == ["crew-at"] and len(a) == 2:
+        print(crew_at(fleet, a[1]))
+    elif a[:1] == ["tell"] and len(a) == 3:
+        sys.exit(0 if tell(fleet, a[1], a[2]) else 1)
     else:
         sys.exit(__doc__)
 

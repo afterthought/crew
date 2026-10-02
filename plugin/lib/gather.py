@@ -83,7 +83,8 @@ def kit(req):
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
     out = {"ok": True, "main": changes(main, "main"), "bolts": {}, "places": {}, "fixes": []}
-    for b in req.get("bolts", []):
+    tracked = [u[5:] for u in ups.values() if u.startswith("bolt/")]
+    for b in list(dict.fromkeys(req.get("bolts", []) + tracked)):
         exists = run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}"], main) is not None
         wt = os.path.join(kdir, "bolts", b)
         out["bolts"][b] = {"exists": exists, "changes": changes(main, f"bolt/{b}") if exists else [],
