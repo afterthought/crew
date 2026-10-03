@@ -45,7 +45,7 @@ The write path runs in crew's own bare cache of the repo, `~/.cache/crew/git/<ow
 { "version": 2,
   "partitions": [
     { "label": "wldn", "partition": "clients/willdan", "blueprints": ["WilldanGroup/willdan-blueprints"],
-      "machine": "chuck-herdr-alpha", "session": "wldn-3" } ],
+      "machine": "chuck-herdr-alpha", "session": "wldn-2" } ],
   "teams": [
     { "name": "swb-1", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
       "units": 4, "repos": ["switchboard-kit", "willdan-blueprints"] } ] }
@@ -157,4 +157,4 @@ Rollback: revert crew's main to the commit before the merge. `teams.json` versio
 
 ## Open Questions
 
-(none) The main levels run in `wldn-3` on chuck-herdr-alpha, `madswan-1` on mac-studio and `swancloud-1` on mac-studio, written by swancloud in `lib/crew-teams.nix`.
+(none) The main levels run in `wldn-2` on chuck-herdr-alpha, `madswan-1` on mac-studio and `swancloud-1` on mac-studio, written by swancloud in `lib/crew-teams.nix`.

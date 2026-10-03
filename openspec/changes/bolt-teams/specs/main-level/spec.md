@@ -10,8 +10,8 @@ Above a partition's bolt teams: a design agent that elaborates on main, a planne
 `teams.json` SHALL list each partition with a main level. Each entry gives the partition's label (`wldn`, `madswan`, `swancloud`), its swancloud name, its blueprints repos, and the machine and session its main level runs in. The first blueprints repo listed SHALL be the one the partition's signals and elaboration go to by default.
 
 #### Scenario: clients/willdan
-- **WHEN** `teams.json` lists `wldn` as `clients/willdan` with willdan-blueprints, running on the box in `wldn-3`
-- **THEN** `crew main up wldn` starts its main level in `wldn-3` on the box
+- **WHEN** `teams.json` lists `wldn` as `clients/willdan` with willdan-blueprints, running on the box in `wldn-2`
+- **THEN** `crew main up wldn` starts its main level in `wldn-2` on the box
 
 ### Requirement: The main level is one herdr workspace
 `crew main up <label>` SHALL open a herdr workspace named `<label>` in the main level's session. It SHALL hold a `design` tab with the design agent, a `planner` tab with the planner, and an `ops` tab with the main-level ops, and start each. It SHALL then start a dispatcher on every host where the partition's teams run.
@@ -71,4 +71,4 @@ Every move SHALL be appended to `signals/moves.rec` through crew: `route` by `cr
 
 #### Scenario: A conductor asks the design agent
 - **WHEN** swb-1's conductor on the box runs `crew tell wldn-design "<question>"`
-- **THEN** the design agent in `wldn-3` receives the question
+- **THEN** the design agent in `wldn-2` receives the question
