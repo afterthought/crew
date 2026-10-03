@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""crew's SessionStart hook: a crew agent that herdr resumes gets its name and its identity back.
+
+crew-role starts every role with CREW_AGENT and CREW_LABEL in its environment, and crew names the role's herdr
+pane after the agent. A herdr server that restarts resumes each agent with a bare `claude --resume <id>`. Claude
+Code brings back the conversation, the brief, the model, the permission mode and the added folders, but the pane
+comes back with no name, so `crew tell` and the greetings miss it, and the agent's crew commands lose who is
+writing and which partition is theirs.
+
+So at every start this records a crew agent's session in ~/.local/state/crew/sessions/<session id>, which a
+resume keeps. A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
+variables back through CLAUDE_ENV_FILE, which Claude Code applies to each of its Bash commands, and its pane gets
+its name back. Any other session costs one file lookup. The hook never fails a start."""
+import json
+import os
+import pathlib
+import re
+import shlex
+import subprocess
+import sys
+
+# herdr knows the agent only once it has started, after this hook: crew's own start retries its rename the same way.
+RENAME = 'for _ in $(seq 60); do "$0" agent rename "$1" "$2" >/dev/null 2>&1 && exit 0; sleep 1; done'
+
+
+def main():
+    try:
+        hook = json.load(sys.stdin)
+    except ValueError:
+        return
+    sid = hook.get("session_id")
+    if not isinstance(sid, str) or not re.fullmatch(r"[A-Za-z0-9-]+", sid) or hook.get("agent_id"):
+        return
+    record = pathlib.Path.home() / ".local/state/crew/sessions" / sid
+    agent = os.environ.get("CREW_AGENT")
+    if agent:
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\n")
+        return
+    if not record.is_file():
+        return
+    saved = dict(line.split("=", 1) for line in record.read_text().splitlines() if "=" in line)
+    agent = saved.get("CREW_AGENT")
+    if not agent:
+        return
+    env_file = os.environ.get("CLAUDE_ENV_FILE")
+    if env_file:
+        with open(env_file, "a") as f:
+            f.write(f"export CREW_AGENT={shlex.quote(agent)} CREW_LABEL={shlex.quote(saved.get('CREW_LABEL', ''))}\n")
+    pane = os.environ.get("HERDR_PANE_ID")
+    if os.environ.get("HERDR_ENV") == "1" and pane:
+        herdr = os.environ.get("HERDR_BIN_PATH") or "herdr"
+        subprocess.Popen(["bash", "-c", RENAME, herdr, pane, agent], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:  # a start is never held up by crew's bookkeeping
+        print(f"crew session-start: {e}", file=sys.stderr)
