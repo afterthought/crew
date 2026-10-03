@@ -9,7 +9,8 @@
 #   crew up      <team>                open the team's workspace and start its conductor and ops
 #   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh
 #   crew close   <team>                end everything the team has and close its panes; nothing is started
-#   crew restart <team> [role...]      end the conductor's or ops' session and start a fresh one in the same pane
+#   crew restart <team> [role...] [--no-greet]
+#                                      end the conductor's or ops' session and start a fresh one in the same pane
 #   crew resume  <team> [role...]      bring back the conductor or ops when not up, with its last conversation
 #   crew clear   <team> <role>         /clear the conductor or ops and give it its name back
 #   crew down    <team>                end every session the team has; the panes stay
@@ -54,8 +55,8 @@ teams() { py teams || exit 1; }
 this_host() { hostname -s; }
 usage() { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
-orig=("$@"); force=0; args=()
-for a in "$@"; do if [[ $a == --force ]]; then force=1; else args+=("$a"); fi; done
+orig=("$@"); force=0; greet=1; args=()
+for a in "$@"; do case $a in --force) force=1 ;; --no-greet) greet=0 ;; *) args+=("$a") ;; esac; done
 set -- ${args[@]+"${args[@]}"}
 cmd=${1:-}
 
@@ -137,17 +138,17 @@ start() {  # start <role> [stage|resume]
   sleep 1
   h pane run "$pane" "bash $(printf '%q' "$here/crew-role") $SCOPE $role ${2:-}" >/dev/null
   give_name "$pane" "$name" || return 1
-  # Claude asks whether a folder it has not seen is trusted. A slot's folder is a worktree crew made from the
-  # team's own repository, which is trusted on main, so that one question is answered for it. Nothing else is.
-  if is_slot "$role"; then
-    for _ in $(seq 15); do
-      sleep 2
-      if h pane read "$pane" --source visible --lines 30 2>/dev/null | command grep -q "Yes, I trust this folder"; then
-        h agent send-keys "$pane" down enter >/dev/null 2>&1 || true; sleep 3; break
-      fi
-      [[ $(agent_status "$pane") == idle ]] && break
-    done
-  fi
+  # Claude asks whether a folder it has not seen is trusted. Every role starts in a folder the hosts file names:
+  # a session's space, a checkout in it, or a worktree crew made from the team's own repository. So that one
+  # question is answered for it. Nothing else is: not the Bypass Permissions warning, which swancloud's settings
+  # answer once for every account.
+  for _ in $(seq 15); do
+    sleep 2
+    if h pane read "$pane" --source visible --lines 30 2>/dev/null | command grep -q "Yes, I trust this folder"; then
+      h agent send-keys "$pane" down enter >/dev/null 2>&1 || true; sleep 3; break
+    fi
+    [[ $(agent_status "$pane") == idle ]] && break
+  done
   case ${2:-} in resume) echo "$name resumed in $pane" ;; "") echo "$name started in $pane" ;; *) echo "$name started $2 in $pane" ;; esac
 }
 
@@ -167,10 +168,12 @@ first_tab() {  # first_tab <workspace label> <tab label> <cwd> <role>: the works
   local r; r=$(workspace "$1" "$3"); h tab rename "${r% *}" "$2" >/dev/null; put "$panes" "$4" "${r#* }"
 }
 
-ensure_team() {  # "<team>": a conductor tab with the conductor and ops, and a git tab, gitgui in each repo
+ensure_team() {  # "<team>": a conductor tab with the conductor and ops, and on a Mac a git tab, gitgui in each repo
   local c o g b
   c=$(pane_of conductor); pane_live "$c" || { first_tab "$TEAM" conductor "$KIT" conductor; c=$(pane_of conductor); }
   o=$(pane_of ops); pane_live "$o" || put "$panes" ops "$(split "$c" right "$KIT")"
+  # gitgui draws with terminal graphics, which are too slow to use over a remote host's connection.
+  [[ ${HOST_KIND:-} == darwin ]] || return 0
   g=$(pane_of git-kit)
   if ! pane_live "$g"; then tab "$TEAM" git "$KIT" git-kit; g=$(pane_of git-kit); h pane run "$g" gitgui >/dev/null; fi
   b=$(pane_of git-blueprints)
@@ -332,7 +335,7 @@ case $cmd in
     load_team "${2:-}"; forward; ensure_state; pick_roles "$@"
     stopped=(); for role in "${picked[@]}"; do stop "$role" && stopped+=("$role"); done
     ensure_team; for role in ${stopped[@]+"${stopped[@]}"}; do start "$role"; done
-    [[ " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
+    [[ $greet == 1 && " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
     load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; ensure_team
     for role in "${picked[@]}"; do

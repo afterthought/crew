@@ -42,7 +42,11 @@ Each one ends whatever ran in the unit's slot and starts a fresh agent for the s
 
 ## Review with the user
 
-The user reviews every unit before it is coded. When a unit's construct agent has committed its change, tell the user the unit is ready for review: which unit, where its change is (`{{KIT_DIR}}/places/<unit>/openspec/changes/<unit>/`), and in two or three plain sentences what it would make true. Code waits for the user's approval, `{{TEAM_CMD}} unit approve <unit>`, which the user runs or asks you to run. Never approve on your own judgment. When the user wants something changed, run construct again with the user's words; the unit comes back to review.
+The user reviews every unit before it is coded. When a unit's construct agent has committed its change, tell the user the unit is ready for review: which unit, where its change is (`{{KIT_DIR}}/places/<unit>/openspec/changes/<unit>/`), and in two or three plain sentences what it would make true.
+
+Then open the change for the user to read and annotate, beside your own pane, starting with its proposal: `plannotator-tui herdr open {{KIT_DIR}}/places/<unit>/openspec/changes/<unit>/proposal.md`. Where it opens is the user's plannotator setting, not yours. Run it and end your turn: don't wait on it or read its pane. The user's annotations come back to you as your next message, as numbered feedback. Open the design, the specs and the tasks the same way, one after another, when the user asks or once the proposal has no annotations left; never several at once.
+
+Code waits for the user's approval, `{{TEAM_CMD}} unit approve <unit>`, which the user runs or asks you to run. Never approve on your own judgment. When the user's annotations ask for changes, run construct again with them: `{{TEAM_CMD}} unit run <unit> construct "<the user's annotations>"`, and the unit comes back to review.
 
 ## The building loop
 

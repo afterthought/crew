@@ -143,7 +143,7 @@ def load():
             fail(f"{what} names {bp} as its blueprints repo, which is not one of {pname}'s: " + " ".join(part["blueprints"]))
         kname = kit.split("/")[-1]
         teams[name] = dict(t, name=name, system=system, machine=machine, session=session, units=units, label=part["label"],
-                           partition=pname, ssh=host["ssh"], dir=sess["dir"], roles=roles_of(t, what, TEAM_ROLES),
+                           partition=pname, ssh=host["ssh"], kind=host.get("kind", ""), dir=sess["dir"], roles=roles_of(t, what, TEAM_ROLES),
                            kit={"name": kname, "repo": kit, "dir": f"{sess['dir']}/{kname}", "main": checkout(sess, kit)},
                            blueprints={"name": bp.split("/")[-1], "repo": bp, "main": checkout(sess, bp)})
         part["teams"].append(name)
@@ -201,6 +201,16 @@ def tell(fleet, name, text):
     return r.returncode == 0
 
 
+def agent_status(fleet, name):
+    """An agent crew starts, as herdr sees it wherever it runs: idle, done, working, blocked, or None when it is not up."""
+    host, session = place_of_agent(fleet, name)
+    r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "get", name])
+    try:
+        return json.loads(r.stdout)["result"]["agent"].get("agent_status") if r.returncode == 0 else None
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
 GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
             "start each stage that is ready.")
 
@@ -211,16 +221,8 @@ def greet(fleet, team, first="", wait=90):
     for up to five minutes. Returns whether it was greeted; a conductor that is not up is reported, not an error."""
     t = team_of(fleet, team)
     name, text = f"{t['name']}-conductor", first + GREETING
-
-    def status():
-        r = on_machine(fleet, t["machine"], ["herdr", "--session", t["session"], "agent", "get", name])
-        try:
-            return json.loads(r.stdout)["result"]["agent"].get("agent_status") if r.returncode == 0 else None
-        except (ValueError, KeyError, TypeError):
-            return None
-
     deadline, asked = time.monotonic() + wait, False
-    while (s := status()) not in ("idle", "done"):
+    while (s := agent_status(fleet, name)) not in ("idle", "done"):
         if s == "blocked" and not asked:
             print(f"{name} is waiting on a question in its pane; answer it there and it will be greeted", file=sys.stderr)
             asked, deadline = True, time.monotonic() + 300
@@ -304,6 +306,20 @@ def slot_of(t, slot):
     fail(f"{t['name']}-{slot} holds no unit or fix")
 
 
+def bolt_place(t):
+    """The worktree of the bolt a team holds, from the plan, where its conductor and ops start; None when it holds
+    none. A plan that can't be read is reported, and the role starts in the kit's main checkout."""
+    r = subprocess.run([sys.executable, str(LIB / "plan.py"), "_bolt-of", t["name"]], capture_output=True, text=True)
+    if r.returncode:
+        why = (r.stderr or r.stdout).strip()
+        if "holds no bolt" not in why:
+            print(f"{t['name']}'s bolt could not be read ({why}); starting in {t['kit']['main']}", file=sys.stderr)
+        return None
+    bolt = r.stdout.strip().partition("=")[2].strip("'\"")
+    path = f"{t['kit']['dir']}/bolts/{bolt}"
+    return path if bolt and pathlib.Path(path).is_dir() else None
+
+
 # A unit's stages and the definition each is started from.
 STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "merge": "coder", "fix": "coder"}
 def launch(fleet, scope, role, extra=None):
@@ -313,7 +329,7 @@ def launch(fleet, scope, role, extra=None):
         t = fleet["teams"][scope]
         label, roles, kit, bp = t["label"], t["roles"], t["kit"], t["blueprints"]
         if role in ("conductor", "ops"):
-            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=kit["main"], dirs=[kit["dir"], bp["main"]])
+            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=bolt_place(t) or kit["main"], dirs=[kit["dir"], bp["main"]])
         elif re.match(r"^unit-[1-9][0-9]*$", role):
             int(role[5:]) <= t["units"] or fail(f"{t['name']} has {t['units']} unit slots, so no {role}")
             extra in STAGES or fail(f"{t['name']}-{role}: which stage? stages: " + " ".join(STAGES))
@@ -355,7 +371,7 @@ def env(t):
     pairs = {
         "TEAM": t["name"], "SYSTEM": t["system"], "MACHINE": t["machine"], "SSH_TARGET": t["ssh"], "SESSION": t["session"],
         "LABEL": t["label"], "CREW_HOME": str(HOME), "KIT": t["kit"]["main"], "KIT_DIR": t["kit"]["dir"], "KIT_NAME": t["kit"]["name"],
-        "BLUEPRINTS": t["blueprints"]["main"], "UNITS": str(t["units"]),
+        "BLUEPRINTS": t["blueprints"]["main"], "UNITS": str(t["units"]), "HOST_KIND": t.get("kind", ""),
     }
     return "\n".join(f"{k}={shlex.quote(v)}" for k, v in pairs.items()) + f'\nSTATE="$HOME/.local/state/{t["name"]}-team"'
 

@@ -39,3 +39,8 @@ eq "$(herdr_state mac-studio madswan-1 '[.agents[].name] | sort | join(",")')" "
 grep -q " ssh " "$CREW_TEST_LOG" && fail "madswan's main level needed no other host"
 expect_fail "no partition 'nope'" crew main up nope
 ok "a dispatcher on the main level's host runs in its session"
+
+: > "$CREW_TEST_LOG"
+CREW_TEST_TRUST=1 expect_ok crew main up wldn
+eq "$(grep -c " agent send-keys w[0-9]*:p[0-9]* down enter" "$CREW_TEST_LOG")" "5"
+ok "the folder-trust question is answered for the design agent, the planner, ops and both dispatchers"

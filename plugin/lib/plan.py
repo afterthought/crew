@@ -381,7 +381,7 @@ def write(fleet, label, repo, change, subject, body=""):
         check(w.plan)
         text = w.plan.text()
         recfix(text, "plan.rec")
-        seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet,
+        seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})")
         return text, seen["subject"] + (f"\n\n{body}" if body else "") + "\n"
     sha = land(repo, ref, "plan.rec", make)
@@ -392,11 +392,21 @@ def write(fleet, label, repo, change, subject, body=""):
 
 def notify(fleet, seen, subject):
     """Tell the conductor of each team holding a bolt the write touched, unless that conductor wrote it, or the
-    write's own command greets it instead."""
-    teams = {seen["before"].get(b) for b in seen["touched"]} | {seen["after"].get(b) for b in seen["touched"]}
+    write's own command greets it instead. Tell the partition's dispatchers that are up of a bolt added, or of one
+    landed or dropped that frees a team, so a free team gets its next bolt, unless one of them wrote it."""
+    before, after, touched = seen["before"], seen["after"], seen["touched"]
+    teams = {before.get(b) for b in touched} | {after.get(b) for b in touched}
     for t in sorted(x for x in teams if x and x not in seen["quiet"]):
         if f"{t}-conductor" != agent() and t in fleet["teams"]:
             crew.tell(fleet, f"{t}-conductor", subject)
+    added = [b for b in touched if b not in before and b in after]
+    freed = [b for b in touched if b not in after and before.get(b)]
+    if added or freed:
+        label = seen["label"]
+        for host in crew.partition_hosts(fleet, label):
+            d = f"{label}-dispatch-{host}"
+            if d != agent() and crew.agent_status(fleet, d):
+                crew.tell(fleet, d, f"{subject}. Give a free team its next bolt.")
 
 
 def init(fleet, args):
@@ -628,7 +638,7 @@ def bolt_new(fleet, a):
         w.plan.bolt(a.bolt) is None or fail(f"plan/{label} already has bolt {a.bolt}")
         r = Rec("Bolt", [("Bolt", a.bolt), ("Repo", a.repo), ("Goal", a.goal)] + [("Source", x) for x in a.source])
         w.plan.insert(r, before=w.bolt(a.before) if a.before else None)
-        return []
+        return [a.bolt]
     write(fleet, label, repo, change, f"plan({a.bolt}): add the bolt")
 
 
@@ -675,7 +685,15 @@ def bolt_give(fleet, a):
     path = f"{t['kit']['dir']}/bolts/{b}"
     make_place(fleet, t, path, f"bolt/{b}", "main")
     print(f"{t['name']} holds {b}: bolt/{b} at {path} on {t['machine']}")
-    crew.greet(fleet, t["name"], first=f"Your team now holds the bolt {b}. ", wait=0)
+    # A team takes a bolt only once its last one has landed or been dropped, so nothing is in flight: a conductor
+    # or ops that is up starts again in the new bolt's worktree, with fresh context, before the conductor is greeted.
+    up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
+    if up:
+        r = crew.on_machine(fleet, t["machine"], ["bash", crew.crew_at(fleet, t["machine"]), "restart", t["name"], *up, "--no-greet"])
+        said = (r.stdout + r.stderr).strip()
+        if said:
+            print(said)
+    crew.greet(fleet, t["name"], first=f"Your team now holds the bolt {b}. ", wait=90 if "conductor" in up else 0)
 
 
 def bolt_order(fleet, a):
