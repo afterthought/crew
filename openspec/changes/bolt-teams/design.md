@@ -130,6 +130,24 @@ The pane takes its account from the session, through swancloud's account shim. T
 ### `crew sites` uses swancloud's naming, not its own
 On each host, crew runs `devurl` in each bolt and place to get its names, and reads the host's portless routes to see which are running. Its naming is never re-implemented, so it cannot drift from `modules/home-devurls.nix`. The URL rule is in the `crew-sites` spec.
 
+### A team's standing roles live in its bolt
+The conductor and ops start in the worktree of the bolt their team holds (`<kit>/bolts/<bolt>`), read from the plan, else in the kit's main checkout: ops deploys and tests from the bolt, and neither has reason to stand in main. A team takes a new bolt only once its last one has landed or been dropped, so nothing is in flight then, and `crew bolt give` to a team that is up restarts its conductor and ops in the new bolt's worktree, with fresh context, and greets the conductor with the bolt's name. *Alternative:* keep them running and have them change folders. Rejected: a Claude's folder is fixed for its session, and a landed bolt's worktree is removed under it.
+
+### A conductor is greeted to carry on
+`crew up`, and `crew bolt give` to a team that is up, tell the conductor to read where its bolt stands with `crew bolts`, report in a few lines and carry on. The greeting waits for the agent to be ready, and for a first run's question in its pane to be answered, for up to five minutes, and says so rather than failing silently.
+
+### The user reviews a change in plannotator
+At review the conductor opens the change's documents, proposal first, with `plannotator-tui herdr open <file>` beside its own pane, and the user's annotations come back to it as its next message: it reruns construct with them, or waits for the user's approval. Where the review pane opens is the user's plannotator setting (`[herdr] placement` in `~/.config/plannotator-tui/config.toml`), which the host's configuration writes; the brief never names a placement.
+
+### Dispatchers hear of bolts they can give
+A plan write that adds a bolt, or lands or drops one a team held, tells each of the partition's dispatchers that is up the commit's subject and that a free team may take its next bolt. A dispatcher's own write tells no dispatcher. Without it, a bolt the planner adds waits until someone asks the dispatcher.
+
+### A git tab only on a Mac
+A team's `git` tab, gitgui in the kit and the blueprints repo, is made only when the team's host is a Mac. gitgui draws with terminal graphics, which are too slow to use through a remote host's connection.
+
+### crew answers Claude's folder-trust question, and nothing else
+Every role starts in a folder the hosts file names: a session's space, a checkout in it, or a worktree crew made from the team's own repository. So crew answers Claude's "trust this folder" question for every role it starts, as it did for unit slots. It never answers another question: the Bypass Permissions warning is answered once per account by the host's configuration (`skipDangerousModePermissionPrompt` in the account settings).
+
 ### Landing is main-level ops'
 The team's ops proves the bolt. The main-level ops merges it into main on the user's word, deploys main, then runs `crew bolt land`. That keeps one agent per partition deciding what reaches main, while each team deploys only from its own bolt.
 

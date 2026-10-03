@@ -91,3 +91,12 @@
   Verify `crew bolts` answers for `wldn`, `madswan` and `swancloud`.
 - [ ] 7.2 `crew main up` for each partition, and `crew operator up` in each operator session. Verify each agent is listed in its workspace.
 - [ ] 7.3 Move swb-1: plan its first bolt with the planner, `crew bolt give swb-1`, `crew up swb-1` on the box. Verify `crew bolts` shows the bolt active on `chuck-herdr-alpha`.
+
+## 8. From the first smoke tests
+
+- [x] 8.1 The conductor and ops start in the worktree of the bolt their team holds, read from the plan; `crew bolt give` to a team that is up restarts both there (`crew restart --no-greet`) and greets the conductor with the bolt's name. Verified in `tests/t-standing.sh`.
+- [x] 8.2 `crew up` and `crew bolt give` greet the conductor once it is ready, waiting out a first run's question, and say when they couldn't. Verified in `tests/t-greet.sh`.
+- [x] 8.3 At review the conductor opens the change in plannotator beside its pane, proposal first, and reruns construct with the user's annotations. Verified in `tests/t-briefs.sh`.
+- [x] 8.4 A plan write that adds a bolt, or lands or drops one a team held, tells the partition's dispatchers that are up. Verified in `tests/t-notify.sh`.
+- [x] 8.5 A team's git tab only on a Mac. Verified in `tests/t-team.sh` and `tests/t-standing.sh`.
+- [x] 8.6 crew answers the folder-trust question for every role it starts, and never the Bypass Permissions warning. Verified in `tests/t-standing.sh` and `tests/t-main.sh`.
