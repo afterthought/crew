@@ -1,0 +1,16 @@
+{
+  "description": "Give a crew agent back its herdr name and crew identity when herdr resumes it after a restart",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
