@@ -209,11 +209,8 @@ teardown() {  # end every session and give the panes back; the slots still say w
   : > "$panes"; : > "$layout"
 }
 
-greet_conductor() {  # a fresh conductor reads where its bolt stands before anyone asks it anything
-  local pane; pane=$(pane_of conductor)
-  h agent wait "$pane" --timeout 60000 >/dev/null 2>&1 || true
-  [[ $(agent_status "$pane") == blocked ]] && { echo "$(name_of conductor) is waiting on a prompt in its pane." >&2; return 0; }
-  h agent prompt "$pane" "Read where your bolt stands and tell me." >/dev/null 2>&1 || true
+greet_conductor() {  # a fresh conductor reads where its bolt stands and carries on, before anyone asks it anything
+  py greet "$TEAM" || true
 }
 
 start_standing() {  # start each standing role that is not up

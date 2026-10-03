@@ -17,7 +17,7 @@
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import functools, json, pathlib, re, shlex, subprocess, sys
+import functools, json, pathlib, re, shlex, subprocess, sys, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -199,6 +199,40 @@ def tell(fleet, name, text):
     if r.returncode:
         print(f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
     return r.returncode == 0
+
+
+GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
+            "start each stage that is ready.")
+
+
+def greet(fleet, team, first="", wait=90):
+    """Get a team's conductor going: once it is up and settled, tell it to read where its bolt stands and carry
+    on. One stopped on a question in its pane, such as a first run's consent, is greeted once that is answered,
+    for up to five minutes. Returns whether it was greeted; a conductor that is not up is reported, not an error."""
+    t = team_of(fleet, team)
+    name, text = f"{t['name']}-conductor", first + GREETING
+
+    def status():
+        r = on_machine(fleet, t["machine"], ["herdr", "--session", t["session"], "agent", "get", name])
+        try:
+            return json.loads(r.stdout)["result"]["agent"].get("agent_status") if r.returncode == 0 else None
+        except (ValueError, KeyError, TypeError):
+            return None
+
+    deadline, asked = time.monotonic() + wait, False
+    while (s := status()) not in ("idle", "done"):
+        if s == "blocked" and not asked:
+            print(f"{name} is waiting on a question in its pane; answer it there and it will be greeted", file=sys.stderr)
+            asked, deadline = True, time.monotonic() + 300
+        if time.monotonic() >= deadline:
+            print(f"{name} is not up: crew up {t['name']} starts and greets it" if s is None
+                  else f"{name} was not ready to greet; once it is: crew tell {name} \"{text}\"", file=sys.stderr)
+            return False
+        time.sleep(2)
+    if not tell(fleet, name, text):
+        return False
+    print(f"{name} greeted")
+    return True
 
 
 def kept_on(fleet, host, repo):
@@ -469,6 +503,8 @@ def main(a):
         print(crew_at(fleet, a[1]))
     elif a[:1] == ["tell"] and len(a) == 3:
         sys.exit(0 if tell(fleet, a[1], a[2]) else 1)
+    elif a[:1] == ["greet"] and len(a) == 2:
+        greet(fleet, a[1])
     else:
         sys.exit(__doc__)
 

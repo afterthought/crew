@@ -355,6 +355,7 @@ class Write:
 
     def __init__(self, repo, label, tip, plan):
         self.repo, self.label, self.tip, self.plan, self.subject = repo, label, tip, plan, None
+        self.quiet = set()  # teams the write's own command greets, so notify leaves them be
 
     def bolt(self, name):
         return self.plan.bolt(name) or self.gone("Bolt", name)
@@ -380,7 +381,8 @@ def write(fleet, label, repo, change, subject, body=""):
         check(w.plan)
         text = w.plan.text()
         recfix(text, "plan.rec")
-        seen.update(before=before, after=w.plan.teams(), touched=touched, subject=f"{w.subject or subject} ({agent()})")
+        seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet,
+                    subject=f"{w.subject or subject} ({agent()})")
         return text, seen["subject"] + (f"\n\n{body}" if body else "") + "\n"
     sha = land(repo, ref, "plan.rec", make)
     print(f"plan/{label} {sha[:7]}: {seen['subject']}")
@@ -389,9 +391,10 @@ def write(fleet, label, repo, change, subject, body=""):
 
 
 def notify(fleet, seen, subject):
-    """Tell the conductor of each team holding a bolt the write touched, unless that conductor wrote it."""
+    """Tell the conductor of each team holding a bolt the write touched, unless that conductor wrote it, or the
+    write's own command greets it instead."""
     teams = {seen["before"].get(b) for b in seen["touched"]} | {seen["after"].get(b) for b in seen["touched"]}
-    for t in sorted(x for x in teams if x):
+    for t in sorted(x for x in teams if x and x not in seen["quiet"]):
         if f"{t}-conductor" != agent() and t in fleet["teams"]:
             crew.tell(fleet, f"{t}-conductor", subject)
 
@@ -663,6 +666,7 @@ def bolt_give(fleet, a):
             b = free[0]
         b.set("Team", t["name"])
         w.subject = f"plan({b.name()}): give to {t['name']}"
+        w.quiet = {t["name"]}  # greeted below, once its bolt's worktree exists
         seen["bolt"] = b.name()
         return [b.name()]
     seen = {}
@@ -671,6 +675,7 @@ def bolt_give(fleet, a):
     path = f"{t['kit']['dir']}/bolts/{b}"
     make_place(fleet, t, path, f"bolt/{b}", "main")
     print(f"{t['name']} holds {b}: bolt/{b} at {path} on {t['machine']}")
+    crew.greet(fleet, t["name"], first=f"Your team now holds the bolt {b}. ", wait=0)
 
 
 def bolt_order(fleet, a):
