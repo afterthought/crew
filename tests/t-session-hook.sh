@@ -9,9 +9,9 @@ hooks=$(jq -r '.hooks.SessionStart[0].hooks[0].command' "$CREW/plugin/hooks/hook
 has "$hooks" '${CLAUDE_PLUGIN_ROOT}/hooks/session-start'
 ok "the plugin's hooks.json runs the session-start hook"
 
-echo '{"session_id":"sid-1","source":"startup"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn hook
-eq "$(cat "$record")" $'CREW_AGENT=swb-1-conductor\nCREW_LABEL=wldn'
-ok "a crew agent's start records its session"
+echo '{"session_id":"sid-1","source":"startup","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn hook
+eq "$(cat "$record")" $'CREW_AGENT=swb-1-conductor\nCREW_LABEL=wldn\nCREW_CWD=/work/kit/bolts/b'
+ok "a crew agent's start records its session and the folder it began in"
 
 p=$(herdr workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
 herdr stub agent "$p"

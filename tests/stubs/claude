@@ -1,11 +1,30 @@
 #!/usr/bin/env python3
 """Stub claude for crew's tests: records how it was launched in $CREW_TEST_CLAUDE_LOG, one JSON line each.
 With CREW_TEST_TRUST=1 it shows Claude's folder-trust question, and with CREW_TEST_BYPASS=1 its Bypass Permissions
-warning, as text in its pane, so a test can see which questions crew answers."""
-import json, os, sys
+warning, as text in its pane, so a test can see which questions crew answers.
+
+It keeps conversations as Claude Code does: one transcript per session, under ~/.claude/projects/<folder>/, written
+once the conversation has a message (CREW_TEST_NO_MESSAGE=1: never), and found by --resume only from the folder the
+conversation began in, failing as Claude does otherwise. At each start it runs crew's SessionStart hook, as Claude
+Code runs the plugin's hooks."""
+import json, os, pathlib, re, subprocess, sys, uuid
+
+args, cwd = sys.argv[1:], os.getcwd()
+session = args[args.index("--resume") + 1] if "--resume" in args else str(uuid.uuid4())
+folder = pathlib.Path(os.environ["HOME"]) / ".claude/projects" / re.sub(r"[^A-Za-z0-9]", "-", cwd)
+transcript = folder / f"{session}.jsonl"
 with open(os.environ["CREW_TEST_CLAUDE_LOG"], "a") as f:
-    f.write(json.dumps({"host": os.environ.get("CREW_TEST_HOST"), "cwd": os.getcwd(), "argv": sys.argv[1:],
+    f.write(json.dumps({"host": os.environ.get("CREW_TEST_HOST"), "cwd": cwd, "argv": args, "session": session,
                         "agent": os.environ.get("CREW_AGENT"), "label": os.environ.get("CREW_LABEL")}) + "\n")
+if "--resume" in args and not transcript.exists():
+    print(f"No conversation found with session ID: {session}")
+    sys.exit(1)
+if os.environ.get("CREW_TEST_NO_MESSAGE") != "1" and not transcript.exists():
+    folder.mkdir(parents=True, exist_ok=True)
+    transcript.write_text(json.dumps({"type": "user", "cwd": cwd, "sessionId": session}) + "\n")
+hook = pathlib.Path(__file__).resolve().parents[2] / "plugin/hooks/session-start"
+subprocess.run([sys.executable, str(hook)], text=True, capture_output=True,
+               input=json.dumps({"session_id": session, "cwd": cwd, "source": "resume" if "--resume" in args else "startup"}))
 if os.environ.get("CREW_TEST_TRUST") == "1":
     print("Quick safety check: Is this a project you created or one you trust?\n  No, exit\n  Yes, I trust this folder")
 if os.environ.get("CREW_TEST_BYPASS") == "1":

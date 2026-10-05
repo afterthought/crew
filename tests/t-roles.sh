@@ -19,6 +19,7 @@ print(" ".join(a[:i]), "| cwd", l["cwd"], "| agent", l["agent"], "| label", l["l
 
 opus='--model claude-opus-5-5[1m]'; fable='--model claude-fable-5-1'
 role chuck-herdr-alpha swb-1 conductor;     has "$launch" "$opus --effort high"; has "$launch" "--name swb-1-conductor"
+first=$(jq -r .session "$CREW_TEST_CLAUDE_LOG")
 has "$launch" "cwd $box/switchboard-kit/main"; has "$launch" "--add-dir $box/switchboard-kit --add-dir $box/willdan-blueprints/main"
 has "$launch" "agent swb-1-conductor | label wldn"
 role chuck-herdr-alpha swb-1 ops;           has "$launch" "$opus --effort high"; has "$launch" "--name swb-1-ops"
@@ -46,7 +47,8 @@ role chuck-herdr-alpha swb-1 unit-2 construct; has "$launch" "$opus --effort hig
 role chuck-herdr-alpha swb-2 conductor;     has "$launch" "$opus --effort high"
 ok "an override changes its role for that team or partition only"
 
-role chuck-herdr-alpha swb-1 conductor resume; has "$launch" "--name swb-1-conductor --resume swb-1-conductor"
+role chuck-herdr-alpha swb-1 conductor resume; has "$launch" "--name swb-1-conductor --resume $first"
+role mac-studio madswan design resume;   has "$launch" "--name madswan-design"; lacks "$launch" "--resume"
 expect_fail "no role 'fable' on team swb-1" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" swb-1 fable
 expect_fail "swb-1 has 4 unit slots, so no unit-5" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" swb-1 unit-5 code
 expect_fail "swb-1-unit-1 holds no unit or fix" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" swb-1 unit-1 code

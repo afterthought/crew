@@ -8,6 +8,8 @@
                                       a definition's brief for a team or a partition's main level; name is the agent's own
   crew.py launch <team|label> <role> [stage|resume]
                                       how crew-role starts the role, as shell assignments
+  crew.py place <team|label> <role> [stage|resume]
+                                      the folder the role runs in; with resume, the one its last conversation began in
   crew.py env-main|env-dispatch|env-operator <label>
                                       a main level's, this host's dispatcher's or operator agent's settings
   crew.py hosts <label>               the hosts where the partition's teams run: name, ssh name, crew there
@@ -17,7 +19,7 @@
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import functools, json, pathlib, re, shlex, subprocess, sys, time
+import functools, itertools, json, pathlib, re, shlex, subprocess, sys, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -457,15 +459,66 @@ def brief(fleet, scope, role, self_name=""):
     return text
 
 
-def launch_shell(fleet, scope, role, extra):
-    """crew-role's start, as shell assignments: CWD, NAME, LABEL and the claude arguments in `args`."""
+# What crew's SessionStart hook (plugin/hooks/session-start) records of each session of an agent it started.
+SESSIONS = pathlib.Path.home() / ".local/state/crew/sessions"
+
+
+def transcript_cwd(path):
+    """The folder a Claude conversation began in, from the first of its transcript's records that names one."""
+    try:
+        with open(path) as f:
+            for line in itertools.islice(f, 200):
+                try:
+                    cwd = json.loads(line).get("cwd")
+                except (ValueError, AttributeError):
+                    continue
+                if isinstance(cwd, str) and cwd:
+                    return cwd
+    except OSError:
+        pass
+    return None
+
+
+def last_conversation(name):
+    """The agent's last session, as (session id, the folder it began in), when it can be resumed. None when it can't:
+    Claude Code keeps a conversation only once it has had a message, and finds it again only from the folder it began
+    in, which must still exist. Only the last session counts: one started fresh and never spoken to is not a reason to
+    pick up the conversation before it. Records from before the hook kept the folder are read for it from the
+    conversation's own transcript."""
+    found = []
+    for p in (SESSIONS.iterdir() if SESSIONS.is_dir() else []):
+        try:
+            kv = dict(l.split("=", 1) for l in p.read_text().splitlines() if "=" in l)
+            if kv.get("CREW_AGENT") == name:
+                found.append((p.stat().st_mtime, p.name, kv))
+        except OSError:
+            continue
+    for _, sid, kv in sorted(found, reverse=True)[:1]:
+        kept = sorted(pathlib.Path.home().glob(f".claude*/projects/*/{sid}.jsonl"))
+        cwd = kept and (kv.get("CREW_CWD") or transcript_cwd(kept[0]))
+        if cwd and pathlib.Path(cwd).is_dir():
+            return sid, cwd
+    return None
+
+
+def resolve(fleet, scope, role, extra):
+    """How a role starts, and with "resume" the session it picks up: its last conversation, in the folder that began
+    it, which since a conductor moves into its bolt's worktree need not be where the role starts today."""
     l = launch(fleet, scope, role, None if extra == "resume" else extra)
+    found = last_conversation(l["name"]) if extra == "resume" else None
+    return (dict(l, cwd=found[1]), found[0]) if found else (l, None)
+
+
+def launch_shell(fleet, scope, role, extra):
+    """crew-role's start, as shell assignments: CWD, NAME, LABEL and the claude arguments in `args`. A resume with no
+    conversation to pick up starts the role fresh."""
+    l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
         args += ["--add-dir", d]
     args += ["--name", l["name"]]
-    if extra == "resume":
-        args += ["--resume", l["name"]]
+    if session:
+        args += ["--resume", session]
     args += ["--append-system-prompt", brief(fleet, scope, l["defn"], l["name"])]
     return (f"CWD={shlex.quote(l['cwd'])}\nNAME={shlex.quote(l['name'])}\nLABEL={shlex.quote(l['label'])}\n"
             f"args=({' '.join(shlex.quote(a) for a in args)})")
@@ -507,6 +560,11 @@ def main(a):
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:
         print(launch_shell(fleet, a[1], a[2], a[3] if len(a) > 3 else None))
+    elif a[:1] == ["place"] and len(a) >= 3:
+        l, session = resolve(fleet, a[1], a[2], a[3] if len(a) > 3 else None)
+        if a[3:4] == ["resume"] and not session:
+            print(f"{l['name']} has no conversation to resume; starting it fresh", file=sys.stderr)
+        print(l["cwd"])
     elif a[:1] == ["env-main"] and len(a) == 2:
         print(env_main(fleet, a[1]))
     elif a[:1] == ["env-dispatch"] and len(a) in (2, 3):

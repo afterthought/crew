@@ -132,6 +132,8 @@ elif group == "pane" and cmd == "close":
 elif group == "pane" and cmd == "run":
     p, line = rest[0], rest[1]
     p in st["panes"] or die(f"no pane {p}")
+    if line.startswith("cd ") and "&&" in line:  # the pane's shell moves, as herdr then saves it
+        st["panes"][p]["cwd"] = shlex.split(line.split("&&", 1)[0])[1]
     if "crew-role" in line:
         save()
         fcntl.flock(lock, fcntl.LOCK_UN)

@@ -129,14 +129,17 @@ stop() {
 }
 
 start() {  # start <role> [stage|resume]
-  local role=$1 pane name; pane=$(pane_of "$role"); name=$(name_of "$role")
+  local role=$1 pane name dir; pane=$(pane_of "$role"); name=$(name_of "$role")
   [[ -z $(agent_status "$pane") ]] || { echo "$name is still running; not starting another over it" >&2; return 1; }
+  dir=$(py place "$SCOPE" "$role" ${2:-}) || return 1
   # A Claude that died badly leaves the pane reporting mouse movement, which types escape codes into the shell
   # and into whatever is run next. Clear the line and switch the reporting off first.
   h pane send-keys "$pane" ctrl+c >/dev/null 2>&1 || true
   h pane run "$pane" "printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?2004l'; clear" >/dev/null 2>&1 || true
   sleep 1
-  h pane run "$pane" "bash $(printf '%q' "$here/crew-role") $SCOPE $role ${2:-}" >/dev/null
+  # The pane's own shell moves to the folder the role runs in. herdr saves a pane's shell folder and, after a restart,
+  # resumes the agent's conversation there, and Claude finds a conversation only from the folder it began in.
+  h pane run "$pane" "cd $(printf '%q' "$dir") && bash $(printf '%q' "$here/crew-role") $SCOPE $role ${2:-}" >/dev/null
   give_name "$pane" "$name" || return 1
   # Claude asks whether a folder it has not seen is trusted. Every role starts in a folder the hosts file names:
   # a session's space, a checkout in it, or a worktree crew made from the team's own repository. So that one
@@ -340,7 +343,7 @@ case $cmd in
     load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; ensure_team
     for role in "${picked[@]}"; do
       if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
-      start "$role" resume || { echo "$(name_of "$role") has no conversation to resume; starting it fresh"; start "$role"; }
+      start "$role" resume || { echo "$(name_of "$role") did not come back with its conversation; starting it fresh"; start "$role"; }
     done ;;
   clear)
     load_team "${2:-}"; forward; ensure_state; role=${3:?usage: crew clear <team> conductor|ops}; known_role "$role"
