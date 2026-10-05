@@ -2,7 +2,7 @@
 
 ## 1. Plan commands in three parts
 
-- [ ] 1.1 Refactor each plan command in `plan.py` (`bolt new|order|drop`, `unit add|move|split|order|after|drop`) into its `checks`, its `change` and its `after`, with `prepare` and `undo` for `unit move`'s rebase, keeping what each does when run directly. Verify the existing `bolt-plan` tests pass unchanged.
+- [x] 1.1 Refactor each plan command in `plan.py` (`bolt new|order|drop`, `unit add|move|split|order|after|drop`) into its `checks`, its `change` and its `after`, with `prepare` and `undo` for `unit move`'s rebase, keeping what each does when run directly. Verify the existing `bolt-plan` tests pass unchanged.
 - [ ] 1.2 A helper that applies a list of commands to a copy of the plan in order, running each one's `checks` and `change`, and reports the first refusal with its command. Verify with a test that a unit added to a bolt created earlier in the list passes, and a unit added to an unknown bolt is reported with its command.
 
 ## 2. Writing a proposal

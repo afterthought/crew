@@ -835,18 +835,6 @@ def free_slot(fleet, t, unit, remove=False):
 
 # --------------------------------------------------------------------------------------------------- bolts
 
-def bolt_new(fleet, a):
-    label, repo = plan_for(fleet, a.repo, default_label(fleet, a))
-    crew.NAME.match(a.bolt) or fail(f"a bolt's name is lowercase words with dashes, not {a.bolt}")
-
-    def change(w):
-        w.plan.bolt(a.bolt) is None or fail(f"{label}/main already has bolt {a.bolt}")
-        r = Rec("Bolt", [("Bolt", a.bolt), ("Repo", a.repo), ("Goal", a.goal)] + [("Source", x) for x in a.source])
-        w.plan.insert(r, before=w.bolt(a.before) if a.before else None)
-        return [a.bolt]
-    write(fleet, label, change, f"plan({a.bolt}): add the bolt", act="bolt.new", on=[f"bolt/{a.bolt}"])
-
-
 def held_by(plan, team):
     return [b for b in plan.bolts() if b.get("Team") == team]
 
@@ -906,43 +894,6 @@ def bolt_give(fleet, a):
     crew.greet(fleet, t["name"], first=f"Your team now holds the bolt {b}. ", wait=90 if "conductor" in up else 0)
 
 
-def bolt_order(fleet, a):
-    label, repo, _, _ = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
-
-    def change(w):
-        b, bolts = w.bolt(a.bolt), w.plan.bolts()
-        if a.first:
-            w.plan.insert(b, before=bolts[0]) if bolts[0] is not b else None
-        elif a.last:
-            w.plan.insert(b, after=bolts[-1]) if bolts[-1] is not b else None
-        else:
-            o = w.bolt(a.before)
-            o is not b or fail("a bolt can't go before itself")
-            w.plan.insert(b, before=o)
-        return [a.bolt]
-    where = "first" if a.first else "last" if a.last else f"before {a.before}"
-    write(fleet, label, change, f"plan({a.bolt}): order the bolt {where}", act="bolt.order", on=[f"bolt/{a.bolt}"])
-
-
-def bolt_drop(fleet, a):
-    label, repo, _, _ = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
-
-    def change(w):
-        b = w.bolt(a.bolt)
-        for u in w.plan.units_of(a.bolt):
-            if a.requeue:
-                u.drop("Bolt")
-                u.drop("After")
-                w.plan.place_last(u)
-            else:
-                w.plan.remove(u)
-                w.on.append(f"unit/{u.name()}")
-        w.plan.remove(b)
-        return [a.bolt]
-    write(fleet, label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), a.reason,
-          act="bolt.drop", on=[f"bolt/{a.bolt}"])
-
-
 DROP_BOLT = r"""main=$1 path=$2 bolt=$3
 cd "$main" || exit 1
 if [ -d "$path" ]; then git worktree remove "$path" || exit 1; fi
@@ -985,43 +936,6 @@ def bolt_land(fleet, a):
 
 # ---------------------------------------------------------------------------------------------------- units
 
-def unit_add(fleet, a):
-    label = default_label(fleet, a)
-    if a.bolt:
-        label, repo, _, plan = locate(fleet, "Bolt", a.bolt, label)
-        kit = plan.bolt(a.bolt).get("Repo")
-        a.repo in (None, kit) or fail(f"bolt {a.bolt} is in {kit}, not {a.repo}")
-    else:
-        a.repo or fail("a unit goes in a bolt (--bolt) or in a repo's queue (--repo)")
-        (label, repo), kit = plan_for(fleet, a.repo, label), a.repo
-    name_free(fleet, label, kit, [a.unit])
-    sources = list(a.source)
-    if a.signal:
-        sources.insert(0, f"signals/{a.signal}")
-
-    def change(w):
-        w.plan.unit(a.unit) is None or fail(f"{label}/main already has unit {a.unit}")
-        if a.bolt:
-            w.bolt(a.bolt)
-        if a.signal:  # its one move, route, in the same commit, checked again on each replay
-            move(fleet, label, w, a.signal, route_move(a.signal, a.unit))
-        r = Rec("Unit", [("Unit", a.unit), ("Repo", kit)] + ([("Bolt", a.bolt)] if a.bolt else []) + [("Intent", a.intent)]
-                + [("After", x) for x in a.after] + [("Source", x) for x in sources])
-        if a.before:
-            o = w.unit(a.before)
-            o.get("Bolt") == a.bolt and o.get("Repo") == kit or fail(f"unit {a.before} is not in {a.bolt or 'the queue of ' + kit}")
-            w.plan.insert(r, before=o)
-        else:
-            w.plan.place_last(r)
-        return [a.bolt] if a.bolt else []
-    sha = write(fleet, label, change, f"plan({a.bolt or 'queue'}): add {a.unit}", act="unit.add",
-                on=[f"unit/{a.unit}", f"bolt/{a.bolt}" if a.bolt else f"queue/{kit}"], frm=[f"signals/{a.signal}"] if a.signal else [])
-    if a.signal:
-        print(f"signal {a.signal} routed to unit/{a.unit}, in the same commit")
-        record.emit(label, "signal.move", [f"signals/{a.signal}", f"unit/{a.unit}"], commit=[f"{repo}@{sha}"],
-                    why=f"signals({a.signal}): route to unit/{a.unit}")
-
-
 def group_of(u):
     """Where a unit is, as an object: its bolt, or its kit's queue."""
     return f"bolt/{u.get('Bolt')}" if u.get("Bolt") else f"queue/{u.get('Repo')}"
@@ -1033,69 +947,6 @@ def unit_stage(fleet, plan, name):
     return (stages_for(fleet, plan, [b]) if b else Stages(fleet, plan, {})).of(name)
 
 
-def unit_split(fleet, a):
-    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-    s = unit_stage(fleet, plan, a.unit)
-    s["stage"] not in LATER or fail(f"unit {a.unit} is in {s['stage']}, so it is no longer split; add the remainder as a new unit instead (crew unit add)")
-    s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
-    name_free(fleet, label, plan.unit(a.unit).get("Repo"), [n for n, _ in a.into])
-
-    def change(w):
-        u = w.unit(a.unit)
-        u.set("Intent", a.intent)
-        prev = u
-        for n, intent in a.into:
-            w.plan.unit(n) is None or fail(f"{label}/main already has unit {n}")
-            r = Rec("Unit", [("Unit", n), ("Repo", u.get("Repo"))] + ([("Bolt", u.get("Bolt"))] if u.get("Bolt") else [])
-                    + [("Intent", intent)] + [("Source", x) for x in u.all("Source")])
-            w.plan.insert(r, after=prev)
-            prev = r
-        return [u.get("Bolt")] if u.get("Bolt") else []
-    bolt = plan.unit(a.unit).get("Bolt") or "queue"
-    write(fleet, label, change, f"plan({bolt}): split {a.unit} into " + ", ".join(n for n, _ in a.into), act="unit.split",
-          on=[f"unit/{a.unit}"] + [f"unit/{n}" for n, _ in a.into], frm=[f"unit/{a.unit}"])
-
-
-def unit_order(fleet, a):
-    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-
-    def change(w):
-        u = w.unit(a.unit)
-        g = w.plan.group(u)
-        if a.first:
-            w.plan.insert(u, before=g[0]) if g[0] is not u else None
-        elif a.last:
-            w.plan.insert(u, after=g[-1]) if g[-1] is not u else None
-        else:
-            o = w.unit(a.before)
-            o is not u or fail("a unit can't go before itself")
-            o in g or fail(f"unit {a.before} is not in {u.get('Bolt') or 'the queue'} with {a.unit}")
-            w.plan.insert(u, before=o)
-        return [u.get("Bolt")] if u.get("Bolt") else []
-    where = "first" if a.first else "last" if a.last else f"before {a.before}"
-    write(fleet, label, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): order {a.unit} {where}", act="unit.order",
-          on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
-
-
-def unit_after(fleet, a):
-    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-    a.none or a.deps or fail("name the units it comes after, or --none")
-
-    def change(w):
-        u = w.unit(a.unit)
-        if a.none:
-            u.drop("After")
-        for d in a.deps:
-            w.unit(d)
-            d != a.unit or fail("a unit can't come after itself")
-            if d not in u.all("After"):
-                u.add("After", d, after="Intent")
-        return [u.get("Bolt")] if u.get("Bolt") else []
-    what = "after nothing" if a.none else "after " + ", ".join(a.deps)
-    write(fleet, label, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): {a.unit} {what}", act="unit.after",
-          on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
-
-
 REBASE = r"""cd "$1" || exit 1
 orig=$(git rev-parse HEAD)
 if git rebase -q --onto "bolt/$3" "bolt/$2" "unit/$4" >/dev/null 2>&1; then
@@ -1105,73 +956,6 @@ else
 fi
 """
 UNREBASE = r"""cd "$1" && git reset -q --hard "$2" && git branch -q --set-upstream-to="bolt/$3" "unit/$4" """
-
-
-def unit_move(fleet, a):
-    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-    u = plan.unit(a.unit)
-    src, to = u.get("Bolt"), None if a.bolt == "queue" else a.bolt
-    to != src or fail(f"unit {a.unit} is already in {src or 'the queue'}")
-    if to:
-        tb = plan.bolt(to) or fail(f"no bolt {to} in {label}/main of {repo}")
-        tb.get("Repo") == u.get("Repo") or fail(f"bolt {to} is in {tb.get('Repo')}; a unit moves only between bolts of its own repo, {u.get('Repo')}")
-    s = unit_stage(fleet, plan, a.unit)
-    s["stage"] not in ("merged", "landed") or fail(f"unit {a.unit} has merged into {src}, so it can't move")
-    s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
-    rebased = None
-    if s["worktree"]:
-        to or fail(f"unit {a.unit} has a worktree at {s['worktree']}, and a queued unit has none")
-        ft, tt = fleet["teams"][plan.bolt(src).get("Team")], fleet["teams"].get(plan.bolt(to).get("Team"))
-        tt or fail(f"bolt {to} is held by no team, so it has no branch to rebase {a.unit} onto")
-        (ft["machine"], ft["kit"]["main"]) == (tt["machine"], tt["kit"]["main"]) or fail(
-            f"bolt {to} is built in {tt['kit']['main']} on {tt['machine']}, not in {a.unit}'s checkout; a unit with a worktree moves only within it")
-        r = crew.on_machine(fleet, ft["machine"], ["bash", "-c", REBASE, "crew", s["worktree"], src, to, a.unit])
-        r.returncode != 3 or fail(f"rebasing {a.unit} onto bolt/{to} conflicts: the move is abandoned and the plan is unchanged")
-        r.returncode == 0 or fail(f"rebasing {a.unit} on {ft['machine']} failed: {r.stderr.strip()}")
-        rebased = (ft, r.stdout.strip())
-
-    def change(w):
-        u = w.unit(a.unit)
-        u.get("Bolt") == src or fail(f"unit {a.unit} moved to {u.get('Bolt') or 'the queue'} meanwhile")
-        u.drop("After")
-        if to:
-            w.bolt(to)
-            u.set("Bolt", to, after="Repo")
-        else:
-            u.drop("Bolt")
-        w.plan.place_last(u)
-        return [b for b in (src, to) if b]
-    try:
-        kit = u.get("Repo")
-        write(fleet, label, change, f"plan({to or 'queue'}): move {a.unit} from {src or 'the queue'}", act="unit.move",
-              on=[f"unit/{a.unit}", f"bolt/{to}" if to else f"queue/{kit}"], frm=[f"bolt/{src}" if src else f"queue/{kit}"])
-    except Refusal:
-        if rebased:
-            crew.on_machine(fleet, rebased[0]["machine"], ["bash", "-c", UNREBASE, "crew", s["worktree"], rebased[1], src, a.unit])
-        raise
-
-
-def unit_drop(fleet, a):
-    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-    s = unit_stage(fleet, plan, a.unit)
-    s["stage"] not in ("merged", "landed") or fail(f"unit {a.unit} has merged into its bolt, so it can't be dropped")
-    s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
-    bolt = plan.unit(a.unit).get("Bolt")
-
-    def change(w):
-        u = w.unit(a.unit)
-        for o in w.plan.group(u):
-            if a.unit in o.all("After"):
-                o.fields = [(n, v) for n, v in o.fields if not (n == "After" and v == a.unit)]
-        w.plan.remove(u)
-        return [bolt] if bolt else []
-    write(fleet, label, change, f"plan({bolt or 'queue'}): drop {a.unit}", a.reason, act="unit.drop",
-          on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
-    team = fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
-    if team:
-        free_slot(fleet, team, a.unit, remove=True)
-    elif s["worktree"]:
-        print(f"its worktree stays at {s['worktree']}, on unit/{a.unit}")
 
 
 APPROVE = r"""cd "$1" || exit 1
@@ -1194,6 +978,325 @@ def unit_approve(fleet, a):
     sha = host_run(fleet, t["machine"], APPROVE, s["worktree"], a.unit)
     print(f"unit {a.unit} approved: {sha[:7]} on unit/{a.unit}")
     record.emit(label, "unit.approve", [f"unit/{a.unit}"], commit=[f"{t['kit']['repo']}@{sha}"], why=f"review({a.unit}): approved")
+
+
+# ----------------------------------------------------------------------------------- plan commands, as ops
+
+class Op:
+    """One plan command, split so a proposal can check it without writing and an approval can apply several in one
+    commit. It is built against a plan, and building it runs its checks, those that read the kits included. It holds
+    its change to a Write (which checks again on each replay and returns the bolts whose conductors hear the write),
+    the subject and run-record entry of its write, what to prepare before the push with its undo (a unit's rebase),
+    and what follows the push."""
+
+    def __init__(self, label, change, subject, act, on=(), frm=(), body="", prepare=None, after=None):
+        self.label, self.change, self.subject, self.act, self.body = label, change, subject, act, body
+        self.on, self.frm = list(on), list(frm)
+        self.prepare, self.after = prepare, after
+        self.added_on, self.added_frm = [], []
+
+
+class Direct:
+    """What a command run directly sees: the plans of every partition, or of --label (or the agent's own)."""
+    direct = True
+
+    def __init__(self, fleet, a):
+        self.fleet, self.label = fleet, default_label(fleet, a)
+
+    def locate(self, kind, name):
+        label, _, _, plan = locate(self.fleet, kind, name, self.label)
+        return label, plan
+
+    def kit(self, kit):
+        return plan_for(self.fleet, kit, self.label)[0]
+
+
+class Proposed:
+    """What a command inside a proposal sees: the proposal's partition, in the plan as the commands before it in the
+    proposal have left it."""
+    direct = False
+
+    def __init__(self, fleet, label, w):
+        self.fleet, self.label, self.w = fleet, label, w
+
+    def locate(self, kind, name):
+        (self.w.plan.bolt(name) if kind == "Bolt" else self.w.plan.unit(name)) or self.w.gone(kind, name)
+        return self.label, self.w.plan
+
+    def kit(self, kit):
+        return plan_for(self.fleet, kit, self.label)[0]
+
+
+def first_open(fleet, plan, bolt):
+    """The first unit of a held bolt that has not merged into it: where work the bolt needs to land goes, ahead of
+    what waits on it. None when every unit has merged, or the bolt has none."""
+    b = plan.bolt(bolt)
+    st = stages_for(fleet, plan, [b])
+    return next((u.name() for u in plan.units_of(bolt) if st.of(u.name())["stage"] not in ("merged", "landed")), None)
+
+
+def unblocking(ctx, plan, label, a, into):
+    """--unblocks <bolt>: the unit is work a bolt a team holds needs before it can be proven or land. It goes into that
+    bolt, ahead of what waits on it, never into the queue or another bolt. Returns the unit it goes ahead of."""
+    into == a.unblocks or fail(f"{a.unit} unblocks bolt {a.unblocks}, so it goes into that bolt, ahead of what waits on it, "
+                               f"not into {f'bolt {into}' if into else 'the queue'}")
+    plan.bolt(a.unblocks).get("Team") or fail(f"{a.unit} unblocks bolt {a.unblocks}, which no team holds, so nothing waits on "
+                                              "it: --unblocks names a bolt in flight")
+    return first_open(ctx.fleet, plan, a.unblocks)
+
+
+def op_bolt_new(ctx, a):
+    label = ctx.kit(a.repo)
+    crew.NAME.match(a.bolt) or fail(f"a bolt's name is lowercase words with dashes, not {a.bolt}")
+
+    def change(w):
+        w.plan.bolt(a.bolt) is None or fail(f"{label}/main already has bolt {a.bolt}")
+        r = Rec("Bolt", [("Bolt", a.bolt), ("Repo", a.repo), ("Goal", a.goal)] + [("Source", x) for x in a.source])
+        w.plan.insert(r, before=w.bolt(a.before) if a.before else None)
+        return [a.bolt]
+    return Op(label, change, f"plan({a.bolt}): add the bolt", "bolt.new", on=[f"bolt/{a.bolt}"])
+
+
+def op_bolt_order(ctx, a):
+    label, _ = ctx.locate("Bolt", a.bolt)
+
+    def change(w):
+        b, bolts = w.bolt(a.bolt), w.plan.bolts()
+        if a.first:
+            w.plan.insert(b, before=bolts[0]) if bolts[0] is not b else None
+        elif a.last:
+            w.plan.insert(b, after=bolts[-1]) if bolts[-1] is not b else None
+        else:
+            o = w.bolt(a.before)
+            o is not b or fail("a bolt can't go before itself")
+            w.plan.insert(b, before=o)
+        return [a.bolt]
+    where = "first" if a.first else "last" if a.last else f"before {a.before}"
+    return Op(label, change, f"plan({a.bolt}): order the bolt {where}", "bolt.order", on=[f"bolt/{a.bolt}"])
+
+
+def op_bolt_drop(ctx, a):
+    label, _ = ctx.locate("Bolt", a.bolt)
+
+    def change(w):
+        b = w.bolt(a.bolt)
+        for u in w.plan.units_of(a.bolt):
+            if a.requeue:
+                u.drop("Bolt")
+                u.drop("After")
+                w.plan.place_last(u)
+            else:
+                w.plan.remove(u)
+                w.on.append(f"unit/{u.name()}")
+        w.plan.remove(b)
+        return [a.bolt]
+    return Op(label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), "bolt.drop",
+              on=[f"bolt/{a.bolt}"], body=a.reason)
+
+
+def op_unit_add(ctx, a):
+    label = ctx.label
+    if a.bolt:
+        label, plan = ctx.locate("Bolt", a.bolt)
+        kit = plan.bolt(a.bolt).get("Repo")
+        a.repo in (None, kit) or fail(f"bolt {a.bolt} is in {kit}, not {a.repo}")
+    else:
+        a.repo or fail("a unit goes in a bolt (--bolt) or in a repo's queue (--repo)")
+        label, kit, plan = ctx.kit(a.repo), a.repo, None
+    ahead = unblocking(ctx, plan, label, a, a.bolt) if getattr(a, "unblocks", None) else None
+    name_free(ctx.fleet, label, kit, [a.unit])
+    sources = list(a.source)
+    if a.signal:
+        sources.insert(0, f"signals/{a.signal}")
+
+    def change(w):
+        w.plan.unit(a.unit) is None or fail(f"{label}/main already has unit {a.unit}")
+        if a.bolt:
+            w.bolt(a.bolt)
+        if a.signal:  # its one move, route, in the same commit, checked again on each replay
+            move(ctx.fleet, label, w, a.signal, route_move(a.signal, a.unit))
+        r = Rec("Unit", [("Unit", a.unit), ("Repo", kit)] + ([("Bolt", a.bolt)] if a.bolt else []) + [("Intent", a.intent)]
+                + [("After", x) for x in a.after] + [("Source", x) for x in sources])
+        before = a.before or ahead
+        o = w.plan.unit(before) if before else None
+        if a.before:
+            o = w.unit(a.before)
+            o.get("Bolt") == a.bolt and o.get("Repo") == kit or fail(f"unit {a.before} is not in {a.bolt or 'the queue of ' + kit}")
+        if o is not None:
+            w.plan.insert(r, before=o)
+        else:
+            w.plan.place_last(r)
+        return [a.bolt] if a.bolt else []
+
+    def after(repo, sha):
+        if a.signal:
+            print(f"signal {a.signal} routed to unit/{a.unit}, in the same commit")
+            record.emit(label, "signal.move", [f"signals/{a.signal}", f"unit/{a.unit}"], commit=[f"{repo}@{sha}"],
+                        why=f"signals({a.signal}): route to unit/{a.unit}")
+    return Op(label, change, f"plan({a.bolt or 'queue'}): add {a.unit}", "unit.add",
+              on=[f"unit/{a.unit}", f"bolt/{a.bolt}" if a.bolt else f"queue/{kit}"], frm=[f"signals/{a.signal}"] if a.signal else [], after=after)
+
+
+def op_unit_split(ctx, a):
+    label, plan = ctx.locate("Unit", a.unit)
+    s = unit_stage(ctx.fleet, plan, a.unit)
+    s["stage"] not in LATER or fail(f"unit {a.unit} is in {s['stage']}, so it is no longer split; add the remainder as a new unit instead (crew unit add)")
+    s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
+    name_free(ctx.fleet, label, plan.unit(a.unit).get("Repo"), [n for n, _ in a.into])
+    bolt = plan.unit(a.unit).get("Bolt")
+
+    def change(w):
+        u = w.unit(a.unit)
+        u.set("Intent", a.intent)
+        prev = u
+        for n, intent in a.into:
+            w.plan.unit(n) is None or fail(f"{label}/main already has unit {n}")
+            r = Rec("Unit", [("Unit", n), ("Repo", u.get("Repo"))] + ([("Bolt", u.get("Bolt"))] if u.get("Bolt") else [])
+                    + [("Intent", intent)] + [("Source", x) for x in u.all("Source")])
+            w.plan.insert(r, after=prev)
+            prev = r
+        return [u.get("Bolt")] if u.get("Bolt") else []
+    return Op(label, change, f"plan({bolt or 'queue'}): split {a.unit} into " + ", ".join(n for n, _ in a.into), "unit.split",
+              on=[f"unit/{a.unit}"] + [f"unit/{n}" for n, _ in a.into], frm=[f"unit/{a.unit}"])
+
+
+def op_unit_order(ctx, a):
+    label, plan = ctx.locate("Unit", a.unit)
+    u0 = plan.unit(a.unit)
+
+    def change(w):
+        u = w.unit(a.unit)
+        g = w.plan.group(u)
+        if a.first:
+            w.plan.insert(u, before=g[0]) if g[0] is not u else None
+        elif a.last:
+            w.plan.insert(u, after=g[-1]) if g[-1] is not u else None
+        else:
+            o = w.unit(a.before)
+            o is not u or fail("a unit can't go before itself")
+            o in g or fail(f"unit {a.before} is not in {u.get('Bolt') or 'the queue'} with {a.unit}")
+            w.plan.insert(u, before=o)
+        return [u.get("Bolt")] if u.get("Bolt") else []
+    where = "first" if a.first else "last" if a.last else f"before {a.before}"
+    return Op(label, change, f"plan({u0.get('Bolt') or 'queue'}): order {a.unit} {where}", "unit.order",
+              on=[f"unit/{a.unit}", group_of(u0)])
+
+
+def op_unit_after(ctx, a):
+    label, plan = ctx.locate("Unit", a.unit)
+    a.none or a.deps or fail("name the units it comes after, or --none")
+    u0 = plan.unit(a.unit)
+
+    def change(w):
+        u = w.unit(a.unit)
+        if a.none:
+            u.drop("After")
+        for d in a.deps:
+            w.unit(d)
+            d != a.unit or fail("a unit can't come after itself")
+            if d not in u.all("After"):
+                u.add("After", d, after="Intent")
+        return [u.get("Bolt")] if u.get("Bolt") else []
+    what = "after nothing" if a.none else "after " + ", ".join(a.deps)
+    return Op(label, change, f"plan({u0.get('Bolt') or 'queue'}): {a.unit} {what}", "unit.after",
+              on=[f"unit/{a.unit}", group_of(u0)])
+
+
+def op_unit_move(ctx, a):
+    label, plan = ctx.locate("Unit", a.unit)
+    u = plan.unit(a.unit)
+    src, to = u.get("Bolt"), None if a.bolt == "queue" else a.bolt
+    to != src or fail(f"unit {a.unit} is already in {src or 'the queue'}")
+    if to:
+        tb = plan.bolt(to) or fail(f"no bolt {to} in {label}/main of {state_of(ctx.fleet, label)[0]}")
+        tb.get("Repo") == u.get("Repo") or fail(f"bolt {to} is in {tb.get('Repo')}; a unit moves only between bolts of its own repo, {u.get('Repo')}")
+    ahead = unblocking(ctx, plan, label, a, to) if getattr(a, "unblocks", None) else None
+    s = unit_stage(ctx.fleet, plan, a.unit)
+    s["stage"] not in ("merged", "landed") or fail(f"unit {a.unit} has merged into {src}, so it can't move")
+    s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
+    prepare = None
+    if s["worktree"]:
+        to or fail(f"unit {a.unit} has a worktree at {s['worktree']}, and a queued unit has none")
+        ft, tt = ctx.fleet["teams"][plan.bolt(src).get("Team")], ctx.fleet["teams"].get(plan.bolt(to).get("Team"))
+        tt or fail(f"bolt {to} is held by no team, so it has no branch to rebase {a.unit} onto")
+        (ft["machine"], ft["kit"]["main"]) == (tt["machine"], tt["kit"]["main"]) or fail(
+            f"bolt {to} is built in {tt['kit']['main']} on {tt['machine']}, not in {a.unit}'s checkout; a unit with a worktree moves only within it")
+
+        def prepare():
+            r = crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", REBASE, "crew", s["worktree"], src, to, a.unit])
+            r.returncode != 3 or fail(f"rebasing {a.unit} onto bolt/{to} conflicts: the move is abandoned and the plan is unchanged")
+            r.returncode == 0 or fail(f"rebasing {a.unit} on {ft['machine']} failed: {r.stderr.strip()}")
+            orig = r.stdout.strip()
+            return lambda: crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", UNREBASE, "crew", s["worktree"], orig, src, a.unit])
+
+    def change(w):
+        u = w.unit(a.unit)
+        u.get("Bolt") == src or fail(f"unit {a.unit} moved to {u.get('Bolt') or 'the queue'} meanwhile")
+        u.drop("After")
+        if to:
+            w.bolt(to)
+            u.set("Bolt", to, after="Repo")
+        else:
+            u.drop("Bolt")
+        o = w.plan.unit(ahead) if ahead else None
+        if o is not None and o is not u and o.get("Bolt") == to:
+            w.plan.insert(u, before=o)
+        else:
+            w.plan.place_last(u)
+        return [b for b in (src, to) if b]
+    kit = u.get("Repo")
+    return Op(label, change, f"plan({to or 'queue'}): move {a.unit} from {src or 'the queue'}", "unit.move",
+              on=[f"unit/{a.unit}", f"bolt/{to}" if to else f"queue/{kit}"], frm=[f"bolt/{src}" if src else f"queue/{kit}"], prepare=prepare)
+
+
+def op_unit_drop(ctx, a):
+    label, plan = ctx.locate("Unit", a.unit)
+    s = unit_stage(ctx.fleet, plan, a.unit)
+    s["stage"] not in ("merged", "landed") or fail(f"unit {a.unit} has merged into its bolt, so it can't be dropped")
+    s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
+    u0 = plan.unit(a.unit)
+    bolt = u0.get("Bolt")
+    team = ctx.fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
+
+    def change(w):
+        u = w.unit(a.unit)
+        for o in w.plan.group(u):
+            if a.unit in o.all("After"):
+                o.fields = [(n, v) for n, v in o.fields if not (n == "After" and v == a.unit)]
+        w.plan.remove(u)
+        return [bolt] if bolt else []
+
+    def after(repo, sha):
+        if team:
+            free_slot(ctx.fleet, team, a.unit, remove=True)
+        elif s["worktree"]:
+            print(f"its worktree stays at {s['worktree']}, on unit/{a.unit}")
+    return Op(label, change, f"plan({bolt or 'queue'}): drop {a.unit}", "unit.drop", on=[f"unit/{a.unit}", group_of(u0)],
+              body=a.reason, after=after)
+
+
+# The nine commands a proposal may hold, each built the same way whether run directly or inside a proposal.
+OPS = {
+    ("bolt", "new"): op_bolt_new, ("bolt", "order"): op_bolt_order, ("bolt", "drop"): op_bolt_drop,
+    ("unit", "add"): op_unit_add, ("unit", "split"): op_unit_split, ("unit", "order"): op_unit_order,
+    ("unit", "after"): op_unit_after, ("unit", "move"): op_unit_move, ("unit", "drop"): op_unit_drop,
+}
+
+
+def direct(key):
+    """A plan command run directly: built (its checks), prepared, written, and what follows done, as one write."""
+    def run(fleet, a):
+        op = OPS[key](Direct(fleet, a), a)
+        undo = op.prepare() if op.prepare else None
+        try:
+            sha = write(fleet, op.label, op.change, op.subject, op.body, act=op.act, on=op.on, frm=op.frm)
+        except Refusal:
+            if undo:
+                undo()
+            raise
+        if op.after:
+            op.after(state_of(fleet, op.label)[0], sha)
+    return run
 
 
 # -------------------------------------------------------------------------------------------------- signals
@@ -1625,10 +1728,10 @@ def parser():
 
 COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view,
-    ("bolt", "new"): bolt_new, ("bolt", "give"): bolt_give, ("bolt", "order"): bolt_order, ("bolt", "drop"): bolt_drop,
+    ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land,
-    ("unit", "add"): unit_add, ("unit", "split"): unit_split, ("unit", "order"): unit_order, ("unit", "after"): unit_after,
-    ("unit", "move"): unit_move, ("unit", "drop"): unit_drop, ("unit", "approve"): unit_approve,
+    ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
+    ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")), ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
     ("_slots", None): slots_cmd, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
     ("_ends", None): stage_ends,
