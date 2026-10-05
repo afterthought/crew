@@ -89,8 +89,8 @@
   - merge `bolt-teams` into crew's main, and pull it on the box.
 
   Verify `crew bolts` answers for `wldn`, `madswan` and `swancloud`.
-- [ ] 7.2 `crew main up` for each partition, and `crew operator up` in each operator session. Verify each agent is listed in its workspace.
-- [ ] 7.3 Move swb-1: plan its first bolt with the planner, `crew bolt give swb-1`, `crew up swb-1` on the box. Verify `crew bolts` shows the bolt active on `chuck-herdr-alpha`.
+- [x] 7.2 `crew main up` for each partition, and `crew operator up` in each operator session. Verify each agent is listed in its workspace.
+- [x] 7.3 Move swb-1: plan its first bolt with the planner, `crew bolt give swb-1`, `crew up swb-1` on the box. Verify `crew bolts` shows the bolt active on `chuck-herdr-alpha`.
 
 ## 8. From the first smoke tests
 
