@@ -666,9 +666,11 @@ echo "$(git rev-list --count origin/main..main) $(git rev-list --count main..ori
 """
 
 
-def free_slot(fleet, t, unit):
-    """End the agent in the slot a unit or fix holds and free the slot, on the team's host."""
-    r = crew.on_machine(fleet, t["machine"], ["bash", crew.crew_at(fleet, t["machine"]), "_free", t["name"], unit])
+def free_slot(fleet, t, unit, remove=False):
+    """End the agent in the slot a unit or fix holds and free the slot, on the team's host; with remove, a dropped
+    unit's worktree, unless it has uncommitted changes, and its branch go too."""
+    r = crew.on_machine(fleet, t["machine"], ["bash", crew.crew_at(fleet, t["machine"]), "_free", t["name"], unit]
+                        + (["--remove"] if remove else []))
     if r.returncode:
         print(f"{unit}'s slot on {t['name']} was not freed: " + (r.stderr.strip() or f"exit {r.returncode}"), file=sys.stderr)
     elif r.stdout.strip():
@@ -988,8 +990,8 @@ def unit_drop(fleet, a):
     write(fleet, label, repo, change, f"plan({bolt or 'queue'}): drop {a.unit}", a.reason)
     team = fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
     if team:
-        free_slot(fleet, team, a.unit)
-    if s["worktree"]:
+        free_slot(fleet, team, a.unit, remove=True)
+    elif s["worktree"]:
         print(f"its worktree stays at {s['worktree']}, on unit/{a.unit}")
 
 
@@ -1126,6 +1128,20 @@ def team_of_unit(fleet, a):
     u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first (crew unit move {a.unit} <bolt>)")
     team = plan.bolt(u.get("Bolt")).get("Team") or fail(f"bolt {u.get('Bolt')} is held by no team yet: crew bolt give <team> {u.get('Bolt')}")
     print(sh(TEAM=team))
+
+
+def in_plan(fleet, a):
+    """Whether a partition's plan has a unit (every partition's, without --label): said and exit 0 when one does, exit
+    3 when none does, and refused when a plan could not be read, since then nobody can tell."""
+    errors = {}
+    labels = [a.label] if a.label else list(fleet["partitions"])
+    hits = [h for h in plans(fleet, labels, errors) if h[3] and h[3].unit(a.unit)]
+    if hits:
+        print(f"unit {a.unit} is in plan/{hits[0][0]} of {hits[0][1]}")
+        return
+    not errors or fail(f"can't tell whether unit {a.unit} is still planned: "
+                       + "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()))
+    sys.exit(3)
 
 
 def run_check(fleet, a):
@@ -1382,6 +1398,9 @@ def parser():
     x.add_argument("base")
     x = sub.add_parser("_slots")
     x.add_argument("team")
+    x = sub.add_parser("_in-plan")
+    x.add_argument("unit")
+    x.add_argument("--label")
     return ap
 
 
@@ -1392,7 +1411,7 @@ COMMANDS = {
     ("unit", "add"): unit_add, ("unit", "split"): unit_split, ("unit", "order"): unit_order, ("unit", "after"): unit_after,
     ("unit", "move"): unit_move, ("unit", "drop"): unit_drop, ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_slots", None): slots_cmd, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_slots", None): slots_cmd, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
 }
 
 

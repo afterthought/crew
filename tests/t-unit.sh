@@ -100,7 +100,8 @@ expect_fail "unit e has merged into tenant-environments, so it can't move" crew 
 expect_fail "unit e is in merged" crew unit split e "x" --into e2 "y"
 crew unit after later e >/dev/null 2>&1
 expect_ok crew unit drop d "the portal shows them; no console page is wanted"
-has "$out" "its worktree stays at $kd/places/d"
+has "$out" "$kd/places/d and unit/d are removed; the branch was at"
+[[ ! -d $kd/places/d ]] || fail "d's worktree is still there"
 eq "$(git --git-dir "$wb" log -1 --format=%b plan/wldn)" "the portal shows them; no console page is wanted"
 eq "$(plan -t Unit -e "Unit = 'd'" -c)" "0"
-ok "drop removes a unit with the reason in the commit, and refuses merged work"
+ok "drop removes a unit with the reason in the commit, and its worktree and branch, and refuses merged work"

@@ -14,6 +14,9 @@
 #   crew resume  <team> [role...]      bring back the conductor or ops when not up, with its last conversation
 #   crew clear   <team> <role>         /clear the conductor or ops and give it its name back
 #   crew down    <team>                end every session the team has; the panes stay
+#   crew unit free <unit> [--team <team>]
+#                                      free a slot still holding a unit the plan no longer has: end its agent, and
+#                                      remove its worktree, unless it has uncommitted changes, and its branch
 #   crew unit run <unit> construct|code|verify|merge ["<words>"]
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
 #                                      construct writes its OpenSpec change, code builds it once the user has
@@ -281,6 +284,37 @@ reap() {  # free every slot whose unit or fix has merged into its bolt, and remo
     echo "$(name_of "$slot") is free: $name has merged into its bolt"
   done < <(plan _slots "$TEAM" 2>/dev/null || true)
 }
+remove_dropped() {  # remove_dropped <unit> <place>: a dropped unit's worktree, unless it has uncommitted changes, and its branch
+  local unit=$1 path=$2 sha
+  if [[ -d $path ]]; then
+    [[ -z $(git -C "$path" status --porcelain 2>/dev/null) ]] || { echo "$path was kept, and unit/$unit with it: it has uncommitted changes" >&2; return 1; }
+    git -C "$KIT" worktree remove "$path" || return 1
+  fi
+  sha=$(git -C "$KIT" rev-parse --short --verify -q "refs/heads/unit/$unit") || return 0
+  git -C "$KIT" branch -q -D "unit/$unit" && echo "$path and unit/$unit are removed; the branch was at $sha"
+}
+unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit the plan no longer has
+  local unit=${1:?usage: crew unit free <unit> [--team <team>]} team= t slot path out rc=0
+  [[ ${2:-} == --team ]] && team=${3:?usage: crew unit free <unit> [--team <team>]}
+  if [[ -z $team ]]; then  # the team of this host whose slot holds it
+    for t in $(py here | awk '$1 == "team" {print $2}'); do
+      awk -v u="$unit" '$3 == u {f = 1} END {exit !f}' "$HOME/.local/state/$t-team/slots" 2>/dev/null && { team=$t; break; }
+    done
+    [[ -n $team ]] || { echo "no team on this host holds $unit in a slot; name its team: crew unit free $unit --team <team>" >&2; exit 1; }
+  fi
+  load_team "$team"; forward; ensure_state
+  slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
+  out=$(plan _in-plan "$unit" --label "$LABEL" 2>&1) || rc=$?
+  [[ $rc == 0 ]] && { echo "$out: drop it with crew unit drop, which frees its slot" >&2; exit 1; }
+  [[ $rc == 3 ]] || { echo "$out" >&2; exit 1; }
+  path=$(awk -v s="$slot" '$1 == s {print $4}' "$held")
+  if [[ -d $path && -n $(git -C "$path" status --porcelain 2>/dev/null) ]]; then
+    echo "$path has uncommitted changes: they are the user's to keep or discard before the slot is freed" >&2; exit 1
+  fi
+  free "$slot" || exit 1
+  echo "$(name_of "$slot") is free"
+  remove_dropped "$unit" "$path"
+}
 free_elsewhere() {  # a unit moved from another team's bolt in this checkout leaves that team's slot
   local f other
   for f in "$HOME"/.local/state/*-team/slots; do
@@ -376,6 +410,7 @@ case $cmd in
     load_team "${2:-}"; forward; ensure_state
     for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down; echo "$TEAM is down; its panes are still there." ;;
   unit)
+    [[ ${2:-} == free ]] && { unit_free "${@:3}"; exit 0; }
     [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
     unit=${3:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
     stage=${4:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
@@ -405,9 +440,11 @@ case $cmd in
       ensure_slot_pane "$slot" "$path"; run_stage "$slot" fix "Fix: $words"
       echo "$(name_of "$slot") has $fix: code, in $path"
     fi ;;
-  _free)  # crew _free <team> <unit|fix/name>: free the slot holding it (crew unit drop asks for this)
-    load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}"); [[ -n $slot ]] || exit 0
-    free "$slot" && echo "$(name_of "$slot") is free" ;;
+  _free)  # crew _free <team> <unit|fix/name> [--remove]: free the slot holding it, and with --remove remove a dropped
+    # unit's place and branch (crew unit drop asks for both)
+    load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}"); path=$KIT_DIR/places/$3
+    if [[ -n $slot ]]; then path=$(awk -v s="$slot" '$1 == s {print $4}' "$held"); free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi
+    if [[ ${4:-} == --remove ]]; then remove_dropped "$3" "$path" || true; fi ;;
   main)
     sub=${2:-}; load_main "${3:-}"; forward; ensure_state
     case $sub in
