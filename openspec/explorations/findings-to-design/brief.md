@@ -55,7 +55,7 @@ These must be true. Where you think one is wrong, say so and why. Don't drop it 
 
 ### Plan and bolts
 
-14. A bolt has one goal the user would recognize. Work outside that goal goes to the queue or to another bolt.
+14. A bolt has one goal the user would recognize, and landing is part of it. Work a bolt in flight needs before it can be proven or land goes into that bolt, ahead of what waits on it. Work outside that goal goes to the queue or to another bolt.
 15. A bolt may live a long time and collect units found along the way, as long as they serve its goal. Adding a unit to a bolt in flight needs its conductor's agreement.
 
 ### Seeing what happened

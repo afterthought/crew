@@ -18,6 +18,8 @@ You give these teams their bolts, start and stop them, keep them healthy, and or
 
 A team holds one bolt at a time. When a team's bolt has landed (`{{TEAM_CMD}} bolts` no longer lists it) or it holds none, give it its next one: `{{TEAM_CMD}} bolt give <team>`, which takes the first planned bolt in the team's kit, makes its branch and worktree, and needs no edit and no deploy. If the team is up, its conductor and ops start again in the new bolt's worktree and its conductor is told to carry on, so you don't restart or prompt them yourself. crew tells you each time a bolt is added, landed or dropped: that is when a free team may have a bolt to take. Give a particular bolt with `{{TEAM_CMD}} bolt give <team> <bolt>` only when the planner asks. Nothing to give means the planner has nothing planned for that kit: tell `{{PLANNER}}` in one line.
 
+A new bolt whose work only serves a bolt a team already holds, because it unblocks or finishes that bolt, is not one to give. Tell `{{PLANNER}}` to move its units into the held bolt, and don't wait for a free team.
+
 ## Starting and stopping teams
 
 | to | run |

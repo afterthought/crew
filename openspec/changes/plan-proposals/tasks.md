@@ -12,9 +12,11 @@
 - [ ] 2.3 On writing, tell the conductor of each touched bolt a team holds, with the commands that touch its bolt and how to agree; a conductor that is not up is reported and the proposal still written. Verify with the stub `herdr`.
 - [ ] 2.4 Entries: `plan.propose` naming `proposal/<n>` and every bolt and unit its commands name. Verify the entry and that it holds neither the case nor an intent.
 
+- [ ] 2.5 `--unblocks <bolt>` on `unit add` and `unit move` inside a proposal: the named bolt must be held by a team, and the unit must go into that bolt ahead of the units that wait on it; the check refuses the proposal otherwise, naming the bolt. Verify a unit marked `--unblocks` and placed in the queue or a new bolt is refused, and one placed in the held bolt passes.
+
 ## 3. Reading proposals
 
-- [ ] 3.1 `crew plan proposed [--label L] [--json]` lists open proposals with number, writer, date, the case's first line and what each waits on. `crew plan proposed <n>` prints the markdown in design.md: the case; each change in plain words; a new unit's intent with its sources (a signal's assertion and excerpt where it has one) and the goal and team of the bolt it would join; a move's bolts and goals; a drop's reason; the agreements given and missing. Verify against a fixture proposal with one of each change, from a host that holds no team.
+- [ ] 3.1 `crew plan proposed [--label L] [--json]` lists open proposals with number, writer, date, the case's first line and what each waits on. `crew plan proposed <n>` prints the markdown in design.md: the case; each change in plain words; a new unit's intent with its sources (a signal's assertion and excerpt where it has one) and the goal and team of the bolt it would join, and the bolt it unblocks when it carries `--unblocks`; a move's bolts and goals; a drop's reason; the agreements given and missing. Verify against a fixture proposal with one of each change, from a host that holds no team.
 - [ ] 3.2 Document proposals in `README.md` (a "Proposals" section under the plan: the record, the five commands, who may write what directly), `plugin/skills/crew/SKILL.md` and the usage header. Verify every command in the README appears in `crew`'s usage.
 
 ## 4. Agreement

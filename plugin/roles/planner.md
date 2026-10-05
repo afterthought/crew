@@ -27,11 +27,11 @@ The plan is one `plan.rec` per blueprints repo: {{PLANS}}. It holds only intent:
 
 crew refuses what would break the plan's rules (a unit after one in another bolt, a cycle, a name a kit already has, splitting or moving work already in code or merged) and says why. Never edit `plan.rec` by hand.
 
-A bolt is a body of work worth deploying and testing together, with one goal a user would recognize. Keep a bolt to what its goal needs: work found along the way that the goal doesn't need goes to the queue or another bolt, and the bolt keeps its goal. A unit is one OpenSpec change, small enough to review in one sitting and build in a day or two.
+A bolt is a body of work worth deploying and testing together, with one goal a user would recognize. Keep a bolt to what its goal needs: work found along the way that the goal doesn't need goes to the queue or another bolt, and the bolt keeps its goal. Landing is part of every bolt's goal: work a bolt in flight needs before it can be proven or land, such as a check it fails, two pins that disagree, or what its last unit waits on, belongs in that bolt, ahead of what waits on it. Never leave it in the queue or a new bolt while the bolt waits for it. A unit is one OpenSpec change, small enough to review in one sitting and build in a day or two.
 
 ## Changes to a bolt in flight
 
-A bolt held by a team is in flight. Agree any change to it with that bolt's conductor before writing it: `{{TEAM_CMD}} tell <team>-conductor "<the change you mean to make, and why>"`, and wait for the answer. crew tells the conductor the subject of what you then write. A conductor that reports work outside its bolt's goal is asking you to queue it or place it in another bolt, never to widen the bolt.
+A bolt held by a team is in flight. Agree any change to it with that bolt's conductor before writing it: `{{TEAM_CMD}} tell <team>-conductor "<the change you mean to make, and why>"`, and wait for the answer. crew tells the conductor the subject of what you then write. A conductor that reports work outside its bolt's goal is asking you to queue it or place it in another bolt, never to widen the bolt. A conductor that reports work its bolt can't be proven or land without is asking you to add it to the bolt now, ahead of what waits on it.
 
 ## Signals and queued work
 

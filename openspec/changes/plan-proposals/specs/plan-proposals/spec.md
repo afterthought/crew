@@ -96,6 +96,21 @@ When a proposal is written, crew SHALL tell the conductor of each bolt a team ho
 - **WHEN** a planned bolt the proposal touches is given to a team before approval
 - **THEN** approval is refused until that team's conductor has agreed
 
+### Requirement: Work a bolt in flight needs to land goes into that bolt
+Landing SHALL be part of every bolt's goal. A unit that a bolt held by a team needs before it can be proven or land SHALL be proposed into that bolt, ordered ahead of the units that wait on it, and marked with the bolt it unblocks (`--unblocks <bolt>` on the `crew unit add` or `crew unit move` the proposal runs). crew SHALL refuse a proposal that marks a unit as unblocking a held bolt but places it in the queue or in another bolt. `crew plan proposed <n>` SHALL show the mark beside the unit. The planner's and the conductor's briefs SHALL say this, and a dispatcher given a planned bolt whose units only serve a bolt a team already holds SHALL tell the planner to fold them into the held bolt instead of waiting for a free team.
+
+#### Scenario: A conductor's bolt can't land without new work
+- **WHEN** swb-1's conductor tells the planner its bolt can't land until two pins agree
+- **THEN** the planner's proposal adds the unit to swb-1's bolt, ahead of the units waiting on it, marked as unblocking that bolt, and the user reads the mark on the proposal
+
+#### Scenario: Unblocking work placed elsewhere
+- **WHEN** a proposal marks a unit `--unblocks biome-follows-the-shell` but adds it to the queue or to a new bolt
+- **THEN** writing the proposal is refused, naming the held bolt
+
+#### Scenario: A new bolt that only serves a held bolt
+- **WHEN** the dispatcher is told of a new bolt whose units only finish a bolt swb-1 holds
+- **THEN** it does not give the new bolt to a team, and tells the planner to move its units into swb-1's bolt
+
 ### Requirement: Approval applies a proposal exactly as it was read
 `crew plan approve <n>` SHALL apply the proposal's commands in order to the plan at the branch's tip and close the proposal as `approved`, in one commit. When any command would now be refused, the approval SHALL be refused, naming the command and the reason, and the plan and the proposal SHALL be unchanged. What follows a direct command (a rebased unit, a freed slot, a conductor told) SHALL follow the approval.
 
