@@ -19,7 +19,7 @@ crew fix      <team> <name> "<what is wrong>"
 crew fix      <team> <name> --merge
 ```
 
-A team builds one **bolt** at a time: a body of work on `bolt/<bolt>`, in `<kit>/bolts/<bolt>`, deployed and tested from that branch and then landed on main. Its standing roles are the **conductor** and **ops**. A bolt is built from **units**, each one OpenSpec change on `unit/<unit>` in `<kit>/places/<unit>`, taken stage by stage: construct writes the change, the user reviews and approves it (`crew unit approve`), code builds it, verify checks it, and merge merges it into the bolt with `wt merge bolt/<bolt> --no-squash --no-remove`. Each stage is a fresh agent at that stage's effort, in one of the team's `units` slots. A **fix** is built the same way on `fix/<name>` from the bolt, with no change and no plan record. A merged unit's or fix's slot is freed, and its place removed, the next time crew reads the team. A unit dropped from the plan (`crew unit drop`) has its slot freed and its worktree and branch removed at once, unless its stage is still working or its worktree has uncommitted changes; `crew unit free <unit>` frees such a slot later, and refuses a unit the plan still has.
+A team builds one **bolt** at a time: a body of work on `bolt/<bolt>`, in `<kit>/bolts/<bolt>`, deployed and tested from that branch and then landed on main. Its standing roles are the **conductor** and **ops**. A bolt is built from **units**, each one OpenSpec change on `unit/<unit>` in `<kit>/places/<unit>`, taken stage by stage: construct writes the change, the user reviews and approves it (`crew unit approve`), code builds it, verify checks it, and merge merges it into the bolt with `wt merge bolt/<bolt> --no-squash --no-remove`. Each stage is a fresh agent at that stage's effort, in one of the team's `units` slots. Construct can be run again with the user's words at any stage before the unit merges: run on a unit that is approved, in code or in verify, it marks the unit amended in the plan, and code, verify and merge are refused until the user has approved the change written again, which clears the mark. A merged unit is not amended: a defect in it is a fix, and a new need a new unit. A **fix** is built the same way on `fix/<name>` from the bolt, with no change and no plan record. A merged unit's or fix's slot is freed, and its place removed, the next time crew reads the team. A unit dropped from the plan (`crew unit drop`) has its slot freed and its worktree and branch removed at once, unless its stage is still working or its worktree has uncommitted changes; `crew unit free <unit>` frees such a slot later, and refuses a unit the plan still has.
 
 A team is two herdr workspaces in its session: `<team>`, with a `conductor` tab (the conductor and ops, started in the worktree of the bolt the team holds) and, when the team's host is a Mac, a `git` tab (gitgui in the kit and the blueprints repo; gitgui is unusable over ssh), and `<team> units`, one tiled pane per slot in flight, which exists only while a unit or fix is. A team sits whole on one host, and its panes and state live there: a command about a team run anywhere else is run on the team's host, over ssh, by the crew checkout that host's sessions keep.
 
@@ -71,7 +71,7 @@ Who writes the plan directly, when the command runs as an agent crew started (`C
 |---|---|---|
 | the user at a shell | everything | |
 | `<label>-planner` | proposals | refused, naming `crew plan propose` |
-| `<team>-conductor` | `unit split`, `unit order`, `unit after` on units of the bolt its team holds; `plan agree` | refused, naming the planner |
+| `<team>-conductor` | `unit split`, `unit order`, `unit after` on units of the bolt its team holds, and the amended mark `crew unit run <unit> construct` sets on one; `plan agree` | refused, naming the planner |
 | `<label>-design` | `unit add … --repo <kit>`, the queue | refused, naming the planner |
 | `<label>-dispatch-<host>` | `bolt give` | refused, naming the planner |
 | `<label>-ops` | `bolt land` | refused, naming the planner |
@@ -134,7 +134,7 @@ Every crew command that moves work appends one entry per act, after the act, to 
 - `On`, each object acted on, and `From`, each object it came from, as typed names: `unit/<unit>`, `bolt/<bolt>`, `queue/<kit>`, `signals/<id>`, `team/<team>`, `agent/<name>`, `stage/<unit>/<stage>`, `fix/<bolt>/<name>`;
 - `Commit`, `<owner>/<name>@<sha>`, when the act wrote one, and `Why`, the subject crew composed from the names of things;
 - `Refused`, crew's reason, when a command that would have moved work was refused;
-- a stage's end's `Result` (the stage the unit reached), `Tasks`, `Head` (the unit branch's head) and `Observed: late` when nobody waited for it, and a tell's `Chars`.
+- a stage's end's `Result` (the stage the unit reached), `Tasks`, `Head` (the unit branch's head) and `Observed: late` when nobody waited for it, a tell's `Chars`, and `Amended: yes` on the start of a construct that marked its unit amended, whose `Commit` is the plan's.
 
 No entry holds text anyone typed: not a tell's text, an intent, a goal, a reason or an excerpt. A read writes nothing, and a record that can't be written is said on standard error and changes nothing about the command. `recsel -t Entry` reads the files with no crew involved.
 

@@ -29,7 +29,13 @@ Follow the command. These add what it doesn't say:
 - **Stay inside the unit.** Work the intent doesn't cover is not this change's; name it in your final message, and the planner decides where it goes.
 - Run `openspec validate <unit>` before committing.
 
-When the prompt carries the user's words after the sources, the change was reviewed and the user asked for something different: amend the change to say what the user asked, keeping what they didn't object to.
+## Writing a change again
+
+When this worktree already holds the unit's change, you are writing it again, and the prompt says why: the user's words after the sources, when the user asked for something different at review or after approving it; or a sentence saying the unit's intent was amended, when what the unit builds has changed. Revise the change that is there rather than starting over: make it say what the user asked, or make it true to the new intent, and keep what still holds and what the user didn't object to.
+
+- **Tasks already ticked** stay ticked only where the work they describe is still what the change asks for. Untick one whose work must change, and add tasks for what is new. The code stage works from the tasks as you leave them.
+- **The user reviews the revised change before any more of it is coded**, so say in your final message what changed from the version the user approved.
+- **Commit the revision, however small.** The unit reads as back in review only once you have.
 
 ## Committing
 

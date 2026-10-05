@@ -11,7 +11,7 @@
 - [x] 2.1 `run_check` for construct accepts `ready`, `construct`, `review`, `amended`, `approved`, `code` and `verify`, refuses `merged` and `landed`, and at `approved`, `code`, `verify` or `amended` sets `Amended: <unit head>` in the plan before the stage starts; the conductor's role allows this write for a unit of its own bolt. When the mark was `proposal/<n>` or `intent`, the prompt carries the sentence that the intent was amended. Verify in a scratch kit: construct on a unit in code marks it and starts a fresh agent with the user's words; on a merged unit it is refused.
 - [x] 2.2 Code, verify and merge are refused while the mark is set, with the two messages in design.md, each leaving a `Refused` entry. Verify each.
 - [x] 2.3 `crew unit approve` at `review` on a marked unit writes the approval commit and clears the mark in one plan write; run again after a failed plan write it only clears the mark; at `amended` it is refused. Verify the stage after approval is `code` with ticked tasks and `approved` without.
-- [ ] 2.4 `plugin/roles/construct.md`: revising an existing change, for the user's words or for an amended intent. `plugin/roles/conductor.md`: amending a unit after approval, the re-review, and what to do when crew says an intent was amended. Verify both print for the `swb-1` fixture with no unfilled token.
+- [x] 2.4 `plugin/roles/construct.md`: revising an existing change, for the user's words or for an amended intent. `plugin/roles/conductor.md`: amending a unit after approval, the re-review, and what to do when crew says an intent was amended. Verify both print for the `swb-1` fixture with no unfilled token.
 
 ## 3. Amending an intent
 

@@ -34,6 +34,11 @@ for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/cr
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
 expect_ok crewpy brief swb-1 conductor
 for want in "plan proposed <n>" "plan agree <n>" "crew refuses it from you"; do has "$out" "$want"; done
+for want in "at any stage before it merges" "crew marks the unit amended" "code waits for that approval" \
+  "When crew tells you a unit's intent was amended, run construct again" "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
+expect_ok crewpy brief swb-1 construct
+for want in "## Writing a change again" "the unit's intent was amended" "stay ticked only where the work they describe" \
+  "Commit the revision, however small"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn operator
 for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
