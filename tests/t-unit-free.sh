@@ -28,7 +28,7 @@ eq "$(held pin-biome)" "$slot"; [[ -d $kd/places/pin-biome ]] || fail "pin-biome
 ok "a unit dropped while its stage works keeps its slot, worktree and branch"
 
 expect_fail "no team on this host holds pin-biome in a slot; name its team: crew unit free pin-biome --team <team>" crew unit free pin-biome
-expect_fail "unit follows-the-shell is in plan/wldn of WilldanGroup/willdan-blueprints: drop it with crew unit drop" crew unit free follows-the-shell --team swb-1
+expect_fail "unit follows-the-shell is in wldn/main of WilldanGroup/crew-state: drop it with crew unit drop" crew unit free follows-the-shell --team swb-1
 expect_fail "is working; add --force to end it anyway" crew unit free pin-biome --team swb-1
 as $box herdr --session wldn-1 stub status "$(pane_of_slot "$slot")" idle
 echo half-done > "$kd/places/pin-biome/note"

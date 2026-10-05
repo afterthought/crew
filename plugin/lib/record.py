@@ -7,11 +7,17 @@ and the Claude session behind them, the act, the objects acted on (On) and those
 written if any, and the subject crew composed from the names of things: never text anyone typed. A failed append is
 said on standard error and never changes what the command does or how it exits.
 
+Each write to a flywheel's branch of its state repository also carries the host's entries there, to the same path
+under runs/<host>/: the branch's file becomes the union by Id of what it had and what the host has, so a host only
+ever adds to its own files and a host that is asleep or rebuilt loses nothing it had carried. Reading takes the
+branch first, then whatever each host it can reach has not yet carried.
+
   record.py emit --label L --act A [--on X]... [--from X]... [--commit C]... [--why W] [--refused R] [--field K=V]...
                                           append one entry; prints its id
   record.py session                       the caller's Claude session as <host>:<id>, what a forwarded command carries
   record.py events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-                                          the entries of every host the partition runs on, in time order
+                                          the entries of the partition's branch and of every host it runs on, in time order
+  record.py events --push [--label L]     carry this host's entries to the branch now, in a commit of their own
   record.py trace <object> [--label L]    one bolt's, unit's or signal's history, read from the entries alone
 
 An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, team/<team>, agent/<name>,
@@ -93,16 +99,23 @@ def one_line(v):
     return " ".join(str(v).split())
 
 
-def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, **extra):
-    """Append one entry to the label's run record on this host, in one write; its id, or None when it could not be
-    written, which is said on standard error and nothing more."""
+def new_id():
+    """A new entry's id: the time, the host, the process and a count, unique without a lock. A write makes its
+    entry's id before its commit, so the commit can name the entry its message describes."""
     global _count
+    _count += 1
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{crew.this_host()}-{os.getpid()}-{_count}"
+
+
+def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, **extra):
+    """Append one entry to the label's run record on this host, in one write; its id, or None when it could not be
+    written, which is said on standard error and nothing more. eid is an id made ahead with new_id."""
     if not label:
         return None
     now = datetime.datetime.now(datetime.timezone.utc)
     host = crew.this_host()
-    _count += 1
-    eid = f"{now.strftime('%Y%m%dT%H%M%SZ')}-{host}-{os.getpid()}-{_count}"
+    eid = eid or new_id()
     fields = [("Id", eid), ("At", now.strftime("%Y-%m-%dT%H:%M:%SZ")), ("Host", host), ("By", who())]
     if session():
         fields.append(("Session", session()))
@@ -138,6 +151,68 @@ def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, **extra):
         print(f"crew: the run record at {path} could not be written: {e.strerror or e}", file=sys.stderr)
         return None
     return eid
+
+
+# ------------------------------------------------------------------------------------- carried to the branch
+
+def blocks(text):
+    """The entries of run-record text as written, {Id: the entry's lines}, descriptors and comments left out."""
+    out, cur = {}, []
+    for line in text.split("\n") + [""]:
+        if line.strip():
+            cur.append(line)
+            continue
+        if cur and not any(l.startswith(("%", "#")) for l in cur):
+            eid = next((l[3:].strip() for l in cur if l.startswith("Id:")), None)
+            if eid:
+                out[eid] = "\n".join(cur) + "\n"
+        cur = []
+    return out
+
+
+def mark(label):
+    """Where this host notes the newest entry it has carried for the label."""
+    return ROOT / label / "runs" / ".carried"
+
+
+def carry(label, at_branch):
+    """The host's run-record files of the label as its branch must hold them, {path on the branch: text}, and the
+    newest id among the entries looked at. A day's file on the branch becomes the union by Id of the branch's entries
+    and the host's, in Id order, and is left out when the branch already holds every entry the host has. Days before
+    the newest carried one are not looked at. at_branch(path) reads a file at the branch's tip, or None."""
+    host = crew.this_host()
+    d = ROOT / label / "runs" / host
+    try:
+        done = mark(label).read_text().strip()
+    except OSError:
+        done = ""
+    since = f"{done[0:4]}-{done[4:6]}-{done[6:8]}" if len(done) >= 8 else ""
+    out, newest = {}, None
+    for f in sorted(d.glob("*.rec")) if d.is_dir() else []:
+        if f.stem < since:
+            continue
+        mine = blocks(f.read_text())
+        if not mine:
+            continue
+        newest = max([newest or "", *mine])
+        path = f"runs/{host}/{f.name}"
+        have = blocks(at_branch(path) or "")
+        if set(mine) <= set(have):
+            continue
+        union = {**mine, **have}
+        out[path] = DESCRIPTOR + "\n".join(union[k] for k in sorted(union))
+    return out, newest
+
+
+def mark_carried(label, newest):
+    """After a push carried entries up to newest, start the next carry from that day."""
+    if not newest:
+        return
+    try:
+        mark(label).parent.mkdir(parents=True, exist_ok=True)
+        mark(label).write_text(newest + "\n")
+    except OSError as e:
+        print(f"crew: could not note what was carried at {mark(label)}: {e.strerror or e}", file=sys.stderr)
 
 
 # ----------------------------------------------------------------------------------------------- reading
@@ -188,14 +263,35 @@ done
 """
 
 
+def on_branch(fleet, label, since_day):
+    """The entries carried to the label's branch of its state repository, from since_day on."""
+    import plan  # plan.py imports this module; its git layer is only needed here
+    repo, ref = plan.state_of(fleet, label)
+    tip = plan.fetch(repo, ref)
+    if not tip:
+        return []
+    out = []
+    for path in plan.git(repo, "ls-tree", "-r", "--name-only", tip, "--", "runs/").splitlines():
+        if path.endswith(".rec") and pathlib.PurePath(path).stem >= since_day:
+            out += parse(plan.show(repo, tip, path) or "")
+    return out
+
+
 def gather(fleet, labels, since_day):
-    """Every entry of the labels' run records from since_day on, one call per host, duplicates dropped by Id and
-    sorted by time then Id; and the hosts that did not answer, with why."""
+    """Every entry of the labels' run records from since_day on: what each label's branch holds, then what each
+    host has not yet carried, one call per host, duplicates dropped by Id and sorted by time then Id; and what did
+    not answer, with why. A host that does not answer is shown as far as it had carried."""
     by_host = {}
     for l in labels:
         for h in hosts_of(fleet, l):
             by_host.setdefault(h, []).append(l)
     entries, missing = {}, {}
+    for l in labels:
+        try:
+            for e in on_branch(fleet, l, since_day):
+                entries.setdefault(e["Id"], e)
+        except Refusal as err:
+            missing[f"{l}/main"] = str(err)
     for h, ls in sorted(by_host.items()):
         r = crew.on_machine(fleet, h, ["bash", "-c", READ, "crew", since_day, *ls])
         if r.returncode:
@@ -261,6 +357,11 @@ def names(e, obj):
 
 def events(fleet, a):
     labels = labels_for(fleet, a.label)
+    if a.push:
+        import plan
+        for l in labels:
+            plan.carry_now(fleet, l)
+        return
     if a.follow:
         return follow(fleet, labels, a.about)
     day, stamp = when(a.since)
@@ -390,6 +491,7 @@ def parser():
     x.add_argument("--about")
     x.add_argument("--since")
     x.add_argument("--follow", action="store_true")
+    x.add_argument("--push", action="store_true")
     x.add_argument("--json", action="store_true")
     x = sub.add_parser("trace")
     x.add_argument("object")

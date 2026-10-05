@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""plan.py: the bolt plan, one recutils plan.rec per partition and blueprints repo, alone on its plan/<label> branch.
+"""plan.py: the bolt plan, one recutils plan.rec per flywheel, on the flywheel's branch of its state repository.
 
+A flywheel is a partition's loop, named by its label. Its state is the files on the branch <label>/main of the
+state repository the teams file names for it (`state`): plan.rec, moves.rec, and the run record under runs/<host>/.
 The plan holds only intent: Bolt and Unit records. Every stage is read from the kits. A write fetches the branch
-over https, applies itself to the tip, checks the result with recfix and crew's own rules, commits through a
-temporary index in crew's own bare cache of the repo (no working tree is touched), and pushes without force. A push
-that is refused because someone wrote first is applied again to the new tip, up to five times.
+over https, applies itself to the tip, checks each file it changed with recfix (the plan with crew's own rules
+too), commits through a temporary index in crew's own bare cache of the repo (no working tree is touched), and
+pushes without force. A push that is refused because someone wrote first is applied again to the new tip, up to
+five times. A write that changes several files is one commit, and it carries the host's uncarried run record.
 
-  crew plan init <blueprints> <label>        create plan/<label> in a blueprints repo with the schema and no records
+  crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
+                                             the moves where the partition's blueprints repos have them
   crew bolts [<bolt>] [--label L] [--json]   every bolt and unit of the plans, each unit's stage read from its kit
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
@@ -23,7 +27,7 @@ that is refused because someone wrote first is applied again to the new tip, up 
   crew signal <slug> "<what it asserts>" [--kind K] [--subject a,b] [--excerpt "<text>"]
                                              a finding, as a signal in the partition's first blueprints repo
   crew signal move <id> attach|challenge|new-territory|answered|drop [--target T] [--reason R]
-                                             curation's move for a signal, in that repo's signals/moves.rec
+                                             curation's move for a signal, in moves.rec on the flywheel's branch
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
@@ -43,7 +47,8 @@ HEADER = """\
 # The partition's bolts and their units: what is to be built, in which bolt,
 # in what order. Nothing here says how far anything has got: `crew bolts`
 # reads that from the kits. Written only by `crew bolt` and `crew unit`.
-# A Source is a path in this repository, or <repo>:<path> in another.
+# A Source is a path in the flywheel's first blueprints repo, or
+# <owner>/<name>:<path> in another.
 
 %rec: Bolt
 %doc: Work on branch bolt/<Bolt> of Repo, deployed and tested from <Repo>/bolts/<Bolt>.
@@ -61,6 +66,19 @@ HEADER = """\
 %mandatory: Repo Intent
 %allowed: Unit Repo Bolt Intent After Source
 %unique: Repo Bolt Intent
+"""
+MOVES = """\
+# The flywheel's curation moves: one per signal, appended through crew and
+# never merged. A Signal is a signal's id in the flywheel's first blueprints
+# repo, signals/<id>.md.
+
+%rec: Move
+%doc: A curation move over one signal, stored with its inputs.
+%key: Signal
+%mandatory: Signal Move Date By
+%allowed: Signal Move Target Reason Date By
+%type: Move enum attach challenge new-territory answered drop route
+%type: Date date
 """
 
 
@@ -336,14 +354,19 @@ def agent():
 
 # ---------------------------------------------------------------------------------------------------- the plan
 
-def read(repo, label, tip):
-    """plan.rec at a commit of plan/<label>, refused when it fails its schema, naming the commit."""
+def state_of(fleet, label):
+    """A flywheel's state repository and its branch there: <owner>/<name> and <label>/main."""
+    return crew.partition_of(fleet, label)["state"], f"{label}/main"
+
+
+def read(repo, ref, tip):
+    """plan.rec at a commit of a branch, refused when it fails its schema, naming the commit."""
     text = show(repo, tip, "plan.rec")
-    text is not None or fail(f"plan/{label} of {repo} at {tip[:7]} has no plan.rec")
+    text is not None or fail(f"{ref} of {repo} at {tip[:7]} has no plan.rec")
     try:
         recfix(text, "plan.rec")
     except Refusal as e:
-        fail(f"plan/{label} of {repo} at {tip[:7]}: {e}")
+        fail(f"{ref} of {repo} at {tip[:7]}: {e}")
     return Plan(text)
 
 
@@ -354,12 +377,21 @@ def removed_by(repo, tip, kind, name):
 
 
 class Write:
-    """What a change sees: the plan at the tip it is applied to, and how to refuse with the commit that removed something."""
+    """What a change sees: the flywheel's state at the tip it is applied to (the plan, and any other file it reads or
+    replaces), and how to refuse with the commit that removed something."""
 
     def __init__(self, repo, label, tip, plan):
         self.repo, self.label, self.tip, self.plan, self.subject = repo, label, tip, plan, None
+        self.files = {}  # every other file the change replaced, {path: text}, committed with the plan
         self.quiet = set()  # teams the write's own command greets, so notify leaves them be
         self.on, self.frm = [], []  # objects only the change can name, for the write's run-record entry
+
+    def text(self, path):
+        """A file of the branch as the change has left it: replaced, else at the tip, else None."""
+        return self.files[path] if path in self.files else show(self.repo, self.tip, path)
+
+    def replace(self, path, text):
+        self.files[path] = text
 
     def bolt(self, name):
         return self.plan.bolt(name) or self.gone("Bolt", name)
@@ -369,31 +401,53 @@ class Write:
 
     def gone(self, kind, name):
         by = removed_by(self.repo, self.tip, kind, name)
-        fail(f"no {kind.lower()} {name} in plan/{self.label} of {self.repo}" + (f": {by} removed it" if by else ""))
+        fail(f"no {kind.lower()} {name} in {self.label}/main of {self.repo}" + (f": {by} removed it" if by else ""))
 
 
-def write(fleet, label, repo, change, subject, body="", act=None, on=(), frm=()):
-    """Apply change(Write) to the tip of plan/<label>, check, commit and push it, replaying on a refused push.
-    change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it. With act, the
-    write is recorded once pushed, naming on and frm and whatever the change added to them."""
-    ref, seen = f"plan/{label}", {}
-    CONTEXT["label"] = label
+def message(subject, body, eid):
+    """A commit message: the subject, the body where there is one, and the Crew-Entry trailer naming the run-record
+    entry that describes the commit."""
+    return subject + (f"\n\n{body}" if body else "") + (f"\n\nCrew-Entry: {eid}" if eid else "") + "\n"
+
+
+def carried(label, repo, tip, files):
+    """Add the host's uncarried run record of the label to a commit's files; the newest id it carries."""
+    runs, newest = record.carry(label, lambda path: show(repo, tip, path))
+    files.update(runs)
+    return newest
+
+
+def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
+    """Apply change(Write) to the tip of the flywheel's branch, check every file it changed, commit them with the
+    host's uncarried run record, and push, replaying on a refused push. change returns the bolts it touched; each
+    one's conductor is told the subject, unless it wrote it. The commit names its run-record entry; with act, that
+    entry is written once pushed, naming on and frm and whatever the change added to them. Returns the commit."""
+    repo, ref = state_of(fleet, label)
+    seen = {"eid": record.new_id()}
+    CONTEXT.update(label=label, eid=seen["eid"])
 
     def make(tip):
-        tip or fail(f"{repo} has no plan/{label} yet: crew plan init {repo} {label}")
-        w = Write(repo, label, tip, read(repo, label, tip))
+        tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
+        w = Write(repo, label, tip, read(repo, ref, tip))
         before = w.plan.teams()
         touched = change(w) or []
         check(w.plan)
         text = w.plan.text()
         recfix(text, "plan.rec")
+        files = {"plan.rec": text}
+        for path, t in w.files.items():
+            if path.endswith(".rec"):
+                recfix(t, path)
+            files[path] = t
         seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
-        return text, seen["subject"] + (f"\n\n{body}" if body else "") + "\n"
-    sha = land(repo, ref, "plan.rec", make)
-    print(f"plan/{label} {sha[:7]}: {seen['subject']}")
+        seen["newest"] = carried(label, repo, tip, files)
+        return files, message(seen["subject"], body, seen["eid"])
+    sha = land(repo, ref, None, make)
+    record.mark_carried(label, seen["newest"])
+    print(f"{ref} {sha[:7]}: {seen['subject']}")
     if act:
-        record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]))
+        record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]), eid=seen["eid"])
     notify(fleet, seen, seen["subject"])
     return sha
 
@@ -417,25 +471,114 @@ def notify(fleet, seen, subject):
                 crew.tell(fleet, d, f"{subject}. Give a free team its next bolt.")
 
 
-def init(fleet, args):
-    p = crew.partition_of(fleet, args.label)
-    repo = blueprints_of(p, args.blueprints)
+def carry_now(fleet, label):
+    """crew events --push: the host's uncarried run record of the label, carried to its branch in a commit of its
+    own; nothing at all when there is nothing to carry. Such a commit records no act, so it names no entry: an entry
+    of its own would be left uncarried by every push."""
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    if not record.carry(label, lambda path: show(repo, tip, path))[0]:
+        print(f"{ref}: nothing of {crew.this_host()}'s run record left to carry")
+        return
+    seen = {}
 
     def make(tip):
-        tip is None or fail(f"{repo} already has plan/{p['label']} (at {tip[:7]})")
-        recfix(HEADER, "plan.rec")
-        return HEADER, f"plan: start plan/{p['label']} ({agent()})\n"
-    CONTEXT["label"] = p["label"]
-    sha = land(repo, f"plan/{p['label']}", "plan.rec", lambda tip: make(tip))
-    print(f"plan/{p['label']} {sha[:7]}: created in {repo}")
-    record.emit(p["label"], "plan.init", [f"plan/{p['label']}"], commit=[f"{repo}@{sha}"], why=f"plan: start plan/{p['label']}")
+        files = {}
+        seen["newest"] = carried(label, repo, tip, files)
+        return files, message(f"runs({crew.this_host()}): carry the run record ({agent()})", "", None)
+    sha = land(repo, ref, None, make)
+    record.mark_carried(label, seen["newest"])
+    print(f"{ref} {sha[:7]}: carried {crew.this_host()}'s run record")
 
 
-def blueprints_of(p, name):
-    """One of a partition's blueprints repos, named as owner/name or by its name."""
-    found = [b for b in p["blueprints"] if b == name or b.split("/")[-1] == name]
-    len(found) == 1 or fail(f"{name} is not one of {p['label']}'s blueprints repos: " + " ".join(p["blueprints"]))
-    return found[0]
+# --------------------------------------------------------------------------------------------- crew state init
+
+def state_init(fleet, a):
+    """Create the flywheel's branch, adopting what the partition had: the first blueprints repo's plan/<label> is
+    pushed as the branch, so the plan's history is the branch's, else the branch starts with an empty plan; each other
+    blueprints repo's plan/<label> is joined in one commit naming where it came from; then moves.rec, with the first
+    blueprints repo's moves. Every step is its own push and first checks whether the branch already shows it, so a
+    run that stopped partway is finished by running it again, and a finished branch is only reported."""
+    p = crew.partition_of(fleet, a.label)
+    label = p["label"]
+    repo, ref = state_of(fleet, label)
+    CONTEXT["label"] = label
+    # What the partition had, read whole before anything is pushed.
+    old = []
+    for bp in p["blueprints"]:
+        t = fetch(bp, f"plan/{label}")
+        if t:
+            old.append((bp, t, read(bp, f"plan/{label}", t)))
+    owner = {}
+    for bp, _, plan in old:
+        for r in plan.bolts() + plan.units():
+            other = owner.setdefault((r.kind, r.name()), bp)
+            other == bp or fail(f"plan/{label} of {other} and plan/{label} of {bp} both hold {r.kind.lower()} {r.name()}: "
+                                "rename one in its plan first; nothing was written")
+    first = old[0] if old and old[0][0] == p["blueprints"][0] else None
+    joins = [o for o in old if o is not first]
+    did = []
+    tip = fetch(repo, ref)
+    if tip is None:
+        if first:
+            bp, t, _ = first
+            r = git(bp, "push", "--quiet", url(repo), f"{t}:refs/heads/{ref}", check=False)
+            r.returncode == 0 or fail(f"could not push plan/{label} of {bp} to {repo} as {ref}: {r.stderr.strip()}")
+            tip = fetch(repo, ref)
+            did.append(f"adopted plan/{label} of {bp} at {t[:7]}, with its history")
+            record.emit(label, "state.init", [f"plan/{label}"], commit=[f"{repo}@{tip}"], why=f"state({label}): adopt plan/{label} of {bp}")
+        else:
+            tip = init_step(repo, ref, label, f"state({label}): start the flywheel's plan",
+                            lambda w_tip, files: files.update({"plan.rec": HEADER}) if w_tip is None else fail(f"{repo} has {ref} since {w_tip[:7]}"))
+            did.append("started an empty plan")
+    for bp, t, plan in joins:
+        mark = f"join plan/{label} of {bp} at {t[:7]}"
+        if git(repo, "log", "--format=%h", "-F", f"--grep={mark}", tip):
+            continue
+
+        def join(w_tip, files, bp=bp, plan=plan):
+            have = read(repo, ref, w_tip)
+            for r in plan.bolts() + plan.units():
+                (have.bolt if r.kind == "Bolt" else have.unit)(r.name()) is None or fail(
+                    f"{ref} of {repo} already holds {r.kind.lower()} {r.name()}, which plan/{label} of {bp} also holds; nothing was joined")
+                fields = [(n, v if n != "Source" or ":" in v else f"{bp}:{v}") for n, v in r.fields]
+                have.insert(Rec(r.kind, fields))
+            check(have)
+            files["plan.rec"] = have.text()
+        tip = init_step(repo, ref, label, f"state({label}): {mark}", join)
+        did.append(f"joined plan/{label} of {bp} at {t[:7]}")
+    if show(repo, tip, "moves.rec") is None:
+        src = p["blueprints"][0]
+        st = fetch(src, "main")
+        moves = show(src, st, "signals/moves.rec") if st else None
+        recs = Plan(moves).recs("Move") if moves else []
+        at = f" at {st[:7]}" if moves else ""
+
+        def start_moves(w_tip, files):
+            show(repo, w_tip, "moves.rec") is None or fail(f"{ref} of {repo} has moves.rec since {w_tip[:7]}")
+            files["moves.rec"] = MOVES + "".join("\n" + "\n".join(r.lines()) + "\n" for r in recs)
+        tip = init_step(repo, ref, label, f"state({label}): moves.rec, with the {len(recs)} moves of {src}'s signals/moves.rec{at}", start_moves)
+        did.append(f"added moves.rec with {len(recs)} moves of {src}{at}")
+    if did:
+        print(f"{ref} of {repo} {tip[:7]}: " + "; ".join(did))
+    else:
+        print(f"{ref} of {repo} exists, at {tip[:7]}: nothing to do")
+
+
+def init_step(repo, ref, label, subject, make_files):
+    """One step of crew state init: make_files(tip, files) fills the commit's files at the tip (None when the branch
+    is not there yet), pushed without force and replayed on a moved tip. The step's entry names its commit."""
+    eid = record.new_id()
+
+    def make(tip):
+        files = {}
+        make_files(tip, files)
+        for path, text in files.items():
+            recfix(text, path)
+        return files, message(f"{subject} ({agent()})", "", eid)
+    sha = land(repo, ref, None, make)
+    record.emit(label, "state.init", [f"plan/{label}"], commit=[f"{repo}@{sha}"], why=subject, eid=eid)
+    return sha
 
 
 # ------------------------------------------------------------------------------------------ the kits, per host
@@ -556,18 +699,19 @@ def default_label(fleet, a):
 
 
 def plans(fleet, labels, errors=None):
-    """(label, repo, tip, plan) for each plan of the partitions, with tip and plan None where none is started.
-    A plan that can't be read is left out and its reason put in errors when that is given, else refused."""
+    """(label, repo, tip, plan) for each flywheel's one plan, on its branch of its state repository, with tip and
+    plan None where the branch is not started. A plan that can't be read is left out and its reason put in errors
+    when that is given, else refused."""
     out = []
     for l in labels:
-        for repo in crew.partition_of(fleet, l)["blueprints"]:
-            try:
-                tip = fetch(repo, f"plan/{l}")
-                out.append((l, repo, tip, read(repo, l, tip) if tip else None))
-            except Refusal as e:
-                if errors is None:
-                    raise
-                errors[f"plan/{l} of {repo}"] = str(e)
+        repo, ref = state_of(fleet, l)
+        try:
+            tip = fetch(repo, ref)
+            out.append((l, repo, tip, read(repo, ref, tip) if tip else None))
+        except Refusal as e:
+            if errors is None:
+                raise
+            errors[f"{ref} of {repo}"] = str(e)
     return out
 
 
@@ -576,7 +720,7 @@ def locate(fleet, kind, name, label):
     hits = [h for h in plans(fleet, labels, errors) if h[3] and (h[3].bolt(name) if kind == "Bolt" else h[3].unit(name))]
     hits or fail(f"no {kind.lower()} {name} in the plans of " + ", ".join(labels)
                  + "".join(f"; {k} could not be read: {v}" for k, v in errors.items()))
-    len(hits) == 1 or fail(f"{kind.lower()} {name} is in more than one plan: " + ", ".join(f"plan/{h[0]} of {h[1]}" for h in hits) + "; add --label")
+    len(hits) == 1 or fail(f"{kind.lower()} {name} is in more than one plan: " + ", ".join(f"{h[0]}/main of {h[1]}" for h in hits) + "; add --label")
     CONTEXT["label"] = hits[0][0]
     return hits[0]
 
@@ -586,12 +730,12 @@ def kit_teams(fleet, kit, label=None):
 
 
 def plan_for(fleet, kit, label):
-    """The plan a kit's work goes in: the blueprints repo of the teams that build it."""
-    pairs = sorted({(t["label"], t["blueprints"]["repo"]) for t in kit_teams(fleet, kit, label)})
-    pairs or fail(f"no team" + (f" of {label}" if label else "") + f" builds {kit}, so no plan holds its work")
-    len(pairs) == 1 or fail(f"{kit}'s work could go in " + ", ".join(f"plan/{l} of {r}" for l, r in pairs) + "; add --label")
-    CONTEXT["label"] = pairs[0][0]
-    return pairs[0]
+    """The plan a kit's work goes in, (label, state repository): the flywheel of the teams that build it."""
+    labels = sorted({t["label"] for t in kit_teams(fleet, kit, label)})
+    labels or fail(f"no team" + (f" of {label}" if label else "") + f" builds {kit}, so no plan holds its work")
+    len(labels) == 1 or fail(f"{kit}'s work could go in the plan of " + ", ".join(labels) + "; add --label")
+    CONTEXT["label"] = labels[0]
+    return labels[0], state_of(fleet, labels[0])[0]
 
 
 def name_free(fleet, label, kit, names):
@@ -696,11 +840,11 @@ def bolt_new(fleet, a):
     crew.NAME.match(a.bolt) or fail(f"a bolt's name is lowercase words with dashes, not {a.bolt}")
 
     def change(w):
-        w.plan.bolt(a.bolt) is None or fail(f"plan/{label} already has bolt {a.bolt}")
+        w.plan.bolt(a.bolt) is None or fail(f"{label}/main already has bolt {a.bolt}")
         r = Rec("Bolt", [("Bolt", a.bolt), ("Repo", a.repo), ("Goal", a.goal)] + [("Source", x) for x in a.source])
         w.plan.insert(r, before=w.bolt(a.before) if a.before else None)
         return [a.bolt]
-    write(fleet, label, repo, change, f"plan({a.bolt}): add the bolt", act="bolt.new", on=[f"bolt/{a.bolt}"])
+    write(fleet, label, change, f"plan({a.bolt}): add the bolt", act="bolt.new", on=[f"bolt/{a.bolt}"])
 
 
 def held_by(plan, team):
@@ -709,11 +853,12 @@ def held_by(plan, team):
 
 def bolt_give(fleet, a):
     t = crew.team_of(fleet, a.team)
-    label, repo, kit = t["label"], t["blueprints"]["repo"], t["kit"]["name"]
+    label, kit = t["label"], t["kit"]["name"]
+    repo, ref = state_of(fleet, label)
     CONTEXT["label"] = label
-    tip = fetch(repo, f"plan/{label}")
-    tip or fail(f"{repo} has no plan/{label} yet: crew plan init {repo} {label}")
-    plan = read(repo, label, tip)
+    tip = fetch(repo, ref)
+    tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    plan = read(repo, ref, tip)
     held = held_by(plan, t["name"])
     if held:
         st = stages_for(fleet, plan, held)
@@ -735,7 +880,7 @@ def bolt_give(fleet, a):
             not b.get("Team") or fail(f"bolt {a.bolt} is held by {b.get('Team')}")
         else:
             free = [b for b in w.plan.bolts() if b.get("Repo") == kit and not b.get("Team")]
-            free or fail(f"plan/{label} has no planned bolt in {kit} for {t['name']}")
+            free or fail(f"{label}/main has no planned bolt in {kit} for {t['name']}")
             b = free[0]
         b.set("Team", t["name"])
         w.subject = f"plan({b.name()}): give to {t['name']}"
@@ -743,12 +888,13 @@ def bolt_give(fleet, a):
         seen["bolt"] = b.name()
         return [b.name()]
     seen = {}
-    sha = write(fleet, label, repo, change, "plan: give a bolt")
+    sha = write(fleet, label, change, "plan: give a bolt")
     b = seen["bolt"]
     path = f"{t['kit']['dir']}/bolts/{b}"
     make_place(fleet, t, path, f"bolt/{b}", base)
     print(f"{t['name']} holds {b}: bolt/{b} at {path} on {t['machine']}")
-    record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}")
+    record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
+                eid=CONTEXT["eid"])
     # A team takes a bolt only once its last one has landed or been dropped, so nothing is in flight: a conductor
     # or ops that is up starts again in the new bolt's worktree, with fresh context, before the conductor is greeted.
     up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
@@ -775,7 +921,7 @@ def bolt_order(fleet, a):
             w.plan.insert(b, before=o)
         return [a.bolt]
     where = "first" if a.first else "last" if a.last else f"before {a.before}"
-    write(fleet, label, repo, change, f"plan({a.bolt}): order the bolt {where}", act="bolt.order", on=[f"bolt/{a.bolt}"])
+    write(fleet, label, change, f"plan({a.bolt}): order the bolt {where}", act="bolt.order", on=[f"bolt/{a.bolt}"])
 
 
 def bolt_drop(fleet, a):
@@ -793,7 +939,7 @@ def bolt_drop(fleet, a):
                 w.on.append(f"unit/{u.name()}")
         w.plan.remove(b)
         return [a.bolt]
-    write(fleet, label, repo, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), a.reason,
+    write(fleet, label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), a.reason,
           act="bolt.drop", on=[f"bolt/{a.bolt}"])
 
 
@@ -832,7 +978,7 @@ def bolt_land(fleet, a):
             w.on.append(f"unit/{u.name()}")
         w.plan.remove(w.plan.bolt(a.bolt))
         return [a.bolt]
-    write(fleet, label, repo, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"])
+    write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"])
     said = host_run(fleet, t["machine"], DROP_BOLT, t["kit"]["main"], f"{t['kit']['dir']}/bolts/{a.bolt}", a.bolt)
     print(f"{a.bolt} has landed: its worktree is removed and {t['name']} holds no bolt" + (f". {said}" if said else ""))
 
@@ -851,12 +997,14 @@ def unit_add(fleet, a):
     name_free(fleet, label, kit, [a.unit])
     sources = list(a.source)
     if a.signal:
-        sources.insert(0, signal_source(fleet, label, repo, a.signal, a.unit))
+        sources.insert(0, f"signals/{a.signal}")
 
     def change(w):
-        w.plan.unit(a.unit) is None or fail(f"plan/{label} already has unit {a.unit}")
+        w.plan.unit(a.unit) is None or fail(f"{label}/main already has unit {a.unit}")
         if a.bolt:
             w.bolt(a.bolt)
+        if a.signal:  # its one move, route, in the same commit, checked again on each replay
+            move(fleet, label, w, a.signal, route_move(a.signal, a.unit))
         r = Rec("Unit", [("Unit", a.unit), ("Repo", kit)] + ([("Bolt", a.bolt)] if a.bolt else []) + [("Intent", a.intent)]
                 + [("After", x) for x in a.after] + [("Source", x) for x in sources])
         if a.before:
@@ -866,10 +1014,12 @@ def unit_add(fleet, a):
         else:
             w.plan.place_last(r)
         return [a.bolt] if a.bolt else []
-    write(fleet, label, repo, change, f"plan({a.bolt or 'queue'}): add {a.unit}", act="unit.add",
-          on=[f"unit/{a.unit}", f"bolt/{a.bolt}" if a.bolt else f"queue/{kit}"], frm=[f"signals/{a.signal}"] if a.signal else [])
+    sha = write(fleet, label, change, f"plan({a.bolt or 'queue'}): add {a.unit}", act="unit.add",
+                on=[f"unit/{a.unit}", f"bolt/{a.bolt}" if a.bolt else f"queue/{kit}"], frm=[f"signals/{a.signal}"] if a.signal else [])
     if a.signal:
-        route(fleet, label, a.signal, a.unit)
+        print(f"signal {a.signal} routed to unit/{a.unit}, in the same commit")
+        record.emit(label, "signal.move", [f"signals/{a.signal}", f"unit/{a.unit}"], commit=[f"{repo}@{sha}"],
+                    why=f"signals({a.signal}): route to unit/{a.unit}")
 
 
 def group_of(u):
@@ -895,14 +1045,14 @@ def unit_split(fleet, a):
         u.set("Intent", a.intent)
         prev = u
         for n, intent in a.into:
-            w.plan.unit(n) is None or fail(f"plan/{label} already has unit {n}")
+            w.plan.unit(n) is None or fail(f"{label}/main already has unit {n}")
             r = Rec("Unit", [("Unit", n), ("Repo", u.get("Repo"))] + ([("Bolt", u.get("Bolt"))] if u.get("Bolt") else [])
                     + [("Intent", intent)] + [("Source", x) for x in u.all("Source")])
             w.plan.insert(r, after=prev)
             prev = r
         return [u.get("Bolt")] if u.get("Bolt") else []
     bolt = plan.unit(a.unit).get("Bolt") or "queue"
-    write(fleet, label, repo, change, f"plan({bolt}): split {a.unit} into " + ", ".join(n for n, _ in a.into), act="unit.split",
+    write(fleet, label, change, f"plan({bolt}): split {a.unit} into " + ", ".join(n for n, _ in a.into), act="unit.split",
           on=[f"unit/{a.unit}"] + [f"unit/{n}" for n, _ in a.into], frm=[f"unit/{a.unit}"])
 
 
@@ -923,7 +1073,7 @@ def unit_order(fleet, a):
             w.plan.insert(u, before=o)
         return [u.get("Bolt")] if u.get("Bolt") else []
     where = "first" if a.first else "last" if a.last else f"before {a.before}"
-    write(fleet, label, repo, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): order {a.unit} {where}", act="unit.order",
+    write(fleet, label, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): order {a.unit} {where}", act="unit.order",
           on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
 
 
@@ -942,7 +1092,7 @@ def unit_after(fleet, a):
                 u.add("After", d, after="Intent")
         return [u.get("Bolt")] if u.get("Bolt") else []
     what = "after nothing" if a.none else "after " + ", ".join(a.deps)
-    write(fleet, label, repo, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): {a.unit} {what}", act="unit.after",
+    write(fleet, label, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): {a.unit} {what}", act="unit.after",
           on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
 
 
@@ -963,7 +1113,7 @@ def unit_move(fleet, a):
     src, to = u.get("Bolt"), None if a.bolt == "queue" else a.bolt
     to != src or fail(f"unit {a.unit} is already in {src or 'the queue'}")
     if to:
-        tb = plan.bolt(to) or fail(f"no bolt {to} in plan/{label} of {repo}")
+        tb = plan.bolt(to) or fail(f"no bolt {to} in {label}/main of {repo}")
         tb.get("Repo") == u.get("Repo") or fail(f"bolt {to} is in {tb.get('Repo')}; a unit moves only between bolts of its own repo, {u.get('Repo')}")
     s = unit_stage(fleet, plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"unit {a.unit} has merged into {src}, so it can't move")
@@ -993,7 +1143,7 @@ def unit_move(fleet, a):
         return [b for b in (src, to) if b]
     try:
         kit = u.get("Repo")
-        write(fleet, label, repo, change, f"plan({to or 'queue'}): move {a.unit} from {src or 'the queue'}", act="unit.move",
+        write(fleet, label, change, f"plan({to or 'queue'}): move {a.unit} from {src or 'the queue'}", act="unit.move",
               on=[f"unit/{a.unit}", f"bolt/{to}" if to else f"queue/{kit}"], frm=[f"bolt/{src}" if src else f"queue/{kit}"])
     except Refusal:
         if rebased:
@@ -1015,7 +1165,7 @@ def unit_drop(fleet, a):
                 o.fields = [(n, v) for n, v in o.fields if not (n == "After" and v == a.unit)]
         w.plan.remove(u)
         return [bolt] if bolt else []
-    write(fleet, label, repo, change, f"plan({bolt or 'queue'}): drop {a.unit}", a.reason, act="unit.drop",
+    write(fleet, label, change, f"plan({bolt or 'queue'}): drop {a.unit}", a.reason, act="unit.drop",
           on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
     team = fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
     if team:
@@ -1048,18 +1198,17 @@ def unit_approve(fleet, a):
 
 # -------------------------------------------------------------------------------------------------- signals
 
-def signal_source(fleet, label, repo, sig, unit):
-    """A signal's path as a unit's Source, checked before anything is written: the signal exists in the
-    partition's first blueprints repo, where its signals are, it has no move yet, and its route move would pass
-    recfix there."""
+def move(fleet, label, w, sig, rec):
+    """A signal's one move, appended to the flywheel's moves.rec in the write w: refused when the signal is missing
+    from the partition's first blueprints repo, where its signals are, or already has its move. recfix checks the
+    file before the commit, so a move the file's schema refuses writes nothing."""
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
     tip = fetch(srepo, "main") or fail(f"{srepo} has no main")
     show(srepo, tip, f"signals/{sig}.md") is not None or fail(f"no signal {sig} in {srepo}: signals/{sig}.md is not on main")
-    moves = show(srepo, tip, "signals/moves.rec")
-    moves is not None or fail(f"{srepo} has no signals/moves.rec on main")
+    moves = w.text("moves.rec")
+    moves is not None or fail(f"{label}/main of {w.repo} has no moves.rec: crew state init {label}")
     unmoved(moves, sig)
-    recfix(moves.rstrip("\n") + "\n\n" + "\n".join(route_move(sig, unit).lines()) + "\n", f"{srepo}'s signals/moves.rec")
-    return f"signals/{sig}" if srepo == repo else f"{srepo}:signals/{sig}"
+    w.replace("moves.rec", moves.rstrip("\n") + "\n\n" + "\n".join(rec.lines()) + "\n")
 
 
 def unmoved(text, sig):
@@ -1072,52 +1221,22 @@ def route_move(sig, unit):
                         ("Date", datetime.date.today().isoformat()), ("By", agent())])
 
 
-def append(repo, path, rec_lines, message, check=None):
-    """Append a record to a recutils file on main, by path, pushed without force and replayed on the new tip
-    when someone pushed first: never merged. check(text, tip) runs again on each tip."""
-    def make(tip):
-        tip or fail(f"{repo} has no main")
-        text = show(repo, tip, path)
-        text is not None or fail(f"{repo} has no {path} on main")
-        if check:
-            check(text, tip)
-        new = text.rstrip("\n") + "\n\n" + "\n".join(rec_lines) + "\n"
-        recfix(new, path)
-        return new, message
-    return land(repo, "main", path, make)
-
-
-def route(fleet, label, sig, unit):
-    """A signal's one move, route, targeting the unit it became, in signals/moves.rec."""
-    srepo = crew.partition_of(fleet, label)["blueprints"][0]
-    sha = append(srepo, "signals/moves.rec", route_move(sig, unit).lines(), f"signals({sig}): route to unit/{unit} ({agent()})\n",
-                 lambda text, tip: unmoved(text, sig))
-    print(f"{srepo} main {sha[:7]}: signal {sig} routed to unit/{unit}")
-    record.emit(label, "signal.move", [f"signals/{sig}", f"unit/{unit}"], commit=[f"{srepo}@{sha}"], why=f"signals({sig}): route to unit/{unit}")
-
-
 CURATION = ("attach", "challenge", "new-territory", "answered", "drop")
 
 
 def signal_move(fleet, a):
     """Curation's five moves, each written through crew the way the route is: one move per signal, appended to
-    signals/moves.rec in the partition's first blueprints repo, never merged."""
+    moves.rec on the flywheel's branch of its state repository, never merged."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
-    repo = crew.partition_of(fleet, label)["blueprints"][0]
     a.move not in ("attach", "challenge", "answered") or a.target or fail(
         f"a {a.move} move names its target (--target): the intent, claim or record it " + {"attach": "lands on", "challenge": "argues with", "answered": "was settled by"}[a.move])
     a.move != "drop" or a.reason or fail("a drop gives its reason (--reason)")
-
-    def present(text, tip):
-        show(repo, tip, f"signals/{a.signal}.md") is not None or fail(f"no signal {a.signal} in {repo}: signals/{a.signal}.md is not on main")
-        unmoved(text, a.signal)
     rec = Rec("Move", [("Signal", a.signal), ("Move", a.move)] + ([("Target", a.target)] if a.target else [])
               + ([("Reason", a.reason)] if a.reason else []) + [("Date", datetime.date.today().isoformat()), ("By", agent())])
-    sha = append(repo, "signals/moves.rec", rec.lines(), f"signals({a.signal}): {a.move} ({agent()})\n", present)
-    print(f"{repo} main {sha[:7]}: signal {a.signal} moved: {a.move}")
     # A target is a pointer, a typed name such as unit/<unit> or a path; anything else could be typed text.
     target = [a.target] if a.target and re.fullmatch(r"[a-z]+/[^\s]+", a.target) else []
-    record.emit(label, "signal.move", [f"signals/{a.signal}"] + target, commit=[f"{repo}@{sha}"], why=f"signals({a.signal}): {a.move}")
+    write(fleet, label, lambda w: move(fleet, label, w, a.signal, rec), f"signals({a.signal}): {a.move}",
+          act="signal.move", on=[f"signals/{a.signal}"] + target)
 
 
 def signal(fleet, a):
@@ -1172,7 +1291,7 @@ def in_plan(fleet, a):
     labels = [a.label] if a.label else list(fleet["partitions"])
     hits = [h for h in plans(fleet, labels, errors) if h[3] and h[3].unit(a.unit)]
     if hits:
-        print(f"unit {a.unit} is in plan/{hits[0][0]} of {hits[0][1]}")
+        print(f"unit {a.unit} is in {hits[0][0]}/main of {hits[0][1]}")
         return
     not errors or fail(f"can't tell whether unit {a.unit} is still planned: "
                        + "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()))
@@ -1217,8 +1336,9 @@ def run_check(fleet, a):
 
 def bolt_of_team(fleet, a):
     t = crew.team_of(fleet, a.team)
-    tip = fetch(t["blueprints"]["repo"], f"plan/{t['label']}") or fail(f"{t['blueprints']['repo']} has no plan/{t['label']} yet")
-    held = held_by(read(t["blueprints"]["repo"], t["label"], tip), t["name"])
+    repo, ref = state_of(fleet, t["label"])
+    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
+    held = held_by(read(repo, ref, tip), t["name"])
     held or fail(f"{t['name']} holds no bolt: crew bolt give {t['name']}")
     print(sh(BOLT=held[0].name()))
 
@@ -1355,9 +1475,9 @@ def bolts_view(fleet, a):
     for p in data["partitions"]:
         for pl in p["plans"]:
             if not pl["plan"]:
-                lines.append(f"plan/{p['label']}  {pl['repo']}  not started: crew plan init {pl['repo']} {p['label']}")
+                lines.append(f"{p['label']}/main  {pl['repo']}  not started: crew state init {p['label']}")
                 continue
-            lines.append(f"plan/{p['label']} {pl['plan'][:7]}  {pl['repo']}")
+            lines.append(f"{p['label']}/main {pl['plan'][:7]}  {pl['repo']}")
             for b in pl["bolts"]:
                 who = f"{b['team']} @ {b['host']}" if b["team"] else "no team"
                 lines.append(f"{b['bolt']}  {b['repo']}  {who}  {b['state']}")
@@ -1384,9 +1504,8 @@ def bolts_view(fleet, a):
 def parser():
     ap = argparse.ArgumentParser(prog="crew", add_help=False)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pl = sub.add_parser("plan").add_subparsers(dest="sub", required=True)
-    i = pl.add_parser("init")
-    i.add_argument("blueprints")
+    st = sub.add_parser("state").add_subparsers(dest="sub", required=True)
+    i = st.add_parser("init")
     i.add_argument("label")
 
     v = sub.add_parser("bolts")
@@ -1505,7 +1624,7 @@ def parser():
 
 
 COMMANDS = {
-    ("plan", "init"): init, ("bolts", None): bolts_view,
+    ("state", "init"): state_init, ("bolts", None): bolts_view,
     ("bolt", "new"): bolt_new, ("bolt", "give"): bolt_give, ("bolt", "order"): bolt_order, ("bolt", "drop"): bolt_drop,
     ("bolt", "land"): bolt_land,
     ("unit", "add"): unit_add, ("unit", "split"): unit_split, ("unit", "order"): unit_order, ("unit", "after"): unit_after,
@@ -1516,7 +1635,7 @@ COMMANDS = {
 }
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
-    ("plan", "init"): "plan.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
+    ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
     ("bolt", "drop"): "bolt.drop", ("bolt", "land"): "bolt.land", ("unit", "add"): "unit.add", ("unit", "split"): "unit.split",
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
     ("unit", "approve"): "unit.approve", ("signal", None): "capture", ("signal-move", None): "signal.move",
@@ -1535,7 +1654,7 @@ def named(a):
         out.append(f"team/{a.team}")
     if a.cmd == "signal-move":
         out.append(f"signals/{a.signal}")
-    if a.cmd == "plan":
+    if a.cmd == "state":
         out.append(f"plan/{a.label}")
     return out
 

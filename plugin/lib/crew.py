@@ -117,6 +117,13 @@ def load():
         blueprints = need(p, what, "blueprints", list)
         for b in blueprints:
             isinstance(b, str) and re.match(r"^[^/\s]+/[^/\s]+$", b) or fail(f"{what}: a blueprints repo is GitHub owner/name, not {json.dumps(b)}")
+        # Where the flywheel's plan, moves and run record live: a branch <label>/main of this repository. Never a
+        # default: a file without it predates state repositories and is regenerated, not guessed at.
+        p.get("state") not in (None, "") or fail(
+            f"{what} in {TEAMS} names no state repository ('state'): regenerate {TEAMS} from the machine's configuration "
+            f"(swancloud's lib/crew-teams.nix), which gives every partition one")
+        isinstance(p["state"], str) and re.match(r"^[^/\s]+/[^/\s]+$", p["state"]) or fail(
+            f"{what}: 'state' is its state repository as GitHub owner/name, not {json.dumps(p['state'])}")
         host, sess = session_of(hosts, f"{what}'s main level", machine, session)
         if sess.get("partition") != name:
             fail(f"{what}'s main level runs in {machine}'s session {session}, which is in partition {sess.get('partition')}, not {name}")
@@ -413,7 +420,7 @@ def team_tokens(fleet, t, role, self_name):
         "SELF": self_name or {"conductor": f"{n}-conductor", "ops": f"{n}-ops"}.get(role, f"{n}-unit-<n>"),
         "OPERATORS": ", ".join(f"`{label}-operator-{h}`" for h, v in sorted(fleet["hosts"].items()) if label in v.get("sessions", {})) or "none",
         "TEAM": n, "SYSTEM": t["system"], "LABEL": label, "KIT": kit["main"], "KIT_NAME": kit["name"], "KIT_DIR": kit["dir"],
-        "BLUEPRINTS": bp["main"], "BLUEPRINTS_NAME": bp["name"], "BLUEPRINTS_REPO": bp["repo"], "SIGNALS_REPO": p["blueprints"][0],
+        "BLUEPRINTS": bp["main"], "BLUEPRINTS_NAME": bp["name"], "BLUEPRINTS_REPO": bp["repo"], "SIGNALS_REPO": p["blueprints"][0], "STATE_REPO": p["state"],
         "CONDUCTOR": f"{n}-conductor", "OPS": f"{n}-ops", "UNITS": str(t["units"]), "SLOTS": ", ".join(slots),
         "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
         "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
@@ -445,7 +452,7 @@ def main_tokens(fleet, p, role, self_name):
     tok = {
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
-        "PLANS": ", ".join(f"`plan/{label}` of {b}" for b in p["blueprints"]),
+        "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"],
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",

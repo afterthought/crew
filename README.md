@@ -39,10 +39,23 @@ crew unit  after <unit> <unit>...|--none
 crew unit  move <unit> <bolt>|queue
 crew unit  drop <unit> "<reason>"
 crew unit  approve <unit>
-crew plan  init <blueprints> <label>
 ```
 
-Each partition keeps one recutils `plan.rec` per blueprints repo, alone on its `plan/<label>` branch. It holds only intent: Bolt and Unit records, in build order. Every stage is read from the kits, one call per host. A write fetches the branch over https into crew's bare cache of the repo (`~/.cache/crew/git/<owner>/<name>.git`), applies itself to the tip, checks the result with `recfix --check` and crew's rules, commits through a temporary index, and pushes without force; a push refused because someone wrote first is applied again to the new tip, up to five times. Nothing is ever merged. A write that touches a bolt a team holds sends that team's conductor the commit's subject.
+Each partition keeps one recutils `plan.rec`, for all its kits, on its flywheel's branch of its state repository (see State). It holds only intent: Bolt and Unit records, in build order. A Source is a path in the partition's first blueprints repo, or `<owner>/<name>:<path>` in another. Every stage is read from the kits, one call per host. A write fetches the branch over https into crew's bare cache of the repo (`~/.cache/crew/git/<owner>/<name>.git`), applies itself to the tip, checks each file it changed with `recfix --check` and the plan with crew's rules, commits through a temporary index, and pushes without force; a push refused because someone wrote first is applied again to the new tip, up to five times. Nothing is ever merged. A write that touches a bolt a team holds sends that team's conductor the commit's subject.
+
+## State
+
+```
+crew state init <label>
+```
+
+A partition's **flywheel** is its loop, named by its label. Its state is the files on one branch, `<label>/main`, of the state repository the teams file names for it (`state`, one per organisation, such as `WilldanGroup/crew-state`), apart from the design:
+
+- `plan.rec`, the plan;
+- `moves.rec`, every signal's one move;
+- `runs/<host>/<YYYY-MM-DD>.rec`, the run record each host has carried.
+
+Flywheels sharing a repository never meet: each command fetches and pushes only its own flywheel's branch, and no branch shares history with another. A write that changes several files is one commit, and its message ends with a `Crew-Entry:` trailer naming the run-record entry that describes it. `crew state init <label>` creates the branch: it adopts the first blueprints repo's `plan/<label>` with its history where there is one, joins another blueprints repo's `plan/<label>` in one commit naming where it came from, and copies the first blueprints repo's `signals/moves.rec`; run again, it finishes what a stopped run left, or says the branch exists. A clone of the branch reads with `recsel` and nothing else.
 
 ## Signals
 
@@ -51,7 +64,7 @@ crew signal <slug> "<what it asserts>" [--kind K] [--subject a,b] [--excerpt "<t
 crew signal move <id> attach|challenge|new-territory|answered|drop [--target T] [--reason R]
 ```
 
-Signals are in the partition's first blueprints repo, in the shape its `signals/README.md` gives. A finding is recorded with `crew signal`; curation's moves with `crew signal move`; and a signal becomes work only through its `route` move, written by `crew unit add --signal`. Every one is written by its own paths on that repo's main, the plan's way, and never merged.
+Signals are in the partition's first blueprints repo, in the shape its `signals/README.md` gives. A finding is recorded with `crew signal`, by its own paths on that repo's main. Curation's moves, `crew signal move`, are appended to `moves.rec` on the flywheel's branch, and a signal becomes work only through its `route` move, which `crew unit add --signal` writes in the same commit as the unit. Each signal has one move, and nothing is ever merged.
 
 ## The main level and the operator agent
 
@@ -71,6 +84,7 @@ A herdr server that restarts resumes each agent in its saved pane folder, which 
 
 ```
 crew events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
+crew events --push [--label L]
 crew trace  <object>
 crew unit wait <unit> [--timeout <ms>]
 ```
@@ -87,7 +101,7 @@ Every crew command that moves work appends one entry per act, after the act, to 
 
 No entry holds text anyone typed: not a tell's text, an intent, a goal, a reason or an excerpt. A read writes nothing, and a record that can't be written is said on standard error and changes nothing about the command. `recsel -t Entry` reads the files with no crew involved.
 
-`crew events` gathers the entries of every host the partition runs on (its teams', its main level's and its operator sessions'), one call per host, and prints them in time order, naming a host that does not answer; `--follow` prints them as they are written, and the operator workspace's `flow` tab runs it. `crew trace <object>` prints one bolt's, unit's or signal's history from the entries alone: what was done, by whom, with which commit, what it came from and what came from it, each line with the `zoe <session>` to open on its host. A bare name is tried as a unit, then a bolt, then a signal. `crew unit wait <unit>` waits on the team's host for the unit's stage agent to settle and records the stage's end; an end nobody waited for is recorded, once and marked late, the next time crew reads the team.
+Every write to the flywheel's branch also carries the host's uncarried entries there, to `runs/<host>/`: each day's file on the branch becomes the union by `Id` of what it had and what the host has, so a host only ever adds to its own files, and one that is asleep or rebuilt loses nothing it had carried. `crew events --push` carries in a commit of its own, and makes none when nothing is left. `crew events` reads the branch, then gathers what every host the partition runs on (its teams', its main level's and its operator sessions') has not yet carried, one call per host, and prints them in time order, naming a host that does not answer, whose entries are shown as far as it had carried them; `--follow` prints them as they are written, and the operator workspace's `flow` tab runs it. `crew trace <object>` prints one bolt's, unit's or signal's history from the entries alone: what was done, by whom, with which commit, what it came from and what came from it, each line with the `zoe <session>` to open on its host. A bare name is tried as a unit, then a bolt, then a signal. `crew unit wait <unit>` waits on the team's host for the unit's stage agent to settle and records the stage's end; an end nobody waited for is recorded, once and marked late, the next time crew reads the team.
 
 ## Roles
 

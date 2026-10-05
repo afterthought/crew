@@ -2,10 +2,11 @@
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
+ws=$(remote WilldanGroup/crew-state)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
-crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null
+crew state init wldn >/dev/null
 export CREW_AGENT=wldn-planner
-plan() { git --git-dir "$wb" show plan/wldn:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
+plan() { git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 crew bolt new console-pages "The console lists them." --repo switchboard-kit >/dev/null
 crew bolt new apex-zones "Apexes are zones." --repo switchboard-kit >/dev/null
@@ -19,7 +20,7 @@ has "$out" "plan(tenant-environments): add d (wldn-planner)"
 eq "$(plan -t Unit -P Unit)" $'a\nd\nb\nc'
 change "$k" taken; commit_all "$k" "feat: taken"
 expect_fail "switchboard-kit's main already has a change named taken" crew unit add taken "x" --bolt tenant-environments
-expect_fail "plan/wldn already has unit a" crew unit add a "again" --bolt tenant-environments
+expect_fail "wldn/main already has unit a" crew unit add a "again" --bolt tenant-environments
 expect_ok crew unit add later "Later work." --repo switchboard-kit
 eq "$(plan -t Unit -e "Unit = 'later'" -P Bolt)" ""
 ok "add puts a unit at the end of its bolt or before a named one, or in its repo's queue"
@@ -102,6 +103,6 @@ crew unit after later e >/dev/null 2>&1
 expect_ok crew unit drop d "the portal shows them; no console page is wanted"
 has "$out" "$kd/places/d and unit/d are removed; the branch was at"
 [[ ! -d $kd/places/d ]] || fail "d's worktree is still there"
-eq "$(git --git-dir "$wb" log -1 --format=%b plan/wldn)" "the portal shows them; no console page is wanted"
+eq "$(git --git-dir "$ws" log -1 --format=%b wldn/main | head -1)" "the portal shows them; no console page is wanted"
 eq "$(plan -t Unit -e "Unit = 'd'" -c)" "0"
 ok "drop removes a unit with the reason in the commit, and its worktree and branch, and refuses merged work"

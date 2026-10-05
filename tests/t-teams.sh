@@ -42,6 +42,16 @@ expect_fail "still has 'coders'" crewpy teams
 world_teams
 ok "a missing or retired field is an error"
 
+edit teams "del $(part wldn)['state']"
+expect_fail "partition wldn in" crewpy teams
+has "$out" "names no state repository ('state')"; has "$out" "swancloud's lib/crew-teams.nix"
+world_teams
+edit teams "$(part madswan)['state'] = 'crew-state'"
+expect_fail "partition madswan: 'state' is its state repository as GitHub owner/name, not \"crew-state\"" crewpy teams
+world_teams
+expect_ok crewpy teams
+ok "a partition without a state repository, or with one not named owner/name, is refused, naming the fix"
+
 # A team in a clients/willdan session naming afterthought's blueprints: refused, naming wldn's blueprints repos.
 edit hosts "d['hosts']['mac-studio']['sessions']['wldn-5']['repos'].append('afterthought/blueprints')"
 edit teams "$(team atl-1)['repos'] = ['atlas-kit', 'blueprints']"
