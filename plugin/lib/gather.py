@@ -7,9 +7,9 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
 for each bolt whether bolt/<bolt> exists, the changes it holds and its worktree; each place under <dir>/places
-with its branch, its change's tasks, whether its planning is complete and whether it has a review since the bolt;
-and each fix branched from a bolt. It reads with git and openspec only, and changes nothing. It needs nothing
-but python3's standard library, since it is sent to hosts whose crew may be older."""
+with its branch and head, its change's tasks, whether its planning is complete and whether it has a review since
+the bolt; and each fix branched from a bolt. It reads with git and openspec only, and changes nothing. It needs
+nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
 import json, os, re, subprocess, sys
 
 
@@ -60,8 +60,9 @@ def upstreams(main):
 
 
 def place(path, unit, bolt):
-    """A unit's place: its change's tasks, whether its planning is complete, the open tasks, and its review."""
-    info = {"path": path, "tasks": None, "planning": False, "reviewed": False, "open": []}
+    """A unit's place: its head, its change's tasks, whether its planning is complete, the open tasks, and its review."""
+    info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None, "tasks": None,
+            "planning": False, "reviewed": False, "open": []}
     listed = run(["openspec", "list", "--json"], path)
     if listed:
         for c in json.loads(listed).get("changes", []):

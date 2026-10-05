@@ -71,7 +71,7 @@ HEADER = """\
 %type: Unit regexp /^[a-z0-9][a-z0-9-]*$/
 %type: Bolt rec Bolt
 %mandatory: Repo Intent
-%allowed: Unit Repo Bolt Intent After Source
+%allowed: Unit Repo Bolt Intent After Source Amended
 %unique: Repo Bolt Intent
 """
 MOVES = """\
@@ -250,6 +250,23 @@ def recfix(text, what):
             fail(f"{what} fails recfix --check: " + (r.stderr or r.stdout).strip().replace(str(f), pathlib.Path(what).name))
 
 
+def declares(p):
+    """The record set a paragraph of the plan declares, or None for a record or a comment."""
+    return None if isinstance(p, Rec) else next((l[5:].split()[0] for l in p if l.startswith("%rec:")), None)
+
+
+def in_step(plan):
+    """Bring each record descriptor of a plan in step with crew's own (HEADER), so a branch started before a field was
+    allowed takes it on its next write. Returns whether any changed."""
+    want = {declares(p): p for p in Plan(HEADER).paras if declares(p)}
+    changed = False
+    for i, p in enumerate(plan.paras):
+        k = declares(p)
+        if k in want and p != want[k]:
+            plan.paras[i], changed = list(want[k]), True
+    return changed
+
+
 def check(plan):
     """crew's own rules, which recfix cannot check: a unit's bolt exists in the same repo, and its After names
     units of the same bolt, with no cycle."""
@@ -425,10 +442,11 @@ def carried(label, repo, tip, files):
 
 
 def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
-    """Apply change(Write) to the tip of the flywheel's branch, check every file it changed, commit them with the
-    host's uncarried run record, and push, replaying on a refused push. change returns the bolts it touched; each
-    one's conductor is told the subject, unless it wrote it. The commit names its run-record entry; with act, that
-    entry is written once pushed, naming on and frm and whatever the change added to them. Returns the commit."""
+    """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
+    with crew's, check every file it changed, commit them with the host's uncarried run record, and push, replaying on
+    a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
+    The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
+    the change added to them. Returns the commit."""
     repo, ref = state_of(fleet, label)
     seen = {"eid": record.new_id()}
     CONTEXT.update(label=label, eid=seen["eid"])
@@ -436,6 +454,7 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
     def make(tip):
         tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
         w = Write(repo, label, tip, read(repo, ref, tip))
+        in_step(w.plan)
         before = w.plan.teams()
         touched = change(w) or []
         check(w.plan)
@@ -503,8 +522,8 @@ def carry_now(fleet, label):
 def state_init(fleet, a):
     """Create the flywheel's branch, adopting what the partition had: the first blueprints repo's plan/<label> is
     pushed as the branch, so the plan's history is the branch's, else the branch starts with an empty plan; each other
-    blueprints repo's plan/<label> is joined in one commit naming where it came from; then moves.rec, with the first
-    blueprints repo's moves. Every step is its own push and first checks whether the branch already shows it, so a
+    blueprints repo's plan/<label> is joined in one commit naming where it came from; the plan's record descriptors are
+    brought in step with crew's; then moves.rec, with the first blueprints repo's moves. Every step is its own push and first checks whether the branch already shows it, so a
     run that stopped partway is finished by running it again, and a finished branch is only reported."""
     p = crew.partition_of(fleet, a.label)
     label = p["label"]
@@ -554,6 +573,13 @@ def state_init(fleet, a):
             files["plan.rec"] = have.text()
         tip = init_step(repo, ref, label, f"state({label}): {mark}", join)
         did.append(f"joined plan/{label} of {bp} at {t[:7]}")
+    if in_step(read(repo, ref, tip)):
+        def step(w_tip, files):
+            have = read(repo, ref, w_tip)
+            in_step(have)
+            files["plan.rec"] = have.text()
+        tip = init_step(repo, ref, label, f"state({label}): the plan's record descriptors in step with crew's", step)
+        did.append("brought the plan's record descriptors in step with crew's")
     if show(repo, tip, "moves.rec") is None:
         src = p["blueprints"][0]
         st = fetch(src, "main")
@@ -618,10 +644,29 @@ def survey(fleet, held, sites=False):
     return out
 
 
+def amended(mark):
+    """Whether a unit's Amended mark waits for construct to be run again: proposal/<n> or intent. Any other mark is
+    the head of unit/<unit> when construct started again."""
+    return mark == "intent" or (mark or "").startswith("proposal/")
+
+
+def place_stage(pl, mark=None):
+    """The stage of a unit that has neither landed nor merged, from its place and its Amended mark. A marked unit is
+    amended until construct runs again, in construct while its head is still where construct started, and in review
+    once it has moved, whatever its tasks say. Otherwise: verify, code, approved, review or construct, from its tasks,
+    its planning and its review."""
+    if mark:
+        return "amended" if amended(mark) else "construct" if not pl or pl.get("head") == mark else "review"
+    done, total = pl["tasks"] or (0, 0)
+    return ("verify" if total and done == total else "code" if done else
+            "approved" if pl["planning"] and pl["reviewed"] else "review" if pl["planning"] else "construct")
+
+
 class Stages:
     """Each unit's stage, read from its kit on its team's host. The first rule that holds is the stage:
-    landed, merged, verify, code, approved, review, construct, then ready or waiting by its After units; a unit
-    with no bolt is queued, and one whose host does not answer is unknown."""
+    landed, merged, then amended, construct or review for a unit the plan marks amended, then verify, code, approved,
+    review, construct, then ready or waiting by its After units; a unit with no bolt is queued, and one whose host
+    does not answer is unknown."""
 
     def __init__(self, fleet, plan, survey):
         self.fleet, self.plan, self.survey, self.memo = fleet, plan, survey, {}
@@ -655,26 +700,17 @@ class Stages:
                 res["why"] = why
                 return res
             pl = k["places"].get(name)
-            res["worktree"] = pl["path"] if pl else None
+            res["worktree"], res["head"] = (pl["path"], pl.get("head")) if pl else (None, None)
             if name in k["main"]:
                 res["stage"] = "landed"
                 return res
             if name in k["bolts"].get(b, {}).get("changes", []):
                 res["stage"] = "merged"
                 return res
-            if pl:
-                done, total = pl["tasks"] or (0, 0)
-                res.update(tasks=pl["tasks"], open=pl["open"])
-                if total and done == total:
-                    res["stage"] = "verify"
-                elif done:
-                    res["stage"] = "code"
-                elif pl["planning"] and pl["reviewed"]:
-                    res["stage"] = "approved"
-                elif pl["planning"]:
-                    res["stage"] = "review"
-                else:
-                    res["stage"] = "construct"
+            if pl or u.get("Amended"):
+                if pl:
+                    res.update(tasks=pl["tasks"], open=pl["open"])
+                res["stage"] = place_stage(pl, u.get("Amended"))
                 return res
         deps = [self.of(a)["stage"] for a in u.all("After")]
         res["stage"] = "unknown" if "unknown" in deps else ("ready" if all(d in ("merged", "landed") for d in deps) else "waiting")
@@ -2039,15 +2075,28 @@ def place_cmd(fleet, a):
     make_place(fleet, crew.team_of(fleet, a.team), a.path, a.branch, a.base, track=True)
 
 
+def marks_of(fleet, label):
+    """Each unit the label's plan marks amended, {unit: mark}; none when the plan can't be read, so a team's slots are
+    still read from the kit."""
+    try:
+        repo, ref = state_of(fleet, label)
+        tip = fetch(repo, ref)
+        plan = read(repo, ref, tip) if tip else None
+    except Refusal:
+        return {}
+    return {u.name(): u.get("Amended") for u in plan.units() if u.get("Amended")} if plan else {}
+
+
 def slot_stages(fleet, t):
     """Each slot of the team on this host that holds a unit or fix: what it holds and that work's stage, read from the
-    kit alone, with its tasks done and total where its change has a task list."""
+    kit and the plan's Amended marks, with its tasks done and total where its change has a task list."""
     path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
     held = [l.split() for l in (path.read_text().splitlines() if path.exists() else []) if l.strip()]
     if not held:
         return []
     k = survey(fleet, [(t["name"], None)]).get(t["machine"], {})
     kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
+    marks = marks_of(fleet, t["label"]) if any(kind == "unit" for _, kind, *_ in held) else {}
     out = []
     for slot, kind, name, place in held:
         stage, counts = "unknown", None
@@ -2061,10 +2110,8 @@ def slot_stages(fleet, t):
             elif pl and pl["bolt"] and name in kit["bolts"].get(pl["bolt"], {}).get("changes", []):
                 stage = "merged"
             elif pl:
-                done, total = pl["tasks"] or (0, 0)
-                stage = ("verify" if total and done == total else "code" if done else
-                         "approved" if pl["planning"] and pl["reviewed"] else "review" if pl["planning"] else "construct")
-                counts = f"{done}/{total}" if pl["tasks"] else None
+                stage = place_stage(pl, marks.get(name))
+                counts = "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None
             else:
                 stage = "none"
         out.append(dict(slot=slot, kind=kind, name=name, stage=stage, counts=counts, place=place))
@@ -2072,7 +2119,7 @@ def slot_stages(fleet, t):
 
 
 def slots_cmd(fleet, a):
-    """Each slot of the team on this host: what it holds and that work's stage, read from the kit alone."""
+    """Each slot of the team on this host: what it holds and that work's stage, read from the kit and the plan's marks."""
     for s in slot_stages(fleet, crew.team_of(fleet, a.team)):
         tasks = s["counts"] if s["counts"] and s["stage"] in ("code", "verify") else "-"
         print(s["slot"], s["kind"], s["name"], s["stage"], tasks, s["place"])

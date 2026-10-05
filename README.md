@@ -43,6 +43,8 @@ crew unit  approve <unit>
 
 Each partition keeps one recutils `plan.rec`, for all its kits, on its flywheel's branch of its state repository (see State). It holds only intent: Bolt and Unit records, in build order. A Source is a path in the partition's first blueprints repo, or `<owner>/<name>:<path>` in another. Every stage is read from the kits, one call per host. A write fetches the branch over https into crew's bare cache of the repo (`~/.cache/crew/git/<owner>/<name>.git`), applies itself to the tip, checks each file it changed with `recfix --check` and the plan with crew's rules, commits through a temporary index, and pushes without force; a push refused because someone wrote first is applied again to the new tip, up to five times. Nothing is ever merged. A write that touches a bolt a team holds sends that team's conductor the commit's subject.
 
+A unit's stage, as `crew bolts` shows it and `--json` gives it in `stage`, is the first that holds of `landed` (main has its change), `merged` (its bolt has it), `verify` (every task ticked), `code` (some ticked), `approved` (its planning complete and approved since the bolt), `review` (its planning complete), `construct` (its worktree exists), and `ready` or `waiting` by its `After` units; a unit with no bolt is `queued`. A unit the plan marks `Amended` reads, after `landed` and `merged`, `amended` until construct is run again, then `construct` until that commits, then `review`, whatever its tasks say, so a change written again is reviewed again before it is built. `crew unit approve` clears the mark.
+
 ## Proposals
 
 ```

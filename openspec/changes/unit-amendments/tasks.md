@@ -2,9 +2,9 @@
 
 ## 1. The mark and the stage
 
-- [ ] 1.1 Add `Amended` to the Unit schema's `%allowed` in `plan.py`'s header, and have `crew state init` and every plan write keep an existing branch's descriptor in step with it. Verify `recfix --check` passes on a plan holding a unit with `Amended: proposal/4`, and that a plan from before the change still reads.
-- [ ] 1.2 `Stages.of`: after `landed` and `merged`, a marked unit reads `amended` for `proposal/<n>` or `intent`, `construct` while the unit branch's head equals a marked sha, and `review` once it differs; unmarked units read as today. Verify with a fixture kit: a unit with ticked tasks and each of the three mark states, and an unmarked unit at every existing stage.
-- [ ] 1.3 `crew bolts` prints `amended`, and `--json` carries it. Document the stage in `README.md`'s plan section. Verify with the fixture.
+- [x] 1.1 Add `Amended` to the Unit schema's `%allowed` in `plan.py`'s header, and have `crew state init` and every plan write keep an existing branch's descriptor in step with it. Verify `recfix --check` passes on a plan holding a unit with `Amended: proposal/4`, and that a plan from before the change still reads.
+- [x] 1.2 `Stages.of`: after `landed` and `merged`, a marked unit reads `amended` for `proposal/<n>` or `intent`, `construct` while the unit branch's head equals a marked sha, and `review` once it differs; unmarked units read as today. Verify with a fixture kit: a unit with ticked tasks and each of the three mark states, and an unmarked unit at every existing stage.
+- [x] 1.3 `crew bolts` prints `amended`, and `--json` carries it. Document the stage in `README.md`'s plan section. Verify with the fixture.
 
 ## 2. Construct again
 
