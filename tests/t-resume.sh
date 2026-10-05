@@ -1,7 +1,7 @@
 # A role resumes its last conversation in the folder that conversation began in, which, since a conductor moves into
 # its bolt's worktree, need not be where it starts today; a last session never spoken to starts fresh. The pane's own
 # shell moves to the role's folder, which is the folder herdr saves and resumes the agent in after a restart.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn

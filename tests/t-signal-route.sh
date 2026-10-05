@@ -1,7 +1,7 @@
 # crew unit add --signal: the unit's source is the signal, and the signal's one move, route, goes in the same commit
 # on the flywheel's branch: moves.rec beside plan.rec, checked on every replay. The signal itself stays in the
 # partition's first blueprints repo, which nothing here writes.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 ws=$(remote WilldanGroup/crew-state)

@@ -1,6 +1,6 @@
 # The merge stage runs wt merge bolt/<bolt> --no-squash --no-remove from the unit's place. Once the bolt holds
 # the change, crew removes the place and frees the slot: the unit reads merged.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
 box=chuck-herdr-alpha

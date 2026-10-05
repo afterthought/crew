@@ -2,7 +2,7 @@
 # real devurl and found among the routes of a real portless proxy. The proxy is one of the test's own, with its
 # own state directory on an unprivileged port, so the user's proxy is never touched; it is stopped at the end.
 # Opt in with CREW_TEST_LIVE=1, on mac-studio.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 if [[ ${CREW_TEST_LIVE:-} != 1 ]]; then echo "skipped: run with CREW_TEST_LIVE=1 on mac-studio"; exit 0; fi
 [[ $(/bin/hostname -s) == mac-studio ]] || fail "the live sites test runs on mac-studio"
 for c in devurl devurl-serve portless; do command -v $c >/dev/null || fail "the live sites test needs $c"; done

@@ -2,7 +2,7 @@
 # uncarried entries to runs/<host>/ on the branch in the same commit; crew events --push carries on its own, and
 # makes no commit when there is nothing to carry. crew events and crew trace read the branch, then each host they
 # reach, so a host that is down is shown as far as it had carried, and a host that lost its record keeps it there.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 box=chuck-herdr-alpha
 wb=$(blueprints WilldanGroup/willdan-blueprints); ws=$(remote WilldanGroup/crew-state)

@@ -2,7 +2,7 @@
 # partition had: the first blueprints repo's plan/<label>, history and all; another blueprints repo's plan, joined in
 # one commit naming where it came from; and the first blueprints repo's moves. Run again, it writes nothing; stopped
 # partway, it is finished by running it again.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints); ab=$(blueprints afterthought/blueprints); gb=$(blueprints agentplot/blueprints)
 ws=$(remote WilldanGroup/crew-state); as=$(remote afterthought/crew-state)

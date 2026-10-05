@@ -1,6 +1,6 @@
 # crew bolt new|give|order|drop|land: give makes bolt/<bolt> from main and <kit>/bolts/<bolt> on the team's
 # host, and every refusal the bolt-plan spec names.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 ws=$(remote WilldanGroup/crew-state)

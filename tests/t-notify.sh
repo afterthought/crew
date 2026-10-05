@@ -1,5 +1,5 @@
 # A write to an active bolt by anyone other than its conductor sends that conductor the commit's subject.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
 kit chuck-herdr-alpha willdan switchboard-kit >/dev/null

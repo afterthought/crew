@@ -1,7 +1,7 @@
 # A finding written as a signal in the partition's first blueprints repo, by path on main, pushed and replayed
 # when main moved; and every move, curation's and the route, written through crew to moves.rec on the flywheel's
 # branch of its state repository, never merged.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 ws=$(remote WilldanGroup/crew-state)

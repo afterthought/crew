@@ -1,7 +1,7 @@
 # A dropped unit leaves nothing behind: crew unit drop frees its slot and removes its worktree and branch. A slot still
 # holding a unit the plan no longer has, because its agent was working when the unit was dropped, is freed with
 # crew unit free, which refuses a unit still in the plan and a worktree with uncommitted changes.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
