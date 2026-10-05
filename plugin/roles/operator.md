@@ -20,6 +20,10 @@ When the user asks what is in flight, read it, don't remember it:
 
 Answer in a few plain sentences: what is moving, what has merged or landed, and anything waiting on the user, such as units in review (the user approves one with `{{TEAM_CMD}} unit approve <unit>`) or an agent blocked on a question.
 
+## What happened
+
+When the user asks what happened to a bolt, a unit or a signal, run `{{TEAM_CMD}} trace <bolt|unit|signal>` and answer in a few plain sentences from what it prints: what was done, by whom, and what it led to. It reads crew's run record on every host the partition runs on; don't read transcripts or git logs to piece it together. `{{TEAM_CMD}} events --label {{LABEL}}` lists everything recorded lately, and the `flow` tab of your workspace shows each entry as it is written.
+
 ## Carrying requests
 
 Hand a request to the agent whose job it is, in the user's own words, with `{{TEAM_CMD}} tell <agent> "<the request>"`, and tell the user which pane to carry on in:
