@@ -35,7 +35,7 @@ ok "a signal that is missing or already moved is refused, and the plan left as i
 
 # A moves.rec whose Move enum has no route refuses the unit too: the commit holds both files or neither.
 s=$T/state; git clone -q -b wldn/main "$ws" "$s"
-sed -i '' 's/ drop route$/ drop/' "$s/moves.rec"; commit_all "$s" "moves: no route yet"; git -C "$s" push -q origin wldn/main
+rewrite "$s/moves.rec" 's/ drop route$/ drop/'; commit_all "$s" "moves: no route yet"; git -C "$s" push -q origin wldn/main
 mkdir -p "$w/signals/2026-09-10-x"; printf -- '---\nsignal: 2026-09-10-x/01-y\n---\n' > "$w/signals/2026-09-10-x/01-y.md"
 commit_all "$w" "signals: another"; git -C "$w" push -q origin main
 expect_fail "moves.rec fails recfix --check" crew unit add unroutable "Unroutable." --repo switchboard-kit --signal 2026-09-10-x/01-y

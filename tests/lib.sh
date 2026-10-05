@@ -149,6 +149,8 @@ world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
 state_repo() { local r; r=$(remote "$1"); mkdir -p "$(dirname "$r")"; [ -d "$r" ] || git init -q --bare "$r"; }
 
 commit_all() { git -C "$1" add -A && git -C "$1" commit -qm "${2:-wip}"; }
+# rewrite <file> <sed script>: the file edited in place, alike under macOS's sed and the GNU sed devenv's shell puts first
+rewrite() { sed -e "$2" "$1" > "$1.new" && mv "$1.new" "$1"; }
 
 # kit <host> <space> <name>: a kit's main checkout at <space>/<name>/main, with OpenSpec set up
 kit() {

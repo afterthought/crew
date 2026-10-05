@@ -11,7 +11,7 @@ CREW_AGENT= crew unit add b "Unit b." --bolt tenant-environments >/dev/null
 CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
 crew unit run a construct >/dev/null; crew unit run b construct >/dev/null
 change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"; crew unit approve a >/dev/null
-sed -i '' 's/- \[ \]/- [x]/' "$kd/places/a/openspec/changes/a/tasks.md"; commit_all "$kd/places/a" "feat(a): built"
+rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/a" "feat(a): built"
 expect_ok crew unit run a merge
 slot=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-1") | .key')
 
