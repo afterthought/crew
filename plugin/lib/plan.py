@@ -27,14 +27,17 @@ that is refused because someone wrote first is applied again to the new tip, up 
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, datetime, getpass, json, os, pathlib, re, subprocess, sys, tempfile
+import argparse, datetime, fcntl, getpass, json, os, pathlib, re, subprocess, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
 import crew  # noqa: E402
+import record  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 REPLAYS = 5
+# What a command found out before it wrote or was refused: the partition whose run record its entry goes in.
+CONTEXT = {}
 CACHE = pathlib.Path.home() / ".cache/crew/git"
 HEADER = """\
 # The partition's bolts and their units: what is to be built, in which bolt,
@@ -356,6 +359,7 @@ class Write:
     def __init__(self, repo, label, tip, plan):
         self.repo, self.label, self.tip, self.plan, self.subject = repo, label, tip, plan, None
         self.quiet = set()  # teams the write's own command greets, so notify leaves them be
+        self.on, self.frm = [], []  # objects only the change can name, for the write's run-record entry
 
     def bolt(self, name):
         return self.plan.bolt(name) or self.gone("Bolt", name)
@@ -368,10 +372,12 @@ class Write:
         fail(f"no {kind.lower()} {name} in plan/{self.label} of {self.repo}" + (f": {by} removed it" if by else ""))
 
 
-def write(fleet, label, repo, change, subject, body=""):
+def write(fleet, label, repo, change, subject, body="", act=None, on=(), frm=()):
     """Apply change(Write) to the tip of plan/<label>, check, commit and push it, replaying on a refused push.
-    change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it."""
+    change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it. With act, the
+    write is recorded once pushed, naming on and frm and whatever the change added to them."""
     ref, seen = f"plan/{label}", {}
+    CONTEXT["label"] = label
 
     def make(tip):
         tip or fail(f"{repo} has no plan/{label} yet: crew plan init {repo} {label}")
@@ -382,10 +388,12 @@ def write(fleet, label, repo, change, subject, body=""):
         text = w.plan.text()
         recfix(text, "plan.rec")
         seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
-                    subject=f"{w.subject or subject} ({agent()})")
+                    subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
         return text, seen["subject"] + (f"\n\n{body}" if body else "") + "\n"
     sha = land(repo, ref, "plan.rec", make)
     print(f"plan/{label} {sha[:7]}: {seen['subject']}")
+    if act:
+        record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]))
     notify(fleet, seen, seen["subject"])
     return sha
 
@@ -417,8 +425,10 @@ def init(fleet, args):
         tip is None or fail(f"{repo} already has plan/{p['label']} (at {tip[:7]})")
         recfix(HEADER, "plan.rec")
         return HEADER, f"plan: start plan/{p['label']} ({agent()})\n"
+    CONTEXT["label"] = p["label"]
     sha = land(repo, f"plan/{p['label']}", "plan.rec", lambda tip: make(tip))
     print(f"plan/{p['label']} {sha[:7]}: created in {repo}")
+    record.emit(p["label"], "plan.init", [f"plan/{p['label']}"], commit=[f"{repo}@{sha}"], why=f"plan: start plan/{p['label']}")
 
 
 def blueprints_of(p, name):
@@ -541,6 +551,7 @@ def default_label(fleet, a):
     label = getattr(a, "label", None) or os.environ.get("CREW_LABEL")
     if label:
         crew.partition_of(fleet, label)
+        CONTEXT.setdefault("label", label)
     return label
 
 
@@ -566,6 +577,7 @@ def locate(fleet, kind, name, label):
     hits or fail(f"no {kind.lower()} {name} in the plans of " + ", ".join(labels)
                  + "".join(f"; {k} could not be read: {v}" for k, v in errors.items()))
     len(hits) == 1 or fail(f"{kind.lower()} {name} is in more than one plan: " + ", ".join(f"plan/{h[0]} of {h[1]}" for h in hits) + "; add --label")
+    CONTEXT["label"] = hits[0][0]
     return hits[0]
 
 
@@ -578,6 +590,7 @@ def plan_for(fleet, kit, label):
     pairs = sorted({(t["label"], t["blueprints"]["repo"]) for t in kit_teams(fleet, kit, label)})
     pairs or fail(f"no team" + (f" of {label}" if label else "") + f" builds {kit}, so no plan holds its work")
     len(pairs) == 1 or fail(f"{kit}'s work could go in " + ", ".join(f"plan/{l} of {r}" for l, r in pairs) + "; add --label")
+    CONTEXT["label"] = pairs[0][0]
     return pairs[0]
 
 
@@ -669,8 +682,7 @@ echo "$(git rev-list --count origin/main..main) $(git rev-list --count main..ori
 def free_slot(fleet, t, unit, remove=False):
     """End the agent in the slot a unit or fix holds and free the slot, on the team's host; with remove, a dropped
     unit's worktree, unless it has uncommitted changes, and its branch go too."""
-    r = crew.on_machine(fleet, t["machine"], ["bash", crew.crew_at(fleet, t["machine"]), "_free", t["name"], unit]
-                        + (["--remove"] if remove else []))
+    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_free", t["name"], unit, *(["--remove"] if remove else [])))
     if r.returncode:
         print(f"{unit}'s slot on {t['name']} was not freed: " + (r.stderr.strip() or f"exit {r.returncode}"), file=sys.stderr)
     elif r.stdout.strip():
@@ -688,7 +700,7 @@ def bolt_new(fleet, a):
         r = Rec("Bolt", [("Bolt", a.bolt), ("Repo", a.repo), ("Goal", a.goal)] + [("Source", x) for x in a.source])
         w.plan.insert(r, before=w.bolt(a.before) if a.before else None)
         return [a.bolt]
-    write(fleet, label, repo, change, f"plan({a.bolt}): add the bolt")
+    write(fleet, label, repo, change, f"plan({a.bolt}): add the bolt", act="bolt.new", on=[f"bolt/{a.bolt}"])
 
 
 def held_by(plan, team):
@@ -698,6 +710,7 @@ def held_by(plan, team):
 def bolt_give(fleet, a):
     t = crew.team_of(fleet, a.team)
     label, repo, kit = t["label"], t["blueprints"]["repo"], t["kit"]["name"]
+    CONTEXT["label"] = label
     tip = fetch(repo, f"plan/{label}")
     tip or fail(f"{repo} has no plan/{label} yet: crew plan init {repo} {label}")
     plan = read(repo, label, tip)
@@ -730,16 +743,17 @@ def bolt_give(fleet, a):
         seen["bolt"] = b.name()
         return [b.name()]
     seen = {}
-    write(fleet, label, repo, change, "plan: give a bolt")
+    sha = write(fleet, label, repo, change, "plan: give a bolt")
     b = seen["bolt"]
     path = f"{t['kit']['dir']}/bolts/{b}"
     make_place(fleet, t, path, f"bolt/{b}", base)
     print(f"{t['name']} holds {b}: bolt/{b} at {path} on {t['machine']}")
+    record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}")
     # A team takes a bolt only once its last one has landed or been dropped, so nothing is in flight: a conductor
     # or ops that is up starts again in the new bolt's worktree, with fresh context, before the conductor is greeted.
     up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
     if up:
-        r = crew.on_machine(fleet, t["machine"], ["bash", crew.crew_at(fleet, t["machine"]), "restart", t["name"], *up, "--no-greet"])
+        r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "restart", t["name"], *up, "--no-greet"))
         said = (r.stdout + r.stderr).strip()
         if said:
             print(said)
@@ -761,7 +775,7 @@ def bolt_order(fleet, a):
             w.plan.insert(b, before=o)
         return [a.bolt]
     where = "first" if a.first else "last" if a.last else f"before {a.before}"
-    write(fleet, label, repo, change, f"plan({a.bolt}): order the bolt {where}")
+    write(fleet, label, repo, change, f"plan({a.bolt}): order the bolt {where}", act="bolt.order", on=[f"bolt/{a.bolt}"])
 
 
 def bolt_drop(fleet, a):
@@ -776,9 +790,11 @@ def bolt_drop(fleet, a):
                 w.plan.place_last(u)
             else:
                 w.plan.remove(u)
+                w.on.append(f"unit/{u.name()}")
         w.plan.remove(b)
         return [a.bolt]
-    write(fleet, label, repo, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), a.reason)
+    write(fleet, label, repo, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), a.reason,
+          act="bolt.drop", on=[f"bolt/{a.bolt}"])
 
 
 DROP_BOLT = r"""main=$1 path=$2 bolt=$3
@@ -813,9 +829,10 @@ def bolt_land(fleet, a):
         not late or fail(f"unit {late[0]} was added to {a.bolt} since it was checked; it has not landed")
         for u in w.plan.units_of(a.bolt):
             w.plan.remove(u)
+            w.on.append(f"unit/{u.name()}")
         w.plan.remove(w.plan.bolt(a.bolt))
         return [a.bolt]
-    write(fleet, label, repo, change, f"plan({a.bolt}): land the bolt")
+    write(fleet, label, repo, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"])
     said = host_run(fleet, t["machine"], DROP_BOLT, t["kit"]["main"], f"{t['kit']['dir']}/bolts/{a.bolt}", a.bolt)
     print(f"{a.bolt} has landed: its worktree is removed and {t['name']} holds no bolt" + (f". {said}" if said else ""))
 
@@ -849,9 +866,15 @@ def unit_add(fleet, a):
         else:
             w.plan.place_last(r)
         return [a.bolt] if a.bolt else []
-    write(fleet, label, repo, change, f"plan({a.bolt or 'queue'}): add {a.unit}")
+    write(fleet, label, repo, change, f"plan({a.bolt or 'queue'}): add {a.unit}", act="unit.add",
+          on=[f"unit/{a.unit}", f"bolt/{a.bolt}" if a.bolt else f"queue/{kit}"], frm=[f"signals/{a.signal}"] if a.signal else [])
     if a.signal:
         route(fleet, label, a.signal, a.unit)
+
+
+def group_of(u):
+    """Where a unit is, as an object: its bolt, or its kit's queue."""
+    return f"bolt/{u.get('Bolt')}" if u.get("Bolt") else f"queue/{u.get('Repo')}"
 
 
 def unit_stage(fleet, plan, name):
@@ -879,7 +902,8 @@ def unit_split(fleet, a):
             prev = r
         return [u.get("Bolt")] if u.get("Bolt") else []
     bolt = plan.unit(a.unit).get("Bolt") or "queue"
-    write(fleet, label, repo, change, f"plan({bolt}): split {a.unit} into " + ", ".join(n for n, _ in a.into))
+    write(fleet, label, repo, change, f"plan({bolt}): split {a.unit} into " + ", ".join(n for n, _ in a.into), act="unit.split",
+          on=[f"unit/{a.unit}"] + [f"unit/{n}" for n, _ in a.into], frm=[f"unit/{a.unit}"])
 
 
 def unit_order(fleet, a):
@@ -899,7 +923,8 @@ def unit_order(fleet, a):
             w.plan.insert(u, before=o)
         return [u.get("Bolt")] if u.get("Bolt") else []
     where = "first" if a.first else "last" if a.last else f"before {a.before}"
-    write(fleet, label, repo, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): order {a.unit} {where}")
+    write(fleet, label, repo, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): order {a.unit} {where}", act="unit.order",
+          on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
 
 
 def unit_after(fleet, a):
@@ -917,7 +942,8 @@ def unit_after(fleet, a):
                 u.add("After", d, after="Intent")
         return [u.get("Bolt")] if u.get("Bolt") else []
     what = "after nothing" if a.none else "after " + ", ".join(a.deps)
-    write(fleet, label, repo, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): {a.unit} {what}")
+    write(fleet, label, repo, change, f"plan({plan.unit(a.unit).get('Bolt') or 'queue'}): {a.unit} {what}", act="unit.after",
+          on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
 
 
 REBASE = r"""cd "$1" || exit 1
@@ -966,7 +992,9 @@ def unit_move(fleet, a):
         w.plan.place_last(u)
         return [b for b in (src, to) if b]
     try:
-        write(fleet, label, repo, change, f"plan({to or 'queue'}): move {a.unit} from {src or 'the queue'}")
+        kit = u.get("Repo")
+        write(fleet, label, repo, change, f"plan({to or 'queue'}): move {a.unit} from {src or 'the queue'}", act="unit.move",
+              on=[f"unit/{a.unit}", f"bolt/{to}" if to else f"queue/{kit}"], frm=[f"bolt/{src}" if src else f"queue/{kit}"])
     except Refusal:
         if rebased:
             crew.on_machine(fleet, rebased[0]["machine"], ["bash", "-c", UNREBASE, "crew", s["worktree"], rebased[1], src, a.unit])
@@ -987,7 +1015,8 @@ def unit_drop(fleet, a):
                 o.fields = [(n, v) for n, v in o.fields if not (n == "After" and v == a.unit)]
         w.plan.remove(u)
         return [bolt] if bolt else []
-    write(fleet, label, repo, change, f"plan({bolt or 'queue'}): drop {a.unit}", a.reason)
+    write(fleet, label, repo, change, f"plan({bolt or 'queue'}): drop {a.unit}", a.reason, act="unit.drop",
+          on=[f"unit/{a.unit}", group_of(plan.unit(a.unit))])
     team = fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
     if team:
         free_slot(fleet, team, a.unit, remove=True)
@@ -997,7 +1026,7 @@ def unit_drop(fleet, a):
 
 APPROVE = r"""cd "$1" || exit 1
 git commit -q --allow-empty -m "review($2): approved" --trailer "Reviewed-by: $(git config user.name) <$(git config user.email)>"
-git rev-parse --short HEAD
+git rev-parse HEAD
 """
 
 
@@ -1013,7 +1042,8 @@ def unit_approve(fleet, a):
         s.get("why", "it is past review")))
     t = fleet["teams"][plan.bolt(plan.unit(a.unit).get("Bolt")).get("Team")]
     sha = host_run(fleet, t["machine"], APPROVE, s["worktree"], a.unit)
-    print(f"unit {a.unit} approved: {sha} on unit/{a.unit}")
+    print(f"unit {a.unit} approved: {sha[:7]} on unit/{a.unit}")
+    record.emit(label, "unit.approve", [f"unit/{a.unit}"], commit=[f"{t['kit']['repo']}@{sha}"], why=f"review({a.unit}): approved")
 
 
 # -------------------------------------------------------------------------------------------------- signals
@@ -1063,6 +1093,7 @@ def route(fleet, label, sig, unit):
     sha = append(srepo, "signals/moves.rec", route_move(sig, unit).lines(), f"signals({sig}): route to unit/{unit} ({agent()})\n",
                  lambda text, tip: unmoved(text, sig))
     print(f"{srepo} main {sha[:7]}: signal {sig} routed to unit/{unit}")
+    record.emit(label, "signal.move", [f"signals/{sig}", f"unit/{unit}"], commit=[f"{srepo}@{sha}"], why=f"signals({sig}): route to unit/{unit}")
 
 
 CURATION = ("attach", "challenge", "new-territory", "answered", "drop")
@@ -1084,6 +1115,9 @@ def signal_move(fleet, a):
               + ([("Reason", a.reason)] if a.reason else []) + [("Date", datetime.date.today().isoformat()), ("By", agent())])
     sha = append(repo, "signals/moves.rec", rec.lines(), f"signals({a.signal}): {a.move} ({agent()})\n", present)
     print(f"{repo} main {sha[:7]}: signal {a.signal} moved: {a.move}")
+    # A target is a pointer, a typed name such as unit/<unit> or a path; anything else could be typed text.
+    target = [a.target] if a.target and re.fullmatch(r"[a-z]+/[^\s]+", a.target) else []
+    record.emit(label, "signal.move", [f"signals/{a.signal}"] + target, commit=[f"{repo}@{sha}"], why=f"signals({a.signal}): {a.move}")
 
 
 def signal(fleet, a):
@@ -1113,6 +1147,7 @@ def signal(fleet, a):
         return {f"signals/{capture}/capture.md": cap, f"signals/{sid}.md": body}, f"signals({sid}): {a.slug} ({who})\n"
     sha = land(repo, "main", None, make)
     print(f"{repo} main {sha[:7]}: signal {seen['id']}")
+    record.emit(label, "capture", [f"signals/{seen['id']}"], commit=[f"{repo}@{sha}"], why=f"signals({seen['id']}): {a.slug}")
 
 
 # ------------------------------------------------------------------------------------- what bash crew asks
@@ -1167,7 +1202,11 @@ def run_check(fleet, a):
         st in ("approved", "code", "verify") or fail(f"unit {a.unit} is in {st}, with no approved change to code yet")
         prompt = f"/opsx:apply {a.unit}{words}"
     elif a.stage == "verify":
-        st != "code" or fail(f"unit {a.unit} is in code, with these tasks still open: " + "; ".join(s["open"]))
+        if st == "code":
+            e = Refusal(f"unit {a.unit} is in code, with these tasks still open: " + "; ".join(s["open"]))
+            n = len(s["open"])
+            e.recorded = f"unit {a.unit} is in code, with {n} task{'' if n == 1 else 's'} still open"  # titles are typed text
+            raise e
         st == "verify" or fail(f"unit {a.unit} is in {st}: verify waits until every task is ticked")
         prompt = f"/opsx:verify {a.unit}{words}"
     else:
@@ -1188,17 +1227,18 @@ def place_cmd(fleet, a):
     make_place(fleet, crew.team_of(fleet, a.team), a.path, a.branch, a.base, track=True)
 
 
-def slots_cmd(fleet, a):
-    """Each slot of the team on this host: what it holds and that work's stage, read from the kit alone."""
-    t = crew.team_of(fleet, a.team)
+def slot_stages(fleet, t):
+    """Each slot of the team on this host that holds a unit or fix: what it holds and that work's stage, read from the
+    kit alone, with its tasks done and total where its change has a task list."""
     path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
     held = [l.split() for l in (path.read_text().splitlines() if path.exists() else []) if l.strip()]
     if not held:
-        return
+        return []
     k = survey(fleet, [(t["name"], None)]).get(t["machine"], {})
     kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
+    out = []
     for slot, kind, name, place in held:
-        stage, tasks = "unknown", ""
+        stage, counts = "unknown", None
         if kit.get("ok") and kind == "fix":
             f = next((f for f in kit["fixes"] if f["fix"] == name), None)
             stage = ("merged" if f["merged"] else "fix") if f else "none"
@@ -1212,10 +1252,65 @@ def slots_cmd(fleet, a):
                 done, total = pl["tasks"] or (0, 0)
                 stage = ("verify" if total and done == total else "code" if done else
                          "approved" if pl["planning"] and pl["reviewed"] else "review" if pl["planning"] else "construct")
-                tasks = f"{done}/{total}" if pl["tasks"] and stage in ("code", "verify") else ""
+                counts = f"{done}/{total}" if pl["tasks"] else None
             else:
                 stage = "none"
-        print(slot, kind, name, stage, tasks or "-", place)
+        out.append(dict(slot=slot, kind=kind, name=name, stage=stage, counts=counts, place=place))
+    return out
+
+
+def slots_cmd(fleet, a):
+    """Each slot of the team on this host: what it holds and that work's stage, read from the kit alone."""
+    for s in slot_stages(fleet, crew.team_of(fleet, a.team)):
+        tasks = s["counts"] if s["counts"] and s["stage"] in ("code", "verify") else "-"
+        print(s["slot"], s["kind"], s["name"], s["stage"], tasks, s["place"])
+
+
+def stage_ends(fleet, a):
+    """Record the end of each stage the team's stages file holds a start for, once each, under its lock: with --waited,
+    the slot the conductor's wait returned for, as seen at once; with --ending, the slot whose agent is about to be
+    ended, whatever it is doing; otherwise each one whose agent is no longer working, observed late by the command
+    that reads the team. A line whose slot no longer holds its unit or fix is dropped without an entry."""
+    t = crew.team_of(fleet, a.team)
+    state = pathlib.Path.home() / f".local/state/{t['name']}-team"
+    path = state / "stages"
+    slots = state / "slots"
+    held = {l.split()[0]: l.split() for l in (slots.read_text().splitlines() if slots.exists() else []) if l.strip()}
+    now = {}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+    with open(path, "r+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        keep, ended = [], []
+        for l in (l.split() for l in f.read().splitlines() if l.strip()):
+            slot, name = l[0], l[1]
+            if a.slot and slot != a.slot:
+                keep.append(l)
+            elif slot not in held or held[slot][2] != name:
+                continue
+            elif a.ending or crew.agent_status(fleet, f"{t['name']}-{slot}") != "working":
+                ended.append(l)
+            else:
+                keep.append(l)
+        now = {s["slot"]: s for s in slot_stages(fleet, t)} if ended else now
+        for slot, name, stage, *rest in ended:
+            s, fix = now.get(slot, {}), name.startswith("fix/")
+            branch = name if fix else f"unit/{name}"
+            head = subprocess.run(["git", "-C", t["kit"]["main"], "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
+                                  capture_output=True, text=True).stdout.strip()
+            on = ([rest[1]] if fix and len(rest) > 1 else [f"stage/{name}/{stage}", f"unit/{name}"]) + [f"agent/{t['name']}-{slot}"]
+            why = f"fix({name[4:]}): {stage} ended" if fix else f"unit({name}): {stage} ended"
+            record.emit(t["label"], "stage.end", on, why=why,
+                        Result=s.get("stage", "unknown"), Tasks=s.get("counts"), Head=head,
+                        Observed=None if a.waited and not a.ending else "late")
+        f.seek(0)
+        f.truncate()
+        f.write("".join(" ".join(l) + "\n" for l in keep))
+    if a.waited and a.slot in held:
+        now = now or {s["slot"]: s for s in slot_stages(fleet, t)}
+        s = now.get(a.slot, {})
+        print(f"{t['name']}-{a.slot} settled: {held[a.slot][2]} is in {s.get('stage', 'unknown')}"
+              + (f", {s['counts']} tasks" if s.get("counts") else ""))
 
 
 # ----------------------------------------------------------------------------------------------- crew bolts
@@ -1401,6 +1496,11 @@ def parser():
     x = sub.add_parser("_in-plan")
     x.add_argument("unit")
     x.add_argument("--label")
+    x = sub.add_parser("_ends")
+    x.add_argument("team")
+    x.add_argument("--slot")
+    x.add_argument("--waited", action="store_true")
+    x.add_argument("--ending", action="store_true")
     return ap
 
 
@@ -1412,7 +1512,41 @@ COMMANDS = {
     ("unit", "move"): unit_move, ("unit", "drop"): unit_drop, ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
     ("_slots", None): slots_cmd, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_ends", None): stage_ends,
 }
+# The act a command that moves work records, done or refused. A command that only reads records nothing.
+ACTS = {
+    ("plan", "init"): "plan.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
+    ("bolt", "drop"): "bolt.drop", ("bolt", "land"): "bolt.land", ("unit", "add"): "unit.add", ("unit", "split"): "unit.split",
+    ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
+    ("unit", "approve"): "unit.approve", ("signal", None): "capture", ("signal-move", None): "signal.move",
+    ("_run", None): "stage.start",
+}
+
+
+def named(a):
+    """The objects a command names on its command line: a refusal's entry names those."""
+    out = [f"unit/{a.unit}"] if getattr(a, "unit", None) else []
+    if getattr(a, "unit", None) and getattr(a, "stage", None):
+        out.append(f"stage/{a.unit}/{a.stage}")
+    if getattr(a, "bolt", None) and a.bolt != "queue":
+        out.append(f"bolt/{a.bolt}")
+    if getattr(a, "team", None):
+        out.append(f"team/{a.team}")
+    if a.cmd == "signal-move":
+        out.append(f"signals/{a.signal}")
+    if a.cmd == "plan":
+        out.append(f"plan/{a.label}")
+    return out
+
+
+def refused(fleet, a, key, e):
+    """A refused command that would have moved work, in its partition's run record, with crew's reason."""
+    label = CONTEXT.get("label") or getattr(a, "label", None) or os.environ.get("CREW_LABEL")
+    if not label and getattr(a, "team", None) in fleet["teams"]:
+        label = fleet["teams"][a.team]["label"]
+    if label in fleet["partitions"]:
+        record.emit(label, ACTS[key], named(a), refused=getattr(e, "recorded", None) or str(e))
 
 
 def main(argv):
@@ -1421,7 +1555,13 @@ def main(argv):
         argv = ["signal-move"] + argv[2:]
     args = parser().parse_args(argv)
     fleet = crew.load()
-    COMMANDS[(args.cmd, getattr(args, "sub", None))](fleet, args)
+    key = (args.cmd, getattr(args, "sub", None))
+    try:
+        COMMANDS[key](fleet, args)
+    except Refusal as e:
+        if key in ACTS:
+            refused(fleet, args, key, e)
+        raise
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import functools, itertools, json, pathlib, re, shlex, subprocess, sys, time
+import functools, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -196,12 +196,27 @@ def place_of_agent(fleet, name):
     fail(f"no agent {name}: crew starts none by that name")
 
 
-def tell(fleet, name, text):
-    """Send an agent a prompt wherever it runs. An agent that is not up is reported, not an error."""
+def label_of_agent(fleet, name):
+    """The partition an agent crew starts works for, from its name alone."""
+    for t in fleet["teams"].values():
+        if name in (f"{t['name']}-conductor", f"{t['name']}-ops") or re.match(rf"^{re.escape(t['name'])}-unit-[1-9][0-9]*$", name):
+            return t["label"]
+    for l in fleet["partitions"]:
+        if name in (f"{l}-design", f"{l}-planner", f"{l}-ops") or re.match(rf"^{re.escape(l)}-(dispatch|operator)-.+$", name):
+            return l
+    return None
+
+
+def tell(fleet, name, text, record=True):
+    """Send an agent a prompt wherever it runs. An agent that is not up is reported, not an error. A tell is in the
+    run record of the recipient's partition, with its length and never its text."""
     host, session = place_of_agent(fleet, name)
     r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, text])
     if r.returncode:
         print(f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
+    elif record:
+        import record as rec  # record imports this module
+        rec.emit(label_of_agent(fleet, name), "tell", on=[f"agent/{name}"], why=f"tell {name}", Chars=len(text))
     return r.returncode == 0
 
 
@@ -235,8 +250,10 @@ def greet(fleet, team, first="", wait=90):
                   else f"{name} was not ready to greet; once it is: crew tell {name} \"{text}\"", file=sys.stderr)
             return False
         time.sleep(2)
-    if not tell(fleet, name, text):
+    if not tell(fleet, name, text, record=False):
         return False
+    import record as rec  # record imports this module
+    rec.emit(t["label"], "greet", on=[f"agent/{name}", f"team/{t['name']}"], why=f"team({t['name']}): greet {name}")
     print(f"{name} greeted")
     return True
 
@@ -255,6 +272,14 @@ def crew_at(fleet, host):
         return str(HOME / "plugin/bin/crew")
     c = kept_on(fleet, host, "afterthought/crew") or fail(f"none of {host}'s sessions keeps afterthought/crew, so crew can't run there")
     return f"{c}/plugin/bin/crew"
+
+
+def crew_argv(fleet, host, *args):
+    """crew on a host, run as the one asking here: their name, partition and Claude session go with it, so what it
+    records names them and not the host that did the work."""
+    import record as rec  # record imports this module
+    return ["env", f"CREW_AGENT={rec.who()}", f"CREW_LABEL={os.environ.get('CREW_LABEL', '')}",
+            f"CREW_SESSION={rec.session() or ''}", "bash", crew_at(fleet, host), *args]
 
 
 def partition_hosts(fleet, label):
