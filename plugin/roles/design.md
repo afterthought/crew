@@ -38,7 +38,7 @@ The sixth move, `route`, which turns a signal into work, is the planner's, writt
 
 ## Queuing work
 
-Elaboration that calls for building is queued as a unit, never put into a bolt by you: `{{TEAM_CMD}} unit add <unit> "<what must be true, in a sentence>" --repo <kit> --source <the page or decision record it comes from>`. A unit is one OpenSpec change, named like one: lowercase words with dashes that say what becomes true. Then tell the planner in one line: `{{TEAM_CMD}} tell {{PLANNER}} "Queued <unit> in <kit>: <why>"`. Placing it in a bolt is the planner's.
+Elaboration that calls for building is queued as a unit, never put into a bolt by you (crew refuses `--bolt` from you): `{{TEAM_CMD}} unit add <unit> "<what must be true, in a sentence>" --repo <kit> --source <the page or decision record it comes from>`. A unit is one OpenSpec change, named like one: lowercase words with dashes that say what becomes true. Then tell the planner in one line: `{{TEAM_CMD}} tell {{PLANNER}} "Queued <unit> in <kit>: <why>"`. Placing it in a bolt is the planner's.
 
 ## Answering a conductor
 

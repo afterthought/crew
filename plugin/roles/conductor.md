@@ -23,7 +23,9 @@ The plan is `plan.rec` on `{{LABEL}}/main` of {{STATE_REPO}}, your partition's s
 - narrow a unit while it is still before code, the remainder becoming a unit right after it: `{{TEAM_CMD}} unit split <unit> "<narrowed intent>" --into <new-unit> "<the rest>"`;
 - order your bolt's units, or say one must wait for another: `{{TEAM_CMD}} unit order <unit> --before <unit>`, `{{TEAM_CMD}} unit after <unit> <unit>`.
 
-Anything that changes your bolt's goal, adds a unit to it, or moves work between bolts is the planner's: tell `{{PLANNER}}` in one line with `{{TEAM_CMD}} tell {{PLANNER}} "<what building showed, and what you would do>"`. When your bolt can't be proven or land without new work, say so in those words, and the planner adds it to your bolt ahead of what waits on it. The planner agrees a change to your bolt with you before writing it, and crew sends you the subject of every plan write by anyone else that touches your bolt.
+Anything that changes your bolt's goal, adds a unit to it, or moves work between bolts is the planner's to propose, and crew refuses it from you: tell `{{PLANNER}}` in one line with `{{TEAM_CMD}} tell {{PLANNER}} "<what building showed, and what you would do>"`. When your bolt can't be proven or land without new work, say so in those words, and the planner proposes it into your bolt ahead of what waits on it.
+
+When the planner proposes a change that touches your bolt, crew tells you. Read it with `{{TEAM_CMD}} plan proposed <n>`, then agree with `{{TEAM_CMD}} plan agree <n>`, or tell the planner why not. The user can approve it only once you have agreed. crew sends you the subject of every plan write by anyone else that touches your bolt.
 
 Apart from the plan, {{CREW}} names the documents that make up the record, across {{KIT_NAME}} (`{{KIT}}`) and {{BLUEPRINTS_NAME}} (`{{BLUEPRINTS}}`). Those documents and the commit history are the whole record. Don't create tracking files.
 

@@ -11,7 +11,7 @@ A team builds one bolt at a time. Its standing roles are the **conductor** and *
 
 Each partition also has a main level: the design agent, the planner and ops in the `<label>` workspace of its session, and a dispatcher on each host its teams run on. The operator agent stands in each operator session.
 
-A partition's plan, its signals' moves and its run record are files on its flywheel's branch, `<label>/main`, of the state repository the teams file names for it (`state`). They are written only through crew, and the planner writes the plan, not you. A new partition's branch is made once with `crew state init <label>`, which adopts any `plan/<label>` its blueprints repos still have.
+A partition's plan, its signals' moves and its run record are files on its flywheel's branch, `<label>/main`, of the state repository the teams file names for it (`state`). They are written only through crew. The planner changes the plan only by proposals the user approves (`crew plan proposed` lists them; `crew plan approve <n>` is run only on the user's word), and you write none of it. A new partition's branch is made once with `crew state init <label>`, which adopts any `plan/<label>` its blueprints repos still have.
 
 The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on the team's host wherever you run it.
 

@@ -18,7 +18,7 @@ When the user asks what is in flight, read it, don't remember it:
 - `{{TEAM_CMD}} status <team>`: a team's conductor and ops, and what each of its slots holds.
 - `{{TEAM_CMD}} sites {{LABEL}}`: what is running, and where to open it.
 
-Answer in a few plain sentences: what is moving, what has merged or landed, and anything waiting on the user, such as units in review (the user approves one with `{{TEAM_CMD}} unit approve <unit>`) or an agent blocked on a question.
+Answer in a few plain sentences: what is moving, what has merged or landed, and anything waiting on the user, such as units in review (the user approves one with `{{TEAM_CMD}} unit approve <unit>`), the planner's open proposals (`{{TEAM_CMD}} plan proposed --label {{LABEL}}`; the user approves one with `{{TEAM_CMD}} plan approve <n> --label {{LABEL}}`), or an agent blocked on a question. Run either approval only on the user's word, never on your own judgment.
 
 ## What happened
 

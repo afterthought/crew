@@ -32,16 +32,50 @@ crew bolt  give <team> [<bolt>]
 crew bolt  order <bolt> --before <bolt>|--first|--last
 crew bolt  drop <bolt> "<reason>" [--requeue]
 crew bolt  land <bolt>
-crew unit  add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
+crew unit  add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID] [--unblocks <bolt>]
 crew unit  split <unit> "<narrowed intent>" --into <unit> "<intent>"
 crew unit  order <unit> --before <unit>|--first|--last
 crew unit  after <unit> <unit>...|--none
-crew unit  move <unit> <bolt>|queue
+crew unit  move <unit> <bolt>|queue [--unblocks <bolt>]
 crew unit  drop <unit> "<reason>"
 crew unit  approve <unit>
 ```
 
 Each partition keeps one recutils `plan.rec`, for all its kits, on its flywheel's branch of its state repository (see State). It holds only intent: Bolt and Unit records, in build order. A Source is a path in the partition's first blueprints repo, or `<owner>/<name>:<path>` in another. Every stage is read from the kits, one call per host. A write fetches the branch over https into crew's bare cache of the repo (`~/.cache/crew/git/<owner>/<name>.git`), applies itself to the tip, checks each file it changed with `recfix --check` and the plan with crew's rules, commits through a temporary index, and pushes without force; a push refused because someone wrote first is applied again to the new tip, up to five times. Nothing is ever merged. A write that touches a bolt a team holds sends that team's conductor the commit's subject.
+
+## Proposals
+
+```
+crew plan propose <file> [--replaces <n>]
+crew plan proposed [<n>] [--label L] [--json]
+crew plan agree <n> [--team <team>]
+crew plan approve <n>
+crew plan drop <n> "<reason>"
+```
+
+The planner changes the plan only by a **proposal** the user approves: where new work goes (a new bolt, a unit in a bolt, the queue), and every move, split, reorder or drop. A proposal is a record in `proposals.rec` on the flywheel's branch: the planner's `Case`, and the plan commands it would run, in order, one `Do` each, as typed without the leading `crew` (`bolt new|order|drop`, `unit add|move|split|order|after|drop`). Proposals are numbered, and never removed or changed.
+
+- `crew plan propose <file>` takes a file of one record, a `Case` and its `Do` lines. Each command is checked in order against the plan as the ones before it leave it, with every refusal it has run directly; a refused command refuses the proposal and nothing is written. The conductor of each bolt in flight the proposal touches is told. `--replaces <n>` drops proposal n and writes its successor in one commit.
+- `crew plan proposed` lists the open proposals and what each waits on; `crew plan proposed <n>` prints one as markdown: the case, then each change in plain words, a unit's intent beside what it rests on (a signal's assertion and excerpt) and the goal and team of the bolt it would join. It reads only the branch, so any host can answer.
+- `crew plan agree <n>` is a conductor's recorded agreement to a proposal that touches the bolt its team holds; the user may agree for any team it touches.
+- `crew plan approve <n>` applies the proposal's commands, exactly as read, to the plan at the tip and closes the proposal, in one commit, or changes nothing when one no longer applies or a touched bolt's conductor has not agreed. A unit with a worktree that moves is rebased before the push and put back if the approval is refused. The user runs it, or an agent on the user's word.
+- `crew plan drop <n> "<reason>"` closes a proposal unapplied, with the reason.
+
+Work a bolt in flight needs before it can be proven or land goes into that bolt: a `unit add` or `unit move` marked `--unblocks <bolt>` must place the unit in that held bolt, where it goes ahead of the first unit not yet merged, and the mark is shown on the proposal.
+
+Who writes the plan directly, when the command runs as an agent crew started (`CREW_AGENT`):
+
+| Agent | Writes directly | Otherwise |
+|---|---|---|
+| the user at a shell | everything | |
+| `<label>-planner` | proposals | refused, naming `crew plan propose` |
+| `<team>-conductor` | `unit split`, `unit order`, `unit after` on units of the bolt its team holds; `plan agree` | refused, naming the planner |
+| `<label>-design` | `unit add … --repo <kit>`, the queue | refused, naming the planner |
+| `<label>-dispatch-<host>` | `bolt give` | refused, naming the planner |
+| `<label>-ops` | `bolt land` | refused, naming the planner |
+| any other agent | nothing | refused, naming the planner |
+
+Every refusal is a run-record entry. Writing, agreeing, approving and dropping a proposal are entries naming `proposal/<n>`, and each change an approval applies is an entry of its own, from the proposal, with the approval's commit; `crew trace` follows them.
 
 ## State
 
@@ -53,6 +87,7 @@ A partition's **flywheel** is its loop, named by its label. Its state is the fil
 
 - `plan.rec`, the plan;
 - `moves.rec`, every signal's one move;
+- `proposals.rec`, the planner's proposals;
 - `runs/<host>/<YYYY-MM-DD>.rec`, the run record each host has carried.
 
 Flywheels sharing a repository never meet: each command fetches and pushes only its own flywheel's branch, and no branch shares history with another. A write that changes several files is one commit, and its message ends with a `Crew-Entry:` trailer naming the run-record entry that describes it. `crew state init <label>` creates the branch: it adopts the first blueprints repo's `plan/<label>` with its history where there is one, joins another blueprints repo's `plan/<label>` in one commit naming where it came from, and copies the first blueprints repo's `signals/moves.rec`; run again, it finishes what a stopped run left, or says the branch exists. A clone of the branch reads with `recsel` and nothing else.

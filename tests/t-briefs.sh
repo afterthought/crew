@@ -28,8 +28,15 @@ done
 expect_ok crewpy brief wldn design
 for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn planner
-for want in "only agent that creates bolts" "--signal" "Agree any change to it with that bolt's conductor" "wldn/main"; do has "$out" "$want"; done
+for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "plan proposed <n>" "--replaces <n>" "--unblocks <bolt>" \
+  "plan agree <n>" "only when the user says so" "wldn/main"; do has "$out" "$want"; done
+for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it"; do lacks "$out" "$gone"; done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
+expect_ok crewpy brief swb-1 conductor
+for want in "plan proposed <n>" "plan agree <n>" "crew refuses it from you"; do has "$out" "$want"; done
+expect_ok crewpy brief wldn operator
+for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word"; do has "$out" "$want"; done
+expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
 expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time"; do has "$out" "$want"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
