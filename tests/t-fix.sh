@@ -7,7 +7,7 @@ box=chuck-herdr-alpha
 export CREW_LABEL=wldn CREW_AGENT=swb-1-conductor
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 crew bolt give swb-1 >/dev/null 2>&1
-plan_tip=$(git --git-dir "$wb" rev-parse plan/wldn)
+plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
 
 expect_fail "swb-2 holds no bolt" crew fix swb-2 edge-sign-in "x"
 expect_fail "a fix is named with lowercase words and dashes" crew fix swb-1 Edge_Sign "x"
@@ -18,7 +18,7 @@ eq "$(git -C "$k" rev-parse fix/edge-sign-in)" "$(git -C "$k" rev-parse bolt/ten
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/fix/edge-sign-in)" "bolt/tenant-environments"
 eq "$(tail -1 "$CREW_TEST_CLAUDE_LOG" | jq -r '"\(.argv[1]) \(.argv[3]) \(.agent) \(.cwd)"')" "claude-opus-5-5[1m] xhigh swb-1-unit-1 $kd/places/fix-edge-sign-in"
 grep -q "agent prompt .* 'Fix: The edge sign-in answers an object where the spec says a string.'" "$CREW_TEST_LOG" || fail "the fix's words were not sent"
-eq "$(git --git-dir "$wb" rev-parse plan/wldn)" "$plan_tip"
+eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$plan_tip"
 expect_ok crew status swb-1; has "$out" "fix/edge-sign-in  fix"
 expect_ok crew bolts; has "$out" "fix/edge-sign-in                         fix          places/fix-edge-sign-in"
 ok "a fix gets its own place from the bolt and a fresh code agent in a free slot, and no plan record"

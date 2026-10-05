@@ -5,7 +5,7 @@
 . "$TESTS/lib.sh"
 world
 box=chuck-herdr-alpha
-wb=$(blueprints WilldanGroup/willdan-blueprints)
+wb=$(blueprints WilldanGroup/willdan-blueprints); ws=$(remote WilldanGroup/crew-state)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
 clone WilldanGroup/willdan-blueprints "$(space chuck-herdr-alpha willdan)/willdan-blueprints/main"
 runs() { ls "$(home_of "$1")"/.local/state/crew/"${2:-wldn}"/runs/*/*.rec 2>/dev/null || true; }
@@ -19,7 +19,7 @@ print(json.dumps(es[-1] if es else {}))' "$CREW/plugin/lib" "$2" "${3:-wldn}"
 }
 field() { last "$1" "$2" "${4:-wldn}" | jq -r --arg f "$3" 'if (.[$f] | type) == "array" then .[$f] | join(" ") else .[$f] // "" end'; }
 count() { as "$1" bash -c 'cat "$HOME"/.local/state/crew/'"${3:-wldn}"'/runs/*/*.rec 2>/dev/null' | grep -c "^Act: $2\$" || true; }
-tip() { git --git-dir "$wb" rev-parse "$1"; }
+tip() { git --git-dir "$ws" rev-parse "$1"; }
 
 emit $box --act test.one --on unit/a >/dev/null & emit $box --act test.two --on unit/b >/dev/null & wait
 f=$(runs $box)
@@ -32,17 +32,16 @@ eq "$(recsel -C -t Entry -e "Act = 'test.one'" -P On,Host "$f")" $'unit/a\n'"$bo
 ok "two entries written at once are both whole, in the day's file on the host, and the file passes recfix --check"
 
 st=$(home_of mac-studio)/.local/state/crew; mkdir -p "$st"; chmod 555 "$st"
-out=$(crew plan init WilldanGroup/willdan-blueprints wldn 2>"$T/err") || fail "plan init failed when its record could not be written"
-eq "$out" "plan/wldn $(tip plan/wldn | cut -c1-7): created in WilldanGroup/willdan-blueprints"
-eq "$(wc -l < "$T/err" | tr -d ' ')" "1"
-has "$(cat "$T/err")" "crew: the run record at $st/wldn/runs/mac-studio/"
-has "$(cat "$T/err")" "could not be written"
+out=$(crew state init wldn 2>"$T/err") || fail "state init failed when its record could not be written"
+eq "$out" "wldn/main of WilldanGroup/crew-state $(tip wldn/main | cut -c1-7): started an empty plan; added moves.rec with 0 moves of WilldanGroup/willdan-blueprints at $(git --git-dir "$wb" rev-parse --short main)"
+eq "$(wc -l < "$T/err" | tr -d ' ')" "2"
+eq "$(grep -c "crew: the run record at $st/wldn/runs/mac-studio/.* could not be written" "$T/err")" "2"
 chmod 755 "$st"
-ab=$(blueprints afterthought/blueprints)
-crew plan init afterthought/blueprints madswan >/dev/null
-eq "$(field mac-studio plan.init On madswan)" "plan/madswan"
-eq "$(field mac-studio plan.init Commit madswan)" "afterthought/blueprints@$(git --git-dir "$ab" rev-parse plan/madswan)"
-ok "a record that can't be written is said in one line, and the command's output and exit are unchanged; a plan's start is an entry"
+ab=$(blueprints afterthought/blueprints); blueprints agentplot/blueprints >/dev/null; as=$(remote afterthought/crew-state)
+crew state init madswan >/dev/null
+eq "$(field mac-studio state.init On madswan)" "plan/madswan"
+eq "$(field mac-studio state.init Commit madswan)" "afterthought/crew-state@$(git --git-dir "$as" rev-parse madswan/main)"
+ok "a record that can't be written is said in one line per entry, and the command's output and exit are unchanged; a flywheel's start is entries"
 
 p=$(as $box herdr --session wldn-3 workspace create --cwd / --label wldn | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-3 stub agent "$p" wldn-planner
@@ -62,19 +61,19 @@ ok "an agent's entry names its session as herdr reports it; the user's and an ag
 export CREW_LABEL=wldn CREW_AGENT=wldn-planner
 crew bolt new tenant-environments "Tenants hold environments ZQXA." --repo switchboard-kit >/dev/null
 eq "$(field mac-studio bolt.new On)" "bolt/tenant-environments"
-eq "$(field mac-studio bolt.new Commit)" "WilldanGroup/willdan-blueprints@$(tip plan/wldn)"
+eq "$(field mac-studio bolt.new Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 eq "$(field mac-studio bolt.new Why)" "plan(tenant-environments): add the bolt"
 eq "$(field mac-studio bolt.new By)" "wldn-planner"
 crew bolt new apex-zones "Apex zones ZQXB." --repo switchboard-kit >/dev/null
 crew bolt order apex-zones --first >/dev/null
 eq "$(field mac-studio bolt.order On)" "bolt/apex-zones"
-eq "$(field mac-studio bolt.order Commit)" "WilldanGroup/willdan-blueprints@$(tip plan/wldn)"
+eq "$(field mac-studio bolt.order Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 crew unit add a "Unit a ZQXC." --bolt tenant-environments >/dev/null
 eq "$(field mac-studio unit.add On)" "unit/a bolt/tenant-environments"
 crew unit add b "Unit b ZQXD." --bolt tenant-environments >/dev/null
 crew unit add q "Queued ZQXE." --repo switchboard-kit >/dev/null
 eq "$(field mac-studio unit.add On)" "unit/q queue/switchboard-kit"
-eq "$(field mac-studio unit.add Commit)" "WilldanGroup/willdan-blueprints@$(tip plan/wldn)"
+eq "$(field mac-studio unit.add Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 crew unit split q "Narrowed ZQXF." --into q2 "The rest ZQXG." >/dev/null
 eq "$(field mac-studio unit.split On)" "unit/q unit/q2"
 eq "$(field mac-studio unit.split From)" "unit/q"
@@ -87,7 +86,7 @@ eq "$(field mac-studio unit.move On)" "unit/q2 bolt/tenant-environments"
 eq "$(field mac-studio unit.move From)" "queue/switchboard-kit"
 crew unit drop q2 "No longer wanted ZQXH." >/dev/null
 eq "$(field mac-studio unit.drop On)" "unit/q2 bolt/tenant-environments"
-eq "$(field mac-studio unit.drop Commit)" "WilldanGroup/willdan-blueprints@$(tip plan/wldn)"
+eq "$(field mac-studio unit.drop Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 crew bolt drop apex-zones "Not now ZQXI." >/dev/null
 eq "$(field mac-studio bolt.drop On)" "bolt/apex-zones"
 eq "$(field mac-studio bolt.drop Why)" "plan(apex-zones): drop the bolt"
@@ -96,23 +95,24 @@ ok "each plan write is one entry naming its act, its objects and the plan's comm
 CREW_AGENT=swb-1-conductor crew signal the-banner-flickers "The banner flickers ZQXJ." --kind ask >/dev/null
 sig=$(date +%F)-swb-1-conductor/01-the-banner-flickers
 eq "$(field mac-studio capture On)" "signals/$sig"
-eq "$(field mac-studio capture Commit)" "WilldanGroup/willdan-blueprints@$(tip main)"
+eq "$(field mac-studio capture Commit)" "WilldanGroup/willdan-blueprints@$(git --git-dir "$wb" rev-parse main)"
 eq "$(field mac-studio capture By)" "swb-1-conductor"
 CREW_AGENT=wldn-design crew signal move "$sig" drop --reason "Noise ZQXK." >/dev/null
 eq "$(field mac-studio signal.move On)" "signals/$sig"
-eq "$(field mac-studio signal.move Commit)" "WilldanGroup/willdan-blueprints@$(tip main)"
+eq "$(field mac-studio signal.move Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 CREW_AGENT=swb-1-conductor crew signal cfn-nag "Add a security check ZQXL." --kind ask >/dev/null
 sig2=$(date +%F)-swb-1-conductor/02-cfn-nag
 crew unit add cfn-nag-security-check "A security check ZQXM." --repo switchboard-kit --signal "$sig2" >/dev/null
 eq "$(field mac-studio unit.add On)" "unit/cfn-nag-security-check queue/switchboard-kit"
 eq "$(field mac-studio unit.add From)" "signals/$sig2"
 eq "$(field mac-studio signal.move On)" "signals/$sig2 unit/cfn-nag-security-check"
-eq "$(field mac-studio signal.move Commit)" "WilldanGroup/willdan-blueprints@$(tip main)"
+eq "$(field mac-studio unit.add Commit)" "$(field mac-studio signal.move Commit)"
+eq "$(field mac-studio signal.move Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 ok "a capture, a curation move, and a unit queued from a signal with its route each name the signal and the commit"
 
 crew bolt give swb-1 >/dev/null 2>&1
 eq "$(field mac-studio bolt.give On)" "bolt/tenant-environments team/swb-1"
-eq "$(field mac-studio bolt.give Commit)" "WilldanGroup/willdan-blueprints@$(tip plan/wldn)"
+eq "$(field mac-studio bolt.give Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 pl=$(place "$k" tenant-environments b); change "$pl" b 0 2; commit_all "$pl" "docs(b): the change"
 CREW_AGENT=swb-1-conductor crew unit approve b >/dev/null
 eq "$(field mac-studio unit.approve On)" "unit/b"
@@ -123,12 +123,12 @@ crew bolt give swb-2 solo >/dev/null 2>&1
 change "$k" solo-one 3 3; commit_all "$k" "feat: solo-one"; git -C "$kd/bolts/solo" merge -q --ff-only main
 crew bolt land solo >/dev/null
 eq "$(field mac-studio bolt.land On)" "bolt/solo unit/solo-one"
-eq "$(field mac-studio bolt.land Commit)" "WilldanGroup/willdan-blueprints@$(tip plan/wldn)"
+eq "$(field mac-studio bolt.land Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 ok "a give is recorded with the team once its worktree exists, an approval with the kit's commit, a landing with its units"
 
-crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null 2>&1 && fail "a second plan init was not refused"
-eq "$(field mac-studio plan.init On)" "plan/wldn"
-has "$(field mac-studio plan.init Refused)" "already has plan/wldn"
+before=$(count mac-studio state.init)
+crew state init wldn >/dev/null
+eq "$(count mac-studio state.init)" "$before"
 before=$(count mac-studio unit.drop)
 crew unit drop a "Gone ZQXP." >/dev/null
 crew unit drop a "Gone again ZQXQ." >/dev/null 2>&1 && fail "the second drop was not refused"

@@ -54,10 +54,13 @@ teams_json() { cat <<'EOF'
 { "version": 2,
   "partitions": [
     { "label": "wldn", "partition": "clients/willdan", "blueprints": ["WilldanGroup/willdan-blueprints"],
+      "state": "WilldanGroup/crew-state",
       "machine": "chuck-herdr-alpha", "session": "wldn-3" },
     { "label": "madswan", "partition": "business", "blueprints": ["afterthought/blueprints", "agentplot/blueprints"],
+      "state": "afterthought/crew-state",
       "machine": "mac-studio", "session": "madswan-1" },
     { "label": "swancloud", "partition": "personal", "blueprints": ["afterthought/blueprints"],
+      "state": "afterthought/crew-state",
       "machine": "mac-studio", "session": "swancloud-1" } ],
   "teams": [
     { "name": "swb-1", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",
@@ -137,7 +140,11 @@ world() {  # hosts, fixtures, crew's checkout where each host's spaces keep it
   mkdir -p "$(space chuck-herdr-alpha willdan)/crew" "$(space mac-studio madswan)/crew"
   ln -s "$CREW" "$(space chuck-herdr-alpha willdan)/crew/main"
   ln -s "$CREW" "$(space mac-studio madswan)/crew/main"
+  state_repo WilldanGroup/crew-state; state_repo afterthought/crew-state
 }
+
+# state_repo <owner/name>: an empty bare remote, as a state repository is before crew state init
+state_repo() { local r; r=$(remote "$1"); mkdir -p "$(dirname "$r")"; [ -d "$r" ] || git init -q --bare "$r"; }
 
 commit_all() { git -C "$1" add -A && git -C "$1" commit -qm "${2:-wip}"; }
 
@@ -246,8 +253,8 @@ herdr_state() { jq -r "$3" "$(home_of "$1")/.stub-herdr/$2.json"; }
 # team_world: the box's switchboard-kit and willdan-blueprints checkouts, and the plan with swb-1 holding a bolt
 team_world() {
   world
-  wb=$(blueprints WilldanGroup/willdan-blueprints)
+  wb=$(blueprints WilldanGroup/willdan-blueprints); ws=$(remote WilldanGroup/crew-state)
   k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
   clone WilldanGroup/willdan-blueprints "$(space chuck-herdr-alpha willdan)/willdan-blueprints/main"
-  crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null
+  crew state init wldn >/dev/null
 }

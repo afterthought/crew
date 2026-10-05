@@ -4,14 +4,15 @@
 . "$TESTS/lib.sh"
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
+ws=$(remote WilldanGroup/crew-state)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
 r=$(remote WilldanGroup/switchboard-kit); git clone -q --bare "$k" "$r"
 git -C "$k" remote add origin https://github.com/WilldanGroup/switchboard-kit; git -C "$k" fetch -q origin
 other=$T/elsewhere; git clone -q "$r" "$other"
 pushed() { git -C "$other" pull -q --rebase origin main; echo "$1" > "$other/$1"; commit_all "$other" "feat: $1"; git -C "$other" push -q origin main; }
-crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null
+crew state init wldn >/dev/null
 export CREW_AGENT=wldn-planner
-team() { git --git-dir "$wb" show plan/wldn:plan.rec | recsel -t Bolt -e "Bolt = '$1'" -P Team; }
+team() { git --git-dir "$ws" show wldn/main:plan.rec | recsel -t Bolt -e "Bolt = '$1'" -P Team; }
 landed() { crew unit add "$2" "x" --bolt "$1" >/dev/null; change "$k" "$2" 3 3; commit_all "$k" "feat: $2"; git -C "$kd/bolts/$1" merge -q --ff-only main; }
 
 pushed from-a-mac

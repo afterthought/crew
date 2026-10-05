@@ -13,7 +13,7 @@ expect_fail "no definition 'fable' for a team" crewpy brief swb-1 fable
 ok "every team brief prints with no unfilled token"
 
 expect_ok crewpy brief swb-1 conductor
-for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`plan/wldn` of WilldanGroup/willdan-blueprints"; do
+for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
   has "$out" "$want"
 done
 has "$out" "plannotator-tui herdr open"; has "$out" "openspec/changes/<unit>/proposal.md"
@@ -28,7 +28,7 @@ done
 expect_ok crewpy brief wldn design
 for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn planner
-for want in "only agent that creates bolts" "--signal" "Agree any change to it with that bolt's conductor" "plan/wldn"; do has "$out" "$want"; done
+for want in "only agent that creates bolts" "--signal" "Agree any change to it with that bolt's conductor" "wldn/main"; do has "$out" "$want"; done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
 expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time"; do has "$out" "$want"; done
@@ -44,3 +44,16 @@ for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`w
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
 ok "the operator brief prints for wldn, opening sites on a Mac and giving the Mac URL on a box"
+
+# The plan and the moves live on the flywheel's branch of its state repository: no brief names a plan/<label>
+# branch or a moves.rec in the blueprints, and the design agent and the planner name the state repository.
+for role in conductor ops construct coder verify; do
+  expect_ok crewpy brief swb-1 $role; lacks "$out" "plan/wldn"; lacks "$out" "signals/moves.rec"
+done
+for role in design planner main-ops dispatcher operator; do
+  expect_ok crewpy brief wldn $role; lacks "$out" "plan/wldn"; lacks "$out" "signals/moves.rec"
+done
+expect_ok crewpy brief wldn design; has "$out" "\`moves.rec\` on \`wldn/main\` of WilldanGroup/crew-state"
+lacks "$out" "route moves straight to"
+expect_ok crewpy brief wldn planner; has "$out" "\`wldn/main\` of WilldanGroup/crew-state"
+ok "every brief names the flywheel's branch for the plan and the moves, and none names plan/<label>"

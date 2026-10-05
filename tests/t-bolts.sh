@@ -3,9 +3,10 @@
 . "$TESTS/lib.sh"
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
+ws=$(remote WilldanGroup/crew-state)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
 ak=$(kit mac-studio willdan atlas-kit)
-crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null
+crew state init wldn >/dev/null
 export CREW_AGENT=wldn-planner CREW_LABEL=wldn
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 crew bolt new apex-zones "Apexes are zones." --repo switchboard-kit >/dev/null
@@ -76,9 +77,23 @@ rm "$T/down"
 ok "an unreachable host's bolts are listed from the plan with every stage unknown, and the host named"
 
 # A hand edit that leaves a duplicated key: crew refuses to read the plan, naming the commit and recfix's message.
-w=$T/hand; git clone -q -b plan/wldn "$wb" "$w"
-printf '\nUnit: coding\nRepo: switchboard-kit\nIntent: twice\n' >> "$w/plan.rec"; commit_all "$w" "plan: a hand edit"; git -C "$w" push -q origin plan/wldn
+w=$T/hand; git clone -q -b wldn/main "$ws" "$w"
+printf '\nUnit: coding\nRepo: switchboard-kit\nIntent: twice\n' >> "$w/plan.rec"; commit_all "$w" "plan: a hand edit"; git -C "$w" push -q origin wldn/main
 bad=$(git -C "$w" rev-parse --short HEAD)
-expect_fail "plan/wldn of WilldanGroup/willdan-blueprints at $bad: plan.rec fails recfix --check" crew bolts
+expect_fail "wldn/main of WilldanGroup/crew-state at $bad: plan.rec fails recfix --check" crew bolts
 has "$out" "duplicated key"
 ok "a plan that fails its schema is refused, naming the commit"
+
+# madswan builds swancloud, designed in afterthought/blueprints, and flywheel-next, designed in agentplot/blueprints:
+# one plan holds both.
+edit teams "d['teams'].append({'name': 'swc-1', 'system': 'Swancloud', 'machine': 'mac-studio', 'session': 'madswan-1', 'units': 2, 'repos': ['swancloud', 'blueprints']})"
+blueprints afterthought/blueprints >/dev/null; blueprints agentplot/blueprints >/dev/null; crew state init madswan >/dev/null
+crew bolt new site-refresh "The site reads well." --repo swancloud --label madswan >/dev/null
+crew bolt new flywheel-loop "The loop runs." --repo flywheel-next --label madswan >/dev/null
+expect_ok crew bolts --label madswan --json
+eq "$(jq '.partitions[0].plans | length' <<<"$out")" "1"
+eq "$(jq -r '.partitions[0].plans[0].repo' <<<"$out")" "afterthought/crew-state"
+eq "$(jq -r '[.partitions[0].plans[0].bolts[] | "\(.bolt) \(.repo)"] | join(", ")' <<<"$out")" "site-refresh swancloud, flywheel-loop flywheel-next"
+expect_ok crew bolts --label madswan
+has "$out" "madswan/main $(git --git-dir "$(remote afterthought/crew-state)" rev-parse --short madswan/main)  afterthought/crew-state"
+ok "a partition whose kits are designed in two blueprints repos keeps them in one plan, on its branch"

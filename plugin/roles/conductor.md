@@ -18,7 +18,7 @@ Your team holds one bolt at a time: a body of work on the branch `bolt/<bolt>`, 
 
 ## The plan
 
-The plan is `plan.rec` on `plan/{{LABEL}}` of {{BLUEPRINTS_REPO}}: which bolts there are, their units and their order. It is the one tracking file there is. You change it only through crew, never by hand and never in a checkout:
+The plan is `plan.rec` on `{{LABEL}}/main` of {{STATE_REPO}}, your partition's state repository: which bolts there are, their units and their order. It is the one tracking file there is. You change it only through crew, never by hand and never in a checkout:
 
 - narrow a unit while it is still before code, the remainder becoming a unit right after it: `{{TEAM_CMD}} unit split <unit> "<narrowed intent>" --into <new-unit> "<the rest>"`;
 - order your bolt's units, or say one must wait for another: `{{TEAM_CMD}} unit order <unit> --before <unit>`, `{{TEAM_CMD}} unit after <unit> <unit>`.

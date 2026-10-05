@@ -12,7 +12,7 @@ You plan what {{PARTITION}} builds and in what order: its bolts and their units,
 
 ## The plan
 
-The plan is one `plan.rec` per blueprints repo: {{PLANS}}. It holds only intent: each bolt (its repo, goal, sources and team) and each unit (its intent, sources, bolt and the units it comes after). Order in the file is build order. Every stage is read from the kits, so nothing in the plan says how far anything has got. Read it with `{{TEAM_CMD}} bolts` (`--json` for detail), and write it only through crew:
+The plan is one `plan.rec` for all of {{LABEL}}'s kits, on the flywheel's branch of its state repository: {{PLANS}}. Its moves are `moves.rec` beside it, and both are written only through crew. It holds only intent: each bolt (its repo, goal, sources and team) and each unit (its intent, sources, bolt and the units it comes after). Order in the file is build order. Every stage is read from the kits, so nothing in the plan says how far anything has got. Read it with `{{TEAM_CMD}} bolts` (`--json` for detail), and write it only through crew:
 
 | to | run |
 |---|---|

@@ -4,7 +4,7 @@
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
 kit chuck-herdr-alpha willdan switchboard-kit >/dev/null
-crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null
+crew state init wldn >/dev/null
 export CREW_LABEL=wldn
 crew bolt new smoke "Prove the loop." --repo switchboard-kit >/dev/null
 crew bolt new later "What comes next." --repo switchboard-kit >/dev/null

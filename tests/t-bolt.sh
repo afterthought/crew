@@ -3,14 +3,15 @@
 . "$TESTS/lib.sh"
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
+ws=$(remote WilldanGroup/crew-state)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
 kit chuck-herdr-alpha willdan breadboard-kit >/dev/null
 mkdir -p "$k/.devenv/profile/bin"
 printf '#!/usr/bin/env bash\necho "$KIT" > .prepared\n' > "$k/.devenv/profile/bin/crew-prepare"; chmod +x "$k/.devenv/profile/bin/crew-prepare"
 printf '.devenv/\n.prepared\n' > "$k/.gitignore"; commit_all "$k" "chore: ignore what preparing a worktree makes"
-crew plan init WilldanGroup/willdan-blueprints wldn >/dev/null
+crew state init wldn >/dev/null
 export CREW_AGENT=wldn-planner
-plan() { git --git-dir "$wb" show plan/wldn:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
+plan() { git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
 
 expect_ok crew bolt new tenant-environments "A tenant holds environments of its own." --repo switchboard-kit --source books/switchboard-kit/src/account-onboarding.md
 has "$out" "plan(tenant-environments): add the bolt (wldn-planner)"
@@ -19,7 +20,7 @@ crew bolt new apex-zones "Each install's apex is its own zone." --repo switchboa
 crew bolt new board-builds "A board builds." --repo breadboard-kit >/dev/null
 eq "$(plan -t Bolt -P Bolt)" $'tenant-environments\napex-zones\nconsole-pages\nboard-builds'
 eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Source)" "books/switchboard-kit/src/account-onboarding.md"
-expect_fail "plan/wldn already has bolt console-pages" crew bolt new console-pages "again" --repo switchboard-kit
+expect_fail "wldn/main already has bolt console-pages" crew bolt new console-pages "again" --repo switchboard-kit
 expect_fail "no team builds rocs-kit" crew bolt new rocs "x" --repo rocs-kit
 ok "bolt new adds bolts in order"
 
@@ -62,7 +63,7 @@ ok "after landing, the team is given its next planned bolt with no edit and no d
 
 crew bolt give brd-1 >/dev/null
 expect_ok crew bolt drop board-builds "the board ships as is"
-eq "$(git --git-dir "$wb" log -1 --format=%b plan/wldn)" "the board ships as is"
+eq "$(git --git-dir "$ws" log -1 --format=%b wldn/main | head -1)" "the board ships as is"
 crew unit add a-console-page "A page lists them." --bolt console-pages >/dev/null
 crew unit add a-console-filter "It filters them." --bolt console-pages --after a-console-page >/dev/null
 expect_ok crew bolt drop console-pages "folded into the portal" --requeue
