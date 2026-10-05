@@ -20,7 +20,9 @@
 #   crew unit run <unit> construct|code|verify|merge ["<words>"]
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
 #                                      construct writes its OpenSpec change, code builds it once the user has
-#                                      approved it, verify checks it, merge merges it into the bolt
+#                                      approved it, verify checks it, merge merges it into the bolt. Construct
+#                                      run again on an approved unit marks it amended: code waits for the user
+#                                      to approve it again
 #   crew unit wait <unit> [--timeout <ms>]
 #                                      wait for the unit's stage agent to settle, and record the stage's end
 #   crew fix     <team> <name> "<what is wrong>"
@@ -500,7 +502,10 @@ case $cmd in
     if ! e=$(plan _run "$unit" "$stage" "${5:-}"); then [[ $taken == 1 ]] && drop "$held" "$slot"; exit 1; fi
     eval "$e"
     ensure_slot_pane "$slot" "$PLACE"
-    run_stage "$slot" "$stage" "$PROMPT" stage.start "$unit" "unit/$unit" --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")"
+    # A construct that marked the unit amended says so, and is the entry the plan's commit names.
+    amended=(); [[ -n $AMENDED ]] && amended=(--field Amended=yes --commit "$AMENDED" --id "$ENTRY")
+    run_stage "$slot" "$stage" "$PROMPT" stage.start "$unit" "unit/$unit" --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")" \
+      ${amended[@]+"${amended[@]}"}
     echo "$(name_of "$slot") has $unit: $stage, in $PLACE" ;;
   fix)
     load_team "${2:-}"; forward; ensure_state

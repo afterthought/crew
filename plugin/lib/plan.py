@@ -38,7 +38,7 @@ five times. A write that changes several files is one commit, and it carries the
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, datetime, fcntl, getpass, json, os, pathlib, re, shlex, subprocess, sys, tempfile
+import argparse, contextlib, datetime, fcntl, getpass, json, os, pathlib, re, shlex, subprocess, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -1003,26 +1003,49 @@ fi
 UNREBASE = r"""cd "$1" && git reset -q --hard "$2" && git branch -q --set-upstream-to="bolt/$3" "unit/$4" """
 
 
+# The approval commit, printed as "made <sha>"; or, given the head an amended unit's construct started from, the
+# approval already made since then, as "found <sha>", so an approval whose plan write failed only clears the mark.
 APPROVE = r"""cd "$1" || exit 1
+if [ -n "$3" ]; then
+  had=$(git log --format='%H %(trailers:key=Reviewed-by,valueonly,separator=%x2C)' "$3..HEAD" 2>/dev/null | awk 'NF > 1 {print $1; exit}')
+  if [ -n "$had" ]; then echo "found $had"; exit 0; fi
+fi
 git commit -q --allow-empty -m "review($2): approved" --trailer "Reviewed-by: $(git config user.name) <$(git config user.email)>"
-git rev-parse HEAD
+echo "made $(git rev-parse HEAD)"
 """
 
 
 def unit_approve(fleet, a):
+    """crew unit approve <unit>: the user's review, an empty Reviewed-by commit on unit/<unit>. A unit marked amended
+    has its mark cleared in the plan as well, after which its stage is read from its tasks again."""
     label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
     s = unit_stage(fleet, plan, a.unit)
+    u = plan.unit(a.unit)
+    mark, bolt = u.get("Amended"), u.get("Bolt")
     if s["stage"] == "approved":
         print(f"unit {a.unit} is already approved")
         return
     s["stage"] == "review" or fail(f"unit {a.unit} is in {s['stage']}: " + (
+        "construct has not been run again since it was amended" if s["stage"] == "amended" else
+        "its change is being written again, and has not been committed" if s["stage"] == "construct" and mark else
         "its change's planning is not complete" if s["stage"] == "construct" else
         "it has no change to review yet" if s["stage"] in ("ready", "waiting", "queued") else
         s.get("why", "it is past review")))
-    t = fleet["teams"][plan.bolt(plan.unit(a.unit).get("Bolt")).get("Team")]
-    sha = host_run(fleet, t["machine"], APPROVE, s["worktree"], a.unit)
-    print(f"unit {a.unit} approved: {sha[:7]} on unit/{a.unit}")
-    record.emit(label, "unit.approve", [f"unit/{a.unit}"], commit=[f"{t['kit']['repo']}@{sha}"], why=f"review({a.unit}): approved")
+    t = fleet["teams"][plan.bolt(bolt).get("Team")]
+    made, sha = host_run(fleet, t["machine"], APPROVE, s["worktree"], a.unit, mark or "").split()
+    print(f"unit {a.unit} approved: {sha[:7]} on unit/{a.unit}" if made == "made" else
+          f"unit {a.unit} was approved at {sha[:7]} on unit/{a.unit}, after construct ran again")
+    commits, eid = [f"{t['kit']['repo']}@{sha}"], None
+    if mark:
+        def change(w):
+            u = w.unit(a.unit)
+            u.get("Amended") == mark or fail(f"unit {a.unit} was sent back to construct again since it was read: approve it "
+                                             "once its change is in review")
+            u.drop("Amended")
+            return [bolt]
+        commits.append(f"{repo}@{write(fleet, label, change, f'plan({bolt}): {a.unit} approved after amendment')}")
+        eid = CONTEXT["eid"]
+    record.emit(label, "unit.approve", [f"unit/{a.unit}"], commit=commits, why=f"review({a.unit}): approved", eid=eid)
 
 
 # ------------------------------------------------------------------------------------------ who writes what
@@ -1034,8 +1057,8 @@ PLAN_WRITES = {("bolt", "new"), ("bolt", "give"), ("bolt", "order"), ("bolt", "d
 
 def role(fleet, name):
     """What an agent crew started is, from its name alone: (kind, its partition's label or its team), or ("user", None)
-    for no agent at all."""
-    if not name:
+    for no agent at all, or for the user's <user>@<host>, which a command run again on a team's host carries."""
+    if not name or "@" in name:
         return "user", None
     for label in fleet["partitions"]:
         for kind, n in (("planner", f"{label}-planner"), ("design", f"{label}-design"), ("main-ops", f"{label}-ops")):
@@ -1060,9 +1083,10 @@ def planner_of(fleet, kind, of):
 
 def may_write(fleet, key, a):
     """Who writes the plan directly. The user writes everything. The planner changes it only by a proposal; a
-    conductor narrows, orders and sets dependencies within the bolt its team holds (checked once its unit is found);
-    the design agent queues; a dispatcher gives bolts; the main level's ops lands them. Any other plan write by an
-    agent crew started is refused, naming the planner."""
+    conductor narrows, orders and sets dependencies within the bolt its team holds (checked once its unit is found),
+    and marks a unit of it amended by running construct again (run_check); the design agent queues; a dispatcher
+    gives bolts; the main level's ops lands them. Any other plan write by an agent crew started is refused, naming
+    the planner."""
     name = os.environ.get("CREW_AGENT")
     if key not in PLAN_WRITES or not name:
         return
@@ -2026,24 +2050,59 @@ def in_plan(fleet, a):
     sys.exit(3)
 
 
+HEAD = r"""cd "$1" && git rev-parse HEAD"""
+
+
+def mark_amended(fleet, label, unit, bolt, head):
+    """The plan marks a unit amended at the head construct starts again from, so its code, verify and merge wait for
+    the user's review of what construct writes. Returns the write's commit. What the write says goes to standard
+    error: bash crew reads standard output as the stage's variables."""
+    def change(w):
+        u = w.unit(unit)
+        u.get("Bolt") == bolt or fail(f"unit {unit} moved to {u.get('Bolt') or 'the queue'} meanwhile")
+        u.set("Amended", head)
+        return [bolt]
+    with contextlib.redirect_stdout(sys.stderr):
+        return write(fleet, label, change, f"plan({bolt}): {unit} amended, construct runs again")
+
+
 def run_check(fleet, a):
-    """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent."""
+    """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent. Construct
+    is run again at any stage before merge, and on a unit with an approved change, or one already amended, it first
+    marks the unit amended in the plan: a write the conductor of the team holding its bolt, or the user, makes. Code,
+    verify and merge wait while the mark stands."""
     label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
     u = plan.unit(a.unit)
     bolt = u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first")
     t = fleet["teams"][plan.bolt(bolt).get("Team")]
     s = Stages(fleet, plan, survey(fleet, [(t["name"], bolt)])).of(a.unit)
-    st, place = s["stage"], f"{t['kit']['dir']}/places/{a.unit}"
+    st, place, mark = s["stage"], f"{t['kit']['dir']}/places/{a.unit}", u.get("Amended")
     st != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
     words = f" {a.words}" if a.words else ""
+    amended_at = entry = ""
     if a.stage == "construct":
         if st == "waiting":
             deps = [d for d in u.all("After") if Stages(fleet, plan, survey(fleet, [(t["name"], bolt)])).of(d)["stage"] not in ("merged", "landed")]
             fail(f"unit {a.unit} is waiting: it comes after " + ", ".join(deps) + ", not yet merged into its bolt")
-        st in ("ready", "construct", "review") or fail(f"unit {a.unit} is in {st}; construct is behind it")
+        st not in ("merged", "landed") or fail(f"unit {a.unit} has " + ("merged into its bolt" if st == "merged" else "landed on main")
+                                               + ": a defect in it is a fix (crew fix), and a new need is a new unit")
+        marking = bool(mark) or st in ("approved", "code", "verify")
+        if marking:
+            kind, team = role(fleet, os.environ.get("CREW_AGENT"))
+            kind == "user" or (kind, team) == ("conductor", t["name"]) or fail(
+                f"unit {a.unit} is in {st}, so construct run again marks it amended: a plan write only {t['name']}-conductor "
+                "or the user makes")
         make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        if marking:
+            head = s.get("head") or host_run(fleet, t["machine"], HEAD, place)
+            if head != mark:
+                amended_at, entry = f"{repo}@{mark_amended(fleet, label, a.unit, bolt, head)}", CONTEXT["eid"]
         sources = u.all("Source")
-        prompt = f"/opsx:propose {a.unit} {u.get('Intent')}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + words
+        again = " This unit's intent was amended; revise the existing change to it." if amended(mark) else ""
+        prompt = f"/opsx:propose {a.unit} {u.get('Intent')}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + again + words
+    elif mark:
+        fail(f"unit {a.unit} was amended and " + (f"construct has not been run again (crew unit run {a.unit} construct)" if st == "amended"
+                                                  else f"waits for the user's review (crew unit approve {a.unit})"))
     elif a.stage == "code":
         st != "review" or fail(f"unit {a.unit} is in review: code waits until the user approves it (crew unit approve {a.unit})")
         st in ("approved", "code", "verify") or fail(f"unit {a.unit} is in {st}, with no approved change to code yet")
@@ -2059,7 +2118,8 @@ def run_check(fleet, a):
     else:
         st == "verify" or fail(f"unit {a.unit} is in {st}: it merges once every task is ticked and verify has run")
         prompt = f"Merge {a.unit} into bolt/{bolt}: wt merge bolt/{bolt} --no-squash --no-remove{words}"
-    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt))
+    # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
+    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENTRY=entry))
 
 
 def bolt_of_team(fleet, a):

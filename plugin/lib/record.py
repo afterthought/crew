@@ -13,7 +13,7 @@ ever adds to its own files and a host that is asleep or rebuilt loses nothing it
 branch first, then whatever each host it can reach has not yet carried.
 
   record.py emit --label L --act A [--on X]... [--from X]... [--commit C]... [--why W] [--refused R] [--field K=V]...
-                                          append one entry; prints its id
+                [--id I]                  append one entry, with the id a commit already names if given; prints its id
   record.py session                       the caller's Claude session as <host>:<id>, what a forwarded command carries
   record.py events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
                                           the entries of the partition's branch and of every host it runs on, in time order
@@ -37,11 +37,12 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Observed Chars
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Observed Chars Amended
 
 """
-# Fields beyond the common ones: a stage.end's Result, Tasks, Head and Observed, and a tell's Chars.
-EXTRA = ("Result", "Tasks", "Head", "Observed", "Chars")
+# Fields beyond the common ones: a stage.end's Result, Tasks, Head and Observed, a tell's Chars, and the Amended of
+# a construct's start that marked its unit amended.
+EXTRA = ("Result", "Tasks", "Head", "Observed", "Chars", "Amended")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
@@ -334,6 +335,8 @@ def line(e, zoe=False):
         s += f" (observed {e['Observed']})"
     if e.get("Chars"):
         s += f" ({e['Chars']} characters)"
+    if e.get("Amended"):
+        s += " (amended)"
     if e.get("Refused"):
         s += f"  refused: {e['Refused']}"
     if zoe and e.get("Session") and ":" in e["Session"]:
@@ -486,6 +489,7 @@ def parser():
     x.add_argument("--why")
     x.add_argument("--refused")
     x.add_argument("--field", action="append", default=[], help="K=V, one of " + " ".join(EXTRA))
+    x.add_argument("--id")
     sub.add_parser("session")
     x = sub.add_parser("events")
     x.add_argument("--label")
@@ -504,7 +508,7 @@ def main(argv):
     a = parser().parse_args(argv)
     if a.cmd == "emit":
         extra = dict(f.split("=", 1) for f in a.field if "=" in f)
-        eid = emit(a.label, a.act, a.on, a.frm, a.commit, a.why, a.refused, **{k: v for k, v in extra.items() if k in EXTRA})
+        eid = emit(a.label, a.act, a.on, a.frm, a.commit, a.why, a.refused, eid=a.id, **{k: v for k, v in extra.items() if k in EXTRA})
         if eid:
             print(eid)
         return
