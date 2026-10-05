@@ -34,6 +34,7 @@ crew bolt  drop <bolt> "<reason>" [--requeue]
 crew bolt  land <bolt>
 crew unit  add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID] [--unblocks <bolt>]
 crew unit  split <unit> "<narrowed intent>" --into <unit> "<intent>"
+crew unit  amend <unit> "<new intent>"
 crew unit  order <unit> --before <unit>|--first|--last
 crew unit  after <unit> <unit>...|--none
 crew unit  move <unit> <bolt>|queue [--unblocks <bolt>]
@@ -45,6 +46,8 @@ Each partition keeps one recutils `plan.rec`, for all its kits, on its flywheel'
 
 A unit's stage, as `crew bolts` shows it and `--json` gives it in `stage`, is the first that holds of `landed` (main has its change), `merged` (its bolt has it), `verify` (every task ticked), `code` (some ticked), `approved` (its planning complete and approved since the bolt), `review` (its planning complete), `construct` (its worktree exists), and `ready` or `waiting` by its `After` units; a unit with no bolt is `queued`. A unit the plan marks `Amended` reads, after `landed` and `merged`, `amended` until construct is run again, then `construct` until that commits, then `review`, whatever its tasks say, so a change written again is reviewed again before it is built. `crew unit approve` clears the mark.
 
+A unit in flight is amended in one of two ways, and both end in the user's review of its change. How it builds what it builds changes when its conductor runs construct again with the user's words (see Teams). What it builds changes with `crew unit amend <unit> "<new intent>"`, which the user runs at a shell and the planner only inside a proposal: it replaces the unit's intent, and a unit that has a worktree is marked amended (`intent`, or `proposal/<n>` from an approval) and its conductor told to run construct again, whose agent is told the intent was amended. A unit that has merged is refused: a defect in it is a fix, and new work is a new unit.
+
 ## Proposals
 
 ```
@@ -55,10 +58,10 @@ crew plan approve <n>
 crew plan drop <n> "<reason>"
 ```
 
-The planner changes the plan only by a **proposal** the user approves: where new work goes (a new bolt, a unit in a bolt, the queue), and every move, split, reorder or drop. A proposal is a record in `proposals.rec` on the flywheel's branch: the planner's `Case`, and the plan commands it would run, in order, one `Do` each, as typed without the leading `crew` (`bolt new|order|drop`, `unit add|move|split|order|after|drop`). Proposals are numbered, and never removed or changed.
+The planner changes the plan only by a **proposal** the user approves: where new work goes (a new bolt, a unit in a bolt, the queue), and every move, split, reorder or drop. A proposal is a record in `proposals.rec` on the flywheel's branch: the planner's `Case`, and the plan commands it would run, in order, one `Do` each, as typed without the leading `crew` (`bolt new|order|drop`, `unit add|amend|move|split|order|after|drop`). Proposals are numbered, and never removed or changed.
 
 - `crew plan propose <file>` takes a file of one record, a `Case` and its `Do` lines. Each command is checked in order against the plan as the ones before it leave it, with every refusal it has run directly; a refused command refuses the proposal and nothing is written. The conductor of each bolt in flight the proposal touches is told. `--replaces <n>` drops proposal n and writes its successor in one commit.
-- `crew plan proposed` lists the open proposals and what each waits on; `crew plan proposed <n>` prints one as markdown: the case, then each change in plain words, a unit's intent beside what it rests on (a signal's assertion and excerpt) and the goal and team of the bolt it would join. It reads only the branch, so any host can answer.
+- `crew plan proposed` lists the open proposals and what each waits on; `crew plan proposed <n>` prints one as markdown: the case, then each change in plain words, a unit's intent beside what it rests on (a signal's assertion and excerpt) and the goal and team of the bolt it would join, and an amended unit's bolt, team and stage, its intent as it stands and as proposed, and what approval sets in motion. It reads only the branch, so any host can answer.
 - `crew plan agree <n>` is a conductor's recorded agreement to a proposal that touches the bolt its team holds; the user may agree for any team it touches.
 - `crew plan approve <n>` applies the proposal's commands, exactly as read, to the plan at the tip and closes the proposal, in one commit, or changes nothing when one no longer applies or a touched bolt's conductor has not agreed. A unit with a worktree that moves is rebased before the push and put back if the approval is refused. The user runs it, or an agent on the user's word.
 - `crew plan drop <n> "<reason>"` closes a proposal unapplied, with the reason.
