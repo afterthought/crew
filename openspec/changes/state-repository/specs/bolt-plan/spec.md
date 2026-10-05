@@ -41,6 +41,10 @@ Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Ea
 - **WHEN** the planner queues a unit from a signal
 - **THEN** one commit on the flywheel's branch adds the unit with `Source: signals/<id>` and a `route` move for that signal
 
+#### Scenario: A signal in another blueprints repo
+- **WHEN** madswan's planner queues a flywheel-next unit, whose design is in agentplot/blueprints, from a signal in afterthought/blueprints, the partition's first blueprints repo
+- **THEN** the unit's `Source` is `signals/<id>`, which names that signal in afterthought/blueprints, and the route move is in `moves.rec` on `madswan/main`, in the same commit as the unit
+
 #### Scenario: A signal already moved
 - **WHEN** the signal named already has its move
 - **THEN** the command is refused, naming the move it has, and the plan is unchanged
