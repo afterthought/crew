@@ -2,7 +2,7 @@
 # day on the host where it ran, naming who asked and their Claude session, what it acted on and came from, and the
 # commit it wrote. A refusal of a write is an entry; a read is not. No entry holds text anyone typed, and a record
 # that can't be written changes nothing about the command.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 box=chuck-herdr-alpha
 wb=$(blueprints WilldanGroup/willdan-blueprints); ws=$(remote WilldanGroup/crew-state)

@@ -2,7 +2,7 @@
 # from wherever they asked; tells record their length, never their text. A stage's start is an entry, and its end is
 # one too: when crew unit wait sees it settle, or late, once, when the next command reads the team. Refusals that
 # would have moved work are entries. The operator workspace follows the run record in a flow tab.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 mkdir -p "$(space mac-studio willdan)/willdan-blueprints/main"

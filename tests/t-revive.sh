@@ -1,7 +1,7 @@
 # After a restart, crew revive brings back each standing agent of this host whose pane came back with no agent in
 # it: from its last conversation, or fresh when it never had one, as for a main level never spoken to. Agents that
 # came back are left alone, a revived conductor is greeted, and a team or main level taken down stays down.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 clone WilldanGroup/willdan-blueprints "$(space mac-studio willdan)/willdan-blueprints/main"

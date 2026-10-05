@@ -1,5 +1,5 @@
 # Every plan command checks for recutils first, and names the package when it is missing.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 for c in "bolts" "bolt give swb-1" "state init wldn"; do
   expect_fail "install the recutils package" env PATH="$(path_without recsel)" bash -c "$(declare -f as crew home_of); $(declare -p CREW T); HOST=$HOST crew $c"
