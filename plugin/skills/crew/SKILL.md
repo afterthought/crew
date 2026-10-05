@@ -29,6 +29,8 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | after a restart, bring back every standing agent of this host whose pane came back empty | `crew revive` |
 | send an agent crew started a message, wherever it runs | `crew tell <agent> "<text>"` |
 | see what runs where, with the URL to open | `crew sites [<label>]` |
+| see what crew did lately, on every host of a partition, or as it happens | `crew events [--label L] [--about <object>] [--follow]` |
+| answer what happened to a bolt, a unit or a signal | `crew trace <bolt|unit|signal>` |
 
 ## Keeping a team healthy
 
