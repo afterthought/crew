@@ -619,9 +619,58 @@ def make_place(fleet, t, path, branch, base, track=False):
     host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "")
 
 
-def free_slot(fleet, t, unit):
-    """End the agent in the slot a unit or fix holds and free the slot, on the team's host."""
-    r = crew.on_machine(fleet, t["machine"], ["bash", crew.crew_at(fleet, t["machine"]), "_free", t["name"], unit])
+# A host clones a kit once and never pulls it, so its main can lag GitHub's by hundreds of commits. Prints the ref a
+# bolt is cut from: GitHub's main, fetched now, with the checkout's main fast-forwarded to it when that is safe; or the
+# checkout's own main when it already holds all of GitHub's. A main with commits of its own that also lacks some of
+# GitHub's is refused, since a bolt cut from either side would lose the other. A kit with no origin keeps its main.
+FRESH = r"""main=$1
+n() { if [ "$1" = 1 ]; then echo "1 commit"; else echo "$1 commits"; fi; }
+cd "$main" || exit 1
+git remote get-url origin >/dev/null 2>&1 || { echo main; exit 0; }
+err=$(git fetch -q origin 2>&1) || { echo "cannot fetch $(basename "$(dirname "$main")") from GitHub, so a bolt can't be cut from its main: $err" >&2; exit 1; }
+git rev-parse --verify -q origin/main >/dev/null || { echo main; exit 0; }
+ahead=$(git rev-list --count origin/main..main) behind=$(git rev-list --count main..origin/main)
+if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
+  echo "main on this host has $(n $ahead) of its own and lacks $(n $behind) of GitHub's: rebase it onto origin/main first, and never push it with force" >&2; exit 1
+elif [ "$behind" -gt 0 ]; then
+  if [ "$(git branch --show-current)" = main ] && [ -z "$(git status --porcelain)" ]; then
+    git merge -q --ff-only origin/main && echo "main fast-forwarded $(n $behind) to GitHub's" >&2
+  else
+    echo "main is $(n $behind) behind GitHub's and was left as it is (another branch is checked out there, or it has uncommitted changes)" >&2
+  fi
+  echo origin/main
+else
+  [ "$ahead" -gt 0 ] && echo "main holds $(n $ahead) GitHub's main does not yet have; the bolt is cut from them" >&2
+  echo main
+fi
+"""
+
+
+def fresh_base(fleet, t):
+    """The ref a team's next bolt is cut from, on its host, after fetching the kit from GitHub."""
+    r = crew.on_machine(fleet, t["machine"], ["bash", "-c", FRESH, "crew", t["kit"]["main"]])
+    r.returncode == 0 or fail(f"on {t['machine']}: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
+    if r.stderr.strip():
+        print(r.stderr.strip())
+    return r.stdout.strip() or "main"
+
+
+# How far a kit's main on its host is from GitHub's, after fetching: "<ahead> <behind>", or nothing for a kit with no
+# origin or a GitHub repo with no main yet.
+BEHIND = r"""main=$1
+cd "$main" || exit 1
+git remote get-url origin >/dev/null 2>&1 || exit 0
+err=$(git fetch -q origin 2>&1) || { echo "cannot fetch $(basename "$(dirname "$main")") from GitHub, so cannot tell whether its main is behind GitHub's: $err" >&2; exit 1; }
+git rev-parse --verify -q origin/main >/dev/null || exit 0
+echo "$(git rev-list --count origin/main..main) $(git rev-list --count main..origin/main)"
+"""
+
+
+def free_slot(fleet, t, unit, remove=False):
+    """End the agent in the slot a unit or fix holds and free the slot, on the team's host; with remove, a dropped
+    unit's worktree, unless it has uncommitted changes, and its branch go too."""
+    r = crew.on_machine(fleet, t["machine"], ["bash", crew.crew_at(fleet, t["machine"]), "_free", t["name"], unit]
+                        + (["--remove"] if remove else []))
     if r.returncode:
         print(f"{unit}'s slot on {t['name']} was not freed: " + (r.stderr.strip() or f"exit {r.returncode}"), file=sys.stderr)
     elif r.stdout.strip():
@@ -662,6 +711,7 @@ def bolt_give(fleet, a):
             if not plan.units_of(b.name()):
                 fail(f"{t['name']} holds bolt {b.name()}, which has no units yet")
             fail(f"{t['name']} holds bolt {b.name()}, landed but still in the plan: crew bolt land {b.name()}")
+    base = fresh_base(fleet, t)
 
     def change(w):
         again = held_by(w.plan, t["name"])
@@ -683,7 +733,7 @@ def bolt_give(fleet, a):
     write(fleet, label, repo, change, "plan: give a bolt")
     b = seen["bolt"]
     path = f"{t['kit']['dir']}/bolts/{b}"
-    make_place(fleet, t, path, f"bolt/{b}", "main")
+    make_place(fleet, t, path, f"bolt/{b}", base)
     print(f"{t['name']} holds {b}: bolt/{b} at {path} on {t['machine']}")
     # A team takes a bolt only once its last one has landed or been dropped, so nothing is in flight: a conductor
     # or ops that is up starts again in the new bolt's worktree, with fresh context, before the conductor is greeted.
@@ -750,6 +800,12 @@ def bolt_land(fleet, a):
         s = st.of(u)
         s["stage"] != "unknown" or fail(f"cannot tell whether unit {u} has landed: {s.get('why')}")
         s["stage"] == "landed" or fail(f"unit {u} has not landed on main: it is {s['stage']}")
+    # A bolt landed on a main that lags GitHub's can't be pushed without force, and force would erase what it lacks.
+    gap = host_run(fleet, t["machine"], BEHIND, t["kit"]["main"]).split()
+    if gap and int(gap[1]):
+        commits = lambda k: f"{k} commit" + ("" if k == "1" else "s")
+        fail(f"{t['kit']['name']}'s main on {t['machine']} is {commits(gap[1])} behind GitHub's (with {gap[0]} of its own): "
+             f"rebase it onto origin/main, check it again, then land; never push it with force")
 
     def change(w):
         w.bolt(a.bolt)
@@ -934,8 +990,8 @@ def unit_drop(fleet, a):
     write(fleet, label, repo, change, f"plan({bolt or 'queue'}): drop {a.unit}", a.reason)
     team = fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
     if team:
-        free_slot(fleet, team, a.unit)
-    if s["worktree"]:
+        free_slot(fleet, team, a.unit, remove=True)
+    elif s["worktree"]:
         print(f"its worktree stays at {s['worktree']}, on unit/{a.unit}")
 
 
@@ -1072,6 +1128,20 @@ def team_of_unit(fleet, a):
     u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first (crew unit move {a.unit} <bolt>)")
     team = plan.bolt(u.get("Bolt")).get("Team") or fail(f"bolt {u.get('Bolt')} is held by no team yet: crew bolt give <team> {u.get('Bolt')}")
     print(sh(TEAM=team))
+
+
+def in_plan(fleet, a):
+    """Whether a partition's plan has a unit (every partition's, without --label): said and exit 0 when one does, exit
+    3 when none does, and refused when a plan could not be read, since then nobody can tell."""
+    errors = {}
+    labels = [a.label] if a.label else list(fleet["partitions"])
+    hits = [h for h in plans(fleet, labels, errors) if h[3] and h[3].unit(a.unit)]
+    if hits:
+        print(f"unit {a.unit} is in plan/{hits[0][0]} of {hits[0][1]}")
+        return
+    not errors or fail(f"can't tell whether unit {a.unit} is still planned: "
+                       + "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()))
+    sys.exit(3)
 
 
 def run_check(fleet, a):
@@ -1328,6 +1398,9 @@ def parser():
     x.add_argument("base")
     x = sub.add_parser("_slots")
     x.add_argument("team")
+    x = sub.add_parser("_in-plan")
+    x.add_argument("unit")
+    x.add_argument("--label")
     return ap
 
 
@@ -1338,7 +1411,7 @@ COMMANDS = {
     ("unit", "add"): unit_add, ("unit", "split"): unit_split, ("unit", "order"): unit_order, ("unit", "after"): unit_after,
     ("unit", "move"): unit_move, ("unit", "drop"): unit_drop, ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_slots", None): slots_cmd, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_slots", None): slots_cmd, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
 }
 
 

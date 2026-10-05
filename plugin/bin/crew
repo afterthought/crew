@@ -14,6 +14,9 @@
 #   crew resume  <team> [role...]      bring back the conductor or ops when not up, with its last conversation
 #   crew clear   <team> <role>         /clear the conductor or ops and give it its name back
 #   crew down    <team>                end every session the team has; the panes stay
+#   crew unit free <unit> [--team <team>]
+#                                      free a slot still holding a unit the plan no longer has: end its agent, and
+#                                      remove its worktree, unless it has uncommitted changes, and its branch
 #   crew unit run <unit> construct|code|verify|merge ["<words>"]
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
 #                                      construct writes its OpenSpec change, code builds it once the user has
@@ -39,6 +42,9 @@
 #                                      main level's session, and a dispatcher on each host the partition's teams run on
 #   crew operator up <label>           the operator agent in this host's operator session <label>
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs
+#   crew revive                        after a restart, every standing agent of this host whose pane came back with no
+#                                      agent in it, picked up from its last conversation; a team or main level taken
+#                                      down with crew down stays down
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
 #
 # A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
@@ -129,14 +135,17 @@ stop() {
 }
 
 start() {  # start <role> [stage|resume]
-  local role=$1 pane name; pane=$(pane_of "$role"); name=$(name_of "$role")
+  local role=$1 pane name dir; pane=$(pane_of "$role"); name=$(name_of "$role")
   [[ -z $(agent_status "$pane") ]] || { echo "$name is still running; not starting another over it" >&2; return 1; }
+  dir=$(py place "$SCOPE" "$role" ${2:-}) || return 1
   # A Claude that died badly leaves the pane reporting mouse movement, which types escape codes into the shell
   # and into whatever is run next. Clear the line and switch the reporting off first.
   h pane send-keys "$pane" ctrl+c >/dev/null 2>&1 || true
   h pane run "$pane" "printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?2004l'; clear" >/dev/null 2>&1 || true
   sleep 1
-  h pane run "$pane" "bash $(printf '%q' "$here/crew-role") $SCOPE $role ${2:-}" >/dev/null
+  # The pane's own shell moves to the folder the role runs in. herdr saves a pane's shell folder and, after a restart,
+  # resumes the agent's conversation there, and Claude finds a conversation only from the folder it began in.
+  h pane run "$pane" "cd $(printf '%q' "$dir") && bash $(printf '%q' "$here/crew-role") $SCOPE $role ${2:-}" >/dev/null
   give_name "$pane" "$name" || return 1
   # Claude asks whether a folder it has not seen is trusted. Every role starts in a folder the hosts file names:
   # a session's space, a checkout in it, or a worktree crew made from the team's own repository. So that one
@@ -216,6 +225,23 @@ greet_conductor() {  # a fresh conductor reads where its bolt stands and carries
   py greet "$TEAM" || true
 }
 
+# A team or main level taken down stays down through a restart: crew revive leaves it be until it is brought up.
+mark_down() { touch "$STATE/down"; }
+mark_up() { rm -f "$STATE/down"; }
+
+revive() {  # start, from its last conversation, each standing role whose pane is there with no agent in it
+  local role pane
+  [[ -s $panes ]] || return 0
+  [[ -e $STATE/down ]] && { echo "$SCOPE was taken down; it stays down"; return 0; }
+  for role in "${standing[@]}"; do
+    pane=$(pane_of "$role"); pane_live "$pane" || continue
+    [[ -z $(agent_status "$pane") ]] || continue
+    sleep 10; [[ -z $(agent_status "$pane") ]] || continue  # herdr may still be resuming it
+    start "$role" resume || continue
+    [[ $KIND == team && $role == conductor ]] && greet_conductor
+  done
+}
+
 start_standing() {  # start each standing role that is not up
   local role
   for role in "${standing[@]}"; do
@@ -257,6 +283,37 @@ reap() {  # free every slot whose unit or fix has merged into its bolt, and remo
     remove_place "$kind" "$name"
     echo "$(name_of "$slot") is free: $name has merged into its bolt"
   done < <(plan _slots "$TEAM" 2>/dev/null || true)
+}
+remove_dropped() {  # remove_dropped <unit> <place>: a dropped unit's worktree, unless it has uncommitted changes, and its branch
+  local unit=$1 path=$2 sha
+  if [[ -d $path ]]; then
+    [[ -z $(git -C "$path" status --porcelain 2>/dev/null) ]] || { echo "$path was kept, and unit/$unit with it: it has uncommitted changes" >&2; return 1; }
+    git -C "$KIT" worktree remove "$path" || return 1
+  fi
+  sha=$(git -C "$KIT" rev-parse --short --verify -q "refs/heads/unit/$unit") || return 0
+  git -C "$KIT" branch -q -D "unit/$unit" && echo "$path and unit/$unit are removed; the branch was at $sha"
+}
+unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit the plan no longer has
+  local unit=${1:?usage: crew unit free <unit> [--team <team>]} team= t slot path out rc=0
+  [[ ${2:-} == --team ]] && team=${3:?usage: crew unit free <unit> [--team <team>]}
+  if [[ -z $team ]]; then  # the team of this host whose slot holds it
+    for t in $(py here | awk '$1 == "team" {print $2}'); do
+      awk -v u="$unit" '$3 == u {f = 1} END {exit !f}' "$HOME/.local/state/$t-team/slots" 2>/dev/null && { team=$t; break; }
+    done
+    [[ -n $team ]] || { echo "no team on this host holds $unit in a slot; name its team: crew unit free $unit --team <team>" >&2; exit 1; }
+  fi
+  load_team "$team"; forward; ensure_state
+  slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
+  out=$(plan _in-plan "$unit" --label "$LABEL" 2>&1) || rc=$?
+  [[ $rc == 0 ]] && { echo "$out: drop it with crew unit drop, which frees its slot" >&2; exit 1; }
+  [[ $rc == 3 ]] || { echo "$out" >&2; exit 1; }
+  path=$(awk -v s="$slot" '$1 == s {print $4}' "$held")
+  if [[ -d $path && -n $(git -C "$path" status --porcelain 2>/dev/null) ]]; then
+    echo "$path has uncommitted changes: they are the user's to keep or discard before the slot is freed" >&2; exit 1
+  fi
+  free "$slot" || exit 1
+  echo "$(name_of "$slot") is free"
+  remove_dropped "$unit" "$path"
 }
 free_elsewhere() {  # a unit moved from another team's bolt in this checkout leaves that team's slot
   local f other
@@ -325,22 +382,22 @@ case $cmd in
     for role in "${standing[@]}"; do
       [[ -n $(agent_status "$(pane_of "$role")") ]] && { echo "$(name_of "$role") is already up; use: crew restart $TEAM" >&2; exit 1; }
     done
-    ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
+    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
   close)
-    load_team "${2:-}"; forward; ensure_state; force=1; teardown; echo "$TEAM is closed" ;;
+    load_team "${2:-}"; forward; ensure_state; force=1; teardown; mark_down; echo "$TEAM is closed" ;;
   rebuild)
     load_team "${2:-}"; forward; ensure_state; force=1; teardown
-    ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
+    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
   restart)
-    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"
+    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up
     stopped=(); for role in "${picked[@]}"; do stop "$role" && stopped+=("$role"); done
     ensure_team; for role in ${stopped[@]+"${stopped[@]}"}; do start "$role"; done
     [[ $greet == 1 && " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
-    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; ensure_team
+    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up; ensure_team
     for role in "${picked[@]}"; do
       if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
-      start "$role" resume || { echo "$(name_of "$role") has no conversation to resume; starting it fresh"; start "$role"; }
+      start "$role" resume || { echo "$(name_of "$role") did not come back with its conversation; starting it fresh"; start "$role"; }
     done ;;
   clear)
     load_team "${2:-}"; forward; ensure_state; role=${3:?usage: crew clear <team> conductor|ops}; known_role "$role"
@@ -351,8 +408,9 @@ case $cmd in
     give_name "$pane" "$(name_of "$role")" && echo "$(name_of "$role") cleared" ;;
   down)
     load_team "${2:-}"; forward; ensure_state
-    for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; echo "$TEAM is down; its panes are still there." ;;
+    for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down; echo "$TEAM is down; its panes are still there." ;;
   unit)
+    [[ ${2:-} == free ]] && { unit_free "${@:3}"; exit 0; }
     [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
     unit=${3:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
     stage=${4:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
@@ -382,19 +440,21 @@ case $cmd in
       ensure_slot_pane "$slot" "$path"; run_stage "$slot" fix "Fix: $words"
       echo "$(name_of "$slot") has $fix: code, in $path"
     fi ;;
-  _free)  # crew _free <team> <unit|fix/name>: free the slot holding it (crew unit drop asks for this)
-    load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}"); [[ -n $slot ]] || exit 0
-    free "$slot" && echo "$(name_of "$slot") is free" ;;
+  _free)  # crew _free <team> <unit|fix/name> [--remove]: free the slot holding it, and with --remove remove a dropped
+    # unit's place and branch (crew unit drop asks for both)
+    load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}"); path=$KIT_DIR/places/$3
+    if [[ -n $slot ]]; then path=$(awk -v s="$slot" '$1 == s {print $4}' "$held"); free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi
+    if [[ ${4:-} == --remove ]]; then remove_dropped "$3" "$path" || true; fi ;;
   main)
     sub=${2:-}; load_main "${3:-}"; forward; ensure_state
     case $sub in
       up)
-        ensure_main; start_standing
+        mark_up; ensure_main; start_standing
         while read -r host target remote; do
           if [[ $host == $(this_host) ]]; then bash "$0" _dispatch up "$LABEL"; else there "$target" "$remote" _dispatch up "$LABEL"; fi
         done < <(py hosts "$LABEL") ;;
       down)
-        for role in "${standing[@]}"; do stop "$role" || true; done; echo "$LABEL's main level is down; its panes are still there."
+        for role in "${standing[@]}"; do stop "$role" || true; done; mark_down; echo "$LABEL's main level is down; its panes are still there."
         while read -r host target remote; do
           if [[ $host == $(this_host) ]]; then bash "$0" _dispatch down "$LABEL"; else there "$target" "$remote" _dispatch down "$LABEL"; fi
         done < <(py hosts "$LABEL") ;;
@@ -408,10 +468,18 @@ case $cmd in
   _dispatch)  # crew _dispatch up|down|status <label>: this host's dispatcher of the partition
     sub=${2:-}; load_dispatch "${3:?}"; ensure_state
     case $sub in
-      up) ensure_single "$LABEL dispatch" dispatcher; start_standing ;;
-      down) stop dispatcher || true; echo "$(name_of dispatcher) is down" ;;
+      up) mark_up; ensure_single "$LABEL dispatch" dispatcher; start_standing ;;
+      down) stop dispatcher || true; mark_down; echo "$(name_of dispatcher) is down" ;;
       status) st=$(agent_status "$(pane_of dispatcher)"); printf '%-34s %-8s %s\n' "$(name_of dispatcher)" "$(pane_of dispatcher)" "${st:-not up}" ;;
     esac ;;
+  revive)  # each team, main level, dispatcher and operator agent of this host, in a process of its own
+    while read -r kind scope; do [[ -n $kind ]] && { bash "$0" _revive "$kind" "$scope" || true; }; done < <(py here) ;;
+  _revive)  # crew _revive team|main|dispatch|operator <name>
+    case ${2:-} in
+      team) load_team "${3:?}" ;; main) load_main "${3:?}" ;; dispatch) load_dispatch "${3:?}" ;; operator) load_operator "${3:?}" ;;
+      *) echo "usage: crew _revive team|main|dispatch|operator <name>" >&2; exit 2 ;;
+    esac
+    revive ;;
   operator)
     [[ ${2:-} == up ]] || { echo "usage: crew operator up <label>" >&2; exit 2; }
     load_operator "${3:?usage: crew operator up <label>}"; ensure_state

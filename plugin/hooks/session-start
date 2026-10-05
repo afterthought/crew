@@ -8,7 +8,8 @@ comes back with no name, so `crew tell` and the greetings miss it, and the agent
 writing and which partition is theirs.
 
 So at every start this records a crew agent's session in ~/.local/state/crew/sessions/<session id>, which a
-resume keeps. A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
+resume keeps, with the folder it began in: Claude Code finds a conversation again only from that folder, so crew
+resumes a role there (crew.py last_conversation). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
 variables back through CLAUDE_ENV_FILE, which Claude Code applies to each of its Bash commands, and its pane gets
 its name back. Any other session costs one file lookup. The hook never fails a start."""
 import json
@@ -35,7 +36,8 @@ def main():
     agent = os.environ.get("CREW_AGENT")
     if agent:
         record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\n")
+        cwd = hook.get("cwd") if isinstance(hook.get("cwd"), str) else os.getcwd()
+        record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\nCREW_CWD={cwd}\n")
         return
     if not record.is_file():
         return

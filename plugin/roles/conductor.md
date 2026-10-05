@@ -40,6 +40,8 @@ Apart from the plan, {{CREW}} names the documents that make up the record, acros
 
 Each one ends whatever ran in the unit's slot and starts a fresh agent for the stage. crew refuses a stage the unit isn't ready for, and says why: say that to the user rather than working around it. Add after the stage only a fact the stage cannot read for itself, such as the user's words; never how to do the work. After starting a stage, run `herdr agent wait {{TEAM}}-unit-<n> --timeout 3600000` as a background command so you stay free for the user.
 
+When the planner drops a unit, crew frees its slot and removes its worktree and branch. If the unit's stage was working at the time, the slot is left holding it: once its agent settles, free it with `{{TEAM_CMD}} unit free <unit>`. That refuses a unit the plan still has, and a worktree with uncommitted changes, which are the user's to keep or discard.
+
 ## Review with the user
 
 The user reviews every unit before it is coded. When a unit's construct agent has committed its change, tell the user the unit is ready for review: which unit, where its change is (`{{KIT_DIR}}/places/<unit>/openspec/changes/<unit>/`), and in two or three plain sentences what it would make true.

@@ -44,3 +44,10 @@ ok "a dispatcher on the main level's host runs in its session"
 CREW_TEST_TRUST=1 expect_ok crew main up wldn
 eq "$(grep -c " agent send-keys w[0-9]*:p[0-9]* down enter" "$CREW_TEST_LOG")" "5"
 ok "the folder-trust question is answered for the design agent, the planner, ops and both dispatchers"
+
+: > "$CREW_TEST_LOG"
+expect_ok crew main status swancloud
+has "$out" "swancloud-planner"
+lacks "$out" "did not answer"
+lacks "$out" "swancloud-dispatch"
+ok "a partition with no teams has no dispatcher, and its status asks no host for one"

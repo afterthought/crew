@@ -23,15 +23,17 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | bring back the conductor or ops after it died, conversation intact | `crew resume <team> [conductor\|ops]` |
 | clear the conductor or ops and restore its name | `crew clear <team> conductor\|ops` |
 | end a team's sessions | `crew down <team>` |
+| free a slot still holding a unit the plan no longer has | `crew unit free <unit> [--team <team>]` |
 | bring up, check or end a partition's main level and dispatchers | `crew main up\|status\|down <label>` |
 | start the operator agent in this host's operator session | `crew operator up <label>` |
+| after a restart, bring back every standing agent of this host whose pane came back empty | `crew revive` |
 | send an agent crew started a message, wherever it runs | `crew tell <agent> "<text>"` |
 | see what runs where, with the URL to open | `crew sites [<label>]` |
 
 ## Keeping a team healthy
 
 - **Context.** The conductor or ops above 40% context, or with any compaction, is due. The conductor restarts fresh with no loss. Ops holds findings and conversations that may not be committed yet: read the pane first, prefer `resume` after a crash, and `clear` only once what it knows is written down. **Never clear, restart or end a unit slot's agent** mid-stage: the conductor starts each stage fresh itself; if one's context runs high, tell the user.
-- **A dead agent** shows `not up`. `crew resume` brings the conductor or ops back with its conversation; if there is none it starts fresh. The command resets the pane first, because a Claude that dies badly leaves the terminal reporting mouse movement, which types escape codes into the shell. A slot whose agent died is the conductor's to run again.
+- **A dead agent** shows `not up`. `crew resume` brings the conductor or ops back with its conversation, in the folder that conversation began in; if there is none it starts fresh. After a host restarts, `crew revive` does the same for every standing agent there whose pane came back empty, and leaves alone what was taken down. The command resets the pane first, because a Claude that dies badly leaves the terminal reporting mouse movement, which types escape codes into the shell. A slot whose agent died is the conductor's to run again.
 - **`free`** means a slot holds no unit or fix. That is normal; starting work in it is the conductor's call, not yours.
 - **Never act on an agent that is `working`** unless the user says so. `--force` exists for that.
 - **A brief or the teams file changed.** Agents take their brief at launch, so a change reaches an agent on its next start, not on a clear. When a lot has changed, `crew rebuild`.

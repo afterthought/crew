@@ -29,7 +29,7 @@ ok "status lists the conductor, ops and four free slots"
 
 expect_ok crew down swb-1; eq "$(herdr_state $box wldn-1 '.agents | length')" "0"; eq "$(herdr_state $box wldn-1 '.panes | length')" "2"
 expect_ok crew resume swb-1; has "$out" "swb-1-conductor resumed"; has "$out" "swb-1-ops resumed"
-has "$(tail -1 "$CREW_TEST_CLAUDE_LOG")" '"--resume", "swb-1-'
+has "$(tail -1 "$CREW_TEST_CLAUDE_LOG")" '"--resume", "'
 expect_ok crew restart swb-1 ops; has "$out" "swb-1-ops started"; lacks "$out" "conductor"
 expect_fail "no role 'fable' here; roles: conductor ops" crew restart swb-1 fable
 expect_ok crew rebuild swb-1
