@@ -21,6 +21,8 @@
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
 #                                      construct writes its OpenSpec change, code builds it once the user has
 #                                      approved it, verify checks it, merge merges it into the bolt
+#   crew unit wait <unit> [--timeout <ms>]
+#                                      wait for the unit's stage agent to settle, and record the stage's end
 #   crew fix     <team> <name> "<what is wrong>"
 #                                      a fix on the team's bolt, at places/fix-<name>, built by a fresh code agent
 #   crew fix     <team> <name> --merge merge the fix into the bolt
@@ -47,6 +49,12 @@
 #                                      down with crew down stays down
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
 #
+# What happened, read from the run record every command that moves work appends on the host it ran on:
+#   crew events   [--label L] [--about <object>] [--since <time>] [--follow] [--json]
+#                                      the entries of every host the partition runs on, in time order
+#   crew trace    <object>             one bolt's, unit's or signal's history: what was done, by whom, in which
+#                                      session, with which commit, and what it led to
+#
 # A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
 # "git" tab (gitgui in the kit and the blueprints repo), and "<team> units", one pane per slot in flight, which
 # exists only while a unit or fix is. A team's panes and state live on its host, so a command about a team runs
@@ -61,7 +69,7 @@ teams() { py teams || exit 1; }
 this_host() { hostname -s; }
 usage() { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
-orig=("$@"); force=0; greet=1; args=()
+orig=("$@"); force=0; greet=1; args=(); started=(); ended=()
 for a in "$@"; do case $a in --force) force=1 ;; --no-greet) greet=0 ;; *) args+=("$a") ;; esac; done
 set -- ${args[@]+"${args[@]}"}
 cmd=${1:-}
@@ -85,10 +93,22 @@ state_files() { panes=$STATE/panes; layout=$STATE/layout; held=$STATE/slots; }
 ensure_state() { mkdir -p "$STATE"; touch "$panes" "$layout" "$held"; }
 local_here() { [[ $(this_host) == "$MACHINE" ]]; }
 
+# Who asks, and the Claude session behind them, go with a command run on another host, so what it records there names them.
 identity() { echo "CREW_AGENT=${CREW_AGENT:-$(id -un)@$(this_host)}"; }
+session_of() { python3 "$here/../lib/record.py" session 2>/dev/null || true; }
 there() {  # there <host's ssh name> <crew on that host> <args...>: run a crew command on another host
   local target=$1 remote=$2; shift 2
-  ssh -o BatchMode=yes "$target" "$(printf '%q ' env "$(identity)" "CREW_LABEL=${CREW_LABEL:-}" bash "$remote" "$@")"
+  ssh -o BatchMode=yes "$target" "$(printf '%q ' env "$(identity)" "CREW_LABEL=${CREW_LABEL:-}" "CREW_SESSION=$(session_of)" bash "$remote" "$@")"
+}
+# An entry in the run record (lib/record.py), written after the act. A failure is said on standard error and
+# changes nothing about the command.
+entry() { python3 "$here/../lib/record.py" emit "$@" >/dev/null || true; }
+record_agents() {  # record_agents <act> <why> [role...]: one entry for an act on agents, naming each; a team's names the team
+  local act=$1 why=$2 r on=(); shift 2
+  [[ $KIND == team ]] && on+=(--on "team/$TEAM")
+  for r in "$@"; do on+=(--on "agent/$(name_of "$r")"); done
+  (( ${#on[@]} )) || return 0
+  entry --label "$LABEL" --act "$act" "${on[@]}" --why "$why"
 }
 forward() {  # what is acted on lives on its host: run this same command there, unless this is that host
   local_here && return 0
@@ -123,15 +143,19 @@ give_name() {  # herdr drops an agent's name whenever its session changes
   echo "$name did not come up in $pane; look at that pane." >&2; return 1
 }
 
-stop() {
-  local role=$1 pane st; pane=$(pane_of "$role"); pane_live "$pane" || return 0
-  st=$(agent_status "$pane"); [[ -z $st ]] && return 0
+stop() {  # end a role's session; each role whose agent it ends is added to `ended`
+  local role=$1 pane st=; pane=$(pane_of "$role")
+  pane_live "$pane" && st=$(agent_status "$pane")
   if [[ $st == working && $force == 0 ]]; then echo "$(name_of "$role") is working; add --force to end it anyway." >&2; return 1; fi
+  # A slot's stage whose end nobody recorded ends here, with the agent that ran it.
+  if is_slot "$role" && [[ -s $STATE/stages ]]; then plan _ends "$TEAM" --slot "$role" --ending >/dev/null 2>&1 || true; fi
+  [[ -z $st ]] && return 0
   h agent prompt "$pane" "/exit" >/dev/null 2>&1 || h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true
-  for _ in $(seq 30); do [[ -z $(agent_status "$pane") ]] && return 0; sleep 1; done
+  for _ in $(seq 30); do [[ -z $(agent_status "$pane") ]] && { ended+=("$role"); return 0; }; sleep 1; done
   h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true; sleep 2
   # Still running means anything started next would be typed into it as a message. Say so and leave it be.
   [[ -z $(agent_status "$pane") ]] || { echo "$(name_of "$role") did not exit (busy or waiting on the user); it was left running" >&2; return 1; }
+  ended+=("$role")
 }
 
 start() {  # start <role> [stage|resume]
@@ -212,6 +236,11 @@ ensure_main() {  # "<label>": design, planner and ops tabs, one agent each
 ensure_single() {  # ensure_single <workspace label> <role>: a workspace holding one agent
   local p; p=$(pane_of "$2"); pane_live "$p" || first_tab "$1" "$2" "$CWD" "$2"
 }
+ensure_flow() {  # the operator workspace's "flow" tab, following the partition's run record, opened once
+  local p; p=$(pane_of flow); pane_live "$p" && return 0
+  tab operator flow "$CWD" flow
+  h pane run "$(pane_of flow)" "bash $(printf '%q' "$here/crew") events --follow --label $LABEL" >/dev/null
+}
 
 teardown() {  # end every session and give the panes back; the slots still say what is in flight
   local role pane
@@ -238,14 +267,15 @@ revive() {  # start, from its last conversation, each standing role whose pane i
     [[ -z $(agent_status "$pane") ]] || continue
     sleep 10; [[ -z $(agent_status "$pane") ]] || continue  # herdr may still be resuming it
     start "$role" resume || continue
+    record_agents agent.resume "${KIND}($SCOPE): resume $(name_of "$role")" "$role"
     [[ $KIND == team && $role == conductor ]] && greet_conductor
   done
 }
 
-start_standing() {  # start each standing role that is not up
+start_standing() {  # start each standing role that is not up; each one started is added to `started`
   local role
   for role in "${standing[@]}"; do
-    if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; else start "$role"; fi
+    if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; else start "$role"; started+=("$role"); fi
   done
 }
 
@@ -261,9 +291,19 @@ take_slot() {  # take_slot <kind> <name> <place>: the slot holding it, or a free
   echo "all $UNITS of $TEAM's slots are in flight: $(awk '{printf "%s%s holds %s", sep, $1, $3; sep="; "}' "$held")" >&2
   return 1
 }
+held_obj() {  # held_obj <unit|fix> <name>: what a slot holds, as an object
+  local b
+  if [[ $1 == fix ]]; then
+    b=${BOLT:-$(git -C "$KIT" for-each-ref --format='%(upstream:short)' "refs/heads/$2" 2>/dev/null || true)}
+    echo "fix/${b#bolt/}/${2#fix/}"
+  else echo "unit/$2"; fi
+}
 free() {  # end a slot's agent, close its pane and give the slot back; the units workspace goes with the last one
-  local slot=$1 s w; stop "$slot" || return 1
+  local slot=$1 s w kind name; stop "$slot" || return 1
+  read -r kind name < <(awk -v s="$slot" '$1==s{print $2, $3}' "$held") || true
   drop "$held" "$slot"
+  [[ -n ${name:-} ]] && entry --label "$LABEL" --act slot.free --on "agent/$(name_of "$slot")" --on "$(held_obj "$kind" "$name")" \
+    --why "team($TEAM): free $(name_of "$slot")"
   if [[ -n $(awk 'NF' "$held") ]]; then close_pane "$slot"; return 0; fi
   w=$(get "$layout" "$(ws_key "$TEAM units")"); [[ -n $w ]] && { h workspace close "$w" >/dev/null 2>&1 || true; }
   drop "$layout" "$(ws_key "$TEAM units")"; for s in "${slots[@]}"; do drop "$panes" "$s"; done
@@ -274,8 +314,10 @@ remove_place() {  # remove_place <kind> <name>: a merged unit's or fix's worktre
   if [[ -d $path ]]; then git -C "$KIT" worktree remove "$path" >/dev/null 2>&1 || echo "$path was kept: it has changes of its own" >&2; fi
   git -C "$KIT" branch -d "$branch" >/dev/null 2>&1 || true
 }
-reap() {  # free every slot whose unit or fix has merged into its bolt, and remove its place
+reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
+  # bolt, and remove its place
   local slot kind name stage rest
+  if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" >/dev/null 2>&1 || true; fi
   while read -r slot kind name stage rest; do
     [[ $stage == merged || $stage == landed ]] || continue
     [[ $(agent_status "$(pane_of "$slot")") == working ]] && continue
@@ -322,10 +364,27 @@ free_elsewhere() {  # a unit moved from another team's bolt in this checkout lea
     [[ $other != "$TEAM" ]] && awk -v u="$1" '$3==u{found=1} END{exit !found}' "$f" && bash "$here/crew" _free "$other" "$1" || true
   done
 }
-run_stage() {  # run_stage <slot> <stage> <prompt>: end the slot's agent, start the stage fresh, send it its prompt
-  stop "$1" || exit 1
-  start "$1" "$2" || exit 1
-  h agent prompt "$(pane_of "$1")" "$3" >/dev/null
+run_stage() {  # run_stage <slot> <stage> <prompt> <act> <held name> <object> <--on X...>: end the slot's agent, start
+  # the stage fresh and send it its prompt. The start is recorded as <act>, and its end is owed in the stages file.
+  local slot=$1 stage=$2 prompt=$3 act=$4 what=$5 obj=$6 err id; shift 6
+  if ! err=$(stop "$slot" 2>&1); then echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1; fi
+  start "$slot" "$stage" || exit 1
+  h agent prompt "$(pane_of "$slot")" "$prompt" >/dev/null
+  id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act "$act" "$@" --why "${obj%%/*}(${what#fix/}): start $stage" || true)
+  [[ -n $id ]] && echo "$slot $what $stage $id $obj" >> "$STATE/stages"
+  return 0
+}
+unit_wait() {  # unit_wait <unit> [--timeout <ms>]: wait for the unit's stage agent to settle, and record the stage's end
+  local unit=${1:?usage: crew unit wait <unit> [--timeout <ms>]} ms=3600000 slot e
+  [[ ${2:-} == --timeout ]] && ms=${3:?usage: crew unit wait <unit> [--timeout <ms>]}
+  e=$(plan _team-of "$unit") || exit 1; eval "$e"
+  load_team "$TEAM"; forward; ensure_state
+  slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
+  h agent wait "$(name_of "$slot")" --timeout "$ms" >/dev/null 2>&1 || true
+  if [[ $(agent_status "$(pane_of "$slot")") == working ]]; then
+    echo "$(name_of "$slot") is still working on $unit after the wait's $ms ms; nothing is recorded yet"; return 0
+  fi
+  plan _ends "$TEAM" --slot "$slot" --waited
 }
 
 status() {
@@ -372,6 +431,7 @@ pick_roles() {  # with no role named, the standing roles
 case $cmd in
   list) teams ;;
   bolts | bolt | plan | signal) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  events | trace) exec python3 "$here/../lib/record.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
   status)
@@ -382,22 +442,30 @@ case $cmd in
     for role in "${standing[@]}"; do
       [[ -n $(agent_status "$(pane_of "$role")") ]] && { echo "$(name_of "$role") is already up; use: crew restart $TEAM" >&2; exit 1; }
     done
-    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
+    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; started+=("$role"); done
+    record_agents team.up "team($TEAM): up" "${started[@]}"; greet_conductor ;;
   close)
-    load_team "${2:-}"; forward; ensure_state; force=1; teardown; mark_down; echo "$TEAM is closed" ;;
+    load_team "${2:-}"; forward; ensure_state; force=1; teardown; mark_down
+    record_agents team.close "team($TEAM): close" ${ended[@]+"${ended[@]}"}; echo "$TEAM is closed" ;;
   rebuild)
     load_team "${2:-}"; forward; ensure_state; force=1; teardown
-    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
+    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; started+=("$role"); done
+    record_agents team.rebuild "team($TEAM): rebuild" "${started[@]}"; greet_conductor ;;
   restart)
     load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up
     stopped=(); for role in "${picked[@]}"; do stop "$role" && stopped+=("$role"); done
-    ensure_team; for role in ${stopped[@]+"${stopped[@]}"}; do start "$role"; done
+    ensure_team
+    for role in ${stopped[@]+"${stopped[@]}"}; do start "$role"; record_agents agent.restart "team($TEAM): restart $role" "$role"; done
     [[ $greet == 1 && " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
     load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up; ensure_team
     for role in "${picked[@]}"; do
       if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
-      start "$role" resume || { echo "$(name_of "$role") did not come back with its conversation; starting it fresh"; start "$role"; }
+      if start "$role" resume; then record_agents agent.resume "team($TEAM): resume $role" "$role"
+      else
+        echo "$(name_of "$role") did not come back with its conversation; starting it fresh"
+        start "$role"; record_agents agent.start "team($TEAM): start $role" "$role"
+      fi
     done ;;
   clear)
     load_team "${2:-}"; forward; ensure_state; role=${3:?usage: crew clear <team> conductor|ops}; known_role "$role"
@@ -405,12 +473,14 @@ case $cmd in
     [[ -z $st ]] && { echo "$(name_of "$role") is not up." >&2; exit 1; }
     [[ $st == working && $force == 0 ]] && { echo "$(name_of "$role") is working; add --force to clear it anyway." >&2; exit 1; }
     h agent prompt "$pane" "/clear" >/dev/null; sleep 2
-    give_name "$pane" "$(name_of "$role")" && echo "$(name_of "$role") cleared" ;;
+    give_name "$pane" "$(name_of "$role")" && { record_agents agent.clear "team($TEAM): clear $role" "$role"; echo "$(name_of "$role") cleared"; } ;;
   down)
     load_team "${2:-}"; forward; ensure_state
-    for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down; echo "$TEAM is down; its panes are still there." ;;
+    for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down
+    record_agents team.down "team($TEAM): down" ${ended[@]+"${ended[@]}"}; echo "$TEAM is down; its panes are still there." ;;
   unit)
     [[ ${2:-} == free ]] && { unit_free "${@:3}"; exit 0; }
+    [[ ${2:-} == wait ]] && { unit_wait "${@:3}"; exit 0; }
     [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
     unit=${3:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
     stage=${4:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
@@ -418,10 +488,15 @@ case $cmd in
     e=$(plan _team-of "$unit") || exit 1; eval "$e"
     load_team "$TEAM"; forward; ensure_state; reap; free_elsewhere "$unit"
     slot=$(slot_of "$unit"); taken=0
-    [[ -n $slot ]] || { slot=$(take_slot unit "$unit" "$KIT_DIR/places/$unit") || exit 1; taken=1; }
+    if [[ -z $slot ]]; then
+      slot=$(take_slot unit "$unit" "$KIT_DIR/places/$unit") || {
+        entry --label "$LABEL" --act stage.start --on "stage/$unit/$stage" --on "unit/$unit" --refused "all $UNITS of $TEAM's slots are in flight"; exit 1; }
+      taken=1
+    fi
     if ! e=$(plan _run "$unit" "$stage" "${5:-}"); then [[ $taken == 1 ]] && drop "$held" "$slot"; exit 1; fi
     eval "$e"
-    ensure_slot_pane "$slot" "$PLACE"; run_stage "$slot" "$stage" "$PROMPT"
+    ensure_slot_pane "$slot" "$PLACE"
+    run_stage "$slot" "$stage" "$PROMPT" stage.start "$unit" "unit/$unit" --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")"
     echo "$(name_of "$slot") has $unit: $stage, in $PLACE" ;;
   fix)
     load_team "${2:-}"; forward; ensure_state
@@ -432,12 +507,19 @@ case $cmd in
     if [[ $words == --merge ]]; then
       [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
       ensure_slot_pane "$slot" "$path"
-      run_stage "$slot" merge "Merge $fix into bolt/$BOLT: wt merge bolt/$BOLT --no-squash --no-remove"
+      run_stage "$slot" merge "Merge $fix into bolt/$BOLT: wt merge bolt/$BOLT --no-squash --no-remove" fix.merge "$fix" "fix/$BOLT/$name" \
+        --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
       echo "$(name_of "$slot") has $fix: merge, in $path"
     else
-      taken=0; [[ -n $slot ]] || { slot=$(take_slot fix "$fix" "$path") || exit 1; taken=1; }
+      taken=0
+      if [[ -z $slot ]]; then
+        slot=$(take_slot fix "$fix" "$path") || {
+          entry --label "$LABEL" --act fix.start --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "all $UNITS of $TEAM's slots are in flight"; exit 1; }
+        taken=1
+      fi
       plan _place "$TEAM" "$path" "$fix" "bolt/$BOLT" || { [[ $taken == 1 ]] && drop "$held" "$slot"; exit 1; }
-      ensure_slot_pane "$slot" "$path"; run_stage "$slot" fix "Fix: $words"
+      ensure_slot_pane "$slot" "$path"
+      run_stage "$slot" fix "Fix: $words" fix.start "$fix" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
       echo "$(name_of "$slot") has $fix: code, in $path"
     fi ;;
   _free)  # crew _free <team> <unit|fix/name> [--remove]: free the slot holding it, and with --remove remove a dropped
@@ -449,12 +531,13 @@ case $cmd in
     sub=${2:-}; load_main "${3:-}"; forward; ensure_state
     case $sub in
       up)
-        mark_up; ensure_main; start_standing
+        mark_up; ensure_main; start_standing; record_agents main.up "main($LABEL): up" ${started[@]+"${started[@]}"}
         while read -r host target remote; do
           if [[ $host == $(this_host) ]]; then bash "$0" _dispatch up "$LABEL"; else there "$target" "$remote" _dispatch up "$LABEL"; fi
         done < <(py hosts "$LABEL") ;;
       down)
-        for role in "${standing[@]}"; do stop "$role" || true; done; mark_down; echo "$LABEL's main level is down; its panes are still there."
+        for role in "${standing[@]}"; do stop "$role" || true; done; mark_down
+        record_agents main.down "main($LABEL): down" ${ended[@]+"${ended[@]}"}; echo "$LABEL's main level is down; its panes are still there."
         while read -r host target remote; do
           if [[ $host == $(this_host) ]]; then bash "$0" _dispatch down "$LABEL"; else there "$target" "$remote" _dispatch down "$LABEL"; fi
         done < <(py hosts "$LABEL") ;;
@@ -468,8 +551,8 @@ case $cmd in
   _dispatch)  # crew _dispatch up|down|status <label>: this host's dispatcher of the partition
     sub=${2:-}; load_dispatch "${3:?}"; ensure_state
     case $sub in
-      up) mark_up; ensure_single "$LABEL dispatch" dispatcher; start_standing ;;
-      down) stop dispatcher || true; mark_down; echo "$(name_of dispatcher) is down" ;;
+      up) mark_up; ensure_single "$LABEL dispatch" dispatcher; start_standing; record_agents main.up "main($LABEL): up $(name_of dispatcher)" ${started[@]+"${started[@]}"} ;;
+      down) stop dispatcher || true; mark_down; record_agents main.down "main($LABEL): down $(name_of dispatcher)" ${ended[@]+"${ended[@]}"}; echo "$(name_of dispatcher) is down" ;;
       status) st=$(agent_status "$(pane_of dispatcher)"); printf '%-34s %-8s %s\n' "$(name_of dispatcher)" "$(pane_of dispatcher)" "${st:-not up}" ;;
     esac ;;
   revive)  # each team, main level, dispatcher and operator agent of this host, in a process of its own
@@ -484,6 +567,8 @@ case $cmd in
     [[ ${2:-} == up ]] || { echo "usage: crew operator up <label>" >&2; exit 2; }
     load_operator "${3:?usage: crew operator up <label>}"; ensure_state
     ensure_single operator operator
-    if [[ -n $(agent_status "$(pane_of operator)") ]]; then echo "$(name_of operator) is already up"; else start operator; fi ;;
+    if [[ -n $(agent_status "$(pane_of operator)") ]]; then echo "$(name_of operator) is already up"
+    else start operator; record_agents operator.up "operator($LABEL): up $(name_of operator)" operator; fi
+    ensure_flow ;;
   *) usage; exit 2 ;;
 esac

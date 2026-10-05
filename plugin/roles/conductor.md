@@ -38,7 +38,7 @@ Apart from the plan, {{CREW}} names the documents that make up the record, acros
 | fix what the user chose from a verify | `{{TEAM_CMD}} unit run <unit> code "Fix these findings from the verify report at <path>: <the findings>"` |
 | merge a verified unit into the bolt | `{{TEAM_CMD}} unit run <unit> merge` |
 
-Each one ends whatever ran in the unit's slot and starts a fresh agent for the stage. crew refuses a stage the unit isn't ready for, and says why: say that to the user rather than working around it. Add after the stage only a fact the stage cannot read for itself, such as the user's words; never how to do the work. After starting a stage, run `herdr agent wait {{TEAM}}-unit-<n> --timeout 3600000` as a background command so you stay free for the user.
+Each one ends whatever ran in the unit's slot and starts a fresh agent for the stage. crew refuses a stage the unit isn't ready for, and says why: say that to the user rather than working around it. Add after the stage only a fact the stage cannot read for itself, such as the user's words; never how to do the work. After starting a stage, run `{{TEAM_CMD}} unit wait <unit>` as a background command so you stay free for the user: it returns when the stage's agent settles, says what the unit reached, and records the stage's end.
 
 When the planner drops a unit, crew frees its slot and removes its worktree and branch. If the unit's stage was working at the time, the slot is left holding it: once its agent settles, free it with `{{TEAM_CMD}} unit free <unit>`. That refuses a unit the plan still has, and a worktree with uncommitted changes, which are the user's to keep or discard.
 
