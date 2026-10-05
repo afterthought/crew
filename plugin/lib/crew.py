@@ -590,7 +590,9 @@ def main(a):
     elif a[:1] == ["env-operator"] and len(a) == 2:
         print(env_operator(fleet, a[1], this_host()))
     elif a[:1] == ["hosts"] and len(a) == 2:
-        print("\n".join(f"{h} {fleet['hosts'][h]['ssh']} {crew_at(fleet, h)}" for h in partition_hosts(fleet, a[1])))
+        # A partition with no teams has no dispatcher host, and prints nothing: an empty line would read as a host.
+        for h in partition_hosts(fleet, a[1]):
+            print(f"{h} {fleet['hosts'][h]['ssh']} {crew_at(fleet, h)}")
     elif a[:1] == ["here"]:
         print("\n".join(f"{k} {n}" for k, n in here(fleet)))
     elif a[:1] == ["crew-at"] and len(a) == 2:
