@@ -1,6 +1,6 @@
 # A finding written as a signal in the partition's first blueprints repo, by path on main, pushed and replayed
 # when main moved; and every move, curation's and the route, written through crew and never merged.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 kit chuck-herdr-alpha willdan switchboard-kit >/dev/null

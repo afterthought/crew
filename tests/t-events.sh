@@ -1,7 +1,7 @@
 # crew events gathers the run record of every host a partition runs on, in time order, and names a host that doesn't
 # answer; --about narrows it to one object, --json gives it to a program, --follow prints entries as they are written.
 # crew trace prints one object's history through what it came from and what came from it, from the entries alone.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 box=chuck-herdr-alpha
 emit() { local h=$1; shift; as "$h" python3 "$CREW/plugin/lib/record.py" emit --label wldn "$@" >/dev/null; }

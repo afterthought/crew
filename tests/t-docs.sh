@@ -1,6 +1,6 @@
 # README, the crew skill and crew's usage name the same commands: every command in the README is in the usage,
 # and none of the removed ones is in any of them.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 usage=$(crew 2>&1 || true)
 readme=$(cat "$CREW/README.md"); skill=$(cat "$CREW/plugin/skills/crew/SKILL.md")

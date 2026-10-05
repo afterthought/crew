@@ -1,7 +1,7 @@
 # A host clones a kit once and never pulls it. bolt give fetches the kit first: it cuts the bolt from GitHub's main,
 # fast-forwarding a clean main to it, or from the host's main when that already holds all of GitHub's, and refuses a
 # main that has gone its own way. bolt land refuses while the kit's main is behind GitHub's.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")

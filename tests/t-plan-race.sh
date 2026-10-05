@@ -1,7 +1,7 @@
 # The write path: each write fetches plan/<label>, applies itself to the tip, checks, commits through a
 # temporary index and pushes without force. A push refused because another host wrote first is applied again
 # on the new tip, and a write whose subject the other one removed is refused, naming that commit.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 kit chuck-herdr-alpha willdan switchboard-kit >/dev/null

@@ -1,6 +1,6 @@
 # crew reads teams.json version 2: partitions with their main levels, teams with units and [kit, blueprints],
 # a team's partition from its session, roles overrides, and errors for anything missing or inconsistent.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 
 expect_ok crewpy teams; eq "$out" $'swb-1\nswb-2\nbrd-1\natl-1\napk-1'

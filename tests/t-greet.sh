@@ -1,6 +1,6 @@
 # A conductor is greeted to carry on with its bolt: by crew bolt give when it is up, by crew up when it starts,
 # and once it is answered when it starts stopped on a question. A conductor that is not up is told of, not an error.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
 kit chuck-herdr-alpha willdan switchboard-kit >/dev/null

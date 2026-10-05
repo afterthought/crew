@@ -2,7 +2,7 @@
 # is in flight; construct makes places/<unit> on unit/<unit> from the bolt; each stage ends the slot's agent and
 # starts a fresh one from that stage's definition, then sends its prompt; code waits for the approval and
 # verify for every task ticked.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 mkdir -p "$k/.devenv/profile/bin"

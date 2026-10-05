@@ -1,7 +1,7 @@
 # crew up|down|rebuild|close|restart|resume act on a team's conductor and ops only, in one workspace "<team>"
 # on the team's host: a conductor tab, and a git tab only when that host is a Mac. fable, the explorer, the
 # verifier, assign, release and opsx are gone.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 

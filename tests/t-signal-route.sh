@@ -1,6 +1,6 @@
 # crew unit add --signal: the unit's source is the signal, and the signal's one move, route, is committed by path
 # on the blueprints repo's main and pushed.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit)

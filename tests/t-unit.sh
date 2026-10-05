@@ -1,5 +1,5 @@
 # crew unit add|split|order|after|move|drop|approve, and each scenario of the bolt-plan spec they answer.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")

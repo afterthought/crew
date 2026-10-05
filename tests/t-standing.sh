@@ -1,7 +1,7 @@
 # A team's conductor and ops live in the bolt it holds: they start in its worktree, and a bolt given to a team that
 # is up restarts them there before its conductor is greeted. A team on a Mac has a git tab; one on a box has none.
 # Every role crew starts has Claude's folder-trust question answered for it, and no other question.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
