@@ -39,6 +39,9 @@
 #                                      main level's session, and a dispatcher on each host the partition's teams run on
 #   crew operator up <label>           the operator agent in this host's operator session <label>
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs
+#   crew revive                        after a restart, every standing agent of this host whose pane came back with no
+#                                      agent in it, picked up from its last conversation; a team or main level taken
+#                                      down with crew down stays down
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
 #
 # A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
@@ -219,6 +222,23 @@ greet_conductor() {  # a fresh conductor reads where its bolt stands and carries
   py greet "$TEAM" || true
 }
 
+# A team or main level taken down stays down through a restart: crew revive leaves it be until it is brought up.
+mark_down() { touch "$STATE/down"; }
+mark_up() { rm -f "$STATE/down"; }
+
+revive() {  # start, from its last conversation, each standing role whose pane is there with no agent in it
+  local role pane
+  [[ -s $panes ]] || return 0
+  [[ -e $STATE/down ]] && { echo "$SCOPE was taken down; it stays down"; return 0; }
+  for role in "${standing[@]}"; do
+    pane=$(pane_of "$role"); pane_live "$pane" || continue
+    [[ -z $(agent_status "$pane") ]] || continue
+    sleep 10; [[ -z $(agent_status "$pane") ]] || continue  # herdr may still be resuming it
+    start "$role" resume || continue
+    [[ $KIND == team && $role == conductor ]] && greet_conductor
+  done
+}
+
 start_standing() {  # start each standing role that is not up
   local role
   for role in "${standing[@]}"; do
@@ -328,19 +348,19 @@ case $cmd in
     for role in "${standing[@]}"; do
       [[ -n $(agent_status "$(pane_of "$role")") ]] && { echo "$(name_of "$role") is already up; use: crew restart $TEAM" >&2; exit 1; }
     done
-    ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
+    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
   close)
-    load_team "${2:-}"; forward; ensure_state; force=1; teardown; echo "$TEAM is closed" ;;
+    load_team "${2:-}"; forward; ensure_state; force=1; teardown; mark_down; echo "$TEAM is closed" ;;
   rebuild)
     load_team "${2:-}"; forward; ensure_state; force=1; teardown
-    ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
+    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; done; greet_conductor ;;
   restart)
-    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"
+    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up
     stopped=(); for role in "${picked[@]}"; do stop "$role" && stopped+=("$role"); done
     ensure_team; for role in ${stopped[@]+"${stopped[@]}"}; do start "$role"; done
     [[ $greet == 1 && " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
-    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; ensure_team
+    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up; ensure_team
     for role in "${picked[@]}"; do
       if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
       start "$role" resume || { echo "$(name_of "$role") did not come back with its conversation; starting it fresh"; start "$role"; }
@@ -354,7 +374,7 @@ case $cmd in
     give_name "$pane" "$(name_of "$role")" && echo "$(name_of "$role") cleared" ;;
   down)
     load_team "${2:-}"; forward; ensure_state
-    for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; echo "$TEAM is down; its panes are still there." ;;
+    for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down; echo "$TEAM is down; its panes are still there." ;;
   unit)
     [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
     unit=${3:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
@@ -392,12 +412,12 @@ case $cmd in
     sub=${2:-}; load_main "${3:-}"; forward; ensure_state
     case $sub in
       up)
-        ensure_main; start_standing
+        mark_up; ensure_main; start_standing
         while read -r host target remote; do
           if [[ $host == $(this_host) ]]; then bash "$0" _dispatch up "$LABEL"; else there "$target" "$remote" _dispatch up "$LABEL"; fi
         done < <(py hosts "$LABEL") ;;
       down)
-        for role in "${standing[@]}"; do stop "$role" || true; done; echo "$LABEL's main level is down; its panes are still there."
+        for role in "${standing[@]}"; do stop "$role" || true; done; mark_down; echo "$LABEL's main level is down; its panes are still there."
         while read -r host target remote; do
           if [[ $host == $(this_host) ]]; then bash "$0" _dispatch down "$LABEL"; else there "$target" "$remote" _dispatch down "$LABEL"; fi
         done < <(py hosts "$LABEL") ;;
@@ -411,10 +431,18 @@ case $cmd in
   _dispatch)  # crew _dispatch up|down|status <label>: this host's dispatcher of the partition
     sub=${2:-}; load_dispatch "${3:?}"; ensure_state
     case $sub in
-      up) ensure_single "$LABEL dispatch" dispatcher; start_standing ;;
-      down) stop dispatcher || true; echo "$(name_of dispatcher) is down" ;;
+      up) mark_up; ensure_single "$LABEL dispatch" dispatcher; start_standing ;;
+      down) stop dispatcher || true; mark_down; echo "$(name_of dispatcher) is down" ;;
       status) st=$(agent_status "$(pane_of dispatcher)"); printf '%-34s %-8s %s\n' "$(name_of dispatcher)" "$(pane_of dispatcher)" "${st:-not up}" ;;
     esac ;;
+  revive)  # each team, main level, dispatcher and operator agent of this host, in a process of its own
+    while read -r kind scope; do [[ -n $kind ]] && { bash "$0" _revive "$kind" "$scope" || true; }; done < <(py here) ;;
+  _revive)  # crew _revive team|main|dispatch|operator <name>
+    case ${2:-} in
+      team) load_team "${3:?}" ;; main) load_main "${3:?}" ;; dispatch) load_dispatch "${3:?}" ;; operator) load_operator "${3:?}" ;;
+      *) echo "usage: crew _revive team|main|dispatch|operator <name>" >&2; exit 2 ;;
+    esac
+    revive ;;
   operator)
     [[ ${2:-} == up ]] || { echo "usage: crew operator up <label>" >&2; exit 2; }
     load_operator "${3:?usage: crew operator up <label>}"; ensure_state

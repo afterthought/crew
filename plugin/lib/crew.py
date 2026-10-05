@@ -15,6 +15,8 @@
   crew.py hosts <label>               the hosts where the partition's teams run: name, ssh name, crew there
   crew.py crew-at <host>              the crew command on a host
   crew.py tell <agent> "<text>"       prompt an agent wherever it runs
+  crew.py here                        what runs on this host, one per line: team <name>, main <label>,
+                                      dispatch <label> and operator <label>
 
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
@@ -543,6 +545,22 @@ def env_operator(fleet, label, host):
                  CWD=sess["dir"], STATE=f"$HOME/.local/state/crew/{label}-operator")
 
 
+def here(fleet):
+    """What crew runs on this host: its teams, the main levels whose session is here, the dispatchers of the
+    partitions whose teams run here, and the operator agents of its operator sessions."""
+    host, out = this_host(), []
+    out += [("team", n) for n, t in sorted(fleet["teams"].items()) if t["machine"] == host]
+    for label, p in sorted(fleet["partitions"].items()):
+        if p["machine"] == host:
+            out.append(("main", label))
+        if host in partition_hosts(fleet, label):
+            out.append(("dispatch", label))
+        sess = fleet["hosts"].get(host, {}).get("sessions", {}).get(label)
+        if sess and sess.get("partition") == p["partition"]:
+            out.append(("operator", label))
+    return out
+
+
 def shell(**pairs):
     """Shell assignments; STATE is left for the shell to expand, on the host it runs on."""
     return "\n".join(f'{k}="{v}"' if k == "STATE" else f"{k}={shlex.quote(v)}" for k, v in pairs.items())
@@ -573,6 +591,8 @@ def main(a):
         print(env_operator(fleet, a[1], this_host()))
     elif a[:1] == ["hosts"] and len(a) == 2:
         print("\n".join(f"{h} {fleet['hosts'][h]['ssh']} {crew_at(fleet, h)}" for h in partition_hosts(fleet, a[1])))
+    elif a[:1] == ["here"]:
+        print("\n".join(f"{k} {n}" for k, n in here(fleet)))
     elif a[:1] == ["crew-at"] and len(a) == 2:
         print(crew_at(fleet, a[1]))
     elif a[:1] == ["tell"] and len(a) == 3:
