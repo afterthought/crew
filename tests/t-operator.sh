@@ -1,7 +1,7 @@
 # crew operator up <label>, run on the host itself: the "operator" workspace in the session named <label>, the agent
 # <label>-operator-<host> started in the session's folder, nothing done when it is already up, and a non-zero exit
 # naming a missing session or partition.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 
 expect_ok crew operator up madswan

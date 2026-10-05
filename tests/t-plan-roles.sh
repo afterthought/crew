@@ -1,7 +1,7 @@
 # Who writes the plan directly: the user, everything; the planner, only through proposals; a conductor narrows, orders
 # and sets dependencies within the bolt its team holds; the design agent queues; a dispatcher gives bolts; the main
 # level's ops lands them. Any other plan write by an agent crew started is refused, naming the planner.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
 ws=$(remote WilldanGroup/crew-state)

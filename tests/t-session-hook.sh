@@ -1,7 +1,7 @@
 # crew's SessionStart hook records a crew agent's session; when herdr resumes that session without crew's
 # environment, the agent gets CREW_AGENT and CREW_LABEL back through CLAUDE_ENV_FILE and its pane its name.
 # Any other session, a subagent's, or input the hook can't read is left alone, and the hook always exits 0.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 hook() { python3 "$CREW/plugin/hooks/session-start"; }
 record="$HOME/.local/state/crew/sessions/sid-1"
 

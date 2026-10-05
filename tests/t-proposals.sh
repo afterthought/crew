@@ -1,7 +1,7 @@
 # crew plan propose|proposed|agree|approve|drop: every change the planner makes to the plan is a proposal the user
 # approves, with the agreement of the conductor of any bolt in flight it touches; what was approved is exactly what
 # is applied, in one commit. Each scenario of the plan-proposals spec.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 ws=$(remote WilldanGroup/crew-state)

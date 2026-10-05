@@ -1,6 +1,6 @@
 # crew bolts: each unit's stage derived from its kit, one host call per host holding active bolts; planned bolts
 # and queued work read from the plan alone; an unreachable host's units shown as unknown, with the host named.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
 ws=$(remote WilldanGroup/crew-state)

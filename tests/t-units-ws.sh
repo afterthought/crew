@@ -1,6 +1,6 @@
 # "<team> units": made with the first unit or fix in flight, one tiled pane per slot, closed when the last one
 # frees. crew status lists the standing roles and each slot's unit and stage. Two teams share a session.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn

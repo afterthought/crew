@@ -1,5 +1,5 @@
 # Every brief prints for its team or partition with no token left unfilled.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 for role in conductor ops construct coder verify; do
   expect_ok crewpy brief swb-1 $role

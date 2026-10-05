@@ -1,6 +1,6 @@
 # crew fix <team> <name> "<what is wrong>": fix/<name> from the team's bolt at places/fix-<name>, a fresh code
 # agent in a free slot with the words given, and a merge into the bolt like a unit's. No change, no plan record.
-. "$TESTS/lib.sh"
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
 box=chuck-herdr-alpha
