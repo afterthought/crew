@@ -5,8 +5,8 @@ command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn CREW_AGENT=swb-1-conductor
-crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
-crew bolt give swb-1 >/dev/null 2>&1
+CREW_AGENT= crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
+CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
 plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
 
 expect_fail "swb-2 holds no bolt" crew fix swb-2 edge-sign-in "x"

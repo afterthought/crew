@@ -10,11 +10,10 @@ mkdir -p "$k/.devenv/profile/bin"
 printf '#!/usr/bin/env bash\necho "$KIT" > .prepared\n' > "$k/.devenv/profile/bin/crew-prepare"; chmod +x "$k/.devenv/profile/bin/crew-prepare"
 printf '.devenv/\n.prepared\n' > "$k/.gitignore"; commit_all "$k" "chore: ignore what preparing a worktree makes"
 crew state init wldn >/dev/null
-export CREW_AGENT=wldn-planner
 plan() { git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
 
 expect_ok crew bolt new tenant-environments "A tenant holds environments of its own." --repo switchboard-kit --source books/switchboard-kit/src/account-onboarding.md
-has "$out" "plan(tenant-environments): add the bolt (wldn-planner)"
+has "$out" "plan(tenant-environments): add the bolt ($me@mac-studio)"
 crew bolt new console-pages "The console lists a tenant's environments." --repo switchboard-kit >/dev/null
 crew bolt new apex-zones "Each install's apex is its own zone." --repo switchboard-kit --before console-pages >/dev/null
 crew bolt new board-builds "A board builds." --repo breadboard-kit >/dev/null

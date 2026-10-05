@@ -21,7 +21,7 @@ branch first, then whatever each host it can reach has not yet carried.
   record.py trace <object> [--label L]    one bolt's, unit's or signal's history, read from the entries alone
 
 An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, team/<team>, agent/<name>,
-stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>."""
+stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>."""
 import argparse, datetime, getpass, json, os, pathlib, queue, re, signal, subprocess, sys, tempfile, threading
 
 LIB = pathlib.Path(__file__).resolve().parent
@@ -45,7 +45,7 @@ EXTRA = ("Result", "Tasks", "Head", "Observed", "Chars")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
-KINDS = ("unit/", "bolt/", "queue/", "signals/", "team/", "agent/", "stage/", "fix/", "plan/")
+KINDS = ("unit/", "bolt/", "queue/", "signals/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/")
 
 _count = 0
 _session = ...  # resolved once per process
@@ -460,8 +460,9 @@ def trace(fleet, a):
         for e in list(chosen.values()):
             # What it came from. Where a unit moved from says where it was, not what it came from.
             objs.update(f for f in e["From"] if followed(f) and not (e.get("Act") == "unit.move" and f.startswith("bolt/")))
-            # What came from it.
-            if any(f in objs for f in e["From"]):
+            # What came from it. A proposal reached from one of its changes is that change's origin: the rest of what
+            # it applied is its siblings' history, so a proposal is followed forward only when the trace starts there.
+            if any(f in objs and (not f.startswith("proposal/") or f == start) for f in e["From"]):
                 objs.update(o for o in e["On"] if followed(o))
         if (len(objs), len(chosen)) == before:
             break

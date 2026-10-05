@@ -5,7 +5,7 @@ export PATH="$TESTS/stubs-sites:$PATH"
 team_world
 ak=$(kit mac-studio willdan atlas-kit); akd=$(dirname "$ak")
 echo chuck-herdr-alpha > "$(home_of chuck-herdr-alpha)/.devurl-label"; echo studio > "$(home_of mac-studio)/.devurl-label"
-export CREW_LABEL=wldn CREW_AGENT=wldn-planner
+export CREW_LABEL=wldn
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
 crew unit add an-installs-apex-is-its-own-zone "An apex is a zone." --bolt tenant-environments >/dev/null

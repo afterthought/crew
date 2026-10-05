@@ -3,7 +3,7 @@
 . "$TESTS/lib.sh"
 team_world
 box=chuck-herdr-alpha
-export CREW_LABEL=wldn CREW_AGENT=wldn-planner
+export CREW_LABEL=wldn
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 crew bolt new console-pages "The console lists them." --repo switchboard-kit >/dev/null
 for u in a b c; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
@@ -38,7 +38,7 @@ CREW_AGENT=swb-2-conductor crew unit run p construct >/dev/null
 eq "$(labels)" "swb-1,swb-2,swb-1 units,swb-2 units"
 ok "two teams in one session each have their workspace and units workspace"
 
-for u in a b c; do crew unit drop $u "not wanted" >/dev/null; done
+for u in a b c; do CREW_AGENT= crew unit drop $u "not wanted" >/dev/null; done
 eq "$(labels)" "swb-1,swb-2,swb-1 units,swb-2 units"
 eq "$(in_ws | wc -w | tr -d ' ')" "1"
 echo fixed > "$kd/places/fix-edge-sign-in/x"; commit_all "$kd/places/fix-edge-sign-in" "fix: it answers a string"

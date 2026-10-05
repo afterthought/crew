@@ -29,10 +29,12 @@ old_plan() {
 }
 count() { git --git-dir "$1" rev-list --count "$2"; }
 
-# A partition with no plan anywhere: an empty plan, then moves.rec, both passing recfix.
+# A partition with no plan anywhere: an empty plan, then moves.rec and proposals.rec, each passing recfix.
 expect_ok crew state init wldn
 has "$out" "wldn/main of WilldanGroup/crew-state"; has "$out" "started an empty plan"; has "$out" "added moves.rec with 0 moves"
-eq "$(git --git-dir "$ws" ls-tree --name-only wldn/main)" $'moves.rec\nplan.rec'
+eq "$(git --git-dir "$ws" ls-tree --name-only wldn/main)" $'moves.rec\nplan.rec\nproposals.rec'
+git --git-dir "$ws" show wldn/main:proposals.rec > "$T/p.rec"; recfix --check "$T/p.rec" || fail "proposals.rec fails recfix --check"
+eq "$(recsel -t Proposal -c "$T/p.rec")" "0"
 git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recfix --check "$T/plan.rec" || fail "plan.rec fails recfix --check"
 eq "$(recsel -t Unit -c "$T/plan.rec")" "0"; has "$(cat "$T/plan.rec")" "%type: Bolt rec Bolt"
 git --git-dir "$ws" show wldn/main:moves.rec > "$T/moves.rec"; recfix --check "$T/moves.rec" || fail "moves.rec fails recfix --check"
@@ -42,7 +44,7 @@ has "$(git --git-dir "$ws" log -1 --format=%B wldn/main)" "Crew-Entry: "
 expect_ok crew state init wldn
 has "$out" "wldn/main of WilldanGroup/crew-state exists, at"; has "$out" "nothing to do"
 eq "$(count "$ws" wldn/main)" "2"
-ok "a new flywheel gets an empty plan and moves file, and a second run writes nothing"
+ok "a new flywheel gets an empty plan, moves and proposals file, and a second run writes nothing"
 
 # madswan had a plan in each of its blueprints repos, and afterthought/blueprints a move.
 old_plan afterthought/blueprints madswan 'Bolt: site-refresh\nRepo: swancloud\nGoal: The site reads well.\nSource: books/site.md\n\nUnit: the-home-page-loads-fast\nRepo: swancloud\nBolt: site-refresh\nIntent: The home page loads in a second.\nSource: books/site.md\n'
@@ -93,7 +95,7 @@ expect_fail "the push of swancloud/main to afterthought/crew-state failed" crew 
 eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" "plan.rec"
 expect_ok crew state init swancloud
 has "$out" "added moves.rec"; lacks "$out" "started an empty plan"
-eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" $'moves.rec\nplan.rec'
+eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" $'moves.rec\nplan.rec\nproposals.rec'
 expect_ok crew state init swancloud; has "$out" "nothing to do"
 git --git-dir "$as" merge-base madswan/main swancloud/main >/dev/null 2>&1 && fail "madswan's and swancloud's branches share history"
 eq "$(git --git-dir "$as" for-each-ref --format='%(refname:short)' refs/heads)" $'madswan/main\nswancloud/main'

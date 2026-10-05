@@ -51,13 +51,13 @@ crew tell wldn-planner "Secret words ZQXR" >/dev/null
 eq "$(field mac-studio tell On)" "agent/wldn-planner"
 eq "$(field mac-studio tell Chars)" "17"
 eq "$(field mac-studio tell By)" "$user@mac-studio"
-CREW_AGENT=wldn-planner crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
-for u in a b c e; do CREW_AGENT=wldn-planner crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
+crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
+for u in a b c e; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
 crew bolt give swb-1 >/dev/null 2>&1
 eq "$(field mac-studio bolt.give On)" "bolt/tenant-environments team/swb-1"
 eq "$(field $box agent.restart On agent/swb-1-conductor)" "team/swb-1 agent/swb-1-conductor"
 eq "$(field $box agent.restart By agent/swb-1-ops)" "$user@mac-studio"
-CREW_AGENT=wldn-planner crew unit add f "Unit f." --bolt tenant-environments >/dev/null 2>&1
+crew unit add f "Unit f." --bolt tenant-environments >/dev/null 2>&1
 eq "$(field mac-studio tell On agent/swb-1-conductor)" "agent/swb-1-conductor"
 [[ $(record_of mac-studio; record_of $box) != *ZQXR* ]] || fail "a tell's text is in the run record"
 ok "a tell records the recipient and its length, never its text, and so do the tells a write sends; a give's restarts are recorded"

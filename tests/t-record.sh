@@ -58,12 +58,12 @@ CREW_SESSION=mac-studio:sid-elsewhere CREW_AGENT=wldn-planner emit $box --act te
 eq "$(field $box test.carried Session)" "mac-studio:sid-elsewhere"
 ok "an agent's entry names its session as herdr reports it; the user's and an agent herdr doesn't know have none; a carried session wins"
 
-export CREW_LABEL=wldn CREW_AGENT=wldn-planner
+export CREW_LABEL=wldn
 crew bolt new tenant-environments "Tenants hold environments ZQXA." --repo switchboard-kit >/dev/null
 eq "$(field mac-studio bolt.new On)" "bolt/tenant-environments"
 eq "$(field mac-studio bolt.new Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 eq "$(field mac-studio bolt.new Why)" "plan(tenant-environments): add the bolt"
-eq "$(field mac-studio bolt.new By)" "wldn-planner"
+eq "$(field mac-studio bolt.new By)" "$me@mac-studio"
 crew bolt new apex-zones "Apex zones ZQXB." --repo switchboard-kit >/dev/null
 crew bolt order apex-zones --first >/dev/null
 eq "$(field mac-studio bolt.order On)" "bolt/apex-zones"

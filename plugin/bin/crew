@@ -34,11 +34,13 @@
 #                                      every bolt and unit of the plans, each unit's stage read from its kit
 #   crew bolt  new|give|order|drop|land ...
 #   crew unit  add|split|order|after|move|drop|approve ...
+#   crew plan  propose|proposed|agree|approve|drop ...
+#                                      the planner's proposals: a change to the plan, applied once the user approves it
 #   crew signal <slug> "<what it asserts>" ...
 #                                      record a finding as a signal
 #   crew signal move <id> attach|challenge|new-territory|answered|drop ...
 #                                      curation's move for a signal
-#   (crew bolt|unit|signal --help says more)
+#   (crew bolt|unit|plan|signal --help says more)
 #
 # Each partition's main level, and the operator agent in each operator session:
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
@@ -432,7 +434,7 @@ pick_roles() {  # with no role named, the standing roles
 
 case $cmd in
   list) teams ;;
-  bolts | bolt | signal | state) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  bolts | bolt | signal | state | plan) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   events | trace) exec python3 "$here/../lib/record.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;

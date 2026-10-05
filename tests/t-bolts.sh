@@ -7,7 +7,7 @@ ws=$(remote WilldanGroup/crew-state)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
 ak=$(kit mac-studio willdan atlas-kit)
 crew state init wldn >/dev/null
-export CREW_AGENT=wldn-planner CREW_LABEL=wldn
+export CREW_LABEL=wldn
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 crew bolt new apex-zones "Apexes are zones." --repo switchboard-kit >/dev/null
 crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null

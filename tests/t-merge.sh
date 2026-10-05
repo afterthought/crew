@@ -5,10 +5,10 @@ command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn CREW_AGENT=swb-1-conductor
-crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
-crew unit add a "Unit a." --bolt tenant-environments >/dev/null
-crew unit add b "Unit b." --bolt tenant-environments >/dev/null
-crew bolt give swb-1 >/dev/null 2>&1
+CREW_AGENT= crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
+CREW_AGENT= crew unit add a "Unit a." --bolt tenant-environments >/dev/null
+CREW_AGENT= crew unit add b "Unit b." --bolt tenant-environments >/dev/null
+CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
 crew unit run a construct >/dev/null; crew unit run b construct >/dev/null
 change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"; crew unit approve a >/dev/null
 sed -i '' 's/- \[ \]/- [x]/' "$kd/places/a/openspec/changes/a/tasks.md"; commit_all "$kd/places/a" "feat(a): built"
@@ -35,7 +35,7 @@ git -C "$k" ls-tree -d --name-only bolt/tenant-environments openspec/changes/ | 
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1 units"
 ok "once the bolt holds the change, the place is removed, the slot freed, and the unit reads merged"
 
-crew unit drop b "not wanted after all" >/dev/null
+CREW_AGENT= crew unit drop b "not wanted after all" >/dev/null
 eq "$(herdr_state $box wldn-1 '.workspaces | length')" "0"
 eq "$(awk NF "$(home_of $box)/.local/state/swb-1-team/slots")" ""
 ok "dropping the last unit in flight frees its slot and closes the units workspace"

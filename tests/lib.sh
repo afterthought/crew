@@ -14,6 +14,8 @@ export CREW_TEST_ROOT=$T CREW_TEST_LOG=$T/calls.log CREW_TEST_CLAUDE_LOG=$T/clau
 export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
 unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH GIT_DIR GIT_WORK_TREE
 HOST=${HOST:-mac-studio}
+# The user at a shell, as crew names them in what it writes: <me>@<host>.
+me=$(python3 -c 'import getpass; print(getpass.getuser())')
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
 # The test's own commands (making kits and remotes) run with a scratch HOME too, never the user's.
 export HOME=$T/home; mkdir -p "$HOME"

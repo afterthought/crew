@@ -15,7 +15,7 @@ timeout 30 portless proxy start --port "$PORTLESS_PORT" --no-tls </dev/null >/de
 team_world
 ak=$(kit mac-studio willdan atlas-kit); akd=$(dirname "$ak")
 git -C "$ak" remote add origin https://github.com/WilldanGroup/atlas-kit.git
-export CREW_LABEL=wldn CREW_AGENT=wldn-planner
+export CREW_LABEL=wldn
 crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
 crew unit add map-one "Map one." --bolt atlas-maps >/dev/null
 crew bolt give atl-1 >/dev/null 2>&1

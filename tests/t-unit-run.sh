@@ -9,18 +9,18 @@ mkdir -p "$k/.devenv/profile/bin"
 printf '#!/usr/bin/env bash\necho "$KIT" > .prepared\n' > "$k/.devenv/profile/bin/crew-prepare"; chmod +x "$k/.devenv/profile/bin/crew-prepare"
 printf '.devenv/\n.prepared\n' > "$k/.gitignore"; commit_all "$k" "chore: ignore what preparing makes"
 export CREW_LABEL=wldn
-CREW_AGENT=wldn-planner crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
-CREW_AGENT=wldn-planner crew unit add a "Unit a." --bolt tenant-environments --source books/x.md --source switchboard-kit:docs/y.md >/dev/null
-CREW_AGENT=wldn-planner crew unit add b "Unit b." --bolt tenant-environments --after a >/dev/null
-for u in c d e f; do CREW_AGENT=wldn-planner crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
-CREW_AGENT=wldn-planner crew unit add queued-one "Later." --repo switchboard-kit >/dev/null
+crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
+crew unit add a "Unit a." --bolt tenant-environments --source books/x.md --source switchboard-kit:docs/y.md >/dev/null
+crew unit add b "Unit b." --bolt tenant-environments --after a >/dev/null
+for u in c d e f; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
+crew unit add queued-one "Later." --repo switchboard-kit >/dev/null
 export CREW_AGENT=swb-1-conductor
 slots=$(home_of $box)/.local/state/swb-1-team/slots
 last_launch() { tail -1 "$CREW_TEST_CLAUDE_LOG" | jq -r '([.argv | to_entries[] | select(.value == "--name") | .key][0]) as $i | "\(.argv[0:4] | join(" ")) | \(.argv[$i + 1]) | \(.cwd)"'; }
 prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
 
 expect_fail "bolt tenant-environments is held by no team yet" crew unit run a construct
-crew bolt give swb-1 >/dev/null 2>&1
+CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
 expect_fail "unit queued-one is queued" crew unit run queued-one construct
 
 expect_ok crew unit run a construct

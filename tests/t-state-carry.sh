@@ -15,7 +15,7 @@ emit() { local h=$1; shift; as "$h" python3 "$CREW/plugin/lib/record.py" emit --
 onbranch() { git --git-dir "$ws" show "wldn/main:runs/$1/$day.rec" 2>/dev/null | sed -n 's/^Id: //p'; }
 commits() { git --git-dir "$ws" rev-list --count wldn/main; }
 
-CREW_AGENT=wldn-planner crew bolt new tenants "Tenants." --repo switchboard-kit >/dev/null
+crew bolt new tenants "Tenants." --repo switchboard-kit >/dev/null
 sha=$(git --git-dir "$ws" rev-parse wldn/main)
 eid=$(git --git-dir "$ws" log -1 --format='%(trailers:key=Crew-Entry,valueonly)' wldn/main | head -1)
 [[ -n $eid ]] || fail "the write's commit has no Crew-Entry trailer"
@@ -25,7 +25,7 @@ ok "a write's Crew-Entry trailer is the id of the one entry that names its commi
 
 tell=$(emit mac-studio --act tell --on agent/wldn-planner --field Chars=5)
 lacks "$(onbranch mac-studio)" "$tell"
-CREW_AGENT=wldn-planner crew bolt new consoles "Consoles." --repo switchboard-kit >/dev/null
+crew bolt new consoles "Consoles." --repo switchboard-kit >/dev/null
 has "$(onbranch mac-studio)" "$tell"; has "$(onbranch mac-studio)" "$eid"
 git --git-dir "$ws" show "wldn/main:runs/mac-studio/$day.rec" > "$T/runs.rec"; recfix --check "$T/runs.rec" || fail "the carried file fails recfix --check"
 eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" $'plan.rec\n'"runs/mac-studio/$day.rec"

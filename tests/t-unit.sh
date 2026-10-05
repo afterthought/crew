@@ -5,7 +5,6 @@ wb=$(blueprints WilldanGroup/willdan-blueprints)
 ws=$(remote WilldanGroup/crew-state)
 k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
 crew state init wldn >/dev/null
-export CREW_AGENT=wldn-planner
 plan() { git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 crew bolt new console-pages "The console lists them." --repo switchboard-kit >/dev/null
@@ -16,7 +15,7 @@ crew unit add a "Unit a." --bolt tenant-environments --source books/x.md >/dev/n
 crew unit add b "Unit b." --bolt tenant-environments --after a >/dev/null 2>&1
 crew unit add c "Unit c." --bolt tenant-environments >/dev/null 2>&1
 expect_ok crew unit add d "Unit d." --bolt tenant-environments --before b
-has "$out" "plan(tenant-environments): add d (wldn-planner)"
+has "$out" "plan(tenant-environments): add d ($me@mac-studio)"
 eq "$(plan -t Unit -P Unit)" $'a\nd\nb\nc'
 change "$k" taken; commit_all "$k" "feat: taken"
 expect_fail "switchboard-kit's main already has a change named taken" crew unit add taken "x" --bolt tenant-environments
