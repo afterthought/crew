@@ -21,6 +21,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]
+  crew unit amend <unit> "<new intent>"      a unit's intent replaced; one with a worktree is marked amended, and its
+                                             conductor runs construct again
   crew unit order <unit> --before <unit>|--first|--last
   crew unit after <unit> <unit>...|--none
   crew unit move <unit> <bolt>|queue [--unblocks <bolt>]
@@ -1052,7 +1054,7 @@ def unit_approve(fleet, a):
 
 # The commands that write the plan directly, and the one role each agent crew started may use them in.
 PLAN_WRITES = {("bolt", "new"), ("bolt", "give"), ("bolt", "order"), ("bolt", "drop"), ("bolt", "land"), ("unit", "add"),
-               ("unit", "split"), ("unit", "order"), ("unit", "after"), ("unit", "move"), ("unit", "drop")}
+               ("unit", "split"), ("unit", "amend"), ("unit", "order"), ("unit", "after"), ("unit", "move"), ("unit", "drop")}
 
 
 def role(fleet, name):
@@ -1134,12 +1136,12 @@ class Direct:
 
 
 class Proposed:
-    """What a command inside a proposal sees: the proposal's partition, in the plan as the commands before it in the
-    proposal have left it."""
+    """What a command inside a proposal sees: the proposal's partition and number, in the plan as the commands before
+    it in the proposal have left it."""
     direct = False
 
-    def __init__(self, fleet, label, w):
-        self.fleet, self.label, self.w = fleet, label, w
+    def __init__(self, fleet, label, w, n):
+        self.fleet, self.label, self.w, self.n = fleet, label, w, n
 
     def locate(self, kind, name):
         (self.w.plan.bolt(name) if kind == "Bolt" else self.w.plan.unit(name)) or self.w.gone(kind, name)
@@ -1293,6 +1295,39 @@ def op_unit_split(ctx, a):
               on=[f"unit/{a.unit}"] + [f"unit/{n}" for n, _ in a.into], frm=[f"unit/{a.unit}"])
 
 
+def op_unit_amend(ctx, a):
+    """A unit's intent replaced. One that has a worktree has a change written for the old intent, so it is marked
+    amended, proposal/<n> inside an approval and intent when the user runs it, and its conductor is told to run
+    construct again. Merged work is not amended."""
+    label, plan = ctx.locate("Unit", a.unit)
+    s = unit_stage(ctx.fleet, plan, a.unit)
+    s["stage"] not in ("merged", "landed") or fail(
+        f"unit {a.unit} has " + ("merged into its bolt" if s["stage"] == "merged" else "landed on main")
+        + ", so it is not amended: a defect in it is a fix, and new work is a new unit")
+    s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
+    bolt = plan.unit(a.unit).get("Bolt")
+    team = ctx.fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
+    mark = (f"proposal/{ctx.n}" if not ctx.direct else "intent") if s["worktree"] else None
+
+    def change(w):
+        u = w.unit(a.unit)
+        u.set("Intent", a.intent)
+        if mark:
+            u.set("Amended", mark)
+            if team:
+                w.quiet.add(team["name"])  # told below what to do, rather than the write's subject
+        return [bolt] if bolt else []
+
+    def after(repo, sha):
+        if not (mark and team):
+            return
+        by = f"proposal {ctx.n}" if not ctx.direct else "the user"
+        if not crew.tell(ctx.fleet, f"{team['name']}-conductor", f"Unit {a.unit}'s intent was amended by {by}. Run construct again "
+                         f"(crew unit run {a.unit} construct); it returns to the user's review."):
+            print(f"{team['name']}-conductor is not up: unit {a.unit} waits, amended, for construct to be run again")
+    return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
+
+
 def op_unit_order(ctx, a):
     label, plan = ctx.locate("Unit", a.unit)
     conductor_scope(ctx, plan, a)
@@ -1410,10 +1445,10 @@ def op_unit_drop(ctx, a):
               body=a.reason, after=after)
 
 
-# The nine commands a proposal may hold, each built the same way whether run directly or inside a proposal.
+# The ten commands a proposal may hold, each built the same way whether run directly or inside a proposal.
 OPS = {
     ("bolt", "new"): op_bolt_new, ("bolt", "order"): op_bolt_order, ("bolt", "drop"): op_bolt_drop,
-    ("unit", "add"): op_unit_add, ("unit", "split"): op_unit_split, ("unit", "order"): op_unit_order,
+    ("unit", "add"): op_unit_add, ("unit", "split"): op_unit_split, ("unit", "amend"): op_unit_amend, ("unit", "order"): op_unit_order,
     ("unit", "after"): op_unit_after, ("unit", "move"): op_unit_move, ("unit", "drop"): op_unit_drop,
 }
 
@@ -1461,7 +1496,7 @@ class Strict(argparse.ArgumentParser):
 
 
 def do_args(label, do):
-    """A proposal's Do as crew's parser reads it: one of the nine plan commands, in the proposal's partition."""
+    """A proposal's Do as crew's parser reads it: one of the ten plan commands, in the proposal's partition."""
     try:
         argv = shlex.split(do)
     except ValueError as e:
@@ -1511,7 +1546,8 @@ def summary(argvs):
     words = {("bolt", "new"): lambda a: f"new bolt {a.bolt}", ("bolt", "order"): lambda a: f"order bolt {a.bolt}",
              ("bolt", "drop"): lambda a: f"drop bolt {a.bolt}",
              ("unit", "add"): lambda a: f"add {a.unit} to " + (a.bolt or f"the {a.repo} queue"),
-             ("unit", "split"): lambda a: f"split {a.unit}", ("unit", "order"): lambda a: f"order {a.unit}",
+             ("unit", "split"): lambda a: f"split {a.unit}", ("unit", "amend"): lambda a: f"amend {a.unit}",
+             ("unit", "order"): lambda a: f"order {a.unit}",
              ("unit", "after"): lambda a: f"set what {a.unit} comes after",
              ("unit", "move"): lambda a: f"move {a.unit} to " + ("the queue" if a.bolt == "queue" else a.bolt),
              ("unit", "drop"): lambda a: f"drop {a.unit}"}
@@ -1521,7 +1557,7 @@ def summary(argvs):
 def touched_by(plan, argvs):
     """The bolts each of a proposal's commands touches, read from the plan and the commands alone (no kit is read): a
     unit add's bolt; the bolt a unit leaves and the one it joins; the bolt of a unit split, ordered, given what it
-    comes after or dropped; the bolt of a bolt order or drop. A bolt new touches none."""
+    comes after, amended or dropped; the bolt of a bolt order or drop. A bolt new touches none."""
     where = {u.name(): u.get("Bolt") for u in plan.units()}
     out = []
     for a in argvs:
@@ -1555,11 +1591,11 @@ def flat(lists):
     return list(dict.fromkeys(x for l in lists for x in l))
 
 
-def apply_all(fleet, label, w, argvs):
-    """A proposal's commands built and applied in order to the write's plan, each checked against the plan as the ones
+def apply_all(fleet, label, w, argvs, n):
+    """Proposal n's commands built and applied in order to the write's plan, each checked against the plan as the ones
     before it left it. Returns the ops, each with the objects its change added, and the bolts whose conductors hear
     the write."""
-    ctx, ops, told = Proposed(fleet, label, w), [], []
+    ctx, ops, told = Proposed(fleet, label, w, n), [], []
     for a in argvs:
         try:
             op = OPS[(a.cmd, a.sub)](ctx, a)
@@ -1572,14 +1608,14 @@ def apply_all(fleet, label, w, argvs):
     return ops, list(dict.fromkeys(told))
 
 
-def check_ops(fleet, label, w, argvs):
-    """A proposal's commands applied in order to a copy of the plan and of the files they change, then thrown away:
+def check_ops(fleet, label, w, argvs, n):
+    """Proposal n's commands applied in order to a copy of the plan and of the files they change, then thrown away:
     every refusal and rule each has when run directly, the schema's and crew's own rules included."""
     scratch = Write(w.repo, label, w.tip, Plan(w.plan.text()))
     scratch.files = dict(w.files)
     for a in argvs:
         try:
-            OPS[(a.cmd, a.sub)](Proposed(fleet, label, scratch), a).change(scratch)
+            OPS[(a.cmd, a.sub)](Proposed(fleet, label, scratch, n), a).change(scratch)
         except Refusal as e:
             fail(f"`{a.do}`: {e}")
     try:
@@ -1658,10 +1694,10 @@ def plan_propose(fleet, a):
     seen = {}
 
     def change(w):
-        check_ops(fleet, label, w, argvs)
-        per = touched_by(w.plan, argvs)
         pl = proposals(w)
         n = 1 + max([int(p.get("Proposal")) for p in pl.recs("Proposal")] or [0])
+        check_ops(fleet, label, w, argvs, n)
+        per = touched_by(w.plan, argvs)
         today = datetime.date.today().isoformat()
         if a.replaces:
             old = proposal(pl, a.replaces, label)
@@ -1752,7 +1788,7 @@ def plan_approve(fleet, a):
         p.get("State") == "open" or fail(f"proposal {a.n} is {p.get('State')}" + (f": {p.get('Reason')}" if p.get("Reason") else ""))
     opened(p0)
     agreed(w0, p0)
-    ops0 = apply_all(fleet, label, w0, argvs)[0]  # checked at the tip, to know what to prepare
+    ops0 = apply_all(fleet, label, w0, argvs, a.n)[0]  # checked at the tip, to know what to prepare
     undos, seen = [], {}
     try:
         for op in ops0:
@@ -1764,7 +1800,7 @@ def plan_approve(fleet, a):
             p = proposal(pl, a.n, label)
             opened(p)
             agreed(w, p)
-            ops, told = apply_all(fleet, label, w, argvs)
+            ops, told = apply_all(fleet, label, w, argvs, a.n)
             p.set("State", "approved")
             p.set("Closed", datetime.date.today().isoformat(), after="By")
             w.replace("proposals.rec", pl.text())
@@ -1824,9 +1860,27 @@ def signal_text(fleet, label, sig):
     return assertion, excerpt
 
 
+def amendment(fleet, plan, a):
+    """A unit amend as the user reads it: the unit's bolt, team and stage, its intent as it stands and as it would be,
+    and what approval sets in motion. The stage is read from the unit's kit."""
+    u = plan.unit(a.unit)
+    if u is None:
+        return [f"**Amend unit `{a.unit}`**, new in this proposal", f"Intent, as proposed:  {a.intent}"]
+    s, b = unit_stage(fleet, plan, a.unit), u.get("Bolt")
+    team = plan.bolt(b).get("Team") if b else None
+    where = (f"bolt `{b}`" + (f" ({team})" if team else "")) if b else f"the queue of {u.get('Repo')}"
+    st = s["stage"]
+    now = ("" if st == "queued" else f", its stage unknown ({s.get('why')})" if st == "unknown" else
+           f", now in {st}" if st in ("construct", "review", "code", "verify") else f", now {st}")
+    return [f"**Amend unit `{a.unit}`** in {where}{now}", f"Intent, as it stands: {u.get('Intent')}", f"Intent, as proposed:  {a.intent}",
+            f"On approval: {team}'s conductor runs construct again, and the unit returns to your review." if s["worktree"] and team else
+            "On approval: its intent is replaced; it has no change written yet, so nothing else changes."]
+
+
 def describe(fleet, label, plan, p):
     """A proposal as the user reads it: each change in plain words, with what the user is comparing beside it (a unit's
-    intent and sources, the goal and team of the bolt it would join), and who has yet to agree."""
+    intent and sources, the goal and team of the bolt it would join, an amended unit's intent before and after), and
+    who has yet to agree."""
     argvs = [do_args(label, d) for d in p.all("Do")]
     per = touched_by(plan, argvs)
     new_bolts, changes = {}, []
@@ -1878,6 +1932,8 @@ def describe(fleet, label, plan, p):
                 lines.append(f"Unblocks: bolt `{a.unblocks}`, which can't be proven or land without it")
         elif key == ("unit", "split"):
             lines = [f"**Split unit `{a.unit}`**", f"Narrowed intent: {a.intent}"] + [f"New unit `{n}`: {i}" for n, i in a.into]
+        elif key == ("unit", "amend"):
+            lines = amendment(fleet, plan, a)
         elif key == ("unit", "order"):
             where = "first" if a.first else "last" if a.last else f"before `{a.before}`"
             lines = [f"**Order unit `{a.unit}`** {where}", f"Intent: {intent_of(a.unit)}"]
@@ -2356,6 +2412,10 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("intent")
     x.add_argument("--into", nargs=2, action="append", required=True, metavar=("UNIT", "INTENT"))
     x.add_argument("--label")
+    x = un.add_parser("amend")
+    x.add_argument("unit")
+    x.add_argument("intent")
+    x.add_argument("--label")
     x = un.add_parser("order")
     x.add_argument("unit")
     g = x.add_mutually_exclusive_group(required=True)
@@ -2449,7 +2509,8 @@ COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land,
-    ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
+    ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
+    ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")), ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
     ("_slots", None): slots_cmd, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
@@ -2461,6 +2522,7 @@ COMMANDS = {
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
     ("bolt", "drop"): "bolt.drop", ("bolt", "land"): "bolt.land", ("unit", "add"): "unit.add", ("unit", "split"): "unit.split",
+    ("unit", "amend"): "unit.amend",
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
     ("unit", "approve"): "unit.approve", ("signal", None): "capture", ("signal-move", None): "signal.move",
     ("_run", None): "stage.start",

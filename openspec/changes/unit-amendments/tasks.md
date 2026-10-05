@@ -15,8 +15,8 @@
 
 ## 3. Amending an intent
 
-- [ ] 3.1 `crew unit amend <unit> "<new intent>"` as `checks`, `change` and `after`: refused for a merged or landed unit; `Intent` replaced; a unit with a worktree marked `proposal/<n>` in an approval or `intent` for the user; its conductor told. The planner's direct run is refused naming `crew plan propose`; the user's is written. Entry `unit.amend`. Verify each case, and that a queued unit is not marked.
-- [ ] 3.2 A proposal may hold `unit amend`; it touches the unit's bolt, so a held bolt's conductor is told and must agree. `crew plan proposed <n>` prints the amendment as before and after with the unit's bolt, team and stage and what approval sets in motion. Verify with a fixture proposal amending a unit in code: the page, the refusal of approval before agreement, and after approval the new intent, the mark and the tell.
+- [x] 3.1 `crew unit amend <unit> "<new intent>"` as `checks`, `change` and `after`: refused for a merged or landed unit; `Intent` replaced; a unit with a worktree marked `proposal/<n>` in an approval or `intent` for the user; its conductor told. The planner's direct run is refused naming `crew plan propose`; the user's is written. Entry `unit.amend`. Verify each case, and that a queued unit is not marked.
+- [x] 3.2 A proposal may hold `unit amend`; it touches the unit's bolt, so a held bolt's conductor is told and must agree. `crew plan proposed <n>` prints the amendment as before and after with the unit's bolt, team and stage and what approval sets in motion. Verify with a fixture proposal amending a unit in code: the page, the refusal of approval before agreement, and after approval the new intent, the mark and the tell.
 - [ ] 3.3 `plugin/roles/planner.md`: a change to what an existing unit builds is `unit amend` in a proposal, with the case saying why the unit changes and is not replaced. Document `crew unit amend` and amending a unit in flight in `README.md`, `plugin/skills/crew/SKILL.md` and the usage header. Verify every command in the README appears in `crew`'s usage.
 
 ## 4. Proof on real work
