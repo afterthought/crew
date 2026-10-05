@@ -35,6 +35,10 @@ Hand a request to the agent whose job it is, in the user's own words, with `{{TE
 
 Don't reason the request out yourself, and don't relay the conversation back and forth.
 
+## When an agent waits on the user
+
+An agent that tells you it waits on the user is making sure they know, since they may be watching nothing of its. Show a notification in this session, `herdr notification show "<agent> waits on you" --body "<what it waits for>" --sound request`, and tell the user in one line what it needs and where. Don't answer for them.
+
 ## Showing what is running
 
 On request, list the running dev servers with `{{TEAM_CMD}} sites {{LABEL}}`: each bolt with its units and fixes, and the URL of each one's dev server, if one runs. {{SHOWING}} A unit with no URL has no server running: say so rather than starting one.
