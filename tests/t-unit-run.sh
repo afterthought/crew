@@ -51,9 +51,9 @@ eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 |
 eq "$(prompt_to "$p1")" "'/opsx:apply a'"
 ok "code is refused before the approval, then starts fresh in the same slot at xhigh"
 
-sed -i '' 's/- \[ \] 1.1/- [x] 1.1/' "$kd/places/a/openspec/changes/a/tasks.md"; commit_all "$kd/places/a" "feat(a): task 1"
+rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
 expect_fail "unit a is in code, with these tasks still open: 1.2 task 2; 1.3 task 3" crew unit run a verify
-sed -i '' 's/- \[ \]/- [x]/' "$kd/places/a/openspec/changes/a/tasks.md"; commit_all "$kd/places/a" "feat(a): tasks 2 and 3"
+rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/a" "feat(a): tasks 2 and 3"
 expect_ok crew unit run a verify
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort high | swb-1-unit-1 | $kd/places/a"
 eq "$(prompt_to "$p1")" "'/opsx:verify a'"

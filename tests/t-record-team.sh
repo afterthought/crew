@@ -95,7 +95,7 @@ ok "crew unit wait records the stage's end with what it reached and the branch's
 
 expect_fail "swb-1-unit-1 is working; add --force to end it anyway" crew unit run a code
 has "$(field $box stage.start Refused stage/a/code agent/swb-1-unit-1)" "swb-1-unit-1 is working"
-sed -i '' 's/- \[ \] 1.1/- [x] 1.1/' "$kd/places/a/openspec/changes/a/tasks.md"; commit_all "$kd/places/a" "feat(a): task 1"
+rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
 expect_fail "unit a is in code, with these tasks still open: 1.2 task 2" crew unit run a verify
 eq "$(field $box stage.start Refused stage/a/verify)" "unit a is in code, with 1 task still open"
 [[ $(record_of $box) != *"task 2"* ]] || fail "an open task's title is in the run record"
