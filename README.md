@@ -3,7 +3,7 @@
 Bolt teams of Claude agents, run in herdr, and each partition's main level above them.
 
 - The teams and partitions are data in `~/.config/crew/teams.json` (version 2), written by the machine's configuration (in swancloud, `lib/crew-teams.nix`). Hosts, sessions, each session's partition and the repos of its space come from `~/.config/swancloud/herdr-hosts.json`.
-- `plugin/` is the same for every team: the roles (`roles/`, each an agent definition naming its model and effort), the `crew` and `crew-role` commands (`bin/`), the builder that turns the teams file into briefs and settings (`lib/crew.py`), the plan (`lib/plan.py`, with `lib/gather.py`, which reads a host's kits), `crew sites` (`lib/sites.py`), and the skills. It installs as a Claude Code plugin; this repository is its marketplace.
+- `plugin/` is the same for every team: the roles (`roles/`, each an agent definition naming its model and effort), the `crew` and `crew-role` commands (`bin/`), the builder that turns the teams file into briefs and settings (`lib/crew.py`), the plan (`lib/plan.py`, with `lib/gather.py`, which reads a host's kits, and `lib/transcript.py`, which checks a signal's excerpt against its agent's transcript), `crew sites` (`lib/sites.py`), and the skills. It installs as a Claude Code plugin; this repository is its marketplace.
 
 ## Teams
 
@@ -93,6 +93,7 @@ A partition's **flywheel** is its loop, named by its label. Its state is the fil
 - `plan.rec`, the plan;
 - `moves.rec`, every signal's one move;
 - `proposals.rec`, the planner's proposals;
+- `signals/<capture>/`, the captures and signals recorded through crew (see Signals);
 - `runs/<host>/<YYYY-MM-DD>.rec`, the run record each host has carried.
 
 Flywheels sharing a repository never meet: each command fetches and pushes only its own flywheel's branch, and no branch shares history with another. A write that changes several files is one commit, and its message ends with a `Crew-Entry:` trailer naming the run-record entry that describes it. `crew state init <label>` creates the branch: it adopts the first blueprints repo's `plan/<label>` with its history where there is one, joins another blueprints repo's `plan/<label>` in one commit naming where it came from, and copies the first blueprints repo's `signals/moves.rec`; run again, it finishes what a stopped run left, or says the branch exists. A clone of the branch reads with `recsel` and nothing else.
@@ -100,11 +101,26 @@ Flywheels sharing a repository never meet: each command fetches and pushes only 
 ## Signals
 
 ```
-crew signal <slug> "<what it asserts>" [--kind K] [--subject a,b] [--excerpt "<text>"]
+crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>"|--excerpt-file <path> [--kind K] [--subject a,b]
+crew signal show <id>
 crew signal move <id> attach|challenge|new-territory|answered|drop [--target T] [--reason R]
 ```
 
-Signals are in the partition's first blueprints repo, in the shape its `signals/README.md` gives. A finding is recorded with `crew signal`, by its own paths on that repo's main. Curation's moves, `crew signal move`, are appended to `moves.rec` on the flywheel's branch, and a signal becomes work only through its `route` move, which `crew unit add --signal` writes in the same commit as the unit. Each signal has one move, and nothing is ever merged.
+A **signal** is one thing noticed, with the words that show it, in the shape the blueprints' `signals/README.md` gives: a directory per capture, holding `capture.md` and one file per signal. Signals have two homes. What the agents and the user record with `crew signal` is under `signals/` on the flywheel's branch of its state repository; what the daily pass reads from meetings and channels stays under `signals/` in the partition's first blueprints repo. An id is unique across both, and every command looks it up on the flywheel's branch first.
+
+An agent crew started gives an **excerpt**: the words that show the finding, copied as its session received them, from the user or from a tool's output (`--excerpt-file` for words the shell would mangle). crew looks for them, whitespace aside, in the agent's own Claude transcript, `~/.claude*/projects/*/<session>.jsonl` for the session herdr names for the agent, and records a grade on the capture:
+
+- `verified`: the words are in a record the session received, and the capture says who asserted them: `user`; `tool`, for a command's output; `agent:<name>`, for what another agent sent with `crew tell`; or `crew`, for crew's own notice;
+- `found`: they are in the transcript, in a record crew cannot classify;
+- `unverified`: crew could not read the transcript, and the capture says why: herdr names no session, there is no file, its lines are not JSON, or crew's own running command is not in it.
+
+A signal is refused only when crew sees its own command in the transcript and the words nowhere else but in what the agent wrote itself: a paraphrase. A change in Claude Code's format lowers a grade and never stops a capture, and no command refuses anything for its grade; the grade is shown wherever the excerpt is.
+
+A capture is the one record the excerpt came from. Its `capture.md` names the host, the Claude session, the record and its time, who asserted it, and where the agent was working: its team, the bolt the team holds and the unit its slot holds, or the main level. The record itself is copied to `~/.local/state/crew/<label>/raw/<capture>.jsonl` on the host, and the capture points at it as `<host>:<path>`; of the source, only the excerpt enters git. A second signal from the same record joins its capture as its next signal, and the same signal again writes nothing. The capture and its signal are one commit on the flywheel's branch. The user's own note, `crew signal` at a shell, is its own excerpt (`excerpt: own`), of kind `ask` unless another is given.
+
+`crew signal show <id>` prints a signal, its capture's fields (the grade, who captured it, where and when, the session and the raw record) and its move, from any host. Curation's moves, `crew signal move`, are appended to `moves.rec` on the flywheel's branch, and a signal becomes work only through its `route` move, which `crew unit add --signal` writes in the same commit as the unit. Each signal has one move, and nothing is ever merged.
+
+What crew sends an agent is marked as crew's: `crew tell` sends `[crew tell from <sender>] <text>`, the sender being the agent or `<user>@<host>`, and crew's greetings and notices send `[crew] <text>`, so neither is taken for the user's typing.
 
 ## The main level and the operator agent
 
@@ -116,7 +132,7 @@ crew tell     <agent> "<text>"
 crew sites    [<label>] [--json]
 ```
 
-Each partition has a main level in the session the teams file names: the **design agent** (elaboration on main and curation of signals), the **planner** (the only writer of bolts and placements) and the main-level **ops** (lands proven bolts and deploys main), as tabs of the `<label>` workspace; and a **dispatcher** on each host the partition's teams run on, in `<label> dispatch`, which gives that host's teams their bolts. The **operator agent** stands in each operator session (the session named `<label>`), started there with `crew operator up <label>`, and works for the user. `crew tell` prompts any of these agents by name, wherever it runs.
+Each partition has a main level in the session the teams file names: the **design agent** (elaboration on main and curation of signals), the **planner** (the only writer of bolts and placements) and the main-level **ops** (lands proven bolts and deploys main), as tabs of the `<label>` workspace; and a **dispatcher** on each host the partition's teams run on, in `<label> dispatch`, which gives that host's teams their bolts. The **operator agent** stands in each operator session (the session named `<label>`), started there with `crew operator up <label>`, and works for the user. `crew tell` prompts any of these agents by name, wherever it runs, marked with who sent it.
 
 A herdr server that restarts resumes each agent in its saved pane folder, which is the folder crew moved the pane to before starting the agent, since Claude finds a conversation only from the folder it began in. crew's SessionStart hook gives a resumed agent its name and identity back. An agent that never had a message has no conversation to resume, so its pane comes back as a shell: `crew revive`, run on a host after a restart, brings back each standing agent of that host whose pane came back empty, from its last conversation or fresh, and leaves a team or main level taken down with `crew down` as it is. `crew sites` lists each host's bolts, units and fixes with the URL of each running dev server, named by swancloud's `devurl` and found among the host's portless routes.
 

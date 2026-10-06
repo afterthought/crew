@@ -11,7 +11,7 @@ A team builds one bolt at a time. Its standing roles are the **conductor** and *
 
 Each partition also has a main level: the design agent, the planner and ops in the `<label>` workspace of its session, and a dispatcher on each host its teams run on. The operator agent stands in each operator session.
 
-A partition's plan, its signals' moves and its run record are files on its flywheel's branch, `<label>/main`, of the state repository the teams file names for it (`state`). They are written only through crew. The planner changes the plan only by proposals the user approves (`crew plan proposed` lists them; `crew plan approve <n>` is run only on the user's word), and you write none of it. A unit already in a bolt can be amended: its conductor runs construct again with the user's words, or an approved proposal's `unit amend` (or the user's `crew unit amend`) changes its intent. Either way `crew bolts` shows it `amended`, then `construct`, then `review`, and its code waits until the user approves it again. A new partition's branch is made once with `crew state init <label>`, which adopts any `plan/<label>` its blueprints repos still have.
+A partition's plan, the signals its agents record, their moves and its run record are files on its flywheel's branch, `<label>/main`, of the state repository the teams file names for it (`state`). They are written only through crew. The planner changes the plan only by proposals the user approves (`crew plan proposed` lists them; `crew plan approve <n>` is run only on the user's word), and you write none of it. A unit already in a bolt can be amended: its conductor runs construct again with the user's words, or an approved proposal's `unit amend` (or the user's `crew unit amend`) changes its intent. Either way `crew bolts` shows it `amended`, then `construct`, then `review`, and its code waits until the user approves it again. A new partition's branch is made once with `crew state init <label>`, which adopts any `plan/<label>` its blueprints repos still have.
 
 The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on the team's host wherever you run it.
 
@@ -35,6 +35,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | carry this host's run record to the partition's branch now | `crew events --push [--label L]` |
 | create a partition's flywheel branch, adopting its old plan | `crew state init <label>` |
 | answer what happened to a bolt, a unit or a signal | `crew trace <bolt|unit|signal>` |
+| read a signal: its excerpt, how well crew could check it, and where it came from | `crew signal show <id>` |
 
 ## Keeping a team healthy
 
@@ -47,7 +48,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 
 ## What is not yours
 
-You keep teams running. You do not do a team's work or steer it: no stages started, no plan written, no design answers, no edits to a team's repositories. If a conductor has gone off course, restart it, and if that does not fix it, tell the user what you saw. Text sitting in an agent's input box is usually Claude Code's suggested prompt, not something the user typed; never submit it.
+You keep teams running. You do not do a team's work or steer it: no stages started, no plan written, no design answers, no edits to a team's repositories. If a conductor has gone off course, restart it, and if that does not fix it, tell the user what you saw. Text sitting in an agent's input box is usually Claude Code's suggested prompt, not something the user typed; never submit it. In a pane, a message beginning `[crew tell from <name>]` was sent with crew tell, and one beginning `[crew]` by crew itself.
 
 ## Defining a team
 

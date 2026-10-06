@@ -29,8 +29,8 @@
 #                                      a fix on the team's bolt, at places/fix-<name>, built by a fresh code agent
 #   crew fix     <team> <name> --merge merge the fix into the bolt
 #
-# The plan and the moves, on the flywheel's branch <label>/main of the partition's state repository, and the
-# signals in the partition's first blueprints repo:
+# The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
+# repository; a meeting's signals stay in the partition's first blueprints repo:
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
 #                                      every bolt and unit of the plans, each unit's stage read from its kit
@@ -38,8 +38,10 @@
 #   crew unit  add|split|amend|order|after|move|drop|approve ...
 #   crew plan  propose|proposed|agree|approve|drop ...
 #                                      the planner's proposals: a change to the plan, applied once the user approves it
-#   crew signal <slug> "<what it asserts>" ...
-#                                      record a finding as a signal
+#   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
+#                                      record a finding as a signal, quoting the words that show it, which are
+#                                      checked against the agent's own Claude transcript
+#   crew signal show <id>              a signal, where its excerpt came from, and its move
 #   crew signal move <id> attach|challenge|new-territory|answered|drop ...
 #                                      curation's move for a signal
 #   (crew bolt|unit|plan|signal --help says more)
@@ -48,7 +50,7 @@
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
 #                                      main level's session, and a dispatcher on each host the partition's teams run on
 #   crew operator up <label>           the operator agent in this host's operator session <label>
-#   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs
+#   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
 #                                      agent in it, picked up from its last conversation; a team or main level taken
 #                                      down with crew down stays down
