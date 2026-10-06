@@ -2163,6 +2163,7 @@ def signal(fleet, a):
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
     crew.NAME.match(a.slug) or fail(f"a signal's slug is lowercase words with dashes, not {a.slug}")
     a.slug not in ("move", "show") or fail(f"a signal's slug can't be '{a.slug}'")
+    a.asserts.strip() or fail("a signal says what it asserts, in a sentence")
     name, host = os.environ.get("CREW_AGENT"), crew.this_host()
     now = datetime.datetime.now(datetime.timezone.utc)
     excerpt = a.excerpt
@@ -2178,13 +2179,16 @@ def signal(fleet, a):
         v, sid = check_excerpt(a, excerpt, host)
         v.grade != "refused" or fail("the excerpt is not in your session's transcript: quote the words as you received "
                                      "them, from the user or from a tool's output")
+        # The capture's key and name, by grade: a received record by its uuid, any other line by its hash, and an
+        # unchecked excerpt by its own; dated by the record's time where it has one.
         when = stamp(v.at) if v.grade == "verified" else None
-        date = ((stamp(v.at) if v.grade != "unverified" else None) or now).date().isoformat()
+        date = (stamp(v.at) or now).date().isoformat()
+        rid = re.sub(r"[^a-z0-9]", "", (v.uuid or "").lower()) if v.grade == "verified" else ""
         if v.grade == "unverified":
             h = sha16(excerpt)
             key, part = f"unverified/{name}/{h}", h[:8]
-        elif v.grade == "verified" and v.uuid and re.sub(r"[^a-z0-9]", "", v.uuid.lower()):
-            key, part = f"session/{sid}/{v.uuid}", re.sub(r"[^a-z0-9]", "", v.uuid.lower())[:8]
+        elif rid:
+            key, part = f"session/{sid}/{v.uuid}", rid[:8]
         else:
             h = v.line_hash()[:16]
             key, part = f"session/{sid}/line-{h}", h[:8]
@@ -2223,15 +2227,15 @@ def signal(fleet, a):
                 if n[3:-3] == a.slug and quote in (w.text(f"signals/{cap}/{n}") or ""):
                     raise Already(f"{cap}/{n[:-3]}")
         nn = 1 + max([int(n[:2]) for n in names] or [0])
-        sid_ = f"{cap}/{nn:02d}-{a.slug}"
+        sig = f"{cap}/{nn:02d}-{a.slug}"
         if have is None:
             have = capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, w.plan)
         w.replace(cpath, re.sub(r"(?m)^signals: [0-9]+$", f"signals: {len(names) + 1}", have, count=1))
-        w.replace(f"signals/{sid_}.md", "---\n" + f"signal: {sid_}\nkind: {kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "")
+        w.replace(f"signals/{sig}.md", "---\n" + f"signal: {sig}\nkind: {kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "")
                   + "---\n\n" + a.asserts.strip() + "\n\n" + quote + "\n")
-        w.subject = f"signals({sid_}): {a.slug}"
-        w.on.append(f"signals/{sid_}")
-        seen["id"] = sid_
+        w.subject = f"signals({sig}): {a.slug}"
+        w.on.append(f"signals/{sig}")
+        seen["id"] = sig
         return []
     try:
         write(fleet, label, change, f"signals: {a.slug}", act="capture")

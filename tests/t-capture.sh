@@ -89,6 +89,7 @@ ok "the same signal landing first while a push is in flight leaves one signal, a
 ran s-1 reworded
 t4=$(tip)
 conductor expect_fail 'a signal quotes the words that show it: add --excerpt' crew signal no-words "The templates want a check ZQX1."
+conductor expect_fail "a signal says what it asserts, in a sentence" crew signal says-nothing " " --excerpt "a security check"
 conductor expect_fail "the excerpt is not in your session's transcript: quote the words as you received them" \
   crew signal reworded "The templates want a check ZQX2." --excerpt "the user wants every template checked ZQX3"
 eq "$(tip)" "$t4"
@@ -111,6 +112,21 @@ has "$out" "excerpt unverified (crew could not find its own command in the trans
 HOST=$box CREW_AGENT=swb-2-ops expect_ok crew signal no-session "The edge stack drifts again." --excerpt "drift detected again"
 has "$out" "excerpt unverified (herdr names no session)"
 ok "a transcript crew can't find, one without its own command, and no session each write the capture unverified, with the reason"
+
+f=$(transcript $box s-f <<'EOF'
+{"payload":{"text":"stack edge drifted twice overnight"}}
+{"payload":{"command":"crew signal drift-found --excerpt 'drifted twice'"}}
+EOF
+)
+HOST=$box CREW_AGENT=swb-2-conductor CREW_SESSION=$box:s-f expect_ok crew signal drift-found "The edge stack drifts at night." --excerpt "drifted twice overnight"
+lh=$(head -1 "$f" | tr -d '\n' | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:16])')
+fcap=$(date -u +%F)-swb-2-conductor-${lh:0:8}
+has "$out" "signal $fcap/01-drift-found: excerpt found"
+c=$(at "signals/$fcap/capture.md")
+for want in "key: session/s-f/line-$lh" "record: line 1" "excerpt: found" "asserted_by: unknown" "raw: $box:~/.local/state/crew/wldn/raw/$fcap.jsonl"; do has "$c" "$want"; done
+has "$(at "signals/$fcap/01-drift-found.md")" "> \"drifted twice overnight\" — line 1"
+eq "$(cat "$(home_of $box)/.local/state/crew/wldn/raw/$fcap.jsonl")" "$(head -1 "$f")"
+ok "an excerpt in a line crew can't classify is found: named by the line's hash, placed by its number, the line banked"
 
 p=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-2 | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-1 stub agent "$p" swb-2-conductor
