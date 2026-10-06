@@ -6,11 +6,15 @@ Above a partition's bolt teams: a design agent that elaborates on main, a planne
 ## Requirements
 
 ### Requirement: Partitions are declared in the teams file
-`teams.json` SHALL list each partition with a main level. Each entry gives the partition's label (`wldn`, `madswan`, `swancloud`), its swancloud name, its blueprints repos, and the machine and session its main level runs in. The first blueprints repo listed SHALL be the one the partition's signals and elaboration go to by default.
+`teams.json` SHALL list each partition with a main level. Each entry gives the partition's label (`wldn`, `madswan`, `swancloud`), its swancloud name, its blueprints repos, its state repository (`state`, as `<owner>/<name>`), and the machine and session its main level runs in. The first blueprints repo listed SHALL be the one the partition's signals and elaboration go to by default. A partition with no `state` SHALL be an error naming the field and the machine's configuration as the fix, never a default.
 
 #### Scenario: clients/willdan
-- **WHEN** `teams.json` lists `wldn` as `clients/willdan` with willdan-blueprints, running on the box in `wldn-2`
-- **THEN** `crew main up wldn` starts its main level in `wldn-2` on the box
+- **WHEN** `teams.json` lists `wldn` as `clients/willdan` with willdan-blueprints and `WilldanGroup/crew-state`, running on the box in `wldn-2`
+- **THEN** `crew main up wldn` starts its main level in `wldn-2` on the box, and wldn's plan is read from `wldn/main` of `WilldanGroup/crew-state`
+
+#### Scenario: A partition with no state repository
+- **WHEN** a partition's entry has no `state`
+- **THEN** crew refuses to load the teams file, naming the partition and the missing field
 
 ### Requirement: The main level is one herdr workspace
 `crew main up <label>` SHALL open a herdr workspace named `<label>` in the main level's session. It SHALL hold a `design` tab with the design agent, a `planner` tab with the planner, and an `ops` tab with the main-level ops, and start each. It SHALL then start a dispatcher on every host where the partition's teams run.
@@ -27,11 +31,15 @@ The design agent SHALL keep the partition's design true on main: the books, spec
 - **THEN** it queues a unit whose source is the decision's page, and tells the planner
 
 ### Requirement: The planner plans across bolts
-The planner SHALL be the only agent that creates bolts, puts units into bolts, and splits, orders or moves them between bolts. It SHALL route signals to work, and agree a change to an active bolt with that bolt's conductor before writing it. It SHALL NOT start units or drive a team.
+The planner SHALL be the only agent that proposes bolts, the placing of units into bolts, and their splitting, ordering or moving between bolts, and SHALL change the plan only through a proposal the user approves. It SHALL route signals to work. A change to an active bolt SHALL be agreed by that bolt's conductor, with `crew plan agree`, before the proposal can be approved. The planner SHALL NOT start units or drive a team.
 
 #### Scenario: A finding mid-bolt
 - **WHEN** swb-1's conductor reports that a unit needs work outside the bolt's goal
-- **THEN** the planner queues that work or adds it to another bolt, and swb-1's bolt keeps its goal
+- **THEN** the planner proposes queuing that work or adding it to another bolt, and swb-1's bolt keeps its goal
+
+#### Scenario: New work beside a bolt in flight
+- **WHEN** the planner judges that new work belongs in the bolt swb-2 holds
+- **THEN** it proposes the unit for that bolt, swb-2's conductor agrees or says why not, and the unit is in the bolt only once the user has approved the proposal
 
 ### Requirement: A dispatcher allocates each host's work
 A dispatcher SHALL run on each host where the partition's teams run, in a herdr workspace `<label> dispatch`. It runs in the main level's session if that is on the host, otherwise in the session of the host's first team by name. It SHALL give that host's teams their bolts, start and stop them, and watch their health and their accounts' use. It SHALL NOT change a bolt's content or drive a unit.
@@ -55,7 +63,7 @@ Signals SHALL stay in the partition's first blueprints repo, in the signals mode
 - **THEN** it records a signal in willdan-blueprints, and the planner decides whether to route it
 
 ### Requirement: Every move is written through crew and never merged
-Every move SHALL be appended to `signals/moves.rec` through crew: `route` by `crew unit add --signal`, and `attach`, `challenge`, `new-territory`, `answered` and `drop` by `crew signal move <id> <move>`. Each SHALL be fetched over https, applied to the tip of the repo's main, checked with `recfix --check`, committed by its own path alone, and pushed without force, applied again to the new tip when the push is refused. A signal SHALL have one move; a second is refused. `signals/moves.rec merge=union` SHALL stay in `.gitattributes`, only as a fallback for a hand edit.
+Every move SHALL be appended to `moves.rec` on the flywheel's branch of its state repository, through crew: `route` by `crew unit add --signal`, and `attach`, `challenge`, `new-territory`, `answered` and `drop` by `crew signal move <id> <move>`. Each SHALL be fetched over https, applied to the tip of the branch, checked with `recfix --check`, committed, and pushed without force, applied again to the new tip when the push is refused. A signal SHALL have one move; a second is refused.
 
 #### Scenario: Moves from two hosts
 - **WHEN** a route is written on the box while curation writes a drop on mac-studio, both through crew

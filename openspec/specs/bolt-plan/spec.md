@@ -5,17 +5,6 @@ Keeps what a partition means to build, its bolts and their units, in one plain-t
 
 ## Requirements
 
-### Requirement: A partition keeps one plan per blueprints repo
-Each blueprints repo a partition names SHALL hold that partition's plan as one recutils file, `plan.rec`, alone on the branch `plan/<label>`. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal, sources and team. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`). The plan SHALL hold no stage, date or author.
-
-#### Scenario: Business and agentplot work
-- **WHEN** the business partition (label `madswan`) names afterthought/blueprints and agentplot/blueprints
-- **THEN** its plans are `plan/madswan` in each of those repos, and personal's plan is `plan/swancloud` in afterthought/blueprints
-
-#### Scenario: A plan that fails its schema
-- **WHEN** a hand edit leaves a duplicated key or a field the schema does not allow
-- **THEN** crew refuses to read that plan, and names the commit and `recfix --check`'s message
-
 ### Requirement: The file's order and dependencies are the plan
 A bolt's units SHALL be built in the order they appear in the file, and bolts SHALL be given out in the order they appear. A unit's `After` SHALL name units of the same bolt, and the unit SHALL NOT start until each of them has merged into the bolt. A unit with no `Bolt` SHALL be queued work.
 
@@ -28,7 +17,7 @@ A bolt's units SHALL be built in the order they appear in the file, and bolts SH
 - **THEN** `crew bolts` lists it under the queue of its repo
 
 ### Requirement: Writes go through crew and are never merged
-Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Each write SHALL fetch the plan branch over https into crew's own bare cache of the repo, with no working tree, and apply the change to its tip. It SHALL then check the result with `recfix --check` and crew's own rules, commit it without touching any working tree, and push without force. A push that is rejected SHALL have its write applied again to the new tip, up to five times.
+Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Each write SHALL fetch the flywheel's branch of its state repository over https into crew's own bare cache of that repository, with no working tree, and apply the change to its tip. It SHALL then check the result with `recfix --check` and crew's own rules, commit it without touching any working tree, and push without force. A push that is rejected SHALL have its write applied again to the new tip, up to five times.
 
 #### Scenario: Two writes race
 - **WHEN** the planner moves a unit while a conductor narrows the same unit's intent, from different hosts
@@ -40,7 +29,7 @@ Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Ea
 
 #### Scenario: No ssh on a Mac
 - **WHEN** a write runs on a Mac
-- **THEN** git reaches the blueprints repo over https and never waits on 1Password
+- **THEN** git reaches the state repository over https and never waits on 1Password
 
 ### Requirement: A bolt is created, given, dropped and landed through crew
 `crew bolt new` SHALL add a bolt with its repo, goal and sources. `crew bolt give <team> [<bolt>]` SHALL set the bolt's team; with no bolt named it takes the first planned bolt in the team's kit. It SHALL then make `bolt/<bolt>` from main and its worktree at `<kit>/bolts/<bolt>` on the team's host. `crew bolt order` SHALL move a bolt. `crew bolt drop` SHALL remove a bolt and its units, or with `--requeue` queue them. `crew bolt land` SHALL remove a landed bolt and its units.
@@ -104,15 +93,19 @@ crew SHALL derive each unit's stage from its kit on the team's host. The first r
 - **THEN** its bolts are listed from the plan, with every stage shown as unknown and the host named
 
 ### Requirement: Work is queued from a signal
-`crew unit add … --signal <id>` SHALL queue the unit with the signal as its source, and SHALL record the signal's one move, `route`, targeting the unit in the `signals/moves.rec` of the partition's first blueprints repo, where its signals are. The source SHALL be `signals/<id>` when the plan is in that repo, else `<owner/name>:signals/<id>`. A signal that is missing, already moved, or whose move would fail `recfix --check` SHALL be refused before the plan is written.
+`crew unit add … --signal <id>` SHALL queue the unit with the signal as its source, `signals/<id>`, and SHALL record the signal's one move, `route`, targeting the unit, in `moves.rec` on the flywheel's branch, in the same commit as the unit. A signal that is missing from the partition's first blueprints repo, already moved, or whose move would fail `recfix --check` SHALL be refused, and nothing written.
 
 #### Scenario: A signal routed to work
 - **WHEN** the planner queues a unit from a signal
-- **THEN** the unit's `Source` is `signals/<id>`, and `moves.rec` gains a `route` move for that signal
+- **THEN** one commit on the flywheel's branch adds the unit with `Source: signals/<id>` and a `route` move for that signal
 
 #### Scenario: A signal in another blueprints repo
-- **WHEN** madswan's planner queues a flywheel-next unit in agentplot/blueprints' plan from a signal in afterthought/blueprints
-- **THEN** the unit's `Source` is `afterthought/blueprints:signals/<id>`, and the route move is in afterthought/blueprints
+- **WHEN** madswan's planner queues a flywheel-next unit, whose design is in agentplot/blueprints, from a signal in afterthought/blueprints, the partition's first blueprints repo
+- **THEN** the unit's `Source` is `signals/<id>`, which names that signal in afterthought/blueprints, and the route move is in `moves.rec` on `madswan/main`, in the same commit as the unit
+
+#### Scenario: A signal already moved
+- **WHEN** the signal named already has its move
+- **THEN** the command is refused, naming the move it has, and the plan is unchanged
 
 ### Requirement: A conductor hears about writes to its bolt
 When anyone other than a bolt's conductor writes to an active bolt or its units, crew SHALL send that conductor the commit's subject.
@@ -120,3 +113,18 @@ When anyone other than a bolt's conductor writes to an active bolt or its units,
 #### Scenario: The planner adds a unit
 - **WHEN** the planner adds a unit to swb-1's active bolt
 - **THEN** swb-1's conductor receives the commit's subject
+
+### Requirement: A flywheel keeps one plan in its state repository
+Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal, sources and team. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`). The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got.
+
+#### Scenario: Business and agentplot work
+- **WHEN** the business partition (label `madswan`) builds kits whose design is in afterthought/blueprints and kits whose design is in agentplot/blueprints
+- **THEN** its bolts and units for both are in one `plan.rec` on `madswan/main`, and personal's plan is `plan.rec` on `swancloud/main`
+
+#### Scenario: A plan that fails its schema
+- **WHEN** a hand edit leaves a duplicated key or a field the schema does not allow
+- **THEN** crew refuses to read that plan, and names the commit and `recfix --check`'s message
+
+#### Scenario: A source in a blueprints repo
+- **WHEN** a unit's source is a page of the partition's first blueprints repo
+- **THEN** its `Source` is that page's path, and a page of another repo is `<owner>/<name>:<path>`

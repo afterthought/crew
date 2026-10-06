@@ -110,3 +110,14 @@ A session SHALL hold any number of teams.
 #### Scenario: Two teams in one session
 - **WHEN** swb-1 and swb-2 both run in `wldn-1`
 - **THEN** the session has the workspaces `swb-1`, `swb-2`, and a units workspace for each team with work in flight
+
+### Requirement: The conductor waits for a stage through crew
+After starting a unit's stage, the conductor SHALL wait for it with `crew unit wait <unit>`, run as a background command, and SHALL NOT wait on the slot's agent with herdr directly. `crew unit wait` SHALL run on the team's host, return when the slot's agent is no longer working or its timeout passes, and say which.
+
+#### Scenario: A stage settles
+- **WHEN** a conductor has `crew unit wait <unit>` running and the unit's code agent goes idle
+- **THEN** the command returns, saying the agent settled, and the stage's end is in the run record
+
+#### Scenario: The timeout passes
+- **WHEN** the agent is still working when the timeout passes
+- **THEN** the command returns saying so, and no `stage.end` entry is written
