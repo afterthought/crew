@@ -26,7 +26,8 @@
 #   crew unit wait <unit> [--timeout <ms>]
 #                                      wait for the unit's stage agent to settle, and record the stage's end
 #   crew fix     <team> <name> "<what is wrong>"
-#                                      a fix on the team's bolt, at places/fix-<name>, built by a fresh code agent
+#                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
+#                                      built by a fresh code agent
 #   crew fix     <team> <name> --merge merge the fix into the bolt
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
@@ -299,9 +300,11 @@ take_slot() {  # take_slot <kind> <name> <place>: the slot holding it, or a free
   echo "all $UNITS of $TEAM's slots are in flight: $(awk '{printf "%s%s holds %s", sep, $1, $3; sep="; "}' "$held")" >&2
   return 1
 }
-held_obj() {  # held_obj <unit|fix> <name>: what a slot holds, as an object
+held_obj() {  # held_obj <unit|fix> <name>: what a slot holds, as an object; a fix started as fix/<name> takes its
+  # bolt from its branch's upstream
   local b
-  if [[ $1 == fix ]]; then
+  if [[ $1 == fix && $2 == fix/*/* ]]; then echo "$2"
+  elif [[ $1 == fix ]]; then
     b=${BOLT:-$(git -C "$KIT" for-each-ref --format='%(upstream:short)' "refs/heads/$2" 2>/dev/null || true)}
     echo "fix/${b#bolt/}/${2#fix/}"
   else echo "unit/$2"; fi
@@ -316,9 +319,10 @@ free() {  # end a slot's agent, close its pane and give the slot back; the units
   w=$(get "$layout" "$(ws_key "$TEAM units")"); [[ -n $w ]] && { h workspace close "$w" >/dev/null 2>&1 || true; }
   drop "$layout" "$(ws_key "$TEAM units")"; for s in "${slots[@]}"; do drop "$panes" "$s"; done
 }
-remove_place() {  # remove_place <kind> <name>: a merged unit's or fix's worktree and branch
-  local path branch
-  if [[ $1 == fix ]]; then branch=$2; path=$KIT_DIR/places/fix-${2#fix/}; else branch=unit/$2; path=$KIT_DIR/places/$2; fi
+remove_place() {  # remove_place <kind> <name> <place>: a merged unit's or fix's worktree, at the place its slot
+  # recorded, and its branch
+  local path=$3 branch=$2
+  [[ $1 == fix ]] || branch=unit/$2
   if [[ -d $path ]]; then git -C "$KIT" worktree remove "$path" >/dev/null 2>&1 || echo "$path was kept: it has changes of its own" >&2; fi
   git -C "$KIT" branch -d "$branch" >/dev/null 2>&1 || true
 }
@@ -330,7 +334,7 @@ reap() {  # record the stages that ended with nobody waiting; free every slot wh
     [[ $stage == merged || $stage == landed ]] || continue
     [[ $(agent_status "$(pane_of "$slot")") == working ]] && continue
     free "$slot" || continue
-    remove_place "$kind" "$name"
+    remove_place "$kind" "$name" "${rest##* }"
     echo "$(name_of "$slot") is free: $name has merged into its bolt"
   done < <(plan _slots "$TEAM" 2>/dev/null || true)
 }
@@ -378,7 +382,7 @@ run_stage() {  # run_stage <slot> <stage> <prompt> <act> <held name> <object> <-
   if ! err=$(stop "$slot" 2>&1); then echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1; fi
   start "$slot" "$stage" || exit 1
   h agent prompt "$(pane_of "$slot")" "$prompt" >/dev/null
-  id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act "$act" "$@" --why "${obj%%/*}(${what#fix/}): start $stage" || true)
+  id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act "$act" "$@" --why "${obj%%/*}(${what##*/}): start $stage" || true)
   [[ -n $id ]] && echo "$slot $what $stage $id $obj" >> "$STATE/stages"
   return 0
 }
@@ -514,7 +518,11 @@ case $cmd in
     name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}
     [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "a fix is named with lowercase words and dashes" >&2; exit 2; }
     reap; e=$(plan _bolt-of "$TEAM") || exit 1; eval "$e"
-    fix=fix/$name; path=$KIT_DIR/places/fix-$name; slot=$(slot_of "$fix")
+    # A fix is named within its bolt. One a slot holds, under that name or as fix/<name> from before fixes were, keeps
+    # the branch and place its slot recorded.
+    fix=fix/$BOLT/$name; path=$KIT_DIR/places/fix-$BOLT--$name
+    slot=$(slot_of "$fix"); [[ -n $slot ]] || slot=$(slot_of "fix/$name")
+    [[ -n $slot ]] && read -r fix path < <(awk -v s="$slot" '$1==s{print $3, $4}' "$held")
     if [[ $words == --merge ]]; then
       [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
       ensure_slot_pane "$slot" "$path"

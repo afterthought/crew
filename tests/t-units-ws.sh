@@ -29,7 +29,7 @@ eq "$splits" "$p1 right"$'\n'"$2 down"$'\n'"$3 right"
 ok "the first unit in flight makes the units workspace; each next slot halves the newest pane, right then down"
 
 expect_ok crew status swb-1
-for want in "swb-1-conductor" "swb-1-ops" "a  construct" "fix/edge-sign-in  fix" "b  construct" "c  construct"; do has "$out" "$want"; done
+for want in "swb-1-conductor" "swb-1-ops" "a  construct" "fix/tenant-environments/edge-sign-in  fix" "b  construct" "c  construct"; do has "$out" "$want"; done
 change "$kd/places/b" b 1 4; commit_all "$kd/places/b" "feat(b): one task"
 expect_ok crew status swb-1; has "$out" "b  code 1/4"
 ok "status lists the standing roles and each slot's unit and stage"
@@ -41,9 +41,9 @@ ok "two teams in one session each have their workspace and units workspace"
 for u in a b c; do CREW_AGENT= crew unit drop $u "not wanted" >/dev/null; done
 eq "$(labels)" "swb-1,swb-2,swb-1 units,swb-2 units"
 eq "$(in_ws | wc -w | tr -d ' ')" "1"
-echo fixed > "$kd/places/fix-edge-sign-in/x"; commit_all "$kd/places/fix-edge-sign-in" "fix: it answers a string"
-git -C "$kd/bolts/tenant-environments" merge -q --ff-only fix/edge-sign-in
-expect_ok crew status swb-1; has "$out" "fix/edge-sign-in has merged into its bolt"
+echo fixed > "$kd/places/fix-tenant-environments--edge-sign-in/x"; commit_all "$kd/places/fix-tenant-environments--edge-sign-in" "fix: it answers a string"
+git -C "$kd/bolts/tenant-environments" merge -q --ff-only fix/tenant-environments/edge-sign-in
+expect_ok crew status swb-1; has "$out" "fix/tenant-environments/edge-sign-in has merged into its bolt"
 eq "$(labels)" "swb-1,swb-2,swb-2 units"
 grep -q "^$box wldn-1 workspace close $ws" "$CREW_TEST_LOG" || fail "the units workspace was not closed"
 ok "the units workspace closes when its last slot frees"
