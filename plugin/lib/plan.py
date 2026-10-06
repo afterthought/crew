@@ -2,7 +2,8 @@
 """plan.py: the bolt plan, one recutils plan.rec per flywheel, on the flywheel's branch of its state repository.
 
 A flywheel is a partition's loop, named by its label. Its state is the files on the branch <label>/main of the
-state repository the teams file names for it (`state`): plan.rec, moves.rec, and the run record under runs/<host>/.
+state repository the teams file names for it (`state`): plan.rec, moves.rec, proposals.rec, the signals agents record
+under signals/, and the run record under runs/<host>/.
 The plan holds only intent: Bolt and Unit records. Every stage is read from the kits. The planner changes it only
 by a proposal (proposals.rec) the user approves; who else writes it directly is may_write's table. A write fetches the branch
 over https, applies itself to the tip, checks each file it changed with recfix (the plan with crew's own rules
@@ -33,19 +34,25 @@ five times. A write that changes several files is one commit, and it carries the
   crew plan agree <n> [--team <team>]        a conductor's agreement to a proposal that touches its bolt
   crew plan approve <n>                      the proposal applied, exactly as read, in one commit
   crew plan drop <n> "<reason>"              the proposal closed unapplied
-  crew signal <slug> "<what it asserts>" [--kind K] [--subject a,b] [--excerpt "<text>"]
-                                             a finding, as a signal in the partition's first blueprints repo
+  crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>"|--excerpt-file <path> [--kind K] [--subject a,b]
+                                             a finding, as a capture and its signal on the flywheel's branch: an
+                                             agent's excerpt checked against its own Claude transcript and graded, the
+                                             user's note at a shell its own excerpt
   crew signal move <id> attach|challenge|new-territory|answered|drop [--target T] [--reason R]
                                              curation's move for a signal, in moves.rec on the flywheel's branch
 
+A signal recorded through crew is on the flywheel's branch, under signals/; one the daily pass read from a meeting or
+a channel is in the partition's first blueprints repo. An id is looked up in that order.
+
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, contextlib, datetime, fcntl, getpass, json, os, pathlib, re, shlex, subprocess, sys, tempfile
+import argparse, contextlib, datetime, fcntl, getpass, hashlib, json, os, pathlib, re, shlex, subprocess, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
 import crew  # noqa: E402
 import record  # noqa: E402
+import transcript  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 REPLAYS = 5
@@ -78,8 +85,8 @@ HEADER = """\
 """
 MOVES = """\
 # The flywheel's curation moves: one per signal, appended through crew and
-# never merged. A Signal is a signal's id in the flywheel's first blueprints
-# repo, signals/<id>.md.
+# never merged. A Signal is a signal's id: signals/<id>.md on this branch, or
+# in the flywheel's first blueprints repo.
 
 %rec: Move
 %doc: A curation move over one signal, stored with its inputs.
@@ -1844,20 +1851,20 @@ def plan_drop(fleet, a):
 
 
 def signal_text(fleet, label, sig):
-    """A signal's assertion and its excerpt, from the partition's first blueprints repo, for a proposal's page."""
-    srepo = crew.partition_of(fleet, label)["blueprints"][0]
+    """A signal's assertion, its excerpt and the excerpt's grade where its capture has one, from whichever home holds
+    it, for a proposal's page."""
     try:
-        tip = fetch(srepo, "main")
+        hit = signal_at(fleet, label, sig)
     except Refusal:
-        return None, None
-    text = show(srepo, tip, f"signals/{sig}.md") if tip else None
-    if not text:
-        return None, None
+        return None, None, None
+    if not hit:
+        return None, None, None
+    _, repo, tip, text = hit
     body = text.split("---", 2)[2] if text.startswith("---") and text.count("---") >= 2 else text
     paras = [p.strip() for p in body.strip().split("\n\n") if p.strip()]
     excerpt = next((p for p in paras if p.startswith(">")), None)
     assertion = next((p for p in paras if not p.startswith(">")), None)
-    return assertion, excerpt
+    return assertion, excerpt, field(show(repo, tip, capture_of(sig)) or "", "excerpt")
 
 
 def amendment(fleet, plan, a):
@@ -1916,10 +1923,10 @@ def describe(fleet, label, plan, p):
             if getattr(a, "unblocks", None):
                 lines.append(f"Unblocks: bolt `{a.unblocks}`, which can't be proven or land without it")
             if a.signal:
-                assertion, excerpt = signal_text(fleet, label, a.signal)
+                assertion, excerpt, grade = signal_text(fleet, label, a.signal)
                 lines.append(f"From: signals/{a.signal}" + (f": \"{assertion}\"" if assertion else ""))
                 if excerpt:
-                    lines.append(f"Excerpt: {excerpt}")
+                    lines.append(f"Excerpt" + (f" ({grade})" if grade else "") + f": {excerpt}")
             lines += [f"Source: {s}" for s in a.source]
         elif key == ("unit", "move"):
             src = next((b for b in per[i] if b != a.bolt), None)
@@ -2006,13 +2013,51 @@ def plan_proposed(fleet, a):
 
 # -------------------------------------------------------------------------------------------------- signals
 
-def move(fleet, label, w, sig, rec):
-    """A signal's one move, appended to the flywheel's moves.rec in the write w: refused when the signal is missing
-    from the partition's first blueprints repo, where its signals are, or already has its move. recfix checks the
-    file before the commit, so a move the file's schema refuses writes nothing."""
+def signal_at(fleet, label, sig, w=None):
+    """Where a signal is: signals/<id>.md on the flywheel's branch (as the write w has it, else at the branch's tip),
+    else on main of the partition's first blueprints repo, where the daily pass writes meetings' and channels'.
+    (where, repo, tip, the signal's text), or None when it is in neither."""
+    path = f"signals/{sig}.md"
+    if w is not None:
+        repo, ref, tip = w.repo, f"{label}/main", w.tip
+        text = w.text(path)
+    else:
+        repo, ref = state_of(fleet, label)
+        tip = fetch(repo, ref)
+        text = show(repo, tip, path) if tip else None
+    if text is not None:
+        return ref, repo, tip, text
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
-    tip = fetch(srepo, "main") or fail(f"{srepo} has no main")
-    show(srepo, tip, f"signals/{sig}.md") is not None or fail(f"no signal {sig} in {srepo}: signals/{sig}.md is not on main")
+    tip = fetch(srepo, "main")
+    text = show(srepo, tip, path) if tip else None
+    return ("main", srepo, tip, text) if text is not None else None
+
+
+def no_signal(fleet, label, sig):
+    fail(f"no signal {sig} on {label}/main of {state_of(fleet, label)[0]} or on main of "
+         f"{crew.partition_of(fleet, label)['blueprints'][0]}: signals/{sig}.md is in neither")
+
+
+def frontmatter(text):
+    """The fields of a markdown file's frontmatter, [(name, value)] in order; none when it has none."""
+    m = re.match(r"^---\n(.*?)\n---\n", text or "", re.S)
+    return [tuple(l.split(": ", 1)) if ": " in l else (l.rstrip(":"), "") for l in m.group(1).splitlines() if l.strip()] if m else []
+
+
+def field(text, name):
+    return next((v for k, v in frontmatter(text) if k == name), None)
+
+
+def capture_of(sig):
+    """A signal's capture, signals/<capture>/capture.md, from its id <capture>/<NN>-<slug>."""
+    return f"signals/{sig.rsplit('/', 1)[0]}/capture.md"
+
+
+def move(fleet, label, w, sig, rec):
+    """A signal's one move, appended to the flywheel's moves.rec in the write w: refused when the signal is in
+    neither of its homes, or already has its move. recfix checks the file before the commit, so a move the file's
+    schema refuses writes nothing."""
+    signal_at(fleet, label, sig, w) or no_signal(fleet, label, sig)
     moves = w.text("moves.rec")
     moves is not None or fail(f"{label}/main of {w.repo} has no moves.rec: crew state init {label}")
     unmoved(moves, sig)
@@ -2030,6 +2075,7 @@ def route_move(sig, unit):
 
 
 CURATION = ("attach", "challenge", "new-territory", "answered", "drop")
+KINDS = ("constraint", "ask", "question", "commitment", "reaction")
 
 
 def signal_move(fleet, a):
@@ -2047,34 +2093,187 @@ def signal_move(fleet, a):
           act="signal.move", on=[f"signals/{a.signal}"] + target)
 
 
+class Already(Exception):
+    """The signal is recorded already, in its capture: nothing is written, and its id is said."""
+
+
+def dashed(s):
+    """A name as a directory's part: lowercase, any other characters a dash."""
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+
+
+def sha16(text):
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
+def stamp(at):
+    """A record's timestamp as a UTC time, or None when it has none crew can read."""
+    try:
+        t = datetime.datetime.fromisoformat(at.replace("Z", "+00:00")) if at else None
+    except ValueError:
+        return None
+    return (t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)).astimezone(datetime.timezone.utc) if t else None
+
+
+def quoted(excerpt, position):
+    """The excerpt as a signal quotes it: a blockquote of the words, verbatim, then its position."""
+    return "\n".join(f"> {l}" if l else ">" for l in f'"{excerpt}" — {position}'.split("\n"))
+
+
+def where_of(fleet, name, plan):
+    """Where an agent was working, read without asking it: its team, the bolt the team holds and, for a slot's stage,
+    the unit or fix its slot holds; the main level, or the operator session; None for an agent crew has no role for."""
+    kind, of = role(fleet, name)
+    if kind in ("planner", "design", "main-ops", "dispatcher"):
+        return "main level"
+    if kind == "operator":
+        return "operator session"
+    if kind not in ("conductor", "team"):
+        return None
+    out = [f"team {of}"] + [f"bolt {b.name()}" for b in held_by(plan, of)[:1]]
+    slot = re.fullmatch(rf"{re.escape(of)}-(unit-[1-9][0-9]*)", name)
+    if slot:
+        try:
+            held = crew.slot_of(fleet["teams"][of], slot.group(1))
+            out.append(f"fix {held['name'][4:]}" if held["kind"] == "fix" else f"unit {held['name']}")
+        except Refusal:
+            pass
+    return ", ".join(out)
+
+
+def bank(path, line):
+    """The source record appended to the host's raw file for its capture, outside git, unless it is there already."""
+    try:
+        if path.exists() and line in path.read_bytes().split(b"\n"):
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "ab") as f:
+            f.write(line + b"\n")
+    except OSError as e:
+        fail(f"the source record could not be banked at {path}: {e.strerror or e}")
+
+
 def signal(fleet, a):
-    """A finding written as a signal in the partition's first blueprints repo, in the shape its signals/README.md
-    gives: one capture per agent and day, signals/<date>-<agent>/, holding capture.md and one file per signal.
-    Committed by those paths alone on main, and pushed; replayed on the new tip when main moved."""
+    """A finding, as a capture and its signal under signals/ on the flywheel's branch, in the shape the blueprints'
+    signals/README.md gives. An agent quotes the words that show it, which are looked for in its own Claude transcript
+    and graded (transcript.py), and a paraphrase is refused. Its capture is the one record that holds the excerpt,
+    copied to this host's raw/ outside git; a second signal from that record joins the capture, and the same signal
+    again writes nothing. The user's note at a shell is its own excerpt. One write, one commit."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
     crew.NAME.match(a.slug) or fail(f"a signal's slug is lowercase words with dashes, not {a.slug}")
     a.slug != "move" or fail("a signal's slug can't be 'move'")
-    repo, who, today = crew.partition_of(fleet, label)["blueprints"][0], agent(), datetime.date.today().isoformat()
-    capture = f"{today}-" + re.sub(r"[^a-z0-9]+", "-", who.lower()).strip("-")
+    name, host = os.environ.get("CREW_AGENT"), crew.this_host()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    excerpt = a.excerpt
+    if a.excerpt_file:
+        try:
+            excerpt = pathlib.Path(a.excerpt_file).read_text()
+        except (OSError, UnicodeDecodeError) as e:
+            fail(f"cannot read the excerpt from {a.excerpt_file}: {getattr(e, 'strerror', None) or e}")
+    if name:
+        excerpt = (excerpt or "").strip()
+        excerpt or fail('a signal quotes the words that show it: add --excerpt "<the exact words the user said or the '
+                        'tool printed>", or --excerpt-file <path>')
+        v, sid = check_excerpt(a, excerpt, host)
+        v.grade != "refused" or fail("the excerpt is not in your session's transcript: quote the words as you received "
+                                     "them, from the user or from a tool's output")
+        when = stamp(v.at) if v.grade == "verified" else None
+        date = ((stamp(v.at) if v.grade != "unverified" else None) or now).date().isoformat()
+        if v.grade == "unverified":
+            h = sha16(excerpt)
+            key, part = f"unverified/{name}/{h}", h[:8]
+        elif v.grade == "verified" and v.uuid and re.sub(r"[^a-z0-9]", "", v.uuid.lower()):
+            key, part = f"session/{sid}/{v.uuid}", re.sub(r"[^a-z0-9]", "", v.uuid.lower())[:8]
+        else:
+            h = v.line_hash()[:16]
+            key, part = f"session/{sid}/line-{h}", h[:8]
+        cap = f"{date}-{dashed(name)}-{part}"
+        who = {"user": "user", "crew": "crew"}.get(v.asserted_by) or (v.asserted_by[6:] if v.asserted_by.startswith("agent:") else name)
+        position = "unverified" if v.grade == "unverified" else when.strftime("%H:%M:%SZ") if when else f"line {v.n}"
+        kind = a.kind or "constraint"
+    else:
+        excerpt = (excerpt or a.asserts).strip()
+        h = sha16(excerpt)
+        v = sid = when = None
+        date, key = now.date().isoformat(), f"operator/{agent()}/{h}"
+        cap, who, position, kind = f"{date}-{dashed(getpass.getuser())}-{dashed(host)}-{h[:8]}", "user", now.strftime("%H:%M:%SZ"), a.kind or "ask"
+    # An id is unique across both homes, so it is looked up in either without asking which.
+    srepo = crew.partition_of(fleet, label)["blueprints"][0]
+    btip = fetch(srepo, "main")
+    not (btip and git(srepo, "ls-tree", "--name-only", btip, f"signals/{cap}")) or fail(
+        f"{srepo} has signals/{cap} already, so a capture can't take that name")
+    raw = None
+    if v and v.grade != "unverified":
+        bank(record.ROOT / label / "raw" / f"{cap}.jsonl", v.raw)
+        raw = f"{host}:~/.local/state/crew/{label}/raw/{cap}.jsonl"
+    quote = quoted(excerpt, position)
+    subject = "[" + ", ".join(x.strip() for x in a.subject.split(",") if x.strip()) + "]" if a.subject else None
     seen = {}
 
-    def make(tip):
-        tip or fail(f"{repo} has no main")
-        listed = git(repo, "ls-tree", "--name-only", f"{tip}:signals/{capture}", check=False)
-        names = listed.stdout.split() if listed.returncode == 0 else []
-        nn = 1 + max([int(n[:2]) for n in names if re.match(r"^[0-9]{2}-", n)] or [0])
-        sid = f"{capture}/{nn:02d}-{a.slug}"
-        subject = "[" + ", ".join(x.strip() for x in a.subject.split(",") if x.strip()) + "]" if a.subject else None
-        body = "---\n" + f"signal: {sid}\nkind: {a.kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "") + "---\n\n"
-        body += a.asserts.strip() + "\n" + (f"\n> {a.excerpt.strip()}\n" if a.excerpt else "")
-        cap = (f"---\ncapture: {capture}\nsource: crew\ncaptured_by: {who}\nevent_date: {today}\nimported: {today}\nstatus: read\n"
-               f"signals: {nn}\n---\n\n# Findings of {who}, {today}\n\nFindings {who} recorded with crew signal while building, "
-               f"each about something outside its own work.\n")
-        seen["id"] = sid
-        return {f"signals/{capture}/capture.md": cap, f"signals/{sid}.md": body}, f"signals({sid}): {a.slug} ({who})\n"
-    sha = land(repo, "main", None, make)
-    print(f"{repo} main {sha[:7]}: signal {seen['id']}")
-    record.emit(label, "capture", [f"signals/{seen['id']}"], commit=[f"{repo}@{sha}"], why=f"signals({seen['id']}): {a.slug}")
+    def change(w):
+        cpath = f"signals/{cap}/capture.md"
+        have = w.text(cpath)
+        names = []
+        if have is not None:
+            field(have, "key") == key or fail(f"signals/{cap} on {label}/main is another capture ({field(have, 'key')}), not {key}")
+            listed = git(w.repo, "ls-tree", "--name-only", f"{w.tip}:signals/{cap}", check=False)
+            names = [n for n in (listed.stdout.split() if listed.returncode == 0 else []) if re.match(r"^[0-9]{2}-.*\.md$", n)]
+            for n in names:
+                if n[3:-3] == a.slug and quote in (w.text(f"signals/{cap}/{n}") or ""):
+                    raise Already(f"{cap}/{n[:-3]}")
+        nn = 1 + max([int(n[:2]) for n in names] or [0])
+        sid_ = f"{cap}/{nn:02d}-{a.slug}"
+        if have is None:
+            have = capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, w.plan)
+        w.replace(cpath, re.sub(r"(?m)^signals: [0-9]+$", f"signals: {len(names) + 1}", have, count=1))
+        w.replace(f"signals/{sid_}.md", "---\n" + f"signal: {sid_}\nkind: {kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "")
+                  + "---\n\n" + a.asserts.strip() + "\n\n" + quote + "\n")
+        w.subject = f"signals({sid_}): {a.slug}"
+        w.on.append(f"signals/{sid_}")
+        seen["id"] = sid_
+        return []
+    try:
+        write(fleet, label, change, f"signals: {a.slug}", act="capture")
+    except Already as e:
+        print(f"signal {e} is recorded already; nothing was written")
+        return
+    grade = "own" if v is None else v.grade
+    print(f"signal {seen['id']}: excerpt {grade}" + (f", asserted by {v.asserted_by}" if v and v.grade == "verified" else "")
+          + (f" ({v.reason})" if v and v.grade == "unverified" else ""))
+
+
+def check_excerpt(a, excerpt, host):
+    """The agent's excerpt checked against its own Claude session's transcript, which is on this host: crew signal
+    is never run on another. The session is the one a forwarded command carries, else herdr's for the agent. Returns
+    the verdict and the session id."""
+    sess = record.session()
+    shost, sid = sess.split(":", 1) if sess and ":" in sess else (host, sess)
+    if sid and shost != host:
+        return transcript.unverified(f"session {sid} is on {shost}, not {host}"), sid
+    skip = [a.excerpt_file, str(pathlib.Path(a.excerpt_file).resolve())] if a.excerpt_file else []
+    return transcript.check(sid, a.slug, excerpt, skip), sid
+
+
+def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan):
+    """A new capture.md: where its excerpt came from and how well crew could check it, with the count of its signals,
+    which each signal that joins it rewrites."""
+    today = now.date().isoformat()
+    if v is None:
+        fields = [("capture", cap), ("source", "operator"), ("key", key), ("captured_by", agent()), ("host", host),
+                  ("excerpt", "own"), ("asserted_by", "user")]
+        title, body = f"{agent()}, {date}", "The user's own note, recorded with crew signal at a shell."
+    else:
+        when = stamp(v.at) if v.grade != "unverified" else None
+        record_name = None if v.grade == "unverified" else v.uuid or f"line {v.n}"
+        fields = [("capture", cap), ("source", "crew-session"), ("key", key), ("captured_by", name), ("host", host),
+                  ("session", sid), ("record", record_name), ("at", when.strftime("%Y-%m-%dT%H:%M:%SZ") if when else None),
+                  ("excerpt", v.grade), ("unverified", v.reason), ("asserted_by", v.asserted_by),
+                  ("where", where_of(fleet, name, plan)), ("raw", raw)]
+        title = f"{name}, {date}" + (f" {when.strftime('%H:%M')}Z" if when else "")
+        body = (f"Words {name} quoted, captured with crew signal; crew could not check them against its session."
+                if v.grade == "unverified" else f"One record of {name}'s session, captured with crew signal.")
+    fields += [("event_date", date), ("imported", today), ("status", "read"), ("signals", "1")]
+    return "---\n" + "".join(f"{k}: {x}\n" for k, x in fields if x not in (None, "")) + f"---\n\n# {title}\n\n{body}\n"
 
 
 # ------------------------------------------------------------------------------------- what bash crew asks
@@ -2471,9 +2670,11 @@ def parser(cls=argparse.ArgumentParser):
     x = sub.add_parser("signal")
     x.add_argument("slug")
     x.add_argument("asserts")
-    x.add_argument("--kind", choices=("constraint", "ask", "question", "commitment", "reaction"), default="constraint")
+    x.add_argument("--kind", choices=KINDS, help="constraint for an agent, ask for the user, unless given")
     x.add_argument("--subject", help="tags, separated by commas")
-    x.add_argument("--excerpt")
+    g = x.add_mutually_exclusive_group()
+    g.add_argument("--excerpt", help="the words that show it, verbatim, as the session received them")
+    g.add_argument("--excerpt-file", help="a file holding them, for words the shell would mangle")
     x.add_argument("--label")
 
     # What bash crew asks, on the host it has forwarded to.

@@ -1,6 +1,7 @@
 # crew unit add --signal: the unit's source is the signal, and the signal's one move, route, goes in the same commit
-# on the flywheel's branch: moves.rec beside plan.rec, checked on every replay. The signal itself stays in the
-# partition's first blueprints repo, which nothing here writes.
+# on the flywheel's branch: moves.rec beside plan.rec, checked on every replay. A signal is looked up on the
+# flywheel's branch, where crew records them, then in the partition's first blueprints repo, where the daily pass
+# writes a meeting's, which nothing here writes.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -29,7 +30,7 @@ eq "$(git --git-dir "$wb" rev-parse main)" "$main"
 ok "the unit and its route move are one commit on the flywheel's branch, and the blueprints repo is untouched"
 
 expect_fail "signal $sig already has its move: route" crew unit add twice "Twice." --repo switchboard-kit --signal "$sig"
-expect_fail "no signal 2026-09-09-nothing/01-none in WilldanGroup/willdan-blueprints" crew unit add none "None." --repo switchboard-kit --signal 2026-09-09-nothing/01-none
+expect_fail "no signal 2026-09-09-nothing/01-none on wldn/main of WilldanGroup/crew-state or on main of WilldanGroup/willdan-blueprints" crew unit add none "None." --repo switchboard-kit --signal 2026-09-09-nothing/01-none
 git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; eq "$(recsel -t Unit -c "$T/plan.rec")" "1"
 ok "a signal that is missing or already moved is refused, and the plan left as it was"
 
@@ -55,3 +56,37 @@ git --git-dir "$as" show madswan/main:plan.rec > "$T/mplan.rec"
 eq "$(recsel -t Unit -P Source "$T/mplan.rec")" "signals/$msig"
 eq "$(git --git-dir "$as" show madswan/main:moves.rec | recsel -t Move -P Signal,Move)" "$msig"$'\n'"route"
 ok "a signal of the partition's first blueprints repo routes a unit designed in its second, on the flywheel's branch"
+
+# A signal recorded through crew is on the flywheel's branch: it is moved and routed there just the same, directly
+# and inside a proposal, and a meeting's signal in the blueprints is moved as before.
+id_of() { sed -n 's/^signal \([^: ]*\)[: ].*/\1/p' <<<"$1"; }
+git -C "$s" pull -q origin wldn/main; rewrite "$s/moves.rec" 's/ answered drop$/ answered drop route/'
+commit_all "$s" "moves: route again"; git -C "$s" push -q origin wldn/main
+main=$(git --git-dir "$wb" rev-parse main)
+mine=$(id_of "$(crew signal plans-are-checked "Plans should be checked before they run." --label wldn)")
+git --git-dir "$ws" cat-file -e "wldn/main:signals/$mine.md" || fail "the user's note is not on wldn/main"
+expect_ok crew unit add plans-are-checked "A plan is checked before it runs." --repo switchboard-kit --signal "$mine"
+has "$out" "signal $mine routed to unit/plans-are-checked, in the same commit"
+eq "$(git --git-dir "$ws" show wldn/main:moves.rec | recsel -t Move -e "Signal = '$mine'" -P Move,Target)" "route"$'\n'"unit/plans-are-checked"
+noted=$(id_of "$(crew signal noted-twice "The same thing was noted twice." --label wldn)")
+CREW_AGENT=wldn-design expect_ok crew signal move "$noted" drop --reason "a duplicate"
+eq "$(git --git-dir "$ws" show wldn/main:moves.rec | recsel -t Move -e "Signal = '$noted'" -P Move)" "drop"
+msig=2026-09-11-standup/01-a-meeting-said-so
+mkdir -p "$w/signals/${msig%/*}"; printf -- '---\nsignal: %s\n---\n\nA meeting said so.\n' "$msig" > "$w/signals/$msig.md"
+commit_all "$w" "signals: a meeting"; git -C "$w" push -q origin main; main=$(git --git-dir "$wb" rev-parse main)
+CREW_AGENT=wldn-design expect_ok crew signal move "$msig" new-territory
+eq "$(git --git-dir "$ws" show wldn/main:moves.rec | recsel -t Move -e "Signal = '$msig'" -P Move)" "new-territory"
+ok "a signal on the flywheel's branch is routed and moved there, and one in the blueprints is moved as before"
+
+asked=$(id_of "$(crew signal deploys-are-dry-run "Deploys should be dry-run first." --label wldn)")
+printf 'Case: The user asked for it.\nDo: unit add deploys-dry-run-first "A deploy is dry-run before it runs." --repo switchboard-kit --signal %s\n' "$asked" > "$T/p.rec"
+expect_ok crew plan propose "$T/p.rec"
+n=$(sed -n 's/^proposal \([0-9]*\) is open.*/\1/p' <<<"$out")
+expect_ok crew plan proposed "$n"
+has "$out" "From: signals/$asked: \"Deploys should be dry-run first.\""
+has "$out" "Excerpt (own): > \"Deploys should be dry-run first.\" — "
+expect_ok crew plan approve "$n"
+eq "$(git --git-dir "$ws" show wldn/main:moves.rec | recsel -t Move -e "Signal = '$asked'" -P Move,Target)" "route"$'\n'"unit/deploys-dry-run-first"
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main | grep -v '^runs/')" $'moves.rec\nplan.rec\nproposals.rec'
+eq "$(git --git-dir "$wb" rev-parse main)" "$main"
+ok "inside a proposal, a signal on the flywheel's branch is shown with its excerpt and grade, and routed on approval"

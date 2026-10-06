@@ -92,16 +92,15 @@ eq "$(field mac-studio bolt.drop On)" "bolt/apex-zones"
 eq "$(field mac-studio bolt.drop Why)" "plan(apex-zones): drop the bolt"
 ok "each plan write is one entry naming its act, its objects and the plan's commit, written where it ran"
 
-CREW_AGENT=swb-1-conductor crew signal the-banner-flickers "The banner flickers ZQXJ." --kind ask >/dev/null
-sig=$(date +%F)-swb-1-conductor/01-the-banner-flickers
+id_of() { sed -n 's/^signal \([^: ]*\)[: ].*/\1/p' <<<"$1"; }
+sig=$(id_of "$(CREW_AGENT=swb-1-conductor crew signal the-banner-flickers "The banner flickers ZQXJ." --kind ask --excerpt "banner repaints ZQXR")")
 eq "$(field mac-studio capture On)" "signals/$sig"
-eq "$(field mac-studio capture Commit)" "WilldanGroup/willdan-blueprints@$(git --git-dir "$wb" rev-parse main)"
+eq "$(field mac-studio capture Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
 eq "$(field mac-studio capture By)" "swb-1-conductor"
 CREW_AGENT=wldn-design crew signal move "$sig" drop --reason "Noise ZQXK." >/dev/null
 eq "$(field mac-studio signal.move On)" "signals/$sig"
 eq "$(field mac-studio signal.move Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
-CREW_AGENT=swb-1-conductor crew signal cfn-nag "Add a security check ZQXL." --kind ask >/dev/null
-sig2=$(date +%F)-swb-1-conductor/02-cfn-nag
+sig2=$(id_of "$(CREW_AGENT=swb-1-conductor crew signal cfn-nag "Add a security check ZQXL." --kind ask --excerpt "no security check ZQXS")")
 crew unit add cfn-nag-security-check "A security check ZQXM." --repo switchboard-kit --signal "$sig2" >/dev/null
 eq "$(field mac-studio unit.add On)" "unit/cfn-nag-security-check queue/switchboard-kit"
 eq "$(field mac-studio unit.add From)" "signals/$sig2"
@@ -142,7 +141,7 @@ eq "$(cat $(runs mac-studio) | grep -c '^Id:')" "$n"
 ok "a refused write is one entry with crew's reason; a read writes nothing"
 
 all=$(cat $(runs mac-studio) $(runs $box) 2>/dev/null)
-for typed in ZQXA ZQXB ZQXC ZQXD ZQXE ZQXF ZQXG ZQXH ZQXI ZQXJ ZQXK ZQXL ZQXM ZQXN ZQXO ZQXP ZQXQ; do
+for typed in ZQXA ZQXB ZQXC ZQXD ZQXE ZQXF ZQXG ZQXH ZQXI ZQXJ ZQXK ZQXL ZQXM ZQXN ZQXO ZQXP ZQXQ ZQXR ZQXS; do
   [[ $all != *"$typed"* ]] || fail "the run record holds typed text ($typed)"
 done
 ok "no entry holds an intent, a goal, a reason, an assertion or an excerpt"

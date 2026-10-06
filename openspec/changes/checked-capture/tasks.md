@@ -7,15 +7,15 @@
 
 ## 2. The capture and the signal
 
-- [ ] 2.1 `crew signal` for an agent: `--excerpt` or `--excerpt-file` required; the check; the capture's key and directory by grade; `where` from the agent's name, the plan and the slots file; the raw line appended to `~/.local/state/crew/<label>/raw/<capture>.jsonl`; `capture.md` and the signal file in the shapes of design.md; one write on the flywheel's branch. Verify against the state test remote: a verified capture's files and commit, that the blueprints remote received nothing, and that the raw file holds the source line and no repository does.
-- [ ] 2.2 A second signal from the same record joins the capture as the next number and updates its count; the same slug and excerpt again writes nothing and prints the id. Verify both, including under a replayed push.
-- [ ] 2.3 Refusals: no excerpt; an excerpt that is not in a readable transcript. Each leaves a refused `capture` entry holding neither assertion nor excerpt. A transcript crew cannot read writes the capture `unverified` with the reason. Verify with the fixtures of 1.2.
-- [ ] 2.4 The user's note: with no `CREW_AGENT`, the text is assertion and excerpt, `source: operator`, `excerpt: own`, kind `ask` by default, no transcript read. Verify the files.
-- [ ] 2.5 The `capture` entry names `signals/<id>` and the commit. Verify `crew trace signals/<id>` begins with it.
+- [x] 2.1 `crew signal` for an agent: `--excerpt` or `--excerpt-file` required; the check; the capture's key and directory by grade; `where` from the agent's name, the plan and the slots file; the raw line appended to `~/.local/state/crew/<label>/raw/<capture>.jsonl`; `capture.md` and the signal file in the shapes of design.md; one write on the flywheel's branch. Verify against the state test remote: a verified capture's files and commit, that the blueprints remote received nothing, and that the raw file holds the source line and no repository does.
+- [x] 2.2 A second signal from the same record joins the capture as the next number and updates its count; the same slug and excerpt again writes nothing and prints the id. Verify both, including under a replayed push.
+- [x] 2.3 Refusals: no excerpt; an excerpt that is not in a readable transcript. Each leaves a refused `capture` entry holding neither assertion nor excerpt. A transcript crew cannot read writes the capture `unverified` with the reason. Verify with the fixtures of 1.2.
+- [x] 2.4 The user's note: with no `CREW_AGENT`, the text is assertion and excerpt, `source: operator`, `excerpt: own`, kind `ask` by default, no transcript read. Verify the files.
+- [x] 2.5 The `capture` entry names `signals/<id>` and the commit. Verify `crew trace signals/<id>` begins with it.
 
 ## 3. Looking signals up
 
-- [ ] 3.1 One lookup, the flywheel's branch then the first blueprints repo's main, used by `crew signal move` and `crew unit add --signal` (direct and inside a proposal). Verify a move and a route for a signal in each home, and the refusal for an id in neither.
+- [x] 3.1 One lookup, the flywheel's branch then the first blueprints repo's main, used by `crew signal move` and `crew unit add --signal` (direct and inside a proposal). Verify a move and a route for a signal in each home, and the refusal for an id in neither.
 - [ ] 3.2 `crew signal show <id>`: the signal, its capture's provenance in plain lines, its grade and its move, from any host. Verify from a simulated host that holds no team, for a state signal and for a blueprints signal without the new fields.
 
 ## 4. What crew sends
