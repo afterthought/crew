@@ -252,6 +252,13 @@ place() {
 # stage <unit> [label]: the unit's stage as crew bolts reads it
 stage() { crew bolts --label "${2:-wldn}" --json | jq -r --arg u "$1" '[.partitions[].plans[].bolts[].units[] | select(.unit == $u) | .stage] | first // "none"'; }
 
+# transcript <host> <session> [account folder]: a Claude Code transcript of that session on the host, its JSON lines
+# read from standard input, in the account's folder (~/.claude unless named); prints its path
+transcript() {
+  local d; d=$(home_of "$1")/${3:-.claude}/projects/-work
+  mkdir -p "$d"; cat > "$d/$2.jsonl"; echo "$d/$2.jsonl"
+}
+
 # herdr_state <host> <session> <jq>: what the stub herdr holds there
 herdr_state() { jq -r "$3" "$(home_of "$1")/.stub-herdr/$2.json"; }
 # team_world: the box's switchboard-kit and willdan-blueprints checkouts, and the plan with swb-1 holding a bolt

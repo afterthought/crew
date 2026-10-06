@@ -37,21 +37,21 @@ What is known of the transcript's format, from zoetrope's study of it (`furkankl
 2. **The file.** The first match of `~/.claude*/projects/*/<id>.jsonl`. None: `unverified`, "no transcript for session <id>".
 3. **The lines.** Each complete line is parsed as JSON; a trailing partial line is ignored. Any other line that fails: `unverified`, "the transcript is not JSON lines".
 4. **The canary.** Some string anywhere in some line contains both `crew signal` and the slug: the command that is running. Not found: `unverified`, "crew could not find its own command in the transcript".
-5. **The search.** The excerpt and every string in every line are compared after collapsing whitespace runs to one space. Strings that contain `crew signal` are skipped: they are the command itself and its echoes. The search walks the whole JSON value of each line and knows no field names.
+5. **The search.** The excerpt and every string in every line are compared after collapsing whitespace runs to one space. Strings that contain `crew signal` are skipped: they are the command itself and its echoes. Lines whose top-level `type` is `assistant` are skipped: they are what the agent wrote itself, its reply and its reasoning, where a paraphrase is usually composed before it is run. With `--excerpt-file`, lines that name the file are skipped: they are the writing of it, whose tool output holds the agent's own words. The search walks the whole JSON value of each line and knows no field names.
 6. **The verdict.**
    - A match in a line whose top-level `type` is `user`: `verified`. The latest such line is the source record. Its `uuid` and `timestamp` are recorded when present.
    - A match only in other lines: `found`. The latest is the source record.
    - No match: **refused**: "the excerpt is not in your session's transcript: quote the words as you received them, from the user or from a tool's output".
 
-Only the `verified` verdict knows a fact about Claude Code's format (`type: user`). Steps 3 to 5 need only JSON. If the format changes so that `type` moves, grades fall from `verified` to `found`; if lines stop being JSON or crew cannot see its own command, they fall to `unverified`; nothing is refused that is not a paraphrase, and nothing stops a capture.
+crew knows two facts about Claude Code's format: a top-level `type` of `user` marks a record the session received, which only the `verified` verdict uses, and one of `assistant` a record the agent wrote, which the search skips. Steps 3 to 5 need only JSON besides. If the format changes so that `type` moves, grades fall from `verified` to `found`, and words the agent had already written in its own record are found rather than refused; if lines stop being JSON or crew cannot see its own command, grades fall to `unverified`; nothing is refused that is not a paraphrase, and nothing stops a capture.
 
-Who asserted it (`asserted_by`), for a `verified` record, read as far as crew can and otherwise `unknown`:
-- the match is inside a `tool_result` block: `tool`;
+Who asserted it (`asserted_by`), for a `verified` record, read as far as crew can; for `found` and `unverified`, `unknown`:
+- the record holds a `tool_result` block: `tool`;
 - the typed text begins `[crew tell from <name>]`: `agent:<name>`, or `user` when `<name>` is `<user>@<host>`;
 - it begins `[crew]`: `crew`;
 - otherwise: `user`.
 
-`--excerpt-file <path>` reads the excerpt from a file, for words the shell would mangle; the canary then looks for `crew signal` and the slug alone.
+`--excerpt-file <path>` reads the excerpt from a file, for words the shell would mangle; the canary then looks for `crew signal` and the slug alone, and the lines that name the file are not searched.
 
 The first build task is a probe on a real session, on a Mac and on the box, that the running command is in the transcript by the time `crew signal` reads it. If it is not (Claude Code might write the record after the tool returns), every capture would be `unverified`; the fallback, decided then, is to take the canary from the previous record of the session, and the grades are otherwise unchanged.
 
