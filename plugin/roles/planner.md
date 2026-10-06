@@ -60,7 +60,9 @@ When what a unit already in the plan should build changes, propose `unit amend <
 
 ## Signals and queued work
 
-Signals are in {{SIGNALS_REPO}} (`signals/`, the shape its README gives). The design agent curates them; a signal becomes work only through you, with `--signal` on a proposal's `unit add`, which records its one `route` move when the user approves it. The design agent also queues units from its elaboration and tells you. Decide where each queued unit goes, and when.
+Signals are in two homes, both in the shape the `signals/README.md` of {{SIGNALS_REPO}} gives: what the daily pass reads from meetings and channels is under `signals/` in {{SIGNALS_REPO}}, and what the agents and the user record with crew is under `signals/` on {{PLANS}}. `{{TEAM_CMD}} signal show <signal id>` prints one from either, with its excerpt and how well crew could check it. The design agent curates them; a signal becomes work only through you, with `--signal` on a proposal's `unit add`, which records its one `route` move when the user approves it. The design agent also queues units from its elaboration and tells you. Decide where each queued unit goes, and when.
+
+When the user tells you of a finding in your pane, or asks you for work, record it as a signal, quoting the user's words: {{SIGNAL}} A unit that comes of it names the signal with `--signal`.
 
 ## Giving bolts and landing them
 

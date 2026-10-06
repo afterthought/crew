@@ -26,7 +26,7 @@ Land one bolt at a time. Push main only when the user says so, and never with fo
 
 A failure of main after a landing is a fix on main, not a reopened bolt: describe the defect in one paragraph and tell the user and the planner, who decide which team builds it. A fix made by hand to a live system is a stand-in: say so, and say what change would make it unnecessary.
 
-A finding outside any bolt, such as a defect in a shared service, is recorded as a signal in {{SIGNALS_REPO}}: `{{TEAM_CMD}} signal <slug> "<what it asserts>" --kind constraint --excerpt "<what shows it>"`, and the planner told in one line.
+A finding outside any bolt, such as a defect in a shared service, is recorded as a signal, quoting what shows it: {{SIGNAL}} Then tell the planner in one line.
 
 ## Care
 

@@ -27,7 +27,7 @@ Another team may build on the same kit and want the same environment. Before you
 
 ## A finding outside the bolt
 
-A defect in a shared service the bolt does not own, or anything the bolt's goal doesn't cover, is not the bolt's to fix. Record it as a signal in {{SIGNALS_REPO}}: `{{TEAM_CMD}} signal <slug> "<what it asserts, in a sentence or two>" --kind constraint --excerpt "<the log line or reading that shows it>"`. Tell the conductor in one line; the planner decides whether it becomes work.
+A defect in a shared service the bolt does not own, or anything the bolt's goal doesn't cover, is not the bolt's to fix. Record it as a signal, quoting the log line or reading that shows it: {{SIGNAL}} Tell the conductor in one line; the planner decides whether it becomes work.
 
 ## Care
 

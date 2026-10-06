@@ -415,6 +415,20 @@ def env(t):
     return "\n".join(f"{k}={shlex.quote(v)}" for k, v in pairs.items()) + f'\nSTATE="$HOME/.local/state/{t["name"]}-team"'
 
 
+# How an agent records a finding, the same in every brief that records one.
+def signal_how(cmd, label, state):
+    return (f"`{cmd} signal <slug> \"<what it asserts, in a sentence>\" --excerpt \"<the exact words the user said or the tool "
+            f"printed>\" --kind constraint|ask|question|commitment|reaction`. Copy the excerpt, never reword it: crew looks for it "
+            f"in your own session's transcript, and a refusal means the words were reworded. crew writes the signal under "
+            f"`signals/` on `{label}/main` of {state}.")
+
+
+# Who is speaking in an agent's pane, beside every brief's roster.
+SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sent with crew tell by that agent, or by "
+           "the user when the name is `<user>@<host>`; one that begins `[crew]` is crew's own; anything else typed there "
+           "is the user.")
+
+
 def team_tokens(fleet, t, role, self_name):
     kit, bp, n, label = t["kit"], t["blueprints"], t["name"], t["label"]
     p = fleet["partitions"][label]
@@ -427,7 +441,7 @@ def team_tokens(fleet, t, role, self_name):
         "CONDUCTOR": f"{n}-conductor", "OPS": f"{n}-ops", "UNITS": str(t["units"]), "SLOTS": ", ".join(slots),
         "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
         "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
-        "REPORTS": f"~/.local/state/{n}-team/reports",
+        "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
         "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
     }
     tok["ROSTER"] = (
@@ -437,7 +451,7 @@ def team_tokens(fleet, t, role, self_name):
         f"is a fresh agent in that unit's own worktree. Above the team, at {label}'s main level: `{label}-design`, the design agent, "
         f"answers design questions; `{label}-planner` plans the partition's bolts; `{label}-dispatch-{t['machine']}` gives this "
         f"host's teams their bolts; and `{label}-ops` lands a proven bolt on main. Agents outside the team are reached with "
-        f"`{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run.")
+        f"`{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run. {SENDERS}")
     return tok
 
 
@@ -455,7 +469,7 @@ def main_tokens(fleet, p, role, self_name):
     tok = {
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
-        "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"],
+        "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",
@@ -474,7 +488,8 @@ def main_tokens(fleet, p, role, self_name):
         f"agent, keeps the design true on main and curates signals; `{label}-planner` plans the partition's bolts; `{label}-ops` lands "
         f"proven bolts and deploys main. A dispatcher on each host the partition's teams run on gives that host's teams their bolts: "
         f"{tok['DISPATCHERS']}. The operator agent in each of the partition's operator sessions works for the user: {tok['OPERATORS'] or 'none'}. "
-        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs.")
+        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs. "
+        f"{SENDERS}")
     return tok
 
 

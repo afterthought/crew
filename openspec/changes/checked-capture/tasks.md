@@ -21,7 +21,7 @@
 ## 4. What crew sends
 
 - [x] 4.1 `crew tell` sends `[crew tell from <sender>] <text>`; `greet` and crew's notices send `[crew] <text>`. Update the tests that assert on text sent to the stub `herdr`. Verify a capture whose excerpt is in a tell says that agent asserted it, and one in a `[crew]` notice says crew.
-- [ ] 4.2 Every role brief gains the sentence on what `[crew tell from <agent>]` and `[crew]` messages are. `conductor.md`, `ops.md`, `main-ops.md`, `design.md`, `planner.md` and `operator.md` say how to record a finding with its excerpt and what a refusal means. Verify every brief prints for its fixture with no unfilled token.
+- [x] 4.2 Every role brief gains the sentence on what `[crew tell from <agent>]` and `[crew]` messages are. `conductor.md`, `ops.md`, `main-ops.md`, `design.md`, `planner.md` and `operator.md` say how to record a finding with its excerpt and what a refusal means. Verify every brief prints for its fixture with no unfilled token.
 - [ ] 4.3 `README.md` ("Signals": the excerpt, the grades, where signals live, `crew signal show`), `plugin/skills/crew/SKILL.md` and the usage header. Verify every command in the README appears in `crew`'s usage.
 
 ## 5. Outside crew

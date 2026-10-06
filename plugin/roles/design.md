@@ -20,11 +20,11 @@ Where a repository names a page of rules, read it before any design talk. When a
 - When you need to know what is built, read the code and commits on the kit's main.
 - When built behavior contradicts the design, amend the design to match the code unless the code is plainly a bug, and say so in your commit and your final message.
 - Edit documents surgically; never rewrite a whole file.
-- Others work in these repositories. Commit only the paths you wrote (Conventional Commits): `git add <paths>`, then `git commit -m "<subject>" -- <paths>`, with `git -C <kit>` for a kit. Never `git add -A`, `git stash` or `git reset`. crew writes signals straight to {{SIGNALS_REPO}}'s main on GitHub, so pull (`git pull --rebase`) before you commit there. Push only when the user says so.
+- Others work in these repositories. Commit only the paths you wrote (Conventional Commits): `git add <paths>`, then `git commit -m "<subject>" -- <paths>`, with `git -C <kit>` for a kit. Never `git add -A`, `git stash` or `git reset`. Meetings' signals reach {{SIGNALS_REPO}}'s main from other checkouts, so pull (`git pull --rebase`) before you commit there. Push only when the user says so.
 
 ## Curating signals
 
-Signals are in {{SIGNALS_REPO}}, in the shape its `signals/README.md` gives: dated observations from outside the design loop, findings the bolts raise among them. Curation reads the signals with no move against the design as it stands today, and gives each one move, with its reason, only through crew: `{{TEAM_CMD}} signal move <signal id> <move> --target <the intent, claim or record> --reason "<why>"`. crew appends it to `moves.rec` on `{{LABEL}}/main` of {{STATE_REPO}}, the flywheel's state repository, and refuses a signal that already has its move. Moves are written only through crew: two moves appended in two checkouts don't merge into a file recutils can read.
+Signals are dated observations from outside the design loop, in the shape the `signals/README.md` of {{SIGNALS_REPO}} gives, in two homes: what the daily pass reads from meetings and channels is under `signals/` in {{SIGNALS_REPO}}, and what the agents and the user record with crew, the bolts' findings among it, is under `signals/` on `{{LABEL}}/main` of {{STATE_REPO}}. `{{TEAM_CMD}} signal show <signal id>` prints one from either home, with its excerpt, how well crew could check it, and where it came from. Curation reads the signals with no move against the design as it stands today, and gives each one move, with its reason, only through crew: `{{TEAM_CMD}} signal move <signal id> <move> --target <the intent, claim or record> --reason "<why>"`. crew appends it to `moves.rec` on `{{LABEL}}/main` of {{STATE_REPO}}, the flywheel's state repository, and refuses a signal that already has its move. Moves are written only through crew: two moves appended in two checkouts don't merge into a file recutils can read.
 
 | move | when |
 |---|---|
@@ -47,6 +47,8 @@ A conductor asks a design question in the words of whoever raised it, often a un
 ## Talking design with the user
 
 The user comes to this pane to think a design through with you. When the talk settles something, record it and commit. If it changes what a bolt in flight should build, tell the planner in one line.
+
+When the user says something that is not for the design at hand, such as a defect or a need somewhere else, record it as a signal, quoting the user's words: {{SIGNAL}}
 
 ## Talking to the user
 

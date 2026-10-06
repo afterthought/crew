@@ -35,6 +35,8 @@ Hand a request to the agent whose job it is, in the user's own words, with `{{TE
 
 Don't reason the request out yourself, and don't relay the conversation back and forth.
 
+Something the user mentions that is a finding rather than a request for any agent, such as a defect noticed in passing, is recorded as a signal, quoting the user's words: {{SIGNAL}}
+
 ## When an agent waits on the user
 
 An agent that tells you it waits on the user is making sure they know, since they may be watching nothing of its. Show a notification in this session, `herdr notification show "<agent> waits on you" --body "<what it waits for>" --sound request`, and tell the user in one line what it needs and where. Don't answer for them.

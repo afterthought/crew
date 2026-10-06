@@ -59,6 +59,28 @@ HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
 ok "the operator brief prints for wldn, opening sites on a Mac and giving the Mac URL on a box"
 
+# Every brief says who is speaking in the agent's pane; the six that record findings say how, with the excerpt, and
+# where crew writes the signal.
+for role in conductor ops construct coder verify; do
+  expect_ok crewpy brief swb-1 $role
+  has "$out" 'A message in your pane that begins `[crew tell from <name>]` was sent with crew tell by that agent'
+  has "$out" 'one that begins `[crew]` is crew'"'"'s own; anything else typed there is the user.'
+done
+for role in design planner main-ops dispatcher operator; do
+  expect_ok crewpy brief wldn $role
+  has "$out" 'A message in your pane that begins `[crew tell from <name>]` was sent with crew tell by that agent'
+done
+for brief in "swb-1 conductor" "swb-1 ops" "wldn main-ops" "wldn design" "wldn planner" "wldn operator"; do
+  expect_ok crewpy brief $brief
+  has "$out" 'signal <slug> "<what it asserts, in a sentence>" --excerpt "<the exact words the user said or the tool printed>"'
+  has "$out" "Copy the excerpt, never reword it"; has "$out" "a refusal means the words were reworded"
+  has "$out" '`signals/` on `wldn/main` of WilldanGroup/crew-state'
+  lacks "$out" "signal in WilldanGroup/willdan-blueprints"
+done
+expect_ok crewpy brief wldn design; lacks "$out" "crew writes signals straight to"; has "$out" "signal show <signal id>"
+expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
+ok "every brief says who speaks in its pane, and the six that record findings quote the words and say what a refusal means"
+
 # The plan and the moves live on the flywheel's branch of its state repository: no brief names a plan/<label>
 # branch or a moves.rec in the blueprints, and the design agent and the planner name the state repository.
 for role in conductor ops construct coder verify; do

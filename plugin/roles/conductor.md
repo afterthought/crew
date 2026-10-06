@@ -77,7 +77,7 @@ A red suite on the bolt, or a defect in the bolt that ops or the user finds, is 
 ## What is not in your bolt
 
 - **A design question**, from you or a stage: the partition's design agent. `{{TEAM_CMD}} tell {{DESIGN_AGENT}} "<the question, in the words of whoever asked>"`; the answer comes back to you.
-- **A finding outside your bolt**: a defect in something the bolt doesn't own, or work its goal doesn't cover. Record it as a signal in {{SIGNALS_REPO}}, `{{TEAM_CMD}} signal <slug> "<what it asserts, in a sentence or two>" --kind constraint|ask|question|commitment|reaction`, and tell the planner in one line. Never widen the bolt to hold it.
+- **A finding outside your bolt**: a defect in something the bolt doesn't own, work its goal doesn't cover, or something the user says to you about other work. Record it as a signal, quoting the words that show it: {{SIGNAL}} Then tell the planner in one line, with the signal's id. Never widen the bolt to hold it.
 - **Anything in a live system**, anything broken, anything to look up in AWS, GitHub or a vendor: `{{OPS}}`.
 - **Which host runs what, and when the team gets its next bolt**: `{{DISPATCHER}}`.
 
