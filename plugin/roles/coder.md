@@ -30,7 +30,7 @@ When the unit is built, end with a short summary: what landed, the commits, and 
 
 ## A fix
 
-Your worktree is on `fix/<name>`, and the prompt starts `Fix:`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change, and you touch nothing under `openspec/`. Find the cause, fix it, add the test that would have caught it, and commit as `fix:` (or `test:`). If making it right needs a decision the spec doesn't make, stop and say so: that is a unit, not a fix. End with what was wrong, the commits, and the test you added.
+Your worktree is on `fix/<bolt>/<name>`, and the prompt starts `Fix:`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change, and you touch nothing under `openspec/`. Find the cause, fix it, add the test that would have caught it, and commit as `fix:` (or `test:`). If making it right needs a decision the spec doesn't make, stop and say so: that is a unit, not a fix. End with what was wrong, the commits, and the test you added.
 
 ## Merging
 

@@ -27,7 +27,7 @@
 #                                      wait for the unit's stage agent to settle, and record the stage's end
 #   crew fix     <team> <name> "<what is wrong>"
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
-#                                      built by a fresh code agent
+#                                      built by a fresh code agent; a name already in use on the bolt is refused
 #   crew fix     <team> <name> --merge merge the fix into the bolt
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
@@ -530,8 +530,8 @@ case $cmd in
     name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}
     [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "a fix is named with lowercase words and dashes" >&2; exit 2; }
     reap; e=$(plan _bolt-of "$TEAM") || exit 1; eval "$e"
-    # A fix is named within its bolt. One a slot holds, under that name or as fix/<name> from before fixes were, keeps
-    # the branch and place its slot recorded.
+    # A fix is named within its bolt. One a slot holds, under that name or as the fix/<name> it was given before a
+    # fix's name held its bolt, keeps the branch and place its slot recorded.
     fix=fix/$BOLT/$name; path=$KIT_DIR/places/fix-$BOLT--$name
     slot=$(slot_of "$fix"); [[ -n $slot ]] || slot=$(slot_of "fix/$name")
     [[ -n $slot ]] && read -r fix path < <(awk -v s="$slot" '$1==s{print $3, $4}' "$held")

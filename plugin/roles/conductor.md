@@ -72,7 +72,7 @@ If a stage stops short and says what it needs, a design answer comes from the de
 
 ## Fixes
 
-A red suite on the bolt, or a defect in the bolt that ops or the user finds, is a fix: `{{TEAM_CMD}} fix {{TEAM}} <name> "<what is wrong, in the words of whoever found it>"`. It is built in its own `places/fix-<name>` worktree from the bolt, by a fresh code agent in a free slot. When its agent settles, merge it: `{{TEAM_CMD}} fix {{TEAM}} <name> --merge`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change and no plan record. If making it right needs a design decision, that is a unit, and the planner's.
+A red suite on the bolt, or a defect in the bolt that ops or the user finds, is a fix: `{{TEAM_CMD}} fix {{TEAM}} <name> "<what is wrong, in the words of whoever found it>"`. It is built on `fix/<bolt>/<name>` from the bolt, in its own `places/fix-<bolt>--<name>` worktree, by a fresh code agent in a free slot. A name already in use on your bolt is refused: give the fix another name. When its agent settles, merge it: `{{TEAM_CMD}} fix {{TEAM}} <name> --merge`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change and no plan record. If making it right needs a design decision, that is a unit, and the planner's.
 
 ## What is not in your bolt
 
