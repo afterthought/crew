@@ -36,14 +36,14 @@ What is known of the transcript's format, from zoetrope's study of it (`furkankl
 1. **The session.** `CREW_SESSION`, else herdr's session id for `CREW_AGENT`. None: grade `unverified`, reason "herdr names no session".
 2. **The file.** The first match of `~/.claude*/projects/*/<id>.jsonl`. None: `unverified`, "no transcript for session <id>".
 3. **The lines.** Each complete line is parsed as JSON; a trailing partial line is ignored. Any other line that fails: `unverified`, "the transcript is not JSON lines".
-4. **The canary.** Some string anywhere in some line contains both `crew signal` and the slug: the command that is running. Not found: `unverified`, "crew could not find its own command in the transcript".
-5. **The search.** The excerpt and every string in every line are compared after collapsing whitespace runs to one space. Strings that contain `crew signal` are skipped: they are the command itself and its echoes. Lines whose top-level `type` is `assistant` are skipped: they are what the agent wrote itself, its reply and its reasoning, where a paraphrase is usually composed before it is run. With `--excerpt-file`, lines that name the file are skipped: they are the writing of it, whose tool output holds the agent's own words. The search walks the whole JSON value of each line and knows no field names.
+4. **The canary.** The session's previous record shows crew it is reading the live session: the user's message or the last tool's output, written moments before the command runs. The transcript passes when its last complete line that carries a `timestamp` is no older than 15 minutes when `crew signal` reads it; when no line carries one, the file's modification time counts instead. Otherwise: `unverified`, "session <id>'s transcript has not been written for <n> minutes: crew may be reading another session's". The session id comes from `CREW_SESSION` or herdr, and can name a transcript that is no longer written, as after `/clear`.
+5. **The search.** The excerpt and every string in every line are compared after collapsing whitespace runs to one space. Strings that contain `crew signal` are skipped: they are crew's earlier commands and their echoes, whose `--excerpt` holds the words too. Lines whose top-level `type` is `assistant` are skipped: they are what the agent wrote itself, its reply and its reasoning, where a paraphrase is usually composed before it is run. With `--excerpt-file`, lines that name the file are skipped: they are the writing of it, whose tool output holds the agent's own words. The search walks the whole JSON value of each line and knows no field names.
 6. **The verdict.**
    - A match in a line whose top-level `type` is `user`: `verified`. The latest such line is the source record. Its `uuid` and `timestamp` are recorded when present.
    - A match only in other lines: `found`. The latest is the source record.
    - No match: **refused**: "the excerpt is not in your session's transcript: quote the words as you received them, from the user or from a tool's output".
 
-crew knows two facts about Claude Code's format: a top-level `type` of `user` marks a record the session received, which only the `verified` verdict uses, and one of `assistant` a record the agent wrote, which the search skips. Steps 3 to 5 need only JSON besides. If the format changes so that `type` moves, grades fall from `verified` to `found`, and words the agent had already written in its own record are found rather than refused; if lines stop being JSON or crew cannot see its own command, grades fall to `unverified`; nothing is refused that is not a paraphrase, and nothing stops a capture.
+crew knows two facts about Claude Code's format: a top-level `type` of `user` marks a record the session received, which only the `verified` verdict uses, and one of `assistant` a record the agent wrote, which the search skips. The canary reads a line's `timestamp`, and the file's modification time stands in when no line has one. Steps 3 to 5 need only JSON besides. If the format changes so that `type` moves, grades fall from `verified` to `found`, and words the agent had already written in its own record are found rather than refused; if `timestamp` moves, the file's time serves; if lines stop being JSON, grades fall to `unverified`; nothing is refused that is not a paraphrase, and nothing stops a capture.
 
 Who asserted it (`asserted_by`), for a `verified` record, read as far as crew can; for `found` and `unverified`, `unknown`:
 - the record holds a `tool_result` block: `tool`;
@@ -51,9 +51,9 @@ Who asserted it (`asserted_by`), for a `verified` record, read as far as crew ca
 - it begins `[crew]`: `crew`;
 - otherwise: `user`.
 
-`--excerpt-file <path>` reads the excerpt from a file, for words the shell would mangle; the canary then looks for `crew signal` and the slug alone, and the lines that name the file are not searched.
+`--excerpt-file <path>` reads the excerpt from a file, for words the shell would mangle; the lines that name the file are not searched.
 
-The first build task is a probe on a real session, on a Mac and on the box, that the running command is in the transcript by the time `crew signal` reads it. If it is not (Claude Code might write the record after the tool returns), every capture would be `unverified`; the fallback, decided then, is to take the canary from the previous record of the session, and the grades are otherwise unchanged.
+The running `crew signal` is never in the transcript it reads: Claude Code writes a tool call's record only once the tool returns. A probe on mac-studio, with Claude Code 2.1.286 and the account folder `~/.claude-sub-madswan`, found a unique string of a running Bash command 0 times in the session's transcript during the call and once by the next call. So the canary is the session's previous record, and the search and the verdicts do not depend on the command being there.
 
 *Alternatives:* refusing whatever cannot be verified would turn a format change into a day with no captures. No check at all is today's behavior. A stricter parse of the transcript (pairing `tool_use` with `tool_result`, as zoetrope does) buys nothing the grade needs.
 
@@ -149,7 +149,8 @@ The two signals of 2026-10-03 and every meeting signal stay where they are and r
 
 ## Risks / Trade-offs
 
-- [The running command is not yet in the transcript when crew reads it] → the probe in the first task; the fallback above.
+- [The session id names a transcript that is no longer written, as after `/clear`] → the canary: a transcript whose last record is over 15 minutes old is not searched, and the capture is `unverified`, saying how long it has not been written.
+- [A stale transcript was written in the last 15 minutes] → its words are still words a session of the agent received; the window is short enough that this is the session before a `/clear` only moments ago.
 - [An excerpt spans two records, or the user's message was edited by the terminal] → the agent quotes a shorter run of words; the refusal says so.
 - [Agents learn to quote tool output that says little, to pass the check] → the grade is honest about what was checked, not about whether the signal is good; that is curation's judgment, and the excerpt is in front of it.
 - [The user's words enter a repository] → the excerpt always did, by design; it is the evidence. The state repository is not the design repository, and the agent chooses an excerpt without names or client detail it does not need, as the daily pass's reader does.

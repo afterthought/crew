@@ -112,9 +112,9 @@ An agent crew started gives an **excerpt**: the words that show the finding, cop
 
 - `verified`: the words are in a record the session received, and the capture says who asserted them: `user`; `tool`, for a command's output; `agent:<name>`, for what another agent sent with `crew tell`; or `crew`, for crew's own notice;
 - `found`: they are in the transcript, in a record crew cannot classify;
-- `unverified`: crew could not read the transcript, and the capture says why: herdr names no session, there is no file, its lines are not JSON, or crew's own running command is not in it.
+- `unverified`: crew could not read the transcript, and the capture says why: herdr names no session, there is no file, its lines are not JSON, or it has not been written for 15 minutes, so crew may be reading another session's.
 
-A signal is refused only when crew sees its own command in the transcript and the words nowhere else but in what the agent wrote itself: a paraphrase. A change in Claude Code's format lowers a grade and never stops a capture, and no command refuses anything for its grade; the grade is shown wherever the excerpt is.
+A signal is refused only when the transcript is the live session's, its last record written within 15 minutes, and the words are nowhere in it but in what the agent wrote itself: a paraphrase. A change in Claude Code's format lowers a grade and never stops a capture, and no command refuses anything for its grade; the grade is shown wherever the excerpt is.
 
 A capture is the one record the excerpt came from. Its `capture.md` names the host, the Claude session, the record and its time, who asserted it, and where the agent was working: its team, the bolt the team holds and the unit its slot holds, or the main level. The record itself is copied to `~/.local/state/crew/<label>/raw/<capture>.jsonl` on the host, and the capture points at it as `<host>:<path>`; of the source, only the excerpt enters git. A second signal from the same record joins its capture as its next signal, and the same signal again writes nothing. The capture and its signal are one commit on the flywheel's branch. The user's own note, `crew signal` at a shell, is its own excerpt (`excerpt: own`), of kind `ask` unless another is given.
 

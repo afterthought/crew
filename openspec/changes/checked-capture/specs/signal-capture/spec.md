@@ -37,15 +37,15 @@ crew SHALL look for the excerpt, whitespace aside, in the transcript of the call
 - **THEN** the capture is written with the grade `unverified` and the reason
 
 ### Requirement: Only a paraphrase is refused
-crew SHALL refuse a signal for its excerpt only when it finds its own running command in the transcript and the excerpt nowhere else in it. When crew cannot find its own command there, it SHALL treat the transcript as unreadable and write the capture `unverified`. Words the agent itself wrote SHALL NOT count as received.
+crew SHALL refuse a signal for its excerpt only when the transcript it reads is the live session's, its last record written within the last 15 minutes, and the excerpt is nowhere in it. When the transcript's last record is older, crew SHALL treat it as possibly another session's and write the capture `unverified`, with the reason. Words the agent itself wrote, and crew's own commands, SHALL NOT count as received.
 
 #### Scenario: The agent's own summary
 - **WHEN** an agent gives as its excerpt a sentence the user never typed and no tool printed
 - **THEN** the signal is refused, nothing is written, and the message says the words are not in the session's transcript
 
-#### Scenario: crew cannot see its own command
-- **WHEN** crew reads a transcript in which its own running command does not appear
-- **THEN** the signal is written with the grade `unverified`, never refused
+#### Scenario: crew may be reading another session's transcript
+- **WHEN** crew reads a transcript whose last record was written more than 15 minutes ago, such as the one before a `/clear`
+- **THEN** the signal is written with the grade `unverified`, never refused, and the reason says how long the transcript has not been written
 
 ### Requirement: A capture is one record a session received
 A capture made by an agent SHALL be the one transcript record that holds the excerpt. It SHALL name the capturing agent, the host, the Claude session, the record and its time, who asserted it, and the team, bolt and unit the agent was working in. A second signal whose excerpt is in the same record SHALL join that capture as its next signal, and recording the same signal again SHALL write nothing.

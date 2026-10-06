@@ -259,6 +259,9 @@ transcript() {
   mkdir -p "$d"; cat > "$d/$2.jsonl"; echo "$d/$2.jsonl"
 }
 
+# ago <minutes>: the UTC time that many minutes ago, as a transcript's records carry it
+ago() { python3 -c 'import datetime, sys; t = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=float(sys.argv[1])); print(t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z")' "$1"; }
+
 # herdr_state <host> <session> <jq>: what the stub herdr holds there
 herdr_state() { jq -r "$3" "$(home_of "$1")/.stub-herdr/$2.json"; }
 # team_world: the box's switchboard-kit and willdan-blueprints checkouts, and the plan with swb-1 holding a bolt

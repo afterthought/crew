@@ -11,19 +11,19 @@ crew bolt give swb-2 smoke-2 >/dev/null 2>&1
 # laptop: a host with crew's files and nothing of any team's
 mkdir -p "$(home_of laptop)"; gitconfig "$(home_of laptop)"; cp -R "$(home_of mac-studio)/.config" "$(home_of laptop)/"
 
-transcript $box s-1 >/dev/null <<'EOF'
-{"type":"user","uuid":"9f2c1a7e-5b6d-4c3e-8f00-112233445566","timestamp":"2026-10-05T14:21:07Z","message":{"role":"user","content":"Could we get a security check on the CloudFormation templates too?"}}
-{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"crew signal cfn-nag-templates ..."}}]}}
+ts=$(ago 1); day=${ts:0:10}; hms=${ts:11:8}
+transcript $box s-1 >/dev/null <<EOF
+{"type":"user","uuid":"9f2c1a7e-5b6d-4c3e-8f00-112233445566","timestamp":"$ts","message":{"role":"user","content":"Could we get a security check on the CloudFormation templates too?"}}
 EOF
 HOST=$box CREW_AGENT=swb-2-conductor CREW_SESSION=$box:s-1 crew signal cfn-nag-templates "The user wants a security check on the templates." \
   --excerpt "a security check on the CloudFormation templates" --kind ask >/dev/null
-cap=2026-10-05-swb-2-conductor-9f2c1a7e; id=$cap/01-cfn-nag-templates
+cap=$day-swb-2-conductor-9f2c1a7e; id=$cap/01-cfn-nag-templates
 
 HOST=laptop expect_ok crew signal show "$id"
 has "$out" "signals/$id, on wldn/main of WilldanGroup/crew-state"
-has "$out" $'kind: ask\nwho: user\n---\n\nThe user wants a security check on the templates.\n\n> "a security check on the CloudFormation templates" — 14:21:07Z'
+has "$out" $'kind: ask\nwho: user\n---\n\nThe user wants a security check on the templates.\n\n> "a security check on the CloudFormation templates" — '"${hms}Z"
 has "$out" "Its capture, signals/$cap/capture.md:"
-for want in "captured_by: swb-2-conductor" "host: $box" "session: s-1" "at: 2026-10-05T14:21:07Z" "excerpt: verified" "asserted_by: user" \
+for want in "captured_by: swb-2-conductor" "host: $box" "session: s-1" "at: ${ts:0:19}Z" "excerpt: verified" "asserted_by: user" \
   "where: team swb-2, bolt smoke-2" "raw: $box:~/.local/state/crew/wldn/raw/$cap.jsonl"; do
   has "$out" "  $want"
 done

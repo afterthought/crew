@@ -2107,15 +2107,6 @@ def sha16(text):
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
-def stamp(at):
-    """A record's timestamp as a UTC time, or None when it has none crew can read."""
-    try:
-        t = datetime.datetime.fromisoformat(at.replace("Z", "+00:00")) if at else None
-    except ValueError:
-        return None
-    return (t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)).astimezone(datetime.timezone.utc) if t else None
-
-
 def quoted(excerpt, position):
     """The excerpt as a signal quotes it: a blockquote of the words, verbatim, then its position."""
     return "\n".join(f"> {l}" if l else ">" for l in f'"{excerpt}" — {position}'.split("\n"))
@@ -2181,8 +2172,8 @@ def signal(fleet, a):
                                      "them, from the user or from a tool's output")
         # The capture's key and name, by grade: a received record by its uuid, any other line by its hash, and an
         # unchecked excerpt by its own; dated by the record's time where it has one.
-        when = stamp(v.at) if v.grade == "verified" else None
-        date = (stamp(v.at) or now).date().isoformat()
+        when = transcript.stamp(v.at) if v.grade == "verified" else None
+        date = (transcript.stamp(v.at) or now).date().isoformat()
         rid = re.sub(r"[^a-z0-9]", "", (v.uuid or "").lower()) if v.grade == "verified" else ""
         if v.grade == "unverified":
             h = sha16(excerpt)
@@ -2256,7 +2247,7 @@ def check_excerpt(a, excerpt, host):
     if sid and shost != host:
         return transcript.unverified(f"session {sid} is on {shost}, not {host}"), sid
     skip = [a.excerpt_file, str(pathlib.Path(a.excerpt_file).resolve())] if a.excerpt_file else []
-    return transcript.check(sid, a.slug, excerpt, skip), sid
+    return transcript.check(sid, excerpt, skip), sid
 
 
 def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan):
@@ -2268,7 +2259,7 @@ def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan):
                   ("excerpt", "own"), ("asserted_by", "user")]
         title, body = f"{agent()}, {date}", "The user's own note, recorded with crew signal at a shell."
     else:
-        when = stamp(v.at) if v.grade != "unverified" else None
+        when = transcript.stamp(v.at) if v.grade != "unverified" else None
         record_name = None if v.grade == "unverified" else v.uuid or f"line {v.n}"
         fields = [("capture", cap), ("source", "crew-session"), ("key", key), ("captured_by", name), ("host", host),
                   ("session", sid), ("record", record_name), ("at", when.strftime("%Y-%m-%dT%H:%M:%SZ") if when else None),

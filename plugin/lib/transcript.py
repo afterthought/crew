@@ -9,15 +9,21 @@ name. It knows two facts of the format: a top-level type of user marks a record 
 assistant a record the agent wrote itself. When either stops holding, a grade falls; nothing that is not a paraphrase
 is refused, and no capture is stopped.
 
+Claude Code writes a tool call's record only once the tool returns, so the running crew signal is never in the
+transcript it reads. What shows crew it is reading the live session is the record before it, the user's message or
+the last tool's output, written moments earlier: a transcript whose last record is older than FRESH may be another
+session's, such as the one before a /clear, and is not searched.
+
   verified    the excerpt is in a record the session received; who asserted it is read as far as crew can
   found       it is in the transcript, in a record crew cannot classify
-  unverified  crew could not read the transcript, with the reason
-  refused     crew sees its own running command in the transcript, and the excerpt nowhere but there and in what
-              the agent wrote itself: a paraphrase"""
-import hashlib, json, pathlib, re
+  unverified  crew could not read the transcript, or it is not the live session's, with the reason
+  refused     the transcript is the live session's, and the excerpt is nowhere in it but in crew signal commands and
+              in what the agent wrote itself: a paraphrase"""
+import datetime, hashlib, json, pathlib, re
 
 COMMAND = "crew signal"
 TELL = re.compile(r"^\[crew tell from ([^\]\s]+)\]")
+FRESH = datetime.timedelta(minutes=15)
 
 
 def collapse(s):
@@ -40,6 +46,25 @@ def strings(v):
     elif isinstance(v, (list, dict)):
         for x in (v.values() if isinstance(v, dict) else v):
             yield from strings(x)
+
+
+def stamp(at):
+    """A record's timestamp as a UTC time, or None when it has none crew can read."""
+    try:
+        t = datetime.datetime.fromisoformat(at.replace("Z", "+00:00")) if isinstance(at, str) and at else None
+    except ValueError:
+        return None
+    return (t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)).astimezone(datetime.timezone.utc) if t else None
+
+
+def last_written(path, found):
+    """When the session last wrote its transcript: the time of its last complete line that carries a timestamp, else
+    the file's modification time."""
+    for _, _, v in reversed(found):
+        t = stamp(v.get("timestamp")) if isinstance(v, dict) else None
+        if t:
+            return t
+    return datetime.datetime.fromtimestamp(path.stat().st_mtime, datetime.timezone.utc)
 
 
 def kind(value):
@@ -109,11 +134,11 @@ def holds_tool_result(v):
     return False
 
 
-def check(session, slug, excerpt, skip=()):
-    """Look for the excerpt in the session's transcript, whitespace aside. The canary is the running command: a string
-    holding `crew signal` and the slug; without it crew cannot read this transcript. Strings holding `crew signal`
-    are the command and its echoes, lines of type assistant what the agent wrote, and lines that name a path in skip
-    the writing of the excerpt's file: none of them is searched. Returns a Verdict; refused is one too."""
+def check(session, excerpt, skip=()):
+    """Look for the excerpt in the session's transcript, whitespace aside, once it shows it is the live session's: its
+    last record written within FRESH. Strings holding `crew signal` are crew's commands and their echoes, lines of type
+    assistant what the agent wrote, and lines that name a path in skip the writing of the excerpt's file: none of them
+    is searched. Returns a Verdict; refused is one too."""
     if not session:
         return unverified("herdr names no session")
     path = find(session)
@@ -122,8 +147,13 @@ def check(session, slug, excerpt, skip=()):
     found = lines(path)
     if isinstance(found, str):
         return unverified(found)
-    if not any(COMMAND in s and slug in s for _, _, v in found for s in strings(v)):
-        return unverified("crew could not find its own command in the transcript")
+    try:
+        age = datetime.datetime.now(datetime.timezone.utc) - last_written(path, found)
+    except OSError as e:
+        return unverified(f"the transcript {path} can't be read: {e.strerror or e}")
+    if age > FRESH:
+        return unverified(f"session {session}'s transcript has not been written for {int(age.total_seconds() // 60)} "
+                          "minutes: crew may be reading another session's")
     needle = collapse(excerpt)
     received = other = None
     for n, raw, v in found:
