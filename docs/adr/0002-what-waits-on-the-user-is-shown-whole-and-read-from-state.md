@@ -1,6 +1,6 @@
 # What waits on the user is shown whole, and read from state
 
-- Status: accepted
+- Status: proposed, pending the user's review of a mockup
 - Date: 2026-10-06
 - Deciders: the user, through swancloud-operator-mac-studio, in their words; swancloud-design
 - Sources: the user's message of 2026-10-06; `plugin/roles/conductor.md` (review), `planner.md` (proposals), `operator.md` (where things stand); `openspec/changes/plan-proposals/design.md` ("How a proposal reads"); `openspec/explorations/findings-to-design/proposal.md` section 5, the row on Flywheel Next's rail; `plannotator-tui`'s usage (`herdr open [file.md | folder]`)
