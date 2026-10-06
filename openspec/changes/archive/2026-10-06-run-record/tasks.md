@@ -45,4 +45,4 @@
 ## 8. Proof on real work
 
 - [ ] 8.1 Pull crew on mac-studio and the box, and restart swb-2's conductor so it has the new brief. Take one unit of the bolt swb-2 holds through a stage (construct, then the user's approval). Verify on mac-studio that `crew trace unit/<unit>` prints the stage's start, its end with the stage it reached, and the approval, each naming the agent, the box and a session, with no agent asked; and that the `flow` tab showed each line as it happened.
-- [ ] 8.2 Tell the planner something through the operator agent on mac-studio. Verify `crew events --label wldn --since today` shows the tell with both agents' names and a length, written on mac-studio and gathered with the box's entries in time order, and that the text of the message is in no run-record file.
+- [x] 8.2 Tell the planner something through the operator agent on mac-studio. Verify `crew events --label wldn --since today` shows the tell with both agents' names and a length, written on mac-studio and gathered with the box's entries in time order, and that the text of the message is in no run-record file.

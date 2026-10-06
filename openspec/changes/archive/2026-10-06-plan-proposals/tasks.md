@@ -43,4 +43,4 @@
 
 - [ ] 8.1 Pull on every host and restart wldn's main level, its conductors and the operator agents. Ask wldn's planner to place the units waiting in switchboard-kit's queue. Verify it writes a proposal and not the plan: `crew bolts` is unchanged, `crew plan proposed` lists it, and its page shows each unit's intent with the goal of the bolt it would join or the new bolt's goal.
 - [ ] 8.2 Have the planner propose a unit for a bolt a team holds. Verify that team's conductor is told, that `crew plan approve` is refused naming it until it runs `crew plan agree`, and that after the user says yes the approval is one commit on `wldn/main` holding the plan change and the closed proposal.
-- [ ] 8.3 Ask for a different placement of one proposal. Verify the planner replaces it (`--replaces`), the first is `dropped`, and `crew trace proposal/<n>` shows both, each line naming the planner's session and a time.
+- [x] 8.3 Ask for a different placement of one proposal. Verify the planner replaces it (`--replaces`), the first is `dropped`, and `crew trace proposal/<n>` shows both, each line naming the planner's session and a time.
