@@ -110,10 +110,12 @@ ok "a working agent without --force and verify before every task are refused ent
 
 expect_ok crew fix swb-1 tidy "The banner flickers ZQXS"
 eq "$(field $box fix.start On)" "fix/tenant-environments/tidy bolt/tenant-environments agent/swb-1-unit-2"
+eq "$(field $box fix.start Why)" "fix(tidy): start fix"
 expect_ok crew fix swb-1 tidy --merge
 eq "$(field $box fix.merge On)" "fix/tenant-environments/tidy bolt/tenant-environments agent/swb-1-unit-2"
 eq "$(field $box stage.end On fix/tenant-environments/tidy)" "fix/tenant-environments/tidy agent/swb-1-unit-2"
 eq "$(field $box stage.end Observed fix/tenant-environments/tidy)" "late"
+eq "$(field $box stage.end Why fix/tenant-environments/tidy)" "fix(tidy): fix ended"
 [[ $(record_of $box) != *ZQXS* ]] || fail "a fix's words are in the run record"
 crew unit run b construct >/dev/null; crew unit run c construct >/dev/null
 expect_fail "all 4 of swb-1's slots are in flight" crew unit run e construct

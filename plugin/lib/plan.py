@@ -2127,7 +2127,7 @@ def where_of(fleet, name, plan):
     if slot:
         try:
             held = crew.slot_of(fleet["teams"][of], slot.group(1))
-            out.append(f"fix {held['name'][4:]}" if held["kind"] == "fix" else f"unit {held['name']}")
+            out.append(f"fix {held['name'].rsplit('/', 1)[-1]}" if held["kind"] == "fix" else f"unit {held['name']}")
         except Refusal:
             pass
     return ", ".join(out)
@@ -2508,7 +2508,7 @@ def stage_ends(fleet, a):
             head = subprocess.run(["git", "-C", t["kit"]["main"], "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
                                   capture_output=True, text=True).stdout.strip()
             on = ([rest[1]] if fix and len(rest) > 1 else [f"stage/{name}/{stage}", f"unit/{name}"]) + [f"agent/{t['name']}-{slot}"]
-            why = f"fix({name[4:]}): {stage} ended" if fix else f"unit({name}): {stage} ended"
+            why = f"fix({name.rsplit('/', 1)[-1]}): {stage} ended" if fix else f"unit({name}): {stage} ended"
             record.emit(t["label"], "stage.end", on, why=why,
                         Result=s.get("stage", "unknown"), Tasks=s.get("counts"), Head=head,
                         Observed=None if a.waited and not a.ending else "late")

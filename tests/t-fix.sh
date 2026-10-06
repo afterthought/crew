@@ -10,6 +10,16 @@ CREW_AGENT= crew bolt new tenant-environments "Tenants hold environments." --rep
 CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
 plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
 fb=fix/tenant-environments/edge-sign-in; fp=$kd/places/fix-tenant-environments--edge-sign-in
+# field <act> <field> <object>: a field of the box's last entry of the act naming the object
+field() {
+  as $box python3 -c 'import glob, os, sys; sys.path.insert(0, sys.argv[1]); import record
+es = [e for f in sorted(glob.glob(os.path.expanduser("~/.local/state/crew/wldn/runs/*/*.rec"))) for e in record.parse(open(f).read())
+      if e["Act"] == sys.argv[2] and sys.argv[4] in e["On"]]
+v = es[-1].get(sys.argv[3], "") if es else ""
+print(" ".join(v) if isinstance(v, list) else v)' "$CREW/plugin/lib" "$@"
+}
+refused() { field fix.start Refused "$1"; }
+slots_of() { as $box cat ".local/state/$1-team/slots"; }
 
 expect_fail "swb-2 holds no bolt" crew fix swb-2 edge-sign-in "x"
 expect_fail "a fix is named with lowercase words and dashes" crew fix swb-1 Edge_Sign "x"
@@ -42,15 +52,31 @@ git -C "$k" rev-parse --verify -q "refs/heads/$fb" >/dev/null && fail "the fix's
 eq "$(git -C "$kd/bolts/tenant-environments" show HEAD:sign-in)" "fixed"
 expect_fail "swb-1 has no fix edge-sign-in in flight" crew fix swb-1 edge-sign-in --merge
 ok "a fix merges into the bolt like a unit, and its place and slot go"
+eq "$(field fix.start Why "$fb")" "fix(edge-sign-in): start fix"
+eq "$(field stage.end Why "$fb")" "fix(edge-sign-in): merge ended"
+eq "$(field slot.free On "$fb")" "agent/swb-1-unit-1 $fb"
+ok "the run record names the fix fix/<bolt>/<name>, and its reasons give the fix's own name"
 
-# refused <object>: the Refused field of the box's last fix.start entry naming the object
-refused() {
-  as $box python3 -c 'import glob, os, sys; sys.path.insert(0, sys.argv[1]); import record
-es = [e for f in sorted(glob.glob(os.path.expanduser("~/.local/state/crew/wldn/runs/*/*.rec"))) for e in record.parse(open(f).read())
-      if e["Act"] == "fix.start" and sys.argv[2] in e["On"]]
-print(es[-1].get("Refused", "") if es else "")' "$CREW/plugin/lib" "$1"
-}
-slots_of() { as $box cat ".local/state/$1-team/slots"; }
+# A fix started as fix/<name>, before a fix's branch and place named its bolt, as its slot recorded them.
+old=$kd/places/fix-old-sign-in
+git -C "$k" worktree add -q --track -b fix/old-sign-in "$old" bolt/tenant-environments
+as $box bash -c 'echo "unit-2 fix fix/old-sign-in $1" >> .local/state/swb-1-team/slots' _ "$old"
+echo old > "$old/old"; commit_all "$old" "fix: the old sign-in"
+expect_ok crew fix swb-1 old-sign-in --merge
+has "$out" "swb-1-unit-2 has fix/old-sign-in: merge, in $old"
+grep -q "agent prompt .* 'Merge fix/old-sign-in into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'" "$CREW_TEST_LOG" || fail "no merge prompt for the old fix"
+eq "$(field fix.merge On fix/tenant-environments/old-sign-in)" "fix/tenant-environments/old-sign-in bolt/tenant-environments agent/swb-1-unit-2"
+eq "$(field fix.merge Why fix/tenant-environments/old-sign-in)" "fix(old-sign-in): start merge"
+(cd "$old" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge of the old fix failed"
+expect_ok crew status swb-1
+has "$out" "swb-1-unit-2 is free: fix/old-sign-in has merged into its bolt"
+[[ ! -d $old ]] || fail "the old fix's place is still there"
+git -C "$k" rev-parse --verify -q refs/heads/fix/old-sign-in >/dev/null && fail "the old fix's branch is still there"
+eq "$(git -C "$kd/bolts/tenant-environments" show HEAD:old)" "old"
+eq "$(field stage.end Why fix/tenant-environments/old-sign-in)" "fix(old-sign-in): merge ended"
+eq "$(field slot.free On fix/tenant-environments/old-sign-in)" "agent/swb-1-unit-2 fix/tenant-environments/old-sign-in"
+ok "a fix started as fix/<name> merges from the place its slot recorded, and its place, branch and slot go"
+
 CREW_AGENT= crew bolt new console-pages "The console lists them." --repo switchboard-kit >/dev/null
 CREW_AGENT= crew bolt give swb-2 console-pages >/dev/null 2>&1
 expect_ok crew fix swb-1 bolt-takes-main "Bring main into the bolt."

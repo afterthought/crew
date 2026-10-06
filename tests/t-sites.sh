@@ -13,7 +13,7 @@ crew unit add quiet-unit "No server." --bolt tenant-environments >/dev/null
 crew unit add map-one "Map one." --bolt atlas-maps >/dev/null
 crew bolt give swb-1 >/dev/null 2>&1; crew bolt give atl-1 >/dev/null 2>&1
 place "$k" tenant-environments an-installs-apex-is-its-own-zone >/dev/null; place "$k" tenant-environments quiet-unit >/dev/null
-git -C "$k" worktree add -q --track -b fix/edge-sign-in "$kd/places/fix-edge-sign-in" bolt/tenant-environments
+git -C "$k" worktree add -q --track -b fix/tenant-environments/edge-sign-in "$kd/places/fix-tenant-environments--edge-sign-in" bolt/tenant-environments
 place "$ak" atlas-maps map-one >/dev/null
 printf 'unit-an-installs-apex-is-its-own-zone--switchboard-kit\nbolt-tenant-environments--switchboard-kit\n' > "$(home_of chuck-herdr-alpha)/.portless-routes"
 printf 'unit-map-one--atlas-kit\n' > "$(home_of mac-studio)/.portless-routes"
@@ -26,7 +26,7 @@ box='.partitions[0].hosts[] | select(.host == "chuck-herdr-alpha") | .bolts[0]'
 eq "$(j "$box | .url")" "https://bolt-tenant-environments--switchboard-kit--chuck-herdr-alpha.dev.swancloud.net"
 eq "$(j "$box | .units[] | select(.unit == \"an-installs-apex-is-its-own-zone\") | .url")" "https://unit-an-installs-apex-is-its-own-zone--switchboard-kit--chuck-herdr-alpha.dev.swancloud.net"
 eq "$(j "$box | .units[] | select(.unit == \"quiet-unit\") | \"\(.url) \(.worktree)\"")" "null $kd/places/quiet-unit"
-eq "$(j "$box | .fixes[0] | \"\(.fix) \(.url)\"")" "fix/edge-sign-in null"
+eq "$(j "$box | .fixes[0] | \"\(.fix) \(.url)\"")" "fix/tenant-environments/edge-sign-in null"
 has "$(j '.partitions[0].hosts[] | select(.host == "mac-studio") | .bolts[0].units[0].url')" "https://unit-map-one--atlas-kit.local"
 ok "from mac-studio: the box's servers by their dev.swancloud.net names, mac-studio's by its local name, none where none runs"
 

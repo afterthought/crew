@@ -39,7 +39,7 @@ pa=$(place "$k" tenant-environments approved); change "$pa" approved 0 2; commit
 git -C "$pa" commit -q --allow-empty -m "review(approved): approved" --trailer "Reviewed-by: Test User"
 pr=$(place "$k" tenant-environments reviewing); change "$pr" reviewing 0 2; commit_all "$pr" "docs(reviewing)"
 place "$k" tenant-environments constructing >/dev/null
-git -C "$k" worktree add -q --track -b fix/edge-sign-in "$kd/places/fix-edge-sign-in" bolt/tenant-environments
+git -C "$k" worktree add -q --track -b fix/tenant-environments/edge-sign-in "$kd/places/fix-tenant-environments--edge-sign-in" bolt/tenant-environments
 
 : > "$CREW_TEST_LOG"
 expect_ok crew bolts --json; j=$out
@@ -52,14 +52,14 @@ done
 eq "$(jq -r '.partitions[0].plans[0].bolts[] | select(.bolt == "tenant-environments") | "\(.team) \(.host) \(.state)"' <<<"$j")" "swb-1 chuck-herdr-alpha active"
 eq "$(jq -r '.partitions[0].plans[0].bolts[] | select(.bolt == "apex-zones") | "\(.team) \(.state)"' <<<"$j")" "null planned"
 eq "$(jq -r '[.partitions[0].plans[0].bolts[].units[] | select(.unit == "coding") | .tasks] | first | join("/")' <<<"$j")" "4/9"
-eq "$(jq -r '.partitions[0].plans[0].bolts[0].fixes[0].fix' <<<"$j")" "fix/edge-sign-in"
+eq "$(jq -r '.partitions[0].plans[0].bolts[0].fixes[0].fix' <<<"$j")" "fix/tenant-environments/edge-sign-in"
 eq "$(jq -r '.partitions[0].plans[0].queue[0] | "\(.unit) \(.stage) \(.repo)"' <<<"$j")" "later queued switchboard-kit"
 ok "every stage is read from the kits, a squashed merge reads merged, and each host is read once"
 
 expect_ok crew bolts
 has "$out" "tenant-environments  switchboard-kit  swb-1 @ chuck-herdr-alpha  active"
 has "$out" "  coding                                   code 4/9     places/coding"
-has "$out" "  fix/edge-sign-in                         fix          places/fix-edge-sign-in"
+has "$out" "  fix/tenant-environments/edge-sign-in     fix          places/fix-tenant-environments--edge-sign-in"
 has "$out" $'queue  switchboard-kit\n  later                                    queued       signals/x/01-y'
 expect_ok crew bolts apex-zones; has "$out" "apex-zones  switchboard-kit  no team  planned"; lacks "$out" "tenant-environments"
 ok "the text view, and one bolt alone"
