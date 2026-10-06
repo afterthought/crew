@@ -38,6 +38,7 @@ five times. A write that changes several files is one commit, and it carries the
                                              a finding, as a capture and its signal on the flywheel's branch: an
                                              agent's excerpt checked against its own Claude transcript and graded, the
                                              user's note at a shell its own excerpt
+  crew signal show <id>                      a signal with its capture's provenance and its move, from either home
   crew signal move <id> attach|challenge|new-territory|answered|drop [--target T] [--reason R]
                                              curation's move for a signal, in moves.rec on the flywheel's branch
 
@@ -2161,7 +2162,7 @@ def signal(fleet, a):
     again writes nothing. The user's note at a shell is its own excerpt. One write, one commit."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
     crew.NAME.match(a.slug) or fail(f"a signal's slug is lowercase words with dashes, not {a.slug}")
-    a.slug != "move" or fail("a signal's slug can't be 'move'")
+    a.slug not in ("move", "show") or fail(f"a signal's slug can't be '{a.slug}'")
     name, host = os.environ.get("CREW_AGENT"), crew.this_host()
     now = datetime.datetime.now(datetime.timezone.utc)
     excerpt = a.excerpt
@@ -2274,6 +2275,45 @@ def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan):
                 if v.grade == "unverified" else f"One record of {name}'s session, captured with crew signal.")
     fields += [("event_date", date), ("imported", today), ("status", "read"), ("signals", "1")]
     return "---\n" + "".join(f"{k}: {x}\n" for k, x in fields if x not in (None, "")) + f"---\n\n# {title}\n\n{body}\n"
+
+
+def signal_show(fleet, a):
+    """crew signal show <id>: the signal, its capture's provenance in plain lines (the excerpt's grade among them), and
+    its move in each flywheel that reads it. Reads only the branches, so any host can answer."""
+    label = default_label(fleet, a)
+    labels, errors, hit = [label] if label else list(fleet["partitions"]), {}, None
+    for l in labels:
+        try:
+            h = signal_at(fleet, l, a.signal)
+        except Refusal as e:
+            if label:
+                raise
+            errors[l] = str(e)  # with no partition named, one that can't be read is passed over, and named below
+            continue
+        if h:
+            hit = (l, h)
+            break
+    hit or fail(f"no signal {a.signal} on the branches of " + ", ".join(f"{l}/main" for l in labels)
+                + " or on main of their first blueprints repos" + "".join(f"; {l} could not be read: {e}" for l, e in errors.items()))
+    found_in, (where, repo, tip, text) = hit
+    out = [f"signals/{a.signal}, on {where} of {repo}", "", text.rstrip(), ""]
+    cap = show(repo, tip, capture_of(a.signal))
+    if cap is None:
+        out.append(f"No capture.md beside it in {repo}.")
+    else:
+        out.append(f"Its capture, {capture_of(a.signal)}:")
+        out += [f"  {k}: {x}" for k, x in frontmatter(cap)]
+    # A signal in the state is its flywheel's alone; one in a blueprints repo is read by each flywheel it is first for.
+    readers = [found_in] if where != "main" else [l for l in labels if crew.partition_of(fleet, l)["blueprints"][0] == repo]
+    out.append("")
+    for l in readers:
+        srepo, ref = state_of(fleet, l)
+        stip = fetch(srepo, ref)
+        moves = show(srepo, stip, "moves.rec") if stip else None
+        m = next((m for m in Plan(moves).recs("Move") if m.get("Signal") == a.signal), None) if moves else None
+        out.append(f"No move yet in {l}." if not m else f"Its move in {l}: {m.get('Move')}" + (f" {m.get('Target')}" if m.get("Target") else "")
+                   + f", by {m.get('By')} on {m.get('Date')}" + (f": {m.get('Reason')}" if m.get("Reason") else ""))
+    print("\n".join(out))
 
 
 # ------------------------------------------------------------------------------------- what bash crew asks
@@ -2667,6 +2707,9 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("--target")
     x.add_argument("--reason")
     x.add_argument("--label")
+    x = sub.add_parser("signal-show", prog="crew signal show")
+    x.add_argument("signal", metavar="id")
+    x.add_argument("--label")
     x = sub.add_parser("signal")
     x.add_argument("slug")
     x.add_argument("asserts")
@@ -2715,6 +2758,7 @@ COMMANDS = {
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")), ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
     ("_slots", None): slots_cmd, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("signal-show", None): signal_show,
     ("_ends", None): stage_ends,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop,
@@ -2761,8 +2805,8 @@ def refused(fleet, a, key, e):
 
 def main(argv):
     need_recutils()
-    if argv[:2] == ["signal", "move"]:  # crew signal move <id> <move>, beside crew signal <slug> "<asserts>"
-        argv = ["signal-move"] + argv[2:]
+    if argv[:2] in (["signal", "move"], ["signal", "show"]):  # crew signal move|show <id>, beside crew signal <slug> "<asserts>"
+        argv = [f"signal-{argv[1]}"] + argv[2:]
     args = parser().parse_args(argv)
     fleet = crew.load()
     key = (args.cmd, getattr(args, "sub", None))

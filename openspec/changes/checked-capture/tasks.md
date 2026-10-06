@@ -16,7 +16,7 @@
 ## 3. Looking signals up
 
 - [x] 3.1 One lookup, the flywheel's branch then the first blueprints repo's main, used by `crew signal move` and `crew unit add --signal` (direct and inside a proposal). Verify a move and a route for a signal in each home, and the refusal for an id in neither.
-- [ ] 3.2 `crew signal show <id>`: the signal, its capture's provenance in plain lines, its grade and its move, from any host. Verify from a simulated host that holds no team, for a state signal and for a blueprints signal without the new fields.
+- [x] 3.2 `crew signal show <id>`: the signal, its capture's provenance in plain lines, its grade and its move, from any host. Verify from a simulated host that holds no team, for a state signal and for a blueprints signal without the new fields.
 
 ## 4. What crew sends
 
