@@ -15,7 +15,7 @@ eq "$(herdr_state $box wldn-1 '[.agents[].name] | sort | join(",")')" "swb-1-con
 eq "$(wc -l < "$CREW_TEST_CLAUDE_LOG" | tr -d ' ')" "2"
 eq "$(jq -r .agent "$CREW_TEST_CLAUDE_LOG" | sort | tr '\n' ' ')" "swb-1-conductor swb-1-ops "
 eq "$(jq -r .host "$CREW_TEST_CLAUDE_LOG" | sort -u)" "$box"
-grep -q "agent prompt swb-1-conductor 'Read where your bolt stands with" "$CREW_TEST_LOG" || fail "the conductor was not greeted"
+grep -q "agent prompt swb-1-conductor '\[crew\] Read where your bolt stands with" "$CREW_TEST_LOG" || fail "the conductor was not greeted"
 has "$out" "swb-1-conductor greeted"
 [[ -d $(home_of $box)/.local/state/swb-1-team && ! -d $(home_of mac-studio)/.local/state/swb-1-team ]] || fail "the team's state is not on its host"
 ok "crew up makes one workspace with a conductor tab, no git tab on the box, and starts two agents, on the team's host"

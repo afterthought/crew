@@ -125,7 +125,7 @@ ok "approval is refused when the plan has moved: a bolt given since needs its co
 CREW_AGENT= expect_ok crew plan drop 3 "the console waits"
 eq "$(props -t Proposal -e "Proposal = 3" -P State,Reason)" $'dropped\nthe console waits'
 expect_fail "proposal 3 is dropped: the console waits" crew plan approve 3
-grep -q "agent prompt wldn-planner 'Proposal 3 was dropped by" "$CREW_TEST_LOG" || fail "the planner was not told"
+grep -q "agent prompt wldn-planner '\[crew\] Proposal 3 was dropped by" "$CREW_TEST_LOG" || fail "the planner was not told"
 expect_ok crew plan propose --replaces 4 "$(proposal 'Case: Nothing to move after all; order the queue instead.' 'Do: unit order zone-first --first')"
 has "$out" "proposal 4 is dropped, replaced by proposal 5"
 eq "$(props -t Proposal -e "Proposal = 4" -P State,Reason)" $'dropped\nreplaced by proposal 5'

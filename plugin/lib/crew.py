@@ -14,7 +14,7 @@
                                       a main level's, this host's dispatcher's or operator agent's settings
   crew.py hosts <label>               the hosts where the partition's teams run: name, ssh name, crew there
   crew.py crew-at <host>              the crew command on a host
-  crew.py tell <agent> "<text>"       prompt an agent wherever it runs
+  crew.py tell <agent> "<text>"       prompt an agent wherever it runs, the text marked [crew tell from <sender>]
   crew.py here                        what runs on this host, one per line: team <name>, main <label>,
                                       dispatch <label> and operator <label>
 
@@ -214,11 +214,14 @@ def label_of_agent(fleet, name):
     return None
 
 
-def tell(fleet, name, text, record=True):
-    """Send an agent a prompt wherever it runs. An agent that is not up is reported, not an error. A tell is in the
-    run record of the recipient's partition, with its length and never its text."""
+def tell(fleet, name, text, record=True, sender=None):
+    """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
+    carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
+    transcript, never take it for the user's typing. An agent that is not up is reported, not an error. A tell is in
+    the run record of the recipient's partition, with its length and never its text."""
     host, session = place_of_agent(fleet, name)
-    r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, text])
+    mark = f"[crew tell from {sender}]" if sender else "[crew]"
+    r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, f"{mark} {text}"])
     if r.returncode:
         print(f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
     elif record:
@@ -631,7 +634,8 @@ def main(a):
     elif a[:1] == ["crew-at"] and len(a) == 2:
         print(crew_at(fleet, a[1]))
     elif a[:1] == ["tell"] and len(a) == 3:
-        sys.exit(0 if tell(fleet, a[1], a[2]) else 1)
+        import record as rec  # record imports this module
+        sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who()) else 1)
     elif a[:1] == ["greet"] and len(a) == 2:
         greet(fleet, a[1])
     else:

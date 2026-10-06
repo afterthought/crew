@@ -1,4 +1,5 @@
-# A write to an active bolt by anyone other than its conductor sends that conductor the commit's subject.
+# A write to an active bolt by anyone other than its conductor sends that conductor the commit's subject, marked as
+# crew's own notice; crew tell marks what it carries with its sender.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -18,7 +19,7 @@ prompts() { grep "^chuck-herdr-alpha wldn-1 agent prompt $1-conductor " "$CREW_T
 
 : > "$CREW_TEST_LOG"
 crew unit add the-deploy-names-its-host-tenant "The deploy writes the host tenant." --bolt tenant-environments >/dev/null
-eq "$(prompts swb-1)" "chuck-herdr-alpha wldn-1 agent prompt swb-1-conductor 'plan(tenant-environments): add the-deploy-names-its-host-tenant ($me@mac-studio)'"
+eq "$(prompts swb-1)" "chuck-herdr-alpha wldn-1 agent prompt swb-1-conductor '[crew] plan(tenant-environments): add the-deploy-names-its-host-tenant ($me@mac-studio)'"
 eq "$(prompts swb-2)" ""
 ok "a unit added to swb-1's bolt by someone else sends swb-1's conductor the commit's subject"
 
@@ -41,10 +42,12 @@ ok "a move between two teams' bolts tells both conductors"
 
 : > "$CREW_TEST_LOG"
 CREW_AGENT=wldn-design expect_ok crew tell swb-1-conductor "The tenant's zone is its own."
-grep -q "^chuck-herdr-alpha wldn-1 agent prompt swb-1-conductor 'The tenant'\"'\"'s zone is its own.'" "$CREW_TEST_LOG" || fail "crew tell sent nothing"
+grep -q "^chuck-herdr-alpha wldn-1 agent prompt swb-1-conductor '\[crew tell from wldn-design\] The tenant'\"'\"'s zone is its own.'" "$CREW_TEST_LOG" || fail "crew tell sent nothing"
+expect_ok crew tell swb-1-conductor "Hold the zone work."
+grep -q "^chuck-herdr-alpha wldn-1 agent prompt swb-1-conductor '\[crew tell from $me@mac-studio\] Hold the zone work.'" "$CREW_TEST_LOG" || fail "the user's tell is not marked with the user"
 expect_fail "could not tell wldn-design on chuck-herdr-alpha" crew tell wldn-design "anyone there?"
 expect_fail "no agent somebody: crew starts none by that name" crew tell somebody "hello"
-ok "crew tell reaches an agent by name on its host, and says when it is not up"
+ok "crew tell reaches an agent by name on its host, marked with who sent it, and says when it is not up"
 
 # The partition's dispatchers hear of a bolt added, and of one landed or dropped that frees a team.
 p=$(as chuck-herdr-alpha herdr --session wldn-3 workspace create --cwd / --label "wldn dispatch" | jq -r .result.root_pane.pane_id)
@@ -53,7 +56,7 @@ told() { grep "^chuck-herdr-alpha wldn-3 agent prompt wldn-dispatch-chuck-herdr-
 
 : > "$CREW_TEST_LOG"
 crew bolt new edge-signins "Sign-ins at the edge." --repo switchboard-kit >/dev/null
-eq "$(told)" "chuck-herdr-alpha wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha 'plan(edge-signins): add the bolt ($me@mac-studio). Give a free team its next bolt.'"
+eq "$(told)" "chuck-herdr-alpha wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha '[crew] plan(edge-signins): add the bolt ($me@mac-studio). Give a free team its next bolt.'"
 grep -q "agent prompt wldn-dispatch-mac-studio" "$CREW_TEST_LOG" && fail "a dispatcher that is not up was told"
 ok "a bolt added tells the dispatchers that are up"
 
