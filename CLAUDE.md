@@ -15,5 +15,5 @@ On every host, the `crew` command and the plugin every Claude session loads run 
 ## Proving and landing a bolt
 
 - **Before landing:** the full suite on the bolt's head, with "0 failed". That is the bolt's proof; there is nothing to deploy.
-- **After landing:** a change's *Proof on real work* section needs the live system, so it is worked once the bolt has landed and every host has pulled: mac-studio's checkout at once, the box's with `git -C /workspace/crew/main pull --ff-only`. Pull every host in the same step: a crew behind the others can refuse what a newer one writes.
+- **After landing:** a change's *Proof on real work* section needs the live system, so it is worked once the bolt has landed and every host has pulled: mac-studio's checkout at once, the box's with `git -C /workspace/crew/main fetch` and then `merge --ff-only origin/main` (its `main` tracks no upstream). Pull every host in the same step: a crew behind the others can refuse what a newer one writes.
 - A standing agent loads its brief when it starts. A landing that changes a brief takes effect for each agent at its next fresh start, or by telling it what changed.
