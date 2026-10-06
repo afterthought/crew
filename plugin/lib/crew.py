@@ -418,6 +418,7 @@ def team_tokens(fleet, t, role, self_name):
     slots = [f"`{n}-unit-{i}`" for i in range(1, t["units"] + 1)]
     tok = {
         "SELF": self_name or {"conductor": f"{n}-conductor", "ops": f"{n}-ops"}.get(role, f"{n}-unit-<n>"),
+        "OPERATORS": ", ".join(f"`{label}-operator-{h}`" for h, v in sorted(fleet["hosts"].items()) if label in v.get("sessions", {})) or "none",
         "TEAM": n, "SYSTEM": t["system"], "LABEL": label, "KIT": kit["main"], "KIT_NAME": kit["name"], "KIT_DIR": kit["dir"],
         "BLUEPRINTS": bp["main"], "BLUEPRINTS_NAME": bp["name"], "BLUEPRINTS_REPO": bp["repo"], "SIGNALS_REPO": p["blueprints"][0], "STATE_REPO": p["state"],
         "CONDUCTOR": f"{n}-conductor", "OPS": f"{n}-ops", "UNITS": str(t["units"]), "SLOTS": ", ".join(slots),
