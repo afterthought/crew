@@ -25,7 +25,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | bring back the conductor or ops after it died, conversation intact | `crew resume <team> [conductor\|ops]` |
 | clear the conductor or ops and restore its name | `crew clear <team> conductor\|ops` |
 | end a team's sessions | `crew down <team>` |
-| free a slot still holding a unit the plan no longer has | `crew unit free <unit> [--team <team>]` |
+| free a slot still holding a unit no longer in the team's bolt | `crew unit free <unit> [--team <team>]` |
 | bring up, check or end a partition's main level and dispatchers | `crew main up\|status\|down <label>` |
 | start the operator agent in this host's operator session | `crew operator up <label>` |
 | after a restart, bring back every standing agent of this host whose pane came back empty | `crew revive` |

@@ -6,11 +6,12 @@
 #   crew list                          the teams that are defined
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
 #                                      slot with the unit or fix it holds and its stage. It first frees each slot
-#                                      whose work has merged or been dropped, once its agent is not working, and
-#                                      removes the worktrees in the team's kit checkout whose work is over, naming
-#                                      one kept for uncommitted changes
+#                                      whose work has merged, been dropped or left the team's bolt, once its agent
+#                                      is not working, and removes the worktrees in the team's kit checkout whose
+#                                      work is over, naming one kept for uncommitted changes
 #   crew up      <team>                open the team's workspace and start its conductor and ops
-#   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh
+#   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh,
+#                                      keeping only the slots of work still in flight on its bolt
 #   crew close   <team>                end everything the team has and close its panes; nothing is started
 #   crew restart <team> [role...] [--no-greet]
 #                                      end the conductor's or ops' session and start a fresh one in the same pane
@@ -18,9 +19,10 @@
 #   crew clear   <team> <role>         /clear the conductor or ops and give it its name back
 #   crew down    <team>                end every session the team has; the panes stay
 #   crew unit free <unit> [--team <team>]
-#                                      free a slot still holding a unit the plan no longer has now, rather than at
-#                                      the read after its agent settles: end its agent, and remove the worktrees
-#                                      whose work is over; refused while its worktree has uncommitted changes
+#                                      free a slot still holding a unit no longer in the team's bolt now, rather
+#                                      than at the read after its agent settles: end its agent, and remove the
+#                                      worktrees whose work is over; refused while its worktree has uncommitted
+#                                      changes
 #   crew unit run <unit> construct|code|verify|merge ["<words>"]
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
 #                                      construct writes its OpenSpec change, code builds it once the user has
@@ -341,22 +343,29 @@ own_place() {  # own_place <place> <branch>: the fix's place is on its own branc
   return 1
 }
 reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
-  # bolt or been dropped from the plan, once its agent is not working; then remove the worktrees whose work is over
+  # bolt, been dropped from the plan or left the team's bolt, once its agent is not working; then remove the
+  # worktrees whose work is over
   local slot kind name stage rest
   if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" >/dev/null 2>&1 || true; fi
   while read -r slot kind name stage rest; do
-    case $stage in merged | landed | dropped) ;; *) continue ;; esac
+    case $stage in merged | landed | dropped | left) ;; *) continue ;; esac
     if [[ $(agent_status "$(pane_of "$slot")") == working ]]; then
-      [[ $stage == dropped ]] && echo "$(name_of "$slot") still holds $name, dropped from the plan: its agent is working; it is freed once that settles"
+      case $stage in
+        dropped) echo "$(name_of "$slot") still holds $name, dropped from the plan: its agent is working; it is freed once that settles" ;;
+        left) echo "$(name_of "$slot") still holds $name, which has left $TEAM's bolt: its agent is working; it is freed once that settles" ;;
+      esac
       continue
     fi
     free "$slot" || continue
-    if [[ $stage == dropped ]]; then echo "$(name_of "$slot") is free: $name was dropped from the plan"
-    else echo "$(name_of "$slot") is free: $name has merged into its bolt"; fi
+    case $stage in
+      dropped) echo "$(name_of "$slot") is free: $name was dropped from the plan" ;;
+      left) echo "$(name_of "$slot") is free: $name has left $TEAM's bolt" ;;
+      *) echo "$(name_of "$slot") is free: $name has merged into its bolt" ;;
+    esac
   done < <(plan _slots "$TEAM" 2>/dev/null || true)
   plan _tidy "$TEAM" || true
 }
-unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit the plan no longer has
+unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit no longer in the team's bolt
   local unit=${1:?usage: crew unit free <unit> [--team <team>]} team= t slot path out rc=0
   [[ ${2:-} == --team ]] && team=${3:?usage: crew unit free <unit> [--team <team>]}
   if [[ -z $team ]]; then  # the team of this host whose slot holds it
@@ -367,7 +376,7 @@ unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit t
   fi
   load_team "$team"; forward; ensure_state
   slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
-  out=$(plan _in-plan "$unit" --label "$LABEL" 2>&1) || rc=$?
+  out=$(plan _in-bolt "$unit" "$TEAM" 2>&1) || rc=$?
   [[ $rc == 0 ]] && { echo "$out: drop it with crew unit drop, which frees its slot" >&2; exit 1; }
   [[ $rc == 3 ]] || { echo "$out" >&2; exit 1; }
   path=$(awk -v s="$slot" '$1 == s {print $4}' "$held")
@@ -468,8 +477,8 @@ case $cmd in
   close)
     load_team "${2:-}"; forward; ensure_state; force=1; teardown; mark_down
     record_agents team.close "team($TEAM): close" ${ended[@]+"${ended[@]}"}; echo "$TEAM is closed" ;;
-  rebuild)
-    load_team "${2:-}"; forward; ensure_state; force=1; teardown
+  rebuild)  # a slot whose work is over, its agent ended with the rest, is freed rather than kept
+    load_team "${2:-}"; forward; ensure_state; force=1; teardown; reap
     mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; started+=("$role"); done
     record_agents team.rebuild "team($TEAM): rebuild" "${started[@]}"; greet_conductor ;;
   restart)

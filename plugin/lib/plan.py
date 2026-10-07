@@ -2346,17 +2346,19 @@ def team_of_unit(fleet, a):
     print(sh(TEAM=team))
 
 
-def in_plan(fleet, a):
-    """Whether a partition's plan has a unit (every partition's, without --label): said and exit 0 when one does, exit
-    3 when none does, and refused when a plan could not be read, since then nobody can tell."""
+def in_bolt(fleet, a):
+    """Whether a unit is in a bolt the team holds: said and exit 0 when it is, exit 3 when it is not, and refused when
+    the team's plan could not be read, since then nobody can tell."""
+    t = crew.team_of(fleet, a.team)
     errors = {}
-    labels = [a.label] if a.label else list(fleet["partitions"])
-    hits = [h for h in plans(fleet, labels, errors) if h[3] and h[3].unit(a.unit)]
-    if hits:
-        print(f"unit {a.unit} is in {hits[0][0]}/main of {hits[0][1]}")
-        return
-    not errors or fail(f"can't tell whether unit {a.unit} is still planned: "
+    found = plans(fleet, [t["label"]], errors)
+    not errors or fail(f"can't tell whether unit {a.unit} is still in {t['name']}'s bolt: "
                        + "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()))
+    plan = found[0][3]
+    u = plan.unit(a.unit) if plan else None
+    if u and u.get("Bolt") in {b.name() for b in held_by(plan, t["name"])}:
+        print(f"unit {a.unit} is in bolt {u.get('Bolt')}, which {t['name']} holds")
+        return
     sys.exit(3)
 
 
@@ -2458,7 +2460,8 @@ def plan_of(fleet, label):
 def slot_stages(fleet, t):
     """Each slot of the team on this host that holds a unit or fix: what it holds and that work's stage, read from the
     kit and the plan, with its tasks done and total where its change has a task list. Work that has neither landed nor
-    merged is dropped when the plan was read and has no such unit, or no bolt the fix's branch tracks."""
+    merged is dropped when the plan was read and has no such unit, or no bolt the fix's branch tracks; a unit the plan
+    has outside every bolt the team holds, queued again or moved to another bolt, has left."""
     path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
     held = [l.split() for l in (path.read_text().splitlines() if path.exists() else []) if l.strip()]
     if not held:
@@ -2467,6 +2470,7 @@ def slot_stages(fleet, t):
     kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
     plan = plan_of(fleet, t["label"])
     marks = {u.name(): u.get("Amended") for u in plan.units() if u.get("Amended")} if plan else {}
+    bolts = {b.name() for b in held_by(plan, t["name"])} if plan else set()
     out = []
     for slot, kind, name, place in held:
         stage, counts = "unknown", None
@@ -2481,6 +2485,8 @@ def slot_stages(fleet, t):
                 stage = "merged"
             elif plan and not plan.unit(name):
                 stage = "dropped"
+            elif plan and plan.unit(name).get("Bolt") not in bolts:
+                stage = "left"
             elif pl:
                 stage = place_stage(pl, marks.get(name))
                 counts = "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None
@@ -2819,9 +2825,9 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("team")
     x = sub.add_parser("_tidy")
     x.add_argument("team")
-    x = sub.add_parser("_in-plan")
+    x = sub.add_parser("_in-bolt")
     x.add_argument("unit")
-    x.add_argument("--label")
+    x.add_argument("team")
     x = sub.add_parser("_ends")
     x.add_argument("team")
     x.add_argument("--slot")
@@ -2838,7 +2844,7 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")), ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
