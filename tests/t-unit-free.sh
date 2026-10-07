@@ -24,6 +24,7 @@ ok "drop frees the unit's slot and removes its worktree and branch"
 slot=$(held pin-biome)
 as $box herdr --session wldn-1 stub status "$(pane_of_slot "$slot")" working
 CREW_AGENT= expect_ok crew unit drop pin-biome "a duplicate of follows-the-shell"
+has "$out" "swb-1-$slot still holds pin-biome, dropped from the plan: its agent is working; it is freed once that settles"
 eq "$(held pin-biome)" "$slot"; [[ -d $kd/places/pin-biome ]] || fail "pin-biome's worktree went with its agent still working"
 ok "a unit dropped while its stage works keeps its slot, worktree and branch"
 

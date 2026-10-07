@@ -50,6 +50,8 @@ change "$k" the-deploy-names-its-host-tenant 3 3; commit_all "$k" "feat: the dep
 git -C "$kd/bolts/tenant-environments" merge -q --ff-only main
 expect_ok crew bolt land tenant-environments
 has "$out" "plan(tenant-environments): land the bolt"
+has "$out" "tenant-environments has landed and swb-1 holds no bolt"
+has "$out" "$kd/bolts/tenant-environments and bolt/tenant-environments are removed; the branch was at"
 [[ ! -d $kd/bolts/tenant-environments ]] || fail "the bolt's worktree is still there"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(plan -t Unit -c)" "0"; eq "$(plan -t Bolt -P Bolt)" $'apex-zones\nboard-builds\nconsole-pages'
@@ -111,3 +113,13 @@ expect_ok crew status swb-2
 has "$out" "$kd/bolts/lint-twice and bolt/lint-twice are removed; the branch was at"
 [[ ! -d $kd/bolts/lint-twice ]] || fail "the bolt's worktree is still there after the team's read"
 ok "a drop whose team's host doesn't answer still changes the plan, and the team's next read removes the worktree"
+
+# A landing whose bolt's worktree has uncommitted changes still lands, and says the worktree is kept.
+echo changed >> "$kd/bolts/apex-zones/README.md"
+expect_ok crew bolt land apex-zones
+has "$out" "apex-zones has landed and swb-1 holds no bolt"
+has "$out" "$kd/bolts/apex-zones is kept, and bolt/apex-zones with it: bolt apex-zones is in no plan, and it has uncommitted changes, which are the user's to keep or discard"
+eq "$(plan -t Bolt -e "Bolt = 'apex-zones'" -c)" "0"
+[[ -d $kd/bolts/apex-zones ]] || fail "a worktree with uncommitted changes was removed"
+git -C "$k" rev-parse --verify -q bolt/apex-zones >/dev/null || fail "bolt/apex-zones went without its worktree"
+ok "a bolt whose worktree has uncommitted changes lands, and its worktree and branch are kept and named"

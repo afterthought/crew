@@ -554,11 +554,9 @@ case $cmd in
       run_stage "$slot" fix "Fix: $words" fix.start "$fix" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
       echo "$(name_of "$slot") has $fix: code, in $path"
     fi ;;
-  _free)  # crew _free <team> <unit|fix/name> [--remove]: free the slot holding it, and with --remove remove the
-    # worktrees whose work is over (crew unit drop asks for both)
+  _free)  # crew _free <team> <unit|fix/name>: free the slot holding it (a unit moved to another team's bolt leaves it)
     load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}")
-    if [[ -n $slot ]]; then free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi
-    if [[ ${4:-} == --remove ]]; then plan _tidy "$TEAM" || true; fi ;;
+    if [[ -n $slot ]]; then free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi ;;
   _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
     # is over (a plan write that ends work asks for it on the team's host)
     load_team "${2:-}"; forward; ensure_state; reap ;;

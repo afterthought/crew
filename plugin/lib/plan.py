@@ -879,16 +879,6 @@ echo "$(git rev-list --count origin/main..main) $(git rev-list --count main..ori
 """
 
 
-def free_slot(fleet, t, unit, remove=False):
-    """End the agent in the slot a unit or fix holds and free the slot, on the team's host; with remove, a dropped
-    unit's worktree, unless it has uncommitted changes, and its branch go too."""
-    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_free", t["name"], unit, *(["--remove"] if remove else [])))
-    if r.returncode:
-        print(f"{unit}'s slot on {t['name']} was not freed: " + (r.stderr.strip() or f"exit {r.returncode}"), file=sys.stderr)
-    elif r.stdout.strip():
-        print(r.stdout.strip())
-
-
 def tidy_after(fleet, t, what):
     """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
     has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did. A
@@ -962,15 +952,6 @@ def bolt_give(fleet, a):
     crew.greet(fleet, t["name"], first=f"Your team now holds the bolt {b}. ", wait=90 if "conductor" in up else 0)
 
 
-DROP_BOLT = r"""main=$1 path=$2 bolt=$3
-cd "$main" || exit 1
-if [ -d "$path" ]; then git worktree remove "$path" || exit 1; fi
-if git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null; then
-  git branch -d "bolt/$bolt" >/dev/null 2>&1 || echo "bolt/$bolt is kept: it holds commits main does not"
-fi
-"""
-
-
 def bolt_land(fleet, a):
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
@@ -998,8 +979,8 @@ def bolt_land(fleet, a):
         w.plan.remove(w.plan.bolt(a.bolt))
         return [a.bolt]
     write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"])
-    said = host_run(fleet, t["machine"], DROP_BOLT, t["kit"]["main"], f"{t['kit']['dir']}/bolts/{a.bolt}", a.bolt)
-    print(f"{a.bolt} has landed: its worktree is removed and {t['name']} holds no bolt" + (f". {said}" if said else ""))
+    print(f"{a.bolt} has landed and {t['name']} holds no bolt")
+    tidy_after(fleet, t, f"bolt {a.bolt}")
 
 
 # ---------------------------------------------------------------------------------------------------- units
@@ -1470,7 +1451,7 @@ def op_unit_drop(ctx, a):
 
     def after(repo, sha):
         if team:
-            free_slot(ctx.fleet, team, a.unit, remove=True)
+            tidy_after(ctx.fleet, team, f"unit {a.unit}")
         elif s["worktree"]:
             print(f"its worktree stays at {s['worktree']}, on unit/{a.unit}")
     return Op(label, change, f"plan({bolt or 'queue'}): drop {a.unit}", "unit.drop", on=[f"unit/{a.unit}", group_of(u0)],
