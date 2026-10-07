@@ -45,6 +45,8 @@
 #   crew unit  add|split|amend|order|after|move|drop|approve ...
 #   crew plan  propose|proposed|agree|approve|drop ...
 #                                      the planner's proposals: a change to the plan, applied once the user approves it
+#   crew rail  [--label L]             what waits on the user: proposals, reviews, verify reports and bolts to land,
+#                                      each with when it began to wait and the command that answers it
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
@@ -56,7 +58,8 @@
 # Each partition's main level, and the operator agent in each operator session:
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
 #                                      main level's session, and a dispatcher on each host the partition's teams run on
-#   crew operator up <label>           the operator agent in this host's operator session <label>
+#   crew operator up <label>           the operator agent in this host's operator session <label>, with a flow tab
+#                                      following the run record and a rail tab: crew rail above, a shell below
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
 #                                      agent in it, picked up from its last conversation; a team or main level taken
@@ -255,6 +258,17 @@ ensure_flow() {  # the operator workspace's "flow" tab, following the partition'
   local p; p=$(pane_of flow); pane_live "$p" && return 0
   tab operator flow "$CWD" flow
   h pane run "$(pane_of flow)" "bash $(printf '%q' "$here/crew") events --follow --label $LABEL" >/dev/null
+}
+ensure_rail() {  # the operator workspace's "rail" tab, opened once: what waits on the user above, kept current by
+  # crew _rail, and a shell below with this crew on its path, to paste a row's command into
+  local p s; p=$(pane_of rail)
+  if ! pane_live "$p"; then
+    tab operator rail "$CWD" rail; p=$(pane_of rail)
+    h pane run "$p" "bash $(printf '%q' "$here/crew") _rail $LABEL" >/dev/null
+  fi
+  s=$(pane_of rail-shell); pane_live "$s" && return 0
+  s=$(split "$p" down "$CWD"); put "$panes" rail-shell "$s"
+  h pane run "$s" "export PATH=$(printf '%q' "$here"):\$PATH" >/dev/null
 }
 
 teardown() {  # end every session and give the panes back; the slots still say what is in flight
@@ -615,6 +629,19 @@ case $cmd in
     ensure_single operator operator
     if [[ -n $(agent_status "$(pane_of operator)") ]]; then echo "$(name_of operator) is already up"
     else start operator; record_agents operator.up "operator($LABEL): up $(name_of operator)" operator; fi
-    ensure_flow ;;
+    ensure_flow; ensure_rail ;;
+  _rail)  # crew _rail <label>: the rail tab's list, printed again every 30 seconds and as soon as the run record gains
+    # an entry; a burst of entries refreshes it once. Once the follow ends, it refreshes on the clock alone.
+    label=${2:?usage: crew _rail <label>}
+    exec 3< <(bash "$0" events --follow --label "$label" 2>/dev/null)
+    while :; do
+      out=$(bash "$0" rail --label "$label" 2>&1 || true)
+      printf '\033[H\033[2J%s\n' "$out"
+      if read -r -t 30 -u 3 _; then
+        while read -r -t 2 -u 3 _; do :; done
+      elif (( $? <= 128 )); then
+        sleep 30
+      fi
+    done ;;
   *) usage; exit 2 ;;
 esac

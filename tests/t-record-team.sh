@@ -1,7 +1,8 @@
 # Team, main-level and operator commands record what they do to agents, on the host where they run, naming who asked
 # from wherever they asked; tells record their length, never their text. A stage's start is an entry, and its end is
 # one too: when crew unit wait sees it settle, or late, once, when the next command reads the team. Refusals that
-# would have moved work are entries. The operator workspace follows the run record in a flow tab.
+# would have moved work are entries. The operator workspace follows the run record in a flow tab, and keeps what waits
+# on the user in a rail tab, with a shell below it.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -24,10 +25,18 @@ eq "$(field mac-studio operator.up On)" "agent/wldn-operator-mac-studio"
 eq "$(field mac-studio operator.up By)" "$user@mac-studio"
 eq "$(herdr_state mac-studio wldn '[.tabs[] | select(.label == "flow")] | length')" "1"
 grep -q "^mac-studio wldn pane run .* events --follow --label wldn" "$CREW_TEST_LOG" || fail "the flow tab does not follow wldn's run record"
+eq "$(herdr_state mac-studio wldn '[.tabs[] | select(.label == "rail")] | length')" "1"
+rail=$(herdr_state mac-studio wldn '.tabs | to_entries[] | select(.value.label == "rail") | .key')
+eq "$(herdr_state mac-studio wldn "[.panes[] | select(.tab == \"$rail\")] | length")" "2"
+grep -q "^mac-studio wldn pane run .*/crew _rail wldn'" "$CREW_TEST_LOG" || fail "the rail tab does not run wldn's rail"
+grep -qF "export PATH=$CREW/plugin/bin:\$PATH" "$CREW_TEST_LOG" || fail "the rail tab's shell does not have crew on its path"
+: > "$CREW_TEST_LOG"
 expect_ok crew operator up wldn
 eq "$(herdr_state mac-studio wldn '[.tabs[] | select(.label == "flow")] | length')" "1"
+eq "$(herdr_state mac-studio wldn '[.tabs[] | select(.label == "rail")] | length')" "1"
+grep -q "pane run\|pane split\|tab create" "$CREW_TEST_LOG" && fail "a second operator up opened or ran something"
 eq "$(count mac-studio operator.up)" "1"
-ok "operator up records the agent it starts and opens one flow tab following the run record; a second run does neither"
+ok "operator up records the agent it starts and opens one flow tab following the run record and one rail tab, the list above a shell; a second run does none of it"
 
 op=$(herdr_state mac-studio wldn '.agents | to_entries[] | select(.value.name == "wldn-operator-mac-studio") | .key')
 CREW_AGENT=wldn-operator-mac-studio crew up swb-1 >/dev/null 2>&1
