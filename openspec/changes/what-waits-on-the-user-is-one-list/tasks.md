@@ -10,7 +10,7 @@
 - [x] 2.2 A proposal's row is timed by its `plan.propose` entry in the run record, or by its `Opened` date when none is found (design.md, Task notes 2.2).
 - [x] 2.3 `crew plan proposed <n> --open` opens the proposal in plannotator from any host, and a proposal's row carries it (design.md, Task notes 2.3).
 - [x] 2.4 A review or verify row's open command is `plannotator-tui herdr open` on the team's own host, and `ssh -t <host> plannotator-tui` from any other (design.md, Task notes 2.4).
-- [ ] 2.5 `tests/t-rail.sh` holds every group, the order, the times, the commands on each host, opening a proposal, the row leaving once answered, the read writing nothing, and an unreachable host (design.md, Task notes 2.5). Verify `devenv shell -- tests/run t-rail` ends with "0 failed".
+- [x] 2.5 `tests/t-rail.sh` holds every group, the order, the times, the commands on each host, opening a proposal, the row leaving once answered, the read writing nothing, and an unreachable host (design.md, Task notes 2.5). Verify `devenv shell -- tests/run t-rail` ends with "0 failed".
 
 ## 3. The rail tab, the brief and the docs
 
