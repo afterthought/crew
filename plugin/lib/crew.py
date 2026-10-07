@@ -423,6 +423,31 @@ def signal_how(cmd, label, state):
             f"`signals/` on `{label}/main` of {state}.")
 
 
+# How an agent keeps one Pending You card for each rail row it owns, the same in the planner's brief and the conductor's.
+def cards_how(cmd, label, kits):
+    return ("When your session has Pending You's tools, every decision of yours the rail lists gets one card, and only those. "
+            "A question you ask in your pane gets no card. Take the row's card key from the `card:` line under its row in "
+            f"`{cmd} rail --label {label}`, and post the card with that key as its `idempotencyKey`. That way a retry never "
+            "makes a second card, and the rail knows the card is the row's. At your start, call `whoami` with your crew name "
+            "and one line on your role. Then call `list_pending` with that name, and act on any card the user has answered. "
+            "Post a card for any row of yours that has none open. Ask every card in your crew name, with this host as the "
+            "session's machine and your worktree as its folder. File it in the area of its kit, found with `match_area` from "
+            "the kit's git remote. When there is none, create it with `create_area`, named for the kit, in the group "
+            f"`{label}`, with the key `create-area:<owner>/<kit>`. Never make a group: if `{label}` isn't one of the user's "
+            "groups, the area is left ungrouped, and you say so once. Title it with what you ask and its bolt. Put what the "
+            "user would read on it, and give it the row's answers as its options, with `blocking` false. You hear an answer "
+            "by being woken in your pane. Never run `npx pendingyou` or `pendingyou hold`: the `pendingyou` on the path is the "
+            "fleet's, and the wake needs neither. Act on the user's answer as if they had said it in your pane, then close the "
+            "card with `ack_answer` and a one-line outcome. When crew tells you, or prints, to close the card for a row, close "
+            "it with `cancel_request` and the reason, or with `ack_answer` when you acted on its answer. Only your own cards "
+            f"are yours: leave every other card alone. The kits: {kits}.")
+
+
+def kits_named(kits):
+    """Kits as the card discipline names them, <name>: <owner>/<repo>."""
+    return "; ".join(f"{k['name']}: {k['repo']}" for k in sorted(kits, key=lambda k: k["name"])) or "none yet"
+
+
 # Who is speaking in an agent's pane, beside every brief's roster.
 SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sent with crew tell by that agent, or by "
            "the user when the name is `<user>@<host>`; one that begins `[crew]` is crew's own; anything else typed there "
@@ -442,6 +467,7 @@ def team_tokens(fleet, t, role, self_name):
         "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
         "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
         "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
+        "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named([kit])),
         "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
     }
     tok["ROSTER"] = (
@@ -470,6 +496,7 @@ def main_tokens(fleet, p, role, self_name):
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
         "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
+        "CARDS": cards_how(cmd, label, kits_named({t["kit"]["repo"]: t["kit"] for t in teams}.values())),
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",

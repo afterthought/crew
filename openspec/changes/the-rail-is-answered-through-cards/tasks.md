@@ -19,7 +19,7 @@
 
 ## 4. The briefs and the docs
 
-- [ ] 4.1 The planner's and the conductor's briefs share one card discipline, filled from the teams file (design.md, Task notes 4.1).
+- [x] 4.1 The planner's and the conductor's briefs share one card discipline, filled from the teams file (design.md, Task notes 4.1).
 - [ ] 4.2 The planner's brief has it post, act on and close a card for each proposal it opens (design.md, Task notes 4.2).
 - [ ] 4.3 The conductor's brief has it post, act on and close the review, verify and landing cards, and tell the operator agents only of waits with no card (design.md, Task notes 4.3).
 - [ ] 4.4 Main-level ops takes the word to land through the conductor's landing card (design.md, Task notes 4.4). Verify `devenv shell -- tests/run t-briefs t-roles` ends with "0 failed".
