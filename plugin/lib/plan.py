@@ -2717,16 +2717,36 @@ def age(at, now):
     return f"{d}d {h:02d}h"
 
 
+def proposed_at(fleet, props):
+    """When each open proposal was proposed, {(label, proposal/<n>): time}: the earliest plan.propose entry naming it in
+    its partition's run record, read from the day before the oldest Opened, since Opened is the writing host's date and
+    the record's files are named by the UTC day. A proposal whose entry isn't found is left out."""
+    out = {}
+    for l in sorted({d["label"] for d in props}):
+        oldest = min(d["opened"] for d in props if d["label"] == l)
+        entries, _ = record.gather(fleet, [l], (datetime.date.fromisoformat(oldest) - datetime.timedelta(days=1)).isoformat())
+        for e in entries:
+            if e.get("Act") == "plan.propose" and not e.get("Refused"):
+                for o in e["On"]:
+                    if o.startswith("proposal/"):
+                        out.setdefault((l, o), utc(e["At"]))
+    return out
+
+
 def rail_rows(fleet, found, sv):
-    """What waits on the user in the plans read, from the proposals and the kits as surveyed: each row's group, the
-    time it began to wait (shown as a date alone when that is all that is known), what it is, and its commands."""
+    """What waits on the user in the plans read, from the proposals, the run record and the kits as surveyed: each
+    row's group, the time it began to wait (shown as a date alone when that is all that is known), what it is, and its
+    commands."""
     rows = []
-    for d in open_proposals(fleet, [l for l, _, _, p in found if p], found):
+    props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
+    times = proposed_at(fleet, props) if props else {}
+    for d in props:
         l, n = d["label"], d["proposal"]
         what = [f"proposal {n} ({l}), by {d['by']}: {d['case'].splitlines()[0][:70]}"]
         if d["waiting"]:
             what.append("still needs the agreement of " + ", ".join(f"{t}-conductor" for t in d["waiting"]))
-        rows.append(dict(group="proposals", at=utc(f"{d['opened']}T00:00:00Z"), date=d["opened"], what=what,
+        at = times.get((l, f"proposal/{n}"))
+        rows.append(dict(group="proposals", at=at or utc(f"{d['opened']}T00:00:00Z"), date=None if at else d["opened"], what=what,
                          cmds=[("read", f"crew plan proposed {n} --label {l}"), ("answer", f"crew plan approve {n} --label {l}")]))
     for l, _, _, plan in found:
         if not plan:
@@ -2762,8 +2782,8 @@ def rail_rows(fleet, found, sv):
 
 def rail_view(fleet, a):
     """crew rail [--label L]: what waits on the user, in four groups in order, each row with when it began to wait, how
-    long ago that was and the commands that answer it, oldest first. Read from the plans, the proposals and the kits;
-    nothing is written."""
+    long ago that was and the commands that answer it, oldest first. Read from the plans, the proposals, the kits and
+    the run record; nothing is written."""
     label = default_label(fleet, a)
     labels = [label] if label else list(fleet["partitions"])
     errors = {}
