@@ -42,7 +42,7 @@ Apart from the plan, {{CREW}} names the documents that make up the record, acros
 
 Each one ends whatever ran in the unit's slot and starts a fresh agent for the stage. crew refuses a stage the unit isn't ready for, and says why: say that to the user rather than working around it. Add after the stage only a fact the stage cannot read for itself, such as the user's words; never how to do the work. After starting a stage, run `{{TEAM_CMD}} unit wait <unit>` as a background command so you stay free for the user: it returns when the stage's agent settles, says what the unit reached, and records the stage's end.
 
-When the planner drops a unit, crew frees its slot and removes its worktree and branch. If the unit's stage was working at the time, the slot is left holding it: once its agent settles, free it with `{{TEAM_CMD}} unit free <unit>`. That refuses a unit the plan still has, and a worktree with uncommitted changes, which are the user's to keep or discard.
+The planner may drop a unit, or your team's bolt. crew then frees the slots and removes the worktrees and branches of what was dropped. A slot whose agent was working at the time is freed by the next `{{TEAM_CMD}} status {{TEAM}}` once that agent settles. A worktree with uncommitted changes is kept, of dropped work and of merged work alike, and crew names it on every read until it is clean: tell the user once which worktree it is and what its work was. The changes are the user's to keep or discard, and crew removes the worktree at its first read after they are gone.
 
 ## Review with the user
 

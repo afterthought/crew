@@ -13,4 +13,4 @@
 
 ## 3. Briefs and docs
 
-- [ ] 3.1 The conductor's, main-level ops' and planner's briefs, `README.md` and the usage text say when worktrees go, what keeps one, and that requeue refuses a unit with a worktree (design.md, Task notes 3.1). Verify `devenv shell -- tests/run` ends with "0 failed".
+- [x] 3.1 The conductor's, main-level ops' and planner's briefs, `README.md` and the usage text say when worktrees go, what keeps one, and that requeue refuses a unit with a worktree (design.md, Task notes 3.1). Verify `devenv shell -- tests/run` ends with "0 failed".

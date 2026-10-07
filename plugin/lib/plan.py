@@ -18,7 +18,11 @@ five times. A write that changes several files is one commit, and it carries the
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
   crew bolt drop <bolt> "<reason>" [--requeue]
-  crew bolt land <bolt>                      once every unit has landed on main
+                                             the bolt and its units out of the plan, or with --requeue its units
+                                             queued, refused while one has a worktree; its worktrees then go from its
+                                             team's host
+  crew bolt land <bolt>                      once every unit has landed on main; its worktree then goes from its
+                                             team's host, unless it has uncommitted changes
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]

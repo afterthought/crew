@@ -29,13 +29,16 @@ expect_ok crewpy brief wldn design
 for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn planner
 for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "plan proposed <n>" "--replaces <n>" "--unblocks <bolt>" \
-  "plan agree <n>" "only when the user says so" "wldn/main"; do has "$out" "$want"; done
+  "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none"; do
+  has "$out" "$want"
+done
 for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it"; do lacks "$out" "$gone"; done
 for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "why the unit changes rather than being replaced" \
   "A unit that has merged is not amended"; do has "$out" "$want"; done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
 expect_ok crewpy brief swb-1 conductor
-for want in "plan proposed <n>" "plan agree <n>" "crew refuses it from you"; do has "$out" "$want"; done
+for want in "plan proposed <n>" "plan agree <n>" "crew refuses it from you" "crew status swb-1\` once that agent settles" \
+  "tell the user once which worktree it is and what its work was"; do has "$out" "$want"; done
 for want in "at any stage before it merges" "crew marks the unit amended" "code waits for that approval" \
   "When crew tells you a unit's intent was amended, run construct again" "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
 expect_ok crewpy brief swb-1 construct
@@ -48,7 +51,7 @@ expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time"; do has "$out" "$want"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
-for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main"; do has "$out" "$want"; done
+for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main" "the bolt lands either way"; do has "$out" "$want"; done
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
 

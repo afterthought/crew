@@ -5,7 +5,10 @@
 # A team builds one bolt at a time:
 #   crew list                          the teams that are defined
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
-#                                      slot with the unit or fix it holds and its stage
+#                                      slot with the unit or fix it holds and its stage. It first frees each slot
+#                                      whose work has merged or been dropped, once its agent is not working, and
+#                                      removes the worktrees in the team's kit checkout whose work is over, naming
+#                                      one kept for uncommitted changes
 #   crew up      <team>                open the team's workspace and start its conductor and ops
 #   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh
 #   crew close   <team>                end everything the team has and close its panes; nothing is started
@@ -15,8 +18,9 @@
 #   crew clear   <team> <role>         /clear the conductor or ops and give it its name back
 #   crew down    <team>                end every session the team has; the panes stay
 #   crew unit free <unit> [--team <team>]
-#                                      free a slot still holding a unit the plan no longer has: end its agent, and
-#                                      remove its worktree, unless it has uncommitted changes, and its branch
+#                                      free a slot still holding a unit the plan no longer has now, rather than at
+#                                      the read after its agent settles: end its agent, and remove the worktrees
+#                                      whose work is over; refused while its worktree has uncommitted changes
 #   crew unit run <unit> construct|code|verify|merge ["<words>"]
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
 #                                      construct writes its OpenSpec change, code builds it once the user has

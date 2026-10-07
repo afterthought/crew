@@ -38,6 +38,8 @@ Do: unit move retire-suite-cfn-lint cfn-checks
 | move a unit to another bolt, or back to the queue | `unit move <unit> <bolt>` or `queue` |
 | drop a unit or a bolt | `unit drop <unit> "<reason>"`, `bolt drop <bolt> "<reason>" [--requeue]` |
 
+A drop removes the worktrees and branches of what it drops from the team's host once it is applied. `bolt drop --requeue` is refused while a unit of the bolt has a worktree, since a queued unit has none: propose dropping that unit, or moving it to another bolt in the same checkout, first.
+
 Then:
 
 1. `{{TEAM_CMD}} plan propose <file>` checks every command, in order, against the plan as it stands, and refuses one that would be refused run directly, naming it. It tells the conductor of each bolt in flight the proposal touches.
