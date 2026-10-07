@@ -20,6 +20,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | see a team's conductor and ops (state, context use, compactions, age) and each slot's unit and stage | `crew status [team]` |
 | see every bolt, each unit's stage, and the queue | `crew bolts [--label <label>]` |
 | see everything that waits on the user, and the command that answers each | `crew rail [--label <label>]` |
+| see whether a rail row's card is open, or a card has no row | `crew rail [--label <label>]` |
 | start a team that is not up | `crew up <team>` |
 | end everything a team has, close its panes, stand it up fresh | `crew rebuild <team>` |
 | give the conductor or ops a fresh session, same pane | `crew restart <team> [conductor\|ops]` |

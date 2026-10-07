@@ -23,4 +23,4 @@
 - [x] 4.2 The planner's brief has it post, act on and close a card for each proposal it opens (design.md, Task notes 4.2).
 - [x] 4.3 The conductor's brief has it post, act on and close the review, verify and landing cards, and tell the operator agents only of waits with no card (design.md, Task notes 4.3).
 - [x] 4.4 Main-level ops takes the word to land through the conductor's landing card (design.md, Task notes 4.4). Verify `devenv shell -- tests/run t-briefs t-roles` ends with "0 failed".
-- [ ] 4.5 The README and the crew skill describe the cards on the rail (design.md, Task notes 4.5). Verify `devenv shell -- tests/run` ends with "0 failed".
+- [x] 4.5 The README and the crew skill describe the cards on the rail (design.md, Task notes 4.5). Verify `devenv shell -- tests/run` ends with "0 failed".
