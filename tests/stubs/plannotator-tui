@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub plannotator-tui for crew's tests: records `<host> plannotator-tui <args>` in $CREW_TEST_LOG, as the ssh stub
+# records its calls, and opens nothing.
+[[ -n ${CREW_TEST_LOG:-} ]] && printf '%s plannotator-tui %s\n' "${CREW_TEST_HOST:-?}" "$*" >> "$CREW_TEST_LOG"
+exit 0

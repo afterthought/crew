@@ -36,7 +36,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew unit drop <unit> "<reason>"
   crew unit approve <unit>                   the user's review, an empty Reviewed-by: commit on unit/<unit>
   crew plan propose <file> [--replaces <n>]  the planner's proposal: a Case and the plan commands it would run (Do)
-  crew plan proposed [<n>] [--json]          the open proposals, or one as the user reads it
+  crew plan proposed [<n>] [--json] [--open] the open proposals, or one as the user reads it; --open writes that to a
+                                             file on this host and opens it in plannotator
   crew plan agree <n> [--team <team>]        a conductor's agreement to a proposal that touches its bolt
   crew plan approve <n>                      the proposal applied, exactly as read, in one commit
   crew plan drop <n> "<reason>"              the proposal closed unapplied
@@ -2025,13 +2026,28 @@ def open_proposals(fleet, labels, found=None):
 
 
 def plan_proposed(fleet, a):
-    """crew plan proposed [<n>] [--label L] [--json]: the open proposals, or one as the user would read it. Reads the
-    flywheels' branches only, so any host can answer."""
+    """crew plan proposed [<n>] [--label L] [--json] [--open]: the open proposals, or one as the user would read it.
+    Reads the flywheels' branches only, so any host can answer. With --open, one proposal's page is written to
+    ~/.local/state/crew/proposals/<label>-<n>.md on this host, replacing any earlier copy, and opened in plannotator:
+    beside the caller in herdr, inline in the terminal otherwise. The file is a copy for reading; nothing reads it back."""
+    if a.open and a.n is None:
+        fail("--open needs a proposal's number: crew plan proposed <n> --open")
+    if a.open and a.json:
+        fail("--open shows the proposal in plannotator and --json prints it: use one")
     label = default_label(fleet, a)
     if a.n is not None:
         label = label or proposal_label(fleet, a, a.n)
         w, _, p, _ = at_tip(fleet, label, a.n)
         d = describe(fleet, label, w.plan, p)
+        if a.open:
+            f = pathlib.Path.home() / ".local/state/crew/proposals" / f"{label}-{a.n}.md"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(page(d, label))
+            argv = ["plannotator-tui", "herdr", "open", str(f)] if os.environ.get("HERDR_ENV") == "1" else ["plannotator-tui", str(f)]
+            try:
+                sys.exit(subprocess.run(argv).returncode)
+            except FileNotFoundError:
+                fail(f"plannotator-tui is not on this host's path; the proposal is written to {f}")
         print(json.dumps(d, indent=1) if a.json else page(d, label), end="" if not a.json else "\n")
         return
     rows = [dict(d, waits=[f"{t}-conductor" for t in d["waiting"]] + ["the user"])
@@ -2747,7 +2763,8 @@ def rail_rows(fleet, found, sv):
             what.append("still needs the agreement of " + ", ".join(f"{t}-conductor" for t in d["waiting"]))
         at = times.get((l, f"proposal/{n}"))
         rows.append(dict(group="proposals", at=at or utc(f"{d['opened']}T00:00:00Z"), date=None if at else d["opened"], what=what,
-                         cmds=[("read", f"crew plan proposed {n} --label {l}"), ("answer", f"crew plan approve {n} --label {l}")]))
+                         cmds=[("read", f"crew plan proposed {n} --label {l}"), ("open", f"crew plan proposed {n} --label {l} --open"),
+                               ("answer", f"crew plan approve {n} --label {l}")]))
     for l, _, _, plan in found:
         if not plan:
             continue
@@ -2909,6 +2926,7 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("n", nargs="?", type=int)
     x.add_argument("--label")
     x.add_argument("--json", action="store_true")
+    x.add_argument("--open", action="store_true")
     x = pp.add_parser("agree")
     x.add_argument("n", type=int)
     x.add_argument("--team")
