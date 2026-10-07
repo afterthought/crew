@@ -41,6 +41,10 @@ for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "wh
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
   "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
+for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\`" "or answers your card" \
+  "close the old proposal's card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit"; do
+  has "$out" "$want"
+done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
 expect_ok crewpy brief swb-1 conductor
 for want in "plan proposed <n>" "plan agree <n>" "plan approve <n>\`, never on your own judgment" "crew refuses it from you" \

@@ -44,15 +44,23 @@ A drop removes the worktrees and branches of what it drops from the team's host 
 
 Then:
 
-1. `{{TEAM_CMD}} plan propose <file>` checks every command, in order, against the plan as it stands, and refuses one that would be refused run directly, naming it. It tells the conductor of each bolt in flight the proposal touches.
+1. `{{TEAM_CMD}} plan propose <file>` checks every command, in order, against the plan as it stands, and refuses one that would be refused run directly, naming it. It tells the conductor of each bolt in flight the proposal touches. Once it is open, post its card, as *Cards* says.
 2. Show the user what `{{TEAM_CMD}} plan proposed <n>` prints: in your pane, or written to a file and opened beside it with `plannotator-tui herdr open <file>`. Never name a proposal by its number alone: the number follows the words, as a reference. It reads as the user would want it, each change in plain words with what it rests on, the goal of the bolt it would join, and the command approval runs. Ask for the answer in words, approve it or say what to change, and recite no command for the user to answer with.
-3. Wait. Run `{{TEAM_CMD}} plan approve <n>` only when the user says so in your pane, never on your own judgment. When the user wants it changed, write it again and run `{{TEAM_CMD}} plan propose <file> --replaces <n>`; when the user rejects it, `{{TEAM_CMD}} plan drop <n> "<the user's reason>"`.
+3. Wait. Run `{{TEAM_CMD}} plan approve <n>` only when the user says so in your pane or answers your card, never on your own judgment. A note on the card asking for changes, or rejecting the proposal, is the user's words, as if said in your pane. When the user wants it changed, write it again and run `{{TEAM_CMD}} plan propose <file> --replaces <n>`; when the user rejects it, `{{TEAM_CMD}} plan drop <n> "<the user's reason>"`. After a replacement or a drop, close the old proposal's card.
 
 An approval applies the commands exactly as the user read them, in one commit, or nothing at all when one of them no longer applies; then write the proposal again for the plan as it now stands.
 
 crew refuses what would break the plan's rules (a unit after one in another bolt, a cycle, a name a kit already has, splitting or moving work already in code or merged, amending merged work) and says why. Never edit `plan.rec` by hand.
 
 A bolt is a body of work worth deploying and testing together, with one goal a user would recognize. Keep a bolt to what its goal needs: work found along the way that the goal doesn't need goes to the queue or another bolt, and the bolt keeps its goal. Landing is part of every bolt's goal: work a bolt in flight needs before it can be proven or land, such as a check it fails, two pins that disagree, or what its last unit waits on, belongs in that bolt, ahead of what waits on it. Never leave it in the queue or a new bolt while the bolt waits for it. Mark its `unit add` or `unit move` with `--unblocks <bolt>`: the user reads why on the proposal, crew puts the unit ahead of what waits on it, and crew refuses it placed anywhere else. A unit is one OpenSpec change, small enough to review in one sitting and build in a day or two.
+
+## Cards
+
+The rail's proposal rows are yours: one card per proposal you open, keyed `proposal/<n>`. It carries the page `{{TEAM_CMD}} plan proposed <n>` prints, as a Markdown file, and offers approval, with a note for changes or for dropping it. It is filed in the kit of the first bolt or unit its changes name.
+
+{{CARDS}}
+
+When crew tells you a conductor agreed to a proposal, update its card to say it no longer waits on that conductor.
 
 ## Changes to a bolt in flight
 
