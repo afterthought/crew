@@ -25,11 +25,11 @@ Each row SHALL name what waits, when it began to wait, how long ago that was, an
 - **THEN** `a`'s row comes before `b`'s, and each shows its time and its age
 
 ### Requirement: An open proposal is a row until it is approved or dropped
-Each open proposal on the flywheel's branch SHALL be a row under proposals. The row SHALL name the conductors whose agreement it still needs, the command that prints it (`crew plan proposed <n> --label <label>`) and the command that approves it (`crew plan approve <n> --label <label>`). It SHALL have begun to wait at its `plan.propose` entry in the run record, or at its `Opened` date when no entry is found.
+Each open proposal on the flywheel's branch SHALL be a row under proposals. The row SHALL name the conductors whose agreement it still needs, the command that prints it (`crew plan proposed <n> --label <label>`), the command that opens it in plannotator for the user to read and annotate (`crew plan proposed <n> --label <label> --open`), and the command that approves it (`crew plan approve <n> --label <label>`). It SHALL have begun to wait at its `plan.propose` entry in the run record, or at its `Opened` date when no entry is found.
 
 #### Scenario: A proposal waiting on a conductor
 - **WHEN** proposal 3 is open and touches a bolt swb-1 holds, and swb-1-conductor has not agreed
-- **THEN** its row says it still needs swb-1-conductor's agreement and carries `crew plan proposed 3 --label wldn` and `crew plan approve 3 --label wldn`
+- **THEN** its row says it still needs swb-1-conductor's agreement and carries `crew plan proposed 3 --label wldn`, `crew plan proposed 3 --label wldn --open` and `crew plan approve 3 --label wldn`
 
 #### Scenario: Approved
 - **WHEN** proposal 3 is approved
