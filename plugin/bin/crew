@@ -336,33 +336,21 @@ own_place() {  # own_place <place> <branch>: the fix's place is on its own branc
   echo "$1 is on ${on:-no branch}, made from ${up:-no bolt}, not $2 from bolt/$BOLT: crew starts a fix only in its own place"
   return 1
 }
-remove_place() {  # remove_place <kind> <name> <place>: a merged unit's or fix's worktree, at the place its slot
-  # recorded, and its branch
-  local path=$3 branch=$2
-  [[ $1 == fix ]] || branch=unit/$2
-  if [[ -d $path ]]; then git -C "$KIT" worktree remove "$path" >/dev/null 2>&1 || echo "$path was kept: it has changes of its own" >&2; fi
-  git -C "$KIT" branch -d "$branch" >/dev/null 2>&1 || true
-}
 reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
-  # bolt, and remove its place
+  # bolt or been dropped from the plan, once its agent is not working; then remove the worktrees whose work is over
   local slot kind name stage rest
   if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" >/dev/null 2>&1 || true; fi
   while read -r slot kind name stage rest; do
-    [[ $stage == merged || $stage == landed ]] || continue
-    [[ $(agent_status "$(pane_of "$slot")") == working ]] && continue
+    case $stage in merged | landed | dropped) ;; *) continue ;; esac
+    if [[ $(agent_status "$(pane_of "$slot")") == working ]]; then
+      [[ $stage == dropped ]] && echo "$(name_of "$slot") still holds $name, dropped from the plan: its agent is working; it is freed once that settles"
+      continue
+    fi
     free "$slot" || continue
-    remove_place "$kind" "$name" "${rest##* }"
-    echo "$(name_of "$slot") is free: $name has merged into its bolt"
+    if [[ $stage == dropped ]]; then echo "$(name_of "$slot") is free: $name was dropped from the plan"
+    else echo "$(name_of "$slot") is free: $name has merged into its bolt"; fi
   done < <(plan _slots "$TEAM" 2>/dev/null || true)
-}
-remove_dropped() {  # remove_dropped <unit> <place>: a dropped unit's worktree, unless it has uncommitted changes, and its branch
-  local unit=$1 path=$2 sha
-  if [[ -d $path ]]; then
-    [[ -z $(git -C "$path" status --porcelain 2>/dev/null) ]] || { echo "$path was kept, and unit/$unit with it: it has uncommitted changes" >&2; return 1; }
-    git -C "$KIT" worktree remove "$path" || return 1
-  fi
-  sha=$(git -C "$KIT" rev-parse --short --verify -q "refs/heads/unit/$unit") || return 0
-  git -C "$KIT" branch -q -D "unit/$unit" && echo "$path and unit/$unit are removed; the branch was at $sha"
+  plan _tidy "$TEAM" || true
 }
 unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit the plan no longer has
   local unit=${1:?usage: crew unit free <unit> [--team <team>]} team= t slot path out rc=0
@@ -384,7 +372,7 @@ unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit t
   fi
   free "$slot" || exit 1
   echo "$(name_of "$slot") is free"
-  remove_dropped "$unit" "$path"
+  plan _tidy "$TEAM" || true
 }
 free_elsewhere() {  # a unit moved from another team's bolt in this checkout leaves that team's slot
   local f other
@@ -566,11 +554,14 @@ case $cmd in
       run_stage "$slot" fix "Fix: $words" fix.start "$fix" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
       echo "$(name_of "$slot") has $fix: code, in $path"
     fi ;;
-  _free)  # crew _free <team> <unit|fix/name> [--remove]: free the slot holding it, and with --remove remove a dropped
-    # unit's place and branch (crew unit drop asks for both)
-    load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}"); path=$KIT_DIR/places/$3
-    if [[ -n $slot ]]; then path=$(awk -v s="$slot" '$1 == s {print $4}' "$held"); free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi
-    if [[ ${4:-} == --remove ]]; then remove_dropped "$3" "$path" || true; fi ;;
+  _free)  # crew _free <team> <unit|fix/name> [--remove]: free the slot holding it, and with --remove remove the
+    # worktrees whose work is over (crew unit drop asks for both)
+    load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}")
+    if [[ -n $slot ]]; then free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi
+    if [[ ${4:-} == --remove ]]; then plan _tidy "$TEAM" || true; fi ;;
+  _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
+    # is over (a plan write that ends work asks for it on the team's host)
+    load_team "${2:-}"; forward; ensure_state; reap ;;
   main)
     sub=${2:-}; load_main "${3:-}"; forward; ensure_state
     case $sub in

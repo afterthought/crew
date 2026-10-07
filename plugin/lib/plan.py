@@ -2426,40 +2426,42 @@ def place_cmd(fleet, a):
     make_place(fleet, crew.team_of(fleet, a.team), a.path, a.branch, a.base, track=True)
 
 
-def marks_of(fleet, label):
-    """Each unit the label's plan marks amended, {unit: mark}; none when the plan can't be read, so a team's slots are
-    still read from the kit."""
+def plan_of(fleet, label):
+    """The label's plan, or None when it can't be read, so a team's slots are still read from the kit."""
     try:
         repo, ref = state_of(fleet, label)
         tip = fetch(repo, ref)
-        plan = read(repo, ref, tip) if tip else None
+        return read(repo, ref, tip) if tip else None
     except Refusal:
-        return {}
-    return {u.name(): u.get("Amended") for u in plan.units() if u.get("Amended")} if plan else {}
+        return None
 
 
 def slot_stages(fleet, t):
     """Each slot of the team on this host that holds a unit or fix: what it holds and that work's stage, read from the
-    kit and the plan's Amended marks, with its tasks done and total where its change has a task list."""
+    kit and the plan, with its tasks done and total where its change has a task list. Work that has neither landed nor
+    merged is dropped when the plan was read and has no such unit, or no bolt the fix's branch tracks."""
     path = pathlib.Path.home() / f".local/state/{t['name']}-team/slots"
     held = [l.split() for l in (path.read_text().splitlines() if path.exists() else []) if l.strip()]
     if not held:
         return []
     k = survey(fleet, [(t["name"], None)]).get(t["machine"], {})
     kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
-    marks = marks_of(fleet, t["label"]) if any(kind == "unit" for _, kind, *_ in held) else {}
+    plan = plan_of(fleet, t["label"])
+    marks = {u.name(): u.get("Amended") for u in plan.units() if u.get("Amended")} if plan else {}
     out = []
     for slot, kind, name, place in held:
         stage, counts = "unknown", None
         if kit.get("ok") and kind == "fix":
             f = next((f for f in kit["fixes"] if f["fix"] == name), None)
-            stage = ("merged" if f["merged"] else "fix") if f else "none"
+            stage = ("merged" if f["merged"] else "dropped" if plan and f["bolt"] and not plan.bolt(f["bolt"]) else "fix") if f else "none"
         elif kit.get("ok"):
             pl = kit["places"].get(name)
             if name in kit["main"]:
                 stage = "landed"
             elif pl and pl["bolt"] and name in kit["bolts"].get(pl["bolt"], {}).get("changes", []):
                 stage = "merged"
+            elif plan and not plan.unit(name):
+                stage = "dropped"
             elif pl:
                 stage = place_stage(pl, marks.get(name))
                 counts = "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None

@@ -3,7 +3,7 @@
 ## 1. Every team read removes the worktrees whose work is over
 
 - [x] 1.1 `plan.py _tidy <team>` removes, on the team's host, each worktree crew made in the team's kit checkout whose work is over and that no slot holds, keeps and names one with uncommitted changes or a lock, touches nothing else, and removes nothing when a plan can't be read (design.md, Task notes 1.1). Verify a new `tests/t-tidy.sh` passes, covering each case in the note.
-- [ ] 1.2 `reap` frees a slot whose unit or fix the plan has dropped, as it frees merged ones, then runs the tidy in place of `remove_place`, and a hidden `crew _tidy <team>` runs that on the team's host (design.md, Task notes 1.2). Verify `tests/t-unit-free.sh`, updated so that a slot left by a working agent is freed by the next idle `crew status`, passes.
+- [x] 1.2 `reap` frees a slot whose unit or fix the plan has dropped, as it frees merged ones, then runs the tidy in place of `remove_place`, and a hidden `crew _tidy <team>` runs that on the team's host (design.md, Task notes 1.2). Verify `tests/t-unit-free.sh`, updated so that a slot left by a working agent is freed by the next idle `crew status`, passes.
 - [ ] 1.3 A merged unit's or fix's place goes at the next idle read, and one with a stray file is kept and named on each read until the file goes (design.md, Task notes 1.3). Verify `tests/t-merge.sh` and `tests/t-fix.sh`, with the new cases, pass.
 
 ## 2. Dropping and landing tidy at once

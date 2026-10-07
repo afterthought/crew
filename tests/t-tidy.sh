@@ -28,7 +28,7 @@ git -C "$k" worktree add -q -b mine "$kd/mine" main
 git -C "$k" worktree add -q --track -b unit/x "$kd/x" bolt/in-flight
 git -C "$k" worktree add -q -b bolt/elsewhere "$kd/bolts/not-elsewhere" main
 git -C "$k" worktree add -q --detach "$kd/places/detached" bolt/in-flight
-tidy() { as $box python3 "$CREW/plugin/lib/plan.py" _tidy swb-1; }
+tidy() { crew _tidy swb-1; }
 untouched() {
   local p; for p in "$k" "$bd" "$kd/mine" "$kd/x" "$kd/bolts/not-elsewhere" "$kd/places/detached" "$kd/places/held-one" "$kd/places/still-planned"; do
     [[ -d $p ]] || fail "$p was removed"
@@ -60,7 +60,7 @@ lacks "$out" "held-one"; lacks "$out" "still-planned"; lacks "$out" "detached"; 
 ok "a bolt in no plan, a merged place no slot holds and one with only ignored files go with their branches"
 ok "one with uncommitted changes or a lock is kept and named, and nothing crew didn't make, held or planned is touched"
 
-expect_ok tidy
+expect_ok crew status swb-1
 has "$out" "$kd/places/stray is kept, and unit/stray with it"
 has "$out" "$kd/places/locked-one is kept, and unit/locked-one with it: it is locked"
 [[ -d $kd/places/stray ]] || fail "the stray place went on the next read"
