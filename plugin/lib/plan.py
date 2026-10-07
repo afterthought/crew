@@ -2529,6 +2529,14 @@ def run_check(fleet, a):
     else:
         st == "verify" or fail(f"unit {a.unit} is in {st}: it merges once every task is ticked and verify has run")
         prompt = f"Merge {a.unit} into bolt/{bolt}: wt merge bolt/{bolt} --no-squash --no-remove{words}"
+    # The rail row the stage ends, whose card the conductor closes: a review built again, or a verify report acted on.
+    # Said on standard error, since bash crew reads standard output as the stage's variables.
+    ends = (f"review/{a.unit}" if a.stage == "construct" and st == "review" else
+            f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else None)
+    if ends and agent() == f"{t['name']}-conductor":
+        print(close_card(ends), file=sys.stderr)
+    elif ends:
+        crew.tell(fleet, f"{t['name']}-conductor", f"{agent()} ran {a.stage} on unit {a.unit}. {close_card(ends)}")
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
     print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENTRY=entry))
 

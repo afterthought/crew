@@ -1,7 +1,7 @@
 # Unit slots and crew unit run <unit> construct|code|verify|merge: a free slot is taken, refused when every slot
 # is in flight; construct makes places/<unit> on unit/<unit> from the bolt; each stage ends the slot's agent and
 # starts a fresh one from that stage's definition, then sends its prompt; code waits for the approval and
-# verify for every task ticked.
+# verify for every task ticked. A stage that ends a rail row names the row's card to the conductor that owns it.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -25,6 +25,7 @@ expect_fail "unit queued-one is queued" crew unit run queued-one construct
 
 expect_ok crew unit run a construct
 has "$out" "swb-1-unit-1 has a: construct, in $kd/places/a"
+lacks "$out" "Pending You"
 eq "$(cat "$slots")" "unit-1 unit a $kd/places/a"
 eq "$(git -C "$kd/places/a" branch --show-current)" "unit/a"
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "bolt/tenant-environments"
@@ -76,3 +77,25 @@ as $box herdr --session wldn-1 stub status "$p2" working
 expect_fail "swb-1-unit-2 is working; add --force to end it anyway." crew unit run c construct
 expect_ok crew unit run c construct "Use the words the user gave." --force
 ok "a working stage is ended only with --force"
+
+# The stage that ends a rail row names its card: construct again on a unit in review ends its review, and construct,
+# code or merge on a unit in verify ends its verify report's row.
+change "$kd/places/d" d 0 2; commit_all "$kd/places/d" "docs(d): the change"
+eq "$(stage d)" "review"
+: > "$CREW_TEST_LOG"
+expect_ok crew unit run d construct "Name the tenant in the title."
+has "$out" "Close your Pending You card for review/d, if one is open, with what was done."
+grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told of its own run"
+CREW_AGENT= expect_ok crew unit run d construct "Again."
+lacks "$out" "Pending You"
+grep -qF "agent prompt swb-1-conductor '[crew] $me@mac-studio ran construct on unit d. Close your Pending You card for review/d, if one is open, with what was done.'" \
+  "$CREW_TEST_LOG" || fail "the conductor was not told to close its review card:"$'\n'"$(calls)"
+change "$kd/places/e" e 2 2; commit_all "$kd/places/e" "feat(e): done"
+eq "$(stage e)" "verify"
+expect_ok crew unit run e verify
+lacks "$out" "Pending You"
+for s in code merge; do
+  expect_ok crew unit run e $s
+  has "$out" "Close your Pending You card for verify/e, if one is open, with what was done."
+done
+ok "construct again on a unit in review, and code or merge on one in verify, name the row's card: shown to its conductor, told to it otherwise"
