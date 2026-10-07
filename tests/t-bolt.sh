@@ -102,8 +102,14 @@ eq "$(plan -t Unit -e "Unit = 'lint-once' || Unit = 'lint-later'" -c)" "0"
 ok "dropping a held bolt removes its worktree and branch, and its unit's and fix's places, branches and slots"
 
 crew bolt new lint-twice "Lint twice." --repo switchboard-kit >/dev/null
+crew unit add lint-again "Lint again." --bolt lint-twice >/dev/null
 crew bolt give swb-2 lint-twice >/dev/null 2>&1
 echo $box > "$T/down"
+tip=$(git --git-dir "$ws" rev-parse wldn/main)
+expect_fail "cannot tell unit lint-again's stage: " crew bolt drop lint-twice "x" --requeue
+eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$tip"
+ok "--requeue is refused while the stage of a unit of the bolt can't be told, and the plan is unchanged"
+
 expect_ok crew bolt drop lint-twice "linting once is enough"
 has "$out" "swb-2's host did not answer, so its worktrees for bolt lint-twice are not removed yet: the team's next read removes them"
 eq "$(plan -t Bolt -e "Bolt = 'lint-twice'" -c)" "0"
