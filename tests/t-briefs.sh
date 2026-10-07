@@ -27,6 +27,8 @@ for role in design planner dispatcher main-ops; do
 done
 expect_ok crewpy brief wldn design
 for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
+for want in "names, in the message that carries it, the documentation page or the reading it rests on" "Read the thing itself" \
+  "not the sequence" "Answer linked questions together" "never the mechanism"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn planner
 for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "plan proposed <n>" "--replaces <n>" "--unblocks <bolt>" \
   "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none"; do

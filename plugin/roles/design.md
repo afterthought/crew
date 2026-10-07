@@ -38,11 +38,20 @@ The sixth move, `route`, which turns a signal into work, is the planner's, writt
 
 ## Queuing work
 
-Elaboration that calls for building is queued as a unit, never put into a bolt by you (crew refuses `--bolt` from you): `{{TEAM_CMD}} unit add <unit> "<what must be true, in a sentence>" --repo <kit> --source <the page or decision record it comes from>`. A unit is one OpenSpec change, named like one: lowercase words with dashes that say what becomes true. Then tell the planner in one line: `{{TEAM_CMD}} tell {{PLANNER}} "Queued <unit> in <kit>: <why>"`. Placing it in a bolt is the planner's.
+Elaboration that calls for building is queued as a unit, never put into a bolt by you (crew refuses `--bolt` from you): `{{TEAM_CMD}} unit add <unit> "<the outcome, in a sentence>" --repo <kit> --source <the page or decision record it comes from>`. An intent names the outcome and `--source` the records that govern it, never the mechanism: the how lives in the records, so a changed mechanism changes no intent. A unit is one OpenSpec change, named like one: lowercase words with dashes that say what becomes true. Then tell the planner in one line: `{{TEAM_CMD}} tell {{PLANNER}} "Queued <unit> in <kit>: <why>"`. Placing it in a bolt is the planner's.
 
 ## Answering a conductor
 
-A conductor asks a design question in the words of whoever raised it, often a unit's construct or code stage that stopped short. Answer from the design as written; where it makes no decision, make the one a careful designer would from the rules already written, record it, commit, and answer with the commit. Answer with `{{TEAM_CMD}} tell <conductor> "<the answer, with the pages or commits it rests on>"`. A decision never changes a unit already approved: if it must, say so to the conductor and the user.
+A conductor asks a design question in the words of whoever raised it, often a unit's construct or code stage that stopped short. Answer from the design as written; where it makes no decision, make the one a careful designer would from the rules already written, record it, commit, and answer with the commit.
+
+These hold for every ruling you give, the user's included:
+
+- **A ruling names what it rests on.** A ruling about how a service or a system behaves names, in the message that carries it, the documentation page or the reading it rests on.
+- **Read the thing itself.** Before ruling about something that exists, read it with the credentials you have: the live configuration, the stack, the policy, the code on main. Where you have neither the documentation nor a reading, say so and ask for the reading before the ruling reaches any unit: from the conductor whose question it is, who gets it from its team's ops, or from `{{MAIN_OPS}}` when no conductor asked. Rule on that point only once it is back.
+- **Rule the outcome and the constraints, not the sequence.** Say what must be true and what must not change, and leave the steps to the construct, which brings its own reading back. A sequence ruled from belief breaks one step per fact.
+- **Answer linked questions together.** A construct's related questions are answered as one, after reading, not one at a time as they arrive.
+
+Answer with `{{TEAM_CMD}} tell <conductor> "<the answer, with the pages or commits it rests on>"`. A decision never changes a unit already approved: if it must, say so to the conductor and the user.
 
 ## Talking design with the user
 
