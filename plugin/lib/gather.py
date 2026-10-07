@@ -3,14 +3,16 @@
 
   python3 gather.py '<request>'      or, sent over ssh:  python3 - '<request>' < gather.py
 
-The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...]}],
-"sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>}.
+The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
+"reports": [<a team's verify reports folder, ~ allowed>, ...]}], "sites": <true to also read each worktree's dev
+server names with devurl, and the host's running portless routes>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
-for each bolt whether bolt/<bolt> exists, the changes it holds and its worktree; each place under <dir>/places
-with its branch and head, its change's tasks, whether its planning is complete and whether it has a review since
-the bolt; and each fix branched from a bolt. It reads with git and openspec only, and changes nothing. It needs
-nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
-import json, os, re, subprocess, sys
+for each bolt whether bolt/<bolt> exists, the changes it holds, its worktree and the time of its head; each place
+under <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is
+complete and whether it has a review since the bolt; each fix branched from a bolt; and each unit's newest verify
+report in the reports folders, with its path and time. It reads with git, openspec and the file system only, and
+changes nothing. It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
+import datetime, json, os, re, subprocess, sys
 
 
 def run(args, cwd):
@@ -73,10 +75,43 @@ def fix_merged(main, branch, bolt):
         ["git", "merge-base", "--is-ancestor", branch, f"bolt/{bolt}"], cwd=main).returncode == 0
 
 
+def head_at(cwd, ref):
+    """The committer time of a ref, as ISO 8601, or None."""
+    return (run(["git", "log", "-1", "--format=%cI", ref], cwd) or "").strip() or None
+
+
+REPORT = re.compile(r"^verify-(.+)-(\d{8}-\d{4})\.md$")
+
+
+def reports(folders):
+    """Each unit's newest verify report across the folders: {unit: {"path": its absolute path, "at": its file's
+    time, in UTC}}. A folder that isn't there gives nothing."""
+    out = {}
+    for d in folders:
+        d = os.path.abspath(os.path.expanduser(d))
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for n in names:
+            m = REPORT.match(n)
+            if not m:
+                continue
+            f = os.path.join(d, n)
+            try:
+                t = os.path.getmtime(f)
+            except OSError:
+                continue
+            if m.group(1) not in out or t > out[m.group(1)][0]:
+                out[m.group(1)] = (t, f)
+    return {u: {"path": f, "at": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat()} for u, (t, f) in out.items()}
+
+
 def place(path, unit, bolt):
-    """A unit's place: its head, its change's tasks, whether its planning is complete, the open tasks, and its review."""
-    info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None, "tasks": None,
-            "planning": False, "reviewed": False, "open": []}
+    """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, the open
+    tasks, and its review."""
+    info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None,
+            "head_at": head_at(path, "HEAD"), "tasks": None, "planning": False, "reviewed": False, "open": []}
     listed = run(["openspec", "list", "--json"], path)
     if listed:
         for c in json.loads(listed).get("changes", []):
@@ -127,13 +162,14 @@ def kit(req, sites=False, running=None):
     trees = worktrees(main)
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
-    out = {"ok": True, "main": changes(main, "main"), "bolts": {}, "places": {}, "fixes": []}
+    out = {"ok": True, "main": changes(main, "main"), "bolts": {}, "places": {}, "fixes": [], "reports": reports(req.get("reports", []))}
     tracked = [u[5:] for u in ups.values() if u.startswith("bolt/")]
     for b in list(dict.fromkeys(req.get("bolts", []) + tracked)):
         exists = run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}"], main) is not None
         wt = os.path.join(kdir, "bolts", b)
         out["bolts"][b] = {"exists": exists, "changes": changes(main, f"bolt/{b}") if exists else [],
-                           "worktree": wt if at.get(wt) == f"bolt/{b}" else None}
+                           "worktree": wt if at.get(wt) == f"bolt/{b}" else None,
+                           "head_at": head_at(main, f"refs/heads/bolt/{b}") if exists else None}
     places = os.path.join(kdir, "places")
     for path, branch in at.items():
         if os.path.dirname(path) != places or not branch:

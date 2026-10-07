@@ -2,7 +2,7 @@
 
 ## 1. The kit read carries the times
 
-- [ ] 1.1 The kit read on each host also gives each unit worktree's head time, each bolt branch's head time and each unit's newest verify report with its time, in the same call (design.md, Task notes 1.1). Verify `devenv shell -- tests/run t-bolts t-sites` ends with "0 failed".
+- [x] 1.1 The kit read on each host also gives each unit worktree's head time, each bolt branch's head time and each unit's newest verify report with its time, in the same call (design.md, Task notes 1.1). Verify `devenv shell -- tests/run t-bolts t-sites` ends with "0 failed".
 
 ## 2. crew rail
 

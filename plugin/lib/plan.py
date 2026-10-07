@@ -640,13 +640,16 @@ LATER = ("code", "verify", "merged", "landed")
 def survey(fleet, held, sites=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)]. The answer is
     per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
-    the host's running portless routes too."""
+    the host's running portless routes too. Each kit is asked for the verify reports of every team that builds it on
+    that host."""
     hosts = {}
     for team, bolt in held:
         t = fleet["teams"].get(team)
         if not t:
             continue
-        k = hosts.setdefault(t["machine"], {}).setdefault(t["kit"]["main"], {"main": t["kit"]["main"], "dir": t["kit"]["dir"], "bolts": []})
+        k = hosts.setdefault(t["machine"], {}).setdefault(t["kit"]["main"], {"main": t["kit"]["main"], "dir": t["kit"]["dir"], "bolts": [],
+            "reports": sorted({f"~/.local/state/{o['name']}-team/reports" for o in fleet["teams"].values()
+                               if o["machine"] == t["machine"] and o["kit"]["main"] == t["kit"]["main"]})})
         if bolt and bolt not in k["bolts"]:
             k["bolts"].append(bolt)
     out = {}
