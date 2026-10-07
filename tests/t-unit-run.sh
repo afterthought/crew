@@ -82,7 +82,16 @@ ok "a working stage is ended only with --force"
 # code or merge on a unit in verify ends its verify report's row.
 change "$kd/places/d" d 0 2; commit_all "$kd/places/d" "docs(d): the change"
 eq "$(stage d)" "review"
+# A construct refused because the slot's agent is working starts nothing, so it names no card, to anyone.
+p3=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-3") | .key')
+as $box herdr --session wldn-1 stub status "$p3" working
 : > "$CREW_TEST_LOG"
+for who in swb-1-conductor ""; do
+  CREW_AGENT=$who expect_fail "swb-1-unit-3 is working; add --force to end it anyway." crew unit run d construct "Name the tenant in the title."
+  lacks "$out" "Pending You"
+done
+grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told to close a card for a stage that never started"
+as $box herdr --session wldn-1 stub status "$p3" idle
 expect_ok crew unit run d construct "Name the tenant in the title."
 has "$out" "Close your Pending You card for review/d, if one is open, with what was done."
 grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told of its own run"

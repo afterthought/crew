@@ -545,7 +545,9 @@ case $cmd in
     amended=(); [[ -n $AMENDED ]] && amended=(--field Amended=yes --commit "$AMENDED" --id "$ENTRY")
     run_stage "$slot" "$stage" "$PROMPT" stage.start "$unit" "unit/$unit" --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")" \
       ${amended[@]+"${amended[@]}"}
-    echo "$(name_of "$slot") has $unit: $stage, in $PLACE" ;;
+    echo "$(name_of "$slot") has $unit: $stage, in $PLACE"
+    # A stage that ended a rail row names its card only now that it has started.
+    [[ -z $ENDS ]] || plan _ended "$TEAM" "$unit" "$stage" "$ENDS" || true ;;
   fix)
     load_team "${2:-}"; forward; ensure_state
     name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}
