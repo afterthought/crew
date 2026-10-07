@@ -36,14 +36,16 @@ For the list:
 
 ### One list, read from state: the rail
 
-Option 1. `crew rail [--label <label>]`, named as Flywheel Next names it, prints, from any host, everything that waits on the user, grouped in this order, each row with what it is and the command that answers it, written to be pasted:
+Option 1. `crew rail [--label <label>]`, named as Flywheel Next names it, prints, from any host, everything that waits on the user, grouped in this order, each row with what it is, when it began to wait and how long ago that was, and the command that answers it, written to be pasted. Within a group the rows are oldest first, so the top of each group is what has waited longest:
 
-| what | read from | it leaves the list when |
-|---|---|---|
-| an open proposal, with whose agreement it still needs | `proposals.rec` on the flywheel's branch | it is approved or dropped |
-| a unit in review, with the plannotator command that opens its whole change | the unit's stage, from the kit | it is approved, or construct runs again |
-| a unit in verify whose report is newer than its branch's head, with the report's path and its conductor | the team's host: the unit's stage, the reports folder, the branch | code commits again, or the unit merges |
-| a bolt whose every unit has merged and that has not landed, with its team and the main-level ops that lands it | the plan and the kit | it lands |
+| what | read from | it began to wait at | it leaves the list when |
+|---|---|---|---|
+| an open proposal, with whose agreement it still needs | `proposals.rec` on the flywheel's branch | its `plan.propose` entry in the run record, else its `Opened` date | it is approved or dropped |
+| a unit in review, with the plannotator command that opens its whole change | the unit's stage, from the kit | the time of the unit branch's head, construct's last commit | it is approved, or construct runs again |
+| a unit in verify whose report is newer than its branch's head, with the report's path and its conductor | the team's host: the unit's stage, the reports folder, the branch | the report file's time | code commits again, or the unit merges |
+| a bolt whose every unit has merged and that has not landed, with its team and the main-level ops that lands it | the plan and the kit | the time of the bolt branch's head, the last merge into it | it lands |
+
+The time comes from the same state as the row, never from a record kept for the rail, so a row's age is as true as its presence (the user, 2026-10-07: "a column with the time/age so I know how old each is, and ordered").
 
 A host that does not answer is named, as `crew bolts` names one. Items have no numbers of their own: each is named by its id (proposal 3, unit x, bolt y), and nothing is written to put an item on the list or take it off. That is how items go stale: the moment an answer is recorded, in the plan, the branch or the kit, the item is gone.
 
