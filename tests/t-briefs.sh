@@ -45,6 +45,8 @@ for want in "plan proposed <n>" "plan agree <n>" "crew refuses it from you" "cre
   "tell the user once which worktree it is and what its work was"; do has "$out" "$want"; done
 for want in "at any stage before it merges" "crew marks the unit amended" "code waits for that approval" \
   "When crew tells you a unit's intent was amended, run construct again" "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
+for want in "Send linked questions together" "with the documentation or reading it names" \
+  "holds corrections to a unit in construct"; do has "$out" "$want"; done
 expect_ok crewpy brief swb-1 construct
 for want in "## Writing a change again" "the unit's intent was amended" "stay ticked only where the work they describe" \
   "Commit the revision, however small"; do has "$out" "$want"; done
