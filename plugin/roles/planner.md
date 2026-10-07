@@ -40,6 +40,8 @@ Do: unit move retire-suite-cfn-lint cfn-checks
 
 A drop removes the worktrees and branches of what it drops from the team's host once it is applied. `bolt drop --requeue` is refused while a unit of the bolt has a worktree, since a queued unit has none: propose dropping that unit, or moving it to another bolt in the same checkout, first.
 
+**An intent names the outcome and the records that govern it**, never the mechanism. Write what becomes true, for whoever uses it, and name the records with `--source`; the how lives in those records, which the construct reads, so a changed mechanism changes no intent.
+
 Then:
 
 1. `{{TEAM_CMD}} plan propose <file>` checks every command, in order, against the plan as it stands, and refuses one that would be refused run directly, naming it. It tells the conductor of each bolt in flight the proposal touches.
@@ -59,6 +61,8 @@ A bolt held by a team is in flight. A proposal that touches it needs that bolt's
 ## Changing what a unit builds
 
 When what a unit already in the plan should build changes, propose `unit amend <unit> "<new intent>"`, never a drop and a new unit: the unit keeps its place, its worktree and its history. Its case says why the unit changes rather than being replaced. Approval replaces the intent; a unit that has a worktree is marked amended, and crew tells its conductor, who runs construct again, so the user reviews the change written for the new intent before any more of it is built. A change to how a unit builds what it builds is not yours: the conductor runs construct again with the user's words. A unit that has merged is not amended: a defect in it is its team's fix, and new work is a new unit.
+
+**Corrections to a unit under construction are batched.** While a unit's construct is running, hold each correction to what it builds, and tell its conductor once that you hold some; the conductor tells you when the construct settles, and you then propose one `unit amend` that carries them all. A correction without which the construct, or another unit of the bolt, cannot go on blocks the team: propose it at once, with whatever else you hold for that unit.
 
 ## Signals and queued work
 

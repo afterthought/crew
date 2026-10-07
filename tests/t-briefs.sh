@@ -37,6 +37,8 @@ done
 for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it"; do lacks "$out" "$gone"; done
 for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "why the unit changes rather than being replaced" \
   "A unit that has merged is not amended"; do has "$out" "$want"; done
+for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
+  "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
 expect_ok crewpy brief swb-1 conductor
 for want in "plan proposed <n>" "plan agree <n>" "crew refuses it from you" "crew status swb-1\` once that agent settles" \
