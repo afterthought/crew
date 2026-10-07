@@ -45,6 +45,7 @@ eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(tenant-environmen
 eq "$(stage the-deploy-is-logged)" "amended"
 eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
 has "$(prompts swb-1)" "intent was amended by the user. Run construct again (crew unit run the-deploy-is-logged construct); it returns to the user"
+has "$(prompts swb-1)" "review. Close any Pending You card you have open for review/the-deploy-is-logged or verify/the-deploy-is-logged.'"
 ok "a unit in code amended by the user is marked amended, and its conductor is told to run construct again, once"
 
 before=$(tip)

@@ -1,6 +1,7 @@
 # crew plan propose|proposed|agree|approve|drop: every change the planner makes to the plan is a proposal the user
 # approves, with the agreement of the conductor of any bolt in flight it touches; what was approved is exactly what
-# is applied, in one commit. Each scenario of the plan-proposals spec.
+# is applied, in one commit. Each scenario of the plan-proposals spec. The planner is told to post a card for each
+# proposal it opens, and to close or update it when the proposal is approved, dropped, replaced or agreed to.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -33,6 +34,7 @@ expect_ok crew plan propose "$(proposal \
   'Do: unit add a-plan-only-deploy-is-checked "A plan-only deploy is checked." --bolt deploy-checks' \
   'Do: unit move queued-one deploy-checks')"
 has "$out" "proposal 1 is open, waiting on the user"
+eq "$(tail -1 <<<"$out")" "Post your Pending You card for proposal/1."
 eq "$(plan -t Bolt -P Bolt)" $'tenant-environments\nconsole-pages'
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v "^runs/")" "proposals.rec"
 eq "$(props -t Proposal -P Proposal,State,By)" $'1\nopen\nwldn-planner'
@@ -93,20 +95,29 @@ ok "work a held bolt needs to land is proposed into that bolt, marked, and its c
 expect_fail "proposal 2 waits on the agreement of swb-1-conductor" crew plan approve 2
 CREW_AGENT=swb-2-conductor expect_fail "proposal 2 touches no bolt swb-2 holds" crew plan agree 2
 CREW_AGENT=wldn-design expect_fail "wldn-design does not agree to proposals" crew plan agree 2
+: > "$CREW_TEST_LOG"
 HOST=$box CREW_AGENT=swb-1-conductor expect_ok crew plan agree 2
 eq "$(props -t Proposal -e "Proposal = 2" -P Agreed)" "swb-1"
+grep -qF "agent prompt wldn-planner '[crew] swb-1 agrees to proposal 2. Update your Pending You card for proposal/2: it no longer waits on swb-1-conductor.'" \
+  "$CREW_TEST_LOG" || fail "the planner was not told to update its card:"$'\n'"$(calls)"
 before=$(tip)
 HOST=$box CREW_AGENT=swb-1-conductor expect_ok crew plan agree 2
 has "$out" "already has the agreement of swb-1"; eq "$(tip)" "$before"
+: > "$CREW_TEST_LOG"
 expect_ok crew plan approve 2
+eq "$(tail -1 <<<"$out")" "Close your Pending You card for proposal/2, if one is open, with what was done."
+grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was told of its own approval"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -P Unit)" $'zone-first\nthe-deploy-names-its-host-tenant\nthe-deploy-is-logged'
 eq "$(props -t Proposal -e "Proposal = 2" -P State)" "approved"
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v '^runs/')" $'plan.rec\nproposals.rec'
 eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
 ok "approval waits for the conductor's recorded agreement, then applies the proposal ahead of what waits, in one commit"
 
-before=$(tip)
-expect_ok crew plan approve 1
+before=$(tip); : > "$CREW_TEST_LOG"
+CREW_AGENT= expect_ok crew plan approve 1
+lacks "$out" "Pending You"
+grep -qF "agent prompt wldn-planner '[crew] Proposal 1 was approved by $me@mac-studio. Close your Pending You card for proposal/1, if one is open, with what was done.'" \
+  "$CREW_TEST_LOG" || fail "the planner was not told to close its card:"$'\n'"$(calls)"
 eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
 has "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(proposal 1): approve: new bolt deploy-checks"
 eq "$(plan -t Unit -e "Bolt = 'deploy-checks'" -P Unit)" $'a-plan-only-deploy-is-checked\nqueued-one'
@@ -129,15 +140,17 @@ ok "approval is refused when the plan has moved: a bolt given since needs its co
 CREW_AGENT= expect_ok crew plan drop 3 "the console waits"
 eq "$(props -t Proposal -e "Proposal = 3" -P State,Reason)" $'dropped\nthe console waits'
 expect_fail "proposal 3 is dropped: the console waits" crew plan approve 3
-grep -q "agent prompt wldn-planner '\[crew\] Proposal 3 was dropped by" "$CREW_TEST_LOG" || fail "the planner was not told"
+grep -qF "agent prompt wldn-planner '[crew] Proposal 3 was dropped by $me@mac-studio: the console waits. Close your Pending You card for proposal/3, if one is open, with what was done.'" \
+  "$CREW_TEST_LOG" || fail "the planner was not told to close its card:"$'\n'"$(calls)"
 expect_ok crew plan propose --replaces 4 "$(proposal 'Case: Nothing to move after all; order the queue instead.' 'Do: unit order zone-first --first')"
 has "$out" "proposal 4 is dropped, replaced by proposal 5"
+eq "$(tail -2 <<<"$out")" $'Close your Pending You card for proposal/4, if one is open: proposal 5 replaces it.\nPost your Pending You card for proposal/5.'
 eq "$(props -t Proposal -e "Proposal = 4" -P State,Reason)" $'dropped\nreplaced by proposal 5'
 eq "$(props -t Proposal -e "Proposal = 5" -P Replaces,State)" $'4\nopen'
 eq "$(props -t Proposal -e "Proposal = 5" -P Agreed)" ""
 expect_ok crew plan proposed
 lacks "$out" "wldn 3 "; lacks "$out" "wldn 4 "; has "$out" "wldn 5"
-ok "a proposal is dropped with a reason, or replaced; agreements don't carry over"
+ok "a proposal is dropped with a reason, or replaced; agreements don't carry over; the planner is told, or shown, to close each one's card"
 
 # A unit from a signal: the route move is in the approval's commit.
 sig=2026-10-06-standup/01-plans-are-checked

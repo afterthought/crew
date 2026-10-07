@@ -13,7 +13,7 @@
 
 ## 3. crew names the card a change ends
 
-- [ ] 3.1 Approving, dropping, replacing or agreeing to a proposal, an amendment, and every plan write that takes a unit or bolt from a team name the row's card to its owner, printed when the owner made the change and told otherwise (design.md, Task notes 3.1). Verify `devenv shell -- tests/run t-proposals t-amend` ends with "0 failed".
+- [x] 3.1 Approving, dropping, replacing or agreeing to a proposal, an amendment, and every plan write that takes a unit or bolt from a team name the row's card to its owner, printed when the owner made the change and told otherwise (design.md, Task notes 3.1). Verify `devenv shell -- tests/run t-proposals t-amend` ends with "0 failed".
 - [ ] 3.2 `crew unit run` names the review or verify card its stage ends (design.md, Task notes 3.2).
 - [ ] 3.3 `crew unit approve` by anyone but the conductor tells the conductor to close its review card (design.md, Task notes 3.3). Verify `devenv shell -- tests/run t-unit t-unit-run t-merge` ends with "0 failed".
 

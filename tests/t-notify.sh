@@ -38,7 +38,9 @@ ok "a write to a bolt no team holds tells no one"
 crew unit move a-tenant-creates-its-environments console-pages >/dev/null
 has "$(prompts swb-1)" "plan(console-pages): move a-tenant-creates-its-environments from tenant-environments ($me@mac-studio)"
 has "$(prompts swb-2)" "plan(console-pages): move a-tenant-creates-its-environments from tenant-environments ($me@mac-studio)"
-ok "a move between two teams' bolts tells both conductors"
+has "$(prompts swb-1)" "($me@mac-studio). Close any Pending You card you have open for review/a-tenant-creates-its-environments or verify/a-tenant-creates-its-environments.'"
+lacks "$(prompts swb-2)" "Pending You"
+ok "a move between two teams' bolts tells both conductors, and the one it left to close any card for its rows"
 
 : > "$CREW_TEST_LOG"
 CREW_AGENT=wldn-design expect_ok crew tell swb-1-conductor "The tenant's zone is its own."

@@ -51,11 +51,13 @@ git -C "$kd/bolts/tenant-environments" merge -q --ff-only main
 expect_ok crew bolt land tenant-environments
 has "$out" "plan(tenant-environments): land the bolt"
 has "$out" "tenant-environments has landed and swb-1 holds no bolt"
+grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for review/the-deploy-names-its-host-tenant, verify/the-deploy-names-its-host-tenant or land/tenant-environments.'" \
+  "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
 has "$out" "$kd/bolts/tenant-environments and bolt/tenant-environments are removed; the branch was at"
 [[ ! -d $kd/bolts/tenant-environments ]] || fail "the bolt's worktree is still there"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(plan -t Unit -c)" "0"; eq "$(plan -t Bolt -P Bolt)" $'apex-zones\nboard-builds\nconsole-pages'
-ok "land is refused until every unit has landed, then removes the bolt, its units and its worktree"
+ok "land is refused until every unit has landed, then removes the bolt, its units and its worktree, and tells its conductor to close their cards"
 
 expect_ok crew bolt give swb-1
 has "$out" "swb-1 holds apex-zones"

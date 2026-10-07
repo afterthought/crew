@@ -475,7 +475,7 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
         tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
         w = Write(repo, label, tip, read(repo, ref, tip))
         in_step(w.plan)
-        before = w.plan.teams()
+        before, held = w.plan.teams(), holdings(w.plan)
         touched = change(w) or []
         check(w.plan)
         text = w.plan.text()
@@ -485,7 +485,7 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
             if path.endswith(".rec"):
                 recfix(t, path)
             files[path] = t
-        seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
+        seen.update(before=before, after=w.plan.teams(), lost=lost_rows(held, holdings(w.plan)), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
         seen["newest"] = carried(label, repo, tip, files)
         return files, message(seen["subject"], body, seen["eid"])
@@ -498,15 +498,51 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
     return sha
 
 
+def close_card(row):
+    """What the owner of a row is told, or shown, when a change ends the row: to close its card."""
+    return f"Close your Pending You card for {row}, if one is open, with what was done."
+
+
+def either(rows):
+    return rows[0] if len(rows) == 1 else ", ".join(rows[:-1]) + " or " + rows[-1]
+
+
+def holdings(plan):
+    """Which team holds each held bolt, and each unit of one: the bolts and units whose rail rows its conductor owns."""
+    teams = {b.name(): b.get("Team") for b in plan.bolts() if b.get("Team")}
+    return teams, {u.name(): teams[u.get("Bolt")] for u in plan.units() if teams.get(u.get("Bolt"))}
+
+
+def lost_rows(before, after):
+    """The rail rows each team lost in a write, {team: rows}: review/<unit> and verify/<unit> for each unit no longer in
+    a bolt it holds, and land/<bolt> for each bolt it no longer holds. A landing, a drop and a move all lose rows."""
+    (bolts0, units0), (bolts1, units1) = before, after
+    out = {}
+    for u, t in units0.items():
+        if units1.get(u) != t:
+            out.setdefault(t, []).extend([f"review/{u}", f"verify/{u}"])
+    for b, t in bolts0.items():
+        if bolts1.get(b) != t:
+            out.setdefault(t, []).append(f"land/{b}")
+    return out
+
+
 def notify(fleet, seen, subject):
     """Tell the conductor of each team holding a bolt the write touched, unless that conductor wrote it, or the
-    write's own command greets it instead. Tell the partition's dispatchers that are up of a bolt added, or of one
-    landed or dropped that frees a team, so a free team gets its next bolt, unless one of them wrote it."""
-    before, after, touched = seen["before"], seen["after"], seen["touched"]
-    teams = {before.get(b) for b in touched} | {after.get(b) for b in touched}
+    write's own command greets it instead; a team that lost rows of the rail is told to close any card it has open for
+    them, or, when its conductor wrote it, that is printed. Tell the partition's dispatchers that are up of a bolt
+    added, or of one landed or dropped that frees a team, so a free team gets its next bolt, unless one of them wrote
+    it."""
+    before, after, touched, lost = seen["before"], seen["after"], seen["touched"], seen.get("lost", {})
+    teams = {before.get(b) for b in touched} | {after.get(b) for b in touched} | set(lost)
     for t in sorted(x for x in teams if x and x not in seen["quiet"]):
-        if f"{t}-conductor" != agent() and t in fleet["teams"]:
-            crew.tell(fleet, f"{t}-conductor", subject)
+        if t not in fleet["teams"]:
+            continue
+        close = f"Close any Pending You card you have open for {either(lost[t])}." if lost.get(t) else ""
+        if f"{t}-conductor" != agent():
+            crew.tell(fleet, f"{t}-conductor", f"{subject}. {close}" if close else subject)
+        elif close:
+            print(close)
     added = [b for b in touched if b not in before and b in after]
     freed = [b for b in touched if b not in after and before.get(b)]
     if added or freed:
@@ -1053,16 +1089,22 @@ def unit_approve(fleet, a):
     print(f"unit {a.unit} approved: {sha[:7]} on unit/{a.unit}" if made == "made" else
           f"unit {a.unit} was approved at {sha[:7]} on unit/{a.unit}, after construct ran again")
     commits, eid = [f"{t['kit']['repo']}@{sha}"], None
+    conductor = f"{t['name']}-conductor"
     if mark:
         def change(w):
             u = w.unit(a.unit)
             u.get("Amended") == mark or fail(f"unit {a.unit} was sent back to construct again since it was read: approve it "
                                              "once its change is in review")
             u.drop("Amended")
+            w.quiet.add(t["name"])  # told below that the unit was approved, rather than the write's subject
             return [bolt]
         commits.append(f"{repo}@{write(fleet, label, change, f'plan({bolt}): {a.unit} approved after amendment')}")
         eid = CONTEXT["eid"]
     record.emit(label, "unit.approve", [f"unit/{a.unit}"], commit=commits, why=f"review({a.unit}): approved", eid=eid)
+    if agent() == conductor:
+        print(close_card(f"review/{a.unit}"))
+    else:
+        crew.tell(fleet, conductor, f"Unit {a.unit} was approved by {agent()}. {close_card(f'review/{a.unit}')}")
 
 
 # ------------------------------------------------------------------------------------------ who writes what
@@ -1349,7 +1391,8 @@ def op_unit_amend(ctx, a):
             return
         by = f"proposal {ctx.n}" if not ctx.direct else "the user"
         if not crew.tell(ctx.fleet, f"{team['name']}-conductor", f"Unit {a.unit}'s intent was amended by {by}. Run construct again "
-                         f"(crew unit run {a.unit} construct); it returns to the user's review."):
+                         f"(crew unit run {a.unit} construct); it returns to the user's review. Close any Pending You card "
+                         f"you have open for review/{a.unit} or verify/{a.unit}."):
             print(f"{team['name']}-conductor is not up: unit {a.unit} waits, amended, for construct to be run again")
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
 
@@ -1728,6 +1771,7 @@ def plan_propose(fleet, a):
         if a.replaces:
             old = proposal(pl, a.replaces, label)
             old.get("State") == "open" or fail(f"proposal {a.replaces} is {old.get('State')}, so nothing replaces it")
+            seen["old_by"] = old.get("By")
             old.set("State", "dropped")
             old.set("Closed", today, after="By")
             old.set("Reason", f"replaced by proposal {n}", after="Closed")
@@ -1752,6 +1796,14 @@ def plan_propose(fleet, a):
             print(f"{team}-conductor is not up: proposal {n} is written and waits for its agreement")
     waits = [f"{t}-conductor" for t in teams] + ["the user"]
     print(f"proposal {n} is open, waiting on " + ", then ".join(waits) + f": crew plan proposed {n} --label {label}")
+    planner = f"{label}-planner"
+    replaced = f"Close your Pending You card for proposal/{a.replaces}, if one is open: proposal {n} replaces it."
+    if kind == "planner":
+        if a.replaces:
+            print(replaced)
+        print(f"Post your Pending You card for proposal/{n}.")
+    elif a.replaces and seen.get("old_by") == planner:
+        tell_planner(fleet, label, f"Proposal {a.replaces} was replaced by proposal {n}, by {agent()}. {replaced}")
 
 
 def plan_agree(fleet, a):
@@ -1765,6 +1817,7 @@ def plan_agree(fleet, a):
                                           "touches agrees to it")
     w0, _, p0, argvs = at_tip(fleet, label, a.n)
     p0.get("State") == "open" or fail(f"proposal {a.n} is {p0.get('State')}, so there is nothing to agree to")
+    carded = p0.get("By") == f"{label}-planner"
 
     def wanted(w, p):
         held = held_teams(w.plan, flat(touched_by(w.plan, argvs)))
@@ -1793,7 +1846,9 @@ def plan_agree(fleet, a):
         seen["new"] = new
         return []
     write(fleet, label, change, "plan: agree", act="plan.agree")
-    tell_planner(fleet, label, f"{', '.join(seen['new'])} agree{'s' if len(seen['new']) == 1 else ''} to proposal {a.n}.")
+    tell_planner(fleet, label, f"{', '.join(seen['new'])} agree{'s' if len(seen['new']) == 1 else ''} to proposal {a.n}."
+                 + (f" Update your Pending You card for proposal/{a.n}: it no longer waits on "
+                    + either([f"{t}-conductor" for t in seen["new"]]) + "." if carded else ""))
 
 
 def plan_approve(fleet, a):
@@ -1814,6 +1869,7 @@ def plan_approve(fleet, a):
         p.get("State") == "open" or fail(f"proposal {a.n} is {p.get('State')}" + (f": {p.get('Reason')}" if p.get("Reason") else ""))
     opened(p0)
     agreed(w0, p0)
+    carded = p0.get("By") == f"{label}-planner"
     ops0 = apply_all(fleet, label, w0, argvs, a.n)[0]  # checked at the tip, to know what to prepare
     undos, seen = [], {}
     try:
@@ -1845,6 +1901,10 @@ def plan_approve(fleet, a):
         if op.after:
             op.after(repo, sha)
     print(f"proposal {a.n} is approved and applied")
+    if carded and agent() == f"{label}-planner":
+        print(close_card(f"proposal/{a.n}"))
+    elif carded:
+        tell_planner(fleet, label, f"Proposal {a.n} was approved by {agent()}. {close_card(f'proposal/{a.n}')}")
 
 
 def plan_drop(fleet, a):
@@ -1857,6 +1917,7 @@ def plan_drop(fleet, a):
         pl = proposals(w)
         p = proposal(pl, a.n, label)
         p.get("State") == "open" or fail(f"proposal {a.n} is {p.get('State')}, so it can't be dropped")
+        seen["by"] = p.get("By")
         argvs = [do_args(label, d) for d in p.all("Do")]
         p.set("State", "dropped")
         p.set("Closed", datetime.date.today().isoformat(), after="By")
@@ -1865,8 +1926,13 @@ def plan_drop(fleet, a):
         w.subject = f"plan(proposal {a.n}): drop"
         w.on += [f"proposal/{a.n}"] + objects(argvs)
         return []
+    seen = {}
     write(fleet, label, change, "plan: drop", a.reason, act="plan.drop")
-    tell_planner(fleet, label, f"Proposal {a.n} was dropped by {agent()}: {a.reason}")
+    carded = seen["by"] == f"{label}-planner"
+    if carded and agent() == f"{label}-planner":
+        print(close_card(f"proposal/{a.n}"))
+    said = f"Proposal {a.n} was dropped by {agent()}: {a.reason.strip()}"
+    tell_planner(fleet, label, said + (("" if said[-1:] in ".!?" else ".") + f" {close_card(f'proposal/{a.n}')}" if carded else ""))
 
 
 def signal_text(fleet, label, sig):
