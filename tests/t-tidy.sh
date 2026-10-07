@@ -45,6 +45,24 @@ untouched
 mv "$ws.away" "$ws"
 ok "nothing is removed while a plan the kit's work goes in can't be read"
 
+# A flywheel whose state repository can't even be named: said in the same one line, and the tidy still succeeds.
+unnamed() {
+  as $box python3 - "$CREW/plugin/lib" <<'PY'
+import argparse, sys
+sys.path.insert(0, sys.argv[1])
+import crew, plan
+fleet = crew.load()
+del fleet["partitions"]["wldn"]
+plan.tidy(fleet, argparse.Namespace(team="swb-1"))
+PY
+}
+expect_ok unnamed
+has "$out" "no worktree was removed: the plan of wldn could not be read: no partition 'wldn'"
+eq "$(wc -l <<<"$out" | tr -d ' ')" "1"
+for p in bolts/gone places/merged-one places/stray places/ignored-only places/locked-one; do [[ -d $kd/$p ]] || fail "$p went while the plan could not be named"; done
+untouched
+ok "a plan whose state repository can't be named is said, not raised, and nothing is removed"
+
 expect_ok tidy
 has "$out" "$kd/bolts/gone and bolt/gone are removed; the branch was at $gone"
 has "$out" "$kd/places/merged-one and unit/merged-one are removed; the branch was at"

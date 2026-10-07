@@ -764,14 +764,15 @@ def plans(fleet, labels, errors=None):
     when that is given, else refused."""
     out = []
     for l in labels:
-        repo, ref = state_of(fleet, l)
+        repo = None
         try:
+            repo, ref = state_of(fleet, l)
             tip = fetch(repo, ref)
             out.append((l, repo, tip, read(repo, ref, tip) if tip else None))
         except Refusal as e:
             if errors is None:
                 raise
-            errors[f"{ref} of {repo}"] = str(e)
+            errors[f"{ref} of {repo}" if repo else f"the plan of {l}"] = str(e)
     return out
 
 
