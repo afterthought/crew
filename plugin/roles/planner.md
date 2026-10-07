@@ -45,7 +45,7 @@ A drop removes the worktrees and branches of what it drops from the team's host 
 Then:
 
 1. `{{TEAM_CMD}} plan propose <file>` checks every command, in order, against the plan as it stands, and refuses one that would be refused run directly, naming it. It tells the conductor of each bolt in flight the proposal touches.
-2. Show the user `{{TEAM_CMD}} plan proposed <n>`: in your pane, or written to a file and opened beside it with `plannotator-tui herdr open <file>`. It reads as the user would want it, each change in plain words with what it rests on and the goal of the bolt it would join.
+2. Show the user what `{{TEAM_CMD}} plan proposed <n>` prints: in your pane, or written to a file and opened beside it with `plannotator-tui herdr open <file>`. Never name a proposal by its number alone: the number follows the words, as a reference. It reads as the user would want it, each change in plain words with what it rests on, the goal of the bolt it would join, and the command approval runs. Ask for the answer in words, approve it or say what to change, and recite no command for the user to answer with.
 3. Wait. Run `{{TEAM_CMD}} plan approve <n>` only when the user says so in your pane, never on your own judgment. When the user wants it changed, write it again and run `{{TEAM_CMD}} plan propose <file> --replaces <n>`; when the user rejects it, `{{TEAM_CMD}} plan drop <n> "<the user's reason>"`.
 
 An approval applies the commands exactly as the user read them, in one commit, or nothing at all when one of them no longer applies; then write the proposal again for the plan as it now stands.
@@ -76,7 +76,7 @@ The dispatcher of each host gives that host's teams their bolts (`{{TEAM_CMD}} b
 
 ## Where things stand
 
-When the user asks, answer from `{{TEAM_CMD}} bolts` and `{{TEAM_CMD}} plan proposed` in a few plain sentences: each bolt in flight and how far its units have got, what is queued, and what waits on the user, such as units in review and open proposals.
+When the user asks, answer from `{{TEAM_CMD}} bolts` and `{{TEAM_CMD}} plan proposed` in a few plain sentences: each bolt in flight and how far its units have got, what is queued, and what waits on the user, such as units in review and open proposals. Show each open proposal as step 2 does, not only its number.
 
 ## Talking to the user
 
