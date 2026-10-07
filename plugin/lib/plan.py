@@ -889,6 +889,18 @@ def free_slot(fleet, t, unit, remove=False):
         print(r.stdout.strip())
 
 
+def tidy_after(fleet, t, what):
+    """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
+    has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did. A
+    host that does not answer leaves that to the team's next read, and the write stands."""
+    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"]))
+    if r.returncode:
+        why = "did not answer" if r.returncode == 255 else "failed (" + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1] + ")"
+        print(f"{t['name']}'s host {why}, so its worktrees for {what} are not removed yet: the team's next read removes them")
+    elif (r.stdout + r.stderr).strip():
+        print((r.stdout + r.stderr).strip())
+
+
 # --------------------------------------------------------------------------------------------------- bolts
 
 def held_by(plan, team):
@@ -1209,7 +1221,14 @@ def op_bolt_order(ctx, a):
 
 
 def op_bolt_drop(ctx, a):
-    label, _ = ctx.locate("Bolt", a.bolt)
+    label, plan = ctx.locate("Bolt", a.bolt)
+    team = ctx.fleet["teams"].get(plan.bolt(a.bolt).get("Team"))
+    if a.requeue and team:  # a queued unit has no worktree
+        st = stages_for(ctx.fleet, plan, [plan.bolt(a.bolt)])
+        for u in plan.units_of(a.bolt):
+            s = st.of(u.name())
+            s["stage"] != "unknown" or fail(f"cannot tell unit {u.name()}'s stage: {s.get('why')}")
+            not s["worktree"] or fail(f"unit {u.name()} has a worktree at {s['worktree']}, and a queued unit has none")
 
     def change(w):
         b = w.bolt(a.bolt)
@@ -1223,8 +1242,12 @@ def op_bolt_drop(ctx, a):
                 w.on.append(f"unit/{u.name()}")
         w.plan.remove(b)
         return [a.bolt]
+
+    def after(repo, sha):
+        if team:
+            tidy_after(ctx.fleet, team, f"bolt {a.bolt}")
     return Op(label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), "bolt.drop",
-              on=[f"bolt/{a.bolt}"], body=a.reason)
+              on=[f"bolt/{a.bolt}"], body=a.reason, after=after)
 
 
 def op_unit_add(ctx, a):

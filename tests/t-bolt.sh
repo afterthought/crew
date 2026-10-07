@@ -70,3 +70,44 @@ eq "$(plan -t Unit -P Unit)" $'a-console-page\na-console-filter'
 eq "$(plan -t Unit -e "Bolt != ''" -c)" "0"; eq "$(plan -t Unit -e "After != ''" -c)" "0"
 eq "$(plan -t Bolt -P Bolt)" "apex-zones"
 ok "drop removes a bolt and its units, or with --requeue queues them"
+
+# A dropped bolt's worktrees go from its team's host at once: the bolt's own, and its units' and fixes' places,
+# branches and slots. Requeuing is refused while a unit of the bolt has a worktree, since a queued unit has none.
+clone WilldanGroup/willdan-blueprints "$(space chuck-herdr-alpha willdan)/willdan-blueprints/main"
+box=chuck-herdr-alpha
+crew bolt new one-cfn-lint-pass "One cfn-lint pass." --repo switchboard-kit >/dev/null
+crew unit add lint-once "Lint once." --bolt one-cfn-lint-pass >/dev/null
+crew unit add lint-later "Lint later." --bolt one-cfn-lint-pass >/dev/null
+crew bolt give swb-2 one-cfn-lint-pass >/dev/null 2>&1
+crew unit run lint-once construct >/dev/null
+crew fix swb-2 lint-config "The lint config names no rules." >/dev/null
+fx=fix/one-cfn-lint-pass/lint-config
+tip=$(git --git-dir "$ws" rev-parse wldn/main)
+expect_fail "unit lint-once has a worktree at $kd/places/lint-once, and a queued unit has none" crew bolt drop one-cfn-lint-pass "x" --requeue
+eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$tip"
+ok "--requeue is refused while a unit of the bolt has a worktree, and the plan is unchanged"
+
+expect_ok crew bolt drop one-cfn-lint-pass "the deploy lints once already"
+has "$out" "swb-2-unit-1 is free: lint-once was dropped from the plan"
+has "$out" "swb-2-unit-2 is free: $fx was dropped from the plan"
+has "$out" "$kd/bolts/one-cfn-lint-pass and bolt/one-cfn-lint-pass are removed; the branch was at"
+has "$out" "$kd/places/lint-once and unit/lint-once are removed; the branch was at"
+has "$out" "$kd/places/fix-one-cfn-lint-pass--lint-config and $fx are removed; the branch was at"
+for p in bolts/one-cfn-lint-pass places/lint-once places/fix-one-cfn-lint-pass--lint-config; do [[ ! -d $kd/$p ]] || fail "$p is still there"; done
+for b in bolt/one-cfn-lint-pass unit/lint-once "$fx"; do git -C "$k" rev-parse --verify -q "refs/heads/$b" >/dev/null && fail "$b is still there"; done
+eq "$(awk NF "$(home_of $box)/.local/state/swb-2-team/slots")" ""
+eq "$(plan -t Unit -e "Unit = 'lint-once' || Unit = 'lint-later'" -c)" "0"
+ok "dropping a held bolt removes its worktree and branch, and its unit's and fix's places, branches and slots"
+
+crew bolt new lint-twice "Lint twice." --repo switchboard-kit >/dev/null
+crew bolt give swb-2 lint-twice >/dev/null 2>&1
+echo $box > "$T/down"
+expect_ok crew bolt drop lint-twice "linting once is enough"
+has "$out" "swb-2's host did not answer, so its worktrees for bolt lint-twice are not removed yet: the team's next read removes them"
+eq "$(plan -t Bolt -e "Bolt = 'lint-twice'" -c)" "0"
+[[ -d $kd/bolts/lint-twice ]] || fail "the bolt's worktree went with its host down"
+rm "$T/down"
+expect_ok crew status swb-2
+has "$out" "$kd/bolts/lint-twice and bolt/lint-twice are removed; the branch was at"
+[[ ! -d $kd/bolts/lint-twice ]] || fail "the bolt's worktree is still there after the team's read"
+ok "a drop whose team's host doesn't answer still changes the plan, and the team's next read removes the worktree"

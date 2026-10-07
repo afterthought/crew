@@ -8,7 +8,7 @@
 
 ## 2. Dropping and landing tidy at once
 
-- [ ] 2.1 `crew bolt drop` tidies the bolt's team's host after its write, so the bolt's worktree and branch and its units' and fixes' places, branches and slots go, and `--requeue` refuses a unit that has a worktree (design.md, Task notes 2.1). Verify `tests/t-bolt.sh`, with the new drop and requeue cases, passes.
+- [x] 2.1 `crew bolt drop` tidies the bolt's team's host after its write, so the bolt's worktree and branch and its units' and fixes' places, branches and slots go, and `--requeue` refuses a unit that has a worktree (design.md, Task notes 2.1). Verify `tests/t-bolt.sh`, with the new drop and requeue cases, passes.
 - [ ] 2.2 `crew unit drop` and `crew bolt land` tidy the team's host after their writes, and a land whose bolt worktree is kept still lands (design.md, Task notes 2.2). Verify `tests/t-bolt.sh`, `tests/t-unit.sh` and `tests/t-unit-free.sh` pass.
 
 ## 3. Briefs and docs
