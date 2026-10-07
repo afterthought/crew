@@ -63,9 +63,12 @@ has "$out" "Goal: The deploy is checked before it runs."
 has "$out" "2. **New unit \`a-plan-only-deploy-is-checked\`** in bolt \`deploy-checks\` (new in this proposal)"
 has "$out" "3. **Move unit \`queued-one\`** from the queue to bolt \`deploy-checks\` (new in this proposal)"
 has "$out" "Intent: Later work."
-has "$out" "the user: \`crew plan approve 1 --label wldn\`"
+has "$out" 'Runs: `crew bolt new deploy-checks "The deploy is checked before it runs." --repo switchboard-kit`'
+has "$out" 'Runs: `crew unit move queued-one deploy-checks`'
+has "$out" "the user, to approve it or say what to change"
+lacks "$out" "crew plan approve"
 eq "$(crew plan proposed 1 --json | jq -r '.changes[2].do')" "unit move queued-one deploy-checks"
-ok "a proposal reads as the user would read it, from a host that holds no team"
+ok "a proposal reads as the user would read it, from a host that holds no team: each change with its command, and who it waits on in words"
 
 # A unit a held bolt needs before it can land goes into that bolt, marked; anywhere else it is refused.
 expect_fail "zone-first unblocks bolt tenant-environments, so it goes into that bolt, ahead of what waits on it, not into the queue" \
@@ -83,7 +86,8 @@ expect_ok crew plan proposed 2
 has "$out" "Unblocks: bolt \`tenant-environments\`"
 has "$out" "held by swb-1"
 has "$out" "Bolt's goal: A tenant holds environments of its own."
-has "$out" "swb-1-conductor: \`crew plan agree 2 --label wldn\`"
+has "$out" "swb-1-conductor, to agree, or tell wldn-planner why not"
+lacks "$out" "crew plan agree"
 ok "work a held bolt needs to land is proposed into that bolt, marked, and its conductor is told"
 
 expect_fail "proposal 2 waits on the agreement of swb-1-conductor" crew plan approve 2
@@ -182,3 +186,10 @@ eq "$(grep -v 'refused:' <<<"$trace" | awk '{print $3}' | head -4 | tr '\n' ' ')
 has "$trace" "refused: proposal 2 waits on the agreement of swb-1-conductor"
 lacks "$trace" "unit/the-deploy-is-logged"
 ok "each step of a proposal is in the run record, and a unit's trace shows the proposal, the agreement and the approval"
+
+# A command holding a backtick is fenced so it reads whole.
+expect_ok crew plan propose "$(proposal 'Case: The x command is checked.' 'Do: unit add ticks "The `x` command works." --repo switchboard-kit')"
+n=$(props -t Proposal -P Proposal | tail -1)
+expect_ok crew plan proposed "$n"
+has "$out" 'Runs: ``crew unit add ticks "The `x` command works." --repo switchboard-kit``'
+ok "a command that holds a backtick is shown in a code span fenced longer than it"

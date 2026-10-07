@@ -8,5 +8,5 @@
 
 ## 2. The rendering shows the commands
 
-- [ ] 2.1 `crew plan proposed <n>` prints under each change the `crew` command approval runs for it, and names who it waits on in words without answering commands (design.md, Task notes 2.1). Verify the changed checks in `tests/t-proposals.sh` pass.
+- [x] 2.1 `crew plan proposed <n>` prints under each change the `crew` command approval runs for it, and names who it waits on in words without answering commands (design.md, Task notes 2.1). Verify the changed checks in `tests/t-proposals.sh` pass.
 - [ ] 2.2 The README's description of `crew plan proposed <n>` says it shows each change's command and who it waits on, in words (design.md, Task notes 2.2). Verify `devenv shell -- tests/run` ends with "0 failed".

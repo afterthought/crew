@@ -72,13 +72,13 @@ has "$out" "1. **Amend unit \`cfn-lint-treefmt\`** in bolt \`tenant-environments
 has "$out" "   Intent, as it stands: Unit cfn-lint-treefmt."
 has "$out" "   Intent, as proposed:  cfn-lint in treefmt fails the check on a warning as well as an error"
 has "$out" "   On approval: swb-1's conductor runs construct again, and the unit returns to your review."
-has "$out" "- swb-1-conductor: \`crew plan agree 1 --label wldn\`"
+has "$out" "- swb-1-conductor, to agree, or tell wldn-planner why not"
 eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(proposal 1): propose: amend cfn-lint-treefmt (wldn-planner)"
 ok "an amendment is proposed with the intent unchanged, its conductor is told, and its page shows both intents, the stage and what follows"
 
 expect_fail "proposal 1 waits on the agreement of swb-1-conductor" crew plan approve 1
 HOST=$box CREW_AGENT=swb-1-conductor expect_ok crew plan agree 1
-expect_ok crew plan proposed 1; has "$out" "- agreed: swb-1"; lacks "$out" "- swb-1-conductor:"
+expect_ok crew plan proposed 1; has "$out" "- agreed: swb-1"; lacks "$out" "- swb-1-conductor, to agree"
 : > "$CREW_TEST_LOG"
 expect_ok crew plan approve 1
 eq "$(plan -t Unit -e "Unit = 'cfn-lint-treefmt'" -P Intent)" "cfn-lint in treefmt fails the check on a warning as well as an error"

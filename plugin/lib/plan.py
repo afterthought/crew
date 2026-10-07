@@ -1967,8 +1967,17 @@ def describe(fleet, label, plan, p):
             "changes": changes, "agreed": agreed, "waiting": [t for t in held if t not in agreed]}
 
 
+def code_span(text):
+    """text as a markdown code span: fenced one backtick longer than its longest run of backticks, with a space inside
+    each end when it starts or ends with one (CommonMark's rule)."""
+    fence = "`" * (max((len(r) for r in re.findall(r"`+", text)), default=0) + 1)
+    pad = " " if text[:1] == "`" or text[-1:] == "`" else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
+
+
 def page(d, label):
-    """The markdown of one proposal, so the planner can show it in its pane or beside it in plannotator."""
+    """The markdown of one proposal: each change in plain words with the command approval runs for it, and, while it is
+    open, who it waits on, in words."""
     out = [f"# Proposal {d['proposal']} — {d['state']}, by {d['by']}, {d['opened']}", ""]
     if d["replaces"]:
         out += [f"Replaces proposal {d['replaces']}.", ""]
@@ -1977,15 +1986,16 @@ def page(d, label):
         first, *rest = c["lines"]
         out.append(f"{i}. {first}")
         out += [f"   {l}" for l in rest]
+        out.append(f"   Runs: {code_span(c['do'] if c['do'].startswith('crew ') else 'crew ' + c['do'])}")
         out.append("")
     if d["state"] != "open":
         out += [f"Closed {d['closed']}" + (f": {d['reason']}" if d["reason"] else "") + "."]
         return "\n".join(out).rstrip() + "\n"
     out += ["## Waiting on", ""]
-    out += [f"- {t}-conductor: `crew plan agree {d['proposal']} --label {label}`, or tell {label}-planner why not" for t in d["waiting"]]
+    out += [f"- {t}-conductor, to agree, or tell {label}-planner why not" for t in d["waiting"]]
     if d["agreed"]:
         out.append("- agreed: " + ", ".join(d["agreed"]))
-    out.append(f"- the user: `crew plan approve {d['proposal']} --label {label}`, or `crew plan drop {d['proposal']} \"<reason>\" --label {label}`")
+    out.append("- the user, to approve it or say what to change")
     return "\n".join(out) + "\n"
 
 
