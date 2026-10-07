@@ -47,6 +47,7 @@ eq "$(tail -1 "$CREW_TEST_CLAUDE_LOG" | jq -r '.argv[3]')" "xhigh"
 (cd "$fp" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge failed"
 expect_ok crew status swb-1
 has "$out" "swb-1-unit-1 is free: $fb has merged into its bolt"
+has "$out" "$fp and $fb are removed; the branch was at"
 [[ ! -d $fp ]] || fail "the fix's place is still there"
 git -C "$k" rev-parse --verify -q "refs/heads/$fb" >/dev/null && fail "the fix's branch is still there"
 eq "$(git -C "$kd/bolts/tenant-environments" show HEAD:sign-in)" "fixed"
@@ -70,6 +71,7 @@ eq "$(field fix.merge Why fix/tenant-environments/old-sign-in)" "fix(old-sign-in
 (cd "$old" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge of the old fix failed"
 expect_ok crew status swb-1
 has "$out" "swb-1-unit-2 is free: fix/old-sign-in has merged into its bolt"
+has "$out" "$old and fix/old-sign-in are removed; the branch was at"
 [[ ! -d $old ]] || fail "the old fix's place is still there"
 git -C "$k" rev-parse --verify -q refs/heads/fix/old-sign-in >/dev/null && fail "the old fix's branch is still there"
 eq "$(git -C "$kd/bolts/tenant-environments" show HEAD:old)" "old"

@@ -1,5 +1,6 @@
 # The merge stage runs wt merge bolt/<bolt> --no-squash --no-remove from the unit's place. Once the bolt holds
-# the change, crew removes the place and frees the slot: the unit reads merged.
+# the change, crew removes the place and frees the slot: the unit reads merged. A place with a stray file is kept,
+# and named on each read, until the file goes.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
@@ -8,8 +9,9 @@ export CREW_LABEL=wldn CREW_AGENT=swb-1-conductor
 CREW_AGENT= crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 CREW_AGENT= crew unit add a "Unit a." --bolt tenant-environments >/dev/null
 CREW_AGENT= crew unit add b "Unit b." --bolt tenant-environments >/dev/null
+CREW_AGENT= crew unit add c "Unit c." --bolt tenant-environments >/dev/null
 CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
-crew unit run a construct >/dev/null; crew unit run b construct >/dev/null
+crew unit run a construct >/dev/null; crew unit run b construct >/dev/null; crew unit run c construct >/dev/null
 change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"; crew unit approve a >/dev/null
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/a" "feat(a): built"
 expect_ok crew unit run a merge
@@ -34,6 +36,30 @@ eq "$(stage a)" "merged"
 git -C "$k" ls-tree -d --name-only bolt/tenant-environments openspec/changes/ | grep -qx openspec/changes/a || fail "the bolt does not hold a's change"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1 units"
 ok "once the bolt holds the change, the place is removed, the slot freed, and the unit reads merged"
+
+change "$kd/places/c" c 0 2; commit_all "$kd/places/c" "docs(c): the change"; crew unit approve c >/dev/null
+rewrite "$kd/places/c/openspec/changes/c/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/c" "feat(c): built"
+crew unit run c merge >/dev/null
+cslot=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-3") | .key')
+as $box herdr --session wldn-1 stub status "$cslot" working
+(cd "$kd/places/c" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge of c failed"
+echo stray > "$kd/places/c/note"
+as $box herdr --session wldn-1 stub status "$cslot" idle
+expect_ok crew status swb-1
+has "$out" "swb-1-unit-3 is free: c has merged into its bolt"
+has "$out" "$kd/places/c is kept, and unit/c with it: unit c has merged into bolt/tenant-environments, and it has uncommitted changes, which are the user's to keep or discard"
+eq "$(awk '$1 == "unit-3"' "$(home_of $box)/.local/state/swb-1-team/slots")" ""
+[[ -d $kd/places/c ]] || fail "c's place went with its stray file"
+git -C "$k" rev-parse --verify -q unit/c >/dev/null || fail "unit/c went without its place"
+expect_ok crew status swb-1; has "$out" "$kd/places/c is kept, and unit/c with it"
+ok "a merged place with a stray file is kept with its branch, its slot freed, and named on each read"
+
+rm "$kd/places/c/note"
+expect_ok crew status swb-1
+has "$out" "$kd/places/c and unit/c are removed; the branch was at"
+[[ ! -d $kd/places/c ]] || fail "c's place is still there"
+git -C "$k" rev-parse --verify -q unit/c >/dev/null && fail "unit/c is still there"
+ok "once the stray file goes, the next read removes the place and its branch"
 
 CREW_AGENT= crew unit drop b "not wanted after all" >/dev/null
 eq "$(herdr_state $box wldn-1 '.workspaces | length')" "0"
