@@ -14,6 +14,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
                                              the moves where the partition's blueprints repos have them
   crew bolts [<bolt>] [--label L] [--json]   every bolt and unit of the plans, each unit's stage read from its kit
+  crew rail [--label L]                      what waits on the user: open proposals, units in review, verify reports
+                                             and bolts to land, each with when it began to wait and what answers it
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
@@ -2002,6 +2004,26 @@ def page(d, label):
     return "\n".join(out) + "\n"
 
 
+def open_proposals(fleet, labels, found=None):
+    """Each open proposal of the labels' flywheels, as describe() gives it, with its label. found, when given, is the
+    plans already read, as plans() gives them: their tips are used, and a label it lacks is skipped."""
+    rows = []
+    for l in labels:
+        repo, ref = state_of(fleet, l)
+        if found is None:
+            tip, plan = fetch(repo, ref), None
+        else:
+            tip, plan = next(((t, p) for x, _, t, p in found if x == l), (None, None))
+        text = show(repo, tip, "proposals.rec") if tip else None
+        if not text:
+            continue
+        plan = plan or read(repo, ref, tip)
+        for p in Plan(text).recs("Proposal"):
+            if p.get("State") == "open":
+                rows.append(dict(describe(fleet, l, plan, p), label=l))
+    return rows
+
+
 def plan_proposed(fleet, a):
     """crew plan proposed [<n>] [--label L] [--json]: the open proposals, or one as the user would read it. Reads the
     flywheels' branches only, so any host can answer."""
@@ -2012,18 +2034,8 @@ def plan_proposed(fleet, a):
         d = describe(fleet, label, w.plan, p)
         print(json.dumps(d, indent=1) if a.json else page(d, label), end="" if not a.json else "\n")
         return
-    rows = []
-    for l in ([label] if label else list(fleet["partitions"])):
-        repo, ref = state_of(fleet, l)
-        tip = fetch(repo, ref)
-        text = show(repo, tip, "proposals.rec") if tip else None
-        if not text:
-            continue
-        plan = read(repo, ref, tip)
-        for p in Plan(text).recs("Proposal"):
-            if p.get("State") == "open":
-                d = describe(fleet, l, plan, p)
-                rows.append(dict(d, label=l, waits=[f"{t}-conductor" for t in d["waiting"]] + ["the user"]))
+    rows = [dict(d, waits=[f"{t}-conductor" for t in d["waiting"]] + ["the user"])
+            for d in open_proposals(fleet, [label] if label else list(fleet["partitions"]))]
     if a.json:
         print(json.dumps(rows, indent=1))
         return
@@ -2681,6 +2693,104 @@ def bolts_view(fleet, a):
         sys.exit("\n".join(errors.values()))
 
 
+# ------------------------------------------------------------------------------------------------ crew rail
+
+RAIL = ("proposals", "review", "verify", "land")
+
+
+def utc(iso):
+    """An ISO 8601 time, as git and the run record write it, as an aware datetime."""
+    return datetime.datetime.fromisoformat(iso.replace("Z", "+00:00")) if iso else None
+
+
+def age(at, now):
+    """How long ago, in its two largest units: <1m, 14m, 3h 05m, 2d 04h."""
+    m = int((now - at).total_seconds()) // 60
+    if m < 1:
+        return "<1m"
+    if m < 60:
+        return f"{m}m"
+    h, m = divmod(m, 60)
+    if h < 24:
+        return f"{h}h {m:02d}m"
+    d, h = divmod(h, 24)
+    return f"{d}d {h:02d}h"
+
+
+def rail_rows(fleet, found, sv):
+    """What waits on the user in the plans read, from the proposals and the kits as surveyed: each row's group, the
+    time it began to wait (shown as a date alone when that is all that is known), what it is, and its commands."""
+    rows = []
+    for d in open_proposals(fleet, [l for l, _, _, p in found if p], found):
+        l, n = d["label"], d["proposal"]
+        what = [f"proposal {n} ({l}), by {d['by']}: {d['case'].splitlines()[0][:70]}"]
+        if d["waiting"]:
+            what.append("still needs the agreement of " + ", ".join(f"{t}-conductor" for t in d["waiting"]))
+        rows.append(dict(group="proposals", at=utc(f"{d['opened']}T00:00:00Z"), date=d["opened"], what=what,
+                         cmds=[("read", f"crew plan proposed {n} --label {l}"), ("answer", f"crew plan approve {n} --label {l}")]))
+    for l, _, _, plan in found:
+        if not plan:
+            continue
+        st = Stages(fleet, plan, sv)
+        for b in plan.bolts():
+            if not b.get("Team"):
+                continue
+            k, _ = st.kit(b)
+            if not k:
+                continue
+            team, host = k["team"]["name"], k["host"]
+            units = plan.units_of(b.name())
+            for u in units:
+                s, pl = st.of(u.name())["stage"], k["places"].get(u.name())
+                if not pl:
+                    continue
+                if s == "review":
+                    rows.append(dict(group="review", at=utc(pl.get("head_at")), what=[f"unit {u.name()} ({l}), {team} on {host}"],
+                                     cmds=[("answer", f"crew unit approve {u.name()} --label {l}")]))
+                report = k.get("reports", {}).get(u.name())
+                if s == "verify" and report and pl.get("head_at") and utc(report["at"]) > utc(pl["head_at"]):
+                    rows.append(dict(group="verify", at=utc(report["at"]),
+                                     what=[f"unit {u.name()} ({l}), {team} on {host}: report {shlex.quote(report['path'])}"],
+                                     cmds=[("answer", f'crew tell {team}-conductor "On {u.name()}\'s verify report: "')]))
+            stages = [st.of(u.name())["stage"] for u in units]
+            at = k["bolts"].get(b.name(), {}).get("head_at")
+            if stages and at and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
+                rows.append(dict(group="land", at=utc(at), what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
+                                 cmds=[("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]))
+    return rows
+
+
+def rail_view(fleet, a):
+    """crew rail [--label L]: what waits on the user, in four groups in order, each row with when it began to wait, how
+    long ago that was and the commands that answer it, oldest first. Read from the plans, the proposals and the kits;
+    nothing is written."""
+    label = default_label(fleet, a)
+    labels = [label] if label else list(fleet["partitions"])
+    errors = {}
+    found = plans(fleet, labels, errors)
+    sv = survey(fleet, [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")])
+    rows = rail_rows(fleet, found, sv)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    lines = [f"What waits on you ({', '.join(labels)}), as of {now.astimezone():%H:%M:%S}"]
+    for g in RAIL:
+        lines += ["", g]
+        mine = sorted((r for r in rows if r["group"] == g), key=lambda r: (r["at"] is None, r["at"] or now, r["what"][0]))
+        if not mine:
+            lines.append("  none")
+        for r in mine:
+            when = r.get("date") or (f"{r['at'].astimezone():%Y-%m-%d %H:%M}" if r["at"] else "-")
+            first, *rest = r["what"]
+            lines.append(f"  {when:<16}  {age(r['at'], now) if r['at'] else '-':<7}  {first}")
+            lines += [" " * 29 + w for w in rest]
+            lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
+    for h, v in sv.items():
+        if not v["ok"]:
+            lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
+    print("\n".join(lines))
+    if errors:
+        sys.exit("\n".join(errors.values()))
+
+
 # ----------------------------------------------------------------------------------------------------- the CLI
 
 def parser(cls=argparse.ArgumentParser):
@@ -2694,6 +2804,8 @@ def parser(cls=argparse.ArgumentParser):
     v.add_argument("bolt", nargs="?")
     v.add_argument("--label")
     v.add_argument("--json", action="store_true")
+    v = sub.add_parser("rail")
+    v.add_argument("--label")
 
     bo = sub.add_parser("bolt").add_subparsers(dest="sub", required=True)
     x = bo.add_parser("new")
@@ -2840,7 +2952,7 @@ def parser(cls=argparse.ArgumentParser):
 
 
 COMMANDS = {
-    ("state", "init"): state_init, ("bolts", None): bolts_view,
+    ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),

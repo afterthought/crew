@@ -460,7 +460,7 @@ pick_roles() {  # with no role named, the standing roles
 
 case $cmd in
   list) teams ;;
-  bolts | bolt | signal | state | plan) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  bolts | bolt | signal | state | plan | rail) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   events | trace) exec python3 "$here/../lib/record.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
