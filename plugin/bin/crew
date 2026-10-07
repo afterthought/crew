@@ -319,13 +319,18 @@ free() {  # end a slot's agent, close its pane and give the slot back; the units
   w=$(get "$layout" "$(ws_key "$TEAM units")"); [[ -n $w ]] && { h workspace close "$w" >/dev/null 2>&1 || true; }
   drop "$layout" "$(ws_key "$TEAM units")"; for s in "${slots[@]}"; do drop "$panes" "$s"; done
 }
-fix_refused() {  # fix_refused <why>: a fix's start refused, said and recorded
-  echo "$1" >&2
-  entry --label "$LABEL" --act fix.start --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "$1"; exit 1
+fix_refused() {  # fix_refused <act> <why>: a fix's start or merge refused, said and recorded
+  echo "$2" >&2
+  entry --label "$LABEL" --act "$1" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "$2"; exit 1
 }
-own_place() {  # own_place <place> <branch>: the fix's place is on its own branch, made from the team's bolt
-  local on up=
+own_place() {  # own_place <place> <branch>: the fix's place is on its own branch, made from the team's bolt. A merge
+  # stopped partway through its rebase is on no branch, and is taken as on the branch it is rebasing.
+  local on up= d
   on=$(git -C "$1" branch --show-current 2>/dev/null || true)
+  for d in rebase-merge rebase-apply; do
+    [[ -z $on ]] && on=$(cat "$(git -C "$1" rev-parse --path-format=absolute --git-path "$d/head-name" 2>/dev/null)" 2>/dev/null || true)
+  done
+  on=${on#refs/heads/}
   [[ -n $on ]] && up=$(git -C "$1" for-each-ref --format='%(upstream:short)' "refs/heads/$on" 2>/dev/null || true)
   [[ $on == "$2" && $up == "bolt/$BOLT" ]] && return 0
   echo "$1 is on ${on:-no branch}, made from ${up:-no bolt}, not $2 from bolt/$BOLT: crew starts a fix only in its own place"
@@ -537,6 +542,7 @@ case $cmd in
     [[ -n $slot ]] && read -r fix path < <(awk -v s="$slot" '$1==s{print $3, $4}' "$held")
     if [[ $words == --merge ]]; then
       [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
+      err=$(own_place "$path" "$fix") || fix_refused fix.merge "$err"
       ensure_slot_pane "$slot" "$path"
       run_stage "$slot" merge "Merge $fix into bolt/$BOLT: wt merge bolt/$BOLT --no-squash --no-remove" fix.merge "$fix" "fix/$BOLT/$name" \
         --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
@@ -544,9 +550,9 @@ case $cmd in
     else
       taken=0
       if [[ -z $slot ]]; then  # a new fix never takes over a branch or place that is already there
-        if [[ -e $path ]]; then fix_refused "$fix already has a place at $path that no slot of $TEAM holds: name this fix differently"
+        if [[ -e $path ]]; then fix_refused fix.start "$fix already has a place at $path that no slot of $TEAM holds: name this fix differently"
         elif git -C "$KIT" rev-parse --verify -q "refs/heads/$fix" >/dev/null; then
-          fix_refused "$fix already has a branch that no slot of $TEAM holds, though no place at $path: name this fix differently"
+          fix_refused fix.start "$fix already has a branch that no slot of $TEAM holds, though no place at $path: name this fix differently"
         fi
         slot=$(take_slot fix "$fix" "$path") || {
           entry --label "$LABEL" --act fix.start --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "all $UNITS of $TEAM's slots are in flight"; exit 1; }
@@ -554,7 +560,7 @@ case $cmd in
       fi
       if ! err=$(plan _place "$TEAM" "$path" "$fix" "bolt/$BOLT" 2>&1) || ! err=$(own_place "$path" "$fix"); then
         [[ $taken == 1 ]] && drop "$held" "$slot"
-        fix_refused "$err"
+        fix_refused fix.start "$err"
       fi
       ensure_slot_pane "$slot" "$path"
       run_stage "$slot" fix "Fix: $words" fix.start "$fix" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"

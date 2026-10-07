@@ -116,9 +116,23 @@ has "$(refused fix/console-pages/shared)" "made from bolt/tenant-environments"
 eq "$(slots_of swb-1)" "$before"; eq "$(launches | wc -l)" "$launched"
 has "$(slots_of swb-2)" "unit-2 fix fix/shared $kd/places/fix-shared"
 ok "a fix in flight whose place is on another branch, or whose branch is from another team's bolt, is refused and keeps its slot"
+expect_fail "$kd/places/fix-shared is on fix/shared, made from bolt/tenant-environments, not fix/shared from bolt/console-pages: crew starts a fix only in its own place" \
+  crew fix swb-2 shared --merge
+has "$(field fix.merge Refused fix/console-pages/shared)" "made from bolt/tenant-environments"
+eq "$(launches | wc -l)" "$launched"; has "$(slots_of swb-2)" "unit-2 fix fix/shared $kd/places/fix-shared"
+ok "a fix's merge is refused when its branch is from another team's bolt, and keeps its slot"
 
 git -C "$k" branch -q fix/tenant-environments/deep/x bolt/tenant-environments
 expect_fail "refs/heads/fix/tenant-environments/deep" crew fix swb-1 deep "x"
 has "$(refused fix/tenant-environments/deep)" "on $box: "
 eq "$(slots_of swb-1)" "$before"; eq "$(launches | wc -l)" "$launched"
 ok "a fix whose branch git cannot make is refused in git's words and recorded, and gives its slot back"
+
+pc=$kd/places/fix-console-pages--bolt-takes-main
+echo fix > "$pc/main-line"; commit_all "$pc" "fix: main's line"
+echo bolt > "$kd/bolts/console-pages/main-line"; commit_all "$kd/bolts/console-pages" "feat: the bolt's line"
+git -C "$pc" rebase bolt/console-pages >/dev/null 2>&1 && fail "the rebase did not stop"
+eq "$(git -C "$pc" branch --show-current)" ""
+CREW_AGENT=swb-2-conductor expect_ok crew fix swb-2 bolt-takes-main --merge
+has "$out" "swb-2-unit-1 has fix/console-pages/bolt-takes-main: merge, in $pc"
+ok "a fix's merge stopped partway through its rebase starts again in its own place"
