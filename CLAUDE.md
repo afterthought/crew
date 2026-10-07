@@ -9,7 +9,7 @@ On every host, the `crew` command and the plugin every Claude session loads run 
 ## Tests
 
 - Run them only as `devenv shell -- tests/run [name...]` from the worktree's root. Never run a `tests/t-*.sh` file with bash: `tests/run` is what puts stub herdr, ssh, claude and hostname first on the path and gives each test a scratch HOME and bare remotes. A test run outside it reaches the real agents, the real plan on GitHub and the real repos. Every test stops on its first line when `TESTS` is unset; a new test keeps that line.
-- `tests/run` exits 0 even when a test fails: read its summary line, and only "0 failed" passes.
+- `tests/run` exits non-zero when any test fails, and prints a summary line; only "0 failed" passes.
 - Inside devenv's shell `sed` is GNU sed. A test edits a fixture in place with `rewrite` from `tests/lib.sh`, never `sed -i ''`.
 
 ## Proving and landing a bolt
