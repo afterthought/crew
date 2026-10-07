@@ -1,7 +1,9 @@
 # crew rail: everything that waits on the user, in four groups in order (proposals, review, verify, land), each row
 # with when it began to wait, how long ago that was and the commands that answer it, oldest first; read from the plan,
 # the proposals, the kits and the run record, and writing nothing. Each scenario of the crew-rail spec, and opening a
-# proposal in plannotator with crew plan proposed <n> --open.
+# proposal in plannotator with crew plan proposed <n> --open. Each row has its card key and says whether a Pending You
+# card is open for it and whose, and an open card whose row is gone is listed with the tell that asks its owner to
+# close it, read from the card entries crew's hook writes in the run record.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -26,6 +28,7 @@ expect_ok crew rail --label wldn
 has "$out" "What waits on you (wldn), as of "
 eq "$(grep -E '^[a-z]+$' <<<"$out" | tr '\n' ' ')" "proposals review verify land "
 eq "$(grep -c '^  none$' <<<"$out")" "4"
+lacks "$out" "card:"; lacks "$out" "open cards with no row"
 ok "with nothing waiting, the four groups are printed in order, each with none"
 
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
@@ -113,10 +116,52 @@ expect_fail "--json" crew plan proposed 1 --label wldn --open --json
 eq "$(tip)" "$before"
 ok "a proposal opens in plannotator, beside the caller in herdr and inline elsewhere, from a file holding what crew plan proposed prints"
 
+# card <host> <agent> <act> <object> <card> [key]: a card entry, written as crew's hook writes it, on the owner's host
+card() { CREW_AGENT=$2 as "$1" python3 "$CREW/plugin/lib/record.py" emit --label wldn --act "$3" --on "$4" --field "Card=$5" ${6:+--field "Key=$6"} >/dev/null; }
+he=$(git -C "$pe" rev-parse --short=7 HEAD); hl=$(git -C "$pl" rev-parse --short=7 HEAD)
+: > "$CREW_TEST_LOG"
+expect_ok crew rail --label wldn; r=$out
+eq "$(grep -c 'runs/\*/\*.rec' "$CREW_TEST_LOG")" "1"
+eq "$(grep -A4 -F "proposal 1 (wldn)" <<<"$r" | tail -1)" "    card:   proposal/1, none open"
+has "$(group "$r" proposals)" "    card:   proposal/2, none open"
+eq "$(grep -A3 -F "unit early (wldn)" <<<"$r" | tail -1)" "    card:   review/early/$he, none open"
+has "$(group "$r" review)" "    card:   review/late/$hl, none open"
+has "$(group "$r" verify)" "    card:   verify/checked/$(shown 100 %Y%m%d-%H%M), none open"
+eq "$(grep -A2 -F "bolt apex-zones (wldn)" <<<"$r" | tail -1)" "    card:   land/apex-zones, none open"
+eq "$(grep -c '^    card:   ' <<<"$r")" "6"
+lacks "$r" "open cards with no row"
+ok "every row has its card key, after its commands: a proposal's number, a review's head, a verify report's stamp, a bolt's name"
+
+card $box swb-1-conductor card.post unit/early req_rev-1 "review/early/$he"
+has "$(group "$(crew rail --label wldn)" review)" "    card:   review/early/$he, open, asked by swb-1-conductor"
+card $box swb-1-conductor card.close unit/early req_rev-1 "review/early/$he"
+has "$(group "$(crew rail --label wldn)" review)" "    card:   review/early/$he, none open"
+card $box swb-1-conductor card.post unit/early req_rev-2 "review/early/$he"
+card mac-studio wldn-planner card.post proposal/1 req_prop-1 proposal/1
+expect_ok crew rail --label wldn; r=$out
+has "$(group "$r" review)" "    card:   review/early/$he, open, asked by swb-1-conductor"
+has "$(group "$r" proposals)" "    card:   proposal/1, open, asked by wldn-planner"
+has "$(group "$r" proposals)" "    card:   proposal/2, none open"
+lacks "$r" "open cards with no row"
+ok "a row's card is open from its post until its close, and names who asked it"
+
+card $box swb-1-conductor card.post unit/late req_old-1 review/late/0000000
+expect_ok crew rail --label wldn; r=$out
+has "$(group "$r" review)" "    card:   review/late/$hl, none open"
+stray=$(awk '$0 == "open cards with no row:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$r")
+eq "$(grep -cE '^  [0-9]' <<<"$stray")" "1"
+grep -qE "^  $(date +%Y-%m-%d) [0-9]{2}:[0-9]{2}  (<1m|[0-9]m) +review/late/0000000 \(wldn\), asked by swb-1-conductor on $box$" <<<"$stray" \
+  || fail "the card keyed for an older head is not listed:"$'\n'"$r"
+has "$stray" '    answer: crew tell swb-1-conductor "Close your Pending You card review/late/0000000: its row is gone."'
+ok "a card keyed for an older head has no row, and is listed after the groups with the tell that asks its owner to close it"
+
 crew unit approve early --label wldn >/dev/null
 expect_ok crew rail --label wldn
 lacks "$(group "$out" review)" "unit early"; has "$(group "$out" review)" "unit late"
-ok "a unit approved leaves the list at the next read"
+stray=$(awk '$0 == "open cards with no row:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$out")
+eq "$(grep -oE '  review/[a-z]+/[0-9a-f]+ ' <<<"$stray" | tr -d ' ' | tr '\n' ' ')" "review/early/$he review/late/0000000 "
+has "$stray" "    answer: crew tell swb-1-conductor \"Close your Pending You card review/early/$he: its row is gone.\""
+ok "a unit approved leaves the list at the next read, and a card its conductor left open is listed as one with no row"
 
 records() { cat "$(home_of mac-studio)"/.local/state/crew/wldn/runs/*/*.rec "$(home_of $box)"/.local/state/crew/wldn/runs/*/*.rec 2>/dev/null | wc -l || true; }
 before=$(tip); n=$(records)
@@ -124,10 +169,17 @@ crew rail --label wldn >/dev/null; HOST=$box crew rail --label wldn >/dev/null; 
 eq "$(tip)" "$before"; eq "$(records)" "$n"
 ok "the rail writes nothing: the flywheel's branch and the run record are as they were"
 
+HOST=$box crew events --push --label wldn >/dev/null  # the box's cards, on the branch the rail reads with the box down
+card mac-studio atl-1-conductor card.post agent/atl-1-conductor req_free-1
 echo $box > "$T/down"
 expect_ok crew rail --label wldn
+stray=$(awk '$0 == "open cards with no row:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$out")
+lacks "$stray" "review/"
+has "$stray" "an unkeyed card (wldn), asked by atl-1-conductor on mac-studio"
+has "$stray" '    answer: crew tell atl-1-conductor "Close your Pending You card req_free-1: its row is gone."'
+has "$(group "$out" proposals)" "    card:   proposal/1, open, asked by wldn-planner"
 has "$(group "$out" proposals)" "proposal 1 (wldn)"
 has "$out" "$box did not answer"; has "$out" "its units and bolts may also wait on you"
 eq "$(grep -c '^  none$' <<<"$out")" "3"
 rm "$T/down"
-ok "a host that does not answer is named, the proposals are still listed, and the exit is zero"
+ok "a host that does not answer is named, the proposals and their cards are still listed, a stray card of its teams is not, and the exit is zero"
