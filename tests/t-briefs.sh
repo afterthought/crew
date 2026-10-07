@@ -71,7 +71,8 @@ expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time"; do has "$out" "$want"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
-for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main" "the bolt lands either way"; do has "$out" "$want"; done
+for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main" "the bolt lands either way" \
+  "through the bolt's conductor when the user approved its landing card on Pending You"; do has "$out" "$want"; done
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
 
