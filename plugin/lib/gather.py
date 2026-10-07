@@ -38,6 +38,7 @@ def changes(main, ref):
 
 
 def worktrees(main):
+    """The checkout's worktrees: each one's path, its branch when it is on one, and whether it is locked."""
     out, cur = [], {}
     for line in (run(["git", "worktree", "list", "--porcelain"], main) or "").splitlines() + [""]:
         if not line:
@@ -48,6 +49,8 @@ def worktrees(main):
             cur["path"] = os.path.realpath(line[9:])
         elif line.startswith("branch refs/heads/"):
             cur["branch"] = line[18:]
+        elif line == "locked" or line.startswith("locked "):
+            cur["locked"] = True
     return out
 
 
@@ -57,6 +60,17 @@ def upstreams(main):
         b, _, up = line.partition(" ")
         out[b] = up
     return out
+
+
+def fix_merged(main, branch, bolt):
+    """Whether a fix has merged into its bolt: the bolt holds the fix's tip, and the fix has moved since it was made
+    (its reflog's first entry)."""
+    if not bolt:
+        return False
+    born = (run(["git", "reflog", "show", "--format=%H", branch], main) or "").split()
+    tip = (run(["git", "rev-parse", branch], main) or "").strip()
+    return bool(born) and tip != born[-1] and subprocess.run(
+        ["git", "merge-base", "--is-ancestor", branch, f"bolt/{bolt}"], cwd=main).returncode == 0
 
 
 def place(path, unit, bolt):
@@ -130,12 +144,7 @@ def kit(req, sites=False, running=None):
             out["places"][unit] = dict(place(path, unit, bolt), branch=branch, bolt=bolt)
         elif branch.startswith("fix/"):
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
-            # Merged: the bolt holds the fix's tip, and the fix has moved since it was made (its reflog's first entry).
-            born = (run(["git", "reflog", "show", "--format=%H", branch], main) or "").split()
-            tip = (run(["git", "rev-parse", branch], main) or "").strip()
-            merged = bool(bolt) and bool(born) and tip != born[-1] and subprocess.run(
-                ["git", "merge-base", "--is-ancestor", branch, f"bolt/{bolt}"], cwd=main).returncode == 0
-            out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": merged})
+            out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt)})
     if sites:
         out["sites"] = {path: devurl(path) for path, branch in at.items()
                         if os.path.dirname(path) in (places, os.path.join(kdir, "bolts")) and branch}

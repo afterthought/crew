@@ -52,6 +52,7 @@ import argparse, contextlib, datetime, fcntl, getpass, hashlib, json, os, pathli
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
 import crew  # noqa: E402
+import gather  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
@@ -2475,6 +2476,68 @@ def slots_cmd(fleet, a):
         print(s["slot"], s["kind"], s["name"], s["stage"], tasks, s["place"])
 
 
+def tidy(fleet, a):
+    """Each worktree crew made in the team's kit checkout, on this host, whose work is over and that no slot holds:
+    removed with its branch, saying the commit the branch was at; or kept and named, with its branch, while it is
+    locked or has uncommitted changes. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
+    directly in <kit>/places/ on unit/<its folder> or a fix/ branch; nothing else is touched. The worktrees are listed
+    before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
+    makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
+    work goes in can't be read."""
+    t = crew.team_of(fleet, a.team)
+    main, kdir, kit = os.path.realpath(t["kit"]["main"]), os.path.realpath(t["kit"]["dir"]), t["kit"]["name"]
+    trees = gather.worktrees(main)
+    held = set()  # each slot's name and place, of every team of this host building in this checkout
+    for o in fleet["teams"].values():
+        if o["machine"] == crew.this_host() and os.path.realpath(o["kit"]["main"]) == main:
+            f = pathlib.Path.home() / f".local/state/{o['name']}-team/slots"
+            for slot, kind, name, place in (l.split()[:4] for l in (f.read_text().splitlines() if f.exists() else []) if len(l.split()) >= 4):
+                held |= {name, os.path.realpath(place)}
+    errors = {}
+    found = plans(fleet, sorted({o["label"] for o in kit_teams(fleet, kit)}), errors)
+    errors.update({f"{l}/main of {repo}": f"{repo} has no {l}/main yet" for l, repo, tip, _ in found if not tip})
+    if errors:
+        print("no worktree was removed: " + "; ".join(f"{k} could not be read: " + " ".join(v.split()) for k, v in errors.items()))
+        return
+    bolts = {b.name() for *_, p in found for b in p.bolts() if b.get("Repo") == kit}
+    units = {u.name() for *_, p in found for u in p.units() if u.get("Repo") == kit}
+    ups, on_main = gather.upstreams(main), set(gather.changes(main, "main"))
+    for w in trees:
+        path, branch = w["path"], w.get("branch") or ""
+        folder, up = os.path.basename(path), ups.get(branch, "")
+        bolt = up[5:] if up.startswith("bolt/") else None
+        if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch == f"bolt/{folder}":
+            name, over = None, None if folder in bolts else f"bolt {folder} is in no plan"
+        elif os.path.dirname(path) == os.path.join(kdir, "places") and branch == f"unit/{folder}":
+            name, over = folder, (f"unit {folder} has landed on main" if folder in on_main else
+                                  f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in gather.changes(main, f"bolt/{bolt}") else
+                                  None if folder in units else f"unit {folder} is in no plan")
+        elif os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("fix/") and bolt:
+            name, over = branch, (f"{branch} has merged into bolt/{bolt}" if gather.fix_merged(main, branch, bolt) else
+                                  None if bolt in bolts else f"bolt {bolt}, which {branch} was made from, is in no plan")
+        else:
+            continue
+        if not over or name in held or path in held or not os.path.isdir(path):
+            continue
+        if w.get("locked"):
+            print(f"{path} is kept, and {branch} with it: it is locked")
+            continue
+        st = subprocess.run(["git", "-C", path, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
+        if st.returncode or st.stdout.strip():
+            print(f"{path} is kept, and {branch} with it: " + (f"git cannot read its status: {st.stderr.strip()}" if st.returncode else
+                  f"{over}, and it has uncommitted changes, which are the user's to keep or discard"))
+            continue
+        sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
+                             capture_output=True, text=True, env=gitenv()).stdout.strip()
+        r = subprocess.run(["git", "-C", main, "worktree", "remove", "--force", path], capture_output=True, text=True, env=gitenv())
+        if r.returncode:
+            print(f"{path} was not removed: {r.stderr.strip()}")
+            continue
+        r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
+        print(f"{path} and {branch} are removed; the branch was at {sha}" if r.returncode == 0 else
+              f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
+
+
 def stage_ends(fleet, a):
     """Record the end of each stage the team's stages file holds a start for, once each, under its lock: with --waited,
     the slot the conductor's wait returned for, as seen at once; with --ending, the slot whose agent is about to be
@@ -2733,6 +2796,8 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("base")
     x = sub.add_parser("_slots")
     x.add_argument("team")
+    x = sub.add_parser("_tidy")
+    x.add_argument("team")
     x = sub.add_parser("_in-plan")
     x.add_argument("unit")
     x.add_argument("--label")
@@ -2752,7 +2817,7 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")), ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_slots", None): slots_cmd, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-plan", None): in_plan, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
