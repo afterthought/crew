@@ -43,8 +43,8 @@ for want in "An intent names the outcome and the records that govern it" "never 
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
 expect_ok crewpy brief swb-1 conductor
-for want in "plan proposed <n>" "plan agree <n>" "crew refuses it from you" "crew status swb-1\` once that agent settles" \
-  "tell the user once which worktree it is and what its work was"; do has "$out" "$want"; done
+for want in "plan proposed <n>" "plan agree <n>" "plan approve <n>\`, never on your own judgment" "crew refuses it from you" \
+  "crew status swb-1\` once that agent settles" "tell the user once which worktree it is and what its work was"; do has "$out" "$want"; done
 for want in "at any stage before it merges" "crew marks the unit amended" "code waits for that approval" \
   "When crew tells you a unit's intent was amended, run construct again" "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
 for want in "Send linked questions together" "with the documentation or reading it names" \
