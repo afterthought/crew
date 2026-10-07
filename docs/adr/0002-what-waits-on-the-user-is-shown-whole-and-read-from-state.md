@@ -1,6 +1,6 @@
 # What waits on the user is shown whole, and read from state
 
-- Status: proposed, pending the user's review of a mockup
+- Status: accepted, after the user's annotations on a mockup of 2026-10-06
 - Date: 2026-10-06
 - Deciders: the user, through swancloud-operator-mac-studio, in their words; swancloud-design
 - Sources: the user's message of 2026-10-06; `plugin/roles/conductor.md` (review), `planner.md` (proposals), `operator.md` (where things stand); `openspec/changes/plan-proposals/design.md` ("How a proposal reads"); `openspec/explorations/findings-to-design/proposal.md` section 5, the row on Flywheel Next's rail; `plannotator-tui`'s usage (`herdr open [file.md | folder]`)
@@ -29,29 +29,33 @@ For the list:
 
 ### Shown whole
 
-- **A review opens the whole change.** At review the conductor opens the change's folder, `plannotator-tui herdr open <kit>/places/<unit>/openspec/changes/<unit>/`, once, so the proposal, design, specs and tasks are all before the user; it no longer opens the proposal alone and the rest one at a time.
+- **A review is opened by the user, whole.** At review the conductor tells the user the unit is ready and what it would make true, in two or three plain sentences, and stops; it no longer opens plannotator. The rail's row for the unit carries the command that opens the whole change, `plannotator-tui herdr open <kit>/places/<unit>/openspec/changes/<unit>/`, so the proposal, design, specs and tasks are all before the user when they choose to read it.
 - **A proposal is shown, never only named.** Any agent that puts a proposal before the user, the planner, a conductor, the operator agent, shows what `crew plan proposed <n>` prints, in its pane or opened beside it, and never the number alone. A number is a reference to put after the words.
 - **The rendering shows the commands.** Under each change's plain words, `crew plan proposed <n>` prints the command as it will run on approval, so the sequence of adds, moves and drops is visible as it was when the planner wrote the plan directly.
+- **An agent recites no answering command.** An agent that shows the user a decision asks for the answer in words ("approve it, or tell me what to change"), and runs the command on the user's word, as the briefs already have it. The commands belong on the rail, where the user pastes them.
 
-### One list, read from state
+### One list, read from state: the rail
 
-Option 1. `crew waiting [--label <label>]` prints, from any host, everything that waits on the user, each with what it is and the command or pane that answers it, in this order:
+Option 1. `crew rail [--label <label>]`, named as Flywheel Next names it, prints, from any host, everything that waits on the user, grouped in this order, each row with what it is and the command that answers it, written to be pasted:
 
 | what | read from | it leaves the list when |
 |---|---|---|
 | an open proposal, with whose agreement it still needs | `proposals.rec` on the flywheel's branch | it is approved or dropped |
-| a unit in review, with its change's folder | the unit's stage, from the kit | it is approved, or construct runs again |
+| a unit in review, with the plannotator command that opens its whole change | the unit's stage, from the kit | it is approved, or construct runs again |
 | a unit in verify whose report is newer than its branch's head, with the report's path and its conductor | the team's host: the unit's stage, the reports folder, the branch | code commits again, or the unit merges |
 | a bolt whose every unit has merged and that has not landed, with its team and the main-level ops that lands it | the plan and the kit | it lands |
 
 A host that does not answer is named, as `crew bolts` names one. Items have no numbers of their own: each is named by its id (proposal 3, unit x, bolt y), and nothing is written to put an item on the list or take it off. That is how items go stale: the moment an answer is recorded, in the plan, the branch or the kit, the item is gone.
 
-The operator workspace gets a `waiting` tab beside `flow`, showing the list and refreshing it, and the operator agent answers "what waits on me" from `crew waiting`. The conductor's one-line tell to the operator agents when it stops on the user stays: it covers a question the user must answer in the conductor's pane, which no state records and which the list therefore cannot carry.
+The operator workspace gets a `rail` tab beside `flow`, split in two: the list above, rerun every 30 seconds and whenever the run record gains an entry, and a shell below, with crew on its path, where the user pastes a row's command to answer it. The operator agent answers "what waits on me" from `crew rail`. The conductor's one-line tell to the operator agents when it stops on the user stays: it covers a question the user must answer in the conductor's pane, which no state records and which the rail therefore cannot carry.
+
+The rail is built on what crew already reads and stores, not on new records: open proposals are what `crew plan proposed` lists today; a unit in review and a bolt with every unit merged are stages `crew bolts` already derives from the kits; the one new read is a per-host look at the team's reports folder beside the unit branch's head, in the same call that reads the kits. It is one command composing those reads, and a tab.
 
 ### Consequences
 
-- Two units in crew: showing decisions whole (the conductor's, planner's and operator's briefs, and the rendering), and `crew waiting` with its tab.
-- When `curation-and-agenda` lands, the agenda's design-lane items join the list, read from `agenda.rec`; when `blocking-findings` lands, held units join it. The lineage page is the same list with its history.
+- Two units in crew: showing decisions whole (the conductor's, planner's and operator's briefs, and the rendering), and `crew rail` with its tab.
+- The conductor's brief loses its plannotator line; the `bolt-teams` spec's review requirement is amended by the change that builds this.
+- When `curation-and-agenda` lands, the agenda's design-lane items join the rail, read from `agenda.rec`; when `blocking-findings` lands, held units join it. The lineage page is the same list with its history.
 - A question a stage stops on for the user is still in a pane, carried by a tell. If that proves to be the common case, it is the one item that needs a record, and the agenda's design lane is where it would go.
 
 ## Pros and cons of the options
