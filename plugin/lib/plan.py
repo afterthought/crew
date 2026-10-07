@@ -15,7 +15,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              the moves where the partition's blueprints repos have them
   crew bolts [<bolt>] [--label L] [--json]   every bolt and unit of the plans, each unit's stage read from its kit
   crew rail [--label L]                      what waits on the user: open proposals, units in review, verify reports
-                                             and bolts to land, each with when it began to wait and what answers it
+                                             and bolts to land, each with when it began to wait, what answers it and
+                                             its card key, with whether a card is open for it; then the open cards
+                                             whose row is gone
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
@@ -2741,36 +2743,55 @@ def opener(fleet, host, here, path):
     return f"ssh -t {fleet['hosts'][host]['ssh']} plannotator-tui {shlex.quote(shlex.quote(path))}"
 
 
-def proposed_at(fleet, props):
-    """When each open proposal was proposed, {(label, proposal/<n>): time}: the earliest plan.propose entry naming it in
-    its partition's run record, read from the day before the oldest Opened, since Opened is the writing host's date and
-    the record's files are named by the UTC day. A proposal whose entry isn't found is left out."""
-    out = {}
-    for l in sorted({d["label"] for d in props}):
-        oldest = min(d["opened"] for d in props if d["label"] == l)
-        entries, _ = record.gather(fleet, [l], (datetime.date.fromisoformat(oldest) - datetime.timedelta(days=1)).isoformat())
+# How far back the rail reads the run record for the cards still open.
+CARD_DAYS = 14
+
+
+def rail_record(fleet, found, props):
+    """What the rail reads of the run record, in one read of each partition whose plan was read: from 14 days back, or
+    from the day before its oldest open proposal's Opened when that is earlier, since Opened is the writing host's date
+    and the record's files are named by the UTC day. Returns when each open proposal was proposed, {(label,
+    proposal/<n>): time}, from the earliest plan.propose entry naming it (a proposal whose entry isn't found is left
+    out); the cards open, each {label, card, key, on, by, host, at}, from each card.post with a Card that no later
+    card.close of that Card closes; and the hosts whose record did not answer, {label: hosts}."""
+    times, cards, unread = {}, [], {}
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    for l in [l for l, _, _, p in found if p]:
+        since = today - datetime.timedelta(days=CARD_DAYS)
+        opened = [d["opened"] for d in props if d["label"] == l]
+        if opened:
+            since = min(since, datetime.date.fromisoformat(min(opened)) - datetime.timedelta(days=1))
+        entries, missing = record.gather(fleet, [l], since.isoformat())
+        unread[l] = set(missing)
+        posted = {}
         for e in entries:
-            if e.get("Act") == "plan.propose" and not e.get("Refused"):
+            act = e.get("Act")
+            if act == "plan.propose" and not e.get("Refused"):
                 for o in e["On"]:
                     if o.startswith("proposal/"):
-                        out.setdefault((l, o), utc(e["At"]))
-    return out
+                        times.setdefault((l, o), utc(e["At"]))
+            elif act == "card.post" and e.get("Card"):
+                posted.setdefault(e["Card"], dict(label=l, card=e["Card"], key=e.get("Key"), on=(e["On"] or [None])[0],
+                                                  by=e.get("By"), host=e.get("Host"), at=utc(e["At"])))
+            elif act == "card.close" and e.get("Card"):
+                posted.pop(e["Card"], None)
+        cards += posted.values()
+    return times, cards, unread
 
 
-def rail_rows(fleet, found, sv):
-    """What waits on the user in the plans read, from the proposals, the run record and the kits as surveyed: each
-    row's group, the time it began to wait (shown as a date alone when that is all that is known), what it is, and its
-    commands."""
+def rail_rows(fleet, found, sv, props, times):
+    """What waits on the user in the plans read, from the open proposals and when each was proposed, and the kits as
+    surveyed: each row's group, its partition, its card key, the time it began to wait (shown as a date alone when that
+    is all that is known), what it is, and its commands."""
     rows, here = [], crew.this_host()
-    props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
-    times = proposed_at(fleet, props) if props else {}
     for d in props:
         l, n = d["label"], d["proposal"]
         what = [f"proposal {n} ({l}), by {d['by']}: {d['case'].splitlines()[0][:70]}"]
         if d["waiting"]:
             what.append("still needs the agreement of " + ", ".join(f"{t}-conductor" for t in d["waiting"]))
         at = times.get((l, f"proposal/{n}"))
-        rows.append(dict(group="proposals", at=at or utc(f"{d['opened']}T00:00:00Z"), date=None if at else d["opened"], what=what,
+        rows.append(dict(group="proposals", label=l, key=f"proposal/{n}", at=at or utc(f"{d['opened']}T00:00:00Z"),
+                         date=None if at else d["opened"], what=what,
                          cmds=[("read", f"crew plan proposed {n} --label {l}"), ("open", f"crew plan proposed {n} --label {l} --open"),
                                ("answer", f"crew plan approve {n} --label {l}")]))
     for l, _, _, plan in found:
@@ -2790,33 +2811,61 @@ def rail_rows(fleet, found, sv):
                 if not pl:
                     continue
                 if s == "review":
-                    rows.append(dict(group="review", at=utc(pl.get("head_at")), what=[f"unit {u.name()} ({l}), {team} on {host}"],
+                    rows.append(dict(group="review", label=l, key=f"review/{u.name()}/{(pl.get('head') or '')[:7]}",
+                                     at=utc(pl.get("head_at")), what=[f"unit {u.name()} ({l}), {team} on {host}"],
                                      cmds=[("open", opener(fleet, host, here, f"{pl['path']}/openspec/changes/{u.name()}/")),
                                            ("answer", f"crew unit approve {u.name()} --label {l}")]))
                 report = k.get("reports", {}).get(u.name())
                 if s == "verify" and report and pl.get("head_at") and utc(report["at"]) > utc(pl["head_at"]):
-                    rows.append(dict(group="verify", at=utc(report["at"]),
+                    stamp = re.fullmatch(r"verify-.+-(\d{8}-\d{4})\.md", os.path.basename(report["path"]))
+                    rows.append(dict(group="verify", label=l, key=f"verify/{u.name()}/{stamp.group(1) if stamp else ''}", at=utc(report["at"]),
                                      what=[f"unit {u.name()} ({l}), {team} on {host}: report {shlex.quote(report['path'])}"],
                                      cmds=[("open", opener(fleet, host, here, report["path"])),
                                            ("answer", f'crew tell {team}-conductor "On {u.name()}\'s verify report: "')]))
             stages = [st.of(u.name())["stage"] for u in units]
             at = k["bolts"].get(b.name(), {}).get("head_at")
             if stages and at and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
-                rows.append(dict(group="land", at=utc(at), what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
+                rows.append(dict(group="land", label=l, key=f"land/{b.name()}", at=utc(at), what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
                                  cmds=[("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]))
     return rows
 
 
+def stray_cards(fleet, found, sv, rows, cards, unread):
+    """The open cards that match no row, oldest first. A card is left out when whether it has a row can't be known: its
+    own host's record did not answer, so its close may not have been read, or it is a review, verify or land card of a
+    unit or bolt whose team's host did not answer."""
+    plans_, rowed, out = {l: p for l, _, _, p in found if p}, {(r["label"], r["key"]) for r in rows}, []
+    for c in cards:
+        if (c["label"], c["key"]) in rowed:
+            continue
+        down = {h for h, v in sv.items() if not v["ok"]} | unread.get(c["label"], set())
+        if c["host"] in down:
+            continue
+        m = re.match(r"(review|verify|land)/([a-z0-9][a-z0-9-]*)", c["key"] or "")
+        if m:
+            plan, kind, name = plans_[c["label"]], m.group(1), m.group(2)
+            u = plan.unit(name) if kind != "land" else None
+            b = plan.bolt(name if kind == "land" else u.get("Bolt") if u else None)
+            t = fleet["teams"].get(b.get("Team")) if b else None
+            if t and t["machine"] in down:
+                continue
+        out.append(c)
+    return sorted(out, key=lambda c: (c["at"], c["card"]))
+
+
 def rail_view(fleet, a):
     """crew rail [--label L]: what waits on the user, in four groups in order, each row with when it began to wait, how
-    long ago that was and the commands that answer it, oldest first. Read from the plans, the proposals, the kits and
-    the run record; nothing is written."""
+    long ago that was, the commands that answer it, and its card key with whether a card is open for it and whose,
+    oldest first; then any open card whose row is gone, with the tell that asks its owner to close it. Read from the
+    plans, the proposals, the kits and the run record; nothing is written."""
     label = default_label(fleet, a)
     labels = [label] if label else list(fleet["partitions"])
     errors = {}
     found = plans(fleet, labels, errors)
     sv = survey(fleet, [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")])
-    rows = rail_rows(fleet, found, sv)
+    props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
+    times, cards, unread = rail_record(fleet, found, props)
+    rows = rail_rows(fleet, found, sv, props, times)
     now = datetime.datetime.now(datetime.timezone.utc)
     lines = [f"What waits on you ({', '.join(labels)}), as of {now.astimezone():%H:%M:%S}"]
     for g in RAIL:
@@ -2830,6 +2879,16 @@ def rail_view(fleet, a):
             lines.append(f"  {when:<16}  {age(r['at'], now) if r['at'] else '-':<7}  {first}")
             lines += [" " * 29 + w for w in rest]
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
+            lines += [f"    {'card:':<8}{r['key']}, open, asked by {c['by']}" for c in cards
+                      if (c["label"], c["key"]) == (r["label"], r["key"])] or [f"    {'card:':<8}{r['key']}, none open"]
+    stray = stray_cards(fleet, found, sv, rows, cards, unread)
+    if stray:
+        lines += ["", "open cards with no row:"]
+    for c in stray:
+        lines.append(f"  {c['at'].astimezone():%Y-%m-%d %H:%M}  {age(c['at'], now):<7}  {c['key'] or 'an unkeyed card'} ({c['label']}), "
+                     f"asked by {c['by']} on {c['host']}")
+        say = f"Close your Pending You card {c['key'] or c['card']}: its row is gone."
+        lines.append(f"    {'answer:':<8}crew tell {shlex.quote(c['by'])} " + (f'"{say}"' if re.fullmatch(r"[\w/:. -]+", say) else shlex.quote(say)))
     for h, v in sv.items():
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")

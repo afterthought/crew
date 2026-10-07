@@ -8,7 +8,7 @@
 
 ## 2. The rail shows each row's card
 
-- [ ] 2.1 Each rail row prints its card key and whether a card is open for it and whose, and the rail lists open cards with no row, each with a `crew tell` to its owner, read in one run-record read per partition (design.md, Task notes 2.1).
+- [x] 2.1 Each rail row prints its card key and whether a card is open for it and whose, and the rail lists open cards with no row, each with a `crew tell` to its owner, read in one run-record read per partition (design.md, Task notes 2.1).
 - [ ] 2.2 `tests/t-rail.sh` holds every row's key, a card opened and closed, a stray card, an unreachable host's cards, and the rail writing nothing (design.md, Task notes 2.2). Verify `devenv shell -- tests/run t-rail` ends with "0 failed".
 
 ## 3. crew names the card a change ends

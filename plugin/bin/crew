@@ -46,7 +46,8 @@
 #   crew plan  propose|proposed|agree|approve|drop ...
 #                                      the planner's proposals: a change to the plan, applied once the user approves it
 #   crew rail  [--label L]             what waits on the user: proposals, reviews, verify reports and bolts to land,
-#                                      each with when it began to wait and the command that answers it
+#                                      each with when it began to wait, the command that answers it and its Pending
+#                                      You card; then any open card whose row is gone
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
