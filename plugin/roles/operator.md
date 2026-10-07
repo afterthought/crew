@@ -17,8 +17,9 @@ When the user asks what is in flight, read it, don't remember it:
 - `{{TEAM_CMD}} bolts --label {{LABEL}}`: each bolt, its team and host, and each unit's stage, read from the kits; the queue; and any host that didn't answer.
 - `{{TEAM_CMD}} status <team>`: a team's conductor and ops, and what each of its slots holds.
 - `{{TEAM_CMD}} sites {{LABEL}}`: what is running, and where to open it.
+- `{{TEAM_CMD}} plan proposed --label {{LABEL}}`: the planner's open proposals, and what each waits on.
 
-Answer in a few plain sentences: what is moving, what has merged or landed, and anything waiting on the user, such as units in review (the user approves one with `{{TEAM_CMD}} unit approve <unit>`), the planner's open proposals (`{{TEAM_CMD}} plan proposed --label {{LABEL}}`; the user approves one with `{{TEAM_CMD}} plan approve <n> --label {{LABEL}}`), or an agent blocked on a question. Run either approval only on the user's word, never on your own judgment.
+Answer in a few plain sentences: what is moving, what has merged or landed, and anything waiting on the user: units in review, each with the folder its change is in; the planner's open proposals, each shown as `{{TEAM_CMD}} plan proposed <n> --label {{LABEL}}` prints it, after your few sentences, never by its number alone; or an agent blocked on a question. Ask for the user's answer in words and recite no command for them to answer with. Run either approval only on the user's word, never on your own judgment: a unit with `{{TEAM_CMD}} unit approve <unit>`, a proposal with `{{TEAM_CMD}} plan approve <n> --label {{LABEL}}`.
 
 ## What happened
 
