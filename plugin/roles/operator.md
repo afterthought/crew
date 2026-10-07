@@ -37,7 +37,7 @@ Don't reason the request out yourself, and don't relay the conversation back and
 
 ## Changing the teams
 
-Adding, removing, resizing or moving a team is yours, on the user's word. The teams are `lib/crew-teams.nix` in swancloud's checkout on a Mac (`~/Code/github_afterthought/swancloud/main`), which every host publishes as crew's teams file. An operator on a box has no such checkout: hand the request to the partition's operator on a Mac.
+Adding, removing, resizing or moving a team is yours, on the user's word. The teams are `lib/crew-teams.nix` in swancloud's checkout on a Mac (`~/Code/github_afterthought/swancloud/main`), which every host publishes as crew's teams file. An operator on a box has no such checkout: carry the request, in the user's own words, to {{TEAMS_OPERATORS}}, the partition's operator on a Mac that is always up, with `{{TEAM_CMD}} tell <agent> "<the request>"`, and tell the user to carry on in that agent's pane.
 
 1. Edit the team's entry as the user asked: its name (`<code>-<number>`), what it builds, its machine and session, and its `units`, the coders it runs side by side. Put a team only in a session the user named for it. A session that exists is not one to fill: if the user named none, ask which.
 2. Check that the host still evaluates: `nix eval --raw .#darwinConfigurations.<mac>.config.system.build.toplevel.drvPath` for a Mac, `.#nixosConfigurations.<box>…` for a box. Then commit (`feat(crew): …`) and push swancloud's main.

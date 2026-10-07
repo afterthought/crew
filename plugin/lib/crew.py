@@ -478,6 +478,8 @@ def main_tokens(fleet, p, role, self_name):
         "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
         "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
         "OPERATORS": ", ".join(f"`{label}-operator-{h}` on {h}" for h, v in sorted(fleet["hosts"].items()) if label in v.get("sessions", {})),
+        "TEAMS_OPERATORS": ", ".join(f"`{label}-operator-{h}`" for h, v in sorted(fleet["hosts"].items())
+                                     if label in v.get("sessions", {}) and v.get("kind") == "darwin" and v.get("supervised")) or "none",
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
                     "`terminal-browser open <url> --split right`." if fleet["hosts"].get(host, {}).get("kind") == "darwin" else
                     f"{host} is a box, which can't open the dev.swancloud.net names: say so, and give the user the URL "
