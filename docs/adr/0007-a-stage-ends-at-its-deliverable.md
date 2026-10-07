@@ -1,6 +1,6 @@
 # A stage ends at its deliverable, not at a quiet pane
 
-- Status: proposed, for the user's reading
+- Status: accepted, by the user on 2026-10-07
 - Date: 2026-10-07
 - Deciders: the user ("we have agents all over the place that are waiting on processes; pass to design and see what it comes up with"), through swancloud-operator-mac-studio; swancloud-design
 - Sources: wldn-ops's findings on brd-1 (sessions ab0db8d8 and e9d417aa, 2026-10-07 17:19 to 19:21; stage-one-stands' fourth verify at 13:29, twice); `openspec/changes/run-record/design.md` ("A stage's end"); `plugin/roles/conductor.md` (running the stages; the building loop), `verify.md`, `coder.md`, `ops.md`; `openspec/specs/bolt-teams/spec.md`
