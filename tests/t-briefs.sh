@@ -16,7 +16,8 @@ expect_ok crewpy brief swb-1 conductor
 for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
   has "$out" "$want"
 done
-has "$out" "plannotator-tui herdr open"; has "$out" "openspec/changes/<unit>/proposal.md"
+lacks "$out" "plannotator"
+for want in "open nothing, and recite no command" "The user opens the whole change" "never its number alone"; do has "$out" "$want"; done
 ok "the conductor takes units through review, asks the design agent, records signals, and writes the plan only through crew"
 
 for role in design planner dispatcher main-ops; do
