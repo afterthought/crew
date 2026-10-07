@@ -2733,6 +2733,14 @@ def age(at, now):
     return f"{d}d {h:02d}h"
 
 
+def opener(fleet, host, here, path):
+    """The command that opens a file or folder on a host in plannotator: beside the rail when the host is the one it
+    runs on, else inline over ssh, quoted again for the shell on the other end."""
+    if host == here:
+        return f"plannotator-tui herdr open {shlex.quote(path)}"
+    return f"ssh -t {fleet['hosts'][host]['ssh']} plannotator-tui {shlex.quote(shlex.quote(path))}"
+
+
 def proposed_at(fleet, props):
     """When each open proposal was proposed, {(label, proposal/<n>): time}: the earliest plan.propose entry naming it in
     its partition's run record, read from the day before the oldest Opened, since Opened is the writing host's date and
@@ -2753,7 +2761,7 @@ def rail_rows(fleet, found, sv):
     """What waits on the user in the plans read, from the proposals, the run record and the kits as surveyed: each
     row's group, the time it began to wait (shown as a date alone when that is all that is known), what it is, and its
     commands."""
-    rows = []
+    rows, here = [], crew.this_host()
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     times = proposed_at(fleet, props) if props else {}
     for d in props:
@@ -2783,12 +2791,14 @@ def rail_rows(fleet, found, sv):
                     continue
                 if s == "review":
                     rows.append(dict(group="review", at=utc(pl.get("head_at")), what=[f"unit {u.name()} ({l}), {team} on {host}"],
-                                     cmds=[("answer", f"crew unit approve {u.name()} --label {l}")]))
+                                     cmds=[("open", opener(fleet, host, here, f"{pl['path']}/openspec/changes/{u.name()}/")),
+                                           ("answer", f"crew unit approve {u.name()} --label {l}")]))
                 report = k.get("reports", {}).get(u.name())
                 if s == "verify" and report and pl.get("head_at") and utc(report["at"]) > utc(pl["head_at"]):
                     rows.append(dict(group="verify", at=utc(report["at"]),
                                      what=[f"unit {u.name()} ({l}), {team} on {host}: report {shlex.quote(report['path'])}"],
-                                     cmds=[("answer", f'crew tell {team}-conductor "On {u.name()}\'s verify report: "')]))
+                                     cmds=[("open", opener(fleet, host, here, report["path"])),
+                                           ("answer", f'crew tell {team}-conductor "On {u.name()}\'s verify report: "')]))
             stages = [st.of(u.name())["stage"] for u in units]
             at = k["bolts"].get(b.name(), {}).get("head_at")
             if stages and at and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
