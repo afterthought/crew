@@ -54,7 +54,7 @@ A unit in flight is amended in one of two ways, and both end in the user's revie
 
 ```
 crew plan propose <file> [--replaces <n>]
-crew plan proposed [<n>] [--label L] [--json]
+crew plan proposed [<n>] [--label L] [--json] [--open]
 crew plan agree <n> [--team <team>]
 crew plan approve <n>
 crew plan drop <n> "<reason>"
@@ -63,7 +63,7 @@ crew plan drop <n> "<reason>"
 The planner changes the plan only by a **proposal** the user approves: where new work goes (a new bolt, a unit in a bolt, the queue), and every move, split, amendment, reorder or drop. A proposal is a record in `proposals.rec` on the flywheel's branch: the planner's `Case`, and the plan commands it would run, in order, one `Do` each, as typed without the leading `crew` (`bolt new|order|drop`, `unit add|amend|move|split|order|after|drop`). Proposals are numbered, and never removed or changed.
 
 - `crew plan propose <file>` takes a file of one record, a `Case` and its `Do` lines. Each command is checked in order against the plan as the ones before it leave it, with every refusal it has run directly; a refused command refuses the proposal and nothing is written. The conductor of each bolt in flight the proposal touches is told. `--replaces <n>` drops proposal n and writes its successor in one commit.
-- `crew plan proposed` lists the open proposals and what each waits on; `crew plan proposed <n>` prints one as markdown: the case, then each change in plain words, a unit's intent beside what it rests on (a signal's assertion and excerpt) and the goal and team of the bolt it would join, and an amended unit's bolt, team and stage, its intent as it stands and as proposed, and what approval sets in motion; under each change, the command approval runs; and, for an open proposal, who it waits on, in words. It reads only the branch, so any host can answer.
+- `crew plan proposed` lists the open proposals and what each waits on; `crew plan proposed <n>` prints one as markdown: the case, then each change in plain words, a unit's intent beside what it rests on (a signal's assertion and excerpt) and the goal and team of the bolt it would join, and an amended unit's bolt, team and stage, its intent as it stands and as proposed, and what approval sets in motion; under each change, the command approval runs; and, for an open proposal, who it waits on, in words. It reads only the branch, so any host can answer. With `--open`, it writes that page to `~/.local/state/crew/proposals/<label>-<n>.md` on the host it runs on and opens it in plannotator, for the user to read and annotate: beside the caller in herdr, inline in the terminal otherwise.
 - `crew plan agree <n>` is a conductor's recorded agreement to a proposal that touches the bolt its team holds; the user may agree for any team it touches.
 - `crew plan approve <n>` applies the proposal's commands, exactly as read, to the plan at the tip and closes the proposal, in one commit, or changes nothing when one no longer applies or a touched bolt's conductor has not agreed. A unit with a worktree that moves is rebased before the push and put back if the approval is refused. The user runs it, or an agent on the user's word.
 - `crew plan drop <n> "<reason>"` closes a proposal unapplied, with the reason.
@@ -129,12 +129,15 @@ What crew sends an agent is marked as crew's: `crew tell` sends `[crew tell from
 ```
 crew main     up|down|status <label>
 crew operator up <label>
+crew rail     [--label L]
 crew revive
 crew tell     <agent> "<text>"
 crew sites    [<label>] [--json]
 ```
 
 Each partition has a main level in the session the teams file names: the **design agent** (elaboration on main and curation of signals), the **planner** (the only writer of bolts and placements) and the main-level **ops** (lands proven bolts and deploys main), as tabs of the `<label>` workspace; and a **dispatcher** on each host the partition's teams run on, in `<label> dispatch`, which gives that host's teams their bolts. The **operator agent** stands in each operator session (the session named `<label>`), started there with `crew operator up <label>`, and works for the user. `crew tell` prompts any of these agents by name, wherever it runs, marked with who sent it.
+
+`crew rail` lists everything that waits on the user, from any host, in four groups, always in this order: open proposals, units in review, verify reports the user hasn't answered, and bolts whose every unit has merged, waiting to land. Each row says what waits, when it began to wait and how long ago that was, and carries the commands that answer it, written to be pasted; within a group, the oldest comes first. A proposal waits from its entry in the run record (or the day it was opened), a unit in review from its branch's last commit, a verify report from when it was written, once it is newer than that commit, and a bolt from its last merge. Every row and every time is read from the plan, the proposals, the kits and the run record, and nothing is kept by hand: a row leaves the list as soon as its answer is recorded. A host that doesn't answer is named. `crew operator up` also opens a `rail` tab in the `operator` workspace, beside `flow`: the list above, printed again every 30 seconds and as soon as the run record gains an entry, and a shell below with crew on its path, to paste a row's command into.
 
 A herdr server that restarts resumes each agent in its saved pane folder, which is the folder crew moved the pane to before starting the agent, since Claude finds a conversation only from the folder it began in. crew's SessionStart hook gives a resumed agent its name and identity back. An agent that never had a message has no conversation to resume, so its pane comes back as a shell: `crew revive`, run on a host after a restart, brings back each standing agent of that host whose pane came back empty, from its last conversation or fresh, and leaves a team or main level taken down with `crew down` as it is. `crew sites` lists each host's bolts, units and fixes with the URL of each running dev server, named by swancloud's `devurl` and found among the host's portless routes.
 
