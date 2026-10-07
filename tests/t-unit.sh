@@ -53,12 +53,23 @@ eq "$(stage d)" "construct"
 expect_fail "its change's planning is not complete" crew unit approve d
 pc=$(place "$k" tenant-environments c); change "$pc" c 0 2; commit_all "$pc" "docs(c): the change"
 eq "$(stage c)" "review"
+: > "$CREW_TEST_LOG"
 expect_ok crew unit approve c; has "$out" "unit c approved"
+lacks "$out" "Pending You"
+grep -qF "agent prompt swb-1-conductor '[crew] Unit c was approved by $me@mac-studio. Close your Pending You card for review/c, if one is open, with what was done.'" \
+  "$CREW_TEST_LOG" || fail "the conductor was not told to close its review card:"$'\n'"$(calls)"
 eq "$(git -C "$pc" log -1 --format=%s)" "review(c): approved"
 has "$(git -C "$pc" log -1 --format='%(trailers:key=Reviewed-by,valueonly)')" "Test User <test@example.com>"
 eq "$(git -C "$pc" diff HEAD~1 --stat)" ""
 eq "$(stage c)" "approved"
-ok "approve is an empty Reviewed-by commit, refused before planning is complete"
+ok "approve is an empty Reviewed-by commit, refused before planning is complete; its conductor is told to close the review's card"
+
+change "$pd" d 0 2; commit_all "$pd" "docs(d): the change"
+: > "$CREW_TEST_LOG"
+CREW_AGENT=swb-1-conductor expect_ok crew unit approve d
+eq "$(tail -1 <<<"$out")" "Close your Pending You card for review/d, if one is open, with what was done."
+grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told of its own approval:"$'\n'"$(calls)"
+ok "the conductor approving on the user's word is shown the line that closes the review's card, and told nothing"
 
 # The bolt moves on, and the approved unit is rebased onto it.
 echo more > "$kd/bolts/tenant-environments/bolt-work"; commit_all "$kd/bolts/tenant-environments" "feat: bolt work"
