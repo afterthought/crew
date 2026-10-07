@@ -53,7 +53,8 @@ expect_ok crewpy brief swb-1 construct
 for want in "## Writing a change again" "the unit's intent was amended" "stay ticked only where the work they describe" \
   "Commit the revision, however small"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn operator
-for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word" "never by its number alone" "recite no command"; do
+for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word" "never by its number alone" "recite no command" \
+  "rail --label wldn" "the \`rail\` tab"; do
   has "$out" "$want"
 done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'

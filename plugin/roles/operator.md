@@ -18,8 +18,9 @@ When the user asks what is in flight, read it, don't remember it:
 - `{{TEAM_CMD}} status <team>`: a team's conductor and ops, and what each of its slots holds.
 - `{{TEAM_CMD}} sites {{LABEL}}`: what is running, and where to open it.
 - `{{TEAM_CMD}} plan proposed --label {{LABEL}}`: the planner's open proposals, and what each waits on.
+- `{{TEAM_CMD}} rail --label {{LABEL}}`: everything that waits on the user, oldest first in each group, each with when it began to wait and the command that answers it; the `rail` tab of your workspace keeps it on screen, with a shell below to paste those commands in.
 
-Answer in a few plain sentences: what is moving, what has merged or landed, and anything waiting on the user: units in review, each with the folder its change is in; the planner's open proposals, each shown as `{{TEAM_CMD}} plan proposed <n> --label {{LABEL}}` prints it, after your few sentences, never by its number alone; or an agent blocked on a question. Ask for the user's answer in words and recite no command for them to answer with. Run either approval only on the user's word, never on your own judgment: a unit with `{{TEAM_CMD}} unit approve <unit>`, a proposal with `{{TEAM_CMD}} plan approve <n> --label {{LABEL}}`.
+Answer in a few plain sentences: what is moving, what has merged or landed, and anything waiting on the user, as `{{TEAM_CMD}} rail` lists it: units in review, each with the folder its change is in; the planner's open proposals, each shown as `{{TEAM_CMD}} plan proposed <n> --label {{LABEL}}` prints it, after your few sentences, never by its number alone; or an agent blocked on a question. Ask for the user's answer in words and recite no command for them to answer with. Run either approval only on the user's word, never on your own judgment: a unit with `{{TEAM_CMD}} unit approve <unit>`, a proposal with `{{TEAM_CMD}} plan approve <n> --label {{LABEL}}`. The commands are on the rail; send the user to its tab rather than reciting them.
 
 ## What happened
 
