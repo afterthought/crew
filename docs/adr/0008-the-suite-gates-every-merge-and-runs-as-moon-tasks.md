@@ -1,9 +1,17 @@
+---
+number: 8
+title: The suite gates every merge, and runs as moon tasks
+status: accepted
+date: 2026-10-07
+decision-makers:
+- Chuck Swanberg
+- swancloud-design
+---
+
 # The suite gates every merge, and runs as moon tasks
 
-- Status: accepted
-- Date: 2026-10-07
-- Deciders: the user, in an exploration beside swancloud-design ("yes to both", "moon unit after kits-once", "ok" to one task per test file, "let's return all of your recommendations to the crew"); swancloud-design
-- Sources: `openspec/explorations/testing-strategy/reading.md` (the exploration's report, with what each fact rests on); `tests/run` line 45; `CLAUDE.md` "Tests" and "Proving and landing a bolt"; `plugin/roles/coder.md` line 25, `conductor.md` line 68, `ops.md` line 22; switchboard-kit's `.config/wt.toml` and `.moon/`; `openspec/explorations/command-cost/reading.md`
+Deciders: the user, in an exploration beside swancloud-design ("yes to both", "moon unit after kits-once", "ok" to one task per test file, "let's return all of your recommendations to the crew"); swancloud-design.
+Sources: `openspec/explorations/testing-strategy/reading.md` (the exploration's report, with what each fact rests on); `tests/run` line 45; `CLAUDE.md` "Tests" and "Proving and landing a bolt"; `plugin/roles/coder.md` line 25, `conductor.md` line 68, `ops.md` line 22; switchboard-kit's `.config/wt.toml` and `.moon/`; `openspec/explorations/command-cost/reading.md`.
 
 ## Context and problem statement
 

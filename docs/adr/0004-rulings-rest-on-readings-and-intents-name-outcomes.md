@@ -1,9 +1,17 @@
+---
+number: 4
+title: Rulings rest on readings, and intents name outcomes
+status: accepted
+date: 2026-10-07
+decision-makers:
+- Chuck Swanberg
+- swancloud-design
+---
+
 # Rulings rest on readings, and intents name outcomes
 
-- Status: accepted
-- Date: 2026-10-07
-- Deciders: the user, through swancloud-operator-mac-studio, on an exchange in wldn's operator pane; swancloud-design
-- Sources: wldn-operator's account of the boundary takeover (proposals 84, 90, 93, 103, 125 to 128 on `wldn/main`); wldn-design's and wldn-planner's own words there; swancloud's fix-places bolt, which grew from two units to four in a day with units amended in flight; `plugin/roles/design.md`, `planner.md`, `conductor.md`
+Deciders: the user, through swancloud-operator-mac-studio, on an exchange in wldn's operator pane; swancloud-design.
+Sources: wldn-operator's account of the boundary takeover (proposals 84, 90, 93, 103, 125 to 128 on `wldn/main`); wldn-design's and wldn-planner's own words there; swancloud's fix-places bolt, which grew from two units to four in a day with units amended in flight; `plugin/roles/design.md`, `planner.md`, `conductor.md`.
 
 ## Context and problem statement
 

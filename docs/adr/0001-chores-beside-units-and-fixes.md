@@ -1,9 +1,17 @@
+---
+number: 1
+title: Chores beside units and fixes
+status: accepted
+date: 2026-10-05
+decision-makers:
+- Chuck Swanberg
+- swancloud-design
+---
+
 # Chores beside units and fixes
 
-- Status: accepted
-- Date: 2026-10-05
-- Deciders: the user, by the question put to swancloud-design through swancloud-planner; swancloud-design
-- Sources: swancloud's `openspec/explorations/rollout/plan.md` (step 2.3); Flywheel Next's glossary and requirements 59–63, 91 and 123 (`agentplot/blueprints:design/flywheel-next/requirements.md`); crew's `openspec/specs/bolt-teams/spec.md` and `bolt-plan/spec.md`; the briefs `conductor.md`, `coder.md`, `verify.md`, `planner.md`
+Deciders: the user, by the question put to swancloud-design through swancloud-planner; swancloud-design.
+Sources: swancloud's `openspec/explorations/rollout/plan.md` (step 2.3); Flywheel Next's glossary and requirements 59–63, 91 and 123 (`agentplot/blueprints:design/flywheel-next/requirements.md`); crew's `openspec/specs/bolt-teams/spec.md` and `bolt-plan/spec.md`; the briefs `conductor.md`, `coder.md`, `verify.md`, `planner.md`.
 
 ## Context and problem statement
 

@@ -1,9 +1,18 @@
+---
+number: 3
+title: A drop keeps unmerged work
+status: accepted
+date: 2026-10-07
+decision-makers:
+- Chuck Swanberg
+- swancloud-design
+---
+
 # A drop keeps unmerged work
 
-- Status: accepted
-- Date: 2026-10-07; extended to landing the same day
-- Deciders: swancloud-design, on swc-1-conductor's finding (signal `2026-10-07-swancloud-planner-b1ae7de3/01-unit-drop-deletes-unmerged-branch`)
-- Sources: `openspec/specs/bolt-teams/spec.md` ("Units run in slots"), `README.md` (a unit dropped from the plan), `plugin/lib/plan.py` (`unit drop`); proposal 16 on `swancloud/main`
+Date: 2026-10-07; extended to landing the same day.
+Deciders: swancloud-design, on swc-1-conductor's finding (signal `2026-10-07-swancloud-planner-b1ae7de3/01-unit-drop-deletes-unmerged-branch`).
+Sources: `openspec/specs/bolt-teams/spec.md` ("Units run in slots"), `README.md` (a unit dropped from the plan), `plugin/lib/plan.py` (`unit drop`); proposal 16 on `swancloud/main`.
 
 ## Context and problem statement
 

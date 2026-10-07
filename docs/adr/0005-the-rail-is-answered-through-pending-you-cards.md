@@ -1,9 +1,17 @@
+---
+number: 5
+title: The rail is answered through Pending You cards
+status: accepted
+date: 2026-10-07
+decision-makers:
+- Chuck Swanberg
+- swancloud-design
+---
+
 # The rail is answered through Pending You cards
 
-- Status: accepted
-- Date: 2026-10-07
-- Deciders: the user ("yes, let's do it in a subsequent bolt so we can release the rail first"); swancloud-design
-- Sources: `docs/adr/0002` (the rail); recordplane/herdr-pendingyou (the Herdr plugin, 0.2.0) and the `pendingyou` CLI (0.27.0) with the Pending You skill at pendingyou.com/docs/skill, read on 2026-10-07
+Deciders: the user ("yes, let's do it in a subsequent bolt so we can release the rail first"); swancloud-design.
+Sources: `docs/adr/0002` (the rail); recordplane/herdr-pendingyou (the Herdr plugin, 0.2.0) and the `pendingyou` CLI (0.27.0) with the Pending You skill at pendingyou.com/docs/skill, read on 2026-10-07.
 
 ## Context and problem statement
 

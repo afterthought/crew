@@ -1,9 +1,17 @@
+---
+number: 6
+title: A change is archived at its merge into the bolt
+status: accepted
+date: 2026-10-07
+decision-makers:
+- Chuck Swanberg
+- swancloud-design
+---
+
 # A change is archived at its merge into the bolt
 
-- Status: accepted
-- Date: 2026-10-07
-- Deciders: the user ("When in the process does OPSX archive run?", "pass to design"), through swancloud-operator-mac-studio; swancloud-design
-- Sources: `openspec/specs/bolt-teams/spec.md` (a unit is built stage by stage; work happens in fixed places), `bolt-plan/spec.md` (a unit's stage is read from the kits), `plugin/roles/coder.md` (merging), `ops.md` (proving the bolt), `CLAUDE.md` (proving and landing a bolt); `docs/adr/0001` (chores); swancloud's proposals 1 and 3 (archives as units)
+Deciders: the user ("When in the process does OPSX archive run?", "pass to design"), through swancloud-operator-mac-studio; swancloud-design.
+Sources: `openspec/specs/bolt-teams/spec.md` (a unit is built stage by stage; work happens in fixed places), `bolt-plan/spec.md` (a unit's stage is read from the kits), `plugin/roles/coder.md` (merging), `ops.md` (proving the bolt), `CLAUDE.md` (proving and landing a bolt); `docs/adr/0001` (chores); swancloud's proposals 1 and 3 (archives as units).
 
 ## Context and problem statement
 
