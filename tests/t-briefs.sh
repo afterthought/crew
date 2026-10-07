@@ -18,6 +18,11 @@ for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" 
 done
 lacks "$out" "plannotator"
 for want in "open nothing, and recite no command" "The user opens the whole change" "never its number alone"; do has "$out" "$want"; done
+for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`review/<unit>/<head>\`" "keyed \`verify/<unit>/<stamp>\`" \
+  "keyed \`land/<bolt>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." "post its verify card" \
+  "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit."; do
+  has "$out" "$want"
+done
 ok "the conductor takes units through review, asks the design agent, records signals, and writes the plan only through crew"
 
 for role in design planner dispatcher main-ops; do
