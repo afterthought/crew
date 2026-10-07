@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""crew's PostToolUse hook: each Pending You card a crew agent posts, updates, withdraws or closes is an entry in its
+partition's run record, so the rail knows which of its rows has a card open, and whose.
+
+It runs after a Pending You tool that posts (post_request), updates (update_request), withdraws (cancel_request) or
+closes (ack_answer) a card, in a session crew started, and writes one entry: card.post, card.update or card.close. The
+entry names the rail row's object in On (proposal/<n>, unit/<unit> or bolt/<bolt>, from the card's key), the card's id
+in Card, and the row's key in Key when the card was posted with one of the four row keys as its idempotencyKey. A card
+with any other key is on agent/<the agent>, with no Key, since its key is text an agent wrote. Nothing written on the
+card is recorded: no title, summary, option, note or outcome.
+
+A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it, the record session-start keeps of
+it. Any other session, a result that is an error, and a tool of another server write nothing. The hook never fails a
+tool call."""
+import datetime
+import json
+import os
+import pathlib
+import re
+import sys
+
+ACTS = {"post_request": "card.post", "update_request": "card.update", "cancel_request": "card.close", "ack_answer": "card.close"}
+REQUEST_ID = re.compile(r"^req_[A-Za-z0-9-]{1,40}$")
+# The rail's four row keys, and the object of each.
+KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
+        (re.compile(r"^review/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "unit/{}"),
+        (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
+        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)$"), "bolt/{}"))
+# How far back a close looks for its card's post.
+DAYS = 30
+
+
+def is_pending_you(server):
+    """Pending You's server under any name, a plugin's as well: as the wake mod's isPendingYou reads it."""
+    return "pendingyou" in re.sub(r"[^a-z0-9]", "", server.lower())
+
+
+def result_object(result):
+    """The tool's result as an object, as the wake mod's resultObject reads it: structuredContent, else the first text
+    block that parses as a JSON object. Claude Code gives an MCP tool's result as its content blocks, or as an object
+    holding them."""
+    if isinstance(result, list):
+        result = {"content": result}
+    if not isinstance(result, dict):
+        return None
+    if isinstance(result.get("structuredContent"), dict):
+        return result["structuredContent"]
+    texts = []
+
+    def blocks(v):
+        if isinstance(v, list):
+            texts.extend(b["text"] for b in v if isinstance(b, dict) and isinstance(b.get("text"), str))
+    if isinstance(result.get("text"), str):
+        texts.append(result["text"])
+    inner = result.get("result")
+    if isinstance(inner, str):
+        texts.append(inner)
+    elif isinstance(inner, dict):
+        if isinstance(inner.get("structuredContent"), dict):
+            return inner["structuredContent"]
+        blocks(inner.get("content"))
+    else:
+        blocks(inner)
+    blocks(result.get("content"))
+    for t in texts:
+        try:
+            parsed = json.loads(t)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def failed(result):
+    return isinstance(result, dict) and (result.get("isError") is True or "deny" in result)
+
+
+def identity(sid):
+    """The crew agent and its partition: from the environment, else from the record session-start wrote of the session."""
+    agent, label = os.environ.get("CREW_AGENT"), os.environ.get("CREW_LABEL")
+    if agent:
+        return agent, label
+    if not isinstance(sid, str) or not re.fullmatch(r"[A-Za-z0-9-]+", sid):
+        return None, None
+    record = pathlib.Path.home() / ".local/state/crew/sessions" / sid
+    if not record.is_file():
+        return None, None
+    saved = dict(line.split("=", 1) for line in record.read_text().splitlines() if "=" in line)
+    return saved.get("CREW_AGENT"), saved.get("CREW_LABEL")
+
+
+def keyed(key):
+    """A row key and its object, or (None, None) for any other key."""
+    for pattern, obj in KEYS:
+        m = pattern.match(key) if isinstance(key, str) else None
+        if m:
+            return key, obj.format(m.group(1))
+    return None, None
+
+
+def posted(record, label, card):
+    """The Key and On of this host's card.post entry for a card, from the label's run record of the last 30 days."""
+    d = record.ROOT / label / "runs" / record.crew.this_host()
+    since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=DAYS)).isoformat()
+    found = (None, None)
+    for f in sorted(d.glob("*.rec")) if d.is_dir() else []:
+        if f.stem < since:
+            continue
+        for e in record.parse(f.read_text()):
+            if e.get("Act") == "card.post" and e.get("Card") == card:
+                found = (e.get("Key"), e["On"][0] if e["On"] else None)
+    return found
+
+
+def main():
+    hook = json.load(sys.stdin)
+    m = re.fullmatch(r"mcp__(.+)__([a-z_]+)", hook.get("tool_name") or "")
+    if not m or not is_pending_you(m.group(1)) or m.group(2) not in ACTS:
+        return
+    tool = m.group(2)
+    sid = hook.get("session_id")
+    agent, label = identity(sid)
+    if not agent or not label:
+        return
+    result = hook.get("tool_response")
+    if failed(result):
+        return
+    out = result_object(result) or {}
+    given = hook.get("tool_input") if isinstance(hook.get("tool_input"), dict) else {}
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "lib"))
+    import record
+    os.environ.update(CREW_AGENT=agent, CREW_LABEL=label, CREW_SESSION=f"{record.crew.this_host()}:{sid}" if sid else "")
+    if tool == "post_request":
+        card = out.get("requestId")
+        key, on = keyed(given.get("idempotencyKey"))
+    else:
+        card = given.get("requestId") or out.get("requestId")
+        key, on = posted(record, label, card) if isinstance(card, str) and REQUEST_ID.match(card) else (None, None)
+    card = card if isinstance(card, str) and REQUEST_ID.match(card) else None
+    record.emit(label, ACTS[tool], [on or f"agent/{agent}"], Card=card, Key=key)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:  # a tool call is never failed by crew's bookkeeping
+        print(f"crew cards: {e}", file=sys.stderr)
+    sys.exit(0)

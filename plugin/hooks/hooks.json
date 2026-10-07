@@ -1,5 +1,5 @@
 {
-  "description": "Give a crew agent back its herdr name and crew identity when herdr resumes it after a restart",
+  "description": "Give a crew agent back its herdr name and crew identity when herdr resumes it after a restart, and record each Pending You card it posts, updates or closes in crew's run record",
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +7,18 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*__(post_request|update_request|cancel_request|ack_answer)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\"",
             "timeout": 10
           }
         ]

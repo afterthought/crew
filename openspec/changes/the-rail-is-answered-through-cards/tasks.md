@@ -3,7 +3,7 @@
 ## 1. crew records its agents' cards
 
 - [x] 1.1 The run record takes a card's id and row key, in day files begun before and after the change (design.md, Task notes 1.1).
-- [ ] 1.2 A crew agent's post, update, withdrawal or close of a Pending You card is a run-record entry naming its row, its card and its key, holding no text from the card, and the hook never fails a tool call (design.md, Task notes 1.2).
+- [x] 1.2 A crew agent's post, update, withdrawal or close of a Pending You card is a run-record entry naming its row, its card and its key, holding no text from the card, and the hook never fails a tool call (design.md, Task notes 1.2).
 - [ ] 1.3 `tests/t-cards.sh` holds each act, both result shapes, an unkeyed card, the cases that write nothing, and a resumed session (design.md, Task notes 1.3). Verify `devenv shell -- tests/run t-cards t-session-hook t-record` ends with "0 failed".
 
 ## 2. The rail shows each row's card

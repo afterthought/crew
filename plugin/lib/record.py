@@ -7,6 +7,10 @@ and the Claude session behind them, the act, the objects acted on (On) and those
 written if any, and the subject crew composed from the names of things: never text anyone typed. A failed append is
 said on standard error and never changes what the command does or how it exits.
 
+crew's PostToolUse hook (plugin/hooks/cards) appends three acts of its own, one for each Pending You card a crew agent
+posts (card.post), updates (card.update), or withdraws or closes (card.close): each names the rail row's object in On,
+the card's id in Card and the row's key in Key, and nothing written on the card.
+
 Each write to a flywheel's branch of its state repository also carries the host's entries there, to the same path
 under runs/<host>/: the branch's file becomes the union by Id of what it had and what the host has, so a host only
 ever adds to its own files and a host that is asleep or rebuilt loses nothing it had carried. Reading takes the
