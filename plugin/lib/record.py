@@ -37,12 +37,13 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Observed Chars Amended
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Observed Chars Amended Card Key
 
 """
-# Fields beyond the common ones: a stage.end's Result, Tasks, Head and Observed, a tell's Chars, and the Amended of
-# a construct's start that marked its unit amended.
-EXTRA = ("Result", "Tasks", "Head", "Observed", "Chars", "Amended")
+# Fields beyond the common ones: a stage.end's Result, Tasks, Head and Observed, a tell's Chars, the Amended of a
+# construct's start that marked its unit amended, and a card act's Card (the Pending You card's id) and Key (the
+# rail row's card key).
+EXTRA = ("Result", "Tasks", "Head", "Observed", "Chars", "Amended", "Card", "Key")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
@@ -337,6 +338,8 @@ def line(e, zoe=False):
         s += f" ({e['Chars']} characters)"
     if e.get("Amended"):
         s += " (amended)"
+    if e.get("Key") or e.get("Card"):
+        s += " (card " + " ".join(x for x in (e.get("Key"), e.get("Card")) if x) + ")"
     if e.get("Refused"):
         s += f"  refused: {e['Refused']}"
     if zoe and e.get("Session") and ":" in e["Session"]:
