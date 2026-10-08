@@ -25,13 +25,17 @@ change "$k" landed 3 3; mkdir -p "$k/openspec/changes/archive"; change "$k" tmp 
 mv "$k/openspec/changes/tmp" "$k/openspec/changes/archive/2026-09-01-archived"; commit_all "$k" "feat: two units landed"
 git -C "$kd/bolts/tenant-environments" merge -q --ff-only main
 # A unit merged the way the merge stage does by default: squashed by wt merge, its worktree and branch removed.
+# wt merge's own removal runs in the background at macOS's background priority, which a loaded machine can hold
+# back for minutes, so the worktree is kept through the merge and removed with its branch in the foreground.
 ps=$(place "$k" tenant-environments squashed); change "$ps" squashed 2 2; commit_all "$ps" "feat(squashed): one"
 echo two > "$ps/two"; commit_all "$ps" "feat(squashed): two"
-if command -v wt >/dev/null; then (cd "$ps" && wt merge bolt/tenant-environments --yes >/dev/null 2>&1) || fail "wt merge failed"
+if command -v wt >/dev/null; then
+  (cd "$ps" && wt merge bolt/tenant-environments --yes --no-remove >/dev/null 2>&1) || fail "wt merge failed"
+  (cd "$ps" && wt remove --foreground -D --yes >/dev/null 2>&1) || fail "wt remove failed"
 else git -C "$kd/bolts/tenant-environments" merge -q --squash unit/squashed && commit_all "$kd/bolts/tenant-environments" "squashed"
   git -C "$k" worktree remove "$ps" && git -C "$k" branch -qD unit/squashed; fi
-for _ in $(seq 100); do [[ -d $ps ]] || break; /bin/sleep 0.1; done  # wt removes the worktree in the background
 [[ ! -d $ps ]] || fail "the squashed unit's worktree is still there"
+! git -C "$k" rev-parse -q --verify unit/squashed >/dev/null || fail "the squashed unit's branch is still there"
 eq "$(git -C "$k" rev-list --count bolt/tenant-environments ^main)" "1"
 pv=$(place "$k" tenant-environments verifying); change "$pv" verifying 3 3; commit_all "$pv" "feat(verifying)"
 pc=$(place "$k" tenant-environments coding); change "$pc" coding 4 9; commit_all "$pc" "feat(coding)"
