@@ -7,10 +7,10 @@
 world
 h=mac-studio
 # verdict <session> <excerpt> [skip...]: the grade, who asserted it, the source line's number and uuid, and the
-# reason when there is one
+# reason when there is one; STAGE_BY names the conductor whose stage the session runs
 verdict() {
-  as $h python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import transcript
-v = transcript.check(sys.argv[2], sys.argv[3], sys.argv[4:])
+  as $h python3 -c 'import os, sys; sys.path.insert(0, sys.argv[1]); import transcript
+v = transcript.check(sys.argv[2], sys.argv[3], sys.argv[4:], os.environ.get("STAGE_BY"))
 print(" ".join(str(x) for x in (v.grade, v.asserted_by, v.n, v.uuid)) + (f": {v.reason}" if v.reason else ""))' "$CREW/plugin/lib" "$@"
 }
 # An earlier crew signal, as the agent's Bash call records it; its --excerpt holds the words too, and is never a source.
@@ -40,6 +40,33 @@ eq "$(verdict s-tell "The deploy left open security groups behind.")" "verified 
 eq "$(verdict s-tell "Leave the open security groups for now.")" "verified user 2 u-5"
 eq "$(verdict s-tell "open security groups move to the queue")" "verified crew 3 u-6"
 ok "what crew tell carried is asserted by its sender, the user's own tell by the user, and crew's notice by crew"
+
+# A stage's own prompts, as Claude Code records them: code's slash command and its skill's text after it, a fix, a merge.
+transcript $h s-stage >/dev/null <<'EOF'
+{"type":"user","uuid":"u-20","message":{"role":"user","content":"<command-message>opsx:apply</command-message>\n<command-name>/opsx:apply</command-name>\n<command-args>edge-groups Close the open security groups verify found.</command-args>"}}
+{"type":"user","uuid":"u-21","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Implement tasks from an OpenSpec change.\n\n\nARGUMENTS: edge-groups Close the open security groups verify found."}]}}
+{"type":"user","uuid":"u-22","message":{"role":"user","content":"Fix: The deploy leaves open security groups on stack edge."}}
+{"type":"user","uuid":"u-23","message":{"role":"user","content":"Merge fix/smoke-2/edge into bolt/smoke-2: wt merge bolt/smoke-2 --no-squash --no-remove"}}
+{"type":"user","uuid":"u-24","message":{"role":"user","content":"Leave Fix: as it is, the open security groups are mine.\n\nARGUMENTS: edge-groups Close the open security groups verify found."}}
+EOF
+export STAGE_BY=swb-2-conductor
+eq "$(verdict s-stage "/opsx:apply")" "verified agent:swb-2-conductor 1 u-20"
+eq "$(verdict s-stage "Implement tasks from an OpenSpec change.")" "verified agent:swb-2-conductor 2 u-21"
+eq "$(verdict s-stage "open security groups on stack edge")" "verified agent:swb-2-conductor 3 u-22"
+eq "$(verdict s-stage "wt merge bolt/smoke-2")" "verified agent:swb-2-conductor 4 u-23"
+eq "$(verdict s-stage "the open security groups are mine")" "verified user 5 u-24"
+eq "$(verdict s-stage "Close the open security groups verify found.")" "verified user 5 u-24"
+unset STAGE_BY
+eq "$(verdict s-stage "open security groups on stack edge")" "verified user 3 u-22"
+eq "$(verdict s-stage "Implement tasks from an OpenSpec change.")" "verified user 2 u-21"
+ok "a stage's own prompt, with its command's skill text after it, is its conductor's; elsewhere, or not next, the user's"
+
+transcript $h s-stage-args >/dev/null <<'EOF'
+{"type":"user","uuid":"u-25","message":{"role":"user","content":"<command-message>opsx:verify</command-message>\n<command-name>/opsx:verify</command-name>\n<command-args>edge-groups The groups still open?</command-args>"}}
+{"type":"user","uuid":"u-26","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Verify that an implementation matches the change.\n\n\nARGUMENTS: edge-groups The groups still open?"}]}}
+EOF
+eq "$(STAGE_BY=swb-2-conductor verdict s-stage-args "The groups still open?")" "verified agent:swb-2-conductor 2 u-26"
+ok "the words a stage's command carries are the conductor's in the skill text that ends with them"
 
 transcript $h s-own >/dev/null <<EOF
 {"type":"user","uuid":"u-7","message":{"role":"user","content":"Have a look at the templates."}}

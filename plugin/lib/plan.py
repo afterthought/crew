@@ -2286,7 +2286,7 @@ def signal(fleet, a):
         excerpt = (excerpt or "").strip()
         excerpt or fail('a signal quotes the words that show it: add --excerpt "<the exact words the user said or the '
                         'tool printed>", or --excerpt-file <path>')
-        v, sid = check_excerpt(a, excerpt, host)
+        v, sid = check_excerpt(fleet, name, a, excerpt, host)
         v.grade != "refused" or fail("the excerpt is not in your session's transcript: quote the words as you received "
                                      "them, from the user or from a tool's output")
         # The capture's key and name, by grade: a received record by its uuid, any other line by its hash, and an
@@ -2357,16 +2357,18 @@ def signal(fleet, a):
           + (f" ({v.reason})" if v and v.grade == "unverified" else ""))
 
 
-def check_excerpt(a, excerpt, host):
+def check_excerpt(fleet, name, a, excerpt, host):
     """The agent's excerpt checked against its own Claude session's transcript, which is on this host: crew signal
-    is never run on another. The session is the one a forwarded command carries, else herdr's for the agent. Returns
-    the verdict and the session id."""
+    is never run on another. The session is the one a forwarded command carries, else herdr's for the agent. A slot's
+    agent runs its team's stages, whose own prompts are its conductor's. Returns the verdict and the session id."""
     sess = record.session()
     shost, sid = sess.split(":", 1) if sess and ":" in sess else (host, sess)
     if sid and shost != host:
         return transcript.unverified(f"session {sid} is on {shost}, not {host}"), sid
     skip = [a.excerpt_file, str(pathlib.Path(a.excerpt_file).resolve())] if a.excerpt_file else []
-    return transcript.check(sid, excerpt, skip), sid
+    kind, of = role(fleet, name)
+    slot = kind == "team" and re.fullmatch(rf"{re.escape(of)}-unit-[1-9][0-9]*", name)
+    return transcript.check(sid, excerpt, skip, f"{of}-conductor" if slot else None), sid
 
 
 def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan):

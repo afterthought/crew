@@ -63,7 +63,7 @@ Code
 
 **[roles.3]** Rules out: a second brief-only fix for the same broken rule. Source: plan-proposals design; fix-place-names-its-bolt proposal; fix 902336e.
 
-**[roles.4]** Rules out: `herdr agent prompt` from one agent to another; an unmarked notice. Not ruled out: `run_stage`'s `/opsx:…`, `Fix: …` and merge prompts, which a slash command cannot prefix; a quote of one is asserted by the conductor that ran the stage. Source: checked-capture design "Marking what crew sends"; `crew.py` 217–224; `_open.md` for the conductor brief's step 5 and the grader.
+**[roles.4]** Rules out: `herdr agent prompt` from one agent to another; an unmarked notice. Not ruled out: `run_stage`'s `/opsx:…`, `Fix: …` and merge prompts, which a slash command cannot prefix; a quote of one is asserted by the conductor that ran the stage. Source: checked-capture design "Marking what crew sends"; `crew.py` 217–224; `transcript.py` `asserter`.
 
 **[read.1]** Rules out: a default partition; a stage guessed from a missing host; a tidy that removes when a plan can't be read. Source: fixes f734f28, d9c8a11, e413c48; bolt-teams design; `plan.py` 686–690.
 

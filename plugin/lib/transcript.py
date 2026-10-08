@@ -9,6 +9,11 @@ name. It knows two facts of the format: a top-level type of user marks a record 
 assistant a record the agent wrote itself. When either stops holding, a grade falls; nothing that is not a paraphrase
 is refused, and no capture is stopped.
 
+Who asserted the words is read from the mark crew puts on what it sends, and a stage's own prompt, which crew cannot
+mark, from its form: `Fix: …`, the merge line, and the /opsx: commands, which Claude Code records as a string holding
+<command-name>/opsx:apply</command-name> and <command-args>…</command-args>, the skill's text following in the next
+record received, ending ARGUMENTS: and the same words. When these stop holding, a stage's words are read as the user's.
+
 Claude Code writes a tool call's record only once the tool returns, so the running crew signal is never in the
 transcript it reads. What shows crew it is reading the live session is the record before it, the user's message or
 the last tool's output, written moments earlier: a transcript whose last record is older than FRESH may be another
@@ -23,6 +28,10 @@ import datetime, hashlib, json, pathlib, re
 
 COMMAND = "crew signal"
 TELL = re.compile(r"^\[crew tell from ([^\]\s]+)\]")
+# A stage's own prompt, as crew's run_stage sends it: a fix, a merge, or construct, code and verify as slash commands.
+STAGE = re.compile(r"^(Fix: |Merge \S+ into bolt/\S+: wt merge bolt/\S+ --no-squash --no-remove)")
+SLASH = re.compile(r"<command-name>/opsx:(propose|apply|verify)</command-name>")
+ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 FRESH = datetime.timedelta(minutes=15)
 
 
@@ -110,10 +119,18 @@ def lines(path):
     return out
 
 
-def asserter(value, hit):
+def stage_args(s):
+    """The words of a stage's /opsx: command, as Claude Code records the command, or None for any other string."""
+    text = s.lstrip()
+    m = ARGS.search(text) if text.startswith("<command-") and SLASH.search(text) else None
+    return m.group(1) if m else None
+
+
+def asserter(value, hit, stage_by=None, expansion=False):
     """Who asserted a received record's excerpt, from the record and the string that holds it: a tool, for a record
     holding a tool_result block; the agent crew tell names, or the user when that names <user>@<host>; crew, for
-    crew's own message; otherwise the user."""
+    crew's own message; stage_by, the conductor whose stage the session runs, for the stage's own prompt or the
+    expansion of its command; otherwise the user."""
     if holds_tool_result(value):
         return "tool"
     text = hit.lstrip()
@@ -122,6 +139,8 @@ def asserter(value, hit):
         return "user" if "@" in m.group(1) else f"agent:{m.group(1)}"
     if text.startswith("[crew]"):
         return "crew"
+    if stage_by and (expansion or STAGE.match(text) or stage_args(text) is not None):
+        return f"agent:{stage_by}"
     return "user"
 
 
@@ -134,11 +153,12 @@ def holds_tool_result(v):
     return False
 
 
-def check(session, excerpt, skip=()):
+def check(session, excerpt, skip=(), stage_by=None):
     """Look for the excerpt in the session's transcript, whitespace aside, once it shows it is the live session's: its
     last record written within FRESH. Strings holding `crew signal` are crew's commands and their echoes, lines of type
     assistant what the agent wrote, and lines that name a path in skip the writing of the excerpt's file: none of them
-    is searched. Returns a Verdict; refused is one too."""
+    is searched. stage_by is the conductor whose stage the session runs, None for a session that runs none, where a
+    prompt of a stage's form is the user's. Returns a Verdict; refused is one too."""
     if not session:
         return unverified("herdr names no session")
     path = find(session)
@@ -155,23 +175,27 @@ def check(session, excerpt, skip=()):
         return unverified(f"session {session}'s transcript has not been written for {int(age.total_seconds() // 60)} "
                           "minutes: crew may be reading another session's")
     needle = collapse(excerpt)
-    received = other = None
+    received = other = args = None  # args: the words of the stage command just received, which its expansion ends with
     for n, raw, v in found:
         if kind(v) == "assistant":
             continue
         every = list(strings(v))
+        expansion = False
+        if kind(v) == "user":
+            expansion = args is not None and any(collapse(s).endswith(collapse(f"ARGUMENTS: {args}")) for s in every)
+            args = next((x for x in map(stage_args, every) if x is not None), None)
         if any(p in s for s in every for p in skip):
             continue
         hits = [s for s in every if COMMAND not in s and needle in collapse(s)]
         if not hits:
             continue
         if kind(v) == "user":
-            received = (n, raw, v, hits)
+            received = (n, raw, v, hits, expansion)
         else:
             other = (n, raw, v, hits)
     if received:
-        n, raw, v, hits = received
-        return Verdict("verified", raw=raw, n=n, value=v, asserted_by=asserter(v, hits[-1]))
+        n, raw, v, hits, expansion = received
+        return Verdict("verified", raw=raw, n=n, value=v, asserted_by=asserter(v, hits[-1], stage_by, expansion))
     if other:
         n, raw, v, _ = other
         return Verdict("found", raw=raw, n=n, value=v)

@@ -150,6 +150,22 @@ HOST=$box CREW_AGENT=swb-2-unit-1 CREW_SESSION=$box:s-u expect_ok crew signal tr
 has "$(at signals/${ts:0:10}-swb-2-unit-1-c0ffee00/capture.md)" "where: team swb-2, bolt smoke-2, unit cfn-lint-treefmt"
 ok "a stage agent's capture names its team, the bolt the team holds, and the unit its slot holds"
 
+ts=$(ago 1); sd=${ts:0:10}
+for s in s-stage:5a6e0001 s-ops:0b500001; do
+  transcript $box ${s%:*} >/dev/null <<EOF
+{"type":"user","uuid":"${s#*:}-0000-4000-8000-000000000001","timestamp":"$ts","message":{"role":"user","content":"Fix: treefmt stops on cfn-lint's warnings in every template."}}
+EOF
+done
+HOST=$box CREW_AGENT=swb-2-unit-1 CREW_SESSION=$box:s-stage expect_ok crew signal warnings-stop-treefmt "treefmt stops on cfn-lint's warnings." \
+  --excerpt "treefmt stops on cfn-lint's warnings in every template."
+has "$out" "asserted by agent:swb-2-conductor"
+has "$(at signals/$sd-swb-2-unit-1-5a6e0001/01-warnings-stop-treefmt.md)" "who: swb-2-conductor"
+HOST=$box CREW_AGENT=swb-2-ops CREW_SESSION=$box:s-ops expect_ok crew signal warnings-stop-treefmt "treefmt stops on cfn-lint's warnings." \
+  --excerpt "treefmt stops on cfn-lint's warnings in every template."
+has "$out" "asserted by user"
+has "$(at signals/$sd-swb-2-ops-0b500001/01-warnings-stop-treefmt.md)" "who: user"
+ok "a slot agent's own stage prompt is its conductor's; the same words typed to ops are the user's"
+
 ts=$(ago 1); pd=${ts:0:10}
 transcript $box s-p >/dev/null <<EOF
 {"type":"user","uuid":"aaaa0001-0000-4000-8000-000000000003","timestamp":"$ts","message":{"role":"user","content":"[crew tell from swb-2-conductor] smoke-2 needs a security check before it can land."}}

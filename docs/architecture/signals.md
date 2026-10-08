@@ -26,4 +26,4 @@ The rules for captures, signals and moves. `core.md` binds here too; the how-to 
 
 **[signals.4]** Rules out: a second move; a hand edit of `moves.rec`; a route without a unit. Source: `main-level` spec; `plan.py` 95–107, 2108–2145; fix 2d95e12.
 
-**[signals.5]** Rules out: a conductor's `Fix:` words graded as the user's. Source: checked-capture design; `transcript.py` 113–125; `roles.4`. The grader treats a stage prompt as the user's today: `_open.md`.
+**[signals.5]** Rules out: a conductor's `Fix:` words graded as the user's. Source: checked-capture design; `transcript.py` 122–144; `roles.4`.
