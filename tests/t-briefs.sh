@@ -12,6 +12,9 @@ expect_fail "no definition 'fable' for a team" crewpy brief swb-1 fable
 [[ ! -e $CREW/plugin/roles/fable.md && ! -e $CREW/plugin/roles/explorer.md && ! -e $CREW/plugin/roles/verifier.md ]] || fail "a retired role is still there"
 ok "every team brief prints with no unfilled token"
 
+expect_ok crewpy brief swb-1 coder; has "$out" "run \`wt merge\` in the background and wait for it to end"
+ok "the coder runs a merge, whose checks can outlast a command's time limit, in the background"
+
 expect_ok crewpy brief swb-1 conductor
 for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
   has "$out" "$want"
@@ -72,7 +75,8 @@ for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a ti
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
 for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main" "the bolt lands either way" \
-  "through the bolt's conductor when the user approved its landing card on Pending You"; do has "$out" "$want"; done
+  "through the bolt's conductor when the user approved its landing card on Pending You" \
+  "run \`wt merge\` in the background and wait for it to end"; do has "$out" "$want"; done
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
 

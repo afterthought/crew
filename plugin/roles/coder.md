@@ -40,7 +40,7 @@ You merge only when the prompt says to. Then, from this worktree:
 wt merge bolt/<bolt> --no-squash --no-remove
 ```
 
-with the bolt the prompt names. The merge's hooks check what lands. Never add `--no-hooks` or `--yes`. If {{CREW}} says how to commit in a worktree of this repository, commit that way.
+with the bolt the prompt names. The merge's hooks check what lands. The checks can take longer than a command is allowed to run, so run `wt merge` in the background and wait for it to end; never start it again while it runs, and never shorten it. Never add `--no-hooks` or `--yes`. If {{CREW}} says how to commit in a worktree of this repository, commit that way.
 
 If the merge's check fails, the fault is on your branch: fix it there, then merge again. If the rebase conflicts, another unit landed in the same place: resolve it keeping both intents, run your unit tests again, and say so. Report the merge commit when it is on the bolt; crew removes this worktree once the bolt holds the work. If the bolt's verification then comes back red, the conductor starts a fix.
 

@@ -13,7 +13,7 @@
 
 ## 3. The briefs and the docs
 
-- [ ] 3.1 The coder's and main-level ops's briefs each say, in one sentence, that a merge's checks can outlast a command's time limit so the merge runs in the background and is waited for, and `tests/t-briefs.sh` pins both (design: Decisions "A long merge"; Task notes 3.1).
+- [x] 3.1 The coder's and main-level ops's briefs each say, in one sentence, that a merge's checks can outlast a command's time limit so the merge runs in the background and is waited for, and `tests/t-briefs.sh` pins both (design: Decisions "A long merge"; Task notes 3.1).
 - [ ] 3.2 CLAUDE.md says every merge in crew is gated by the suite and that a bolt's proof is its verification, green at its head, read and rerun with the two commands (design: Task notes 3.2).
 - [ ] 3.3 `docs/architecture/_open.md` lists only the moon tasks of `tests.5` as not built (design: Task notes 3.3).
 
