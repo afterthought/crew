@@ -3,8 +3,10 @@
 # its own ($T) with tests/lib.sh to source. lib.sh gives each simulated host a scratch HOME holding fixture
 # teams.json and herdr-hosts.json files, makes bare git remotes, and puts stub herdr, ssh, hostname, sleep and
 # claude commands first on PATH. The stubs record their calls in $T/calls.log and $T/claude.log, so no test
-# ever reaches a real herdr session, a real host or a real agent.
+# ever reaches a real herdr session, a real host or a real agent. It runs only inside a devenv shell, so a test
+# never runs on the host's tools in place of the shell's.
 set -uo pipefail
+[[ -n ${DEVENV_ROOT:-} ]] || { echo "tests/run runs inside crew's devenv shell: a Claude session in a crew checkout is in it from its start; from a terminal, enter it with devenv shell, or direnv with the checkout's .envrc" >&2; exit 2; }
 TESTS=$(cd "$(dirname "$0")" && pwd -P); export TESTS
 
 # A test must never reach the real herdr or ssh: refuse to run if the stubs would not be the ones found.
