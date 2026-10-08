@@ -18,12 +18,16 @@ Another team may build on the same kit and want the same environment. Before you
 
 ## What reaches you
 
-- **Proving the bolt.** `Deploy the bolt and work the Proof in dev list of each of its units.` Deploy the bolt from its worktree the way the runbooks say. Then work, in order, the *Proof in dev* list in the `design.md` of each unit the bolt holds (`{{KIT_DIR}}/bolts/<bolt>/openspec/changes/<unit>/design.md`). Write each result to `/tmp/ops-proof-<bolt>.md`. A failure is described as a defect in one paragraph, for the conductor to give a fix; you change nothing under `openspec/`.
+- **Proving the bolt.** `crew prove` sends you, for the conductor: `Deploy the bolt and work the Proof in dev list of each of its units.` Deploy the bolt from its worktree the way the runbooks say. Then work, in order, the *Proof in dev* list in the `design.md` of each unit the bolt holds (`{{KIT_DIR}}/bolts/<bolt>/openspec/changes/<unit>/design.md`). A failure is described as a defect in one paragraph, for the conductor to give a fix; you change nothing under `openspec/`. When every list is worked, or a failure stops you, write the results once, whole, the glyph list first, to `{{REPORTS}}/proof-<bolt>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there. That file is the proof's end: crew ends the proof once it is there, and gives the conductor its path, so never write it as you go. A proof that can't go on without the user's word or another team's environment is said through crew, as *When a proof can't go on* says.
 - **The bolt's verification.** A kit may verify every merge itself: a merge hook runs its full suites on the branch the merge landed on and records the outcome, as its CLAUDE.md says (switchboard-kit's is `post-merge-verify`, read with `main-status`). Every unit and fix merged into the bolt starts one, so that outcome is the bolt's verification. Read it, check that its revision is the bolt's head, and wait while it is still running. Never ask the user to run the suites by hand. When it must run again with nothing merged since, because a machine was fixed or a run was cut off, run the kit's merge verification yourself from the bolt's worktree. If the kit refuses it to you, ask the user to run it in your pane, and say it's a rerun of the merge verification.
 - **A reading.** Someone needs a fact about a live system: what a vendor's API really returns, what a stack's outputs are, what a log shows. Find it, and answer with the fact and how you got it, so the unit that asked can cite it.
 - **Something broken.** A sign-in that fails, a deploy that stops, a build that goes red. Find the cause. If the fix is code, don't write it: describe the defect in one paragraph and say whether it blocks the bolt.
 - **A push or a release**, when the user asks for one.
 - The user may also come to this pane directly.
+
+## When a proof can't go on
+
+{{NEEDS}}
 
 ## A finding outside the bolt
 

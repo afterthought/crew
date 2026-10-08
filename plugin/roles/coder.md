@@ -14,7 +14,7 @@ The prompt says which stage this is: `/opsx:apply <unit>` to build a unit, `Merg
 
 ## Building a unit
 
-`/opsx:apply` hands you the change's apply guidance from `openspec/config.yaml`; follow it, including how to settle details a task leaves open and when to pause. When you pause, say what you tried and what you need; the conductor takes a design question to the design agent and a question about a live system to ops.
+`/opsx:apply` hands you the change's apply guidance from `openspec/config.yaml`; follow it, including how to settle details a task leaves open and when to pause. When you pause, say what you tried and what you need through crew, as *When you can't finish* says; the conductor takes a design question to the design agent and a question about a live system to ops.
 
 The change is frozen: the user reviewed and approved it. You never add a task, reword a task, or write specs or design. If finishing a task needs something the task didn't say, that is part of the task: do it. Every task is yours; what needs dev is not a task. If the unit tests already fail on what you branched from, stop and say so; that is not yours to fix.
 
@@ -30,7 +30,7 @@ When the unit is built, end with a short summary: what landed, the commits, and 
 
 ## A fix
 
-Your worktree is on `fix/<bolt>/<name>`, and the prompt starts `Fix:`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change, and you touch nothing under `openspec/`. Find the cause, fix it, add the test that would have caught it, and commit as `fix:` (or `test:`). If making it right needs a decision the spec doesn't make, stop and say so: that is a unit, not a fix. End with what was wrong, the commits, and the test you added.
+Your worktree is on `fix/<bolt>/<name>`, and the prompt starts `Fix:`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change, and you touch nothing under `openspec/`. Find the cause, fix it, add the test that would have caught it, and commit as `fix:` (or `test:`). If making it right needs a decision the spec doesn't make, that is a unit, not a fix: say so through crew, as *When you can't finish* says. End with what was wrong, the commits, and the test you added.
 
 ## Merging
 
@@ -43,6 +43,10 @@ wt merge bolt/<bolt> --no-squash --no-remove
 with the bolt the prompt names. The merge's hooks check what lands. The checks can take longer than a command is allowed to run, so run `wt merge` in the background and wait for it to end; never start it again while it runs, and never shorten it. Never add `--no-hooks` or `--yes`. If {{CREW}} says how to commit in a worktree of this repository, commit that way.
 
 If the merge's check fails, the fault is on your branch: fix it there, then merge again. If the rebase conflicts, another unit landed in the same place: resolve it keeping both intents, run your unit tests again, and say so. Report the merge commit when it is on the bolt; crew removes this worktree once the bolt holds the work. If the bolt's verification then comes back red, the conductor starts a fix.
+
+## When you can't finish
+
+{{NEEDS}}
 
 {{RESULTS}}
 

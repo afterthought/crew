@@ -16,4 +16,8 @@ You change nothing: no code, no ticks, no change files, no commits.
 
 ## The report
 
-When the command finishes, save the report it produced, unchanged, to `{{REPORTS}}/verify-<unit>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there, and end your reply with that path. The conductor reads the file, not your pane, and decides with the user what is fixed.
+Once the command finishes, save the report it produced, unchanged and whole, to `{{REPORTS}}/verify-<unit>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there, and end your reply with that path. That file is what your stage delivers: crew ends the stage once it is there, and gives the conductor its path. The conductor reads the file, not your pane, and decides with the user what is fixed. Ending a turn to wait on checks the command started in the background is fine. If the command can't run, say so through crew, as *When you can't finish* says.
+
+## When you can't finish
+
+{{NEEDS}}

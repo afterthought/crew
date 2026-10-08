@@ -430,6 +430,16 @@ def signal_how(cmd, label, state):
             f"`signals/` on `{label}/main` of {state}.")
 
 
+# How a stage's agent, or ops during a proof, stops short, the same in every brief that runs a stage: work is "stage"
+# or "proof".
+def needs_how(cmd, work):
+    return (f"When you cannot finish without something only someone else can give (a decision, a fact about a live system, "
+            f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. crew ends your "
+            f"{work} there and gives your words to the conductor, who gets the answer and starts the {work} again with it. "
+            "Never ask in your pane: nobody watches it. Ending a turn to wait on something you started in the background is "
+            f"fine: crew knows your {work} is over only when what it delivers is there.")
+
+
 # How an agent keeps one Pending You card for each rail row it owns, the same in the planner's brief and the conductor's.
 def cards_how(cmd, label, kits):
     return ("When your session has Pending You's tools, every decision of yours the rail lists gets one card, and only those. "
@@ -493,6 +503,7 @@ def team_tokens(fleet, t, role, self_name):
         "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
         "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
         "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named([kit])), "RESULTS": RESULTS,
+        "NEEDS": needs_how(f"{HOME}/plugin/bin/crew", "proof" if role == "ops" else "stage"),
         "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
     }
     tok["ROSTER"] = (
