@@ -359,14 +359,99 @@ def git(repo, *args, input=None, env=None, check=True):
     return r if not check else r.stdout.strip()
 
 
-def fetch(repo, ref):
-    """The tip of a branch of the repo, fetched now over https, or None when the repo has no such branch."""
+class Reading:
+    """What one command has read on this host, kept for its later steps, so the command fetches each branch and reads
+    each kit once however many steps it has (plan.12): the tip of each branch it fetched or pushed, and each kit's
+    answer by host. It lives in the folder CREW_READ names when that folder's host file names this host (bash crew
+    makes one for a command of several steps, shares it with the steps it starts on this host, and removes it when
+    the command ends), else in this process's memory. Inside fresh() nothing is served from it, so a wait looks again
+    each time; what is read there is still kept. A reading is never a service or state: it is gone with its command
+    (state.4)."""
+
+    def __init__(self):
+        self.memory, self.bypass, self.dir = {}, 0, False
+
+    def folder(self):
+        if self.dir is False:
+            d = os.environ.get("CREW_READ")
+            try:
+                mine = bool(d) and pathlib.Path(d, "host").read_text().strip() == crew.this_host()
+            except OSError:
+                mine = False
+            self.dir = pathlib.Path(d) if mine else None
+        return self.dir
+
+    def held(self, name):
+        d = self.folder()
+        if d is None:
+            return self.memory.get(name)
+        try:
+            return json.loads((d / name).read_text())
+        except (OSError, ValueError):
+            return None
+
+    def keep(self, name, value):
+        d = self.folder()
+        if d is not None:
+            try:  # a whole file or none: a step started meanwhile never reads half of one
+                tmp = d / f".{name}.{os.getpid()}"
+                tmp.write_text(json.dumps(value))
+                os.replace(tmp, d / name)
+                return
+            except OSError:
+                self.dir = None
+        self.memory[name] = value
+
+    @staticmethod
+    def tip_name(repo, ref):
+        return "tip-" + hashlib.sha1(f"{repo} {ref}".encode()).hexdigest()
+
+    def tip(self, repo, ref):
+        return None if self.bypass else self.held(self.tip_name(repo, ref))
+
+    def keep_tip(self, repo, ref, sha):
+        self.keep(self.tip_name(repo, ref), sha)
+
+    def kits(self, host):
+        return {} if self.bypass else self.held(f"kits-{host}.json") or {}
+
+    def keep_kits(self, host, answers):
+        self.keep(f"kits-{host}.json", dict(self.held(f"kits-{host}.json") or {}, **answers))
+
+    def drop_kit(self, host, main):
+        """A step that made or removed a worktree in a kit, or committed in one: the next step reads that kit again."""
+        kits = self.held(f"kits-{host}.json") or {}
+        if main in kits:
+            del kits[main]
+            self.keep(f"kits-{host}.json", kits)
+
+    @contextlib.contextmanager
+    def fresh(self):
+        self.bypass += 1
+        try:
+            yield
+        finally:
+            self.bypass -= 1
+
+
+READ = Reading()
+
+
+def fetch(repo, ref, fresh=False):
+    """The tip of a branch of the repo: the one this command already holds, else fetched now over https and kept; or
+    None when the repo has no such branch, which is not kept, so a later step looks again. fresh fetches even when a
+    tip is held: after a refused push, and after any push that is not a write's own."""
+    held = None if fresh else READ.tip(repo, ref)
+    if held:
+        return held
     r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
     if r.returncode:
         if "couldn't find remote ref" in r.stderr:
             return None
         fail(f"could not fetch {ref} of {repo} over https: {r.stderr.strip()}")
-    return git(repo, "rev-parse", f"refs/crew/{ref}")
+    tip = git(repo, "rev-parse", f"refs/crew/{ref}")
+    READ.keep_tip(repo, ref, tip)
+    return tip
 
 
 def show(repo, tip, path):
@@ -389,10 +474,12 @@ def commit(repo, parent, files, message):
 
 def land(repo, ref, path, make):
     """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses. Every
-    file the commit holds is checked first, the carried run record among them. The commit is pushed without force;
-    when the push is refused because the branch moved, make runs again on the new tip, up to five times."""
+    file the commit holds is checked first, the carried run record among them. The first attempt starts from the tip
+    the command holds; the commit is pushed without force, and when the push is refused because the branch moved, the
+    branch is fetched afresh and make runs again on the new tip, up to five times (plan.1, state.1). The command then
+    holds the commit it pushed, so its later steps see its own write."""
+    tip = fetch(repo, ref)
     for _ in range(1 + REPLAYS):
-        tip = fetch(repo, ref)
         text, message = make(tip)
         files = text if path is None else {path: text}
         checked(files)
@@ -400,9 +487,12 @@ def land(repo, ref, path, make):
         r = git(repo, "push", "--quiet", url(repo), f"{sha}:refs/heads/{ref}", check=False)
         if r.returncode == 0:
             git(repo, "update-ref", f"refs/crew/{ref}", sha)
+            READ.keep_tip(repo, ref, sha)
             return sha
-        if fetch(repo, ref) == tip:
+        moved = fetch(repo, ref, fresh=True)
+        if moved == tip:
             fail(f"the push of {ref} to {repo} failed: {r.stderr.strip()}")
+        tip = moved
     fail(f"{ref} of {repo} kept moving: the write was applied {1 + REPLAYS} times and each push was refused")
 
 
@@ -615,7 +705,7 @@ def state_init(fleet, a):
             bp, t, _ = first
             r = git(bp, "push", "--quiet", url(repo), f"{t}:refs/heads/{ref}", check=False)
             r.returncode == 0 or fail(f"could not push plan/{label} of {bp} to {repo} as {ref}: {r.stderr.strip()}")
-            tip = fetch(repo, ref)
+            tip = fetch(repo, ref, fresh=True)
             did.append(f"adopted plan/{label} of {bp} at {t[:7]}, with its history")
             record.emit(label, "state.init", [f"plan/{label}"], commit=[f"{repo}@{tip}"], why=f"state({label}): adopt plan/{label} of {bp}")
         else:
@@ -689,7 +779,8 @@ def survey(fleet, held, sites=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)]. The answer is
     per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
     the host's running portless routes too. Each kit is asked for the verify reports of every team that builds it on
-    that host."""
+    that host. A kit the command has already read is not asked again, and what a host answers is kept for the
+    command's later steps; a sites survey is neither served nor kept."""
     hosts = {}
     for team, bolt in held:
         t = fleet["teams"].get(team)
@@ -702,11 +793,18 @@ def survey(fleet, held, sites=False):
             k["bolts"].append(bolt)
     out = {}
     for host, kits in sorted(hosts.items()):
-        r = crew.on_machine(fleet, host, ["python3", "-", json.dumps({"kits": list(kits.values()), "sites": sites})], input=GATHER)
-        if r.returncode == 0:
-            out[host] = {"ok": True, "kits": json.loads(r.stdout)}
-        else:
-            out[host] = {"ok": False, "error": ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]}
+        have = {} if sites else {m: k for m, k in READ.kits(host).items() if m in kits}
+        ask = [k for m, k in kits.items() if m not in have]
+        if ask:
+            r = crew.on_machine(fleet, host, ["python3", "-", json.dumps({"kits": ask, "sites": sites})], input=GATHER)
+            if r.returncode:
+                out[host] = {"ok": False, "error": ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]}
+                continue
+            got = json.loads(r.stdout)
+            if not sites:
+                READ.keep_kits(host, {m: k for m, k in got.items() if k.get("ok")})
+            have.update(got)
+        out[host] = {"ok": True, "kits": have}
     return out
 
 
@@ -3019,49 +3117,50 @@ def stage_wait(fleet, a):
     deadline = time.monotonic() + a.timeout / 1000
     stuck = datetime.timedelta(milliseconds=a.stuck)
     seen_quiet = seen_working = None
-    while True:
-        with stages_file(t, shared=True) as lines:
-            words = handed(t, a.slot, o.eid)
-            owed = any(l[3:4] == [o.eid] for l in lines)
-        if words is not None:
-            print(f"{agent} stopped short in {o.phrase()}. It needs: {words}")
-            return
-        if not owed:
-            print(ended_said(t, agent))
-            return
-        info = crew.agent_get(fleet, agent)
-        status = info.get("agent_status") if info else None
-        got, missing = deliverable(fleet, t, o, place) if status != "working" else (None, None)
-        if got:
-            if end_owed(fleet, t, o, "delivered", got):
-                print(f"{agent} delivered {o.phrase()}: {missing}")
+    with READ.fresh():  # each look reads the plan and the kit afresh
+        while True:
+            with stages_file(t, shared=True) as lines:
+                words = handed(t, a.slot, o.eid)
+                owed = any(l[3:4] == [o.eid] for l in lines)
+            if words is not None:
+                print(f"{agent} stopped short in {o.phrase()}. It needs: {words}")
                 return
-            continue
-        if info is None:
-            print(f"{agent} is no longer running: {o.phrase()} delivered nothing and said nothing it needs")
-            return
-        now = datetime.datetime.now(datetime.timezone.utc)
-        if status == "working":
-            seen_working, doing = now, "is working"
-        else:
-            seen_quiet = seen_quiet or now
-            pending, last, unread = background(info)
-            if pending:
-                doing = f"is waiting on {len(pending)} background task{'' if len(pending) == 1 else 's'} of its own"
-            else:
-                # The clock starts at the transcript's last record, or when this wait first saw the agent quiet when
-                # that can't be read, and never before this wait last saw it working.
-                quiet = now - max(x for x in ((seen_quiet if unread or not last else last), seen_working) if x)
-                if quiet >= stuck:
-                    print(f"{agent} is stuck in {o.phrase()}: quiet for {minutes(quiet)}, with {missing} and nothing it needs said"
-                          + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
+            if not owed:
+                print(ended_said(t, agent))
+                return
+            info = crew.agent_get(fleet, agent)
+            status = info.get("agent_status") if info else None
+            got, missing = deliverable(fleet, t, o, place) if status != "working" else (None, None)
+            if got:
+                if end_owed(fleet, t, o, "delivered", got):
+                    print(f"{agent} delivered {o.phrase()}: {missing}")
                     return
-                doing = f"has been quiet for {minutes(quiet)}, under the limit of {minutes(stuck)}"
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            print(f"{o.phrase()} is still running after the wait's {a.timeout} ms: {agent} {doing}; nothing is recorded yet")
-            return
-        time.sleep(min(POLL, remaining))
+                continue
+            if info is None:
+                print(f"{agent} is no longer running: {o.phrase()} delivered nothing and said nothing it needs")
+                return
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if status == "working":
+                seen_working, doing = now, "is working"
+            else:
+                seen_quiet = seen_quiet or now
+                pending, last, unread = background(info)
+                if pending:
+                    doing = f"is waiting on {len(pending)} background task{'' if len(pending) == 1 else 's'} of its own"
+                else:
+                    # The clock starts at the transcript's last record, or when this wait first saw the agent quiet when
+                    # that can't be read, and never before this wait last saw it working.
+                    quiet = now - max(x for x in ((seen_quiet if unread or not last else last), seen_working) if x)
+                    if quiet >= stuck:
+                        print(f"{agent} is stuck in {o.phrase()}: quiet for {minutes(quiet)}, with {missing} and nothing it needs said"
+                              + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
+                        return
+                    doing = f"has been quiet for {minutes(quiet)}, under the limit of {minutes(stuck)}"
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                print(f"{o.phrase()} is still running after the wait's {a.timeout} ms: {agent} {doing}; nothing is recorded yet")
+                return
+            time.sleep(min(POLL, remaining))
 
 
 def stage_needs(fleet, a):
