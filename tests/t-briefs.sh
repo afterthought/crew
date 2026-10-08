@@ -132,3 +132,19 @@ expect_ok crewpy brief wldn design; has "$out" "\`moves.rec\` on \`wldn/main\` o
 lacks "$out" "route moves straight to"
 expect_ok crewpy brief wldn planner; has "$out" "\`wldn/main\` of WilldanGroup/crew-state"
 ok "every brief names the flywheel's branch for the plan and the moves, and none names plan/<label>"
+
+# Test, check and proof results reach the user as a glyph list (briefs.7): the six roles that report results carry
+# one section, built once in crew, word for word the same in each.
+first=""
+for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" "wldn main-ops"; do
+  expect_ok crewpy brief $brief
+  n=$(grep -c '^## Test, check and proof results$' <<<"$out")
+  [[ $n == 1 ]] || fail "the $brief brief holds the results heading $n times"
+  cut=$(awk '/^## Test, check and proof results$/ {on = 1; print; next} on && /^## / {exit} on' <<<"$out")
+  for want in "## Test, check and proof results" "- ✅" "- ❌" "- ⏳" "before any prose" "Never say a result only in a sentence"; do
+    has "$cut" "$want"
+  done
+  [[ -z $first ]] && first=$cut
+  [[ $cut == "$first" ]] || fail "the $brief brief's results section differs from the swb-1 conductor's:"$'\n'"$cut"
+done
+ok "the six roles that report results carry one glyph-list section, the same in each"
