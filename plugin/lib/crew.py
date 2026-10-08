@@ -453,6 +453,24 @@ SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sen
            "the user when the name is `<user>@<host>`; one that begins `[crew]` is crew's own; anything else typed there "
            "is the user.")
 
+# How an agent reports results, the same in every brief that reports them.
+RESULTS = ("## Test, check and proof results\n\n"
+           "Whenever you report how tests, checks or proofs went (a suite you ran, a merge's checks, the bolt's verification, "
+           "an `openspec validate`, a verify's checks, each item of a Proof in dev list), list them first, before any prose, "
+           "one bullet per suite, check or proof:\n\n"
+           "- ✅ <what ran>: passed, with its counts where the tool gave them (`46 passed`)\n"
+           "- ❌ <what ran>: failed, with how many failed and one line on why (`2 of 46 failed: t-briefs lacks \"open nothing\"`)\n"
+           "- ⏳ <what ran>: not yet run, or still running, and what it waits on\n\n"
+           "Use these three marks and no other. A check skipped on purpose, or one you don't run yourself, is ⏳ with what it "
+           "waits on; a check that is red on purpose is still ❌, its line saying so. A verify's checks are the dimensions of "
+           "its scorecard: one with a CRITICAL issue is ❌ with how many, one with only warnings or suggestions is ✅ with "
+           "those counts, and one it skipped is ⏳ with the reason its report gives.\n\n"
+           "Never say a result only in a sentence (\"they all passed\"), and never fold several suites into one bullet. Take "
+           "every count from what the tool printed; where it printed none, give none. What you would do about a failure, and "
+           "anything else you have to say, comes after the list. Use the same list wherever the results go: your reply, a "
+           "file you write them to, or a message to another agent that will pass them on. When you pass on results another "
+           "agent reported, show its list as it is, first.")
+
 
 def team_tokens(fleet, t, role, self_name):
     kit, bp, n, label = t["kit"], t["blueprints"], t["name"], t["label"]
@@ -467,7 +485,7 @@ def team_tokens(fleet, t, role, self_name):
         "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
         "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
         "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
-        "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named([kit])),
+        "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named([kit])), "RESULTS": RESULTS,
         "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
     }
     tok["ROSTER"] = (
@@ -496,7 +514,7 @@ def main_tokens(fleet, p, role, self_name):
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
         "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
-        "CARDS": cards_how(cmd, label, kits_named({t["kit"]["repo"]: t["kit"] for t in teams}.values())),
+        "CARDS": cards_how(cmd, label, kits_named({t["kit"]["repo"]: t["kit"] for t in teams}.values())), "RESULTS": RESULTS,
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",
