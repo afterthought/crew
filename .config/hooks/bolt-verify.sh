@@ -65,8 +65,10 @@ if [ -z "${BOLT_VERIFY_REV:-}" ]; then
   exit 0
 fi
 
-# The run itself, detached.
+# The run itself, detached. BOLT_VERIFY_REV goes once read: a suite that inherited it would have any test that
+# merges into a bolt of its own verify this run's revision there instead of that bolt's.
 rev=$BOLT_VERIFY_REV
+unset BOLT_VERIFY_REV
 rec=$dir/$rev.rec
 log=$dir/$rev.log
 # A run of this revision claimed meanwhile, or a record that can't be read, is left alone.

@@ -8,7 +8,8 @@
 # checkout, as the copy is, so such a merge passes its gate and fails its verification); two runs side by side
 # each keep their own revision's outcome; a merge onto main starts none; a dead run reads interrupted, a head with
 # no run not verified, and a record that can't be read is named; a hand rerun is refused while a run of the head is
-# alive and starts after a cut-off.
+# alive and starts after a cut-off. The suite a verification runs never inherits BOLT_VERIFY_REV, so a test that
+# merges into a bolt of its own, as this one does, verifies that bolt, not the one under verification.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 gitconfig "$HOME"
@@ -33,6 +34,7 @@ cat > "$r/tests/run" <<EOF
 #!/bin/sh
 while [ -e "$T/hold" ] && [ ! -e .git ]; do /bin/sleep 0.1; done
 echo "live=[\${CREW_TEST_LIVE-unset}]"
+echo "verify-rev=[\${BOLT_VERIFY_REV-unset}]"
 echo "ok    t-a"
 if [ -e red ] || { [ -e needs-git ] && [ ! -e .git ]; }; then echo "FAIL  t-b   (scratch kept: none)"; echo "1 passed, 1 failed"; exit 1; fi
 echo "ok    t-b"; echo "2 passed, 0 failed"
@@ -87,7 +89,8 @@ until_state "$r1" green
 status; eq "$rc" 0
 has "$out" "State: green"; has "$out" "Rev: $r1"; has "$out" "Subject: chore: rm red"; has "$out" "Ended: "
 [[ -z $(ls "$TMPDIR") ]] || fail "the run left its copy: $(ls "$TMPDIR")"
-ok "the merge's verification ends green at the bolt's head, and its copy is removed"
+grep -qxF "verify-rev=[unset]" "$vd/$r1.log" || fail "the verification's suite inherited BOLT_VERIFY_REV:"$'\n'"$(cat "$vd/$r1.log")"
+ok "the merge's verification ends green at the bolt's head, its suite inherits no BOLT_VERIFY_REV, and its copy is removed"
 
 # A fix's merge into its bolt.
 f=$T/crew/places/fix-b--y
