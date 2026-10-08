@@ -19,4 +19,4 @@
 
 ## 4. The suite
 
-- [ ] 4.1 `devenv shell -- tests/run` prints `0 failed` in this worktree and again from a `git archive` copy of its head (design: Task notes 4.1).
+- [x] 4.1 `devenv shell -- tests/run` prints `0 failed` in this worktree and again from a `git archive` copy of its head (design: Task notes 4.1).
