@@ -3059,6 +3059,54 @@ def stage_wait(fleet, a):
         time.sleep(min(POLL, remaining))
 
 
+def stage_needs(fleet, a):
+    """crew needs: the caller's stage ends short, recorded with Ended short and never the words (record.3), and the
+    words go to the conductor: to the wait running on the stage when there is one, through needs/<slot>, else in a
+    tell marked as from the agent (roles.4). Only the agent of a stage crew owes an end may say it."""
+    t = crew.team_of(fleet, a.team)
+    agent, conductor = f"{t['name']}-{a.slot}", f"{t['name']}-conductor"
+    a.words.strip() or fail('say what you need: crew needs "<what you tried and what you need>"')
+    held = {l.split()[0]: l.split() for l in (team_state(t) / "slots").read_text().splitlines() if l.strip()} \
+        if (team_state(t) / "slots").exists() else {}
+    needs = team_state(t) / "needs" / a.slot
+    owed = []
+
+    def hand(lines):
+        needs.parent.mkdir(parents=True, exist_ok=True)
+        tmp = needs.with_name(f".{a.slot}.new")
+        tmp.write_text(f"{owed[0].eid}\n{a.words}")
+        tmp.replace(needs)
+
+    with stages_file(t, shared=True) as lines:
+        owed += [Owed(t, l) for l in lines if l[0] == a.slot and (a.slot == "ops" or held.get(a.slot, [None] * 3)[2] == l[1])]
+    owed or fail(f"{agent} runs no stage crew is waiting on")
+    o = owed[0]
+    end_owed(fleet, t, o, "short", then=hand) or fail(f"{agent} runs no stage crew is waiting on")
+    # The words are the wait's once it takes the file; when no wait holds its lock, or the one there ends without
+    # taking them, they are told. A wait takes the file only while it holds the lock, so a free lock with the file
+    # still there means nobody will.
+    told = f"{agent} stopped short in {o.phrase()}. It needs: {a.words}"
+    give_up, waits = time.monotonic() + 6 * POLL, team_state(t) / "waits" / f"{a.slot}.lock"
+    while needs.exists():
+        waits.parent.mkdir(parents=True, exist_ok=True)
+        with open(waits, "a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                free = True
+            except OSError:
+                free = False
+            if (free or time.monotonic() > give_up) and needs.exists():
+                needs.unlink(missing_ok=True)
+                if crew.tell(fleet, conductor, told, sender=agent):
+                    print(f"{o.phrase()} is ended, stopped short: {conductor} is told what you need")
+                else:
+                    print(f"{o.phrase()} is ended, stopped short, and {conductor} could not be told what you need: "
+                          "say it in your last message", file=sys.stderr)
+                return
+        time.sleep(1)
+    print(f"{o.phrase()} is ended, stopped short: {conductor}'s wait has what you need")
+
+
 # ----------------------------------------------------------------------------------------------- crew bolts
 
 def bolts_view(fleet, a):
@@ -3473,6 +3521,10 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("team")
     x.add_argument("--slot")
     x.add_argument("--ending", action="store_true")
+    x = sub.add_parser("_needs")
+    x.add_argument("team")
+    x.add_argument("--slot", required=True)
+    x.add_argument("words")
     x = sub.add_parser("_wait")
     x.add_argument("team")
     x.add_argument("--slot", required=True)
@@ -3491,7 +3543,7 @@ COMMANDS = {
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
     ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
-    ("_ends", None): stage_ends, ("_wait", None): stage_wait,
+    ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop,
 }
@@ -3502,7 +3554,7 @@ ACTS = {
     ("unit", "amend"): "unit.amend",
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
     ("unit", "approve"): "unit.approve", ("signal", None): "capture", ("signal-move", None): "signal.move",
-    ("_run", None): "stage.start",
+    ("_run", None): "stage.start", ("_needs", None): "stage.end",
     ("plan", "propose"): "plan.propose", ("plan", "agree"): "plan.agree", ("plan", "approve"): "plan.approve",
     ("plan", "drop"): "plan.drop",
 }
@@ -3517,6 +3569,8 @@ def named(a):
         out.append(f"bolt/{a.bolt}")
     if getattr(a, "team", None):
         out.append(f"team/{a.team}")
+    if a.cmd == "_needs":
+        out.append(f"agent/{a.team}-{a.slot}")
     if a.cmd == "signal-move":
         out.append(f"signals/{a.signal}")
     if a.cmd == "state":

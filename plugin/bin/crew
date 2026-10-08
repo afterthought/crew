@@ -29,12 +29,25 @@
 #                                      approved it, verify checks it, merge merges it into the bolt. Construct
 #                                      run again on an approved unit marks it amended: code waits for the user
 #                                      to approve it again
-#   crew unit wait <unit> [--timeout <ms>]
-#                                      wait for the unit's stage agent to settle, and record the stage's end
+#   crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]
+#                                      wait for the unit's stage to end at what it delivers (construct's change,
+#                                      code's ticked tasks, verify's report, merge's commit on the bolt), or at its
+#                                      agent saying what it needs; the stage's end is recorded. It returns sooner when
+#                                      the agent has been quiet past --stuck (15 minutes) with nothing of its own
+#                                      running, or is gone, or the timeout (an hour) passes, and says which
 #   crew fix     <team> <name> "<what is wrong>"
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
 #                                      built by a fresh code agent; a name already in use on the bolt is refused
 #   crew fix     <team> <name> --merge merge the fix into the bolt
+#   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>]
+#                                      wait for the fix's stage to end: its commits, or its merge on the bolt
+#   crew prove   <team> ["<words>"]    ask the team's ops to deploy the bolt and work each unit's Proof in dev list;
+#                                      its proof file in the team's reports folder is the proof's end
+#   crew prove   <team> --wait [--timeout <ms>] [--stuck <ms>]
+#                                      wait for ops's proof file
+#   crew needs   "<what you need>"     run by a stage's agent, or ops during a proof, that can't finish without
+#                                      something only someone else can give: its stage ends short, and the conductor
+#                                      is given the words, by its wait or by a tell
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
 # repository; a meeting's signals stay in the partition's first blueprints repo:
@@ -422,13 +435,44 @@ run_stage() {  # run_stage <slot> <stage> <prompt> <act> <held name> <object> <-
   [[ -n $id ]] && echo "$slot $what $stage $id $obj" >> "$STATE/stages"
   return 0
 }
-unit_wait() {  # unit_wait <unit> [--timeout <ms>]: wait for the unit's stage agent to settle, and record the stage's end
-  local unit=${1:?usage: crew unit wait <unit> [--timeout <ms>]} ms=3600000 slot e
-  [[ ${2:-} == --timeout ]] && ms=${3:?usage: crew unit wait <unit> [--timeout <ms>]}
+limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, as plan _wait takes them, in `limit`
+  limit=()
+  while (( $# )); do
+    case $1 in
+      --timeout | --stuck) [[ ${2:-} =~ ^[0-9]+$ ]] || { echo "$1 takes a number of milliseconds" >&2; exit 2; }; limit+=("$1" "$2"); shift 2 ;;
+      *) echo "a wait takes --timeout <ms> and --stuck <ms>, not $1" >&2; exit 2 ;;
+    esac
+  done
+}
+stage_wait() {  # stage_wait <slot|ops> [--timeout <ms>] [--stuck <ms>]: wait on the stage it owes, on the team's host
+  local slot=$1; shift; limits "$@"
+  plan _wait "$TEAM" --slot "$slot" ${limit[@]+"${limit[@]}"}
+}
+unit_wait() {  # unit_wait <unit> [--timeout <ms>] [--stuck <ms>]: wait for the unit's stage to end, and say how
+  local unit=${1:?usage: crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]} slot e; shift
+  limits "$@"
   e=$(plan _team-of "$unit") || exit 1; eval "$e"
   load_team "$TEAM"; forward; ensure_state
   slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
-  plan _wait "$TEAM" --slot "$slot" --timeout "$ms"
+  stage_wait "$slot" "$@"
+}
+prove() {  # prove "<words>": ask ops to prove the team's bolt, and owe the proof's end like a stage's
+  local words=$1 bolt= err id
+  if ! err=$(plan _bolt-of "$TEAM" 2>&1); then
+    echo "$err" >&2; entry --label "$LABEL" --act stage.start --on "team/$TEAM" --on "agent/$TEAM-ops" --refused "$err"; exit 1
+  fi
+  eval "$(grep '^BOLT=' <<<"$err")"; bolt=$BOLT
+  if [[ -z $(agent_status "$(pane_of ops)") ]]; then
+    err="$TEAM-ops is not up: crew resume $TEAM ops brings it back"
+    echo "$err" >&2; entry --label "$LABEL" --act stage.start --on "stage/$bolt/proof" --on "bolt/$bolt" --on "agent/$TEAM-ops" --refused "$err"; exit 1
+  fi
+  # A proof still owed is over once another is asked for.
+  if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" --slot ops --ending >/dev/null 2>&1 || true; fi
+  py tell "$TEAM-ops" "Deploy the bolt and work the Proof in dev list of each of its units.${words:+ $words}" || exit 1
+  id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act stage.start --on "stage/$bolt/proof" --on "bolt/$bolt" \
+    --on "agent/$TEAM-ops" --why "bolt($bolt): start proof" || true)
+  [[ -n $id ]] && echo "ops $bolt proof $id bolt/$bolt" >> "$STATE/stages"
+  echo "$TEAM-ops is asked to prove bolt/$bolt: crew prove $TEAM --wait waits for its proof file"
 }
 
 status() {
@@ -549,15 +593,20 @@ case $cmd in
     [[ -z $ENDS ]] || plan _ended "$TEAM" "$unit" "$stage" "$ENDS" || true ;;
   fix)
     load_team "${2:-}"; forward; ensure_state
-    name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge}
+    name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}
     [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "a fix is named with lowercase words and dashes" >&2; exit 2; }
-    reap; e=$(plan _bolt-of "$TEAM") || exit 1; eval "$e"
+    [[ $words == --wait ]] && limits "${@:5}"
+    [[ $words == --wait ]] || reap
+    e=$(plan _bolt-of "$TEAM") || exit 1; eval "$e"
     # A fix is named within its bolt. One a slot holds, under that name or as the fix/<name> it was given before a
     # fix's name held its bolt, keeps the branch and place its slot recorded.
     fix=fix/$BOLT/$name; path=$KIT_DIR/places/fix-$BOLT--$name
     slot=$(slot_of "$fix"); [[ -n $slot ]] || slot=$(slot_of "fix/$name")
     [[ -n $slot ]] && read -r fix path < <(awk -v s="$slot" '$1==s{print $3, $4}' "$held")
-    if [[ $words == --merge ]]; then
+    if [[ $words == --wait ]]; then
+      [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
+      stage_wait "$slot" "${@:5}"
+    elif [[ $words == --merge ]]; then
       [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
       err=$(own_place "$path" "$fix") || fix_refused fix.merge "$err"
       ensure_slot_pane "$slot" "$path"
@@ -583,6 +632,19 @@ case $cmd in
       run_stage "$slot" fix "Fix: $words" fix.start "$fix" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
       echo "$(name_of "$slot") has $fix: code, in $path"
     fi ;;
+  needs)  # run by a stage's agent, or ops during a proof: the team and slot are its own name's
+    words=${2:-}; who=${CREW_AGENT:-$(id -un)@$(this_host)}; team= slot=
+    [[ -n ${words//[[:space:]]/} ]] || { echo "usage: crew needs \"<what you tried and what you need>\"" >&2; exit 2; }
+    for t in $(teams); do
+      if [[ $who == "$t-ops" || $who == "$t-conductor" ]]; then team=$t; slot=${who#"$t"-}
+      elif [[ $who =~ ^$t-(unit-[1-9][0-9]*)$ ]]; then team=$t; slot=${BASH_REMATCH[1]}; fi
+    done
+    [[ -n $team ]] || { echo "$who runs no stage crew is waiting on" >&2; exit 1; }
+    load_team "$team"; forward; ensure_state
+    plan _needs "$TEAM" --slot "$slot" "$words" ;;
+  prove)
+    load_team "${2:-}"; forward; ensure_state
+    if [[ ${3:-} == --wait ]]; then stage_wait ops "${@:4}"; else prove "${3:-}"; fi ;;
   _free)  # crew _free <team> <unit|fix/name>: free the slot holding it (a unit moved to another team's bolt leaves it)
     load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}")
     if [[ -n $slot ]]; then free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi ;;
