@@ -9,7 +9,7 @@ The rules every change to crew holds to, wherever it is made. A rule that binds 
 | `record.md` | `plugin/lib/record.py`: the run record |
 | `signals.md` | `plugin/lib/transcript.py` and the signal commands in `plan.py` |
 | `briefs.md` | `plugin/roles/`, `plugin/skills/`: what each role may and may not do |
-| `tests.md` | `tests/`, `devenv.nix`, `.config/` |
+| `tests.md` | `tests/`, `devenv.nix`, `.config/`, `.claude/`, `.envrc` |
 | `docs.md` | `README.md`, `openspec/`, `docs/`, `CLAUDE.md` |
 
 ## Rules
