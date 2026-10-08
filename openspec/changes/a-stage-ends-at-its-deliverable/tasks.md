@@ -13,4 +13,4 @@
 - [x] 1.9 `tests/t-stage-ends.sh` proves each deliverable, the stuck clock with and without background work and transcript, the stop-short both ways, the gone agent, a fix's wait and the proof (Task notes 1.9; `tests.2`, `tests.4`).
 - [x] 1.10 `t-record-team.sh`, `t-amend.sh` and `t-fix.sh` read the new ends, and `t-briefs.sh` pins the briefs' new phrases (Task notes 1.10; `tests.6`).
 - [x] 1.11 `teams.4` names its sources and leaves `_open.md`, and README and the crew skill describe the new waits, `crew needs`, `crew prove` and the new fields (Task notes 1.11; `docs.2`).
-- [ ] 1.12 `devenv shell -- tests/run` ends with "0 failed".
+- [x] 1.12 `devenv shell -- tests/run` ends with "0 failed".
