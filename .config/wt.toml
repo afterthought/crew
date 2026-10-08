@@ -6,9 +6,18 @@
 # bolt, and a bolt's merge onto main, alike. A red suite refuses the merge with nothing landed, and `tests/run`'s
 # output names each failing test.
 #
+# `[post-merge]` runs, once a merge has landed, in the background in the target's worktree: `bolt-verify.sh` runs
+# the whole suite again, on a frozen copy of the revision a bolt now holds, detached, and records its outcome per
+# revision under the git common dir. That is the bolt's verification, which ops reads with
+# `sh .config/hooks/bolt-status.sh` from the bolt's worktree; red is a fix. A merge onto main starts none.
+#
 # Agents never run these hooks with `wt hook`, and never bypass them with `--no-hooks` or `--yes`. The first
 # merge on a host waits for the user's one-time `wt config approvals add` in crew, asked again whenever a
-# command here changes; keep each command one string, so an approval matches it.
+# command here changes; keep each command one string, so an approval matches it. ops runs a bolt's verification
+# again with `devenv shell -- sh .config/hooks/bolt-verify.sh` from the bolt's worktree.
 
 [pre-merge]
 suite = "devenv shell -- env CREW_TEST_LIVE= tests/run"
+
+[post-merge]
+verify = "devenv shell -- sh .config/hooks/bolt-verify.sh {{ target }}"

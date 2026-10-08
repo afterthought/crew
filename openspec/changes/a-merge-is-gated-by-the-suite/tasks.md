@@ -7,7 +7,7 @@
 
 ## 2. The bolt is verified after each merge
 
-- [ ] 2.1 `.config/hooks/bolt-verify.sh` runs the whole suite on a frozen copy of a bolt's merged revision, detached, and records the outcome per revision under the git common dir, starting nothing for a branch that isn't a bolt and refusing a second live run of the same revision; `.config/wt.toml` runs it as the post-merge hook (design: Decisions "The verification runs after each merge", "The record"; Task notes 2.1).
+- [x] 2.1 `.config/hooks/bolt-verify.sh` runs the whole suite on a frozen copy of a bolt's merged revision, detached, and records the outcome per revision under the git common dir, starting nothing for a branch that isn't a bolt and refusing a second live run of the same revision; `.config/wt.toml` runs it as the post-merge hook (design: Decisions "The verification runs after each merge", "The record"; Task notes 2.1).
 - [ ] 2.2 `.config/hooks/bolt-status.sh` prints the verification of the bolt's current head, reads a dead run as interrupted and a missing or unreadable record as not green, writes nothing, and exits 0 only on green (design: Decisions "One reader"; Task notes 2.2).
 - [ ] 2.3 `tests/t-merge-gate.sh` shows a merge's verification ending green and red at the bolt's head, two runs side by side each keeping its own revision's outcome, no run after a merge onto main, the interrupted, not-verified and unreadable readings, and a hand rerun refused while alive and started after a cut-off (design: Task notes 2.3).
 
