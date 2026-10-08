@@ -230,14 +230,21 @@ def tell(fleet, name, text, record=True, sender=None):
     return r.returncode == 0
 
 
-def agent_status(fleet, name):
-    """An agent crew starts, as herdr sees it wherever it runs: idle, done, working, blocked, or None when it is not up."""
+def agent_get(fleet, name):
+    """An agent crew starts, as herdr's agent get answers wherever it runs, or None when it is not up."""
     host, session = place_of_agent(fleet, name)
     r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "get", name])
     try:
-        return json.loads(r.stdout)["result"]["agent"].get("agent_status") if r.returncode == 0 else None
+        a = json.loads(r.stdout)["result"]["agent"] if r.returncode == 0 else None
     except (ValueError, KeyError, TypeError):
         return None
+    return a if isinstance(a, dict) else None
+
+
+def agent_status(fleet, name):
+    """An agent crew starts, as herdr sees it wherever it runs: idle, done, working, blocked, or None when it is not up."""
+    a = agent_get(fleet, name)
+    return a.get("agent_status") if a else None
 
 
 GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "

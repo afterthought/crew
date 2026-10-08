@@ -56,7 +56,7 @@ a channel is in the partition's first blueprints repo. An id is looked up in tha
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, contextlib, datetime, fcntl, getpass, hashlib, json, os, pathlib, re, shlex, subprocess, sys, tempfile
+import argparse, contextlib, datetime, fcntl, getpass, hashlib, json, os, pathlib, re, shlex, subprocess, sys, tempfile, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -2841,51 +2841,222 @@ def deliverable(fleet, t, o, place=None):
     return (f"unit/{o.name}@{head}", f"its change is committed at {head}, ready for review") if planned else (None, "its planning not complete")
 
 
-def stage_ends(fleet, a):
-    """Record the end of each stage the team's stages file holds a start for, once each, under its lock: with --waited,
-    the slot the conductor's wait returned for, as seen at once; with --ending, the slot whose agent is about to be
-    ended, whatever it is doing; otherwise each one whose agent is no longer working, observed late by the command
-    that reads the team. A line whose slot no longer holds its unit or fix is dropped without an entry."""
-    t = crew.team_of(fleet, a.team)
-    state = pathlib.Path.home() / f".local/state/{t['name']}-team"
-    path = state / "stages"
-    slots = state / "slots"
-    held = {l.split()[0]: l.split() for l in (slots.read_text().splitlines() if slots.exists() else []) if l.strip()}
-    now = {}
+@contextlib.contextmanager
+def stages_file(t, shared=False):
+    """The team's stages file under its lock (teams.9), as its lines split into fields. Under the exclusive lock the
+    caller may change the list, and what it leaves is written back."""
+    path = team_state(t) / "stages"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.touch()
     with open(path, "r+") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        fcntl.flock(f, fcntl.LOCK_SH if shared else fcntl.LOCK_EX)
+        lines = [l.split() for l in f.read().splitlines() if l.strip()]
+        before = [list(l) for l in lines]
+        yield lines
+        if not shared and lines != before:
+            f.seek(0)
+            f.truncate()
+            f.write("".join(" ".join(l) + "\n" for l in lines))
+
+
+def record_end(fleet, t, o, ended, delivered=None, late=False, now=None):
+    """One owed stage's stage.end: how it ended (delivered, short or stopped), what it delivered, and the stage, tasks
+    and head crew then reads from the kit. now is slot_stages' answer when the caller has it."""
+    main = t["kit"]["main"]
+    if o.proof:
+        result = tasks = None
+    else:
+        s = (now if now is not None else {x["slot"]: x for x in slot_stages(fleet, t)}).get(o.slot, {})
+        result, tasks = s.get("stage", "unknown"), s.get("counts")
+    record.emit(t["label"], "stage.end", o.on(), why=o.why(ended), Result=result, Tasks=tasks,
+                Head=short_head(main, f"refs/heads/{o.branch()}"), Ended=ended, Delivered=delivered,
+                Observed="late" if late else None)
+
+
+def end_owed(fleet, t, o, ended, delivered=None, then=None):
+    """Record an owed stage's end and remove its line, under the stages file's lock, unless another command recorded
+    it first. then(lines) runs under the same lock once the end is recorded. Returns whether this call recorded it."""
+    with stages_file(t) as lines:
+        i = next((i for i, l in enumerate(lines) if l[3:4] == [o.eid]), None)
+        if i is None:
+            return False
+        record_end(fleet, t, o, ended, delivered)
+        del lines[i]
+        if then:
+            then(lines)
+    return True
+
+
+def stage_ends(fleet, a):
+    """Record the end of each stage the team's stages file owes, once each, under its lock. With --ending, the slot's
+    or ops's stage whose agent is about to be ended: delivered when its deliverable exists, else stopped. Otherwise each
+    one whose deliverable exists and whose agent is not working, observed late by the command that reads the team; a
+    quiet stage that has delivered nothing stays owed. A slot's line whose slot no longer holds its unit or fix is
+    dropped without an entry, and so is a proof's line once the team no longer holds its bolt."""
+    t = crew.team_of(fleet, a.team)
+    held = {l.split()[0]: l.split() for l in (team_state(t) / "slots").read_text().splitlines() if l.strip()} \
+        if (team_state(t) / "slots").exists() else {}
+    with stages_file(t) as lines:
         keep, ended = [], []
-        for l in (l.split() for l in f.read().splitlines() if l.strip()):
-            slot, name = l[0], l[1]
-            if a.slot and slot != a.slot:
+        bolts = None
+        for l in lines:
+            o = Owed(t, l)
+            if a.slot and o.slot != a.slot:
                 keep.append(l)
-            elif slot not in held or held[slot][2] != name:
                 continue
-            elif a.ending or crew.agent_status(fleet, f"{t['name']}-{slot}") != "working":
-                ended.append(l)
+            if o.proof:
+                if bolts is None:
+                    plan = plan_of(fleet, t["label"])
+                    bolts = {b.name() for b in held_by(plan, t["name"])} if plan else False
+                if bolts is not False and o.name not in bolts and not a.ending:
+                    continue
+            elif o.slot not in held or held[o.slot][2] != o.name:
+                continue
+            if a.ending:
+                got, _ = deliverable(fleet, t, o, held.get(o.slot, [None] * 4)[3])
+                ended.append((o, "delivered" if got else "stopped", got))
+            elif crew.agent_status(fleet, o.agent) != "working":
+                got, _ = deliverable(fleet, t, o, held.get(o.slot, [None] * 4)[3])
+                (ended.append((o, "delivered", got)) if got else keep.append(l))
             else:
                 keep.append(l)
-        now = {s["slot"]: s for s in slot_stages(fleet, t)} if ended else now
-        for slot, name, stage, *rest in ended:
-            s, fix = now.get(slot, {}), name.startswith("fix/")
-            branch = name if fix else f"unit/{name}"
-            head = subprocess.run(["git", "-C", t["kit"]["main"], "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
-                                  capture_output=True, text=True).stdout.strip()
-            on = ([rest[1]] if fix and len(rest) > 1 else [f"stage/{name}/{stage}", f"unit/{name}"]) + [f"agent/{t['name']}-{slot}"]
-            why = f"fix({name.rsplit('/', 1)[-1]}): {stage} ended" if fix else f"unit({name}): {stage} ended"
-            record.emit(t["label"], "stage.end", on, why=why,
-                        Result=s.get("stage", "unknown"), Tasks=s.get("counts"), Head=head,
-                        Observed=None if a.waited and not a.ending else "late")
-        f.seek(0)
-        f.truncate()
-        f.write("".join(" ".join(l) + "\n" for l in keep))
-    if a.waited and a.slot in held:
-        now = now or {s["slot"]: s for s in slot_stages(fleet, t)}
-        s = now.get(a.slot, {})
-        print(f"{t['name']}-{a.slot} settled: {held[a.slot][2]} is in {s.get('stage', 'unknown')}"
-              + (f", {s['counts']} tasks" if s.get("counts") else ""))
+        now = {s["slot"]: s for s in slot_stages(fleet, t)} if any(not o.proof for o, *_ in ended) else {}
+        for o, how, got in ended:
+            record_end(fleet, t, o, how, got, late=how == "delivered", now=now)
+        lines[:] = keep
+
+
+# ------------------------------------------------------------------------------------------------- the wait
+
+POLL = 10  # seconds between a wait's reads
+
+
+def handed(t, slot, eid):
+    """The words a stop-short of this stage handed to its wait (needs/<slot>, its first line the stage's start entry
+    id), taken: the file goes once read. None when there are none for this stage."""
+    f = team_state(t) / "needs" / slot
+    try:
+        first, _, words = f.read_text().partition("\n")
+    except OSError:
+        return None
+    if first.strip() != eid:
+        return None
+    f.unlink(missing_ok=True)
+    return words
+
+
+def background(info):
+    """What an agent's own session says it still waits on: (the background tasks it started and has not been told are
+    over, when its transcript last wrote, None), or (None, None, what crew could not read)."""
+    sess = info.get("agent_session")
+    sid = sess.get("value") if isinstance(sess, dict) else None
+    if not isinstance(sid, str) or not sid:
+        return None, None, "herdr names no session for it"
+    path = transcript.find(sid)
+    if path is None:
+        return None, None, f"no transcript for its session {sid}"
+    pending = transcript.pending(path)
+    if pending is None:
+        return None, None, f"its transcript {path} can't be read"
+    return pending, transcript.last_at(path), None
+
+
+def minutes(td):
+    m = max(0, int(td.total_seconds() // 60))
+    return f"{m} minute{'' if m == 1 else 's'}"
+
+
+def last_end(t, agent):
+    """The newest stage.end this host recorded for an agent, or None."""
+    runs = record.ROOT / t["label"] / "runs" / crew.this_host()
+    found = []
+    for f in sorted(runs.glob("*.rec"))[-3:] if runs.is_dir() else []:
+        found += [e for e in record.parse(f.read_text()) if e.get("Act") == "stage.end" and not e.get("Refused")
+                  and f"agent/{agent}" in e["On"]]
+    return max(found, key=lambda e: (e["At"], e["Id"])) if found else None
+
+
+def ended_said(t, agent):
+    """What a wait says of a stage whose end was recorded by something other than itself, from the run record."""
+    e = last_end(t, agent)
+    if not e:
+        return f"{agent} owes no stage's end, and none is recorded for it on this host"
+    stage = next((o.split("/") for o in e["On"] if o.startswith("stage/")), None)
+    fix = next((o for o in e["On"] if o.startswith("fix/")), None)
+    m = re.match(r"^[a-z]+\([^)]*\): (\S+) ", e.get("Why") or "")
+    what = (f"the proof of {stage[1]}" if stage and stage[2:] == ["proof"] else f"{stage[2]} on {stage[1]}" if stage and len(stage) > 2 else
+            (f"fix {fix}" if not m or m.group(1) == "fix" else f"{m.group(1)} of {fix}") if fix else "its stage")
+    how = {"delivered": f"{agent} delivered {e.get('Delivered')}" + (" (observed late)" if e.get("Observed") == "late" else ""),
+           "short": f"{agent} stopped short, and {t['name']}-conductor was told what it needs",
+           "stopped": f"crew ended {agent} before it delivered"}.get(e.get("Ended"), f"{agent} reached {e.get('Result', 'unknown')}")
+    return f"{what} has ended: {how}"
+
+
+def stage_wait(fleet, a):
+    """Wait on the stage a slot's agent, or ops, owes, until it ends at its deliverable, stops short, is stuck, its agent
+    is gone, or the timeout passes, and print the one line that says which. A delivered end is recorded here; nothing
+    else is. The wait holds waits/<slot>.lock for its life, so crew needs knows a wait is there to hand its words to."""
+    t = crew.team_of(fleet, a.team)
+    agent = f"{t['name']}-{a.slot}"
+    (team_state(t) / "waits").mkdir(parents=True, exist_ok=True)
+    lock = open(team_state(t) / "waits" / f"{a.slot}.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fail(f"a wait on {agent}'s stage is already running: its answer is the one to read")
+    held = {l.split()[0]: l.split() for l in (team_state(t) / "slots").read_text().splitlines() if l.strip()} \
+        if (team_state(t) / "slots").exists() else {}
+    with stages_file(t, shared=True) as lines:
+        o = next((Owed(t, l) for l in lines if l[0] == a.slot), None)
+    if o is None:
+        print(ended_said(t, agent))
+        return
+    o.start or fail(f"crew can't tell when {o.phrase()} began: its start entry's id, {o.eid}, holds no time it reads")
+    place = held.get(a.slot, [None] * 4)[3] if not o.proof else None
+    deadline = time.monotonic() + a.timeout / 1000
+    stuck = datetime.timedelta(milliseconds=a.stuck)
+    seen_quiet = seen_working = None
+    while True:
+        with stages_file(t, shared=True) as lines:
+            words = handed(t, a.slot, o.eid)
+            owed = any(l[3:4] == [o.eid] for l in lines)
+        if words is not None:
+            print(f"{agent} stopped short in {o.phrase()}. It needs: {words}")
+            return
+        if not owed:
+            print(ended_said(t, agent))
+            return
+        info = crew.agent_get(fleet, agent)
+        status = info.get("agent_status") if info else None
+        got, missing = deliverable(fleet, t, o, place) if status != "working" else (None, None)
+        if got:
+            if end_owed(fleet, t, o, "delivered", got):
+                print(f"{agent} delivered {o.phrase()}: {missing}")
+                return
+            continue
+        if info is None:
+            print(f"{agent} is no longer running: {o.phrase()} delivered nothing and said nothing it needs")
+            return
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if status == "working":
+            seen_working, doing = now, "is working"
+        else:
+            seen_quiet = seen_quiet or now
+            pending, last, unread = background(info)
+            if pending:
+                doing = f"is waiting on {len(pending)} background task{'' if len(pending) == 1 else 's'} of its own"
+            else:
+                quiet = now - max(x for x in ((seen_quiet if unread or not last else last), seen_working, o.start) if x)
+                if quiet >= stuck:
+                    print(f"{agent} is stuck in {o.phrase()}: quiet for {minutes(quiet)}, with {missing} and nothing it needs said"
+                          + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
+                    return
+                doing = f"has been quiet for {minutes(quiet)}, under the limit of {minutes(stuck)}"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            print(f"{o.phrase()} is still running after the wait's {a.timeout} ms: {agent} {doing}; nothing is recorded yet")
+            return
+        time.sleep(min(POLL, remaining))
 
 
 # ----------------------------------------------------------------------------------------------- crew bolts
@@ -3301,8 +3472,12 @@ def parser(cls=argparse.ArgumentParser):
     x = sub.add_parser("_ends")
     x.add_argument("team")
     x.add_argument("--slot")
-    x.add_argument("--waited", action="store_true")
     x.add_argument("--ending", action="store_true")
+    x = sub.add_parser("_wait")
+    x.add_argument("team")
+    x.add_argument("--slot", required=True)
+    x.add_argument("--timeout", type=int, default=3600000)
+    x.add_argument("--stuck", type=int, default=900000)
     return ap
 
 
@@ -3316,7 +3491,7 @@ COMMANDS = {
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
     ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
-    ("_ends", None): stage_ends,
+    ("_ends", None): stage_ends, ("_wait", None): stage_wait,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop,
 }

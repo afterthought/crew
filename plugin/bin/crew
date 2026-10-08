@@ -166,8 +166,11 @@ stop() {  # end a role's session; each role whose agent it ends is added to `end
   local role=$1 pane st=; pane=$(pane_of "$role")
   pane_live "$pane" && st=$(agent_status "$pane")
   if [[ $st == working && $force == 0 ]]; then echo "$(name_of "$role") is working; add --force to end it anyway." >&2; return 1; fi
-  # A slot's stage whose end nobody recorded ends here, with the agent that ran it.
-  if is_slot "$role" && [[ -s $STATE/stages ]]; then plan _ends "$TEAM" --slot "$role" --ending >/dev/null 2>&1 || true; fi
+  # A slot's stage, or ops's proof, whose end nobody recorded ends here, with the agent that ran it: delivered when its
+  # deliverable is there, else stopped.
+  if [[ $KIND == team ]] && { is_slot "$role" || [[ $role == ops ]]; } && [[ -s $STATE/stages ]]; then
+    plan _ends "$TEAM" --slot "$role" --ending >/dev/null 2>&1 || true
+  fi
   [[ -z $st ]] && return 0
   h agent prompt "$pane" "/exit" >/dev/null 2>&1 || h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true
   for _ in $(seq 30); do [[ -z $(agent_status "$pane") ]] && { ended+=("$role"); return 0; }; sleep 1; done
@@ -425,11 +428,7 @@ unit_wait() {  # unit_wait <unit> [--timeout <ms>]: wait for the unit's stage ag
   e=$(plan _team-of "$unit") || exit 1; eval "$e"
   load_team "$TEAM"; forward; ensure_state
   slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
-  h agent wait "$(name_of "$slot")" --timeout "$ms" >/dev/null 2>&1 || true
-  if [[ $(agent_status "$(pane_of "$slot")") == working ]]; then
-    echo "$(name_of "$slot") is still working on $unit after the wait's $ms ms; nothing is recorded yet"; return 0
-  fi
-  plan _ends "$TEAM" --slot "$slot" --waited
+  plan _wait "$TEAM" --slot "$slot" --timeout "$ms"
 }
 
 status() {
