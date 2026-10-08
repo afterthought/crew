@@ -8,7 +8,7 @@
 
 ## 2. The suite holds it
 
-- [ ] 2.1 `tests/t-dev-shell.sh` shows the hook entering the shell, keeping other hooks' lines, leaving a session already inside alone, and telling a session it could not enter, and fails when any doc an agent reads says `devenv shell --` (design: Decisions "The check that holds the rule"; Task notes 2.1).
+- [x] 2.1 `tests/t-dev-shell.sh` shows the hook entering the shell, keeping other hooks' lines, leaving a session already inside alone, and telling a session it could not enter, and fails when any doc an agent reads says `devenv shell --` (design: Decisions "The check that holds the rule"; Task notes 2.1).
 
 ## 3. The docs and the rules
 
