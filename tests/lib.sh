@@ -13,6 +13,9 @@ CREW=$(cd "$TESTS/.." && pwd -P)
 export CREW_TEST_ROOT=$T CREW_TEST_LOG=$T/calls.log CREW_TEST_CLAUDE_LOG=$T/claude.log
 export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
 unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH GIT_DIR GIT_WORK_TREE
+# A wt merge running the suite as its gate hands its hooks worktrunk's own variables, among them the file its shell
+# wrapper reads a cd from: a test's wt never writes there, or the merge ends trying to cd into a removed scratch dir.
+unset $(env | sed -n 's/^\(WORKTRUNK_[A-Za-z0-9_]*\)=.*/\1/p')
 HOST=${HOST:-mac-studio}
 # The user at a shell, as crew names them in what it writes: <me>@<host>.
 me=$(python3 -c 'import getpass; print(getpass.getuser())')
