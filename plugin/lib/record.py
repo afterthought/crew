@@ -25,7 +25,8 @@ branch first, then whatever each host it can reach has not yet carried.
   record.py trace <object> [--label L]    one bolt's, unit's or signal's history, read from the entries alone
 
 An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, team/<team>, agent/<name>,
-stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>."""
+stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, and what a stage delivered in a file of the team's
+reports folder: report/<file name> and proof/<file name>."""
 import argparse, datetime, getpass, json, os, pathlib, queue, re, signal, subprocess, sys, tempfile, threading
 
 LIB = pathlib.Path(__file__).resolve().parent
@@ -41,17 +42,17 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Observed Chars Amended Card Key
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Card Key
 
 """
-# Fields beyond the common ones: a stage.end's Result, Tasks, Head and Observed, a tell's Chars, the Amended of a
-# construct's start that marked its unit amended, and a card act's Card (the Pending You card's id) and Key (the
-# rail row's card key).
-EXTRA = ("Result", "Tasks", "Head", "Observed", "Chars", "Amended", "Card", "Key")
+# Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
+# it delivered, as an object) and Observed, a tell's Chars, the Amended of a construct's start that marked its unit
+# amended, and a card act's Card (the Pending You card's id) and Key (the rail row's card key).
+EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Card", "Key")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
-KINDS = ("unit/", "bolt/", "queue/", "signals/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/")
+KINDS = ("unit/", "bolt/", "queue/", "signals/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/", "proof/")
 
 _count = 0
 _session = ...  # resolved once per process
@@ -334,8 +335,12 @@ def line(e, zoe=False):
     s = f"{at[5:10]} {at[11:19]}  {e.get('Act', '?'):<13} {e.get('By', '?'):<20} {e.get('Host', '?'):<17}  {commit:<7}  " + " ".join(e["On"])
     if e["From"]:
         s += " ← " + " ".join(e["From"])
+    # A stage's end: what the kit read, then how it ended; what it delivered names the head, so the head is not said twice.
     if e.get("Result"):
-        s += f" → {e['Result']}" + (f" {e['Tasks']}" if e.get("Tasks") not in (None, "", "-") else "") + (f" at {e['Head']}" if e.get("Head") else "")
+        s += f" → {e['Result']}" + (f" {e['Tasks']}" if e.get("Tasks") not in (None, "", "-") else "")
+        s += f" at {e['Head']}" if e.get("Head") and not e.get("Delivered") else ""
+    if e.get("Ended"):
+        s += ("," if e.get("Result") else " →") + f" {e['Ended']}" + (f" {e['Delivered']}" if e.get("Delivered") else "")
     if e.get("Observed"):
         s += f" (observed {e['Observed']})"
     if e.get("Chars"):
@@ -362,7 +367,8 @@ def labels_for(fleet, label):
 
 
 def names(e, obj):
-    return obj in e["On"] or obj in e["From"]
+    """Whether an entry names the object: in On or From, or as what a stage delivered."""
+    return obj in e["On"] or obj in e["From"] or e.get("Delivered") == obj
 
 
 def events(fleet, a):
