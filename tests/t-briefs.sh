@@ -105,6 +105,17 @@ expect_ok crewpy brief wldn design; lacks "$out" "crew writes signals straight t
 expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
 ok "every brief says who speaks in its pane, and the six that record findings quote the words and say what a refusal means"
 
+# Every message an agent sends another goes through crew tell, marked: no brief prompts an agent through herdr.
+for role in conductor ops construct coder verify; do
+  expect_ok crewpy brief swb-1 $role; lacks "$out" "herdr agent prompt"
+done
+for role in design planner main-ops dispatcher operator; do
+  expect_ok crewpy brief wldn $role; lacks "$out" "herdr agent prompt"
+done
+expect_ok crewpy brief swb-1 conductor
+has "$out" 'tell swb-1-ops "Deploy the bolt and work the Proof in dev list of each of its units."'
+ok "no brief prompts another agent through herdr, and the conductor asks ops for the bolt's proof with crew tell"
+
 # The plan and the moves live on the flywheel's branch of its state repository: no brief names a plan/<label>
 # branch or a moves.rec in the blueprints, and the design agent and the planner name the state repository.
 for role in conductor ops construct coder verify; do
