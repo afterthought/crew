@@ -17,4 +17,4 @@
 
 ## 4. The suite
 
-- [ ] 4.1 The whole suite prints `0 failed` in this worktree (design: Task notes 4.1).
+- [x] 4.1 The whole suite prints `0 failed` in this worktree (design: Task notes 4.1).
