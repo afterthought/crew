@@ -1,7 +1,8 @@
 # A stage ends at its deliverable, never at a quiet pane (teams.4): what each stage delivers, read since the stage
 # began; the wait that returns with it and records its end; the stuck clock, which runs only while the agent waits on
 # nothing of its own and says when it could not read that; a stop-short through crew needs, carried to the waiting
-# wait or told to the conductor and never put in the run record; a gone agent; a fix's wait; and ops's proof.
+# wait or told to the conductor and never put in the run record; a wait that sees a tick made while it waits; a gone
+# agent; a fix's wait; and ops's proof.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
@@ -146,6 +147,25 @@ grep -q "agent prompt swb-1-conductor .*ZQXM" "$CREW_TEST_LOG" && fail "the cond
 eq "$(field stage.end Ended stage/b/construct)" "short"
 [[ $(record_of) != *ZQXN* && $(record_of) != *ZQXM* ]] || fail "a stop-short's words are in the run record"
 ok "with a wait running, a stop-short's words are its answer and nobody else's; no stop-short's words are in the run record"
+
+change "$kd/places/b" b 0 2; commit_all "$kd/places/b" "docs(b): the change"
+crew unit approve b >/dev/null
+expect_ok crew unit run b code
+rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/b" "feat(b): task 1"
+looks() { grep -c " agent get swb-1-unit-2$" "$CREW_TEST_LOG" || true; }
+n=$(looks)
+crew unit wait b --stuck 3600000 --timeout 120000 > "$T/wait.out" 2>&1 &
+waiting=$!
+for _ in $(seq 100); do (( $(looks) > n )) && break; python3 -c 'import time; time.sleep(0.2)'; done
+python3 -c 'import time; time.sleep(1)'
+kill -0 $waiting 2>/dev/null || fail "the wait returned before the last task was ticked: $(cat "$T/wait.out")"
+rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \] 1.2/- [x] 1.2/'; commit_all "$kd/places/b" "feat(b): task 2"
+wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
+eq "$(cat "$T/wait.out")" "swb-1-unit-2 delivered code on b: every task is ticked (2/2) at $(short unit/b)"
+(( $(looks) >= n + 2 )) || fail "the wait returned delivered without looking again after the tick"
+eq "$(field stage.end Ended stage/b/code)" "delivered"
+eq "$(field stage.end Observed stage/b/code)" ""
+ok "a wait that saw the last task open sees it ticked at its next look, and returns with the delivered end"
 
 expect_ok crew unit run c construct
 as $box herdr --session wldn-1 agent prompt "$(pane swb-1-unit-3)" /exit >/dev/null
