@@ -13,8 +13,9 @@
 #
 # Agents never run these hooks with `wt hook`, and never bypass them with `--no-hooks` or `--yes`. The first
 # merge on a host waits for the user's one-time `wt config approvals add` in crew, asked again whenever a
-# command here changes; keep each command one string, so an approval matches it. ops runs a bolt's verification
-# again with `devenv shell -- sh .config/hooks/bolt-verify.sh` from the bolt's worktree.
+# command here changes; keep each command one string, so an approval matches it. Both hooks enter crew's devenv
+# shell themselves, because worktrunk runs them for whoever merges, in a shell or not. ops runs a bolt's
+# verification again with `sh .config/hooks/bolt-verify.sh` from the bolt's worktree, in the shell its session is in.
 
 [pre-merge]
 suite = "devenv shell -- env CREW_TEST_LIVE= tests/run"

@@ -192,4 +192,4 @@ A definition's frontmatter names its model and effort; a team or a partition ove
 
 `herdr`, `jq`, `python3`, `git`, and `recutils` for the plan; in each kit `wt`, `moon` and `openspec`; `devurl` and `portless` for `crew sites`. `devenv.nix` declares `jq`, `python3` and `recutils`.
 
-`tests/run` runs crew's tests on stub `herdr`, `ssh` and `claude`, each simulated host with its own scratch home, so no test reaches a real session, host or agent: `devenv shell -- tests/run`. `CREW_TEST_LIVE=1` adds the live `crew sites` check on mac-studio.
+`tests/run` runs crew's tests on stub `herdr`, `ssh` and `claude`, each simulated host with its own scratch home, so no test reaches a real session, host or agent. Run it in crew's devenv shell, which a Claude session in a crew checkout is in from its start; a terminal enters it with `devenv shell`, or direnv with the checkout's `.envrc`. `CREW_TEST_LIVE=1` adds the live `crew sites` check on mac-studio.

@@ -12,7 +12,7 @@
 
 ## 3. The docs and the rules
 
-- [ ] 3.1 CLAUDE.md, the README and the comments in `.config/wt.toml` and `bolt-verify.sh` say agents work inside crew's shell and run the tests and the bolt's verification unwrapped, with the merge hooks' commands unchanged (design: Decisions "What enters the shell, and what doesn't"; Task notes 3.1).
+- [x] 3.1 CLAUDE.md, the README and the comments in `.config/wt.toml` and `bolt-verify.sh` say agents work inside crew's shell and run the tests and the bolt's verification unwrapped, with the merge hooks' commands unchanged (design: Decisions "What enters the shell, and what doesn't"; Task notes 3.1).
 - [ ] 3.2 crew's testing rules carry `tests.7` and the amended `tests.1`, and load for the files this change adds (design: Task notes 3.2).
 
 ## 4. The suite

@@ -3,7 +3,7 @@
 # after each merge, with the target's branch; ops runs it by hand from the bolt's worktree, with none, to verify
 # the bolt's head again when a run was cut off or a machine was fixed and nothing has merged since:
 #
-#   devenv shell -- sh .config/hooks/bolt-verify.sh
+#   sh .config/hooks/bolt-verify.sh
 #
 # It runs crew's whole suite, tests/run without the live test, on a copy of the revision the bolt holds when it is
 # started, exported with git archive into a scratch directory, so a later merge into the bolt never changes the
