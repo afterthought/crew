@@ -1,0 +1,14 @@
+# crew's merges are gated by worktrunk's hooks, and agents do not run them by hand.
+#
+# `[pre-merge]` runs crew's whole suite: `tests/run` inside crew's devenv, with `CREW_TEST_LIVE` emptied so the
+# live test stays out whatever the merging shell has set. It runs in the worktree being merged, after the rebase
+# and before the target moves, on the exact tree the merge is about to land: a unit's or a fix's merge into its
+# bolt, and a bolt's merge onto main, alike. A red suite refuses the merge with nothing landed, and `tests/run`'s
+# output names each failing test.
+#
+# Agents never run these hooks with `wt hook`, and never bypass them with `--no-hooks` or `--yes`. The first
+# merge on a host waits for the user's one-time `wt config approvals add` in crew, asked again whenever a
+# command here changes; keep each command one string, so an approval matches it.
+
+[pre-merge]
+suite = "devenv shell -- env CREW_TEST_LIVE= tests/run"

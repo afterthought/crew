@@ -2,7 +2,7 @@
 
 ## 1. A red suite refuses a merge
 
-- [ ] 1.1 crew's `.config/wt.toml` runs the whole suite, inside devenv and without the live test, as a pre-merge gate on every `wt merge`, and says in its opening comment what each hook does and that agents never bypass it (design: Task notes 1.1).
+- [x] 1.1 crew's `.config/wt.toml` runs the whole suite, inside devenv and without the live test, as a pre-merge gate on every `wt merge`, and says in its opening comment what each hook does and that agents never bypass it (design: Task notes 1.1).
 - [ ] 1.2 `tests/t-merge-gate.sh` shows, with the real `wt` in a scratch repository, that a red suite refuses a unit's, a fix's and a bolt's merge with the target unmoved and the failing test named, and that a green one lands (design: Task notes 1.2).
 
 ## 2. The bolt is verified after each merge
