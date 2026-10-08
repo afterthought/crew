@@ -26,6 +26,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `signals.6`: a program's captures landed on the flywheel's branch (`machine-captures-land-on-the-flywheels-branch`, after `daily-pass-lands-through-crew`).
 - `signals.7`: curation on a cadence (`curation-runs-on-a-cadence`, after `curate-into-agenda`).
 - `briefs.9`: a card links a plannotator session on its document (`a-card-links-a-plannotator-session`); today the conductor's card carries the change folder's path and the planner's the proposal's page as a file.
+- `briefs.10`: the operator agent as the partition's front door, in every roster (`a-partitions-operator-agent-is-its-front-door`).
 
 ## Code against a rule
 
