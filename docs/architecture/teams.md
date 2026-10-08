@@ -31,7 +31,7 @@ The rules for teams, slots, stages, panes and tells: the bash command, the role 
 
 **[teams.3]** Rules out: `fix/<name>` with no bolt; a merge from another place; adopting an existing place. Source: fixes 5e11de2, f6d7b11, 4fd29d2; fix-place-names-its-bolt.
 
-**[teams.4]** Rules out: `stage.end` at herdr's first idle with no deliverable; a conductor reading a pane for an outcome; a two-hour wait on a stage already done. Source: ADR 0007. `crew unit wait` still ends at herdr's settle until `a-stage-ends-at-its-deliverable` lands: `_open.md`.
+**[teams.4]** Rules out: `stage.end` at herdr's first idle with no deliverable; a conductor reading a pane for an outcome; a two-hour wait on a stage already done. Source: ADR 0007; `a-stage-ends-at-its-deliverable`; `plan.py` `deliverable`, `stage_wait` (`_wait`), `stage_needs` (`_needs`) and `stage_ends`; `transcript.py` `pending`; `tests/t-stage-ends.sh`.
 
 **[teams.5]** Rules out: `--no-hooks`, `--yes`, a squash. Source: `bolt-teams` spec; `plugin/bin/crew` 562; `plan.py` 2463.
 

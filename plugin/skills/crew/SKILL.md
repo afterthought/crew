@@ -7,7 +7,7 @@ description: Manage bolt teams of Claude agents running in herdr, and each parti
 
 Teams and partitions are data in `~/.config/crew/teams.json` (version 2), which the machine's configuration writes. Each role is an agent definition in `plugin/roles/`, naming its model and effort; its brief is built from that data. Nothing about a team lives anywhere else. Each agent's brief is its system prompt, and the plan, the kits and the commits are the state, so restarting an agent is cheap and is the normal cure.
 
-A team builds one bolt at a time. Its standing roles are the **conductor** and **ops**, in the `<team>` workspace's **conductor** tab; on a Mac, its **git** tab holds gitgui in the kit and the blueprints repo, for the user, with no agent (a team on a remote host has no git tab: gitgui is unusable over ssh). The conductor and ops start in the worktree of the bolt the team holds, else in the kit's main checkout, and `crew bolt give` to a team that is up restarts both in the new bolt's worktree. The bolt's units are built stage by stage (construct, the user's review, code, verify, merge into the bolt), each stage a fresh agent in one of the team's unit slots, `<team>-unit-<n>`, in the `<team> units` workspace, which exists only while a unit or fix is in flight. The conductor runs the stages (`crew unit run`) and the fixes (`crew fix`); that is its work, not yours.
+A team builds one bolt at a time. Its standing roles are the **conductor** and **ops**, in the `<team>` workspace's **conductor** tab; on a Mac, its **git** tab holds gitgui in the kit and the blueprints repo, for the user, with no agent (a team on a remote host has no git tab: gitgui is unusable over ssh). The conductor and ops start in the worktree of the bolt the team holds, else in the kit's main checkout, and `crew bolt give` to a team that is up restarts both in the new bolt's worktree. The bolt's units are built stage by stage (construct, the user's review, code, verify, merge into the bolt), each stage a fresh agent in one of the team's unit slots, `<team>-unit-<n>`, in the `<team> units` workspace, which exists only while a unit or fix is in flight. The conductor runs the stages (`crew unit run`) and the fixes (`crew fix`), and asks ops for the bolt's proof (`crew prove`); that is its work, not yours. A stage ends at what it delivers (construct's change, code's ticked tasks, verify's report, merge's commit on the bolt, a fix's commits, ops's proof file), never when its agent goes quiet. The conductor waits for each through crew (`crew unit wait`, `crew fix <team> <name> --wait`, `crew prove <team> --wait`), and a stage's agent, or ops during a proof, that can't finish says what it needs with `crew needs "<words>"`, which ends the stage short and gives the conductor the words.
 
 Each partition also has a main level: the design agent, the planner and ops in the `<label>` workspace of its session, and a dispatcher on each host its teams run on. The operator agent stands in each operator session.
 
@@ -36,7 +36,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | see what crew did lately, on every host of a partition, or as it happens | `crew events [--label L] [--about <object>] [--follow]` |
 | carry this host's run record to the partition's branch now | `crew events --push [--label L]` |
 | create a partition's flywheel branch, adopting its old plan | `crew state init <label>` |
-| answer what happened to a bolt, a unit or a signal | `crew trace <bolt|unit|signal>` |
+| answer what happened to a bolt, a unit or a signal, each stage's end with how it ended (`Ended`) and what it delivered (`Delivered`) | `crew trace <bolt|unit|signal>` |
 | read a signal: its excerpt, how well crew could check it, and where it came from | `crew signal show <id>` |
 
 ## Keeping a team healthy
@@ -47,6 +47,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 - **Never act on an agent that is `working`** unless the user says so. `--force` exists for that.
 - **A brief or the teams file changed.** Agents take their brief at launch, so a change reaches an agent on its next start, not on a clear. When a lot has changed, `crew rebuild`.
 - **Blocked** means a question for the user. Read the pane and tell the user which agent is waiting and on what. Do not answer it for them.
+- **A stuck stage.** The conductor's wait reports a stage stuck when its agent has been quiet past crew's limit with nothing delivered, nothing said through `crew needs` and no background work of its own running. The conductor tells the user; the stage is run again, or waited on again, only on the user's word.
 
 ## What is not yours
 
