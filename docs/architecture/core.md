@@ -25,7 +25,7 @@ State
 Roles
 
 - **[roles.1]** The planner changes the plan only by a proposal the user approves, and crew itself refuses any direct plan write by an agent outside the role table: a conductor splits, orders and sets `After` within its own bolt and agrees to proposals, the design agent queues, a dispatcher gives bolts, main-level ops lands them, the user writes anything.
-- **[roles.2]** An approval, a deploy, a landing, a push to a main or a change to the teams is run only on the user's word, never on an agent's own judgment; crew records who ran it and in which session, and does not refuse it by caller.
+- **[roles.2]** An approval, a landing, a push to a main or a change to the teams is run only on the user's word, never on an agent's own judgment; a deploy runs on the environment's policy, `auto` given once by the user or `manual` given per deploy through the rail's card, never by an agent; crew records who ran or approved it and in which session, and does not refuse it by caller.
 - **[roles.3]** When an agent breaks a rule its brief already states, the fix adds a check in crew that refuses the act, not only firmer wording in the brief.
 - **[roles.4]** Every message crew or an agent sends another agent goes through `crew tell`, and everything crew types into a pane is marked, `[crew tell from <sender>]` or `[crew]`; a stage's own prompt is the one unmarked text, recognised by its form.
 
@@ -59,7 +59,7 @@ Code
 
 **[roles.1]** Rules out: `crew unit add --bolt` from the design agent; `unit move` from a conductor; `bolt give` or `bolt land` inside a proposal. Source: `plan-proposals` spec; `plan.py` `may_write` 1068–1117, `OPS` 1122–1165; `tests/t-plan-roles.sh`.
 
-**[roles.2]** Rules out: a conductor approving a proposal on its own reading; an operator deploying unasked. Not ruled out: `crew plan approve` and `crew unit approve` open to any caller, by design. Source: plan-proposals design "Who may write what directly"; fixes a2ea85e, 63bab58, 04daa5d.
+**[roles.2]** Rules out: a conductor approving a proposal on its own reading; an operator or main-ops deploying unasked; a `manual` environment moved by a timer. Not ruled out: `crew plan approve` and `crew unit approve` open to any caller, by design; a kit's deployer moving an `auto` environment. Source: plan-proposals design "Who may write what directly"; fixes a2ea85e, 63bab58, 04daa5d; ADR 0012 as amended 2026-10-08.
 
 **[roles.3]** Rules out: a second brief-only fix for the same broken rule. Source: plan-proposals design; fix-place-names-its-bolt proposal; fix 902336e.
 

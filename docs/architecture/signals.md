@@ -15,6 +15,8 @@ The rules for captures, signals and moves. `core.md` binds here too; the how-to 
 - **[signals.3]** Of a capture's source only the excerpt enters git; the raw record is banked outside git on the capturing host and the capture points to it.
 - **[signals.4]** A signal has one move, appended to `moves.rec` on the branch and refused when one exists; a signal becomes work only through `route`, written with the unit that takes it; signals, captures, moves and proposals are append-only, and a capture names who recorded it.
 - **[signals.5]** Who asserted an excerpt is read from the mark on the record: `[crew tell from <name>]` is that agent, `[crew]` is crew, a stage's own prompt is the conductor that ran it, a tool's output is the tool, and anything else is the user.
+- **[signals.6]** A capture a program records, a kit's release adapter or its deployer, lands through `crew signal land` on the flywheel's branch of the partition the kit belongs to, with `source` naming the program and the raw record banked on the host that ran it; a program never writes a blueprints repo, and a capture that is its own excerpt gets its one signal mechanically, with no model in between.
+- **[signals.7]** Curation runs on the partition's cadence over the signals with no move, and on the user's word; a batch of chores it routes is proposed as one bolt the user accepts or declines row by row, each row still its own decision.
 
 ## Details
 
@@ -27,3 +29,7 @@ The rules for captures, signals and moves. `core.md` binds here too; the how-to 
 **[signals.4]** Rules out: a second move; a hand edit of `moves.rec`; a route without a unit. Source: `main-level` spec; `plan.py` 95–107, 2108–2145; fix 2d95e12.
 
 **[signals.5]** Rules out: a conductor's `Fix:` words graded as the user's. Source: checked-capture design; `transcript.py` 122–144; `roles.4`.
+
+**[signals.6]** Rules out: a release or a deploy failure captured into a blueprints repo; a program summarising a release before curation; a machine capture with no raw record. Source: swancloud ADR 0019, 0020; the blueprints' `signals/README.md` (two homes); Flywheel Next on enumerators, per the exploration of 2026-10-08. Not built: `_open.md`.
+
+**[signals.7]** Rules out: curation only when someone asks; a bolt of chores approved as one yes with no row declinable. Source: Flywheel Next requirements 60 and 110, per the exploration of 2026-10-08; ADR 0001. Not built: `_open.md`.

@@ -32,7 +32,7 @@ Sources: `openspec/specs/bolt-teams/spec.md` (a unit is built stage by stage; wo
 
 ## Decision outcome
 
-Option 1. A unit's change is archived by its merge stage: the first thing the merge does, in the unit's worktree, is `openspec archive <unit>`, committed on the unit's branch, and then the branch merges into the bolt as it does today. By then verify has passed and every task is ticked, which is what an archive needs. The bolt's specs then say what the bolt's code does; a later unit's construct and verify read them; landing carries the archived change and the merged specs to main through the kit's merge hooks.
+Option 1. A unit's change is archived by its merge stage: the first thing the merge does, in the unit's worktree, is `openspec archive <unit>`, committed on the unit's branch, and then the branch merges into the bolt as it does today. Under a merge queue the same holds in its words: the archive is the last commit before the head is submitted (the user, 2026-10-08: "Probably makes sense that the archive is done before submitting to the merge queue"; Flywheel's `archive_change`, sluice A.1). By then verify has passed and every task is ticked, which is what an archive needs. The bolt's specs then say what the bolt's code does; a later unit's construct and verify read them; landing carries the archived change and the merged specs to main through the kit's merge hooks.
 
 What follows from it:
 

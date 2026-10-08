@@ -17,6 +17,7 @@ The rules for where crew's design is written. `core.md` binds here too.
 - **[docs.3]** A fix that changes behaviour an open change describes rewrites that change's proposal, design, spec and tasks in the same commit, and code follows the design where they disagree.
 - **[docs.4]** A spec is changed only through a delta in the change that builds it; a record's decision reaches `openspec/specs/` with that build, never ahead of it.
 - **[docs.5]** A design or commit that relies on a rule cites its id, one that departs from a rule says which and why, and a decision that changes a rule amends it in the same commit with the next free id in its area.
+- **[docs.6]** An OpenSpec change holds, in its spec delta, what becomes true, as requirements with scenarios; in its tasks, what the coder proves locally; in its design, how and why, with *Proof in dev* as prose only where a check cannot be code; what must be true after a deploy is code in the same change by the kit's rules, and a design lists an after-deploy step only where no check can be code, saying why.
 
 ## Details
 
@@ -29,3 +30,5 @@ The rules for where crew's design is written. `core.md` binds here too.
 **[docs.4]** Rules out: editing `openspec/specs/` on main for an unbuilt decision. Source: ADRs 0001–0003 consequences; `roadmap.md`.
 
 **[docs.5]** Rules out: a change design naming no rule. Source: CLAUDE.md §Rules; `openspec/config.yaml`.
+
+**[docs.6]** Rules out: a *Proof after deploy* list of what a doctor row could assert; a task that is a deploy; a design that is a task list. Source: ADR 0012 point 3 as amended 2026-10-08; swancloud `testing.6`. `construct.md` and `openspec/config.yaml` say it once `a-change-holds-what-is-true-and-what-is-proved` lands: `_open.md`.
