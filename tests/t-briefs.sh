@@ -117,8 +117,8 @@ for role in design planner main-ops dispatcher operator; do
   expect_ok crewpy brief wldn $role; lacks "$out" "herdr agent prompt"
 done
 expect_ok crewpy brief swb-1 conductor
-has "$out" 'tell swb-1-ops "Deploy the bolt and work the Proof in dev list of each of its units."'
-ok "no brief prompts another agent through herdr, and the conductor asks ops for the bolt's proof with crew tell"
+has "$out" 'prove swb-1`, then wait for its proof with `'
+ok "no brief prompts another agent through herdr, and the conductor asks ops for the bolt's proof through crew"
 
 # The plan and the moves live on the flywheel's branch of its state repository: no brief names a plan/<label>
 # branch or a moves.rec in the blueprints, and the design agent and the planner name the state repository.
@@ -148,3 +148,28 @@ for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-
   [[ $cut == "$first" ]] || fail "the $brief brief's results section differs from the swb-1 conductor's:"$'\n'"$cut"
 done
 ok "the six roles that report results carry one glyph-list section, the same in each"
+
+# A stage ends at its deliverable (teams.4): the conductor waits for every stage, fix and proof through crew and reads
+# no pane for an outcome, takes a stuck stage to the user and runs a stopped-short one again with the answer; the stage
+# agents and ops say what they need with crew needs; verify's report and ops's proof file are written once, whole.
+expect_ok crewpy brief swb-1 conductor
+for want in "unit wait <unit>\` as a background command" "you never read a pane for one" "**Stuck**" \
+  "run the stage again or wait again only on the user's word" "fix swb-1 <name> --wait\`" "prove swb-1 --wait\`" \
+  "run the stage again with the answer as its words" "prove swb-1 \"<the answer>\""; do
+  has "$out" "$want"
+done
+for gone in "If it is waiting on a question for the user, leave it for the user" "When its agent settles, merge it" "tell swb-1-ops \"Deploy"; do
+  lacks "$out" "$gone"
+done
+for role in construct coder verify ops; do
+  expect_ok crewpy brief swb-1 $role
+  has "$out" 'needs "<what you tried and what you need>"` and end your turn'
+  has "$out" "Never ask in your pane: nobody watches it."
+  has "$out" "Ending a turn to wait on something you started in the background is fine"
+done
+expect_ok crewpy brief swb-1 ops
+has "$out" "reports/proof-<bolt>-<YYYYMMDD-HHMM>.md"; has "$out" "once, whole"; has "$out" "crew ends the proof once it is there"
+lacks "$out" "/tmp/ops-proof"
+expect_ok crewpy brief swb-1 verify
+has "$out" "unchanged and whole"; has "$out" "crew ends the stage once it is there"
+ok "the conductor waits for every stage through crew and never reads a pane for its outcome; every stage, and ops's proof, stops short with crew needs"

@@ -55,8 +55,11 @@ expect_fail "swb-1 has no fix edge-sign-in in flight" crew fix swb-1 edge-sign-i
 ok "a fix merges into the bolt like a unit, and its place and slot go"
 eq "$(field fix.start Why "$fb")" "fix(edge-sign-in): start fix"
 eq "$(field stage.end Why "$fb")" "fix(edge-sign-in): merge ended"
+eq "$(field stage.end Ended "$fb")" "delivered"
+eq "$(field stage.end Delivered "$fb")" "bolt/tenant-environments@$(git -C "$k" rev-parse --short bolt/tenant-environments)"
+eq "$(field stage.end Observed "$fb")" "late"
 eq "$(field slot.free On "$fb")" "agent/swb-1-unit-1 $fb"
-ok "the run record names the fix fix/<bolt>/<name>, and its reasons give the fix's own name"
+ok "the run record names the fix fix/<bolt>/<name>, its reasons give the fix's own name, and its merge's end names the bolt's commit holding it"
 
 # A fix started as fix/<name>, before a fix's branch and place named its bolt, as its slot recorded them.
 old=$kd/places/fix-old-sign-in

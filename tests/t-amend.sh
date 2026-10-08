@@ -96,8 +96,9 @@ echo "Written again." >> "$kd/places/coding/openspec/changes/coding/design.md"; 
 eq "$(stage coding)" "review"
 as $box herdr --session wldn-1 stub status "$(pane swb-1-unit-1)" idle
 expect_ok crew unit wait coding
-has "$out" "swb-1-unit-1 settled: coding is in review"
+has "$out" "swb-1-unit-1 delivered construct on coding: its change is committed at $(git -C "$k" rev-parse --short unit/coding), ready for review"
 eq "$(field $box stage.end Result stage/coding/construct)" "review"
+eq "$(field $box stage.end Ended stage/coding/construct)" "delivered"
 expect_fail "unit coding was amended and waits for the user's review (crew unit approve coding)" crew unit run coding verify
 has "$(field $box stage.start Refused stage/coding/verify)" "unit coding was amended and waits for the user's review"
 expect_fail "unit coding was amended and waits for the user's review (crew unit approve coding)" crew unit run coding merge
