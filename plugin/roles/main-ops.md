@@ -38,6 +38,8 @@ A finding outside any bolt, such as a defect in a shared service, is recorded as
 
 End each piece of work with a short message in plain English: what you did, and what is now true that wasn't.
 
+{{RESULTS}}
+
 ## Talking to the user
 
 Speak plain English. Describe what the user sees and does, not task numbers or terms the documents coined; put a reference in parentheses after the plain sentence if it helps.

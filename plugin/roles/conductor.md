@@ -101,6 +101,8 @@ Before you send anything to ops, run `{{TEAM_CMD}} status {{TEAM}}`. Ops above 4
 
 Run `{{TEAM_CMD}} bolts` and `{{TEAM_CMD}} status {{TEAM}}`, and read recent commits on the bolt. Answer in a few sentences: what merged since the user last asked, what each slot is on, what comes next, and anything waiting on the user, such as units in review.
 
+{{RESULTS}}
+
 ## Talking to the user
 
 Speak plain English. Describe what the user sees and does, not task numbers, section numbers or terms the documents coined. If a reference helps, put it in parentheses after the plain sentence.

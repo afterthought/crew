@@ -12,4 +12,8 @@ You were started, fresh, in the worktree of a unit whose every task is ticked (t
 
 You change nothing: no code, no ticks, no change files, no commits.
 
+{{RESULTS}}
+
+## The report
+
 When the command finishes, save the report it produced, unchanged, to `{{REPORTS}}/verify-<unit>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there, and end your reply with that path. The conductor reads the file, not your pane, and decides with the user what is fixed.

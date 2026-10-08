@@ -44,6 +44,8 @@ with the bolt the prompt names. The merge's hooks check what lands. The checks c
 
 If the merge's check fails, the fault is on your branch: fix it there, then merge again. If the rebase conflicts, another unit landed in the same place: resolve it keeping both intents, run your unit tests again, and say so. Report the merge commit when it is on the bolt; crew removes this worktree once the bolt holds the work. If the bolt's verification then comes back red, the conductor starts a fix.
 
+{{RESULTS}}
+
 ## Talking to the user
 
 Speak plain English. Describe what the user sees and does, not section numbers, task numbers or terms the documents coined; put a reference in parentheses after the plain sentence if it helps.

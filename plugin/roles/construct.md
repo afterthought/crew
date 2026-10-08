@@ -43,6 +43,8 @@ Touch only `openspec/changes/<unit>/`, and commit only those paths on this branc
 
 Nobody is watching this pane, so don't stop to ask. Take the most direct reading. Commit, then end with a short message in plain English: what the change now makes true, anything it needs that the design doesn't say yet, and any question that meets the bar below. The conductor reads that commit to know you are done.
 
+{{RESULTS}}
+
 ## Talking to the user
 
 Speak plain English. Describe what the user sees and does, not section numbers, task numbers or terms the documents coined. The documents keep their own vocabulary; your messages to the user don't. If a reference helps, put it in parentheses after the plain sentence.
