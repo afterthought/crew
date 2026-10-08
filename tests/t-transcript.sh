@@ -1,8 +1,8 @@
 # What crew reads of a Claude transcript to check a signal's excerpt: every string of every complete JSON line,
-# whitespace aside, but crew signal commands, what the agent wrote, and the writing of an excerpt's file. The grade,
-# the source record (the latest that holds the words) and who asserted it. Claude Code writes the running command's
-# record only once it returns, so the transcript is taken for the live session's when its last record was written in
-# the last 15 minutes; a paraphrase is refused only then.
+# whitespace aside, but the crew signal command lines that carry an excerpt, what the agent wrote, and the writing of
+# an excerpt's file. The grade, the source record (the latest that holds the words) and who asserted it. Claude Code
+# writes the running command's record only once it returns, so the transcript is taken for the live session's when its
+# last record was written in the last 15 minutes; a paraphrase is refused only then.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 h=mac-studio
@@ -77,6 +77,22 @@ eq "$(verdict s-own "The templates leave open security groups.")" "refused unkno
 eq "$(verdict s-own "the user wants every template locked down")" "refused unknown None None"
 eq "$(verdict s-own "open security groups")" "refused unknown None None"
 ok "words only in the agent's own record, nowhere, or only in a crew signal command are refused"
+
+# A tell and a report that mention crew signal, and an output that echoes two crew signal commands, one run on with a
+# backslash: only the command lines that carry an excerpt are left out.
+transcript $h s-mention >/dev/null <<'EOF'
+{"type":"user","uuid":"u-30","message":{"role":"user","content":"[crew tell from swc-1-conductor] crew signal refused to record this: the deploy left open security groups behind."}}
+{"type":"user","uuid":"u-31","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t4","content":"Verify report: crew signal land lands each capture of the pass on main."}]}}
+{"type":"user","uuid":"u-32","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t5","content":"the templates keep their groups open\n+ /w/crew/main/plugin/bin/crew signal open-groups \"Templates need a check.\" --excerpt \"every template is open to the world\"\n+ crew signal edge-drifts \"Edge drifts.\" \\\n    --excerpt=\"edge drifted overnight\"\nsignal 2026-10-08-x/01-open-groups: excerpt verified"}]}}
+EOF
+eq "$(verdict s-mention "crew signal refused to record this: the deploy left open security groups behind.")" "verified agent:swc-1-conductor 1 u-30"
+eq "$(verdict s-mention "crew signal land lands each capture of the pass")" "verified tool 2 u-31"
+eq "$(verdict s-mention "the templates keep their groups open")" "verified tool 3 u-32"
+eq "$(verdict s-mention "01-open-groups: excerpt verified")" "verified tool 3 u-32"
+eq "$(verdict s-mention "every template is open to the world")" "refused unknown None None"
+eq "$(verdict s-mention "Templates need a check.")" "refused unknown None None"
+eq "$(verdict s-mention "edge drifted overnight")" "refused unknown None None"
+ok "a message or an output that mentions crew signal is searched, all but the crew signal command lines in it"
 
 transcript $h s-untyped >/dev/null <<'EOF'
 {"uuid":"x-1","payload":{"text":"open security groups everywhere"}}

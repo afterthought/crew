@@ -34,7 +34,9 @@ A wait on a stage reads the same transcript for the work the agent started in th
 quiet agent waiting on its own work reads as waiting on nothing, and is reported stuck sooner; never as finished."""
 import datetime, hashlib, json, pathlib, re
 
-COMMAND = "crew signal"
+# A crew signal command line that carries an excerpt, the agent's own or an echo of it: from `crew signal` to the end of
+# its line, a backslash-newline running it on, when a word after it starts --excerpt.
+COMMAND = re.compile(r"crew signal(?:\\\n|.)*?(?<!\S)--excerpt(?:\\\n|.)*")
 TELL = re.compile(r"^\[crew tell from ([^\]\s]+)\]")
 # A stage's own prompt, as crew's run_stage sends it: a fix, a merge, or construct, code and verify as slash commands.
 STAGE = re.compile(r"^(Fix: |Merge \S+ into bolt/\S+: wt merge bolt/\S+ --no-squash --no-remove)")
@@ -56,6 +58,12 @@ def find(session):
         return None
     found = sorted(pathlib.Path.home().glob(f".claude*/projects/*/{session}.jsonl"))
     return found[0] if found else None
+
+
+def searched(s):
+    """The pieces of a string the search reads: all of it but the crew signal command lines in it that carry an
+    excerpt, whose --excerpt holds the words too. A message or an output that only mentions crew signal is read whole."""
+    return COMMAND.split(s)
 
 
 def strings(v):
@@ -165,10 +173,11 @@ def holds_tool_result(v):
 
 def check(session, excerpt, skip=(), stage_by=None):
     """Look for the excerpt in the session's transcript, whitespace aside, once it shows it is the live session's: its
-    last record written within FRESH. Strings holding `crew signal` are crew's commands and their echoes, lines of type
-    assistant what the agent wrote, and lines that name a path in skip the writing of the excerpt's file: none of them
-    is searched. stage_by is the conductor whose stage the session runs, None for a session that runs none, where a
-    prompt of a stage's form is the user's. Returns a Verdict; refused is one too."""
+    last record written within FRESH. The crew signal command lines that carry an excerpt are crew's commands and their
+    echoes, lines of type assistant what the agent wrote, and lines that name a path in skip the writing of the
+    excerpt's file: none of them is searched, and the rest of a string that holds such a command line is. stage_by is
+    the conductor whose stage the session runs, None for a session that runs none, where a prompt of a stage's form is
+    the user's. Returns a Verdict; refused is one too."""
     if not session:
         return unverified("herdr names no session")
     path = find(session)
@@ -196,7 +205,7 @@ def check(session, excerpt, skip=(), stage_by=None):
             args = next((x for x in map(stage_args, every) if x is not None), None)
         if any(p in s for s in every for p in skip):
             continue
-        hits = [s for s in every if COMMAND not in s and needle in collapse(s)]
+        hits = [s for s in every if any(needle in collapse(p) for p in searched(s))]
         if not hits:
             continue
         if kind(v) == "user":
