@@ -3,7 +3,7 @@
 ## 1. Entering a crew checkout enters crew's shell
 
 - [x] 1.1 A Claude session that starts in a crew checkout runs every command inside that checkout's devenv shell, through a committed SessionStart hook that is silent when it works and gives the session one line, naming no workaround, when it can't (design: Decisions "The repository's SessionStart hook, as swancloud's"; Task notes 1.1).
-- [ ] 1.2 A person entering a crew checkout with direnv enters the same shell, and devenv's and direnv's working files never show as changes in a checkout (design: Decisions "The checkout is clean after the shell"; Task notes 1.2).
+- [x] 1.2 A person entering a crew checkout with direnv enters the same shell, and devenv's and direnv's working files never show as changes in a checkout (design: Decisions "The checkout is clean after the shell"; Task notes 1.2).
 - [ ] 1.3 `tests/run` refuses to start outside a devenv shell and says how to enter one (design: Decisions "The runner refuses outside a shell"; Task notes 1.3).
 
 ## 2. The suite holds it
