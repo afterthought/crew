@@ -3046,7 +3046,9 @@ def stage_wait(fleet, a):
             if pending:
                 doing = f"is waiting on {len(pending)} background task{'' if len(pending) == 1 else 's'} of its own"
             else:
-                quiet = now - max(x for x in ((seen_quiet if unread or not last else last), seen_working, o.start) if x)
+                # The clock starts at the transcript's last record, or when this wait first saw the agent quiet when
+                # that can't be read, and never before this wait last saw it working.
+                quiet = now - max(x for x in ((seen_quiet if unread or not last else last), seen_working) if x)
                 if quiet >= stuck:
                     print(f"{agent} is stuck in {o.phrase()}: quiet for {minutes(quiet)}, with {missing} and nothing it needs said"
                           + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
