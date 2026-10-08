@@ -22,6 +22,8 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 - **[plan.10]** A branch holding commits whose patch the bolt or main lacks, judged by `git cherry`, is kept and named when its worktree goes; a branch holding nothing beyond its target is removed.
 - **[plan.11]** A chore is planned maintenance built inside a bolt by code, verify and merge, with no construct and no review, and changes nothing a spec says must be true.
 - **[plan.12]** A command reads each kit once and fetches the state branch once, however many steps it has, and stage facts read without `openspec` agree with openspec's on the same worktree.
+- **[plan.13]** `After` names a unit whose code the dependent builds on, a contour that exists only once that unit's code exists; the dependent starts only once each has merged into the bolt, and `After` is never set for shared files or for product order, which is the file's.
+- **[plan.14]** A landing records the sha main holds afterwards and deploys nothing; a deploy is one act on the user's word, to one environment, over every landing since that environment's last deployed state, recorded with its contents, the after-deploy checks that apply to that environment and their outcomes; promotion to the next environment is a deploy to it.
 
 ## Details
 
@@ -48,3 +50,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 **[plan.11]** Rules out: a construct stage for a chore; a chore that writes a spec. Source: ADR 0001. Not built: `_open.md`.
 
 **[plan.12]** Rules out: a second `gather` in one command; a stage fact that disagrees with openspec. Source: `openspec/explorations/command-cost/reading.md`; ADR 0008. Not built: `_open.md`.
+
+**[plan.13]** Rules out: `After` between units that only touch the same files; a dependent started at its dependency's verify; `After` as sequencing. Source: ADR 0011; `bolt-plan` spec "The file's order and dependencies are the plan".
+
+**[plan.14]** Rules out: a deploy implied by `crew bolt land`; a deploy whose contents are remembered rather than read; one list for proof on the bolt and proof after deploy; a checklist that ignores which environment an item names. Source: ADR 0012; `main-level` spec; the versions statement on channels. Not built: `_open.md`.

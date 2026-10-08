@@ -15,6 +15,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `plan.10`: a drop keeps a branch with unmerged patches, judged by `git cherry`; `tidy()` deletes with `git branch -D` and `gather.fix_merged` judges by ancestry (`a-drop-keeps-unmerged-work`, fix-places).
 - `plan.11`: the chore kind (`chores-beside-units-and-fixes`, curation-and-holds).
 - `plan.12`: one kit read and one fetch per command (`a-command-reads-the-kits-once`).
+- `plan.14`: a landing records its sha and a deploy is one act over the landings since the last, with a *Proof after deploy* list per unit (ADR 0012, no change yet); `crew bolt land` records no sha, main-ops deploys at every landing, and `construct.md` knows one proof list.
 - `tests.5`: the suite as one moon task per test file, in parallel, replayed on an identical tree (`the-suite-runs-as-moon-tasks`); crew has no moon.
 - ADR 0006: a change archived at its merge (`a-merged-change-is-archived`); the coder brief has no archive step and ops reads the proof from the open change.
 - ADR 0005: cards (`the-rail-is-answered-through-cards`, after the rail).
