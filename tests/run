@@ -16,6 +16,8 @@ done
 for c in recsel recfix git python3 jq; do
   command -v "$c" >/dev/null || { echo "tests need $c on PATH (recutils comes with crew's devenv: devenv shell)" >&2; exit 2; }
 done
+# t-stage-facts holds crew's reading of a change's tasks and planning to openspec's own, on the same worktrees.
+command -v openspec >/dev/null || { echo "tests need openspec on PATH (each host has it from swancloud's packages)" >&2; exit 2; }
 
 # Written for bash 3.2 as well, the one macOS ships: an empty array is expanded as ${a[@]+"${a[@]}"}.
 tests=()
