@@ -2768,10 +2768,10 @@ def committed_at(main, ref):
 
 
 def ticks(main, branch, unit):
-    """A unit's tasks at its branch's head, done and total, read from the commit and not the working tree."""
-    text = gather.run(["git", "show", f"{branch}:openspec/changes/{unit}/tasks.md"], main) or ""
-    marks = [l.strip()[:5] for l in text.splitlines() if l.strip()[:5] in ("- [ ]", "- [x]", "- [X]")]
-    return sum(m != "- [ ]" for m in marks), len(marks)
+    """A unit's tasks at its branch's head, done and total, read from the commit and not the working tree, by the
+    reading every other reader of a unit's tasks uses (gather.tasks_of)."""
+    tasks = gather.tasks_of(gather.run(["git", "show", f"{branch}:openspec/changes/{unit}/tasks.md"], main) or "")
+    return sum(done for done, _ in tasks), len(tasks)
 
 
 def newest_saved(t, pattern, name, since):
@@ -2833,11 +2833,14 @@ def deliverable(fleet, t, o, place=None):
                       "no commit since it began" if total else "no task list at its head")
     if not fresh:
         return None, "nothing committed"
-    status = gather.run(["openspec", "status", "--change", o.name, "--json"], place or f"{t['kit']['dir']}/places/{o.name}")
-    try:
-        planned = bool(json.loads(status).get("isPlanningComplete")) if status else False
-    except (ValueError, AttributeError):
-        planned = False
+    place = place or f"{t['kit']['dir']}/places/{o.name}"
+    planned = gather.planned(f"{place}/openspec/changes/{o.name}", place)
+    if planned is None:
+        status = gather.run(["openspec", "status", "--change", o.name, "--json"], place)
+        try:
+            planned = bool(json.loads(status).get("isPlanningComplete")) if status else False
+        except (ValueError, AttributeError):
+            planned = False
     return (f"unit/{o.name}@{head}", f"its change is committed at {head}, ready for review") if planned else (None, "its planning not complete")
 
 
