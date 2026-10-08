@@ -17,7 +17,6 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `plan.12`: one kit read and one fetch per command (`a-command-reads-the-kits-once`).
 - `teams.4`: a stage ends at its deliverable; `crew unit wait` ends at herdr's settle (`a-stage-ends-at-its-deliverable`).
 - `tests.5`: the suite as one moon task per test file, in parallel, replayed on an identical tree (`the-suite-runs-as-moon-tasks`); crew has no moon.
-- `briefs.7`: the glyph list (`test-results-are-a-glyph-list`).
 - ADR 0006: a change archived at its merge (`a-merged-change-is-archived`); the coder brief has no archive step and ops reads the proof from the open change.
 - ADR 0005: cards (`the-rail-is-answered-through-cards`, after the rail).
 

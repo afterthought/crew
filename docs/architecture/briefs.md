@@ -33,6 +33,6 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 
 **[briefs.6]** Rules out: a question left in a pane nobody watches; "please run the suites". Source: fixes 21d82af, ec593d5, e3d75cb.
 
-**[briefs.7]** Rules out: "they all passed" in a sentence. Source: signal `2026-10-07-swancloud-design-c8f7c4bd/01-test-results-are-a-glyph-list`; unit `test-results-are-a-glyph-list`. Not built: `_open.md`.
+**[briefs.7]** Rules out: "they all passed" in a sentence. Source: signal `2026-10-07-swancloud-design-c8f7c4bd/01-test-results-are-a-glyph-list`; unit `test-results-are-a-glyph-list`; `crew.py` `RESULTS`; `tests/t-briefs.sh`.
 
 **[briefs.8]** Rules out: a dispatcher restarting a working conductor. Source: `plugin/skills/crew/SKILL.md`; `dispatcher.md`.
