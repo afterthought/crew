@@ -78,7 +78,7 @@ The stub starts Python without site packages (`-S`) and imports `subprocess` and
 - [A command's later steps see the plan as it was when the command began, a few seconds old] → that is what one Python run would see; every write still lands on the current tip, re-checked (`plan.1`), and waits and loops read afresh.
 - [`openspec` changes its rules] → the agreement test fails on the next suite run with the machine's `openspec`, naming the case; the direct reading is updated to match. The rules were read from 1.14.1.
 - [A kit's change uses a workflow crew doesn't read] → that place costs what it costs today; nothing else does.
-- [A step that changes a kit and does not drop its answer] → a stale stage in a later step of the same command. `make_place` and `tidy` are the only steps that make or remove worktrees; a new one must drop the kit's answer, which the design's sentence and `t-reads-once.sh` name.
+- [A step that changes a kit and does not drop its answer] → a stale stage in a later step of the same command. Every step that makes or removes a worktree, or commits in a place and so moves its head, drops the kit's answer: `make_place`, `tidy`, `tidy_after`, `unit_approve`, and `op_unit_move`'s rebase and its undo. A new step that does any of these must drop it too, as `drop_kit`'s docstring says.
 - [Reading every bolt branch costs one `git ls-tree` per branch] → a few milliseconds each; `tidy` removes finished bolts' worktrees, and the branch count stays small.
 
 ## Migration Plan
