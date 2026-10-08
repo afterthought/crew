@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""crew's SessionStart hook: a Claude session in any crew checkout works inside that checkout's devenv shell.
+
+devenv is crew's shell (devenv.nix), and the tools crew's tests and its merge gate need come from it. The fleet
+keeps direnv's hook off in Claude sessions and herdr panes (swancloud's modules/home-shell.nix), so nothing else
+would put an agent in it: not a stage crew starts in a unit's or a fix's place, not the conductor or ops in a
+bolt's worktree, not a session in crew's main. So at every start (startup, resume, /clear, compaction) this enters
+the checkout's devenv shell once, has it write its environment to a temporary file as JSON (never through
+devenv's stdout, which devenv and an enterShell print to), and appends an export to CLAUDE_ENV_FILE for each
+variable the shell set or changed. Claude Code sources that file before every Bash command, so the session's
+commands run in the shell from the first one, devenv's tools first on the path and the host's after them. It runs
+inside Claude Code, after it is up, so it cannot eat type-ahead the way direnv's hook does in a fresh pane.
+
+The hook is the repository's, in .claude/settings.json, not crew's plugin's: the plugin is loaded by every session
+in every kit, and what the shell is belongs to the checkout. Variables the shell dropped are left alone, and so are
+the shell's bookkeeping and the temporary directories direnv's own integration restores. It appends, never
+truncates: crew's plugin hook (plugin/hooks/session-start) writes CREW_AGENT and CREW_LABEL to the same file when
+herdr resumes an agent, and this exports only what the shell changed, so it never replaces them. A session started
+from a terminal already in this checkout's shell, or one with no CLAUDE_ENV_FILE, is left as it is. It prints
+nothing when the shell is entered; when it cannot be, it prints one line, which becomes the session's context, and
+the session starts with the host's environment."""
+import json
+import os
+import pathlib
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+
+# Under the hook's 600-second timeout in .claude/settings.json, so a cold devenv that runs long still ends in the
+# failure line rather than in Claude Code killing the hook.
+TIMEOUT = 570
+SKIP = {"PWD", "OLDPWD", "SHLVL", "_", "TMP", "TMPDIR", "TEMP", "TEMPDIR", "NIX_BUILD_TOP", "DEVENV_CMDLINE"}
+DUMP = "import json, os, sys; json.dump(dict(os.environ), open(sys.argv[1], 'w'))"
+FAILED = ("This session is not in crew's devenv shell: devenv could not be entered when it started. "
+          "crew's tests and merge gate need that shell; say so rather than going on without it.")
+
+
+def entered(root):
+    """The environment of root's devenv shell, or None when devenv could not give it."""
+    fd, dump = tempfile.mkstemp(prefix="devenv-shell-", suffix=".json")
+    os.close(fd)
+    os.unlink(dump)
+    try:
+        done = subprocess.run(["devenv", "shell", "--", sys.executable, "-c", DUMP, dump], cwd=root,
+                              stdin=subprocess.DEVNULL, stdout=sys.stderr, timeout=TIMEOUT)
+        if done.returncode != 0 or not os.path.isfile(dump):
+            return None
+        with open(dump) as f:
+            return json.load(f)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as e:
+        print(f"devenv-shell: {e}", file=sys.stderr)
+        return None
+    finally:
+        if os.path.exists(dump):
+            os.unlink(dump)
+
+
+def main():
+    env_file = os.environ.get("CLAUDE_ENV_FILE")
+    if not env_file:
+        return
+    root = os.path.realpath(os.environ.get("CLAUDE_PROJECT_DIR") or pathlib.Path(__file__).resolve().parents[2])
+    if os.environ.get("DEVENV_ROOT") and os.path.realpath(os.environ["DEVENV_ROOT"]) == root:
+        return
+    shell = entered(root)
+    if shell is None:
+        print(FAILED)
+        return
+    lines = [f"export {name}={shlex.quote(value)}\n" for name, value in sorted(shell.items())
+             if name not in SKIP and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
+             and os.environ.get(name) != value]
+    with open(env_file, "a") as f:
+        f.writelines(lines)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:  # a start is never held up by the shell
+        print(f"devenv-shell: {e}", file=sys.stderr)
+        print(FAILED)
