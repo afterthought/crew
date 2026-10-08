@@ -25,7 +25,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 ## Details
 
-**[plan.1]** Rules out: a write that skips `recfix`; a precondition checked once before the replay loop. Source: `plan.py` 261–313, 375–389, 478–488. The carried `runs/` files and `signals/*.md` are not checked today: `_open.md`.
+**[plan.1]** Rules out: a write that skips `recfix`; a precondition checked once before the replay loop. Source: `plan.py` 263–328, 390–406, 488–500. `land` checks every file a commit holds, the carried `runs/<host>/` files among them; a signal's or capture's markdown is checked by its frontmatter, read as one record.
 
 **[plan.2]** Rules out: a commit with no trailer; two acts in one commit with one entry. Source: `flywheel-state` spec "A commit names its run-record entry"; `plan.py` 449–535.
 

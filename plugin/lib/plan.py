@@ -270,6 +270,19 @@ def recfix(text, what):
             fail(f"{what} fails recfix --check: " + (r.stderr or r.stdout).strip().replace(str(f), pathlib.Path(what).name))
 
 
+def checked(files):
+    """recfix --check on every file a commit holds, {path: text}: a .rec file whole, and a signal's or a capture's
+    markdown by its frontmatter, which is one record. A comment stands in for the opening ---, so recfix's line
+    numbers are the file's."""
+    for path, text in files.items():
+        if path.endswith(".md"):
+            m = re.match(r"^---\n(.*?\n)---\n", text, re.S)
+            m or fail(f"{path} has no frontmatter")
+            recfix("#\n" + m.group(1), path)
+        else:
+            recfix(text, path)
+
+
 def declares(p):
     """The record set a paragraph of the plan declares, or None for a record or a comment."""
     return None if isinstance(p, Rec) else next((l[5:].split()[0] for l in p if l.startswith("%rec:")), None)
@@ -375,13 +388,15 @@ def commit(repo, parent, files, message):
 
 
 def land(repo, ref, path, make):
-    """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses. The
-    commit is pushed without force; when the push is refused because the branch moved, make runs again on the new
-    tip, up to five times."""
+    """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses. Every
+    file the commit holds is checked first, the carried run record among them. The commit is pushed without force;
+    when the push is refused because the branch moved, make runs again on the new tip, up to five times."""
     for _ in range(1 + REPLAYS):
         tip = fetch(repo, ref)
         text, message = make(tip)
-        sha = commit(repo, tip, text if path is None else {path: text}, message)
+        files = text if path is None else {path: text}
+        checked(files)
+        sha = commit(repo, tip, files, message)
         r = git(repo, "push", "--quiet", url(repo), f"{sha}:refs/heads/{ref}", check=False)
         if r.returncode == 0:
             git(repo, "update-ref", f"refs/crew/{ref}", sha)
@@ -463,8 +478,8 @@ def carried(label, repo, tip, files):
 
 def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
     """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
-    with crew's, check every file it changed, commit them with the host's uncarried run record, and push, replaying on
-    a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
+    with crew's, commit every file it changed with the host's uncarried run record, each file checked first, and push,
+    replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
     the change added to them. Returns the commit."""
     repo, ref = state_of(fleet, label)
@@ -478,13 +493,7 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
         before, held = w.plan.teams(), holdings(w.plan)
         touched = change(w) or []
         check(w.plan)
-        text = w.plan.text()
-        recfix(text, "plan.rec")
-        files = {"plan.rec": text}
-        for path, t in w.files.items():
-            if path.endswith(".rec"):
-                recfix(t, path)
-            files[path] = t
+        files = {"plan.rec": w.plan.text(), **w.files}
         seen.update(before=before, after=w.plan.teams(), lost=lost_rows(held, holdings(w.plan)), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
         seen["newest"] = carried(label, repo, tip, files)
@@ -664,8 +673,6 @@ def init_step(repo, ref, label, subject, make_files):
     def make(tip):
         files = {}
         make_files(tip, files)
-        for path, text in files.items():
-            recfix(text, path)
         return files, message(f"{subject} ({agent()})", "", eid)
     sha = land(repo, ref, None, make)
     record.emit(label, "state.init", [f"plan/{label}"], commit=[f"{repo}@{sha}"], why=subject, eid=eid)
@@ -1702,9 +1709,7 @@ def check_ops(fleet, label, w, argvs, n):
             refuse(f"`{a.do}`: {e}", f"`{do_named(a)}`: {getattr(e, 'recorded', None) or e}")
     try:
         check(scratch.plan)
-        recfix(scratch.plan.text(), "plan.rec")
-        for path, text in scratch.files.items():
-            recfix(text, path)
+        checked({"plan.rec": scratch.plan.text(), **scratch.files})
     except Refusal as e:
         fail(f"the proposal as a whole: {e}")
 

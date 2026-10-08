@@ -23,7 +23,6 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 
 ## Code against a rule
 
-- `plan.1`: the `runs/<host>/*.rec` files carried in a write are added after the `recfix` loop and never checked, and `signals/*.md` never are. A fix.
 - `tests.6`: the brief fixes 21d82af, ec593d5, 63bab58, e3d75cb and 902336e added no phrase to `t-briefs.sh`. A chore.
 - `teams.6`: `openspec/config.yaml` says every agent runs on Opus 5.5; the design agent and planner run on Fable 5.1. Fixed with this file. README's Roles table names models as documentation of the frontmatter, which the `agent-models` spec's "nowhere else" should allow; amend the spec at its next delta.
 - Specs lagging built code, to fix at archive: `bolt-teams` (fix naming `fix/<bolt>/<name>` at `places/fix-<bolt>--<name>`; the git tab only on a Mac; a slot freed when its unit leaves the bolt); `main-level` and `bolt-plan` (an agent's signals on the flywheel's branch; "one plan per blueprints repo"); `plan-proposals` (`unit amend` as a proposable command); `run-record` (a move's commit is the state branch's); `operator-agent` (the operator writes the teams file on the user's word).

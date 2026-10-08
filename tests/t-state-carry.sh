@@ -1,7 +1,8 @@
 # A write to the flywheel's branch names its run-record entry in a Crew-Entry trailer, and carries the host's
 # uncarried entries to runs/<host>/ on the branch in the same commit; crew events --push carries on its own, and
 # makes no commit when there is nothing to carry. crew events and crew trace read the branch, then each host they
-# reach, so a host that is down is shown as far as it had carried, and a host that lost its record keeps it there.
+# reach, so a host that is down is shown as far as it had carried, and a host that lost its record keeps it there. A
+# carried file that fails recfix --check refuses the write it rides in.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 box=chuck-herdr-alpha
@@ -66,3 +67,16 @@ HOST=$box expect_ok crew events --push --label wldn
 for id in $carried; do has "$(onbranch $box)" "$id"; done
 eq "$(onbranch $box | wc -l | tr -d ' ')" "$(( $(wc -w <<<"$carried") + 1 ))"
 ok "a host that lost its run record after carrying keeps its entries on the branch, and adds new ones beside them"
+
+# An entry cut short in the host's run record fails recfix --check, and a write that would carry it is refused, naming
+# the file, with nothing pushed; once the entry is gone the same write lands.
+printf 'Id: 20991231T235959Z-mac-studio-1-1\nAt: 2099-12-31T23:59:59Z\n\n' >> "$rec"
+tip=$(git --git-dir "$ws" rev-parse wldn/main)
+expect_fail "runs/mac-studio/$day.rec fails recfix --check" crew bolt new portals "Portals." --repo switchboard-kit
+expect_fail "runs/mac-studio/$day.rec fails recfix --check" crew events --push --label wldn
+eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$tip"
+lacks "$(git --git-dir "$ws" show wldn/main:plan.rec)" "Bolt: portals"
+rewrite "$rec" '/^Id: 20991231T235959Z-mac-studio-1-1$/,/^At: 2099-12-31T23:59:59Z$/d'
+expect_ok crew bolt new portals "Portals." --repo switchboard-kit
+git --git-dir "$ws" show "wldn/main:runs/mac-studio/$day.rec" > "$T/runs.rec"; recfix --check "$T/runs.rec" || fail "the carried file fails recfix --check"
+ok "a carried run-record file that fails recfix --check refuses the write, and nothing is pushed"

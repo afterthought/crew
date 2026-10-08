@@ -1,6 +1,6 @@
 # A finding recorded through crew is a capture and its signal on the flywheel's branch of its state repository,
 # pushed and replayed when the branch moved, the blueprints repo untouched; and every move, curation's and the
-# route, written through crew to moves.rec on that branch, never merged.
+# route, written through crew to moves.rec on that branch, never merged; a signal's frontmatter is checked as a record.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -24,6 +24,12 @@ has "$sigtext" "subject: [waf, security]"; has "$sigtext" "> \"action: COUNT"
 has "$(git --git-dir "$ws" show "wldn/main:signals/${waf%/*}/capture.md")" "signals: 1"
 eq "$(git --git-dir "$wb" rev-parse main)" "$main"
 ok "a finding becomes a signal file and its capture, committed on the flywheel's branch, and the blueprints repo is untouched"
+
+# A value that would break a signal's frontmatter fails recfix --check, read as the record it is, and nothing is pushed.
+tip=$(git --git-dir "$ws" rev-parse wldn/main)
+expect_fail "/01-tiles-split.md fails recfix --check: 01-tiles-split.md: 6: error" crew signal tiles-split "Tiles split at the seam." --subject $'tiles\nseams'
+eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$tip"
+ok "a signal whose frontmatter fails recfix --check is refused, naming the file and its line, and nothing is pushed"
 
 # Another host writes the branch while the next signal is in flight: it is applied again on the new tip.
 race WilldanGroup/crew-state mac-studio atl-1-ops signal atlas-tiles-are-cached "Atlas caches tiles a day." --kind constraint --excerpt "Cache-Control: max-age=86400"
