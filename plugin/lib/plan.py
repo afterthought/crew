@@ -982,8 +982,10 @@ if [ -x "$p/crew-prepare" ]; then cd "$path" && KIT="$main" PATH="$p:$PATH" crew
 
 
 def make_place(fleet, t, path, branch, base, track=False):
-    """A worktree at a fixed path, made with git itself on the team's host and prepared as the kit says."""
+    """A worktree at a fixed path, made with git itself on the team's host and prepared as the kit says. The command's
+    next step reads the kit again."""
     host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "")
+    READ.drop_kit(t["machine"], t["kit"]["main"])
 
 
 # A host clones a kit once and never pulls it, so its main can lag GitHub's by hundreds of commits. Prints the ref a
@@ -1038,6 +1040,7 @@ def tidy_after(fleet, t, what):
     has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did. A
     host that does not answer leaves that to the team's next read, and the write stands."""
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"]))
+    READ.drop_kit(t["machine"], t["kit"]["main"])
     if r.returncode:
         why = "did not answer" if r.returncode == 255 else "failed (" + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1] + ")"
         print(f"{t['name']}'s host {why}, so its worktrees for {what} are not removed yet: the team's next read removes them")
@@ -1191,6 +1194,7 @@ def unit_approve(fleet, a):
         s.get("why", "it is past review")))
     t = fleet["teams"][plan.bolt(bolt).get("Team")]
     made, sha = host_run(fleet, t["machine"], APPROVE, s["worktree"], a.unit, mark or "").split()
+    READ.drop_kit(t["machine"], t["kit"]["main"])
     print(f"unit {a.unit} approved: {sha[:7]} on unit/{a.unit}" if made == "made" else
           f"unit {a.unit} was approved at {sha[:7]} on unit/{a.unit}, after construct ran again")
     commits, eid = [f"{t['kit']['repo']}@{sha}"], None
@@ -1568,10 +1572,15 @@ def op_unit_move(ctx, a):
 
         def prepare():
             r = crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", REBASE, "crew", s["worktree"], src, to, a.unit])
+            READ.drop_kit(ft["machine"], ft["kit"]["main"])
             r.returncode != 3 or fail(f"rebasing {a.unit} onto bolt/{to} conflicts: the move is abandoned and the plan is unchanged")
             r.returncode == 0 or fail(f"rebasing {a.unit} on {ft['machine']} failed: {r.stderr.strip()}")
             orig = r.stdout.strip()
-            return lambda: crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", UNREBASE, "crew", s["worktree"], orig, src, a.unit])
+
+            def undo():
+                crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", UNREBASE, "crew", s["worktree"], orig, src, a.unit])
+                READ.drop_kit(ft["machine"], ft["kit"]["main"])
+            return undo
 
     def change(w):
         u = w.unit(a.unit)
@@ -2741,7 +2750,7 @@ def tidy(fleet, a):
     directly in <kit>/places/ on unit/<its folder> or a fix/ branch; nothing else is touched. The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
     makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
-    work goes in can't be read."""
+    work goes in can't be read. Once a worktree is removed, the command's next step reads the kit again."""
     t = crew.team_of(fleet, a.team)
     main, kdir, kit = os.path.realpath(t["kit"]["main"]), os.path.realpath(t["kit"]["dir"]), t["kit"]["name"]
     trees = gather.worktrees(main)
@@ -2791,6 +2800,7 @@ def tidy(fleet, a):
         if r.returncode:
             print(f"{path} was not removed: {r.stderr.strip()}")
             continue
+        READ.drop_kit(t["machine"], t["kit"]["main"])  # the command's next step reads the kit again
         r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
         print(f"{path} and {branch} are removed; the branch was at {sha}" if r.returncode == 0 else
               f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
