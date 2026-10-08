@@ -109,22 +109,138 @@ def reports(folders):
     return {u: {"path": f, "at": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat()} for u, (t, f) in out.items()}
 
 
+# A change's tasks and whether its planning is complete, read from its files by openspec 1.14.1's own rules for its
+# spec-driven schema (dist/utils/task-progress.js, dist/core/artifact-graph, dist/utils/change-metadata.js), so
+# neither needs openspec started. tests/t-stage-facts.sh holds this reading to openspec's on the same worktrees.
+# JavaScript's \s, written out, since Python's differs; JavaScript's `.` stops at a line or paragraph separator.
+SPACE = "\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+WS = f"[{SPACE}]"
+# openspec's TASK_LINE_PATTERN: a list item (-, *, + or 1. / 1)) holding a checkbox of at most one marker; only x or X
+# is done. Not anchored at the end, so a CRLF line still matches.
+TASK = re.compile(rf"^{WS}*(?:[-*+]|[0-9]{{1,9}}[.)]){WS}*\[(?:{WS}*([^\]{SPACE}]?){WS}*\](?![(\[])|{WS}+\]){WS}*([^\n\r\u2028\u2029]*)")
+# The spec-driven schema's outputs: an artifact is complete when a file it generates exists.
+PLANNED = ("proposal.md", "design.md", "tasks.md")
+
+
+def tasks_of(text):
+    """Each task of a tasks file, in order, as (done, description), as openspec parses them."""
+    out = []
+    for line in text.split("\n"):
+        m = TASK.match(line)
+        if m:
+            out.append(((m.group(1) or "").lower() == "x", re.sub(rf"^{WS}+|{WS}+$", "", m.group(2))))
+    return out
+
+
+def yaml_lines(path):
+    """A small YAML file's top-level lines as [(key, value, indented lines under it)], or None when crew does not read
+    it: a line that is not a plain `key: value` at the left edge or a key's indented continuation, or a key twice.
+    [] when the file is not there."""
+    try:
+        with open(path, encoding="utf-8", newline="") as f:
+            text = f.read()
+    except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError):
+        return None
+    out = []
+    for line in text.split("\n"):
+        line = line[:-1] if line.endswith("\r") else line
+        if not line.strip() or line.startswith("#"):
+            continue
+        if line.startswith(" ") and out:
+            out[-1][2].append(line)
+            continue
+        m = re.match(r"^([a-z_]+):(?:[ ]+(\S.*?))?[ ]*$", line)
+        if not m or any(k == m.group(1) for k, _, _ in out):
+            return None
+        out.append((m.group(1), m.group(2) or "", []))
+    return out
+
+
+def data_dir():
+    """openspec's global data folder: $XDG_DATA_HOME/openspec when that is set, else ~/.local/share/openspec
+    (getGlobalDataDir, on every system but Windows)."""
+    base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "openspec")
+
+
+def planned(change, root):
+    """Whether a change's planning is complete, as `openspec status` would say it in the project at root: True or
+    False when the change uses openspec's own spec-driven schema and crew reads all its metadata, else None, meaning
+    read it through openspec. The schema is the change's .openspec.yaml's, else the project's openspec/config.yaml's
+    (config.yml's when there is no .yaml), else spec-driven; a spec-driven of the project's or the user's own, any
+    other schema, or a line crew does not read hands the change to openspec. .openspec.yaml is read when it holds
+    only schema, created and skip_specs; config.yaml when its schema is plain and its other keys are context, rules
+    and operations, which openspec reads for its instructions only."""
+    if os.path.islink(change):
+        return None
+    metadata = os.path.join(change, ".openspec.yaml")
+    meta = yaml_lines(metadata)
+    config = os.path.join(root, "openspec", "config.yaml")
+    conf = yaml_lines(config if os.path.exists(config) else os.path.join(root, "openspec", "config.yml"))
+    if meta is None or conf is None:
+        return None
+    if os.path.lexists(metadata) and not any(k == "schema" for k, _, _ in meta):
+        return None  # openspec refuses metadata with no schema
+    for k, v, more in meta:
+        if more or not (k == "schema" and v == "spec-driven" or k == "created" and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", v)
+                        or k == "skip_specs" and v in ("true", "false")):
+            return None
+    for k, v, more in conf:
+        if k == "schema" and (more or v != "spec-driven") or k not in ("schema", "context", "rules", "operations"):
+            return None
+    if any(os.path.exists(os.path.join(d, "spec-driven")) for d in (os.path.join(root, "openspec", "schemas"), os.path.join(data_dir(), "schemas"))):
+        return None
+    if not os.path.isdir(change):
+        return False
+    if not all(os.path.isfile(os.path.join(change, f)) for f in PLANNED):
+        return False
+    return ("skip_specs", "true", []) in meta or specs_written(os.path.join(change, "specs"))
+
+
+def specs_written(specs):
+    """Whether specs/**/*.md matches a file, as openspec's glob does: a regular file, symbolic links followed, no
+    part of its path below specs/ starting with a dot."""
+    for d, dirs, files in os.walk(specs, followlinks=True):
+        dirs[:] = [x for x in dirs if not x.startswith(".")]
+        if any(f.endswith(".md") and not f.startswith(".") and os.path.isfile(os.path.join(d, f)) for f in files):
+            return True
+    return False
+
+
+def change_tasks(change):
+    """A change's tasks, as tasks_of reads its tasks.md; [] when there is none to read."""
+    try:
+        with open(os.path.join(change, "tasks.md"), encoding="utf-8", errors="replace", newline="") as f:
+            return tasks_of(f.read())
+    except OSError:
+        return []
+
+
 def place(path, unit, bolt):
     """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, the open
-    tasks, and its review."""
+    tasks, and its review. The tasks and the planning are read from the change's files, or through openspec when
+    planned() hands the change to it."""
     info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None,
             "head_at": head_at(path, "HEAD"), "tasks": None, "planning": False, "reviewed": False, "open": []}
-    listed = run(["openspec", "list", "--json"], path)
-    if listed:
-        for c in json.loads(listed).get("changes", []):
-            if c.get("name") == unit:
-                info["tasks"] = [c.get("completedTasks", 0), c.get("totalTasks", 0)]
-    status = run(["openspec", "status", "--change", unit, "--json"], path)
-    if status:
-        info["planning"] = bool(json.loads(status).get("isPlanningComplete"))
-    tasks = os.path.join(path, "openspec", "changes", unit, "tasks.md")
-    if os.path.exists(tasks):
-        info["open"] = [l.strip()[6:] for l in open(tasks) if l.strip().startswith("- [ ]")]
+    change = os.path.join(path, "openspec", "changes", unit)
+    tasks = change_tasks(change)
+    info["open"] = [d for done, d in tasks if not done]
+    planning = planned(change, path)
+    if planning is not None:
+        info["planning"] = planning
+        if os.path.isdir(change):  # openspec lists a change folder, not a link to one
+            info["tasks"] = [sum(done for done, _ in tasks), len(tasks)]
+    else:
+        listed = run(["openspec", "list", "--json"], path)
+        if listed:
+            for c in json.loads(listed).get("changes", []):
+                if c.get("name") == unit:
+                    info["tasks"] = [c.get("completedTasks", 0), c.get("totalTasks", 0)]
+        status = run(["openspec", "status", "--change", unit, "--json"], path)
+        if status:
+            info["planning"] = bool(json.loads(status).get("isPlanningComplete"))
     if bolt:
         log = run(["git", "log", "--format=%(trailers:key=Reviewed-by,valueonly)", f"bolt/{bolt}..unit/{unit}"], path) or ""
         info["reviewed"] = bool(log.strip())
