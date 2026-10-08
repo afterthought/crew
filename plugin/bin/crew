@@ -106,6 +106,28 @@ for a in "$@"; do case $a in --force) force=1 ;; --no-greet) greet=0 ;; *) args+
 set -- ${args[@]+"${args[@]}"}
 cmd=${1:-}
 
+# The command's reading (plan.12): a folder holding what its steps on this host have read of the plan and the kits, so
+# the command fetches the state branch and reads each kit once however many steps it has. The steps it starts on this
+# host share it through CREW_READ; a step on another host makes its own. It goes when the command ends, refused or
+# not, and one a killed command left goes once it is a day old. A command run as one process (exec'd below) keeps its
+# reading in memory; the rail tab's loop and crew events make none, so each refresh reads afresh.
+reads=$HOME/.cache/crew/reads
+unread() { case ${CREW_READ:-} in "$reads"/????????) rm -rf -- "$CREW_READ" ;; esac; }
+reading() {
+  [[ -n ${CREW_READ:-} && $(cat "$CREW_READ/host" 2>/dev/null) == "$(this_host)" ]] && return 0
+  mkdir -p "$reads"
+  find "$reads" -mindepth 1 -maxdepth 1 -name '????????' -mtime +0 -exec rm -rf -- {} + 2>/dev/null || true
+  CREW_READ=$(mktemp -d "$reads/XXXXXXXX") || { echo "crew could not make its reading in $reads" >&2; exit 1; }
+  trap unread EXIT; export CREW_READ
+  this_host > "$CREW_READ/host"
+}
+case $cmd in
+  bolts | bolt | signal | state | plan | rail | trace | sites | list | tell) ;;
+  events | _rail) unset CREW_READ ;;
+  unit) case ${2:-} in run | free | wait) reading ;; esac ;;
+  *) reading ;;
+esac
+
 # ------------------------------------------------------------------------------------------- what is acted on
 
 load_team() {
