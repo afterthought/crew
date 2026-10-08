@@ -1,7 +1,7 @@
 # crew records its agents' Pending You cards: the run record takes a card's id (Card) and its rail row's key (Key),
 # in a day's file begun before those fields were allowed as well as after, and carries both to the branch. crew's
 # PostToolUse hook writes an entry for each card a crew agent posts, updates, withdraws or closes, naming its row, its
-# card and its key and nothing written on the card, from either shape of a tool's result; a card with no row key is on
+# card and its key and nothing written on the card, from each shape of a tool's result; a card with no row key is on
 # its agent. An error, another server's tool and a session crew didn't start write nothing; a session herdr resumed is
 # known by what session-start recorded; and the hook never fails a tool call.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -66,7 +66,11 @@ call plugin_pendingyou_pendingyou post_request "$(post land/tenant-environments)
 call pendingyou post_request "$(post proposal/4)" '{"structuredContent": {"requestId": "req_abc-4"}}' | cards
 eq "$(entries card.post | jq -r '"\(.On[0]) \(.Card) \(.Key)"' | tail -2 | tr '\n' ' ')" \
   "bolt/tenant-environments req_abc-3 land/tenant-environments proposal/4 req_abc-4 proposal/4 "
-ok "a post's entry names its row, its card and its key, from structuredContent, a text block of JSON, or a plugin's server"
+# As Claude Code 2.1.292 gives Pending You's result: the text alone, a string of JSON.
+call pendingyou post_request "$(post review/y/def5678)" \
+  '"{\"requestId\":\"req_5de3dad46fba41068fba\",\"threadId\":\"req_5de3dad46fba41068fba\",\"status\":\"pending\",\"version\":1}"' | cards
+eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/y req_5de3dad46fba41068fba review/y/def5678"
+ok "a post's entry names its row, its card and its key, from structuredContent, a text block of JSON, a plain string of JSON, or a plugin's server"
 
 call pendingyou update_request '{"name": "swb-1-conductor", "requestId": "req_abc-1", "title": "ZQXTITLE again"}' \
   '{"structuredContent": {"requestId": "req_abc-1", "status": "pending", "version": 2}}' | cards

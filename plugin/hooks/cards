@@ -37,8 +37,10 @@ def is_pending_you(server):
 
 def result_object(result):
     """The tool's result as an object, as the wake mod's resultObject reads it: structuredContent, else the first text
-    block that parses as a JSON object. Claude Code gives an MCP tool's result as its content blocks, or as an object
-    holding them."""
+    block that parses as a JSON object. Claude Code gives an MCP tool's result as its content blocks, as an object
+    holding them, or, as 2.1.292 does for Pending You's, as the text itself."""
+    if isinstance(result, str):
+        result = {"text": result}
     if isinstance(result, list):
         result = {"content": result}
     if not isinstance(result, dict):
