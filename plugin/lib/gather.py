@@ -7,11 +7,11 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 "reports": [<a team's verify reports folder, ~ allowed>, ...]}], "sites": <true to also read each worktree's dev
 server names with devurl, and the host's running portless routes>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
-for each bolt whether bolt/<bolt> exists, the changes it holds, its worktree and the time of its head; each place
-under <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is
-complete and whether it has a review since the bolt; each fix branched from a bolt; and each unit's newest verify
-report in the reports folders, with its path and time. It reads with git, openspec and the file system only, and
-changes nothing. It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
+for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree
+and the time of its head; each place under <dir>/places with its branch, its head and the head's time, its change's
+tasks, whether its planning is complete and whether it has a review since the bolt; each fix branched from a bolt;
+and each unit's newest verify report in the reports folders, with its path and time. It reads with git, the file
+system and, for a change whose workflow it does not read itself, openspec, and changes nothing. It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
 import datetime, json, os, re, subprocess, sys
 
 
@@ -281,9 +281,12 @@ def kit(req, sites=False, running=None):
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
     out = {"ok": True, "main": changes(main, "main"), "bolts": {}, "places": {}, "fixes": [], "reports": reports(req.get("reports", []))}
+    # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
+    # asked for, or tracked by a place, that has no branch is marked missing.
+    have = [r[len("refs/heads/bolt/"):] for r in (run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/"], main) or "").split()]
     tracked = [u[5:] for u in ups.values() if u.startswith("bolt/")]
-    for b in list(dict.fromkeys(req.get("bolts", []) + tracked)):
-        exists = run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}"], main) is not None
+    for b in sorted(set(have + req.get("bolts", []) + tracked)):
+        exists = b in have
         wt = os.path.join(kdir, "bolts", b)
         out["bolts"][b] = {"exists": exists, "changes": changes(main, f"bolt/{b}") if exists else [],
                            "worktree": wt if at.get(wt) == f"bolt/{b}" else None,

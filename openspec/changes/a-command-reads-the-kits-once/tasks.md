@@ -4,7 +4,7 @@
 
 - [x] 1.1 `gather.py` reads a place's tasks, open tasks and planning from its change's files by `openspec` 1.14's rules for the spec-driven schema, and through `openspec` for any other schema, a redefined spec-driven, or metadata it does not read (design: *Stage facts are read from the change's files*; Task notes 1.1; `read.1`, `code.1`).
 - [x] 1.2 `ticks()` and construct's deliverable use the same reading, so every reader of a unit's tasks and planning agrees (Task notes 1.2).
-- [ ] 1.3 A kit's answer holds every local `bolt/*` branch, so one answer serves every step of a command (design: *Every bolt branch of a kit is read*; Task notes 1.3).
+- [x] 1.3 A kit's answer holds every local `bolt/*` branch, so one answer serves every step of a command (design: *Every bolt branch of a kit is read*; Task notes 1.3).
 - [ ] 1.4 Within one command on one host, the state branch is fetched once and each kit gathered once; a write starts from the held tip, fetches afresh only after a refused push, and the reading then holds its commit (design: *Each command keeps one reading on each host*; Task notes 1.4; `plan.1`, `state.1`).
 - [ ] 1.5 Making a place or removing a worktree drops that kit's answer, so the next step reads it again (Task notes 1.5).
 - [ ] 1.6 `plugin/bin/crew` makes the command's reading for every command that runs more than one step, shares it with nested runs on the same host, removes it however the command ends, and makes none for the rail loop, `crew events` or an exec'd single run; a wait reads afresh at every look (design: *Waits and loops read afresh*; Task notes 1.6; `state.4`).
