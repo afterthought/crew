@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -S
 """Stub herdr for crew's tests: enough of herdr's socket API for crew, and nothing real.
 
 Every call is logged to $CREW_TEST_LOG as `<host> <session> <args...>`. State lives in
@@ -8,8 +8,34 @@ claude has recorded its launch), the pane holds an idle agent with no name, as h
 a new session. `agent prompt <pane> /exit` ends that agent.
 
 Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status, and
-`herdr --session S stub agent <pane> [name]` puts an agent in a pane."""
-import fcntl, json, os, pathlib, shlex, subprocess, sys
+`herdr --session S stub agent <pane> [name]` puts an agent in a pane.
+
+It starts Python without its site packages and imports only what every call needs, since every test calls it often:
+not even the json package, whose import of re costs a call a third of its time, but json's own C parts, writing what
+json.dumps writes."""
+import _json, fcntl, os, shlex, sys
+
+
+class Scanning:  # what json's C scanner reads of its decoder
+    strict, object_hook, object_pairs_hook, parse_float, parse_int, parse_constant = True, None, None, float, int, None
+
+
+scan = _json.make_scanner(Scanning())
+
+
+def dumps(o, indent=None, at=""):
+    """json.dumps(o, indent=indent) of the state's values: dicts, lists, strings, whole numbers, booleans and null."""
+    if isinstance(o, (dict, list)) and o:
+        inner = at + " " * indent if indent is not None else ""
+        items = ([f"{_json.encode_basestring_ascii(str(k))}: {dumps(v, indent, inner)}" for k, v in o.items()] if isinstance(o, dict)
+                 else [dumps(v, indent, inner) for v in o])
+        sep, head, tail = (",\n" + inner, "\n" + inner, "\n" + at) if indent is not None else (", ", "", "")
+        return ("{" if isinstance(o, dict) else "[") + head + sep.join(items) + tail + ("}" if isinstance(o, dict) else "]")
+    if isinstance(o, (dict, list)):
+        return "{}" if isinstance(o, dict) else "[]"
+    if isinstance(o, str):
+        return _json.encode_basestring_ascii(o)
+    return "null" if o is None else "true" if o is True else "false" if o is False else str(int(o))
 
 args = sys.argv[1:]
 session = "default"
@@ -20,24 +46,32 @@ if os.environ.get("CREW_TEST_LOG"):
     with open(os.environ["CREW_TEST_LOG"], "a") as f:
         f.write(f"{host} {session} {shlex.join(args)}\n")
 
-path = pathlib.Path(os.environ["HOME"]) / ".stub-herdr" / f"{session}.json"
-path.parent.mkdir(parents=True, exist_ok=True)
-lock = open(str(path) + ".lock", "w")
+path = os.path.join(os.environ["HOME"], ".stub-herdr", f"{session}.json")
+os.makedirs(os.path.dirname(path), exist_ok=True)
+lock = open(path + ".lock", "w")
 fcntl.flock(lock, fcntl.LOCK_EX)
-st = json.loads(path.read_text()) if path.exists() else {"n": 0, "workspaces": {}, "tabs": {}, "panes": {}, "agents": {}}
+
+
+def load():
+    with open(path) as f:
+        return scan(f.read(), 0)[0]
+
+
+st = load() if os.path.exists(path) else {"n": 0, "workspaces": {}, "tabs": {}, "panes": {}, "agents": {}}
 
 
 def save():
-    path.write_text(json.dumps(st, indent=1))
+    with open(path, "w") as f:
+        f.write(dumps(st, indent=1))
 
 
 def out(obj):
-    print(json.dumps({"result": obj}))
+    print(dumps({"result": obj}))
 
 
 def die(msg, code=1):
     save()
-    print(json.dumps({"error": msg}), file=sys.stderr)
+    print(dumps({"error": msg}), file=sys.stderr)
     sys.exit(code)
 
 
@@ -135,12 +169,13 @@ elif group == "pane" and cmd == "run":
     if line.startswith("cd ") and "&&" in line:  # the pane's shell moves, as herdr then saves it
         st["panes"][p]["cwd"] = shlex.split(line.split("&&", 1)[0])[1]
     if "crew-role" in line:
+        import subprocess
         save()
         fcntl.flock(lock, fcntl.LOCK_UN)
         r = subprocess.run(["bash", "-c", line], cwd=st["panes"][p]["cwd"], capture_output=True, text=True,
                            env=dict(os.environ, HERDR_PANE_ID=p))
         fcntl.flock(lock, fcntl.LOCK_EX)
-        st = json.loads(path.read_text())
+        st = load()
         st["panes"][p]["output"] = r.stdout + r.stderr
         if r.returncode == 0:
             st["agents"][p] = {"status": "idle", "name": None}
