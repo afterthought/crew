@@ -19,7 +19,7 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 - **[briefs.7]** Test, check and proof results reach the user as one bullet per suite or proof before any prose: ✅ passed, ❌ failed with the count and a one-line cause, ⏳ not yet run.
 - **[briefs.8]** Without the user's word, no agent acts on an agent that is working, or clears, restarts or ends a slot's stage agent; every brief speaks plain English and describes what the user sees and does.
 - **[briefs.9]** A card that asks the user to read something, a proposal, a change in review, a report, carries the link to a plannotator session its owner starts on that document without opening a browser on the host; the session's verdict and annotations are read as the card's answer, and the session ends when the card closes.
-- **[briefs.10]** Anything sent to a partition from outside it goes to that partition's operator agent, on the sender's host when it has one there, else on the partition's main-level host, which carries it to whose job it is; every brief's roster names that door, and no agent sends a team's or a partition's business to its conductors.
+- **[briefs.10]** Anything sent to another team or partition is sent with `crew send <team or partition> "<text>"`, which delivers it to that partition's operator agent, on the sender's host when it has one there, else on the partition's main-level host, and records the send; every brief says so in one line, names nothing else to send to, and no agent sends a team's or a partition's business to its conductors.
 
 ## Details
 
@@ -41,4 +41,4 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 
 **[briefs.9]** Rules out: a card with the files attached and no link; a browser opened on the host for a session whose link is on a card; annotations the user wrote that reach nobody. Source: ADR 0005 as amended 2026-10-08; signal 2026-10-08-swancloud-design-0f348337/01; the readings in that record. Not built: `_open.md`.
 
-**[briefs.10]** Rules out: a session offering to send findings to the conductors; a message to a dispatcher that is not about a bolt. Source: ADR 0013; signal 2026-10-08-swancloud-operator-mac-studio-5fda4ef7/01; `operator.md` Carrying requests. Not built: `_open.md`.
+**[briefs.10]** Rules out: a session offering to send findings to the conductors; a message to a dispatcher that is not about a bolt; an agent working out which operator on which host to tell. Source: ADR 0013; signal 2026-10-08-swancloud-operator-mac-studio-5fda4ef7/01 and the user's requirement on it. Not built: `_open.md`.
