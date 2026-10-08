@@ -11,7 +11,8 @@ for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exist
 and the time of its head; each place under <dir>/places with its branch, its head and the head's time, its change's
 tasks, whether its planning is complete and whether it has a review since the bolt; each fix branched from a bolt;
 and each unit's newest verify report in the reports folders, with its path and time. It reads with git, the file
-system and, for a change whose workflow it does not read itself, openspec, and changes nothing. It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
+system and, for a change whose workflow it does not read itself, openspec, and changes nothing. It needs nothing but
+python3's standard library, since it is sent to hosts whose crew may be older."""
 import datetime, json, os, re, subprocess, sys
 
 
