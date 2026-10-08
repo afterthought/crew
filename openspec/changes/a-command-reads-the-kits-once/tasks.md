@@ -10,6 +10,6 @@
 - [x] 1.6 `plugin/bin/crew` makes the command's reading for every command that runs more than one step, shares it with nested runs on the same host, removes it however the command ends, and makes none for the rail loop, `crew events` or an exec'd single run; a wait reads afresh at every look (design: *Waits and loops read afresh*; Task notes 1.6; `state.4`).
 - [x] 1.7 The stub `herdr` answers each call in about half its current time, with the same state, log lines and answers (design: *The stub herdr*; Task notes 1.7; `tests.4`).
 - [x] 1.8 `tests/run` refuses to start without `openspec`, and `tests/t-stage-facts.sh` fails on any case where crew's reading and `openspec`'s differ on the same worktree (design: *How the rule is tested*; Task notes 1.8; `tests.1`, `tests.2`).
-- [ ] 1.9 `tests/t-reads-once.sh` proves one fetch, one gather and no `openspec` start on the team's host for `crew status` with three units in flight and for `crew unit run`, a raced write that replays, and no reading left after a command or a refused one (Task notes 1.9).
+- [x] 1.9 `tests/t-reads-once.sh` proves one fetch, one gather and no `openspec` start on the team's host for `crew status` with three units in flight and for `crew unit run`, a raced write that replays, and no reading left after a command or a refused one (Task notes 1.9).
 - [ ] 1.10 `plan.12` leaves `_open.md` and names its sources and the schema rule (Task notes 1.10; `docs.5`).
 - [ ] 1.11 `devenv shell -- tests/run` ends with "0 failed", and its wall time is given in the summary (Task notes 1.11).
