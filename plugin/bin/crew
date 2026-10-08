@@ -568,7 +568,7 @@ case $cmd in
     record_agents team.down "team($TEAM): down" ${ended[@]+"${ended[@]}"}; echo "$TEAM is down; its panes are still there." ;;
   unit)
     [[ ${2:-} == free ]] && { unit_free "${@:3}"; exit 0; }
-    [[ ${2:-} == wait ]] && { unit_wait "${@:3}"; exit 0; }
+    [[ ${2:-} == wait ]] && { unit_wait "${@:3}"; exit $?; }
     [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
     unit=${3:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
     stage=${4:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}

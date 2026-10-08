@@ -71,12 +71,12 @@ eq "$(field stage.end Tasks stage/a/code)" "2/2"
 ok "code quiet with a task open has not ended, and no read records it; once every task is ticked its end is recorded late, once"
 
 second
-expect_ok crew unit run a code "Fix these findings from the verify report: the banner."
+expect_ok crew unit run a code "Fix these findings from the verify report: the footer."
 expect_ok crew unit wait a --timeout 0
 eq "$out" "code on a is still running after the wait's 0 ms: swb-1-unit-1 has been quiet for 0 minutes, under the limit of 15 minutes; nothing is recorded yet"
 expect_ok crew status swb-1
 eq "$(ends)" "2"
-echo fixed > "$kd/places/a/banner"; commit_all "$kd/places/a" "fix(a): the banner"
+echo fixed > "$kd/places/a/footer"; commit_all "$kd/places/a" "fix(a): the footer"
 expect_ok crew unit wait a
 eq "$out" "swb-1-unit-1 delivered code on a: every task is ticked (2/2) at $(short unit/a)"
 ok "code run again on a ticked change ends only at a commit made since it began"
@@ -137,6 +137,7 @@ for _ in $(seq 100); do
   python3 -c 'import fcntl, sys; f = open(sys.argv[1], "a"); fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$lock" 2>/dev/null || break
   python3 -c 'import time; time.sleep(0.2)'
 done
+expect_fail "a wait on swb-1-unit-2's stage is already running: its answer is the one to read" crew unit wait b
 CREW_AGENT=swb-1-unit-2 expect_ok crew needs "the user's word ZQXM"
 eq "$out" "construct on b is ended, stopped short: swb-1-conductor's wait has what you need"
 wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
@@ -174,6 +175,22 @@ eq "$out" "swb-1-unit-4 delivered merge of $fb: bolt/tenant-environments holds i
 eq "$(field stage.end Delivered $fb)" "bolt/tenant-environments@$(short bolt/tenant-environments)"
 eq "$(field stage.end Why $fb)" "fix(tidy): merge ended"
 ok "a fix waits the same way: its commits end its code, and the bolt holding it ends its merge"
+
+expect_ok crew unit run a merge
+expect_ok crew unit wait a --stuck 0 --timeout 0
+has "$out" "swb-1-unit-1 is stuck in merge on a: quiet for "
+has "$out" " minutes, with bolt/tenant-environments not yet holding it and nothing it needs said"
+status swb-1-unit-1 working
+(cd "$kd/places/a" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge failed"
+expect_ok crew unit wait a --timeout 0
+eq "$out" "merge on a is still running after the wait's 0 ms: swb-1-unit-1 is working; nothing is recorded yet"
+status swb-1-unit-1 idle
+expect_ok crew unit wait a
+eq "$out" "swb-1-unit-1 delivered merge on a: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
+eq "$(field stage.end Ended stage/a/merge)" "delivered"
+eq "$(field stage.end Delivered stage/a/merge)" "bolt/tenant-environments@$(short bolt/tenant-environments)"
+lacks "$(cat "$stages")" "unit-1 a merge "
+ok "a unit's merge ends once its bolt holds the change, recorded with the bolt's head"
 
 expect_fail "swb-2 holds no bolt" crew prove swb-2
 has "$(field stage.start Refused agent/swb-2-ops)" "swb-2 holds no bolt"
