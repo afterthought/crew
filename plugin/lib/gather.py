@@ -81,6 +81,8 @@ def head_at(cwd, ref):
 
 
 REPORT = re.compile(r"^verify-(.+)-(\d{8}-\d{4})\.md$")
+# Ops's proof of a bolt, saved once, whole, in the same folder.
+PROOF = re.compile(r"^proof-(.+)-(\d{8}-\d{4})\.md$")
 
 
 def reports(folders):

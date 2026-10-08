@@ -2698,6 +2698,149 @@ def tidy(fleet, a):
               f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
 
 
+# ------------------------------------------------------------------------------------------ a stage's end
+
+def team_state(t):
+    """The team's state folder on its host: its slots, panes, stages, reports, waits and stop-shorts."""
+    return pathlib.Path.home() / f".local/state/{t['name']}-team"
+
+
+def started(eid):
+    """When a stage began: the UTC second at the front of its start entry's id, or None when the id holds none."""
+    try:
+        return datetime.datetime.strptime(eid[:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=datetime.timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+class Owed:
+    """A stage crew owes an end, from its line in the team's stages file: <slot> <unit, fix branch or bolt> <stage>
+    <start entry id> <object>. A unit's stages are construct, code, verify and merge; a fix's, fix and merge, its name
+    its branch and its object fix/<bolt>/<name>; ops's proof of a bolt is proof, in the slot ops."""
+
+    def __init__(self, t, fields):
+        self.t, self.fields = t, list(fields)
+        self.slot, self.name, self.stage, self.eid, self.obj = (self.fields + [""] * 5)[:5]
+        self.agent = f"{t['name']}-{self.slot}"
+        self.start = started(self.eid)
+        self.proof = self.stage == "proof"
+        self.fix = not self.proof and self.name.startswith("fix/")
+
+    def branch(self):
+        """The branch whose head an end names: the unit's, the fix's, or the proven bolt's."""
+        return self.name if self.fix else f"bolt/{self.name}" if self.proof else f"unit/{self.name}"
+
+    def phrase(self):
+        """The stage as the wait names it."""
+        if self.proof:
+            return f"the proof of {self.name}"
+        if self.fix:
+            return f"fix {self.obj or self.name}" if self.stage == "fix" else f"{self.stage} of {self.obj or self.name}"
+        return f"{self.stage} on {self.name}"
+
+    def on(self):
+        if self.proof:
+            return [f"stage/{self.name}/proof", f"bolt/{self.name}", f"agent/{self.agent}"]
+        if self.fix:
+            return [self.obj or self.name, f"agent/{self.agent}"]
+        return [f"stage/{self.name}/{self.stage}", f"unit/{self.name}", f"agent/{self.agent}"]
+
+    def why(self, ended):
+        how = "stopped short" if ended == "short" else "ended"
+        if self.proof:
+            return f"bolt({self.name}): proof {how}"
+        if self.fix:
+            return f"fix({self.name.rsplit('/', 1)[-1]}): {self.stage} {how}"
+        return f"unit({self.name}): {self.stage} {how}"
+
+
+def short_head(main, ref):
+    return (gather.run(["git", "rev-parse", "--short", "--verify", "-q", ref], main) or "").strip()
+
+
+def committed_at(main, ref):
+    """When a branch's head was committed, in UTC, or None."""
+    at = gather.head_at(main, ref)
+    try:
+        return datetime.datetime.fromisoformat(at).astimezone(datetime.timezone.utc) if at else None
+    except ValueError:
+        return None
+
+
+def ticks(main, branch, unit):
+    """A unit's tasks at its branch's head, done and total, read from the commit and not the working tree."""
+    text = gather.run(["git", "show", f"{branch}:openspec/changes/{unit}/tasks.md"], main) or ""
+    marks = [l.strip()[:5] for l in text.splitlines() if l.strip()[:5] in ("- [ ]", "- [x]", "- [X]")]
+    return sum(m != "- [ ]" for m in marks), len(marks)
+
+
+def newest_saved(t, pattern, name, since):
+    """The newest file in the team's reports folder that the pattern names for name, modified at or after since."""
+    best = None
+    folder = team_state(t) / "reports"
+    for f in (folder.iterdir() if folder.is_dir() else []):
+        m = pattern.match(f.name)
+        try:
+            at = f.stat().st_mtime if m and m.group(1) == name else None
+        except OSError:
+            continue
+        if at is not None and at >= since.timestamp() and (best is None or at > best[0]):
+            best = (at, f)
+    return best[1] if best else None
+
+
+def bolt_of_unit(fleet, t, main, unit):
+    """The bolt a unit's branch was made from and merges into, from its upstream; else the bolt the team holds."""
+    up = gather.upstreams(main).get(f"unit/{unit}", "")
+    if up.startswith("bolt/"):
+        return up[5:]
+    plan = plan_of(fleet, t["label"])
+    held = held_by(plan, t["name"]) if plan else []
+    return held[0].name() if held else None
+
+
+def deliverable(fleet, t, o, place=None):
+    """What an owed stage has delivered since it began, read on the team's host: (its object, what the wait says of
+    it), or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning
+    complete; code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since
+    the start; merge: the bolt holding the unit's change, or the fix's commits; a fix: a commit on its branch since the
+    start; the proof: a proof file for the bolt saved since the start. A start crew can't read delivers nothing."""
+    main = t["kit"]["main"]
+    if o.start is None:
+        return None, f"no start crew can read in its entry {o.eid}"
+    if o.proof:
+        f = newest_saved(t, gather.PROOF, o.name, o.start)
+        return (f"proof/{f.name}", str(f)) if f else (None, "no proof file saved")
+    if o.stage == "verify":
+        f = newest_saved(t, gather.REPORT, o.name, o.start)
+        return (f"report/{f.name}", f"the report is {f}") if f else (None, "no report saved")
+    if o.stage == "merge":
+        bolt = o.obj.split("/")[1] if o.fix and o.obj.count("/") == 2 else None if o.fix else bolt_of_unit(fleet, t, main, o.name)
+        if not bolt:
+            return None, "no bolt crew can read for it"
+        holds = gather.fix_merged(main, o.name, bolt) if o.fix else o.name in gather.changes(main, f"bolt/{bolt}")
+        head = short_head(main, f"refs/heads/bolt/{bolt}")
+        return (f"bolt/{bolt}@{head}", f"bolt/{bolt} holds it at {head}") if holds and head else (None, f"bolt/{bolt} not yet holding it")
+    head, at = short_head(main, f"refs/heads/{o.branch()}"), committed_at(main, f"refs/heads/{o.branch()}")
+    fresh = bool(head) and at is not None and at >= o.start
+    if o.fix:
+        return (f"{o.obj or o.name}@{head}", f"its branch is at {head}") if fresh else (None, "nothing committed since it began")
+    if o.stage == "code":
+        done, total = ticks(main, o.branch(), o.name)
+        if fresh and total and done == total:
+            return f"unit/{o.name}@{head}", f"every task is ticked ({done}/{total}) at {head}"
+        return None, (f"{done} of {total} tasks ticked at its head" if total and done < total else
+                      "no commit since it began" if total else "no task list at its head")
+    if not fresh:
+        return None, "nothing committed"
+    status = gather.run(["openspec", "status", "--change", o.name, "--json"], place or f"{t['kit']['dir']}/places/{o.name}")
+    try:
+        planned = bool(json.loads(status).get("isPlanningComplete")) if status else False
+    except (ValueError, AttributeError):
+        planned = False
+    return (f"unit/{o.name}@{head}", f"its change is committed at {head}, ready for review") if planned else (None, "its planning not complete")
+
+
 def stage_ends(fleet, a):
     """Record the end of each stage the team's stages file holds a start for, once each, under its lock: with --waited,
     the slot the conductor's wait returned for, as seen at once; with --ending, the slot whose agent is about to be
