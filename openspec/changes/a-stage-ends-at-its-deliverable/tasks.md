@@ -3,7 +3,7 @@
 ## 1. A stage ends at its deliverable
 
 - [x] 1.1 The run record takes a stage end's `Ended` and `Delivered`, and `crew trace` finds `report/` and `proof/` objects; `t-record.sh` and `t-events.sh` still pass (design: *The run record*; Task notes 1.1).
-- [ ] 1.2 `transcript.py` names the background tasks an agent's session started and has not been told are over, and the time of its last record, or says it could not read them (design: *Still running or stuck*; Task notes 1.2; `read.2`).
+- [x] 1.2 `transcript.py` names the background tasks an agent's session started and has not been told are over, and the time of its last record, or says it could not read them (design: *Still running or stuck*; Task notes 1.2; `read.2`).
 - [ ] 1.3 crew reads whether each stage's deliverable exists since the stage began, for construct, code, verify, merge, a fix, a fix's merge and ops's proof (design: *What each deliverable is, and how it is read*; Task notes 1.3).
 - [ ] 1.4 A wait returns at a delivered end (recording it), a stop-short, a stuck stage, a gone agent or its timeout, each as the one line the design gives (design: *The wait*; Task notes 1.4).
 - [ ] 1.5 A late end is recorded only once its deliverable exists, and ending a slot's or ops's agent records the owed end as delivered or stopped (design: *The run record*; Task notes 1.5; `record.5`).

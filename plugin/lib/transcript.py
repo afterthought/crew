@@ -23,7 +23,15 @@ session's, such as the one before a /clear, and is not searched.
   found       it is in the transcript, in a record crew cannot classify
   unverified  crew could not read the transcript, or it is not the live session's, with the reason
   refused     the transcript is the live session's, and the excerpt is nowhere in it but in crew signal commands and
-              in what the agent wrote itself: a paraphrase"""
+              in what the agent wrote itself: a paraphrase
+
+A wait on a stage reads the same transcript for the work the agent started in the background and is still waiting on
+(pending), and for when the session last wrote (last_at). It knows two more facts of the format, read from Claude Code
+2.1.286's transcript of session f9b10eee-83e1-4c51-991f-820f7a2fe367, a coder that ran suites in the background on
+2026-10-08: a Bash call run in the background is answered by a record whose toolUseResult holds
+"backgroundTaskId": "<id>"; and when that work ends, the session receives a string holding <task-notification> with
+<task-id><id></task-id> in it, recorded as a queue-operation and again as an attachment. When these stop holding, a
+quiet agent waiting on its own work reads as waiting on nothing, and is reported stuck sooner; never as finished."""
 import datetime, hashlib, json, pathlib, re
 
 COMMAND = "crew signal"
@@ -33,6 +41,8 @@ STAGE = re.compile(r"^(Fix: |Merge \S+ into bolt/\S+: wt merge bolt/\S+ --no-squ
 SLASH = re.compile(r"<command-name>/opsx:(propose|apply|verify)</command-name>")
 ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 FRESH = datetime.timedelta(minutes=15)
+NOTICE = "<task-notification>"
+TASK_ID = re.compile(r"<task-id>(.*?)</task-id>", re.S)
 
 
 def collapse(s):
@@ -200,3 +210,32 @@ def check(session, excerpt, skip=(), stage_by=None):
         n, raw, v, _ = other
         return Verdict("found", raw=raw, n=n, value=v)
     return Verdict("refused")
+
+
+def pending(path):
+    """The background work the session started and has not been told is over: the ids of every toolUseResult's
+    backgroundTaskId with no <task-id> naming it in a string holding <task-notification>, in the order started. None,
+    never an empty list, when the transcript is missing or can't be read."""
+    found = lines(path) if path else None
+    if found is None or isinstance(found, str):
+        return None
+    started, told = [], set()
+    for _, _, v in found:
+        r = v.get("toolUseResult") if isinstance(v, dict) else None
+        tid = r.get("backgroundTaskId") if isinstance(r, dict) else None
+        if isinstance(tid, str) and tid and tid not in started:
+            started.append(tid)
+        for x in strings(v):
+            if NOTICE in x:
+                told.update(TASK_ID.findall(x))
+    return [t for t in started if t not in told]
+
+
+def last_at(path):
+    """When the session last wrote its transcript: the newest timestamp of any of its records, as a UTC time. None when
+    the transcript is missing or can't be read, or no record carries a time crew can read."""
+    found = lines(path) if path else None
+    if found is None or isinstance(found, str):
+        return None
+    times = [t for t in (stamp(v.get("timestamp")) for _, _, v in found if isinstance(v, dict)) if t]
+    return max(times) if times else None
