@@ -1,3 +1,5 @@
+> An exploration's brief (2026-10-03), partly stale: review happens as docs/adr/0002 says, and the transcript canary is the fifteen-minute check of checked-capture.
+
 # Findings to design
 
 A brief for a clean-room design pass. This brief and the files it names are everything you have: don't rely on any earlier conversation.

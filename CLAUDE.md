@@ -1,6 +1,16 @@
 # crew
 
-crew runs bolt teams of Claude agents in herdr, and each partition's main level. `README.md` says how it works; `openspec/` holds its changes, and `openspec/explorations/findings-to-design/roadmap.md` their order.
+crew runs bolt teams of Claude agents in herdr, and each partition's main level. `README.md` says how it works; `openspec/` holds its changes, and the partition's plan their order.
+
+## Rules
+
+The rules every change holds to are in `docs/architecture/`: `core.md`, imported below, binds all of crew, and an area's page beside it binds that area, loaded when a file under its paths is read. A design or commit that relies on a rule cites its id (`state.1`); one that departs from a rule says which and why. Where `docs/architecture/` and README or a spec disagree, `docs/architecture/` wins. The reasoning behind a rule is in `docs/adr/`.
+
+@docs/architecture/core.md
+
+## Crew
+
+What a crew team building crew needs to know. **The record**, in this order: `docs/architecture/` (the rules), `docs/adr/` (the reasoning), `openspec/specs/` (what each capability does), `README.md` and this file (the how-to), `openspec/explorations/` (readings and explorations, each saying so in its first line). **Where design is written**: a rule goes in `docs/architecture/core.md` if it binds all of crew, else on its area's page, with an id (`<area>.<n>`, the next free number in its area), one sentence, what it rules out and its source, amended in the same commit as the decision that changes it; a decision's reasoning is a record in `docs/adr/` (`adrs new`); how a capability behaves is its spec, changed only by a delta in the change that builds it.
 
 ## This checkout is live
 

@@ -1,3 +1,5 @@
+> An exploration's plan (2026-10-03): the build order of the findings-to-design changes only; the partition's plan orders every change. Steps 0 to 5 are built; later ADR-driven changes are not listed here.
+
 # Findings to design: the roadmap
 
 Every change that builds `proposal.md`, in build order. Each is an OpenSpec change in this repository, `openspec/changes/<name>/`, with its proposal, specs, design and tasks, written to be built by an agent that has read nothing else. `brief.md` holds the invariants the whole thing answers to.

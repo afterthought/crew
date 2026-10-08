@@ -1,6 +1,7 @@
 schema: spec-driven
 
 context: |
+  Rules: docs/architecture/core.md binds every change; an area's page beside it binds that area. Reasoning: docs/adr/.
   crew — teams of Claude Code agents run in herdr sessions. A Claude Code
   plugin (plugin/): the `crew` command (bash, plugin/bin/crew), its builder
   (python3, plugin/lib/crew.py), the role briefs (plugin/roles/*.md, filled
@@ -14,7 +15,7 @@ context: |
   plugin from this checkout.
 
   Runs on the Macs (mac-studio, macbook-pro) and on NixOS workspace boxes
-  (chuck-herdr-alpha), reached over ssh. Every agent runs on Opus 5.5.
+  Each role's model and effort are in its definition's frontmatter (plugin/roles/), overridden only in the teams file.
 
   Vocabulary: partition, session (a herdr server), connection (a session in
   a window's sidebar), operator session, operator agent, herdr workspace (a
@@ -22,3 +23,13 @@ context: |
 
   Conventions: conventional commits; plain English in briefs and messages;
   simplicity over abstraction.
+
+rules:
+  design:
+    - "Cite by id the rules in docs/architecture/ that this design relies on, and name each page of docs/architecture/ whose area the change touches. Where the design departs from a rule, name the rule and say why."
+
+operations:
+  apply:
+    guidance:
+      - "Where a task leaves a detail open, decide it the way a careful engineer would from docs/architecture, openspec/specs, README and the code, in that order, hold similar things to the same rule, and name each choice in your summary. An open detail is not a reason to pause."
+      - "Pause only when the same test still fails after two attempts, or when passing would mean changing a rule in docs/architecture or a spec under openspec/specs that the task does not tell you to change."

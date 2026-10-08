@@ -1,3 +1,5 @@
+> A reading (2026-10-07): the exploration's report; its crew decisions are docs/adr/0008.
+
 # Exploration: a testing strategy for crew and swancloud, with cached checks
 
 Date: 2026-10-07. Pane: exploration beside swancloud-design, session swancloud-1, mac-studio.

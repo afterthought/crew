@@ -1,3 +1,5 @@
+> An exploration (2026-10-03), the design the roadmap's changes built; where a change's design differs, the change wins.
+
 # Findings to design: a proposal
 
 For the user's review. It answers `brief.md`, beside it, in the brief's order. The build is laid out in `roadmap.md`, beside it, and specified change by change in `openspec/changes/`.
