@@ -49,7 +49,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 **[plan.11]** Rules out: a construct stage for a chore; a chore that writes a spec. Source: ADR 0001. Not built: `_open.md`.
 
-**[plan.12]** Rules out: a second `gather` in one command; a stage fact that disagrees with openspec. Source: `openspec/explorations/command-cost/reading.md`; ADR 0008. Not built: `_open.md`.
+**[plan.12]** Rules out: a second `gather` in one command; a stage fact that disagrees with openspec. The direct reading knows openspec's own spec-driven schema; a change of any other schema, of a spec-driven its kit or user redefines, or with metadata crew does not read, is read through `openspec`. Source: `openspec/explorations/command-cost/reading.md`; ADR 0008; a-command-reads-the-kits-once; `plan.py` `Reading`, `fetch`, `land`, `survey`; `gather.py` `tasks_of`, `planned`; `tests/t-stage-facts.sh`, `tests/t-reads-once.sh`.
 
 **[plan.13]** Rules out: `After` between units that only touch the same files; a dependent started at its dependency's verify; `After` as sequencing. Source: ADR 0011; `bolt-plan` spec "The file's order and dependencies are the plan".
 
