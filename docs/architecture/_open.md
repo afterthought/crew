@@ -19,6 +19,8 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `tests.5`: the suite as one moon task per test file, in parallel, replayed on an identical tree (`the-suite-runs-as-moon-tasks`); crew has no moon.
 - ADR 0006: a change archived at its merge (`a-merged-change-is-archived`); the coder brief has no archive step and ops reads the proof from the open change.
 - ADR 0005: cards (`the-rail-is-answered-through-cards`, after the rail).
+- `teams.7` for the main level: every agent started outside a team is greeted once it is up (`main-level-agents-are-greeted-at-start`); `crew main up`, `crew operator up` and `crew revive` greet nobody.
+- `teams.11`: a tell to an agent waiting on a question is refused with nothing typed (`a-tell-never-lands-in-a-question`); `tell` types into the pane regardless.
 
 ## Code against a rule
 

@@ -17,7 +17,8 @@ The rules for teams, slots, stages, panes and tells: the bash command, the role 
 - **[teams.4]** A stage ends when its deliverable exists in the kit or on the team's host, or when its agent stops short and says what it needs, never when its pane goes quiet; whoever waits learns the end with the deliverable, and a stage quiet past crew's limit is reported stuck.
 - **[teams.5]** Code is refused for a unit the user has not approved, verify until every task is ticked, and a unit or fix merges into its bolt only through `wt merge bolt/<bolt> --no-squash --no-remove`.
 - **[teams.6]** A role's model and effort come only from its definition's frontmatter, overridden only under `roles.<role>` in the teams file; `crew-role` starts every role with `CREW_AGENT` and `CREW_LABEL` set and the filled brief appended to the system prompt, in the role's folder, and `crew resume` picks up the agent's last session in the folder it began in.
-- **[teams.7]** A conductor gets exactly one greeting per start, and a plan write whose own command greets a team does not also notify its conductor.
+- **[teams.7]** A conductor, and every agent crew starts outside a team (a main level's design agent, planner and ops, a dispatcher, an operator agent), gets exactly one greeting per start, marked as crew's; a plan write whose own command greets a team does not also notify its conductor.
+- **[teams.11]** A tell reaches its agent as a prompt or not at all: an agent that is not up, or waiting on a question in its pane, is reported and the command fails with nothing typed.
 - **[teams.8]** A pane crew starts answers only Claude's folder-trust question, never the Bypass Permissions warning.
 - **[teams.9]** The panes, layout and slots files change only by writing a new file and moving it over the old; the stages file changes only under `flock`; output that bash evals is shell assignments quoted with `shlex.quote`, and everything else such a command says goes to standard error.
 - **[teams.10]** A brief fills every `{{TOKEN}}` from the builder, a token with no builder or no data is a refusal, never blank text, and every brief carries the roster with how to read crew's marks.
@@ -36,7 +37,8 @@ The rules for teams, slots, stages, panes and tells: the bash command, the role 
 
 **[teams.6]** Rules out: a model named in `plugin/lib` or `plugin/bin`; an override for a role the team lacks; a resume in the wrong folder. Source: `agent-models` spec; `crew.py` 32–35, 84–97, 326–335, 567–579; fix 25c300d.
 
-**[teams.7]** Rules out: a conductor greeted twice. Source: fix 5a481ae.
+**[teams.7]** Rules out: a conductor greeted twice; a main level or operator agent that starts and sits idle until someone tells it what to do. Source: fix 5a481ae; `main-level` spec "The main level is one herdr workspace" (the user, 2026-10-08: "They got no initial instructions, though.", signal 2026-10-08-swancloud-operator-mac-studio-c1fb895d/01). `crew main up`, `crew operator up` and `crew revive` greet nobody until `main-level-agents-are-greeted-at-start` lands: `_open.md`.
+**[teams.11]** Rules out: `herdr agent prompt` into a pane whose agent is blocked on a question, where the text lands in the dialog and the agent never receives it (the user, 2026-10-07: "i don't think it got it since it had a userquestion tool open", signal 2026-10-07-swancloud-operator-mac-studio-09fca02b/01). Source: `main-level` spec "Any agent crew starts is reached by name"; `crew.py` `greet` already waits on `blocked`. `tell` types regardless until `a-tell-never-lands-in-a-question` lands: `_open.md`.
 
 **[teams.8]** Rules out: crew pressing through the Bypass warning. Source: `plugin/bin/crew` 192–202.
 
