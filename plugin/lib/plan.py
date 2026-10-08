@@ -1564,20 +1564,33 @@ class Strict(argparse.ArgumentParser):
         fail(message)
 
 
+def refuse(said, recorded):
+    """A refusal that quotes typed text: said whole, and in the run record as crew's own words without it (record.3)."""
+    e = Refusal(said)
+    e.recorded = recorded
+    raise e
+
+
+def do_named(a):
+    """A proposal's command as the run record holds it: the command and what it acts on, never its intent or reason."""
+    return f"{a.cmd} {a.sub} {a.bolt if a.cmd == 'bolt' else a.unit}"
+
+
 def do_args(label, do):
     """A proposal's Do as crew's parser reads it: one of the ten plan commands, in the proposal's partition."""
     try:
         argv = shlex.split(do)
     except ValueError as e:
-        fail(f"`{do}`: {e}")
+        refuse(f"`{do}`: {e}", f"a Do line does not parse: {e}")
     argv = argv[1:] if argv[:1] == ["crew"] else argv
-    tuple(argv[:2]) in PROPOSABLE or fail(f"a proposal holds only the plan's commands ("
-                                          + ", ".join(" ".join(k) for k in PROPOSABLE) + f"), not `{do}`")
+    held = "a proposal holds only the plan's commands (" + ", ".join(" ".join(k) for k in PROPOSABLE) + ")"
+    tuple(argv[:2]) in PROPOSABLE or refuse(f"{held}, not `{do}`", held)
     try:
         a = parser(Strict).parse_args(argv)
     except Refusal as e:
-        fail(f"`{do}`: {e}")
-    getattr(a, "label", None) in (None, label) or fail(f"`{do}` names partition {a.label}, and the proposal is {label}'s")
+        refuse(f"`{do}`: {e}", f"`{' '.join(argv[:2])}` does not parse as crew's parser reads it")
+    getattr(a, "label", None) in (None, label) or refuse(f"`{do}` names partition {a.label}, and the proposal is {label}'s",
+                                                         f"`{do_named(a)}` names partition {a.label}, and the proposal is {label}'s")
     a.label, a.do = label, do
     return a
 
@@ -1671,7 +1684,7 @@ def apply_all(fleet, label, w, argvs, n):
             n_on, n_frm = len(w.on), len(w.frm)
             told += op.change(w) or []
         except Refusal as e:
-            fail(f"`{a.do}`: {e}")
+            refuse(f"`{a.do}`: {e}", f"`{do_named(a)}`: {getattr(e, 'recorded', None) or e}")
         op.added_on, op.added_frm = w.on[n_on:], w.frm[n_frm:]
         ops.append(op)
     return ops, list(dict.fromkeys(told))
@@ -1686,7 +1699,7 @@ def check_ops(fleet, label, w, argvs, n):
         try:
             OPS[(a.cmd, a.sub)](Proposed(fleet, label, scratch, n), a).change(scratch)
         except Refusal as e:
-            fail(f"`{a.do}`: {e}")
+            refuse(f"`{a.do}`: {e}", f"`{do_named(a)}`: {getattr(e, 'recorded', None) or e}")
     try:
         check(scratch.plan)
         recfix(scratch.plan.text(), "plan.rec")
@@ -1866,7 +1879,8 @@ def plan_approve(fleet, a):
                             + f": crew plan agree {a.n}")
 
     def opened(p):
-        p.get("State") == "open" or fail(f"proposal {a.n} is {p.get('State')}" + (f": {p.get('Reason')}" if p.get("Reason") else ""))
+        state = f"proposal {a.n} is {p.get('State')}"
+        p.get("State") == "open" or refuse(state + (f": {p.get('Reason')}" if p.get("Reason") else ""), state)
     opened(p0)
     agreed(w0, p0)
     carded = p0.get("By") == f"{label}-planner"
@@ -2522,10 +2536,9 @@ def run_check(fleet, a):
         prompt = f"/opsx:apply {a.unit}{words}"
     elif a.stage == "verify":
         if st == "code":
-            e = Refusal(f"unit {a.unit} is in code, with these tasks still open: " + "; ".join(s["open"]))
             n = len(s["open"])
-            e.recorded = f"unit {a.unit} is in code, with {n} task{'' if n == 1 else 's'} still open"  # titles are typed text
-            raise e
+            refuse(f"unit {a.unit} is in code, with these tasks still open: " + "; ".join(s["open"]),
+                   f"unit {a.unit} is in code, with {n} task{'' if n == 1 else 's'} still open")  # titles are typed text
         st == "verify" or fail(f"unit {a.unit} is in {st}: verify waits until every task is ticked")
         prompt = f"/opsx:verify {a.unit}{words}"
     else:

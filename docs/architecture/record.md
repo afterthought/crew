@@ -22,7 +22,7 @@ The rules for the run record: what an entry is, when it is written, what it neve
 
 **[record.2]** Rules out: `set -e` tripping on `entry`; a command failing for want of a record. Source: `record.py` 7–8, 151–153; `plugin/bin/crew` 123.
 
-**[record.3]** Rules out: `Refused: \`unit add x "the whole intent"\``. Source: `run-record` spec "An entry holds no text anyone typed"; `record.py` 6–7. A refused proposal's entry embeds its `Do` line today: `_open.md`.
+**[record.3]** Rules out: `Refused: \`unit add x "the whole intent"\``. Source: `run-record` spec "An entry holds no text anyone typed"; `record.py` 6–7.
 
 **[record.4]** Rules out: a host writing another's file; an entry edited in place. Source: `record.py` 112–205; state-repository design.
 

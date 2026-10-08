@@ -23,7 +23,6 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 
 ## Code against a rule
 
-- `record.3`: a refused proposal's entry embeds its whole `Do` line, intent included (`plan.py` 1527–1534, 3047–3053); only verify's refusal strips typed text through `recorded`. A fix.
 - `plan.1`: the `runs/<host>/*.rec` files carried in a write are added after the `recfix` loop and never checked, and `signals/*.md` never are. A fix.
 - `tests.6`: the brief fixes 21d82af, ec593d5, 63bab58, e3d75cb and 902336e added no phrase to `t-briefs.sh`. A chore.
 - `teams.6`: `openspec/config.yaml` says every agent runs on Opus 5.5; the design agent and planner run on Fable 5.1. Fixed with this file. README's Roles table names models as documentation of the frontmatter, which the `agent-models` spec's "nowhere else" should allow; amend the spec at its next delta.

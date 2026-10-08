@@ -206,3 +206,31 @@ n=$(props -t Proposal -P Proposal | tail -1)
 expect_ok crew plan proposed "$n"
 has "$out" 'Runs: ``crew unit add ticks "The `x` command works." --repo switchboard-kit``'
 ok "a command that holds a backtick is shown in a code span fenced longer than it"
+
+# A refused proposal's entry names its command and the things it acts on, never the intent or reason typed in it.
+refusal() { as mac-studio bash -c 'recsel -t Entry -e "Act = '"'\$1'"'" -P Refused "$HOME"/.local/state/crew/wldn/runs/*/*.rec' _ "$1" | grep . | tail -1; }
+as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec' > "$T/before"
+expect_fail '`unit add y "Typed ZQXA." --bolt nowhere`: no bolt nowhere in wldn/main' \
+  crew plan propose "$(proposal 'Case: x' 'Do: unit add y "Typed ZQXA." --bolt nowhere')"
+has "$(refusal plan.propose)" '`unit add y`: no bolt nowhere in wldn/main'
+expect_fail '`unit add y "Typed ZQXB." --boltt console-pages`' \
+  crew plan propose "$(proposal 'Case: x' 'Do: unit add y "Typed ZQXB." --boltt console-pages')"
+has "$(refusal plan.propose)" '`unit add` does not parse'
+expect_fail '`unit add y "Typed ZQXC.`: No closing quotation' \
+  crew plan propose "$(proposal 'Case: x' 'Do: unit add y "Typed ZQXC.')"
+expect_fail '`unit add y "Typed ZQXD." --repo switchboard-kit --label nope` names partition nope' \
+  crew plan propose "$(proposal 'Case: x' 'Do: unit add y "Typed ZQXD." --repo switchboard-kit --label nope')"
+has "$(refusal plan.propose)" '`unit add y` names partition nope'
+crew plan propose "$(proposal 'Case: x' 'Do: unit add later "Typed ZQXE." --repo switchboard-kit')" >/dev/null
+n=$(props -t Proposal -P Proposal | tail -1)
+CREW_AGENT= crew unit add later "Added directly." --repo switchboard-kit >/dev/null
+expect_fail "\`unit add later \"Typed ZQXE.\" --repo switchboard-kit\`: wldn/main already has unit later" crew plan approve "$n"
+has "$(field plan.approve Refused proposal/$n)" '`unit add later`: wldn/main already has unit later'
+CREW_AGENT= crew plan drop "$n" "Dropped ZQXF." >/dev/null
+expect_fail "proposal $n is dropped: Dropped ZQXF." crew plan approve "$n"
+eq "$(field plan.approve Refused proposal/$n)" "proposal $n is dropped"
+new=$(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec' | grep -vxFf "$T/before" || true)
+for typed in ZQXA ZQXB ZQXC ZQXD ZQXE ZQXF; do
+  [[ $new != *"$typed"* ]] || fail "a refused proposal's entry holds typed text ($typed):"$'\n'"$new"
+done
+ok "a refused proposal's entry names its command and objects, and holds no intent or reason typed in it"
