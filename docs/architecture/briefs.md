@@ -18,6 +18,7 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 - **[briefs.6]** An agent that stops to wait on the user tells each of the partition's operator agents in one line what it waits for and where, and never asks the user to do what it can do itself.
 - **[briefs.7]** Test, check and proof results reach the user as one bullet per suite or proof before any prose: ✅ passed, ❌ failed with the count and a one-line cause, ⏳ not yet run.
 - **[briefs.8]** Without the user's word, no agent acts on an agent that is working, or clears, restarts or ends a slot's stage agent; every brief speaks plain English and describes what the user sees and does.
+- **[briefs.9]** A card that asks the user to read something, a proposal, a change in review, a report, carries the link to a plannotator session its owner starts on that document without opening a browser on the host; the session's verdict and annotations are read as the card's answer, and the session ends when the card closes.
 
 ## Details
 
@@ -36,3 +37,5 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 **[briefs.7]** Rules out: "they all passed" in a sentence. Source: signal `2026-10-07-swancloud-design-c8f7c4bd/01-test-results-are-a-glyph-list`; unit `test-results-are-a-glyph-list`; `crew.py` `RESULTS`; `tests/t-briefs.sh`.
 
 **[briefs.8]** Rules out: a dispatcher restarting a working conductor. Source: `plugin/skills/crew/SKILL.md`; `dispatcher.md`.
+
+**[briefs.9]** Rules out: a card with the files attached and no link; a browser opened on the host for a session whose link is on a card; annotations the user wrote that reach nobody. Source: ADR 0005 as amended 2026-10-08; signal 2026-10-08-swancloud-design-0f348337/01; the readings in that record. Not built: `_open.md`.
