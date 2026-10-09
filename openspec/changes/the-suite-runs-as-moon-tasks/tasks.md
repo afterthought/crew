@@ -24,4 +24,4 @@
 
 ## 5. The suite
 
-- [ ] 5.1 `tests/suite --affected` prints `0 failed` in this worktree and a second run replays every test (design: Task notes 5.1).
+- [x] 5.1 `tests/suite --affected` prints `0 failed` in this worktree and a second run replays every test (design: Task notes 5.1).
