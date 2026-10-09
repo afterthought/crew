@@ -278,6 +278,7 @@ mv "$ws" "$ws.away"
 why=$(denied swb-1-conductor post_request land/tenant-environments/abc1234)
 mv "$ws.away" "$ws"
 has "$why" "crew could not check this card: could not fetch wldn/main of WilldanGroup/crew-state"
+has "$why" ". Post it again later."
 why=$(CREW_AGENT=swb-1-conductor cards <<<"$(pre pendingyou post_request '{"name": "x"}')" | jq -r '.hookSpecificOutput.permissionDecisionReason')
 eq "$why" "crew refuses a card with no idempotencyKey."
 ok "a card crew can't check is refused, naming the branch it could not read, and so is one with no key"

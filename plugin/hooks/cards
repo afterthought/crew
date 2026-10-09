@@ -7,7 +7,8 @@ Before Pending You's post_request or create_area runs (PreToolUse), in a session
 plan.card_refusal whether the agent may use the call's idempotencyKey: a card's must be a rail row's key the agent
 owns, which only the planner and the conductors have, and an area's must be create-area:<owner>/<kit> for a kit of its
 own (briefs.11). Any other key is refused before the call reaches Pending You, in words naming the key to use, and so
-is a call crew could not check, since a card crew let through can't be taken back (read.1).
+is a call crew could not check, in words saying to post it again later, since a card crew let through can't be taken
+back (read.1).
 
 After a Pending You tool that posts (post_request), updates (update_request), withdraws (cancel_request) or closes
 (ack_answer) a card (PostToolUse), in a session crew started, it writes one entry: card.post, card.update or
@@ -130,8 +131,8 @@ def posted(record, label, card):
 
 def check(hook, tool):
     """Before a card is posted or an area made in a session crew started: Claude Code's denial, with crew's reason, unless
-    the agent may use the call's key; a denial too when crew can't check it."""
-    what = "area" if tool == "create_area" else "card"
+    the agent may use the call's key; a denial too when crew can't check it, saying to post it again later."""
+    what, later = ("area", "Make it again later.") if tool == "create_area" else ("card", "Post it again later.")
     try:
         agent, label = identity(hook.get("session_id"))
         if not agent or not label:
@@ -141,7 +142,7 @@ def check(hook, tool):
         given = hook.get("tool_input") if isinstance(hook.get("tool_input"), dict) else {}
         why = plan.card_refusal(plan.crew.load(), agent, label, tool, given.get("idempotencyKey"))
     except Exception as e:  # a card crew can't check is refused: one let through can't be taken back
-        why = f"crew could not check this {what}: {e}"
+        why = f"crew could not check this {what}: {str(e).rstrip('.')}. {later}"
     if why:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                  "permissionDecisionReason": why}}))
