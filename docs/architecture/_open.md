@@ -24,6 +24,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `docs.6`: what a change holds, in `construct.md` and `openspec/config.yaml` (`a-change-holds-what-is-true-and-what-is-proved`).
 - `signals.6`: a program's captures landed on the flywheel's branch (`machine-captures-land-on-the-flywheels-branch`, after `daily-pass-lands-through-crew`).
 - `signals.7`: curation on a cadence (`curation-runs-on-a-cadence`, after `curate-into-agenda`).
+- `briefs.11`: a team's cards are its conductor's, and crew refuses a crew agent's card or area under any other key (`a-teams-cards-are-its-conductors`); `ops.md` has no card rule, the landing card asks no step, and the hook records any key.
 - `briefs.10`: the operator agent as the partition's front door, in every roster (`a-partitions-operator-agent-is-its-front-door`).
 
 ## Code against a rule
