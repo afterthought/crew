@@ -19,6 +19,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - ADR 0005: cards (`the-rail-is-answered-through-cards`, after the rail).
 - `plan.14`, `roles.2` as amended: `deploy.*` run-record entries, the deploy's approval, the rail row and held card for a `manual` environment, the board's Operation lane rows per environment (`a-deploy-is-approved-and-recorded-through-crew`), and the lineage page's deploys view (`the-page-shows-the-deploys`, record 0010); the `main-level` spec and `main-ops.md` step 4 still have main-ops deploying.
 - Record 0010's board view: the page draws the lanes in the mockup's forms, side by side or stacked, narrowed to a team, with every partition one step away (`the-page-shows-the-board`, after the text board and the page); nothing draws lanes today.
+- `plan.8`, `teams.5` as amended (ADR 0015): a fix that carries the bolt onto main becomes its head by crew's move, the bolt's checks run and ops proves it again (`a-fix-carries-the-bolt-onto-main`); the fix merge only merges, the main-ops brief sends a landing's conflict to a fix that cannot carry it, and the user moves the branch by hand.
 - `docs.6`: what a change holds, in `construct.md` and `openspec/config.yaml` (`a-change-holds-what-is-true-and-what-is-proved`).
 - `signals.6`: a program's captures landed on the flywheel's branch (`machine-captures-land-on-the-flywheels-branch`, after `daily-pass-lands-through-crew`).
 - `signals.7`: curation on a cadence (`curation-runs-on-a-cadence`, after `curate-into-agenda`).

@@ -83,4 +83,4 @@ Code
 
 **[code.5]** Rules out: crew editing the teams file; a version-1 file accepted. Source: `bolt-teams` spec "Teams are fixed in the teams file"; `crew.py` 100–161.
 
-**[code.6]** Rules out: `git add -A` in a brief or a script. Source: `openspec/config.yaml`; every brief's committing section.
+**[code.6]** Rules out: `git add -A` in a brief or a script; an agent moving a bolt's branch by `git reset`. Not ruled out: crew moving a branch it made, `UNREBASE`'s undo of its own rebase and the bolt's move to a fix that carries it (ADR 0015), which move a branch and discard nothing. Source: `openspec/config.yaml`; every brief's committing section.
