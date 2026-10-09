@@ -326,13 +326,19 @@ teardown() {  # end every session and give the panes back; the slots still say w
 greet_conductor() {  # a fresh conductor reads where its bolt stands and carries on, before anyone asks it anything
   py greet "$TEAM" || true
 }
+greet_started() {  # greet_started [role...]: each agent outside a team that this command started or brought back is
+  # greeted, each in the background, so one waiting on a question holds back nobody else; the command waits for them
+  # before it ends, and a greeting that can't be sent fails nothing
+  local r; for r in "$@"; do { py greet-agent "$(name_of "$r")" || true; } & done
+}
 
 # A team or main level taken down stays down through a restart: crew revive leaves it be until it is brought up.
 mark_down() { touch "$STATE/down"; }
 mark_up() { rm -f "$STATE/down"; }
 
-revive() {  # start, from its last conversation, each standing role whose pane is there with no agent in it
-  local role pane
+revive() {  # start, from its last conversation, each standing role whose pane is there with no agent in it; a team's
+  # conductor is greeted, and every agent brought back outside a team, together once all are back
+  local role pane back=()
   [[ -s $panes ]] || return 0
   [[ -e $STATE/down ]] && { echo "$SCOPE was taken down; it stays down"; return 0; }
   for role in "${standing[@]}"; do
@@ -341,8 +347,9 @@ revive() {  # start, from its last conversation, each standing role whose pane i
     sleep 10; [[ -z $(agent_status "$pane") ]] || continue  # herdr may still be resuming it
     start "$role" resume || continue
     record_agents agent.resume "${KIND}($SCOPE): resume $(name_of "$role")" "$role"
-    [[ $KIND == team && $role == conductor ]] && greet_conductor
+    if [[ $KIND != team ]]; then back+=("$role"); elif [[ $role == conductor ]]; then greet_conductor; fi
   done
+  greet_started ${back[@]+"${back[@]}"}; wait
 }
 
 start_standing() {  # start each standing role that is not up; each one started is added to `started`
@@ -683,9 +690,11 @@ case $cmd in
     case $sub in
       up)
         mark_up; ensure_main; start_standing; record_agents main.up "main($LABEL): up" ${started[@]+"${started[@]}"}
+        greet_started ${started[@]+"${started[@]}"}  # each host's own _dispatch up greets its dispatcher
         while read -r host target remote; do
           if [[ $host == $(this_host) ]]; then bash "$0" _dispatch up "$LABEL"; else there "$target" "$remote" _dispatch up "$LABEL"; fi
-        done < <(py hosts "$LABEL") ;;
+        done < <(py hosts "$LABEL")
+        wait ;;
       down)
         for role in "${standing[@]}"; do stop "$role" || true; done; mark_down
         record_agents main.down "main($LABEL): down" ${ended[@]+"${ended[@]}"}; echo "$LABEL's main level is down; its panes are still there."
@@ -702,7 +711,9 @@ case $cmd in
   _dispatch)  # crew _dispatch up|down|status <label>: this host's dispatcher of the partition
     sub=${2:-}; load_dispatch "${3:?}"; ensure_state
     case $sub in
-      up) mark_up; ensure_single "$LABEL dispatch" dispatcher; start_standing; record_agents main.up "main($LABEL): up $(name_of dispatcher)" ${started[@]+"${started[@]}"} ;;
+      up)
+        mark_up; ensure_single "$LABEL dispatch" dispatcher; start_standing; record_agents main.up "main($LABEL): up $(name_of dispatcher)" ${started[@]+"${started[@]}"}
+        greet_started ${started[@]+"${started[@]}"}; wait ;;
       down) stop dispatcher || true; mark_down; record_agents main.down "main($LABEL): down $(name_of dispatcher)" ${ended[@]+"${ended[@]}"}; echo "$(name_of dispatcher) is down" ;;
       status) st=$(agent_status "$(pane_of dispatcher)"); printf '%-34s %-8s %s\n' "$(name_of dispatcher)" "$(pane_of dispatcher)" "${st:-not up}" ;;
     esac ;;
@@ -719,8 +730,9 @@ case $cmd in
     load_operator "${3:?usage: crew operator up <label>}"; ensure_state
     ensure_single operator operator
     if [[ -n $(agent_status "$(pane_of operator)") ]]; then echo "$(name_of operator) is already up"
-    else start operator; record_agents operator.up "operator($LABEL): up $(name_of operator)" operator; fi
-    ensure_flow; ensure_rail ;;
+    else start operator; started+=(operator); record_agents operator.up "operator($LABEL): up $(name_of operator)" operator; fi
+    ensure_flow; ensure_rail
+    greet_started ${started[@]+"${started[@]}"}; wait ;;
   _rail)  # crew _rail <label>: the rail tab's list, printed again every 30 seconds and as soon as the run record gains
     # an entry; a burst of entries refreshes it once. Once the follow ends, it refreshes on the clock alone.
     label=${2:?usage: crew _rail <label>}
