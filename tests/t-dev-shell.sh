@@ -6,6 +6,7 @@
 # .claude/settings.json runs. tests/run refuses to start outside a devenv shell. No CLAUDE.md, README, brief or
 # skill tells an agent to wrap a command in `devenv shell --`, and a checkout carries the .envrc and ignores
 # devenv's and direnv's working files.
+# Reads: .claude/hooks/devenv-shell .claude/settings.json .envrc .gitignore CLAUDE.md README.md
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 hook=$CREW/.claude/hooks/devenv-shell
 mkdir -p "$T/bin" "$T/repo" "$T/profile/bin" "$T/empty"

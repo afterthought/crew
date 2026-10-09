@@ -1,0 +1,241 @@
+# Written by tests/moon-tasks from tests/t-*.sh; never edited by hand. After adding or removing a test, or changing
+# what one reads (its `# Reads:` line), run tests/moon-tasks and commit this file: tests/suite refuses to run while
+# it is out of step. One task per test, the live test left out; tests/moon-tasks says what each task's inputs are.
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+tasks:
+  t-amend:
+    command: 'tests/run t-amend'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-amend.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-amend-intent:
+    command: 'tests/run t-amend-intent'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-amend-intent.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-bolt:
+    command: 'tests/run t-bolt'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-bolt.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-bolts:
+    command: 'tests/run t-bolts'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-bolts.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-briefs:
+    command: 'tests/run t-briefs'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-briefs.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-capture:
+    command: 'tests/run t-capture'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-capture.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-cards:
+    command: 'tests/run t-cards'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-cards.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-dev-shell:
+    command: 'tests/run t-dev-shell'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-dev-shell.sh', '/.claude/hooks/devenv-shell', '/.claude/settings.json', '/.envrc', '/.gitignore', '/CLAUDE.md', '/README.md']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-docs:
+    command: 'tests/run t-docs'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-docs.sh', '/README.md']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-events:
+    command: 'tests/run t-events'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-events.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-fix:
+    command: 'tests/run t-fix'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-fix.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-fresh:
+    command: 'tests/run t-fresh'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-fresh.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-greet:
+    command: 'tests/run t-greet'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-greet.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-main:
+    command: 'tests/run t-main'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-main.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-merge:
+    command: 'tests/run t-merge'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-merge.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-merge-gate:
+    command: 'tests/run t-merge-gate'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-merge-gate.sh', '/.config/**/*']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-notify:
+    command: 'tests/run t-notify'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-notify.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-operator:
+    command: 'tests/run t-operator'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-operator.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-plan-race:
+    command: 'tests/run t-plan-race'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-plan-race.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-plan-roles:
+    command: 'tests/run t-plan-roles'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-plan-roles.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-proposals:
+    command: 'tests/run t-proposals'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-proposals.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-rail:
+    command: 'tests/run t-rail'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-rail.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-reads-once:
+    command: 'tests/run t-reads-once'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-reads-once.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-record:
+    command: 'tests/run t-record'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-record.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-record-team:
+    command: 'tests/run t-record-team'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-record-team.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-recutils:
+    command: 'tests/run t-recutils'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-recutils.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-resume:
+    command: 'tests/run t-resume'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-resume.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-revive:
+    command: 'tests/run t-revive'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-revive.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-roles:
+    command: 'tests/run t-roles'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-roles.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-session-hook:
+    command: 'tests/run t-session-hook'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-session-hook.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-signal:
+    command: 'tests/run t-signal'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-signal.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-signal-route:
+    command: 'tests/run t-signal-route'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-signal-route.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-signal-show:
+    command: 'tests/run t-signal-show'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-signal-show.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-sites:
+    command: 'tests/run t-sites'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-sites.sh', '/tests/stubs-sites/**/*']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-stage-ends:
+    command: 'tests/run t-stage-ends'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-stage-ends.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-stage-facts:
+    command: 'tests/run t-stage-facts'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-stage-facts.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-standing:
+    command: 'tests/run t-standing'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-standing.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-state-carry:
+    command: 'tests/run t-state-carry'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-state-carry.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-state-init:
+    command: 'tests/run t-state-init'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-state-init.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-team:
+    command: 'tests/run t-team'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-team.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-teams:
+    command: 'tests/run t-teams'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-teams.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-tidy:
+    command: 'tests/run t-tidy'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-tidy.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-transcript:
+    command: 'tests/run t-transcript'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-transcript.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-unit:
+    command: 'tests/run t-unit'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-unit.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-unit-free:
+    command: 'tests/run t-unit-free'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-unit-free.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-unit-run:
+    command: 'tests/run t-unit-run'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-unit-run.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-units-ws:
+    command: 'tests/run t-units-ws'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-units-ws.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }

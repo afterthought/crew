@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Generate crew's moon tasks: tests/moon-tasks [--check].
+
+One task per tests/t-*.sh, written into tests/moon.yml, the live tests (t-*-live.sh) left out. Each task runs its
+one test through tests/run, tagged suite, and its inputs are everything the test reads from crew's tree: plugin/,
+which every command crosses, tests/run, tests/lib.sh, tests/stubs/, crew's devenv files, the test file itself and
+each path the test names on a `# Reads:` line of its opening comment (a directory as everything under it). moon
+replays a task whose inputs are unchanged since a pass, so an input left out could replay a stale pass.
+
+With no argument it writes tests/moon.yml. With --check it writes nothing and exits 1, naming each, when a test has
+no task, a task has no test, a task is not what this would write, or a test refers to $CREW/<path> or $TESTS/<path>
+outside its task's inputs. Either way it refuses, writing nothing, when a test reads a path its task doesn't name,
+or a `# Reads:` line names a path not in crew's tree. tests/suite runs the check before every run.
+"""
+import os
+import posixpath
+import re
+import sys
+
+TESTS = os.path.dirname(os.path.realpath(__file__))
+ROOT = os.path.dirname(TESTS)
+MOON_YML = os.path.join(TESTS, "moon.yml")
+COMMON = ["/plugin/**/*", "/tests/run", "/tests/lib.sh", "/tests/stubs/**/*", "/devenv.nix", "/devenv.lock"]
+HEADER = """\
+# Written by tests/moon-tasks from tests/t-*.sh; never edited by hand. After adding or removing a test, or changing
+# what one reads (its `# Reads:` line), run tests/moon-tasks and commit this file: tests/suite refuses to run while
+# it is out of step. One task per test, the live test left out; tests/moon-tasks says what each task's inputs are.
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+tasks:
+"""
+TASK = re.compile(r"^  (t-[a-z0-9][a-z0-9-]*):$")
+# $CREW/<path>, ${CREW}/<path>, $TESTS/<path> or ${TESTS}/<path>, the path running to the first character no path of
+# crew's holds: a quote, a parenthesis, a colon, a $, a space.
+REF = re.compile(r"\$(?:\{(CREW|TESTS)\}|(CREW|TESTS))/([A-Za-z0-9._/*@+-]*)")
+WORD = re.compile(r"^[A-Za-z0-9._@+-][A-Za-z0-9._/@+-]*(/\*\*)?/?$")
+
+
+class Refusal(Exception):
+    pass
+
+
+def tests():
+    """Each test's name and file, in name order, the live ones left out."""
+    names = sorted(f[:-3] for f in os.listdir(TESTS) if f.startswith("t-") and f.endswith(".sh"))
+    return [(n, os.path.join(TESTS, n + ".sh")) for n in names if not n.endswith("-live")]
+
+
+def opening(text):
+    """The lines of the file's opening comment block."""
+    lines = []
+    for line in text.splitlines():
+        if not line.startswith("#"):
+            break
+        lines.append(line)
+    return lines
+
+
+def declared(name, text):
+    """The inputs the test's `# Reads:` lines name, as moon globs; a path not in crew's tree refuses."""
+    inputs, bad = [], []
+    for line in opening(text):
+        m = re.match(r"^#\s*Reads:(.*)$", line)
+        if not m:
+            continue
+        for word in m.group(1).split():
+            path = word[:-3] if word.endswith("/**") else word.rstrip("/")
+            norm = posixpath.normpath(path)
+            if not WORD.match(word) or norm != path or norm.startswith("..") or not os.path.exists(os.path.join(ROOT, norm)):
+                bad.append(word)
+                continue
+            glob = f"/{norm}/**/*" if os.path.isdir(os.path.join(ROOT, norm)) else f"/{norm}"
+            if glob not in inputs:
+                inputs.append(glob)
+    if bad:
+        raise Refusal("\n".join(f"{name}'s # Reads: line names {w}, which is no path in crew's tree" for w in bad))
+    return inputs
+
+
+def covered(path, inputs):
+    """The path, relative to crew's root, is one of the inputs or under one of them."""
+    for i in inputs:
+        if i.endswith("/**/*"):
+            d = i[1:-5]
+            if path == d or path.startswith(d + "/"):
+                return True
+        elif path == i[1:]:
+            return True
+    return False
+
+
+def undeclared(name, text, inputs):
+    """Each path of crew's the test refers to through $CREW or $TESTS that its inputs don't cover."""
+    out = []
+    for m in REF.finditer(text):
+        path = m.group(3).split("*")[0].rstrip("/")
+        if (m.group(1) or m.group(2)) == "TESTS":
+            path = posixpath.join("tests", path) if path else "tests"
+        path = posixpath.normpath(path) if path else ""
+        if not covered(path, inputs) and path not in out:
+            out.append(path or ".")
+    return [f"{name} reads {p}, which its task's inputs don't name: add it to the test's # Reads: line" for p in out]
+
+
+def tasks():
+    """The tasks this writes, as {name: block text}, and each read of a test's that its inputs leave out."""
+    blocks, problems = {}, []
+    for name, path in tests():
+        with open(path) as f:
+            text = f.read()
+        try:
+            inputs = COMMON + [f"/tests/{name}.sh"] + declared(name, text)
+        except Refusal as e:
+            problems.append(str(e))
+            continue
+        problems += undeclared(name, text, inputs)
+        blocks[name] = (f"  {name}:\n"
+                        f"    command: 'tests/run {name}'\n"
+                        f"    inputs: [{', '.join(repr(i) for i in inputs)}]\n"
+                        f"    tags: [suite]\n"
+                        f"    options: {{ runFromWorkspaceRoot: true }}\n")
+    return blocks, problems
+
+
+def written(blocks):
+    return HEADER + "".join(blocks[n] for n in sorted(blocks))
+
+
+def committed():
+    """tests/moon.yml as {name: block text}, or None when it can't be read as this writes it."""
+    try:
+        with open(MOON_YML) as f:
+            text = f.read()
+    except OSError:
+        return None
+    if not text.startswith(HEADER):
+        return None
+    blocks, name = {}, None
+    for line in text[len(HEADER):].splitlines(keepends=True):
+        m = TASK.match(line.rstrip("\n"))
+        if m:
+            name = m.group(1)
+            blocks[name] = line
+        elif name and line.startswith("    "):
+            blocks[name] += line
+        else:
+            return None
+    return blocks
+
+
+def check():
+    want, problems = tasks()
+    have = committed()
+    names = {n for n, _ in tests()}
+    if have is None:
+        stale = ["tests/moon.yml is missing or not what tests/moon-tasks writes"]
+    else:
+        stale = [f"{n} has no task in tests/moon.yml" for n in sorted(names - set(have))]
+        stale += [f"{n} is a task in tests/moon.yml with no test tests/{n}.sh" for n in sorted(set(have) - names)]
+        stale += [f"{n}'s task in tests/moon.yml is not what tests/moon-tasks writes"
+                  for n in sorted(set(want) & set(have)) if want[n] != have[n]]
+    if stale:
+        stale.append("run tests/moon-tasks and commit tests/moon.yml")
+    if problems or stale:
+        raise Refusal("\n".join(problems + stale))
+
+
+def main(args):
+    if args == ["--check"]:
+        check()
+    elif not args:
+        blocks, problems = tasks()
+        if problems:
+            raise Refusal("\n".join(problems + ["nothing written"]))
+        text = written(blocks)
+        with open(MOON_YML + ".new", "w") as f:
+            f.write(text)
+        os.replace(MOON_YML + ".new", MOON_YML)
+    else:
+        raise Refusal("usage: tests/moon-tasks [--check]")
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except Refusal as e:
+        sys.exit("\n".join(f"tests/moon-tasks: {line}" for line in str(e).splitlines()))

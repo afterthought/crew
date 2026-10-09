@@ -10,6 +10,7 @@
 # no run not verified, and a record that can't be read is named; a hand rerun is refused while a run of the head is
 # alive and starts after a cut-off. The suite a verification runs never inherits BOLT_VERIFY_REV, so a test that
 # merges into a bolt of its own, as this one does, verifies that bolt, not the one under verification.
+# Reads: .config/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 gitconfig "$HOME"

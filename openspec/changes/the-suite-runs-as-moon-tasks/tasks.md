@@ -3,7 +3,7 @@
 ## 1. The suite runs as moon tasks
 
 - [x] 1.1 crew's devenv shell has moon 2.5.x and links each checkout's `.moon/cache/outputs` to `<git common dir>/moon-outputs`, and `.moon/cache/` is ignored; a fresh shell shows both (design: Decisions "The archives are shared"; Task notes 1.1).
-- [ ] 1.2 `.moon/workspace.yml` and a generated `tests/moon.yml` give every test but the live one a task whose inputs name everything it reads, and `tests/moon-tasks --check` refuses a test with no task, a task with no test, a stale task or an undeclared read (design: Decisions "One project, one task per test file"; Task notes 1.2).
+- [x] 1.2 `.moon/workspace.yml` and a generated `tests/moon.yml` give every test but the live one a task whose inputs name everything it reads, and `tests/moon-tasks --check` refuses a test with no task, a task with no test, a stale task or an undeclared read (design: Decisions "One project, one task per test file"; Task notes 1.2).
 - [ ] 1.3 `tests/suite` runs every task, the named ones, the affected ones or every one without the cache, side by side, and reports in `tests/run`'s words with replayed tests marked, refusing first when the tasks are out of step (design: Decisions "`tests/suite` is the one way"; Task notes 1.3).
 - [ ] 1.4 `tests/t-suite.sh` shows, with the real moon in a scratch repository, a first run, a full replay, a one-test rerun, a `plugin/` rerun, a failure that stops nothing and is never replayed, `--affected`, the refusals, no live task, `__pycache__` ignored, and a second checkout replaying the first (design: Task notes 1.4).
 
