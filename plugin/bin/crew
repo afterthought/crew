@@ -76,13 +76,16 @@
 #
 # Each partition's main level, and the operator agent in each operator session:
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
-#                                      main level's session, and a dispatcher on each host the partition's teams run on
+#                                      main level's session, and a dispatcher on each host the partition's teams run on;
+#                                      each agent up starts is greeted to read where the partition stands and carry on
 #   crew operator up <label>           the operator agent in this host's operator session <label>, with a flow tab
-#                                      following the run record and a rail tab: crew rail above, a shell below
+#                                      following the run record and a rail tab: crew rail above, a shell below; the
+#                                      agent it starts is greeted the same way
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
-#                                      agent in it, picked up from its last conversation; a team or main level taken
-#                                      down with crew down stays down
+#                                      agent in it, picked up from its last conversation and greeted when it is a
+#                                      conductor or an agent outside a team; a team or main level taken down with
+#                                      crew down stays down
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
 #
 # What happened, read from the run record every command that moves work appends on the host it ran on:

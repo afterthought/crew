@@ -30,9 +30,9 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | clear the conductor or ops and restore its name | `crew clear <team> conductor\|ops` |
 | end a team's sessions | `crew down <team>` |
 | free a slot still holding a unit no longer in the team's bolt | `crew unit free <unit> [--team <team>]` |
-| bring up, check or end a partition's main level and dispatchers | `crew main up\|status\|down <label>` |
-| start the operator agent in this host's operator session | `crew operator up <label>` |
-| after a restart, bring back every standing agent of this host whose pane came back empty | `crew revive` |
+| bring up, check or end a partition's main level and dispatchers, each agent it starts greeted to read where the partition stands and carry on | `crew main up\|status\|down <label>` |
+| start the operator agent in this host's operator session, greeted once it is up | `crew operator up <label>` |
+| after a restart, bring back every standing agent of this host whose pane came back empty, greeting each conductor and each agent outside a team it brings back | `crew revive` |
 | send an agent crew started a message, wherever it runs | `crew tell <agent> "<text>"` |
 | see what runs where, with the URL to open | `crew sites [<label>]` |
 | see what crew did lately, on every host of a partition, or as it happens | `crew events [--label L] [--about <object>] [--follow]` |
