@@ -2,104 +2,123 @@
 
 ## Context
 
-See proposal.md for why, and record 0014 for the operator's ruling of 2026-10-09, D1 to D8. The current state:
+See proposal.md for why, and record 0014 for the operator's ruling of 2026-10-09. The current state:
 
-- `run_check` in `plan.py` refuses construct for a unit whose stage is `waiting`, that is one with no place whose After units have not all merged; refuses code at `review` ("code waits until the user approves it") and at anything but `approved`, `code` or `verify`; refuses verify until every task is ticked; and sends merge the prompt `wt merge bolt/<bolt> --no-squash --no-remove`.
-- `place_stage` reads `verify`, `code`, `approved` (planning complete and a `Reviewed-by` commit since the bolt), `review` (planning complete) or `construct`; an `Amended` mark reads `amended`, then `construct` while the head is where construct started, then `review` until `crew unit approve` clears it (unit-amendments, built and not archived).
-- The rail (`rail_rows`) has four groups and four card keys: proposals, `review/<unit>/<head>`, `verify/<unit>/<stamp>` and `land/<bolt>`. A review card links a plannotator session on the change folder (`crew card session`, `briefs.9`).
+- `run_check` in `plan.py` refuses construct for a unit whose stage is `waiting`, one with no place whose After units have not all merged; refuses code at `review` and at anything but `approved`, `code` or `verify`; refuses verify until every task is ticked; and sends merge the prompt `wt merge bolt/<bolt> --no-squash --no-remove`.
+- `place_stage` reads `verify`, `code`, `approved` (planning complete and a `Reviewed-by` commit since the bolt), `review` (planning complete) or `construct`; an `Amended` mark reads `amended`, then `construct` while the head is where construct started, then `review` until `crew unit approve` clears it. That last part is unit-amendments, built and not archived.
+- The rail (`rail_rows`) and the card hook know four card keys (`CARD_KEYS`): `proposal/<n>`, the planner's, and `review/<unit>/<head>`, `verify/<unit>/<stamp>` and `land/<bolt>`, the conductor's. A review card links a plannotator session on the change folder (`crew card session`, `briefs.9`).
 - Touches is prose at the end of `proposal.md` (`construct.md` line 27), compared by eye by the conductor (`conductor.md` line 83), who builds overlapping units one after the other.
-- The conductor waits on every stage with `crew unit wait <unit>` and on a proof with `crew prove <team> --wait`, both background commands that return within the hour (`bolt-teams` "The conductor waits for a stage through crew"). crew runs no service (`state.4`), so these waits are the only clock a team has.
+- The conductor waits on every stage with `crew unit wait <unit>` and on a proof with `crew prove <team> --wait`, background commands that return within the hour. crew runs no service (`state.4`), so the conductors' waits are the only clock a partition has.
+- A partition's main level holds the design agent, the planner and main-level ops in one herdr workspace (`main-level` spec). The planner already posts the partition's proposal cards.
 
-Pages whose areas this touches: `plan.md` (`plan.py`, `gather.py`), `teams.md` (`plugin/bin/crew`, `crew.py`), `briefs.md` (`plugin/roles/`, `plugin/skills/`), `tests.md` (`tests/`), `docs.md` (`README.md`, `openspec/`, `docs/`). Rules relied on: `plan.1`, `plan.6` and `plan.13` as amended, `plan.9`, `plan.10`, `teams.1`, `teams.2`, `teams.4`, `teams.5` as amended, `teams.11`, `teams.12`, `teams.13`, `briefs.2`, `briefs.4` and `briefs.9` as amended, `briefs.5`, `briefs.11`, `briefs.12`, `roles.1`, `roles.2`, `roles.4`, `state.2`, `state.4`, `read.1`, `code.5`, `docs.4`.
+Pages whose areas this touches: `plan.md` (`plan.py`, `gather.py`), `teams.md` (`plugin/bin/crew`, `crew.py`), `briefs.md` (`plugin/roles/`, `plugin/skills/`), `tests.md` (`tests/`, `.config/`), `docs.md` (`README.md`, `openspec/`, `docs/`). Rules relied on: `plan.1`, `plan.6` and `plan.13` as amended, `plan.9`, `plan.10`, `teams.1`, `teams.2`, `teams.4`, `teams.5` as amended, `teams.7`, `teams.11`, `teams.12`, `teams.13`, `teams.14`, `briefs.1` and `briefs.2` as amended, `briefs.4` and `briefs.9` as amended, `briefs.5`, `briefs.11`, `briefs.12`, `roles.1`, `roles.2`, `roles.4`, `state.2`, `state.4`, `read.1`, `code.5`, `tests.5`, `docs.4`.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- A bolt's units are built side by side as far as slots allow, from the moment the bolt is given.
-- A dependent codes on its dependency's plan and lands after it.
+- A bolt's units are built side by side as far as slots allow, their changes written in waves.
+- A dependent builds on its dependency's plan and work as they stand, and lands after it.
 - A conflict between units is known before either is finished, and is resolved by the later unit with both intents in hand.
-- The user sees every change before its bolt lands, a batch at a time, and what the user says reaches the unit while it can still change.
+- The user sees every change before its bolt lands, a partition's batch at a time, and what the user says reaches the unit while it can still change.
 
 **Non-Goals:**
-- Changing what `After` means (record 0011's point 1 stands).
-- Building sluice, or crew's side of its after-entries. D7 only switches the merge command where sluice is available.
+- Building sluice, or crew's side of it beyond the merge stage's command and the kit's opt-in.
 - Amending a merged unit. A defect is a fix, new work a new unit.
-- Moving proposal, verify or landing cards off plannotator sessions. Only the batch card reads in Pending You alone.
+- Moving proposal, verify or landing cards off plannotator sessions. Only batch cards are read in Pending You alone.
 
 ## Decisions
 
-### 1. Construct fans out (D1)
+### 0. unit-amendments is archived first
 
-`run_check` drops the `waiting` refusal for construct. A unit with no place reads `ready` whatever its After units are; `waiting` now means a constructed unit whose code is held (decision 2). The conductor's building loop runs construct for every unit of the bolt with no change, in the file's order, as slots free (`teams.1` still caps units in flight).
+Its deltas to `bolt-plan`, `bolt-teams` and `plan-proposals` speak of re-approval. It is archived before any other task of this change, so that this change's MODIFIED deltas to "A unit in flight goes back through construct and review" and "An amendment is read as before and after" find their requirements in `openspec/specs/`.
 
-### 2. After holds code and merge, not construct (D2)
+### 1. Construct in waves (D1)
 
-An After unit has finished construct when its stage is `planned`, `waiting`, `code`, `verify`, `merged` or `landed`: its change is committed and its planning complete. `amended` and `construct` are not finished.
+A unit with no place reads `ready` once each of its After units has finished construct, and `waiting` until then. An After unit has finished construct when its stage is `planned`, `code`, `verify`, `merged` or `landed`. `run_check` refuses construct at `waiting`, naming the After units still in construct, and never waits on a merge. The conductor's building loop runs construct for every `ready` unit, in the file's order, as slots free (`teams.1`). Changes are written in waves, so a dependent's change is written with its dependency's change in hand: record 0011's reason for holding a dependent stands, met at its dependency's construct instead of its merge.
 
-- **Code** is refused while any After unit has not finished construct, naming them. The unit reads `waiting`.
-- **The dependent's place.** When code starts, crew brings into `unit/<unit>` the head of each After unit not yet merged, as a merge of that head (never a push, never a write to the After unit's branch), in the dependent's place. The heads taken are recorded on the `stage.start` entry.
-- **Rebase on merge.** When an After unit merges, crew rebases each dependent's place onto `bolt/<bolt>` at the next read of the team that finds the dependent's agent not working (`teams.2`, `briefs.8`) and its place clean (`plan.9`'s test). Commits the bolt already holds drop out. A rebase that conflicts is aborted with the place as it was, and handed to the dependent's agent as decision 5 says.
-- **Merge** is refused while any After unit has not merged, naming them. Under sluice the queue's after-entries hold it as well; crew's refusal stays, so a kit without sluice is held the same way.
+### 2. After holds construct and merge (D2)
+
+- **The dependent's place.** When the dependent's place is made, at its construct, crew merges into `unit/<unit>` the head of each After unit not yet merged, as it stands, in the dependent's place: never a push, never a write to the After unit's branch. The heads taken are recorded on the `stage.start` entry.
+- **Rebase on merge.** When an After unit merges, crew rebases each dependent's place onto `bolt/<bolt>` at the next read of the team that finds the dependent's agent not working (`teams.2`, `briefs.8`) and its place clean (`plan.9`'s test). Commits the bolt already holds drop out. A rebase that conflicts is aborted with the place as it was, and goes to the dependent as decision 5 says.
+- **An After unit amended later.** When an After unit is constructed again after its dependent's code has started, the dependent is not held: crew carries the amendment to it as decision 5 carries a forecast, with the revised change's path.
+- **Merge** is refused while any After unit has not merged, naming them. Where the kit opts into sluice, the unit's After units are its after-entries as well.
 
 ### 3. No review gate (D5)
 
-`crew unit approve`, the `review` and `approved` stages and the `review/<unit>/<head>` rail row go. A unit whose change's planning is complete reads `planned` (or `waiting`, decision 2), and code is accepted there. An amended unit reads `amended` until construct runs again and `construct` while it runs; once its construct has committed the mark stops counting, the unit reads from its tasks again, and crew removes the mark in the plan write that records the construct's end (`plan.6` as amended). `Reviewed-by` commits already on branches are left alone and read by nothing.
+`crew unit approve`, the `review` and `approved` stages and the `review/<unit>/<head>` rail row go. A unit whose change's planning is complete reads `planned`, and code is accepted there. An amended unit reads `amended` until construct runs again and `construct` while it runs; once that construct has committed the mark stops counting, the unit reads from its tasks again, and crew removes the mark in the plan write that records the construct's end (`plan.6` as amended). `Reviewed-by` commits already on branches are left alone and read by nothing.
 
-### 4. Touches is parsed (D8)
+### 4. Touches is parsed and checked (D8)
 
-`construct.md` has the change end `proposal.md` with `## Touches` and one fenced block of paths or globs relative to the kit's root, one to a line; `**` crosses directories. crew reads the block from the place before code starts, and refuses code naming what is missing when there is no heading, no block, or an empty block (`read.1`). Two units overlap when an entry of one matches a path the other's entry names or a glob of one matches a glob of the other by literal prefix up to its first wildcard; overlap is a forecast, never a refusal.
+`construct.md` has the change end `proposal.md` with `## Touches` and one fenced block of paths or globs relative to the kit's root, one to a line; `**` crosses directories. crew reads the block from the place before code starts, and refuses code naming what is missing when there is no heading, no block, or an empty block (`read.1`). Two entries overlap when one matches the other, or when two globs share their literal prefix up to the first wildcard.
 
-When a unit's code is about to start and its Touches overlap those of an unmerged unit ahead of it in the file's order, crew tells the later unit's agent, through `crew tell` (`roles.4`), the overlapping entries and the path of the other unit's change.
+When a unit's code is about to start and its Touches overlap those of an unmerged unit ahead of it, the code stage's prompt names the overlapping entries and the other unit's change.
 
-At verify, crew adds to the verify prompt the output of `git diff --name-only bolt/<bolt>...unit/<unit>` filtered to the paths no Touches entry matches, and `verify.md` has the report name each as "changed and not declared". crew does not change the list itself.
+At verify, crew adds to the verify prompt the paths `git diff --name-only bolt/<bolt>...unit/<unit>` names that no Touches entry matches, and `verify.md` has the report name each as "changed and not declared". The code stage the conductor runs on that finding corrects the Touches block of `proposal.md`, the one part of the change a coder may edit (`briefs.2` as amended).
 
-### 5. Conflicts are forecast, and the later unit resolves (D3, D4)
+### 5. Conflicts are forecast and reach the later unit (D3, D4)
 
-On every `crew unit wait` and `crew prove --wait`, before it waits, crew runs on the team's host, for each unmerged unit with a place, `git merge-tree --write-tree --name-only bolt/<bolt> unit/<unit>` and, for each unmerged unit ahead of it in the file's order, `git merge-tree --write-tree --name-only unit/<ahead> unit/<unit>`. `merge-tree` writes objects and no ref, so no branch moves. A non-zero exit with conflicted paths is a forecast for the later unit. A forecast is told once for a pair of heads: crew records `forecast.tell` in the run record with both heads and the paths, and tells again only when a head has moved and the conflict remains. It is told when the later unit's agent is not working; otherwise at the next wait that finds it idle.
+On every `crew unit wait` and `crew prove --wait`, before it waits, crew runs on the team's host, for each unmerged unit with a place, `git merge-tree --write-tree --name-only bolt/<bolt> unit/<unit>`, and for each unmerged unit ahead of it in the file's order, `git merge-tree --write-tree --name-only unit/<ahead> unit/<unit>`. `merge-tree` writes objects and no ref. A non-zero exit with conflicted paths is a forecast for the later unit. "Ahead" and "later" are the plan's order throughout; under sluice, the queue honours `After` as after-entries.
 
-The tell, and the hand-off of a real conflict at a rebase or at merge, carry the other unit's change path, its proposal's *Why* and *What Changes*, and the conflicting paths, and ask the agent to resolve in its own place keeping both intents (`teams.13`). The earlier unit is never changed for it. `coder.md` gains how: read the other change, keep both, run the tests the paths affect, commit.
+A forecast is recorded once for a pair of heads, `forecast` in the run record with both heads and the paths, and reaches the later unit once, in one of three ways:
 
-### 6. Batches (D5, D6)
+- its stage's agent is running: told with `crew tell` (`roles.4`) once the agent is not working (`teams.11`);
+- no agent of it is running and it has not delivered its verify: carried in the prompt of its next stage, which names the forecast entries it carries on its `stage.start`;
+- it has delivered its verify and waits to merge: a settle stage (decision 6).
 
-- **What is due.** A unit's change is due each time a construct stage of it ends delivered: the `stage.end` entry names construct's commit. A batch entry, `review.batch`, names the team, the bolt, a batch number and each unit with the commit its change was read at. A change is due while no batch names the unit at its latest construct commit. Everything is read from the run record and the kit (`state.2`, `state.4`).
-- **When.** On each of the conductor's waits, crew counts the team's due changes and reads the time of the team's last `review.batch`. With N or more due, or T hours or more since the last batch and at least one due, a batch is due, and the wait answers with it before waiting. N and T come from the team's entry in the teams file (decision 9).
-- **The reviewer.** `crew review <team>` starts a fresh agent of a new role, `reviewer` (`plugin/roles/reviewer.md`, its model and effort in its frontmatter, `teams.6`), with the list of due units and the commit of each. It reads each change whole at that commit and writes `{{REPORTS}}/batch-<bolt>-<n>.md`: one section per unit, with what the change does, the decisions it took, its risks, its Touches, and what the user would likely care about, in the change's own words where it can. The file is its deliverable (`teams.4`); `crew review <team> --wait` returns its path, and the `review.batch` entry is written when it is delivered. The reviewer changes nothing in any place.
-- **The card.** The conductor posts the batch as one card keyed `batch/<bolt>/<n>`, a new rail row and a new card key in the card hook (`briefs.11`). The card carries each unit's summary from the file and attaches or links each unit's whole change, its proposal, design, specs and tasks, so the user reads and answers in Pending You (`briefs.9` as amended); no plannotator session is started. It asks one question per unit, fine or feedback in words. An agent never answers it (`roles.2`).
-- **Answers.** Fine changes nothing. Feedback on an unmerged unit runs `crew unit run <unit> construct "<the user's words>"`, held while that unit's construct is running until it settles (`briefs.5`); the unit goes on with no approval, and its revised change is due again. Feedback on a merged unit is a fix with the user's words, or, when it is new work, a tell to the planner.
-- **Landing guard.** `rail_rows` offers `land/<bolt>` only once every unit's latest construct commit is named by a `review.batch`. When the proof is clean and some are not, a batch is due at once for them; the conductor's landing card names them as waiting on that batch, and `crew bolt land` is refused while any remains outside a batch.
+Each carries the other unit's change path, its proposal's *Why* and *What Changes*, and the conflicting paths.
 
-### 7. Merging (D7)
+- **With the bolt.** The later unit resolves in its place, rebased onto the bolt (`teams.13`).
+- **Between two unmerged units.** The conductor sets `crew unit after <later> <earlier>` (`roles.1`: a conductor sets `After` within its own bolt), crew merges the earlier unit's head into the later unit's place as for a dependent, the later unit resolves there, and it merges after the earlier one (`plan.13` as amended).
 
-The merge stage's prompt is `wt submit bolt/<bolt>` where sluice is available for the kit, else `wt merge bolt/<bolt> --no-squash --no-remove` as now (`teams.5` as amended). Without sluice, the conductor merges one unit at a time, as now; a merge refused by the gate or by a conflict goes back to the unit's agent (decision 5). How crew learns that sluice is available is open (question 7).
+The earlier unit is never changed for it. `coder.md` gains how: read the other change, keep both intents, run the tests the paths affect, commit.
 
-### 8. The briefs
+### 6. The settle stage
 
-- `conductor.md`: the building loop constructs every unit at once and starts code as soon as `crew bolts` shows a unit `planned`; the *Touches* sentence at line 83 goes; *Review with the user* becomes batches: run `crew review` when a wait says a batch is due, post the card, act on each answer; the review row leaves *Cards* and the batch row joins it; *Changing a unit after it was approved* loses its re-approval; the landing card names units outside a batch.
-- `construct.md`: the Touches block in its parsed form; *Writing a change again* no longer says the user reviews before more is coded, and says the revision goes into the next batch.
-- `coder.md`: resolving a forecast or a conflict, keeping both intents.
+`crew unit run <unit> settle "<what reached it>"` starts a fresh agent in the unit's slot with the coder's brief, for a unit that has delivered its verify and waits to merge, prompted with the forecast or the amendment. Its deliverable (`teams.4`) is a commit on `unit/<unit>` made since the stage began. When nothing needs to change, the agent stops short saying so (`teams.4`'s other ending), and the unit goes on to merge. A settled unit merges without verify being run again; the merge's gate runs the suite (`tests.5`). `run_check` accepts settle only at `verify` with a verify report delivered.
+
+### 7. Batches (D5, D6)
+
+- **What is due.** A unit's change is due each time a construct stage of it ends delivered: the `stage.end` entry names construct's commit. A batch entry, `review.batch`, names the partition, a batch number, and each unit with its team and the commit its change was read at. A change is due while no batch names the unit at its latest construct commit. Everything is read from the run record and the kits (`state.2`, `state.4`).
+- **When.** A batch spans the partition, all its teams. On each wait of a conductor of the partition, crew counts the partition's due changes and reads the time of its last `review.batch`. With N or more due, or T hours or more since the last batch and at least one due, a batch is due, and crew tells the partition's planner once, `batch.due` in the run record, with the count. N and T come from the partition's entry in the teams file (decision 10).
+- **The reviewer.** A main-level role, `reviewer` (`plugin/roles/reviewer.md`, its model and effort in its frontmatter, `teams.6`). The planner starts it with `crew review <label>` in a `review` tab of the main level's workspace, beside the planner, on the main level's host; it is sent the due units and their commits as its prompt, the way a stage is (`roles.4`), and is not greeted (`teams.7` names the standing agents). It reads each change whole at its commit, through the kit on the team's host, and writes `{{REPORTS}}/batch-<label>-<n>.md`: one section per unit with its team, what the change does, the decisions it took, its risks, its Touches, and what the user would likely care about, in the change's own words where it can. The file is its deliverable (`teams.4`); `crew review <label> --wait` returns its path, and the `review.batch` entry is written when it is delivered. The reviewer writes nothing else (`briefs.1` as amended) and its tab is closed when it ends.
+- **The cards.** The planner posts them. `briefs.11` makes a team's cards its conductor's and keeps them from stage agents; a batch is the partition's, not a team's. The planner already owns the partition's rail rows (`proposal/<n>`), has the card discipline filled into its brief, and stays up to act on an answer, where the reviewer ends at its file. One card holds at most five units, Pending You's limit on a choice's options; a batch of more is split, each card keyed `batch/<n>-<k>` and a rail row of its own, added to `CARD_KEYS` and the card hook. Each card's body carries each unit's summary and a link to each unit's whole change, its proposal, design, specs and tasks; it asks one choice of several, "which need notes?", listing its units, and one question in words for the notes (`briefs.9` as amended). No plannotator session is started. An agent never answers it (`roles.2`).
+- **Answers.** A unit not picked is fine. For each unit picked, the planner sends the notes verbatim to that unit's team's conductor (`crew tell`); the planner drives no team (`briefs.1`). The conductor runs `crew unit run <unit> construct "<the notes>"` for an unmerged unit, held while that unit's construct is running until it settles (`briefs.5`); the unit goes on with no approval, and its revised change is due again. For a merged unit, a defect is a fix with the user's words, and new work a tell to the planner.
+- **Landing guard.** `rail_rows` offers `land/<bolt>` only once every unit's latest construct commit is named by a `review.batch`. When the proof is clean and some are not, a batch is due at once; the conductor's landing card names them, and `crew bolt land` is refused while any remains outside a batch. "Appeared in a batch" is the test, as ruled: an unanswered card does not hold a landing.
+
+### 8. Merging (D7)
+
+A kit opts into sluice by a flag in its config, read with the kit. Opted in, the merge stage's prompt is `wt submit bolt/<bolt>`: the kit's pre-merge hooks become `wt submit`'s submit gate and sluice's verdict replaces the merge hooks' suite gate (sluice record 0002; `teams.5` as amended; `tests.5` stands, the suite still gating through sluice). Otherwise the prompt is `wt merge bolt/<bolt> --no-squash --no-remove` and the conductor merges one unit at a time, as now. A merge refused by its gate or by a conflict goes back to the unit's agent (decision 5).
+
+### 9. The briefs
+
+- `conductor.md`: the building loop constructs in waves and starts code as soon as `crew bolts` shows a unit `planned`; line 83's Touches sentence goes; *Review with the user* goes, replaced by acting on the planner's notes; the review row leaves *Cards*; *Changing a unit after it was approved* loses its re-approval; forecasts, `crew unit after` for two unmerged units, and settle; the landing card names units outside a batch.
+- `planner.md`: run `crew review` when crew says a batch is due, wait on it, post its cards, send each picked unit's notes to its conductor.
+- `construct.md`: the Touches block in its parsed form; a revision goes into the next batch.
+- `coder.md`: resolving a forecast or conflict, keeping both intents; correcting Touches on a verify finding; the settle prompt.
 - `verify.md`: undeclared paths are findings.
 - `reviewer.md`: new.
 
-### 9. The team's batch setting
+### 10. The partition's batch setting
 
-`teams.json` gains, per team, `review: {every: <N>, hours: <T>}`. crew reads both and refuses a team without them (`code.5`: no field has a default in crew); the defaults, 5 and 4, are written by swancloud's `lib/crew-teams.nix`, which writes the file. That edit is in swancloud, not here (open question 1).
+`teams.json` gains, per partition, `review: {every: <N>, hours: <T>}`. crew reads both and refuses a partition without them (`code.5`: no field has a default in crew). The defaults, N = 5 to match a card's five options and T = 4, live in swancloud's `lib/crew-teams.nix`, which writes the file. That edit is a task of this change made in swancloud, not in crew.
 
-### 10. Rules
+### 11. Rules
 
-Amended in the same commit as record 0014: `plan.6`, `plan.13`, `teams.5`, `briefs.4`, `briefs.9`, and `roles.2`'s details. New: `teams.12`, `teams.13`, `briefs.12`. All accepted and not built until this change lands (`_open.md`).
+Amended in the same commit as record 0014: `plan.6`, `plan.13`, `teams.5`, `briefs.1`, `briefs.2`, `briefs.4`, `briefs.9`, and the details of `roles.2`, `teams.1`, `teams.7` and `tests.5`. New: `teams.12`, `teams.13`, `teams.14`, `briefs.12`. All accepted and not built until this change lands (`_open.md`).
 
 ## Risks / Trade-offs
 
-- [Code built on a change the user later rejects] → feedback amends the unit in flight; the cost is rework on the units whose batch came back with feedback, against the idle time of every unit today.
-- [A dependent codes against an After unit's work that later changes] → the rebase at the After unit's merge brings the final form; a conflict there goes to the dependent's agent.
-- [More conflicts, since overlapping units now build together] → forecast on every wait, told before either is finished; the merge queue attributes any that remain to the later entry.
+- [Code built on a change the user later sends notes on] → notes amend the unit in flight; the cost is rework on noted units, against the idle time of every unit today.
+- [A dependent codes against an After unit's work that later changes] → it is told of an amendment, and the rebase at the After unit's merge brings the final form; a conflict there goes to the dependent.
+- [More conflicts, since overlapping units now build together] → forecast on every wait, before either is finished; two unmerged units in conflict are ordered by `After`.
 - [Forecast cost: one `merge-tree` per unmerged unit plus one per pair] → bounded by slots, run on the team's host in one ssh with the wait's own read.
-- [A bolt lands with a batch posted and unanswered] → D6 asks only that every change appeared in a batch; see open question 9.
-- [Stage words change in `crew bolts --json`] → `review` and `approved` go, `planned` comes; the only reader is crew.
+- [A bolt lands with a batch card unanswered] → as ruled, appearing in a batch is enough; notes that arrive after a merge become a fix or new work.
+- [Stage words change in `crew bolts --json`] → `review` and `approved` go, `planned` and `settle` come; the only reader is crew.
+- [The partition's clock is its conductors' waits] → a partition with no unit in flight has nothing due.
 
 ## Migration Plan
 
-Pull on every host and restart conductors, ops and planners for the new briefs. swancloud writes `review` for every team before the first crew that reads it; a crew from before this change ignores the field. A unit in `review` or `approved` when this lands reads `planned` and may start code; its change is due for the first batch. Open `review/<unit>` cards are withdrawn by their conductors at restart. Rollback: revert; units read `review` again and wait on `crew unit approve`.
+Archive unit-amendments first. Pull on every host and restart conductors, ops and planners for the new briefs. swancloud writes `review` for every partition before the first crew that reads it; a crew from before this change ignores the field. A unit in `review` or `approved` when this lands reads `planned` and may start code; its change is due for the first batch. Open `review/<unit>` cards are withdrawn by their conductors at restart. Rollback: revert; units read `review` again and wait on `crew unit approve`.
 
 ## Proof in dev
 
@@ -108,55 +127,50 @@ None. crew has nothing to deploy; its proof before landing is the suite on the b
 ## Proof on real work
 
 Once the bolt has landed and every host has pulled, with the standing agents restarted:
-- Give a team a bolt of three units, one with `After` on another. All three constructs start at once; the dependent's code starts once its After unit's construct has committed, and its merge is refused until the After unit has merged.
-- Two units whose Touches overlap build side by side; the later one's agent is told the overlap before its code, and a forecast conflict while both are in code.
-- After the fifth construct, or four hours, a batch card arrives in Pending You with a summary per unit and each whole change readable there. Feedback on one unit amends it, and its code goes on with nothing to approve; the revised change is in the next batch.
+- Give a team a bolt of three units, one with `After` on another. The two without start construct at once; the dependent's construct starts once its After unit's change is committed, and its merge is refused until the After unit has merged.
+- Two units whose Touches overlap build side by side; the later one's code prompt names the overlap, a forecast conflict between them gives it `After` on the earlier, and it merges after it.
+- A verified unit forecast to conflict with the bolt gets a settle stage, which ends at its commit.
+- After five constructs across the switchboard teams, or four hours, a batch card arrives from the planner in Pending You with each unit's summary and a link to each whole change. Picking one unit and writing notes amends it through its team's conductor, and its code goes on with nothing to approve; the revised change is in the next batch. Seven due changes come as two cards.
 - The landing card is offered only once every unit's latest change has been in a batch.
-
-## Open questions
-
-What the operator's ruling and the rules leave unsettled. Each is also under *Decisions waiting* in `docs/architecture/_open.md`; a task that depends on one waits for its answer.
-
-1. **The batch setting's defaults.** D5 gives defaults of 5 and 4 hours; `code.5` says no field of the teams file has a default in crew, and crew never writes the file. Decision 9 puts the defaults in swancloud's `lib/crew-teams.nix`; that needs the operator's word and a change in swancloud.
-2. **Where the reviewer runs.** It is not a unit, so not a slot (`teams.1`), and a team's standing roles are its conductor and ops (`bolt-teams` "A team's standing roles are its conductor and ops"; "A team is two herdr workspaces" lists its panes). A pane of its own, a turn in ops's pane, or a slot taken while free are all open.
-3. **Who posts the card.** D5 has the reviewer post it; `briefs.11` says a team's cards are its conductor's and no stage agent posts one. Decision 6 follows `briefs.11`: the reviewer writes the file, the conductor posts. To be confirmed.
-4. **One question per unit on one card.** The rail and the card hook know four card keys; a batch card adds a fifth. Whether Pending You carries a question per unit with an answer per unit on one card, and how a whole change of several files is attached or linked from a host that may not be the user's, is not settled by the ruling or by record 0005.
-5. **Where a forecast or a conflict goes when no stage is running.** Every stage is a fresh agent (`teams.2`) and ends at its deliverable (`teams.4`). After a stage delivers, the slot's agent is idle with its stage over: a tell sets it working outside any stage crew waits on. A unit between stages (`planned`, `waiting`) may have no agent at all. Whether a forecast goes to the running agent, into the next stage's prompt, or starts a stage of its own for resolving is open; the same holds for a rebase conflict handed back under D2.
-6. **What resolving a forecast means before either unit merges.** The later unit can't merge the earlier unit's unmerged head without taking its work as D2 does for `After`. Whether it adapts its own code only, or takes the other head as a dependent would, is open.
-7. **How crew knows sluice is available** for a kit (a teams-file field, the kit's `wt` configuration, or `wt submit` answering), and whether sluice's verdict replaces or follows the merge hooks' suite gate (`state.3`, `tests.*`, record 0008).
-8. **"Ahead of it".** D3 compares a unit with sibling heads ahead of it. Decisions 4 and 5 read that as the file's order (`bolt-plan`); under sluice the queue's order is submission order, and the two can differ.
-9. **"Appeared in a batch".** D6 asks that every latest change appeared in a batch, not that its question was answered. A bolt can then land with feedback still to come. Whether an unanswered batch holds the landing is open.
-10. **Who corrects Touches.** D8 says the list is corrected after verify; verify changes nothing (`briefs.2`), and a code stage that edits `proposal.md` changes the change. Whether it is the code stage acting on the finding, or construct run again (which makes the change due for a batch again), is open.
-11. **A dependent's construct before its After unit's change exists.** Record 0011's first driver: a spec written before the contour exists invents it. D1 lets the dependent's construct run before its After units' changes are written; D2 holds only its code. Whether the dependent's change is revised once its After units' changes commit is open.
-12. **An After unit amended after its dependent started code.** The After unit goes back to `amended` and `construct`; the dependent's code is already running on its old plan. Whether the dependent is told, held or left is open.
-13. **unit-amendments is built and not archived.** Its deltas to `bolt-plan`, `bolt-teams` and `plan-proposals` say an amended unit returns to the user's review and waits for `crew unit approve`; its `plan-proposals` requirement "An amendment is read as before and after" has `crew plan proposed` say so. It must be archived before this change, and that requirement then needs a MODIFIED delta here, which can't be written until it is in `openspec/specs/`.
 
 ## Task notes
 
+### 0.1
+
+`openspec archive unit-amendments`, after its two *Proof on real work* tasks are worked or the user says to archive without them; then `openspec validate concurrent-units --strict` with no archive warning.
+
 ### 1.1
 
-`Stages.of` and `place_stage`: the stage list in the `bolt-plan` delta. A unit with no place reads `ready` in a held bolt whatever its After units. `run_check`: construct has no `waiting` refusal; code is refused while an After unit has not finished construct, naming them, and accepted at `planned`; merge is refused while an After unit has not merged. Remove the code refusal at `review` and the mark's "waits for the user's review" message. Fixture kits in `tests/` for each stage and each refusal.
+`Stages.of` and `place_stage`: the stage list in the `bolt-plan` delta, `ready` and `waiting` by After units' construct. `run_check`: construct refused at `waiting`; code accepted at `planned` and refused at `construct`, with no refusal for review; merge refused while an After unit has not merged; settle accepted only at `verify` with a report delivered. Remove the review refusal and the mark's "waits for the user's review" message. Fixture kits in `tests/` for each stage and each refusal.
 
 ### 1.2
 
-`crew unit approve` and its usage line go; `may_write` no longer lists it; the `review` rail group and `review/<unit>` key go from `rail_rows`, `lost_rows` and the card hook. The construct that ends an amended unit's construct clears the mark in the plan write `stage_ends` makes.
+`crew unit approve` and its usage line go; `may_write` no longer lists it; the `review` rail group and the `review/<unit>` key go from `rail_rows`, `lost_rows`, `CARD_KEYS` and the card hook. The construct that ends an amended unit's construct clears the mark in the plan write `stage_ends` makes.
 
 ### 2.1
 
-The Touches reader in `gather.py` (stdlib only, `code.1`), returning the entries or what is missing; `run_check` for code refuses without them. The overlap test and the tell before code.
+The Touches reader in `gather.py` (stdlib only, `code.1`), returning the entries or what is missing; `run_check` for code refuses without them; the overlap test and the code prompt's overlap lines; the undeclared paths in the verify prompt.
 
 ### 2.2
 
-The forecast in the wait (decision 5), with `forecast.tell` entries and the once-per-pair-of-heads rule. Stub git is not needed: the tests build two units in a scratch kit that conflict on one line.
+The forecast in the wait (decision 5), with `forecast` entries, once per pair of heads, and the three ways a forecast reaches a unit. Tests build two units in a scratch kit that conflict on one line.
 
 ### 2.3
 
-The dependent's place at code start and the rebase at an After unit's merge (decision 2), with the hand-off on conflict.
+The dependent's place at construct, the rebase at an After unit's merge, the amendment carried to a dependent, and `crew unit after` on a forecast between two unmerged units (decisions 2 and 5).
+
+### 2.4
+
+The settle stage: `run_check`, its prompt, its deliverable in `stage_ends` (a commit since the stage began).
 
 ### 3.1
 
-`review.batch` and the due count; `crew review <team>` and `--wait`; the reviewer role; the batch rail row and card key; the landing guard in `rail_rows` and `bolt land`. Waits for open questions 1 to 4.
+`review.batch` and `batch.due`; the partition-wide count; `crew review <label>` and `--wait`; the reviewer role and its tab; the `batch/<n>-<k>` key in `CARD_KEYS` and the card hook; the split at five; the landing guard in `rail_rows` and `bolt land`.
+
+### 3.2
+
+swancloud's `lib/crew-teams.nix` writes `review = { every = 5; hours = 4; }` for every partition, and crew's `teams.json` reader requires it (`code.5`). The swancloud edit is a commit in swancloud, made by whoever works this task on the user's word, not in crew's bolt.
 
 ### 4.1
 
-The merge prompt with `wt submit` where sluice is available. Waits for open question 7.
+The kit's sluice flag, read with the kit; the merge prompt `wt submit bolt/<bolt>` when it is on.
