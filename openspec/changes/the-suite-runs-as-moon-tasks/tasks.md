@@ -10,7 +10,7 @@
 ## 2. The gate and the bolt's verification run it
 
 - [x] 2.1 The merge gate runs `tests/suite`, and the bolt's verification runs it in its frozen copy made a one-commit git repository linked to the shared archives, so a tree the gate passed replays (design: Decisions "The verification's copy", "The gate runs `tests/suite`"; Task notes 2.1).
-- [ ] 2.2 `tests/t-merge-gate.sh` holds the gate and the verification to the new command and copy, and passes (design: Task notes 2.2).
+- [x] 2.2 `tests/t-merge-gate.sh` holds the gate and the verification to the new command and copy, and passes (design: Task notes 2.2).
 
 ## 3. The tests don't collide
 

@@ -3,9 +3,10 @@
 # refused while the suite is red, naming t-b, with the target unmoved, and lands once it is green; the live test
 # stays out of the gate whatever the merging shell has set.
 #
-# After each merge into the bolt, its verification runs on a frozen copy of the bolt's new head and bolt-status.sh
-# reads it: green, and red naming t-b (the stand-in's t-b also fails on a tree holding needs-git that is not a git
-# checkout, as the copy is, so such a merge passes its gate and fails its verification); two runs side by side
+# After each merge into the bolt, its verification runs on a frozen copy of the bolt's new head, made a git
+# repository of one commit whose tree is the head's, its archives linked to the repository's moon-outputs, and
+# bolt-status.sh reads it: green, and red naming t-b (the stand-in's t-b also fails in the verification's copy of a
+# tree holding copy-red, so such a merge passes its gate and fails its verification); two runs side by side
 # each keep their own revision's outcome; a merge onto main starts none; a dead run reads interrupted, a head with
 # no run not verified, and a record that can't be read is named; a hand rerun is refused while a run of the head is
 # alive and starts after a cut-off. The suite a verification runs never inherits BOLT_VERIFY_REV, so a test that
@@ -29,25 +30,30 @@ chmod +x "$T/bin/devenv"; export PATH="$T/bin:$PATH"
 # The repository, laid out as crew's is: main at crew/main, the bolt's worktree at crew/bolts/b, places beside them.
 r=$T/crew/main
 git init -q "$r"; cp -R "$CREW/.config" "$r/"; mkdir -p "$r/tests"
-# The stand-in suite. On a frozen copy, which is no git checkout, it waits while $T/hold exists, so a verification
-# can be caught mid-run while the gates go on.
-cat > "$r/tests/run" <<EOF
+# The stand-in suite. In a verification's copy, made under $TMPDIR, it says what the copy is, and waits while
+# $T/hold exists, so a verification can be caught mid-run while the gates go on.
+cat > "$r/tests/suite" <<EOF
 #!/bin/sh
-while [ -e "$T/hold" ] && [ ! -e .git ]; do /bin/sleep 0.1; done
+copy=; case \$(pwd -P) in "$TMPDIR"/crew-verify.*) copy=1 ;; esac
+while [ -e "$T/hold" ] && [ -n "\$copy" ]; do /bin/sleep 0.1; done
 echo "live=[\${CREW_TEST_LIVE-unset}]"
 echo "verify-rev=[\${BOLT_VERIFY_REV-unset}]"
+if [ -n "\$copy" ]; then
+  echo "copy-commits=[\$(git rev-list --count HEAD)] copy-tree=[\$(git rev-parse HEAD^{tree})] copy-status=[\$(git status --porcelain)]"
+  echo "copy-outputs=[\$(readlink .moon/cache/outputs)]"
+fi
 echo "ok    t-a"
-if [ -e red ] || { [ -e needs-git ] && [ ! -e .git ]; }; then echo "FAIL  t-b   (scratch kept: none)"; echo "1 passed, 1 failed"; exit 1; fi
-echo "ok    t-b"; echo "2 passed, 0 failed"
+if [ -e red ] || { [ -e copy-red ] && [ -n "\$copy" ]; }; then echo "FAIL  t-b"; echo "1 passed (0 replayed), 1 failed"; exit 1; fi
+echo "ok    t-b"; echo "2 passed (0 replayed), 0 failed"
 EOF
-chmod +x "$r/tests/run"; commit_all "$r" "chore: start"
+chmod +x "$r/tests/suite"; printf '.moon/cache/\n' > "$r/.gitignore"; commit_all "$r" "chore: start"
 git -C "$r" branch bolt/b
 git -C "$r" worktree add -q "$T/crew/bolts/b" bolt/b; bw=$T/crew/bolts/b
 
 (cd "$r" && wt config approvals add --yes >/dev/null 2>&1) || fail "wt config approvals add failed"
 approvals=$XDG_CONFIG_HOME/worktrunk/approvals.toml
 [[ -f $approvals ]] || fail "worktrunk's approvals are not in the scratch HOME"
-grep -qF 'devenv shell -- env CREW_TEST_LIVE= tests/run' "$approvals" || fail "the gate is not approved:"$'\n'"$(cat "$approvals")"
+grep -qF 'devenv shell -- env CREW_TEST_LIVE= tests/suite' "$approvals" || fail "the gate is not approved:"$'\n'"$(cat "$approvals")"
 
 rev() { git -C "$r" rev-parse "$1"; }
 vd=$r/.git/bolt-verify/b
@@ -81,7 +87,7 @@ ok "a red suite refuses a unit's merge, naming the failing test, with the bolt u
 
 commit "$p" rm red
 expect_ok merge "$p" bolt/b
-has "$out" "2 passed, 0 failed"
+has "$out" "2 passed (0 replayed), 0 failed"
 eq "$(rev bolt/b)" "$(rev unit/x)"
 ok "a green suite lets the unit's merge land"
 
@@ -91,7 +97,11 @@ status; eq "$rc" 0
 has "$out" "State: green"; has "$out" "Rev: $r1"; has "$out" "Subject: chore: rm red"; has "$out" "Ended: "
 [[ -z $(ls "$TMPDIR") ]] || fail "the run left its copy: $(ls "$TMPDIR")"
 grep -qxF "verify-rev=[unset]" "$vd/$r1.log" || fail "the verification's suite inherited BOLT_VERIFY_REV:"$'\n'"$(cat "$vd/$r1.log")"
-ok "the merge's verification ends green at the bolt's head, its suite inherits no BOLT_VERIFY_REV, and its copy is removed"
+grep -qxF "copy-commits=[1] copy-tree=[$(git -C "$r" rev-parse "$r1^{tree}")] copy-status=[]" "$vd/$r1.log" ||
+  fail "the verification's copy is not one commit holding the bolt's tree:"$'\n'"$(cat "$vd/$r1.log")"
+grep -qxF "copy-outputs=[$r/.git/moon-outputs]" "$vd/$r1.log" || fail "the copy's archives are not the repository's:"$'\n'"$(cat "$vd/$r1.log")"
+[[ -d $r/.git/moon-outputs ]] || fail "the verification made no $r/.git/moon-outputs"
+ok "the merge's verification ends green at the bolt's head, in a copy of one commit holding the head's tree with the shared archives, its suite inherits no BOLT_VERIFY_REV, and its copy is removed"
 
 # A fix's merge into its bolt.
 f=$T/crew/places/fix-b--y
@@ -100,7 +110,7 @@ commit "$f" add red
 before=$(rev bolt/b)
 expect_fail "FAIL  t-b" merge "$f" bolt/b
 eq "$(rev bolt/b)" "$before"
-commit "$f" rm red; commit "$f" add needs-git
+commit "$f" rm red; commit "$f" add copy-red
 expect_ok merge "$f" bolt/b
 eq "$(rev bolt/b)" "$(rev fix/b/y)"
 ok "a fix's merge is gated the same way"
@@ -116,11 +126,11 @@ ok "a red verification names the failing test and its log, and the bolt's ended 
 # Two merges in a row while the first run is held: two runs side by side, each of its own revision.
 touch "$T/hold"
 z=$T/crew/places/z; git -C "$r" worktree add -q -b unit/z "$z" bolt/b
-commit "$z" rm needs-git
+commit "$z" rm copy-red
 expect_ok merge "$z" bolt/b; r3=$(rev bolt/b)
 until_state "$r3" running
 w=$T/crew/places/w; git -C "$r" worktree add -q -b unit/w "$w" bolt/b
-commit "$w" add needs-git
+commit "$w" add copy-red
 expect_ok merge "$w" bolt/b; r4=$(rev bolt/b)
 until_state "$r4" running
 [[ $(sed -n 's/^State: //p' "$vd/$r3.rec") == running ]] || fail "the run of $r3 did not run beside $r4's"
@@ -132,7 +142,7 @@ ok "two runs side by side each finish on their own revision and keep their own o
 
 # A run cut off reads interrupted; a hand rerun of the head starts, and is refused while it is alive.
 v=$T/crew/places/v; git -C "$r" worktree add -q -b unit/v "$v" bolt/b
-commit "$v" rm needs-git
+commit "$v" rm copy-red
 expect_ok merge "$v" bolt/b; r5=$(rev bolt/b)
 until_state "$r5" green
 sh -c 'exit 0' & dead=$!; wait "$dead"
