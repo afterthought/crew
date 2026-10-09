@@ -16,4 +16,4 @@
 
 ## 3. The rules and README
 
-- [ ] 3.1 `briefs.11` reads as built, its item leaves `_open.md`, and README's cards paragraph says crew refuses a card or an area under another key (design.md, Task notes 3.1). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 3.1 `briefs.11` reads as built, its item leaves `_open.md`, and README's cards paragraph says crew refuses a card or an area under another key (design.md, Task notes 3.1). Verify `tests/suite --affected` ends with "0 failed".
