@@ -9,7 +9,7 @@
 ## 2. A tell is a prompt or nothing
 
 - [x] 2.1 `tell` types nothing, fails and says the agent is waiting on a question when herdr reports it blocked, when its mark is open, or when herdr refuses with `agent_blocked`, and refuses naming what it could not read when it can't tell (design.md, Task notes 2.1). Verify `tests/suite t-notify` ends with "0 failed".
-- [ ] 2.2 A greeting waits on a question crew's mark shows as it waits on one herdr shows, and is sent once (design.md, Task notes 2.2). Verify `tests/suite t-greet` ends with "0 failed".
+- [x] 2.2 A greeting waits on a question crew's mark shows as it waits on one herdr shows, and is sent once (design.md, Task notes 2.2). Verify `tests/suite t-greet` ends with "0 failed".
 
 ## 3. The docs and the rule
 
