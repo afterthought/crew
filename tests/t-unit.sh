@@ -53,6 +53,8 @@ eq "$(stage d)" "construct"
 expect_fail "its change's planning is not complete" crew unit approve d
 pc=$(place "$k" tenant-environments c); change "$pc" c 0 2; commit_all "$pc" "docs(c): the change"
 eq "$(stage c)" "review"
+p=$(as chuck-herdr-alpha herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
+as chuck-herdr-alpha herdr --session wldn-1 stub agent "$p" swb-1-conductor  # up, so it can be told
 : > "$CREW_TEST_LOG"
 expect_ok crew unit approve c; has "$out" "unit c approved"
 lacks "$out" "Pending You"

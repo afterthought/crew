@@ -24,6 +24,8 @@ crew unit add queued-one "Later work." --repo switchboard-kit >/dev/null
 crew bolt give swb-1 tenant-environments >/dev/null 2>&1
 p=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-1 stub agent "$p" swb-1-conductor
+p=$(as $box herdr --session wldn-3 workspace create --cwd / --label wldn | jq -r .result.root_pane.pane_id)
+as $box herdr --session wldn-3 stub agent "$p" wldn-planner
 
 export CREW_AGENT=wldn-planner
 before=$(tip)

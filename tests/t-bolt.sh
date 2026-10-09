@@ -48,6 +48,8 @@ ok "give is refused while the team holds a bolt with a unit that has not landed"
 expect_fail "unit the-deploy-names-its-host-tenant has not landed on main: it is ready" crew bolt land tenant-environments
 change "$k" the-deploy-names-its-host-tenant 3 3; commit_all "$k" "feat: the deploy names its host tenant"
 git -C "$kd/bolts/tenant-environments" merge -q --ff-only main
+p=$(as chuck-herdr-alpha herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
+as chuck-herdr-alpha herdr --session wldn-1 stub agent "$p" swb-1-conductor  # up, so it can be told
 expect_ok crew bolt land tenant-environments
 has "$out" "plan(tenant-environments): land the bolt"
 has "$out" "tenant-environments has landed and swb-1 holds no bolt"

@@ -95,6 +95,8 @@ as $box herdr --session wldn-1 stub status "$p3" idle
 expect_ok crew unit run d construct "Name the tenant in the title."
 has "$out" "Close your Pending You card for review/d, if one is open, with what was done."
 grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told of its own run"
+p=$(as chuck-herdr-alpha herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
+as chuck-herdr-alpha herdr --session wldn-1 stub agent "$p" swb-1-conductor  # up, so it can be told
 CREW_AGENT= expect_ok crew unit run d construct "Again."
 lacks "$out" "Pending You"
 grep -qF "agent prompt swb-1-conductor '[crew] $me@mac-studio ran construct on unit d. Close your Pending You card for review/d, if one is open, with what was done.'" \
