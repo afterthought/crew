@@ -671,7 +671,11 @@ case $cmd in
     elif [[ $words == --merge ]]; then
       [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
       err=$(own_place "$path" "$fix") || fix_refused fix.merge "$err"
-      e=$(plan _carry "$TEAM" "$fix" "$BOLT" 2>&1) || fix_refused fix.carry "$e"
+      # Only the judgment's standard output is evaled (teams.9); its standard error is the refusal, kept apart to be
+      # recorded, and is passed on when it judged.
+      errs=$(mktemp) || fix_refused fix.carry "crew could not make a file to hold plan _carry's refusal"
+      if e=$(plan _carry "$TEAM" "$fix" "$BOLT" 2>"$errs"); then cat "$errs" >&2; rm -f "$errs"
+      else err=$(<"$errs"); rm -f "$errs"; fix_refused fix.carry "$err"; fi
       eval "$e"
       [[ $CARRIES == yes ]] && { carry "$slot"; exit 0; }
       echo "$fix does not carry the bolt onto main ($WHY): merging it as a fix" >&2
