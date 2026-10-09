@@ -11,7 +11,9 @@ So at every start this records a crew agent's session in ~/.local/state/crew/ses
 resume keeps, with the folder it began in: Claude Code finds a conversation again only from that folder, so crew
 resumes a role there (crew.py last_conversation). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
 variables back through CLAUDE_ENV_FILE, which Claude Code applies to each of its Bash commands, and its pane gets
-its name back. Any other session costs one file lookup. The hook never fails a start."""
+its name back. Any other session costs one file lookup. At every start it also removes the session's question mark
+(hooks/questions), so a session resumed after its pane died with a question open carries no mark whose answer will
+never be written. The hook never fails a start."""
 import json
 import os
 import pathlib
@@ -32,6 +34,8 @@ def main():
     sid = hook.get("session_id")
     if not isinstance(sid, str) or not re.fullmatch(r"[A-Za-z0-9-]+", sid) or hook.get("agent_id"):
         return
+    # A question left open when the session last ended is never answered in it: its mark goes (hooks/questions).
+    (pathlib.Path.home() / ".local/state/crew/questions" / sid).unlink(missing_ok=True)
     record = pathlib.Path.home() / ".local/state/crew/sessions" / sid
     agent = os.environ.get("CREW_AGENT")
     if agent:

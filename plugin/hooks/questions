@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""crew's PreToolUse hook: a crew agent that opens a question or a plan for the user leaves a mark, so crew never
+types a tell into the dialog.
+
+herdr refuses to prompt an agent it sees waiting at a question, but it reads Claude Code's state from the screen
+alone, and on 2026-10-07 it took a tell typed into an AskUserQuestion dialog it did not see. The transcript can't
+show the open call either: Claude Code writes a tool call's record only once the tool returns. This hook runs before
+AskUserQuestion or ExitPlanMode is processed and writes ~/.local/state/crew/questions/<session id>: one JSON object
+holding the call's tool_use_id and the transcript_path from its input, written to a new file and moved over the old.
+A later question in the same session replaces it. crew's questions.py reads it with the transcript: the mark counts
+until the transcript holds that call's tool_result, so a question answered, dismissed or abandoned stops counting
+without crew seeing it close. session-start removes a session's mark at each start.
+
+It writes only for a session crew started, one with CREW_AGENT or the record session-start keeps of it, and nothing
+for a subagent's call (an input with agent_id), whose answer lands in another transcript. It reads nothing else,
+prints nothing on stdout, decides nothing about the call and never fails it."""
+import json
+import os
+import pathlib
+import re
+import sys
+import tempfile
+
+
+def main():
+    try:
+        hook = json.load(sys.stdin)
+    except ValueError:
+        return
+    if not isinstance(hook, dict) or hook.get("agent_id"):
+        return
+    sid, call, transcript = hook.get("session_id"), hook.get("tool_use_id"), hook.get("transcript_path")
+    if not isinstance(sid, str) or not re.fullmatch(r"[A-Za-z0-9-]+", sid):
+        return
+    if not (isinstance(call, str) and call and isinstance(transcript, str) and transcript):
+        return
+    state = pathlib.Path.home() / ".local/state/crew"
+    if not os.environ.get("CREW_AGENT") and not (state / "sessions" / sid).is_file():
+        return
+    marks = state / "questions"
+    marks.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=marks, prefix=f".{sid}.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump({"tool_use_id": call, "transcript_path": transcript}, f)
+        os.replace(tmp, marks / sid)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:  # a question is never held up by crew's bookkeeping
+        print(f"crew questions: {e}", file=sys.stderr)
+    sys.exit(0)
