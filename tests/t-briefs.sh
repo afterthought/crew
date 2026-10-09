@@ -27,8 +27,14 @@ expect_ok crewpy brief swb-1 conductor
 for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
   has "$out" "$want"
 done
-lacks "$out" "plannotator"
+lacks "$out" "plannotator-tui"
 for want in "open nothing, and recite no command" "The user opens the whole change" "never its number alone"; do has "$out" "$want"; done
+for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" "never run \`plannotator\` yourself" \
+  "carrying the link to the plannotator session on its change folder" "not the folder's path" \
+  "carrying the link to the plannotator session on the report, not the report as a file" "it has nothing to read, so it carries no link"; do
+  has "$out" "$want"
+done
+ok "a conductor's review and verify cards link the session crew starts on what they ask the user to read, and it opens nothing"
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`review/<unit>/<head>\`" "keyed \`verify/<unit>/<stamp>\`" \
   "keyed \`land/<bolt>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." "post its verify card" \
   "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit."; do
@@ -57,6 +63,8 @@ for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "wh
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
   "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
+for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" \
+  "carries the link to the plannotator session on the page" "not the page as a file"; do has "$out" "$want"; done
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\`" "or answers your card" \
   "close the old proposal's card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit"; do
   has "$out" "$want"
