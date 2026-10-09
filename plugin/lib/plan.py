@@ -2855,7 +2855,10 @@ def slots_cmd(fleet, a):
 def tidy(fleet, a):
     """Each worktree crew made in the team's kit checkout, on this host, whose work is over and that no slot holds:
     removed with its branch, saying the commit the branch was at; or kept and named, with its branch, while it is
-    locked or has uncommitted changes. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
+    locked or has uncommitted changes. The removal goes through the kit's own `wt remove`, run from the kit's main
+    checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having failed or
+    waiting for the user's approval on this host, or with no wt on this host's path, is kept and named with its
+    branch, and the next read tries it again. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
     directly in <kit>/places/ on unit/<its folder> or a fix/ branch; nothing else is touched. The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
     makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
@@ -2905,11 +2908,32 @@ def tidy(fleet, a):
             continue
         sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
                              capture_output=True, text=True, env=gitenv()).stdout.strip()
-        r = subprocess.run(["git", "-C", main, "worktree", "remove", "--force", path], capture_output=True, text=True, env=gitenv())
+        kept = f"{path} is kept, and {branch} with it: {over}, and "
+        try:  # the clean check above is the guard, so --force; the branch is crew's, so --no-delete-branch
+            r = subprocess.run(["wt", "-C", main, "remove", path, "--foreground", "--no-delete-branch", "--force", "--format", "json"],
+                               capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                               env={k: v for k, v in gitenv().items() if not k.startswith("WORKTRUNK_")})
+        except FileNotFoundError:
+            print(kept + f"wt, the kit's worktree tool, is not on {crew.this_host()}'s path")
+            continue
         if r.returncode:
-            print(f"{path} was not removed: {r.stderr.strip()}")
+            said = [l.strip() for l in r.stderr.splitlines() if l.strip() and not l.strip().startswith("↳")]  # ↳ advises --no-hooks or --yes
+            if any("Cannot prompt for approval" in l for l in said):
+                print(kept + f"the kit's remove hooks wait for the user's approval on {crew.this_host()}: wt config approvals add, in {main}")
+            else:
+                print(kept + "the kit's wt remove refused it: " + "; ".join(
+                    [l[1:].strip() for l in said if l.startswith("✗")] or said[-1:] or [f"wt remove exited {r.returncode}"]))
             continue
         READ.drop_kit(t["machine"], t["kit"]["main"])  # the command's next step reads the kit again
+        try:
+            told = json.loads(r.stdout)
+            left = (len(told) == 1 and os.path.realpath(told[0]["path"]) == os.path.realpath(path)
+                    and told[0]["branch_outcome"] == "not_attempted")
+        except (ValueError, TypeError, KeyError, IndexError):
+            left = False
+        if not left:
+            print(f"{path} is removed, and {branch} is kept: crew could not read what wt remove said of the branch")
+            continue
         r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
         print(f"{path} and {branch} are removed; the branch was at {sha}" if r.returncode == 0 else
               f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
