@@ -34,6 +34,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-capture.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-card-session:
+    command: 'tests/run t-card-session'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-card-session.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-cards:
     command: 'tests/run t-cards'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-cards.sh']
