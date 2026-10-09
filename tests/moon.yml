@@ -199,6 +199,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-state-init.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-suite:
+    command: 'tests/run t-suite'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-suite.sh', '/.moon/workspace.yml', '/tests/suite', '/tests/moon-tasks']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-team:
     command: 'tests/run t-team'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-team.sh']
