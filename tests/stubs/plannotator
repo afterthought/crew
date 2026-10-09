@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Stub plannotator for crew's tests: `annotate` and `sessions`, behaving as plannotator 0.28.6 was read to behave, and
+serving nothing.
+
+`plannotator annotate <file|folder...> --gate --json --result-file <f>` registers its session in
+$HOME/.stub-plannotator/<pid>.json: its pid, mode, target (the path as given, made absolute, a folder's without its
+last slash), url, port, project, label and startedAt, as `sessions --json` lists them, and, for the test alone, its
+argv and whether PLANNOTATOR_SKIP_BROWSER_OPEN=1 and PLANNOTATOR_REMOTE=1 were set. The url is
+http://<host>:<port>: the host PLANNOTATOR_URL_HOST names, `auto` as <host>.ts.swancloud.net, and localhost when it is
+unset; the port the first of PLANNOTATOR_PORT's range (19432-19451 when unset) no live session holds. It says it is
+ready on stderr, and, unless the browser was skipped, records `<host> plannotator opened a browser on <url>` in
+$CREW_TEST_LOG. It then waits for the decision a test writes to $HOME/.stub-plannotator/<pid>.decision, one JSON
+object ({"decision": "approved", "feedback": ...}, "annotated", or "dismissed"), and writes it as plannotator does:
+atomically to the result file and to stdout, then exits. Killed first, it writes no result.
+
+`plannotator sessions --json` lists the registered sessions whose pid is alive.
+
+It ends by itself when its registry is gone, as when tests/run removes a passed test's scratch directory, or after
+five minutes, so no stub outlives its test for long."""
+import datetime, json, os, pathlib, sys, time
+
+reg = pathlib.Path(os.environ["HOME"]) / ".stub-plannotator"
+LISTED = ("index", "mode", "target", "url", "port", "pid", "project", "label", "startedAt")
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def live():
+    out = []
+    for f in sorted(reg.glob("*.json")) if reg.is_dir() else []:
+        try:
+            s = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if alive(s["pid"]):
+            out.append(s)
+    return sorted(out, key=lambda s: s["startedAt"], reverse=True)
+
+
+args = sys.argv[1:]
+if args[:1] == ["sessions"]:
+    if "--json" in args:
+        print(json.dumps([dict({k: s[k] for k in LISTED if k != "index"}, index=i) for i, s in enumerate(live(), 1)]))
+    else:
+        for i, s in enumerate(live(), 1):
+            print(f"#{i} {s['mode']} {s['target']} {s['url']} pid {s['pid']}")
+    sys.exit(0)
+if args[:1] != ["annotate"]:
+    print(f"stub plannotator: {' '.join(args)} is not stubbed", file=sys.stderr)
+    sys.exit(2)
+
+paths, result, i = [], None, 1
+while i < len(args):
+    if args[i] == "--result-file":
+        result, i = args[i + 1], i + 2
+        continue
+    if not args[i].startswith("--"):
+        paths.append(args[i])
+    i += 1
+if result and not ("--gate" in args and "--json" in args):
+    print("--result-file requires --gate --json", file=sys.stderr)
+    sys.exit(2)
+if not paths:
+    print("Usage: plannotator annotate <file.md | folder/>", file=sys.stderr)
+    sys.exit(2)
+
+host = os.environ.get("CREW_TEST_HOST", "localhost")
+url_host = os.environ.get("PLANNOTATOR_URL_HOST") or "localhost"
+url_host = f"{host}.ts.swancloud.net" if url_host == "auto" else url_host
+lo, _, hi = (os.environ.get("PLANNOTATOR_PORT") or "19432-19451").partition("-")
+taken = {s["port"] for s in live()}
+port = next((p for p in range(int(lo), int(hi or lo) + 1) if p not in taken), None)
+if port is None:
+    print(f"No free port in PLANNOTATOR_PORT {os.environ.get('PLANNOTATOR_PORT')}", file=sys.stderr)
+    sys.exit(1)
+target = os.path.abspath(paths[0]).rstrip("/") or "/"
+url = f"http://{url_host}:{port}"
+skipped = os.environ.get("PLANNOTATOR_SKIP_BROWSER_OPEN") == "1"
+reg.mkdir(parents=True, exist_ok=True)
+me = reg / f"{os.getpid()}.json"
+me.write_text(json.dumps({
+    "mode": "annotate", "target": target, "url": url, "port": port, "pid": os.getpid(), "project": os.path.basename(os.getcwd()),
+    "label": f"annotate-{os.path.basename(target)}", "startedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "argv": args, "skip_browser": skipped, "remote": os.environ.get("PLANNOTATOR_REMOTE") == "1"}))
+print(f"Plannotator session ready — open on your device\n  {url}", file=sys.stderr, flush=True)
+if not skipped and os.environ.get("CREW_TEST_LOG"):
+    with open(os.environ["CREW_TEST_LOG"], "a") as log:
+        log.write(f"{host} plannotator opened a browser on {url}\n")
+
+decision, give_up = reg / f"{os.getpid()}.decision", time.monotonic() + 300
+while not decision.exists():
+    if not reg.is_dir() or time.monotonic() > give_up:
+        sys.exit(0)
+    time.sleep(0.05)
+time.sleep(0.05)  # the test's write is whole
+out = json.dumps(json.loads(decision.read_text()))
+if result:
+    tmp = pathlib.Path(f"{result}.tmp-{os.getpid()}")
+    tmp.write_text(out + "\n")
+    tmp.replace(result)
+print(out)
+me.unlink()

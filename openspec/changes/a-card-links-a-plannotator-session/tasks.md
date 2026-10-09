@@ -5,7 +5,7 @@
 - [x] 1.1 `crew card session <key>` starts one plannotator session, with no browser and an Approve button, on the document of the rail row with that key, prints its link, gives back the running session's link when run again, and refuses a land key, a key with no row, a document on another host and a link only the host can open (design.md, Task notes 1.1).
 - [x] 1.2 `crew card wait <key>` returns the session's decision, approved, annotated or closed, with the user's words verbatim, or that it ended with none, including a decision made before the wait began (design.md, Task notes 1.2).
 - [x] 1.3 `crew card end <key>` ends only a plannotator process crew started for that key and still serving its document, and forgets the key either way (design.md, Task notes 1.3).
-- [ ] 1.4 A stub `plannotator` behaves as the readings say: the three decision shapes, no result when killed, a session list by pid, and whether a browser was skipped (design.md, Task notes 1.4).
+- [x] 1.4 A stub `plannotator` behaves as the readings say: the three decision shapes, no result when killed, a session list by pid, and whether a browser was skipped (design.md, Task notes 1.4).
 - [ ] 1.5 `tests/t-card-session.sh` holds every case in the `card-sessions` spec, and `tests/moon.yml` has its task (design.md, Task notes 1.5). Verify `tests/suite t-card-session` ends with "0 failed".
 - [ ] 1.6 The usage of `plugin/bin/crew`, README and the crew skill name `crew card session|wait|end` (design.md, Task notes 1.6). Verify `tests/suite t-docs` ends with "0 failed".
 
