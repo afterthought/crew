@@ -13,6 +13,7 @@ What is still open now that every page is written. A working file: an item leave
 Each is a queued or placed unit; the rule stands and the code catches up.
 
 - `plan.10`: a drop keeps a branch with unmerged patches, judged by `git cherry`; `tidy()` deletes with `git branch -D` and `gather.fix_merged` judges by ancestry (`a-drop-keeps-unmerged-work`, fix-places).
+- `plan.9` as amended: a worktree is removed through the kit's worktree tool so its remove hooks run (`a-worktree-goes-through-the-kits-remove-hooks`); `tidy` runs `git worktree remove --force`, and wldn's ministacks and Frontegg objects stand after a fix's worktree goes.
 - `plan.11`: the chore kind (`chores-beside-units-and-fixes`, curation-and-holds).
 - `plan.14`: a landing records its sha and a deploy is one act over the landings since the last, every after-deploy step on its record with doer and state, the user's a rail row with a card (ADR 0012, `a-deploy-is-approved-and-recorded-through-crew` as amended); `crew bolt land` records no sha, main-ops deploys at every landing, and `construct.md` knows one proof list.
 - ADR 0006: a change archived at its merge (`a-merged-change-is-archived`); the coder brief has no archive step and ops reads the proof from the open change.
