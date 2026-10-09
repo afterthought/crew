@@ -48,7 +48,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 - **`free`** means a slot holds no unit or fix. That is normal; starting work in it is the conductor's call, not yours.
 - **Never act on an agent that is `working`** unless the user says so. `--force` exists for that.
 - **A brief or the teams file changed.** Agents take their brief at launch, so a change reaches an agent on its next start, not on a clear. When a lot has changed, `crew rebuild`.
-- **Blocked** means a question for the user. Read the pane and tell the user which agent is waiting and on what. Do not answer it for them.
+- **Blocked** means a question for the user. Read the pane and tell the user which agent is waiting and on what. Do not answer it for them. A tell to an agent waiting on a question is refused with nothing typed, so report the question first, and tell the agent again once the user has answered it.
 - **A stuck stage.** The conductor's wait reports a stage stuck when its agent has been quiet past crew's limit with nothing delivered, nothing said through `crew needs` and no background work of its own running. The conductor tells the user; the stage is run again, or waited on again, only on the user's word.
 
 ## What is not yours
