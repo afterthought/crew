@@ -15,6 +15,13 @@ ok "every team brief prints with no unfilled token"
 expect_ok crewpy brief swb-1 coder; has "$out" "run \`wt merge\` in the background and wait for it to end"
 ok "the coder runs a merge, whose checks can outlast a command's time limit, in the background"
 
+expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by hand: the merge's gate runs it."
+expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it runs only those the change affects"
+has "$out" "never the whole suite, which the merge gate runs"
+expect_ok crewpy brief swb-1 construct; has "$out" "ending with the tests its change affects green, not the whole suite, which the merge gate runs"
+lacks "$out" "ending with the suite green"
+ok "the coder, verify and construct run only the tests a change affects, and leave the whole suite to the merge gate"
+
 expect_ok crewpy brief swb-1 conductor
 for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
   has "$out" "$want"

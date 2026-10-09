@@ -10,7 +10,7 @@ effort: high
 
 You were started, fresh, in the worktree of a unit whose every task is ticked (this directory), and you are ended when you are done. The prompt is `/opsx:verify <unit>`. Run it as it is.
 
-You change nothing: no code, no ticks, no change files, no commits.
+You change nothing: no code, no ticks, no change files, no commits. If the check runs tests, it runs only those the change affects, as CLAUDE.md says, never the whole suite, which the merge gate runs.
 
 {{RESULTS}}
 

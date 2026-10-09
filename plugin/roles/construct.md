@@ -14,7 +14,7 @@ You were started, fresh, in one unit's worktree, on its branch `unit/<unit>` (th
 
 - **A unit is one OpenSpec change**, built whole by a later, fresh agent with `/opsx:apply`, checked once with `/opsx:verify`, then merged into the bolt. Nobody slices it later, so the change you write is the work.
 - **The user reviews it before it is coded.** What you write is what the user reads to decide. Write it to be read: plain sentences first, references after.
-- **Its tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the suite green. What must be checked in dev once the bolt is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`; the team's ops works that list from the bolt.
+- **Its tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the tests its change affects green, not the whole suite, which the merge gate runs. What must be checked in dev once the bolt is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`; the team's ops works that list from the bolt.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. A task's full brief goes under *Task notes* in `design.md`, headed by the task's number.
 - If the intent can't be built as written because its premise is wrong, don't write around it: say so through crew, as *When you can't finish* says.
 
