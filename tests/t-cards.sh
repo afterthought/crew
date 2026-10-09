@@ -281,7 +281,10 @@ has "$why" "crew could not check this card: could not fetch wldn/main of Willdan
 has "$why" ". Post it again later."
 why=$(CREW_AGENT=swb-1-conductor cards <<<"$(pre pendingyou post_request '{"name": "x"}')" | jq -r '.hookSpecificOutput.permissionDecisionReason')
 eq "$why" "crew refuses a card with no idempotencyKey."
-ok "a card crew can't check is refused, naming the branch it could not read, and so is one with no key"
+why=$(CREW_LABEL= denied swb-1-conductor post_request land/tenant-environments/abc1234)
+eq "$why" "crew could not check this card: swb-1-conductor's session has no CREW_LABEL, so crew can't tell its partition."
+has "$(CREW_LABEL= denied swb-1-conductor create_area create-area:WilldanGroup/switchboard-kit)" "crew could not check this area: swb-1-conductor's session has no CREW_LABEL"
+ok "a card crew can't check is refused, naming the branch it could not read, and so is one with no key or no CREW_LABEL"
 
 eq "$(CREW_AGENT= CREW_LABEL= cards <<<"$(pre pendingyou post_request '{"idempotencyKey": "anything"}' sid-none)")" ""
 eq "$(CREW_AGENT= CREW_LABEL= cards <<<"$(pre pendingyou create_area '{"idempotencyKey": "area:mine"}' sid-none)")" ""

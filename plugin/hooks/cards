@@ -21,8 +21,9 @@ When a crew agent withdraws or closes a card with a row key, the hook then ends 
 session` started for that key on this host, as `crew card end` does, so no card's session outlives its card.
 
 A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it, the record session-start keeps of
-it. Any other session, and a tool of another server, is neither checked nor recorded; a result that is an error writes
-nothing. Its bookkeeping after a call never fails the call."""
+it. A session with a CREW_AGENT but no CREW_LABEL is a crew agent whose partition crew can't tell: its card or area is
+refused, naming the missing CREW_LABEL, and nothing it does is recorded. Any other session, and a tool of another
+server, is neither checked nor recorded; a result that is an error writes nothing. Its bookkeeping after a call never fails the call."""
 import datetime
 import json
 import os
@@ -135,12 +136,15 @@ def check(hook, tool):
     what, later = ("area", "Make it again later.") if tool == "create_area" else ("card", "Post it again later.")
     try:
         agent, label = identity(hook.get("session_id"))
-        if not agent or not label:
+        if not agent:
             return
-        sys.path.insert(0, str(LIB))
-        import plan
-        given = hook.get("tool_input") if isinstance(hook.get("tool_input"), dict) else {}
-        why = plan.card_refusal(plan.crew.load(), agent, label, tool, given.get("idempotencyKey"))
+        if label:
+            sys.path.insert(0, str(LIB))
+            import plan
+            given = hook.get("tool_input") if isinstance(hook.get("tool_input"), dict) else {}
+            why = plan.card_refusal(plan.crew.load(), agent, label, tool, given.get("idempotencyKey"))
+        else:
+            why = f"crew could not check this {what}: {agent}'s session has no CREW_LABEL, so crew can't tell its partition."
     except Exception as e:  # a card crew can't check is refused: one let through can't be taken back
         why = f"crew could not check this {what}: {str(e).rstrip('.')}. {later}"
     if why:
