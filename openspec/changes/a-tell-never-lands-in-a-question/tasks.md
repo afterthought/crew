@@ -2,7 +2,7 @@
 
 ## 1. crew knows when an agent is waiting on a question
 
-- [ ] 1.1 Stub herdr refuses a prompt to a blocked agent with `agent_blocked` and types nothing, as herdr 0.9.3 does (design.md, Task notes 1.1). Verify `tests/suite t-greet t-notify` ends with "0 failed".
+- [x] 1.1 Stub herdr refuses a prompt to a blocked agent with `agent_blocked` and types nothing, as herdr 0.9.3 does (design.md, Task notes 1.1). Verify `tests/suite t-greet t-notify` ends with "0 failed".
 - [ ] 1.2 crew's PreToolUse hook leaves a mark when a crew agent opens a question or a plan for the user, and a session's start clears its mark (design.md, Task notes 1.2). Verify `tests/suite t-session-hook` ends with "0 failed".
 - [ ] 1.3 A stdlib-only reader, run on the agent's host, says whether a session's mark is open, answered or unreadable (design.md, Task notes 1.3). Proved by 2.1's tests.
 

@@ -5,7 +5,8 @@ Every call is logged to $CREW_TEST_LOG as `<host> <session> <args...>`. State li
 $HOME/.stub-herdr/<session>.json, so each simulated host (its own HOME) has its own servers.
 `pane run` of a crew-role command runs it at once, in the pane's folder; when it exits 0 (the stub
 claude has recorded its launch), the pane holds an idle agent with no name, as herdr has it after
-a new session. `agent prompt <pane> /exit` ends that agent.
+a new session. `agent prompt <pane> /exit` ends that agent; any other prompt to an agent that is blocked is refused
+with `agent_blocked`, as herdr refuses it, and typed nowhere.
 
 Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status, and
 `herdr --session S stub agent <pane> [name]` puts an agent in a pane. With CREW_TEST_BLOCKED naming agents, each one
@@ -203,6 +204,8 @@ elif group == "agent" and cmd == "prompt":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     if rest[1] == "/exit":
         del st["agents"][p]
+    elif st["agents"][p]["status"] == "blocked":  # as herdr 0.9.3 refuses it, typing nothing
+        die({"code": "agent_blocked", "message": f"agent {rest[0]} is blocked on an approval or question UI"})
     else:
         st["agents"][p].setdefault("prompts", []).append(rest[1])
     out({})
