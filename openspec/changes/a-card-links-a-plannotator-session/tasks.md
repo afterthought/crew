@@ -15,6 +15,6 @@
 
 ## 3. The briefs and the rules
 
-- [ ] 3.1 The card discipline the planner and the conductor share has them start a card's session, carry its link, wait on its decision in the background, act on it as the card's answer and withdraw the card, and start them again after a restart (design.md, Task notes 3.1).
+- [x] 3.1 The card discipline the planner and the conductor share has them start a card's session, carry its link, wait on its decision in the background, act on it as the card's answer and withdraw the card, and start them again after a restart (design.md, Task notes 3.1).
 - [ ] 3.2 The planner's and the conductor's *Cards* say each reading card carries its session's link in place of a file or path, and `tests/t-briefs.sh` pins the new phrases (design.md, Task notes 3.2). Verify `tests/suite t-briefs t-roles` ends with "0 failed".
 - [ ] 3.3 `briefs.9` reads as built and `briefs.4`'s detail says a card's session opens nothing (design.md, Task notes 3.3). Verify `tests/suite --affected` ends with "0 failed".

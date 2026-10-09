@@ -457,7 +457,21 @@ def cards_how(cmd, label, kits):
             "fleet's, and the wake needs neither. Act on the user's answer as if they had said it in your pane, then close the "
             "card with `ack_answer` and a one-line outcome. When crew tells you, or prints, to close the card for a row, close "
             "it with `cancel_request` and the reason, or with `ack_answer` when you acted on its answer. Only your own cards "
-            f"are yours: leave every other card alone. The kits: {kits}.")
+            f"are yours: leave every other card alone. The kits: {kits}.\n\n"
+            "A card that asks the user to read something, a proposal, a unit's change or a verify report, links a plannotator "
+            "session on it, so the user can read and annotate it wherever they answer the card. Before you post it, run "
+            f"`{cmd} card session <key> --label {label}` with the row's card key: crew starts the session on this host without "
+            "opening a browser, and prints its link. Put that link on the card as its artifact of kind `url`, titled \"Read and "
+            "annotate it in plannotator\", in place of a file or a path. Then run "
+            f"`{cmd} card wait <key> --label {label}` as a background command. Its end is the user's answer in the session: "
+            "approved is the card's approval, with any notes as the user's words; annotated is a note asking for changes, in "
+            "the user's words as they wrote them; closed or ended with no decision leaves the card the user's to answer, so "
+            "run the session again, update the card's link if it changed, and wait again. When you have acted on a decision "
+            "made in the session, withdraw the card with `cancel_request`, `answeredHere` true, and the reason that it was "
+            "answered in its plannotator session. A wait that says crew ended the session means its card is closed, and "
+            "nothing is left to do. At your start, for each of your open cards that links a session, run the session and the "
+            "wait again: the session gives back the running link, or starts a new one. Never open a browser for a card, and "
+            "never run `plannotator` yourself for one: crew starts the card's session, and ends it when you close the card.")
 
 
 def kits_named(kits):
