@@ -14,7 +14,7 @@
 
 ## 3. The tests don't collide
 
-- [ ] 3.1 A serial `tests/run` and two parallel `tests/suite --force` runs all print `0 failed` in this worktree, with any test that failed only in parallel fixed (design: Decisions "Proving the tests don't collide"; Task notes 3.1).
+- [x] 3.1 A serial `tests/run` and two parallel `tests/suite --force` runs all print `0 failed` in this worktree, with any test that failed only in parallel fixed (design: Decisions "Proving the tests don't collide"; Task notes 3.1).
 
 ## 4. What agents are told, and the rules
 
