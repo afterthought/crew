@@ -88,7 +88,7 @@ bolt/<bolt> moved from <old7> to <new7>: fix/<bolt>/<name> carries the bolt's <n
 the bolt's checks are running on <new7>; prove the bolt again before it lands
 ```
 
-with the second line replaced by `the bolt's checks did not start: <worktrunk's words>; ask ops to run the bolt's verification again, then prove the bolt again before it lands` when `wt hook` failed.
+with the second line replaced by `the bolt's checks did not start: <worktrunk's words>; ask ops to run the bolt's verification again, then prove the bolt again before it lands` when `wt hook` failed, and by `the kit has no post-merge hooks, so no checks run on <new7>; prove the bolt again before it lands` when the kit has none (worktrunk exits 0 and prints `No post-merge hooks configured`).
 
 Not carried, on standard error before the usual `<slot> has <fix>: merge, in <path>`:
 
