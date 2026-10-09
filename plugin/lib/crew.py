@@ -582,7 +582,8 @@ def needs_how(cmd, work):
 # How an agent keeps one Pending You card for each rail row it owns, the same in the planner's brief and the conductor's.
 def cards_how(cmd, label, kits):
     return ("When your session has Pending You's tools, every decision of yours the rail lists gets one card, and only those. "
-            "A question you ask in your pane gets no card. Take the row's card key from the `card:` line under its row in "
+            "crew refuses a card you post under any key but a rail row's of your own, and an area under any key but "
+            "`create-area:<owner>/<kit>`, and its refusal names the key to use. A question you ask in your pane gets no card. Take the row's card key from the `card:` line under its row in "
             f"`{cmd} rail --label {label}`, and post the card with that key as its `idempotencyKey`. That way a retry never "
             "makes a second card, and the rail knows the card is the row's. A row's key changes when what it asks changes: "
             "a unit built again, or a bolt a fix moved. Then close the card you hold under the old key with what changed, "
