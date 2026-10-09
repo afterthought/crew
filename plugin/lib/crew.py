@@ -572,7 +572,8 @@ def signal_how(cmd, label, state):
 # or "proof".
 def needs_how(cmd, work):
     return (f"When you cannot finish without something only someone else can give (a decision, a fact about a live system, "
-            f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. crew ends your "
+            f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. Post no Pending "
+            "You card and make no area: your team's cards are its conductor's, and crew refuses any other. crew ends your "
             f"{work} there and gives your words to the conductor, who gets the answer and starts the {work} again with it. "
             "Never ask in your pane: nobody watches it. Ending a turn to wait on something you started in the background is "
             f"fine: crew knows your {work} is over only when what it delivers is there.")
