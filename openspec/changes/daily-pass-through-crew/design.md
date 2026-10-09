@@ -34,6 +34,8 @@ Checks, before any write, each failure naming the file:
 1. `capture.md` exists; its frontmatter's `capture` equals the directory's name; `source` and `event_date` are present; `status` is `unread` or `read`.
 2. Every other file is named `NN-<slug>.md`. Anything else (a `.txt`, a `.jsonl`, a subdirectory) is refused: raw material does not enter git.
 3. Each signal file's `signal` is `<capture>/<file stem>`; `kind` is one of the five; `who` is present; the body has at least one line of assertion; and, when the capture is `read`, a blockquote. A signal file larger than 8 KiB is refused as copying its source.
+
+A program that hands captures to crew looks for the command before it does: swancloud's release adapter hands over only when `crew signal land --help` prints a first line beginning `usage: crew signal land` (its verify, 2026-10-08, report `verify-upstream-releases-arrive-as-signals-20261008-2324.md`, suggestion 1). `crew signal land` is an argparse subcommand beside `crew signal move`, whose `--help` begins `usage: crew signal move`, so its first line is `usage: crew signal land [-h] ...` and nothing more is needed here; swancloud's fake of it in its tests prints the same first line. A program's capture is cut by the program under the limit above, verbatim, the whole in the raw record (swancloud record 0020).
 4. A `read` capture's `signals` equals the number of signal files.
 5. The capture's name is not that of a capture on the flywheel's state branch.
 
