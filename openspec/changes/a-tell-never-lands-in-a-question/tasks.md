@@ -14,4 +14,4 @@
 ## 3. The docs and the rule
 
 - [x] 3.1 The usage of `plugin/bin/crew`, README and the crew skill say a tell is refused while its agent waits on a question (design.md, Task notes 3.1). Verify `tests/suite t-docs t-briefs` ends with "0 failed".
-- [ ] 3.2 `teams.11`'s details name the two readings and the hook, and `_open.md` no longer lists it as unbuilt (design.md, Task notes 3.2). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 3.2 `teams.11`'s details name the two readings and the hook, and `_open.md` no longer lists it as unbuilt (design.md, Task notes 3.2). Verify `tests/suite --affected` ends with "0 failed".
