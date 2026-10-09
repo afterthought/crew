@@ -15,6 +15,9 @@
   crew.py hosts <label>               the hosts where the partition's teams run: name, ssh name, crew there
   crew.py crew-at <host>              the crew command on a host
   crew.py tell <agent> "<text>"       prompt an agent wherever it runs, the text marked [crew tell from <sender>]
+  crew.py greet <team>                greet the team's conductor, marked [crew], once it is up and settled
+  crew.py greet-agent <agent> [--wait <seconds>]
+                                      greet an agent crew starts outside a team, with its role's greeting, the same way
   crew.py here                        what runs on this host, one per line: team <name>, main <label>,
                                       dispatch <label> and operator <label>
 
@@ -184,11 +187,19 @@ def on_machine(fleet, host, argv, input=None):
                           input=input, capture_output=True, text=True)
 
 
-def place_of_agent(fleet, name):
-    """The host and herdr session an agent crew starts runs in, from its name alone."""
+def team_of_agent(fleet, name):
+    """The team an agent crew starts belongs to, from its name alone: its conductor, ops or a unit slot; else None."""
     for t in fleet["teams"].values():
         if name in (f"{t['name']}-conductor", f"{t['name']}-ops") or re.match(rf"^{re.escape(t['name'])}-unit-[1-9][0-9]*$", name):
-            return t["machine"], t["session"]
+            return t
+    return None
+
+
+def place_of_agent(fleet, name):
+    """The host and herdr session an agent crew starts runs in, from its name alone."""
+    t = team_of_agent(fleet, name)
+    if t:
+        return t["machine"], t["session"]
     for p in fleet["partitions"].values():
         l = p["label"]
         if name in (f"{l}-design", f"{l}-planner", f"{l}-ops"):
@@ -205,9 +216,9 @@ def place_of_agent(fleet, name):
 
 def label_of_agent(fleet, name):
     """The partition an agent crew starts works for, from its name alone."""
-    for t in fleet["teams"].values():
-        if name in (f"{t['name']}-conductor", f"{t['name']}-ops") or re.match(rf"^{re.escape(t['name'])}-unit-[1-9][0-9]*$", name):
-            return t["label"]
+    t = team_of_agent(fleet, name)
+    if t:
+        return t["label"]
     for l in fleet["partitions"]:
         if name in (f"{l}-design", f"{l}-planner", f"{l}-ops") or re.match(rf"^{re.escape(l)}-(dispatch|operator)-.+$", name):
             return l
@@ -250,29 +261,69 @@ def agent_status(fleet, name):
 GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
             "start each stage that is ready.")
 
+# The greeting of each agent crew starts outside a team, by role: the reads its brief already teaches, and what is its own.
+GREETINGS = {
+    "design": ("Read where {label} stands with `crew bolts` and `crew rail`, and the signals waiting for curation, tell me in "
+               "a few lines, then carry on with what is yours: curate the signals that have no move."),
+    "planner": ("Read where {label} stands with `crew bolts` and `crew plan proposed`, tell me in a few lines, then carry on "
+                "with what is yours: plan what is queued and see each open proposal through."),
+    "ops": ("Read where {label} stands with `crew bolts` and `crew rail`, tell me in a few lines, then carry on with what is "
+            "yours: a bolt lands only on the user's word, so land nothing until it comes."),
+    "dispatch": ("Read where {label} stands on {host} with `crew bolts` and `crew status` for each team here, tell me in a few "
+                 "lines, then carry on with what is yours: give each team here that holds no bolt its next one."),
+    "operator": ("Read where {label} stands with `crew rail` and `crew bolts`, and tell me in a few lines what is moving and "
+                 "what waits on me."),
+}
 
-def greet(fleet, team, first="", wait=90):
-    """Get a team's conductor going: once it is up and settled, tell it to read where its bolt stands and carry
-    on. One stopped on a question in its pane, such as a first run's consent, is greeted once that is answered,
-    for up to five minutes. Returns whether it was greeted; a conductor that is not up is reported, not an error."""
-    t = team_of(fleet, team)
-    name, text = f"{t['name']}-conductor", first + GREETING
+
+def greet_agent(fleet, name, text, on, label, why, hint, wait=90):
+    """Greet an agent crew started: once it is up and settled, send it the text, marked [crew], and record a `greet`
+    entry on the objects `on` in the label's run record. One stopped on a question in its pane, such as a first run's
+    consent, is greeted once that is answered, for up to five minutes. Returns whether it was greeted; an agent that is
+    not up is reported with the hint, one never ready with the crew tell that would greet it, and neither is an error."""
     deadline, asked = time.monotonic() + wait, False
     while (s := agent_status(fleet, name)) not in ("idle", "done"):
         if s == "blocked" and not asked:
             print(f"{name} is waiting on a question in its pane; answer it there and it will be greeted", file=sys.stderr)
             asked, deadline = True, time.monotonic() + 300
         if time.monotonic() >= deadline:
-            print(f"{name} is not up: crew up {t['name']} starts and greets it" if s is None
-                  else f"{name} was not ready to greet; once it is: crew tell {name} \"{text}\"", file=sys.stderr)
+            print(f"{name} is not up: {hint}" if s is None
+                  else f"{name} was not ready to greet; once it is: crew tell {name} {shlex.quote(text)}", file=sys.stderr)
             return False
         time.sleep(2)
     if not tell(fleet, name, text, record=False):
         return False
     import record as rec  # record imports this module
-    rec.emit(t["label"], "greet", on=[f"agent/{name}", f"team/{t['name']}"], why=f"team({t['name']}): greet {name}")
+    rec.emit(label, "greet", on=on, why=why)
     print(f"{name} greeted")
     return True
+
+
+def greet(fleet, team, first="", wait=90):
+    """Get a team's conductor going: tell it to read where its bolt stands and carry on."""
+    t = team_of(fleet, team)
+    name = f"{t['name']}-conductor"
+    return greet_agent(fleet, name, first + GREETING, [f"agent/{name}", f"team/{t['name']}"], t["label"],
+                       f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
+
+
+def greet_standing(fleet, name, wait=90):
+    """Get an agent crew starts outside a team going (a main level's design agent, planner or ops, a dispatcher, an
+    operator agent): tell it to read where its partition stands and carry on with what is its role's. A team's agent,
+    or a name crew starts no agent by, is refused."""
+    t = team_of_agent(fleet, name)
+    t is None or fail(f"{name} is one of team {t['name']}'s agents, not one crew starts outside a team; "
+                      f"crew up {t['name']} greets its conductor")
+    label = label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
+    host, _ = place_of_agent(fleet, name)
+    role = name[len(label) + 1:]  # design, planner, ops, dispatch-<host> or operator-<host>
+    role = role if role in GREETINGS else role.split("-")[0]
+    text = GREETINGS[role].format(label=label, host=host)
+    if role == "operator":
+        why, hint = f"operator({label}): greet {name}", f"crew operator up {label} starts and greets it"
+    else:
+        why, hint = f"main({label}): greet {name}", f"crew main up {label} starts and greets it"
+    return greet_agent(fleet, name, text, [f"agent/{name}"], label, why, hint, wait)
 
 
 def kept_on(fleet, host, repo):
@@ -732,6 +783,9 @@ def main(a):
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who()) else 1)
     elif a[:1] == ["greet"] and len(a) == 2:
         greet(fleet, a[1])
+    elif a[:1] == ["greet-agent"] and len(a) in (2, 4) and a[2:3] in ([], ["--wait"]):
+        len(a) == 2 or a[3].isdigit() or fail(f"--wait takes a number of seconds, not {a[3]}")
+        greet_standing(fleet, a[1], int(a[3]) if len(a) == 4 else 90)
     else:
         sys.exit(__doc__)
 
