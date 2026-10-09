@@ -189,3 +189,28 @@ lacks "$out" "/tmp/ops-proof"
 expect_ok crewpy brief swb-1 verify
 has "$out" "unchanged and whole"; has "$out" "crew ends the stage once it is there"
 ok "the conductor waits for every stage through crew and never reads a pane for its outcome; every stage, and ops's proof, stops short with crew needs"
+
+# A landing whose rebase conflicts lands nothing and goes back to the team as a fix that carries the bolt onto main
+# (plan.8, teams.5): main-ops aborts it and names the commit and files, the conductor starts the fix and proves the bolt
+# again after crew's move, the fix's agent replays the bolt onto main and adds nothing, and ops reads the verification
+# the move starts.
+expect_ok crewpy brief wldn main-ops
+for want in "git rebase --abort" "Tell the bolt's conductor and the user that commit and those files" \
+  "for the bolt's head as it is now" "its landing comes back to the user on a new card"; do
+  has "$out" "$want"
+done
+expect_ok crewpy brief swb-1 conductor
+for want in "Carry the bolt onto main" "prove the bolt again" "post the landing card again only once that proof is clean" \
+  "fix swb-1 <name> --merge\` as for any fix"; do
+  has "$out" "$want"
+done
+expect_ok crewpy brief swb-1 coder
+for want in "Carry the bolt onto main" "git rebase main" "add no commit" "keeping both intents, main's and the bolt's" \
+  "under \`openspec/\` too"; do
+  has "$out" "$want"
+done
+expect_ok crewpy brief swb-1 ops
+for want in "crew's move of the bolt to a fix that carries it onto main starts one too" "a bolt whose head moved is proven again"; do
+  has "$out" "$want"
+done
+ok "a landing's conflict becomes a fix that carries the bolt onto main, and the bolt is proven again before it lands"

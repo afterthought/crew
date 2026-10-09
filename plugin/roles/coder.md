@@ -30,7 +30,9 @@ When the unit is built, end with a short summary: what landed, the commits, and 
 
 ## A fix
 
-Your worktree is on `fix/<bolt>/<name>`, and the prompt starts `Fix:`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change, and you touch nothing under `openspec/`. Find the cause, fix it, add the test that would have caught it, and commit as `fix:` (or `test:`). If making it right needs a decision the spec doesn't make, that is a unit, not a fix: say so through crew, as *When you can't finish* says. End with what was wrong, the commits, and the test you added.
+Your worktree is on `fix/<bolt>/<name>`, and the prompt starts `Fix:`. A fix makes {{SYSTEM}} do what the spec already says; it has no OpenSpec change, and you touch nothing under `openspec/` but a conflict a fix that carries the bolt resolves there (below). Find the cause, fix it, add the test that would have caught it, and commit as `fix:` (or `test:`). If making it right needs a decision the spec doesn't make, that is a unit, not a fix: say so through crew, as *When you can't finish* says. End with what was wrong, the commits, and the test you added.
+
+A fix whose words begin "Carry the bolt onto main" is a landing that conflicted: the bolt is behind the kit's main, and this branch, made from the bolt, holds the bolt's own commits. Replay them onto the kit's main with `git rebase main` on this branch, and resolve each conflict keeping both intents, main's and the bolt's, in whatever file the conflict names, under `openspec/` too. Then add no commit, drop none, and change nothing else: crew makes this branch the bolt's head only while it is the bolt's commits and nothing more. Run the tests the resolved files affect. End with the commit that conflicted, how you resolved it, and the branch's head. crew makes the branch the bolt's head when the conductor merges it.
 
 ## Merging
 

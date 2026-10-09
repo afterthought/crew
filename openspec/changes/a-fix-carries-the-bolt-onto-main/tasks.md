@@ -8,6 +8,6 @@
 
 ## 2. The briefs and docs say so
 
-- [ ] 2.1 The main-ops, conductor, coder and ops briefs say how a landing's conflict becomes a fix that carries the bolt, what that fix's agent does, and that the bolt is proven again before it lands, each pinned in `t-briefs.sh`, and `tests/suite t-briefs` ends with "0 failed" (design: *The briefs*; Task notes 2.1; `tests.6`, `briefs.2` departure).
+- [x] 2.1 The main-ops, conductor, coder and ops briefs say how a landing's conflict becomes a fix that carries the bolt, what that fix's agent does, and that the bolt is proven again before it lands, each pinned in `t-briefs.sh`, and `tests/suite t-briefs` ends with "0 failed" (design: *The briefs*; Task notes 2.1; `tests.6`, `briefs.2` departure).
 - [ ] 2.2 README and the crew skill say what `--merge` now does and what a conflicting landing leads to, and `tests/suite t-docs` ends with "0 failed" (Task notes 2.2; `docs.2`).
 - [ ] 2.3 `teams.5`'s details name what builds the carry and `_open.md` no longer lists it, with `plan.md` and the `teams.5` rule line left as they are, and `tests/suite --affected` ends with "0 failed" (Task notes 2.3; design: *Risks / Trade-offs*).
