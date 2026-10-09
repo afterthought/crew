@@ -5,7 +5,12 @@
 # its agent. An error, another server's tool and a session crew didn't start write nothing; a session herdr resumed is
 # known by what session-start recorded; and the hook never fails a tool call. A keyed card's withdrawal or close ends
 # the plannotator session crew started for its key; an unkeyed card's ends nothing, nor does a key's close end a
-# session crew did not start, and a card posted under a key that is no longer a row's closes under it.
+# session crew did not start, and a card posted under a key that is no longer a row's closes under it. Before a card is
+# posted or an area made, the hook refuses a crew agent's card under any key but a rail row's of its own, the planner's
+# open proposal or its conductor's bolt and units, and an area under any key but create-area: and a kit of its own,
+# naming the key to use; a team's ops and slots and the main level's other agents own no card key; a call crew can't
+# check is refused naming what it could not read; and a session crew didn't start, another server's tool and the other
+# card tools are neither checked nor refused. Each refusal scenario of the rail-cards spec.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -199,3 +204,90 @@ eq "$(pick card.close '[.Card, .Key] | join(" ")')" "req_ses-5 review/z/1234567"
 up "$s3" || fail "a session was ended while its key could not be forgotten"
 kill "$s3" "$mine"
 ok "a session the hook can't end is said, the close is still recorded, and the tool call goes on"
+
+# Before a card is posted or an area made: a team holds a bolt with units, another team holds another, and the
+# partition has a proposal open and one closed.
+unset CREW_AGENT
+export CREW_LABEL=wldn
+kit chuck-herdr-alpha willdan switchboard-kit >/dev/null
+crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
+crew bolt new console-pages "The console lists them." --repo switchboard-kit >/dev/null
+for u in x checked; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
+crew unit add z "Unit z." --bolt console-pages >/dev/null
+crew bolt give swb-1 tenant-environments >/dev/null 2>&1
+crew bolt give swb-2 console-pages >/dev/null 2>&1
+printf '%s\n' 'Case: The queue gets a unit.' 'Do: unit add queued "Queued." --repo switchboard-kit' > "$T/p1.rec"
+printf '%s\n' 'Case: The queue gets another.' 'Do: unit add later "Later." --repo switchboard-kit' > "$T/p2.rec"
+crew plan propose "$T/p1.rec" >/dev/null 2>&1; crew plan propose "$T/p2.rec" >/dev/null 2>&1
+crew plan drop 2 "not now" >/dev/null
+# pre <server> <tool> <input> [session]: the hook's input before one tool call, as Claude Code gives it
+pre() { jq -nc --arg t "mcp__$1__$2" --argjson i "$3" --arg s "${4:-sid-1}" \
+  '{session_id: $s, hook_event_name: "PreToolUse", cwd: "/work", tool_name: $t, tool_input: $i}'; }
+# gate <agent> <tool> <key>: what the hook prints before that agent's call under that key
+gate() { CREW_AGENT=$1 cards <<<"$(pre pendingyou "$2" "$(jq -nc --arg k "$3" '{name: "x", title: "ZQXTITLE", idempotencyKey: $k}')")"; }
+# denied <agent> <tool> <key>: the reason the call is denied with; fails when it is let through
+denied() {
+  local o; o=$(gate "$@")
+  eq "$(jq -r '.hookSpecificOutput | [.hookEventName, .permissionDecision] | join(" ")' <<<"$o")" "PreToolUse deny"
+  jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$o"
+}
+n=$(entries | wc -l)
+
+why=$(denied swb-1-ops post_request land/tenant-environments/abc1234)
+has "$why" "swb-1-ops owns no card key, since a team's cards are its conductor's"
+has "$why" "in your proof file, under Left for the user"
+why=$(denied swb-1-ops post_request 'gateway check ZQXKEY')
+has "$why" "swb-1-ops owns no card key"
+why=$(denied swb-1-unit-2 post_request review/x/abc1234)
+has "$why" "swb-1-unit-2 owns no card key, since a team's cards are its conductor's"
+has "$why" "/plugin/bin/crew needs"
+ok "a team's ops and its unit slots are refused a card under any key: a team's cards are its conductor's"
+
+eq "$(gate swb-1-conductor post_request land/tenant-environments/abc1234)" ""
+eq "$(gate swb-1-conductor post_request review/x/abc1234)" ""
+eq "$(gate swb-1-conductor post_request verify/checked/20261007-1412)" ""
+eq "$(gate wldn-planner post_request proposal/1)" ""
+ok "a conductor's own landing, review and verify keys, and the planner's open proposal, go through"
+
+rows="land/tenant-environments/<head> or review/<unit>/<head> or verify/<unit>/<stamp> for unit x or checked, the head or stamp from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`"
+why=$(denied swb-1-conductor post_request gateway-check-tenant-environments)
+eq "$why" "crew refuses a card under gateway-check-tenant-environments: swb-1-conductor posts a card only under a rail row's key of its own: $rows."
+why=$(denied swb-1-conductor post_request review/z/abc1234)
+has "$why" "swb-1-conductor posts a card only under a rail row's key of its own: $rows"
+has "$(denied swb-1-conductor post_request land/console-pages/abc1234)" "$rows"
+has "$(denied swb-1-conductor post_request land/tenant-environments)" "$rows"
+has "$(denied brd-1-conductor post_request land/tenant-environments/abc1234)" "brd-1 holds no bolt"
+ok "a conductor's key of its own making, a bolt's bare land/<bolt>, and another team's row, are refused naming the keys that are its own"
+
+why=$(denied wldn-planner post_request proposal/2)
+eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, proposal/1, from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`."
+has "$(denied wldn-design post_request proposal/1)" "wldn-design owns no card key, since only the planner and the conductors post cards"
+has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "Tell the partition's operator agents what you wait on"
+ok "the planner is refused a closed proposal's key, naming the open one, and the main level's other agents own no key"
+
+why=$(denied swb-1-conductor create_area area:swb-1-conductor)
+eq "$why" "crew refuses an area under area:swb-1-conductor: swb-1-conductor makes a kit's area only under create-area:WilldanGroup/switchboard-kit."
+eq "$(gate swb-1-conductor create_area create-area:WilldanGroup/switchboard-kit)" ""
+eq "$(gate wldn-planner create_area create-area:WilldanGroup/atlas-kit)" ""
+has "$(denied wldn-planner create_area create-area:agentplot/flywheel-next)" \
+  "only under create-area:WilldanGroup/atlas-kit, create-area:WilldanGroup/breadboard-kit or create-area:WilldanGroup/switchboard-kit"
+has "$(denied swb-1-conductor create_area create-area:WilldanGroup/atlas-kit)" "create-area:WilldanGroup/switchboard-kit"
+ok "an area is let through only under create-area: and a kit of the agent's team, or of its partition's teams for the main level"
+
+mv "$ws" "$ws.away"
+why=$(denied swb-1-conductor post_request land/tenant-environments/abc1234)
+mv "$ws.away" "$ws"
+has "$why" "crew could not check this card: could not fetch wldn/main of WilldanGroup/crew-state"
+why=$(CREW_AGENT=swb-1-conductor cards <<<"$(pre pendingyou post_request '{"name": "x"}')" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+eq "$why" "crew refuses a card with no idempotencyKey."
+ok "a card crew can't check is refused, naming the branch it could not read, and so is one with no key"
+
+eq "$(CREW_AGENT= CREW_LABEL= cards <<<"$(pre pendingyou post_request '{"idempotencyKey": "anything"}' sid-none)")" ""
+eq "$(CREW_AGENT= CREW_LABEL= cards <<<"$(pre pendingyou create_area '{"idempotencyKey": "area:mine"}' sid-none)")" ""
+eq "$(CREW_AGENT=swb-1-ops cards <<<"$(pre github post_request '{"idempotencyKey": "anything"}')")" ""
+eq "$(CREW_AGENT=swb-1-ops cards <<<"$(pre pendingyou update_request '{"requestId": "req_abc-1"}')")" ""
+eq "$(entries | wc -l)" "$n"
+eq "$(grep -rl ZQX "$(home_of mac-studio)/.local/state/crew" || true)" ""
+hooks=$(jq -c '.hooks.PreToolUse[1] | [.matcher, .hooks[0].command, .hooks[0].timeout]' "$CREW/plugin/hooks/hooks.json")
+eq "$hooks" '["mcp__.*__(post_request|create_area)","python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\"",30]'
+ok "a session crew didn't start, another server's tool and any other card tool are neither checked nor refused, nothing is recorded before a call, and the plugin runs the check before the two"
