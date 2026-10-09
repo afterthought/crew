@@ -694,10 +694,14 @@ case $cmd in
       up)
         mark_up; ensure_main; start_standing; record_agents main.up "main($LABEL): up" ${started[@]+"${started[@]}"}
         greet_started ${started[@]+"${started[@]}"}  # each host's own _dispatch up greets its dispatcher
+        ups=() rc=0  # side by side, so a dispatcher waiting on a question holds back no other host's; one that fails fails main up
         while read -r host target remote; do
-          if [[ $host == $(this_host) ]]; then bash "$0" _dispatch up "$LABEL"; else there "$target" "$remote" _dispatch up "$LABEL"; fi
+          if [[ $host == $(this_host) ]]; then bash "$0" _dispatch up "$LABEL" </dev/null &
+          else there "$target" "$remote" _dispatch up "$LABEL" </dev/null & fi
+          ups+=($!)
         done < <(py hosts "$LABEL")
-        wait ;;
+        for p in ${ups[@]+"${ups[@]}"}; do wait "$p" || rc=$?; done
+        wait; exit $rc ;;
       down)
         for role in "${standing[@]}"; do stop "$role" || true; done; mark_down
         record_agents main.down "main($LABEL): down" ${ended[@]+"${ended[@]}"}; echo "$LABEL's main level is down; its panes are still there."

@@ -110,6 +110,36 @@ answered=$(at "stub status wldn-planner idle")
 (( answered < $(at "agent prompt wldn-planner '") )) || fail "the planner was greeted before its question was answered"
 ok "an agent waiting on a question is greeted once it is answered, and holds back no other agent's greeting"
 
+# The box's dispatcher, the first host's, stops on a question as it starts: mac-studio's is started and greeted meanwhile.
+HOST=$box crew main down wldn >/dev/null
+: > "$CREW_TEST_LOG"
+answer() {
+  local i
+  for i in $(seq 300); do
+    grep -q "agent prompt wldn-dispatch-mac-studio '" "$CREW_TEST_LOG" &&
+      grep -q "^$box wldn-3 agent get wldn-dispatch-$box\$" "$CREW_TEST_LOG" && break
+    /bin/sleep 0.1
+  done
+  as $box herdr --session wldn-3 stub status wldn-dispatch-$box idle
+}
+answer &
+CREW_TEST_BLOCKED=wldn-dispatch-$box expect_ok crew main up wldn
+wait
+has "$out" "wldn-dispatch-$box is waiting on a question in its pane; answer it there and it will be greeted"
+has "$out" "wldn-dispatch-$box greeted"; has "$out" "wldn-dispatch-mac-studio greeted"
+eq "$(grep -c "agent prompt wldn-dispatch-$box '" "$CREW_TEST_LOG")" "1"
+answered=$(at "stub status wldn-dispatch-$box idle")
+(( $(at "agent prompt wldn-dispatch-mac-studio '") < answered )) || fail "mac-studio's dispatcher waited on the box's question"
+(( answered < $(at "agent prompt wldn-dispatch-$box '") )) || fail "the box's dispatcher was greeted before its question was answered"
+ok "a dispatcher waiting on a question holds back no other host's dispatcher"
+
+HOST=$box crew main down wldn >/dev/null
+echo mac-studio > "$CREW_TEST_ROOT/down"
+HOST=$box expect_fail "mac-studio port 22: Operation timed out" crew main up wldn
+has "$out" "wldn-dispatch-$box started"; has "$out" "wldn-dispatch-$box greeted"
+rm "$CREW_TEST_ROOT/down"
+ok "a host that does not answer fails main up, once every other host's dispatcher is up and greeted"
+
 as $box herdr --session wldn-3 stub status wldn-design working
 before=$(greets $box wldn-design)
 : > "$CREW_TEST_LOG"
