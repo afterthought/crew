@@ -147,3 +147,17 @@ has "$(prompts swb-1)" "Race the question."
 eq "$(herdr_state $box wldn-1 '[.agents[] | select(.name == "swb-1-conductor") | .prompts[] | select(contains("Race"))] | length')" "0"
 as $box herdr --session wldn-1 stub status swb-1-conductor idle
 ok "herdr's own agent_blocked, for a question opened since crew read the agent, is reported in the same words"
+
+mkdir -p "$T/sessionless"
+cat > "$T/sessionless/herdr" <<EOF
+#!/usr/bin/env bash
+# stub herdr, whose agent get names no session for the agent
+[[ \${3:-} == agent && \${4:-} == get ]] || exec "$TESTS/stubs/herdr" "\$@"
+"$TESTS/stubs/herdr" "\$@" | jq -c 'del(.result.agent.agent_session)'
+EOF
+chmod +x "$T/sessionless/herdr"
+: > "$CREW_TEST_LOG"
+PATH="$T/sessionless:$PATH" expect_fail "could not tell swb-1-conductor on chuck-herdr-alpha: herdr names no session for it, so crew can't tell whether it is waiting on a question; nothing was sent" \
+  crew tell swb-1-conductor "Hold the zone work."
+eq "$(prompts swb-1)" ""
+ok "an agent herdr names no session for refuses the tell, naming what it could not read"
