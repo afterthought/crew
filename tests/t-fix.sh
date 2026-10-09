@@ -218,6 +218,20 @@ eq "$(cat "$T/hook-ran" 2>/dev/null)" "$bt $new"
 eq "$(git -C "$bd" rev-parse HEAD)" "$new"; eq "$(merge_prompts "$ca")" "0"
 ok "the kit's post-merge hooks run on the bolt's new head, with the bolt as their target"
 
+rm "$k/.config/wt.toml" "$T/hook-ran"
+echo "# switchboard-kit, main's once more" > "$k/README.md"; commit_all "$k" "docs: main's title once more"
+nh=fix/tenant-environments/no-hooks
+expect_ok crew fix swb-1 no-hooks "Carry the bolt onto main: the landing stopped on README.md once more."
+replay "$kd/places/fix-tenant-environments--no-hooks" "# switchboard-kit, main's once more and the bolt's"
+old=$(git -C "$k" rev-parse "$bt"); new=$(git -C "$k" rev-parse "$nh")
+expect_ok crew fix swb-1 no-hooks --merge
+has "$out" "bolt/tenant-environments moved from ${old:0:7} to ${new:0:7}: $nh carries the bolt's $n commits onto main (1 changed by the resolution)"
+has "$out" "the kit has no post-merge hooks, so no checks run on ${new:0:7}; prove the bolt again before it lands"
+lacks "$out" "the bolt's checks"
+eq "$(git -C "$bd" rev-parse HEAD)" "$new"; eq "$(merge_prompts "$nh")" "0"
+[[ ! -e $T/hook-ran ]] || fail "a hook ran for a kit with no post-merge hooks"
+ok "a kit with no post-merge hooks moves the bolt and says no checks run on it"
+
 echo more > "$k/more"; commit_all "$k" "docs: more on main"
 own=fix/tenant-environments/own-commit; op=$kd/places/fix-tenant-environments--own-commit
 expect_ok crew fix swb-1 own-commit "Carry the bolt onto main."
