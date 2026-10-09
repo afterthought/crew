@@ -1,6 +1,6 @@
 # crew operator up <label>, run on the host itself: the "operator" workspace in the session named <label>, the agent
-# <label>-operator-<host> started in the session's folder, nothing done when it is already up, and a non-zero exit
-# naming a missing session or partition.
+# <label>-operator-<host> started in the session's folder and greeted once its rail tab is open, nothing done and
+# nobody greeted when it is already up, and a non-zero exit naming a missing session or partition.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 
@@ -12,13 +12,22 @@ eq "$(jq -r '"\(.host) \(.cwd) \(.argv[1]) \(.argv[3]) \(.label)"' "$CREW_TEST_C
 grep -q " ssh " "$CREW_TEST_LOG" && fail "operator up left its host"
 ok "the operator agent starts in the operator workspace of the session named for its partition"
 
+has "$out" "madswan-operator-mac-studio greeted"
+greeting=$(grep -n "^mac-studio madswan agent prompt madswan-operator-mac-studio '\[crew\] Read where madswan stands with" "$CREW_TEST_LOG")
+eq "$(grep -c . <<<"$greeting")" "1"
+has "$greeting" "what is moving and what waits on me"
+(( $(grep -n -- "tab create .*--label rail" "$CREW_TEST_LOG" | head -1 | cut -d: -f1) < ${greeting%%:*} )) ||
+  fail "the operator agent was greeted before its rail tab was open"
+ok "the operator agent it starts is greeted once, after its rail tab is open"
+
 : > "$CREW_TEST_LOG"
 expect_ok crew operator up madswan
 has "$out" "madswan-operator-mac-studio is already up"
 eq "$(herdr_state mac-studio madswan '.workspaces | length')" "1"
 eq "$(wc -l < "$CREW_TEST_CLAUDE_LOG" | tr -d ' ')" "1"
-grep -q "workspace create\|pane run" "$CREW_TEST_LOG" && fail "a second operator up made or started something"
-ok "run twice, it starts nothing and succeeds"
+grep -q "workspace create\|pane run\|agent prompt" "$CREW_TEST_LOG" && fail "a second operator up made, started or greeted something"
+lacks "$out" "greeted"
+ok "run twice, it starts nothing, greets nobody and succeeds"
 
 HOST=chuck-herdr-alpha expect_ok crew operator up wldn; has "$out" "wldn-operator-chuck-herdr-alpha started"
 HOST=chuck-herdr-alpha expect_fail "chuck-herdr-alpha has no session named madswan" crew operator up madswan
