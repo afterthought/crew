@@ -16,6 +16,7 @@ expect_ok crewpy brief swb-1 coder; has "$out" "run \`wt merge\` in the backgrou
 ok "the coder runs a merge, whose checks can outlast a command's time limit, in the background"
 
 expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by hand: the merge's gate runs it."
+has "$out" "run the tests of what you changed, as the kit's CLAUDE.md says"; lacks "$out" "moon run"
 expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it runs only those the change affects"
 has "$out" "never the whole suite, which the merge gate runs"
 expect_ok crewpy brief swb-1 construct; has "$out" "ending with the tests its change affects green, not the whole suite, which the merge gate runs"
