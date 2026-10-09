@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Run crew's suite as moon tasks: tests/suite [--affected | --force] [name...]. Each tests/t-*.sh but the live one is
+# a task (tests/moon.yml, written by tests/moon-tasks) that runs that one test through tests/run, and the tasks run
+# side by side. A task whose inputs are identical to a run that passed on this host, in any worktree of crew, is
+# replayed from moon's archives instead of run again; a run that failed is never replayed.
+#
+#   tests/suite                 every task
+#   tests/suite merge docs      those tasks (merge, t-merge and t-merge.sh all name tests:t-merge)
+#   tests/suite --affected      the tasks whose inputs differ from the merge-base with main, uncommitted edits
+#                               included; the rest are not run
+#   tests/suite --force         every selected task run, none replayed
+#
+# Every selected task runs even when one fails. It prints a line per test in tests/run's words, `ok    t-<name>`,
+# with `   (replayed)` on one moon replayed, or `FAIL  t-<name>`; then each failing test's output; then
+# `<n> passed (<k> replayed), <m> failed`, and exits 0 only when none failed. moon's own output is in
+# .moon/cache/suite.log. It refuses before running anything when the tasks are out of step with the tests.
+# Written for bash 3.2, as tests/run is.
+set -uo pipefail
+[[ -n ${DEVENV_ROOT:-} ]] || { echo "tests/suite runs inside crew's devenv shell: a Claude session in a crew checkout is in it from its start; from a terminal, enter it with devenv shell, or direnv with the checkout's .envrc" >&2; exit 2; }
+for c in moon jq; do
+  command -v "$c" >/dev/null || { echo "tests/suite needs $c on PATH (it comes with crew's devenv)" >&2; exit 2; }
+done
+TESTS=$(cd "$(dirname "$0")" && pwd -P)
+root=$(dirname "$TESTS")
+cd "$root" || exit 2
+
+affected= force=
+names=()
+for a in "$@"; do
+  case $a in
+    --affected) affected=1 ;;
+    --force) force=1 ;;
+    -*) echo "usage: tests/suite [--affected | --force] [name...]" >&2; exit 2 ;;
+    *) names+=("$a") ;;
+  esac
+done
+[[ -n $affected && -n $force ]] && { echo "tests/suite: --affected and --force can't go together: --force runs every selected task" >&2; exit 2; }
+
+"$TESTS/moon-tasks" --check || exit 2
+
+targets=()
+if (( ${#names[@]} )); then
+  for n in "${names[@]}"; do
+    n=${n#t-}; n=t-${n%.sh}
+    grep -qx "  $n:" "$TESTS/moon.yml" || { echo "tests/suite: $n is no task in tests/moon.yml; tests/run $n runs a test that has none" >&2; exit 2; }
+    targets+=("tests:$n")
+  done
+else
+  targets=("tests:#suite")
+fi
+args=(--on-failure continue)
+[[ -n $affected ]] && args+=(--affected remote)
+[[ -n $force ]] && args+=(--force)
+
+# moon hands its tasks its own settings (MOON_CACHE, MOON_CACHE_DIR, MOON_WORKSPACE_ROOT…), and reads the same
+# variables as options: a run started from inside a task, as t-suite's are, would write into that task's cache and
+# replay nothing. Only the shell's MOON_TOOLCHAIN_FORCE_GLOBALS and a caller's MOON_CONCURRENCY are kept.
+for v in $(env | sed -n 's/^\(MOON_[A-Z0-9_]*\)=.*/\1/p'); do
+  case $v in MOON_TOOLCHAIN_FORCE_GLOBALS | MOON_CONCURRENCY) ;; *) unset "$v" ;; esac
+done
+
+cache=$root/.moon/cache
+log=$cache/suite.log
+report=$cache/runReport.json
+mkdir -p "$cache" || exit 2
+rm -f "$report"
+moon exec "${targets[@]}" "${args[@]}" </dev/null >"$log" 2>&1
+rc=$?
+
+if [[ ! -f $report ]]; then
+  if (( rc == 0 )) && grep -q "No tasks affected" "$log"; then
+    echo "no test is affected: nothing to run"
+    echo "0 passed (0 replayed), 0 failed"
+    exit 0
+  fi
+  tail -40 "$log" >&2
+  echo "tests/suite: moon exited $rc before running a task; its whole output is in $log" >&2
+  exit "$(( rc ? rc : 1 ))"
+fi
+
+# One line per task moon ran: <name> <status>, in name order.
+results=$(jq -r '.actions[] | select(.label | startswith("RunTask(tests:")) | "\(.label | ltrimstr("RunTask(tests:") | rtrimstr(")")) \(.status)"' "$report" | sort) || {
+  echo "tests/suite: cannot read $report" >&2; exit 2; }
+
+pass=0 replayed=0
+failed=()
+while read -r name status; do
+  [[ -n $name ]] || continue
+  case $status in
+    passed) pass=$((pass + 1)); echo "ok    $name" ;;
+    cached) pass=$((pass + 1)); replayed=$((replayed + 1)); echo "ok    $name   (replayed)" ;;
+    failed) failed+=("$name"); echo "FAIL  $name" ;;
+    *) failed+=("$name"); echo "FAIL  $name   (moon: $status)" ;;
+  esac
+done <<<"$results"
+
+if (( ${#failed[@]} == 0 && pass == 0 )); then echo "no test selected: nothing ran"; fi
+# A failing test's output is moon's record of its run, tests/run's own lines and its trimmed tail among them;
+# indented, so the only lines starting FAIL are the ones above, one per failing test.
+for name in ${failed[@]+"${failed[@]}"}; do
+  state=$cache/states/tests/$name
+  echo
+  echo "── $name failed:"
+  if [[ -s $state/stdout.log || -s $state/stderr.log ]]; then
+    cat "$state/stdout.log" "$state/stderr.log" 2>/dev/null | sed 's/^/      /'
+  else
+    echo "      no output recorded in $state"
+  fi
+done
+(( ${#failed[@]} )) && echo
+echo "${pass} passed (${replayed} replayed), ${#failed[@]} failed"
+(( ${#failed[@]} == 0 && rc == 0 )) || {
+  (( ${#failed[@]} == 0 )) && { tail -20 "$log"; echo "tests/suite: moon exited $rc; its whole output is in $log"; }
+  exit 1
+}
