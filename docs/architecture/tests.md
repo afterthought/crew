@@ -32,7 +32,7 @@ The rules for how crew is tested and gated. `core.md` binds here too; the how-to
 
 **[tests.4]** Rules out: a code fix with no test; a stub that behaves unlike the tool. Source: fixes e413c48, f734f28, 5e11de2, 25c300d, 04daa5d.
 
-**[tests.5]** Rules out: a merge with no gate; one task for the whole suite. Source: ADR 0008. Not built: `_open.md`.
+**[tests.5]** Rules out: a merge with no gate; one task for the whole suite. Source: ADR 0008; `tests/suite`; `tests/moon-tasks`.
 
 **[tests.6]** Rules out: a brief rule with no phrase in `t-briefs.sh`. Source: fix a2ea85e; rulings-rest-on-readings design. Five brief fixes have no phrase: `_open.md`.
 

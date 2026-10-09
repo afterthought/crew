@@ -38,7 +38,7 @@ Reading
 
 Code
 
-- **[code.1]** crew's Python imports nothing outside the standard library and its own modules; `gather.py` imports only the standard library, since it is piped to hosts whose crew may be older; devenv declares only jq, python3 and recutils.
+- **[code.1]** crew's Python imports nothing outside the standard library and its own modules; `gather.py` imports only the standard library, since it is piped to hosts whose crew may be older; devenv declares only jq, moon, python3 and recutils.
 - **[code.2]** A refusal is a `Refusal` raised through `fail()`, turned into `sys.exit(<message>)` at each entry point, never a traceback.
 - **[code.3]** Every bash command about a team, main level or slot forwards to the host the teams file names before touching any state, carrying the asker's `CREW_AGENT`, `CREW_LABEL` and `CREW_SESSION`; every ssh crew runs passes `-o BatchMode=yes`.
 - **[code.4]** Every name crew mints or accepts matches `^[a-z0-9][a-z0-9-]*$`.
@@ -73,7 +73,7 @@ Code
 
 **[read.4]** Rules out: starting a role over a running agent; a fix adopting an existing place; tidying a hand-made worktree. Source: fixes 499cd3b, 5e11de2, f6d7b11; worktrees-go-with-their-work.
 
-**[code.1]** Rules out: `import yaml`; `gather.py` importing `crew`. Source: `plan.py` 57–65; `gather.py` 13–15; `devenv.nix`.
+**[code.1]** Rules out: `import yaml`; `gather.py` importing `crew`. Source: `plan.py` 57–65; `gather.py` 13–15; `devenv.nix`; ADR 0008, for moon.
 
 **[code.2]** Rules out: a bare `raise` reaching the user; `sys.exit(1)` with no message. Source: `crew.py` 38–43, 662–666; `plan.py` 3072–3076.
 

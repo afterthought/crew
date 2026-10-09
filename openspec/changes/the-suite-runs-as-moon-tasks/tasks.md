@@ -20,7 +20,7 @@
 
 - [x] 4.1 CLAUDE.md and README say an agent runs only the tests its change affects with `tests/suite`, never the whole suite by hand, and how to regenerate the tasks (design: Decisions "Agents run only the tests their change affects"; Task notes 4.1).
 - [x] 4.2 The coder's, verify's and construct's briefs each say so in one sentence, and `tests/t-briefs.sh` pins all three (design: Task notes 4.2).
-- [ ] 4.3 `code.1` allows moon in devenv, and `tests.5` is no longer listed as not built (design: Decisions "The rules and the record"; Task notes 4.3).
+- [x] 4.3 `code.1` allows moon in devenv, and `tests.5` is no longer listed as not built (design: Decisions "The rules and the record"; Task notes 4.3).
 
 ## 5. The suite
 
