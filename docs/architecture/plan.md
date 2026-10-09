@@ -15,14 +15,14 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 - **[plan.3]** A proposal holds only the plan commands a proposal may hold, parsed by the command line's own grammar and applied by the same functions as a direct run; it is checked by applying each `Do` in order to a copy at the tip, one refusal refuses the whole, and approval applies every `Do` in order at the tip and closes the proposal in one commit, or changes nothing.
 - **[plan.4]** A proposal is numbered once, never removed, its `Do` lines never changed; it closes only as approved or dropped, and one that touches a held bolt is approved only after that bolt's conductor has agreed.
 - **[plan.5]** Work a held bolt needs before it can be proven or land is placed in that bolt ahead of its first unmerged unit, marked `--unblocks`; a proposal that marks a unit so and places it elsewhere is refused.
-- **[plan.6]** A unit that has merged or landed is never amended, split, moved or dropped; a unit marked `Amended` reads amended, then construct, then review, and its code, verify and merge are refused until the user approves again.
+- **[plan.6]** A unit that has merged or landed is never amended, split, moved or dropped; a unit marked `Amended` reads amended, then construct, and its code, verify and merge are refused until its construct has committed again, with no approval asked.
 - **[plan.7]** A unit's name is its OpenSpec change's name, refused when the kit's main already holds a change by that name, open or archived.
 - **[plan.8]** A bolt is cut from GitHub's main fetched at that moment, and a landing is refused while the kit's main on its host is behind GitHub's.
 - **[plan.9]** crew removes only worktrees it made, directly under `<kit>/bolts/` or `<kit>/places/` on a `bolt/`, `unit/` or `fix/` branch, once their work is finished; a worktree with modified or non-ignored untracked files, a locked one, the main checkout and a hand-made one are never removed, and nothing is removed while a plan the kit's work goes in cannot be read.
 - **[plan.10]** A branch holding commits whose patch the bolt or main lacks, judged by `git cherry`, is kept and named when its worktree goes; a branch holding nothing beyond its target is removed.
 - **[plan.11]** A chore is planned maintenance built inside a bolt by code, verify and merge, with no construct and no review, and changes nothing a spec says must be true.
 - **[plan.12]** A command reads each kit once and fetches the state branch once, however many steps it has, and stage facts read without `openspec` agree with openspec's on the same worktree.
-- **[plan.13]** `After` names a unit whose code the dependent builds on, a contour that exists only once that unit's code exists; the dependent starts only once each has merged into the bolt, and `After` is never set for shared files or for product order, which is the file's.
+- **[plan.13]** `After` names a unit whose code the dependent builds on, a contour that exists only once that unit's code exists; the dependent's construct never waits on it, its code starts only once each has finished construct, and it merges only after each has merged into the bolt; `After` is never set for shared files or for product order, which is the file's.
 - **[plan.14]** A landing records the sha main holds afterwards and deploys nothing; a deploy is one act by the kit's deployer under the environment's policy, to one environment, over every landing since that environment's last deployed state, recorded in the run record as it runs with its contents, the kit's after-deploy checks and their outcomes, and every after-deploy step of the landings it carries with its doer and state; a `manual` environment's deploy is a rail row with a card held to approve, a step that is the user's is a rail row with a card until the user marks it done, and promotion to the next environment is a deploy to it.
 
 ## Details
@@ -37,7 +37,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 **[plan.5]** Rules out: an `--unblocks` unit in the queue. Source: fix 902336e; `plan-proposals` spec "Work a bolt in flight needs to land goes into that bolt".
 
-**[plan.6]** Rules out: `unit split` on a unit in code; construct on a merged unit. Source: `bolt-plan` spec; unit-amendments design; `plan.py` 1328–1330, 1409, 1449.
+**[plan.6]** Rules out: `unit split` on a unit in code; construct on a merged unit; an amended unit held for the user's approval. Source: `bolt-plan` spec; unit-amendments design; ADR 0014 (D5); `plan.py` 1328–1330, 1409, 1449. The code holds an amended unit for `crew unit approve` until `concurrent-units` lands: `_open.md`.
 
 **[plan.7]** Rules out: a unit named after an archived change. Source: `plan.py` 808–817.
 
@@ -51,6 +51,6 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 **[plan.12]** Rules out: a second `gather` in one command; a stage fact that disagrees with openspec. The direct reading knows openspec's own spec-driven schema; a change of any other schema, of a spec-driven its kit or user redefines, or with metadata crew does not read, is read through `openspec`. Source: `openspec/explorations/command-cost/reading.md`; ADR 0008; a-command-reads-the-kits-once; `plan.py` `Reading`, `fetch`, `land`, `survey`; `gather.py` `tasks_of`, `planned`; `tests/t-stage-facts.sh`, `tests/t-reads-once.sh`.
 
-**[plan.13]** Rules out: `After` between units that only touch the same files; a dependent started at its dependency's verify; `After` as sequencing. Source: ADR 0011; `bolt-plan` spec "The file's order and dependencies are the plan".
+**[plan.13]** Rules out: `After` between units that only touch the same files; a dependent's construct held for its dependency; a dependent's code before its dependency's change is committed; a dependent merged before its dependency; `After` as sequencing. Source: ADR 0011; ADR 0014 (D1, D2); `bolt-plan` spec "The file's order and dependencies are the plan". The code holds construct until the dependency merges until `concurrent-units` lands: `_open.md`.
 
 **[plan.14]** Rules out: a deploy implied by `crew bolt land`; a deploy whose contents are remembered rather than read; main-ops running a deploy; a `manual` deploy approved anywhere but its card; an after-deploy list of what a check could assert; a step for the user that lives only in a pane. Source: ADR 0012 as amended 2026-10-08 and 2026-10-09; `main-level` spec; swancloud ADR 0018, 0019; the versions statement on channels. Not built: `_open.md`.

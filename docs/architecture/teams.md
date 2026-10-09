@@ -15,9 +15,11 @@ The rules for teams, slots, stages, panes and tells: the bash command, the role 
 - **[teams.2]** Every unit stage starts as a fresh agent in its slot after the slot's previous agent is ended; crew never starts a role over an agent still running, `stop` fails rather than lies when the agent did not exit, and a working agent is ended, cleared or freed only with `--force`.
 - **[teams.3]** A fix is built on `fix/<bolt>/<name>` at `<kit>/places/fix-<bolt>--<name>` from its team's bolt; a fix whose branch or place already exists is refused, and a fix's agent starts or merges only in a worktree on its own branch tracking the bolt.
 - **[teams.4]** A stage ends when its deliverable exists in the kit or on the team's host, or when its agent stops short and says what it needs, never when its pane goes quiet; whoever waits learns the end with the deliverable, and a stage quiet past crew's limit is reported stuck.
-- **[teams.5]** Code is refused for a unit the user has not approved, verify until every task is ticked, and a unit or fix merges into its bolt only through `wt merge bolt/<bolt> --no-squash --no-remove`.
+- **[teams.5]** Code is refused until a unit's change is committed, never for want of a review; verify until every task is ticked; merge until every unit it comes after has merged; and a unit or fix merges into its bolt only through `wt merge bolt/<bolt> --no-squash --no-remove`, or `wt submit bolt/<bolt>` where sluice is available.
 - **[teams.6]** A role's model and effort come only from its definition's frontmatter, overridden only under `roles.<role>` in the teams file; `crew-role` starts every role with `CREW_AGENT` and `CREW_LABEL` set and the filled brief appended to the system prompt, in the role's folder, and `crew resume` picks up the agent's last session in the folder it began in.
 - **[teams.7]** A conductor, and every agent crew starts outside a team (a main level's design agent, planner and ops, a dispatcher, an operator agent), gets exactly one greeting per start, marked as crew's; a plan write whose own command greets a team does not also notify its conductor.
+- **[teams.12]** A unit's Touches is a fenced list of paths or globs under `## Touches` in its proposal, read by crew before code; an overlap with an unmerged unit ahead of it, and a conflict `git merge-tree` forecasts on the conductor's waits, are told to the later unit's agent once, and order only merging, never construct, code or verify; a path the unit changed and did not declare is a verify finding.
+- **[teams.13]** A conflict between two units, forecast, met at a rebase or met at merge, is resolved in the later unit's place by its agent, handed the other unit's change and the conflicting paths, keeping both intents; the earlier unit is not changed for it.
 - **[teams.11]** A tell reaches its agent as a prompt or not at all: an agent that is not up, or waiting on a question in its pane, is reported and the command fails with nothing typed.
 - **[teams.8]** A pane crew starts answers only Claude's folder-trust question, never the Bypass Permissions warning.
 - **[teams.9]** The panes, layout and slots files change only by writing a new file and moving it over the old; the stages file changes only under `flock`; output that bash evals is shell assignments quoted with `shlex.quote`, and everything else such a command says goes to standard error.
@@ -33,7 +35,11 @@ The rules for teams, slots, stages, panes and tells: the bash command, the role 
 
 **[teams.4]** Rules out: `stage.end` at herdr's first idle with no deliverable; a conductor reading a pane for an outcome; a two-hour wait on a stage already done. Source: ADR 0007; `a-stage-ends-at-its-deliverable`; `plan.py` `deliverable`, `stage_wait` (`_wait`), `stage_needs` (`_needs`) and `stage_ends`; `transcript.py` `pending`; `tests/t-stage-ends.sh`.
 
-**[teams.5]** Rules out: `--no-hooks`, `--yes`, a squash. Source: `bolt-teams` spec; `plugin/bin/crew` 562; `plan.py` 2463.
+**[teams.5]** Rules out: `--no-hooks`, `--yes`, a squash; code held for the user's review; a dependent merged ahead of its dependency. Source: `bolt-teams` spec; ADR 0014 (D2, D5, D7); `plugin/bin/crew` 562; `plan.py` 2463. The code refuses code before `crew unit approve` and knows only `wt merge` until `concurrent-units` lands: `_open.md`.
+
+**[teams.12]** Rules out: Touches as prose compared by eye; two units built one after the other because their Touches overlap; a forecast that moves a ref; the same forecast told twice for the same heads; the earlier unit told. Source: ADR 0014 (D3, D8); `concurrent-units` design. Not built: `_open.md`.
+
+**[teams.13]** Rules out: a conflict resolved without the other unit's change in hand; the earlier unit rewritten for a later one's conflict. Source: ADR 0014 (D4); the sluice statement on attributing a conflict to the later entry. Not built: `_open.md`.
 
 **[teams.6]** Rules out: a model named in `plugin/lib` or `plugin/bin`; an override for a role the team lacks; a resume in the wrong folder. Source: `agent-models` spec; `crew.py` 32–35, 84–97, 326–335, 567–579; fix 25c300d.
 

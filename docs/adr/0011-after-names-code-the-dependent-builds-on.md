@@ -53,3 +53,4 @@ Option 3.
 - `plan.13` added in `docs/architecture/plan.md`; the `bolt-plan` spec's "SHALL NOT start until each of them has merged into the bolt" stands as written; `plugin/roles/planner.md` gains the carving sentence; `conductor.md` is unchanged.
 - Nothing to build: no check can tell a contour dependency from a shared file, so `roles.3` has nothing to refuse.
 - Option 2 may be revisited once verify send-backs are measured rare on a kit.
+- Point 2 is superseded by record 0014 (the operator's ruling of 2026-10-09): the dependent's construct never waits, its code waits on each `After` unit's construct, and its merge on each `After` unit's merge. Point 1, what `After` means, stands.
