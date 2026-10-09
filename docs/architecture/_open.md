@@ -21,7 +21,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - ADR 0005: cards (`the-rail-is-answered-through-cards`, after the rail).
 - `teams.7` for the main level: every agent started outside a team is greeted once it is up (`main-level-agents-are-greeted-at-start`); `crew main up`, `crew operator up` and `crew revive` greet nobody.
 - `teams.11`: a tell to an agent waiting on a question is refused with nothing typed (`a-tell-never-lands-in-a-question`); `tell` types into the pane regardless.
-- `plan.14`, `roles.2` as amended: `deploy.*` run-record entries, the deploy's approval, the rail row and held card for a `manual` environment, the board's Operation lane rows per environment (`a-deploy-is-approved-and-recorded-through-crew`); the `main-level` spec and `main-ops.md` step 4 still have main-ops deploying.
+- `plan.14`, `roles.2` as amended: `deploy.*` run-record entries, the deploy's approval, the rail row and held card for a `manual` environment, the board's Operation lane rows per environment (`a-deploy-is-approved-and-recorded-through-crew`), and the lineage page's deploys view (`the-page-shows-the-deploys`, record 0010); the `main-level` spec and `main-ops.md` step 4 still have main-ops deploying.
 - `docs.6`: what a change holds, in `construct.md` and `openspec/config.yaml` (`a-change-holds-what-is-true-and-what-is-proved`).
 - `signals.6`: a program's captures landed on the flywheel's branch (`machine-captures-land-on-the-flywheels-branch`, after `daily-pass-lands-through-crew`).
 - `signals.7`: curation on a cadence (`curation-runs-on-a-cadence`, after `curate-into-agenda`).
