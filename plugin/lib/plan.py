@@ -18,6 +18,10 @@ five times. A write that changes several files is one commit, and it carries the
                                              and bolts to land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone
+  crew card session|wait|end <key>           a plannotator session on what the rail row with that card key asks the
+                                             user to read, started on this host with no browser and its link printed;
+                                             the user's decision in it, waited for; and its end, which a card's close
+                                             brings too
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
@@ -56,7 +60,9 @@ a channel is in the partition's first blueprints repo. An id is looked up in tha
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, contextlib, datetime, fcntl, getpass, hashlib, json, os, pathlib, re, shlex, subprocess, sys, tempfile, time
+import argparse, contextlib, datetime, fcntl, getpass, hashlib, json, os, pathlib, re, shlex, shutil, subprocess, sys, tempfile, time
+import urllib.parse
+from signal import SIGTERM
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -3358,7 +3364,8 @@ def rail_record(fleet, found, props):
 def rail_rows(fleet, found, sv, props, times):
     """What waits on the user in the plans read, from the open proposals and when each was proposed, and the kits as
     surveyed: each row's group, its partition, its card key, the time it began to wait (shown as a date alone when that
-    is all that is known), what it is, and its commands."""
+    is all that is known), what it is, its commands, and the document its card asks the user to read: ("page", label,
+    n) for a proposal, (host, path) for a review's change folder or a verify report, None for a landing."""
     rows, here = [], crew.this_host()
     for d in props:
         l, n = d["label"], d["proposal"]
@@ -3367,7 +3374,7 @@ def rail_rows(fleet, found, sv, props, times):
             what.append("still needs the agreement of " + ", ".join(f"{t}-conductor" for t in d["waiting"]))
         at = times.get((l, f"proposal/{n}"))
         rows.append(dict(group="proposals", label=l, key=f"proposal/{n}", at=at or utc(f"{d['opened']}T00:00:00Z"),
-                         date=None if at else d["opened"], what=what,
+                         date=None if at else d["opened"], what=what, doc=("page", l, n),
                          cmds=[("read", f"crew plan proposed {n} --label {l}"), ("open", f"crew plan proposed {n} --label {l} --open"),
                                ("answer", f"crew plan approve {n} --label {l}")]))
     for l, _, _, plan in found:
@@ -3389,6 +3396,7 @@ def rail_rows(fleet, found, sv, props, times):
                 if s == "review":
                     rows.append(dict(group="review", label=l, key=f"review/{u.name()}/{(pl.get('head') or '')[:7]}",
                                      at=utc(pl.get("head_at")), what=[f"unit {u.name()} ({l}), {team} on {host}"],
+                                     doc=(host, f"{pl['path']}/openspec/changes/{u.name()}/"),
                                      cmds=[("open", opener(fleet, host, here, f"{pl['path']}/openspec/changes/{u.name()}/")),
                                            ("answer", f"crew unit approve {u.name()} --label {l}")]))
                 report = k.get("reports", {}).get(u.name())
@@ -3396,12 +3404,13 @@ def rail_rows(fleet, found, sv, props, times):
                     stamp = re.fullmatch(r"verify-.+-(\d{8}-\d{4})\.md", os.path.basename(report["path"]))
                     rows.append(dict(group="verify", label=l, key=f"verify/{u.name()}/{stamp.group(1) if stamp else ''}", at=utc(report["at"]),
                                      what=[f"unit {u.name()} ({l}), {team} on {host}: report {shlex.quote(report['path'])}"],
+                                     doc=(host, report["path"]),
                                      cmds=[("open", opener(fleet, host, here, report["path"])),
                                            ("answer", f'crew tell {team}-conductor "On {u.name()}\'s verify report: "')]))
             stages = [st.of(u.name())["stage"] for u in units]
             at = k["bolts"].get(b.name(), {}).get("head_at")
             if stages and at and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
-                rows.append(dict(group="land", label=l, key=f"land/{b.name()}", at=utc(at), what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
+                rows.append(dict(group="land", label=l, key=f"land/{b.name()}", at=utc(at), doc=None, what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
                                  cmds=[("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]))
     return rows
 
@@ -3473,6 +3482,253 @@ def rail_view(fleet, a):
         sys.exit("\n".join(errors.values()))
 
 
+# ------------------------------------------------------------------------------------------------ crew card
+
+# A card's plannotator session, by its card key, in ~/.local/state/crew/cards/<label>/<key>/ on the owner's host, the
+# key's slashes as folders: session.json (pid, document, url, started), and plannotator's result.json once the user
+# decides.
+CARDS = pathlib.Path.home() / ".local/state/crew/cards"
+# The rail's four card keys, as crew's card hook reads them.
+CARD_KEYS = (r"proposal/\d+", r"review/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}",
+             r"land/[a-z0-9][a-z0-9-]*")
+CARD_START = 10  # seconds a start waits for plannotator to list its session
+CARD_POLL = 5  # seconds between a wait's reads
+
+
+def card_of(fleet, a):
+    """The partition a card command runs as and the key's folder: refused with no partition, or a key that is not one
+    of the rail's four."""
+    label = default_label(fleet, a) or fail("crew card runs as the card's partition: run it as a crew agent, or add --label")
+    any(re.fullmatch(k, a.key) for k in CARD_KEYS) or fail(
+        f"{a.key} is not a card key: proposal/<n>, review/<unit>/<head>, verify/<unit>/<stamp> or land/<bolt>")
+    return label, CARDS / label / a.key
+
+
+def plannotator_sessions():
+    """The plannotator sessions running on this host, ({pid: session}, None), as `plannotator sessions --json` lists
+    them, each with the pid, target and url it lists; (None, why) when the list can't be read."""
+    try:
+        r = subprocess.run(["plannotator", "sessions", "--json"], capture_output=True, text=True, timeout=8)
+    except FileNotFoundError:
+        return None, "plannotator is not on this host's path"
+    except subprocess.TimeoutExpired:
+        return None, "plannotator sessions did not answer in 8 seconds"
+    if r.returncode:
+        return None, "plannotator sessions: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
+    try:
+        got = json.loads(r.stdout)
+    except ValueError:
+        got = None
+    if not isinstance(got, list):
+        return None, "plannotator sessions --json printed no list"
+    return {s["pid"]: s for s in got if isinstance(s, dict) and isinstance(s.get("pid"), int) and isinstance(s.get("target"), str)
+            and isinstance(s.get("url"), str)}, None
+
+
+def card_recorded(d):
+    """The session crew started for a key, as session.json records it, or None when none is recorded. A record crew
+    can't read is refused, so nothing is done to a process it names."""
+    f = d / "session.json"
+    try:
+        s = json.loads(f.read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as e:
+        fail(f"crew can't read {f}: {e}")
+    ok = (isinstance(s, dict) and isinstance(s.get("pid"), int) and s["pid"] > 1
+          and all(isinstance(s.get(k), str) for k in ("document", "url", "started")))
+    return s if ok else fail(f"{f} is not a session crew recorded: it lacks a pid, document, url or started")
+
+
+def serving(listed, s):
+    """Whether plannotator lists the recorded session's pid as serving its document: a folder's target is listed
+    without its last slash."""
+    got = listed.get(s["pid"])
+    return bool(got) and os.path.realpath(got["target"]) == s["document"]
+
+
+def card_result(d):
+    """The user's decision in a key's session, as plannotator wrote it to result.json: (decision, feedback), feedback
+    None when it gave none; None while there is no result."""
+    f = d / "result.json"
+    try:
+        r = json.loads(f.read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as e:
+        fail(f"crew can't read plannotator's result {f}: {e}")
+    if not isinstance(r, dict) or r.get("decision") not in ("approved", "annotated", "dismissed"):
+        fail(f"plannotator's result {f} holds no decision crew knows: approved, annotated or dismissed")
+    fb = r.get("feedback")
+    return r["decision"], fb if isinstance(fb, str) and fb.strip() else None
+
+
+def card_row(fleet, label, key):
+    """The rail row of one partition with that card key, read as crew rail reads its rows, without the run record:
+    only the proposals for a proposal's key, only the host of the unit's team for a review's or a verify report's."""
+    found = plans(fleet, [label])
+    plan = found[0][3]
+    kind, name = key.split("/")[:2]
+    held = []
+    if kind != "proposal" and plan and plan.unit(name):
+        b = plan.bolt(plan.unit(name).get("Bolt"))
+        held = [(b.get("Team"), b.name())] if b and b.get("Team") else []
+    sv = survey(fleet, held)
+    props = open_proposals(fleet, [label], found) if kind == "proposal" and plan else []
+    row = next((r for r in rail_rows(fleet, found, sv, props, {}) if r["key"] == key), None)
+    if row:
+        return row, props
+    down = [f"{h} did not answer ({v['error']})" for h, v in sv.items() if not v["ok"]]
+    fail(f"no row of {label}'s rail has the card key {key}"
+         + (", and whether one would can't be known: " + "; ".join(down) if down else ": its row is gone, so its card has nothing to read"))
+
+
+def card_stop(proc):
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
+def card_session(fleet, a):
+    """crew card session <key> [--label L]: a plannotator session on the document the rail row with that card key asks
+    the user to read, started on this host with an Approve button and no browser, and its link printed. While the
+    session crew started for the key still runs, its link is printed again and nothing is started; one that ended
+    with no decision is forgotten, and one the user closed undecided is moved aside, so a new one starts. Refused for a
+    landing's key, a key with no row, a document on another host, and a link that would open only on this host."""
+    label, d = card_of(fleet, a)
+    a.key.startswith("land/") and fail("a landing card has no document to read, so it has no session")
+    row, props = card_row(fleet, label, a.key)
+    where, doc = row["doc"][0], row["doc"][1:]
+    here = crew.this_host()
+    where in ("page", here) or fail(f"{a.key}'s document is on {where}, not {here}: its session starts there, from its owner")
+    d.mkdir(parents=True, exist_ok=True)
+    with open(d / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        s = card_recorded(d)
+        if s:
+            listed, why = plannotator_sessions()
+            listed is not None or fail(f"crew can't tell whether {a.key}'s session still runs: {why}")
+            if serving(listed, s):
+                print(s["url"])
+                return
+            decided = card_result(d)
+            if decided and decided[0] != "dismissed":
+                print(s["url"])
+                print(f"the user decided in {a.key}'s session before it ended: crew card wait {a.key} gives the decision",
+                      file=sys.stderr)
+                return
+            if decided:
+                (d / "result.json").rename(d / f"result.{re.sub(r'[-:]', '', s['started'])}.json")
+            (d / "session.json").unlink()
+        shutil.which("plannotator") or fail("plannotator is not on this host's path, and a card's session is a plannotator session")
+        if where == "page":
+            _, n = doc
+            p = next(x for x in props if x["proposal"] == n)
+            f = d / f"proposal-{n}.md"
+            f.write_text(page(p, label))
+            doc = str(f)
+        else:
+            doc = doc[0]
+        doc = os.path.realpath(doc)
+        os.path.exists(doc) or fail(f"{a.key}'s document {doc} is not on {here}")
+        given = doc + "/" if os.path.isdir(doc) else doc  # a folder, as plannotator's usage gives it
+        started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        env = dict(os.environ, PLANNOTATOR_SKIP_BROWSER_OPEN="1", PLANNOTATOR_REMOTE="1")
+        with open(d / "out", "w") as out, open(d / "err", "w") as err:
+            proc = subprocess.Popen(["plannotator", "annotate", given, "--gate", "--json", "--result-file", str(d / "result.json")],
+                                    stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, start_new_session=True)
+        deadline = time.monotonic() + CARD_START
+        while True:
+            listed, why = plannotator_sessions()
+            got = (listed or {}).get(proc.pid)
+            if got:
+                break
+            if proc.poll() is not None:
+                said = (d / "err").read_text().strip().splitlines()
+                fail(f"plannotator ended before {a.key}'s session was ready" + (f": {said[-1]}" if said else f", exit {proc.returncode}"))
+            if time.monotonic() > deadline:
+                card_stop(proc)
+                fail(f"plannotator did not list {a.key}'s session within {CARD_START} seconds" + (f" ({why})" if why else "")
+                     + ", so crew ended it")
+            time.sleep(0.2)
+        host = urllib.parse.urlsplit(got["url"]).hostname or ""
+        if host in ("localhost", "::1") or host.startswith("127."):
+            card_stop(proc)
+            fail(f"plannotator gave {a.key}'s session the link {got['url']}, which would open only on {here}, so crew ended it: "
+                 "a card's session needs PLANNOTATOR_URL_HOST naming the host on the tailnet (swancloud sets it to auto)")
+        tmp = d / ".session.json"
+        tmp.write_text(json.dumps({"pid": proc.pid, "document": doc, "url": got["url"], "started": started}) + "\n")
+        tmp.replace(d / "session.json")
+    print(got["url"])
+
+
+def card_wait(fleet, a):
+    """crew card wait <key> [--label L]: wait, with no timeout, until the user decides in the session crew started for
+    the key, or it ends without a decision, and print which: approved or annotated with the user's words after it as
+    they are, closed in plannotator with no decision, or ended with no decision; a decision made before the wait began
+    is printed at once. A session crew ended, its card closed, is said so. Refused for a key with no session started."""
+    label, d = card_of(fleet, a)
+    card_recorded(d) or fail(f"no session was started for card {a.key}: crew card session {a.key} starts one")
+    said = {"approved": "approved", "annotated": "annotated", "dismissed": "closed in plannotator with no decision"}
+    while True:
+        decided = card_result(d)
+        if decided:
+            print(f"{a.key}: {said[decided[0]]}")
+            if decided[1]:
+                print(decided[1], end="" if decided[1].endswith("\n") else "\n")
+            return
+        s = card_recorded(d)
+        if s is None:
+            print(f"{a.key}: crew ended its session, as its card closed or crew card end was run")
+            return
+        listed, _ = plannotator_sessions()  # a list that can't be read says nothing: the wait goes on
+        if listed is not None and not serving(listed, s) and not card_result(d) and card_recorded(d) == s:
+            print(f"{a.key}: the session ended with no decision")
+            return
+        time.sleep(CARD_POLL)
+
+
+def end_session(label, key):
+    """End the plannotator session crew started for a card key on this host, and forget the key: its folder goes
+    first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only while plannotator lists it
+    as serving the recorded document (read.4). Returns what it did, in words. crew's card hook runs it when a crew
+    agent closes or withdraws a keyed card."""
+    any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
+    d = CARDS / label / key
+    if not d.is_dir():
+        return f"no session was running for {key}"
+    try:
+        s = card_recorded(d)
+    except Refusal:
+        s = None
+    listed, why = plannotator_sessions() if s else (None, None)
+    shutil.rmtree(d)
+    for p in d.parents:
+        if p == CARDS / label or not p.is_dir() or any(p.iterdir()):
+            break
+        p.rmdir()
+    if not s:
+        return f"no session was recorded for {key}; its folder is removed"
+    if listed is None:
+        return f"crew can't read plannotator's sessions ({why}): it ended nothing, and {key} is forgotten"
+    if not serving(listed, s):
+        return f"plannotator lists no session of pid {s['pid']} on {s['document']}: crew ended nothing, and {key} is forgotten"
+    try:
+        os.kill(s["pid"], SIGTERM)
+    except ProcessLookupError:
+        return f"{key}'s session had already ended, and {key} is forgotten"
+    return f"ended {key}'s session, plannotator pid {s['pid']}"
+
+
+def card_end(fleet, a):
+    """crew card end <key> [--label L]: end the session crew started for a card key, and forget the key."""
+    label, _ = card_of(fleet, a)
+    print(end_session(label, a.key))
+
+
 # ----------------------------------------------------------------------------------------------------- the CLI
 
 def parser(cls=argparse.ArgumentParser):
@@ -3488,6 +3744,11 @@ def parser(cls=argparse.ArgumentParser):
     v.add_argument("--json", action="store_true")
     v = sub.add_parser("rail")
     v.add_argument("--label")
+    ca = sub.add_parser("card").add_subparsers(dest="sub", required=True)
+    for c in ("session", "wait", "end"):
+        x = ca.add_parser(c)
+        x.add_argument("key")
+        x.add_argument("--label")
 
     bo = sub.add_parser("bolt").add_subparsers(dest="sub", required=True)
     x = bo.add_parser("new")
@@ -3649,6 +3910,7 @@ def parser(cls=argparse.ArgumentParser):
 
 COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
+    ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
