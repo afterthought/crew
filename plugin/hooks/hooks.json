@@ -1,5 +1,5 @@
 {
-  "description": "Give a crew agent back its herdr name and crew identity when herdr resumes it after a restart, mark each question or plan a crew agent opens for the user so no tell is typed into it, and record each Pending You card it posts, updates or closes in crew's run record",
+  "description": "Give a crew agent back its herdr name and crew identity when herdr resumes it after a restart, mark each question or plan a crew agent opens for the user so no tell is typed into it, refuse a Pending You card or area a crew agent posts under a key that is not its own, and record each Pending You card it posts, updates or closes in crew's run record",
   "hooks": {
     "SessionStart": [
       {
@@ -20,6 +20,16 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/questions\"",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__(post_request|create_area)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\"",
+            "timeout": 30
           }
         ]
       }
