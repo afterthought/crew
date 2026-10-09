@@ -2857,8 +2857,9 @@ def tidy(fleet, a):
     removed with its branch, saying the commit the branch was at; or kept and named, with its branch, while it is
     locked or has uncommitted changes. The removal goes through the kit's own `wt remove`, run from the kit's main
     checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having failed or
-    waiting for the user's approval on this host, or with no wt on this host's path, is kept and named with its
-    branch, and the next read tries it again. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
+    waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is kept
+    and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
+    alone, the branch is kept and said. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
     directly in <kit>/places/ on unit/<its folder> or a fix/ branch; nothing else is touched. The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
     makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
@@ -2925,6 +2926,9 @@ def tidy(fleet, a):
                     [l[1:].strip() for l in said if l.startswith("✗")] or said[-1:] or [f"wt remove exited {r.returncode}"]))
             continue
         READ.drop_kit(t["machine"], t["kit"]["main"])  # the command's next step reads the kit again
+        if os.path.isdir(path):
+            print(kept + "the kit's wt remove exited 0 and left it there")
+            continue
         try:
             told = json.loads(r.stdout)
             left = (len(told) == 1 and os.path.realpath(told[0]["path"]) == os.path.realpath(path)

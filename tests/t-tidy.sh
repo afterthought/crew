@@ -3,7 +3,8 @@
 # it. One with uncommitted changes, or a lock, is kept and named on each read. Nothing crew didn't make is touched,
 # and nothing is removed while a plan the kit's work goes in can't be read. Each removal goes through the kit's own
 # wt remove, so its remove hooks run; one whose pre-remove hook fails, whose hooks wait for the user's approval on
-# the host, or with no wt on the host's path, is kept with its branch and named, never with wt's advice to skip.
+# the host, that wt leaves standing, or with no wt on the host's path, is kept with its branch and named, never with
+# wt's advice to skip; when wt's answer doesn't say it left the branch alone, the branch is kept and said.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -162,3 +163,37 @@ has "$out" "$kd/places/toolless is kept, and unit/toolless with it: unit toolles
 [[ -d $kd/places/toolless ]] || fail "the place went with no wt to remove it"
 git -C "$k" rev-parse --verify -q unit/toolless >/dev/null || fail "unit/toolless went with no wt"
 ok "with no wt on the host's path the place is kept with its branch, and named"
+
+# A wt that exits 0 but whose answer crew can't trust: it says $T/wt-says on stdout, and removes the worktree
+# unless $T/wt-keeps exists.
+mkdir -p "$T/oddwt"
+cat > "$T/oddwt/wt" <<SH
+#!/usr/bin/env bash
+[[ \$1 == -C && \$3 == remove ]] || exit 9
+[[ -e $T/wt-keeps ]] || git -C "\$2" worktree remove --force "\$4" || exit 9
+cat $T/wt-says
+SH
+chmod +x "$T/oddwt/wt"
+oddwt() ( PATH=$T/oddwt:$PATH; tidy )
+for u in deleted unparsed elsewhere unnamed; do change "$bd" $u 2 2; done; commit_all "$bd" "feat: four more merged"
+for u in deleted unparsed; do
+  place "$k" in-flight $u >/dev/null
+  if [[ $u == deleted ]]; then printf '[{"path": "%s", "branch_outcome": "deleted"}]\n' "$kd/places/$u"; else echo "not json"; fi > "$T/wt-says"
+  expect_ok oddwt
+  has "$out" "$kd/places/$u is removed, and unit/$u is kept: crew could not read what wt remove said of the branch"
+  [[ ! -d $kd/places/$u ]] || fail "the $u place is still there"
+  git -C "$k" rev-parse --verify -q unit/$u >/dev/null || fail "unit/$u went though crew could not read what wt said of it"
+done
+ok "when wt's answer says another fate for the branch, or can't be read, the place is removed and its branch kept, and said"
+
+touch "$T/wt-keeps"
+for u in elsewhere unnamed; do
+  place "$k" in-flight $u >/dev/null
+  if [[ $u == elsewhere ]]; then printf '[{"path": "%s", "branch_outcome": "not_attempted"}]\n' "$kd/places/other"; else echo "[]"; fi > "$T/wt-says"
+  expect_ok oddwt
+  has "$out" "$kd/places/$u is kept, and unit/$u with it: unit $u has merged into bolt/in-flight, and the kit's wt remove exited 0 and left it there"
+  lacks "$out" "$kd/places/$u is removed"
+  [[ -d $kd/places/$u ]] || fail "the $u place went"
+  git -C "$k" rev-parse --verify -q unit/$u >/dev/null || fail "unit/$u went though its place is there"
+done
+ok "when wt exits 0 but names another worktree, or none, and the place is still there, it is kept with its branch, and said"
