@@ -2693,6 +2693,109 @@ def place_cmd(fleet, a):
     make_place(fleet, crew.team_of(fleet, a.team), a.path, a.branch, a.base, track=True)
 
 
+# One line of `git range-diff --no-color --no-patch`, as git 2.54 prints it: "<i>:  <sha> <op> <j>:  <sha> <subject>",
+# its op = (the same patch), ! (paired, changed), < (in the first range alone) or > (in the second alone), a side with
+# no commit "-:  -------", and <i> padded on the left once there are ten. --no-patch leaves out the diff a ! prints.
+RANGE = re.compile(r"^\s*(\d+|-):\s+([0-9a-f]+|-+)\s+([=!<>])\s+(\d+|-):\s+([0-9a-f]+|-+)\s?(.*)$")
+
+
+def pairing(text):
+    """Whether range-diff, from the bolt's commits beyond main to a fix's, pairs each of the bolt's commits with the
+    fix's commit in the same place, the same or changed, and leaves no commit of either unpaired: (how many changed,
+    None) when it does, else (None, why not), naming each commit that found no pair by short sha and subject. A line
+    that is not range-diff's is refused, quoted."""
+    rows = []
+    for line in text.splitlines():
+        m = RANGE.match(line)
+        m or fail(f"git range-diff printed a line crew cannot read: {line!r}")
+        rows.append(m.groups())
+    named = lambda rs: ", ".join(f"{sha} ({subject})" for sha, subject in rs)
+    lone = [(r[1], r[5]) for r in rows if r[2] == "<"]
+    own = [(r[4], r[5]) for r in rows if r[2] == ">"]
+    why = []
+    if lone:
+        why.append(f"the bolt's commit{'s' if len(lone) > 1 else ''} {named(lone)} found no pair in it")
+    if own:
+        why.append(f"its commit{'s' if len(own) > 1 else ''} {named(own)} pair{'' if len(own) > 1 else 's'} with none of the bolt's")
+    if not why and any(r[0] != r[3] for r in rows):
+        why.append("its commits pair out of order")
+    return (None, "; ".join(why)) if why else (sum(r[2] == "!" for r in rows), None)
+
+
+def kit_git(fleet, t, where, *args, ok=(0,)):
+    """git in a checkout of the team's kit, on the team's host: (exit status, output); refused in git's words when it
+    exits with a status outside ok."""
+    r = crew.on_machine(fleet, t["machine"], ["git", "-C", where, *args])
+    r.returncode in ok or fail(f"git {args[0]} in {where} on {t['machine']} failed: "
+                               + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
+    return r.returncode, r.stdout.strip()
+
+
+def head_of(fleet, t, where, ref):
+    """The commit a branch of the kit is at, or None when there is no such branch."""
+    rc, out = kit_git(fleet, t, where, "rev-parse", "--verify", "-q", f"refs/heads/{ref}^{{commit}}", ok=(0, 1))
+    return out if rc == 0 and out else None
+
+
+# What keeps a worktree from moving, by the file its git dir holds while it is in progress.
+IN_PROGRESS = (("rebase-merge", "a rebase"), ("rebase-apply", "a rebase"), ("MERGE_HEAD", "a merge"), ("CHERRY_PICK_HEAD", "a cherry-pick"))
+
+
+def carry_move(fleet, t, fix, bolt, old, new):
+    """The bolt's branch moved to the fix's head, in the bolt's worktree, by git reset --keep, which discards nothing
+    (code.6): only while that worktree is on bolt/<bolt> with nothing uncommitted and nothing in progress, and both
+    heads are still where the judgment read them."""
+    wt, main, name = f"{t['kit']['dir']}/bolts/{bolt}", t["kit"]["main"], fix.rsplit("/", 1)[-1]
+    again = f"then run crew fix {t['name']} {name} --merge again"
+    rc, _ = kit_git(fleet, t, wt, "rev-parse", "--git-dir", ok=(0, 128))
+    rc == 0 or fail(f"bolt/{bolt} is not moved: its worktree {wt} is not there")
+    for path, what in IN_PROGRESS:
+        _, at = kit_git(fleet, t, wt, "rev-parse", "--path-format=absolute", "--git-path", path)
+        crew.on_machine(fleet, t["machine"], ["test", "-e", at]).returncode != 0 or fail(
+            f"bolt/{bolt} is not moved: its worktree {wt} has {what} in progress; finish or abort it, {again}")
+    _, on = kit_git(fleet, t, wt, "branch", "--show-current")
+    on == f"bolt/{bolt}" or fail(f"bolt/{bolt} is not moved: its worktree {wt} is on {on or 'no branch'}, not bolt/{bolt}")
+    _, status = kit_git(fleet, t, wt, "status", "--porcelain")
+    if status:
+        paths = [l.split(None, 1)[-1] for l in status.splitlines()]
+        fail(f"bolt/{bolt} is not moved: its worktree {wt} has uncommitted changes (" + ", ".join(paths[:5])
+             + (f" and {len(paths) - 5} more" if len(paths) > 5 else "") + f"); commit or remove them, {again}")
+    for ref, was in ((f"bolt/{bolt}", old), (fix, new)):
+        now = head_of(fleet, t, main, ref)
+        now == was or fail(f"bolt/{bolt} is not moved: {ref} moved from {was[:7]} to {(now or 'nothing')[:7]} since crew read it; {again}")
+    kit_git(fleet, t, wt, "reset", "-q", "--keep", new)
+    READ.drop_kit(t["machine"], main)
+
+
+def carry_cmd(fleet, a):
+    """Whether a fix carries its bolt onto main, as shell assignments for bash crew (teams.9): CARRIES=yes with the
+    bolt's head (OLD), the fix's (NEW), how many of the bolt's commits it carries (COMMITS) and how many the
+    resolution changed (CHANGED); or CARRIES=no and why not (WHY). It carries when the bolt's head is not in the fix,
+    and range-diff pairs each of the bolt's commits beyond the kit's main with the fix's in the same place, the same
+    or changed, with none of either left over. With --move, the bolt's branch is moved to the fix's head."""
+    t = crew.team_of(fleet, a.team)
+    main = t["kit"]["main"]
+    if a.move:
+        return carry_move(fleet, t, a.fix, a.bolt, *a.move)
+    heads = {ref: head_of(fleet, t, main, ref) for ref in (f"bolt/{a.bolt}", a.fix, "main")}
+    missing = [ref for ref, sha in heads.items() if not sha]
+    not missing or fail(f"can't tell whether {a.fix} carries bolt/{a.bolt} onto main: {main} has no " + " and no ".join(missing))
+    old, new, base = heads[f"bolt/{a.bolt}"], heads[a.fix], heads["main"]
+    no = lambda why: print(sh(CARRIES="no", WHY=why))
+    rc, _ = kit_git(fleet, t, main, "merge-base", "--is-ancestor", old, new, ok=(0, 1))
+    if rc == 0:
+        return no("it holds the bolt's head")
+    n = int(kit_git(fleet, t, main, "rev-list", "--count", f"{base}..{old}")[1])
+    if not n:
+        return no(f"bolt/{a.bolt} has no commits beyond main")
+    if not int(kit_git(fleet, t, main, "rev-list", "--count", f"{base}..{new}")[1]):
+        return no("it has no commits beyond main")
+    changed, why = pairing(kit_git(fleet, t, main, "range-diff", "--no-color", "--no-patch", f"{base}..{old}", f"{base}..{new}")[1])
+    if why:
+        return no(why)
+    print(sh(CARRIES="yes", OLD=old, NEW=new, COMMITS=n, CHANGED=changed))
+
+
 def plan_of(fleet, label):
     """The label's plan, or None when it can't be read, so a team's slots are still read from the kit."""
     try:
@@ -3887,6 +3990,11 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("path")
     x.add_argument("branch")
     x.add_argument("base")
+    x = sub.add_parser("_carry")
+    x.add_argument("team")
+    x.add_argument("fix")
+    x.add_argument("bolt")
+    x.add_argument("--move", nargs=2, metavar=("OLD", "NEW"))
     x = sub.add_parser("_slots")
     x.add_argument("team")
     x = sub.add_parser("_tidy")
@@ -3919,7 +4027,7 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")), ("unit", "approve"): unit_approve,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
