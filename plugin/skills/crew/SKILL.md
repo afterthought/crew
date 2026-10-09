@@ -21,6 +21,8 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | see every bolt, each unit's stage, and the queue | `crew bolts [--label <label>]` |
 | see everything that waits on the user, and the command that answers each | `crew rail [--label <label>]` |
 | see whether a rail row's card is open, or a card has no row | `crew rail [--label <label>]` |
+| start the plannotator session a card links, on what its row asks the user to read, and print its link | `crew card session <key>` |
+| wait for the user's decision in a card's session, or end the session by hand | `crew card wait <key>`, `crew card end <key>` |
 | start a team that is not up | `crew up <team>` |
 | end everything a team has, close its panes, stand it up fresh | `crew rebuild <team>` |
 | give the conductor or ops a fresh session, same pane | `crew restart <team> [conductor\|ops]` |

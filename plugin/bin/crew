@@ -61,6 +61,11 @@
 #   crew rail  [--label L]             what waits on the user: proposals, reviews, verify reports and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
 #                                      You card; then any open card whose row is gone
+#   crew card  session|wait|end <key> [--label L]
+#                                      the plannotator session on what a rail row's card asks the user to read:
+#                                      session starts it on this host with no browser and prints its link (the
+#                                      running one's when there is one); wait waits for the user's decision in it and
+#                                      prints it with their words; end ends it, as the card's close does
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
