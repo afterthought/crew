@@ -17,7 +17,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 - **[plan.5]** Work a held bolt needs before it can be proven or land is placed in that bolt ahead of its first unmerged unit, marked `--unblocks`; a proposal that marks a unit so and places it elsewhere is refused.
 - **[plan.6]** A unit that has merged or landed is never amended, split, moved or dropped; a unit marked `Amended` reads amended, then construct, and its code, verify and merge are refused until its construct has committed again, with no approval asked.
 - **[plan.7]** A unit's name is its OpenSpec change's name, refused when the kit's main already holds a change by that name, open or archived.
-- **[plan.8]** A bolt is cut from GitHub's main fetched at that moment, and a landing is refused while the kit's main on its host is behind GitHub's.
+- **[plan.8]** A bolt is cut from GitHub's main fetched at that moment, meets main only at its landing, which rebases it onto main in its own worktree through the kit's hooks, and a landing is refused while the kit's main on its host is behind GitHub's; when the landing's rebase conflicts nothing lands, the team's fix carries the bolt's commits onto main with the conflict resolved, crew makes that the bolt's head, and no agent moves a bolt's branch by hand.
 - **[plan.9]** crew removes only worktrees it made, directly under `<kit>/bolts/` or `<kit>/places/` on a `bolt/`, `unit/` or `fix/` branch, once their work is finished; a worktree with modified or non-ignored untracked files, a locked one, the main checkout and a hand-made one are never removed, and nothing is removed while a plan the kit's work goes in cannot be read.
 - **[plan.10]** A branch holding commits whose patch the bolt or main lacks, judged by `git cherry`, is kept and named when its worktree goes; a branch holding nothing beyond its target is removed.
 - **[plan.11]** A chore is planned maintenance built inside a bolt by code, verify and merge, with no construct and no review, and changes nothing a spec says must be true.
@@ -41,7 +41,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 **[plan.7]** Rules out: a unit named after an archived change. Source: `plan.py` 808–817.
 
-**[plan.8]** Rules out: a bolt cut from a stale clone; a landing onto a main behind GitHub. Source: fix 04daa5d; `plan.py` 846–879, 976–981.
+**[plan.8]** Rules out: a bolt cut from a stale clone; a landing onto a main behind GitHub; `git reset` or `git branch -f` on a bolt's branch by an agent; a fix that replays main's commits over the bolt. Source: fix 04daa5d; `plan.py` 846–879, 976–981; ADR 0015 (signal 2026-10-09-crw-1-conductor-47d11d45/01). The fix merge moves no bolt until `a-fix-carries-the-bolt-onto-main` lands: `_open.md`.
 
 **[plan.9]** Rules out: tidying `main`; removing a dirty worktree; removing anything when a plan is unreadable. Source: worktrees-go-with-their-work; `plan.py` 2537–2596; `tests/t-tidy.sh`.
 
