@@ -4,7 +4,7 @@
 
 - [x] 1.1 `plan _carry` judges whether a fix carries its bolt onto main by `git range-diff` pairing, and with `--move` moves the bolt's branch to the fix's head in a clean bolt worktree whose heads have not moved, refusing and naming anything else (design: *crew judges the fix before it starts a merge stage*, *crew moves the bolt in the bolt's worktree*; Task notes 1.1; `read.1`, `read.2`, `code.6`).
 - [x] 1.2 `crew fix <team> <name> --merge` ends the fix's agent, moves the bolt, runs the kit's post-merge hooks on it, records `fix.carry` and prints the move when the fix carries the bolt, and starts the merge stage as today, saying why, when it does not; the usage header says so (design: *The bolt's checks are the kit's post-merge hooks*, *What `--merge` prints and records*; Task notes 1.2; `teams.2`, `teams.5`, `record.3`, `record.6`, `docs.2`).
-- [ ] 1.3 `tests/t-fix.sh` proves the carry, the checks run and not approved, the fixes that merge instead, and the refusals, and `tests/suite t-fix` ends with "0 failed" (Task notes 1.3; `tests.4`).
+- [x] 1.3 `tests/t-fix.sh` proves the carry, the checks run and not approved, the fixes that merge instead, and the refusals, and `tests/suite t-fix` ends with "0 failed" (Task notes 1.3; `tests.4`).
 
 ## 2. The briefs and docs say so
 
