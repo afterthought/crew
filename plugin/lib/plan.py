@@ -3595,9 +3595,11 @@ def card_stop(proc):
 def card_session(fleet, a):
     """crew card session <key> [--label L]: a plannotator session on the document the rail row with that card key asks
     the user to read, started on this host with an Approve button and no browser, and its link printed. While the
-    session crew started for the key still runs, its link is printed again and nothing is started; one that ended
-    with no decision is forgotten, and one the user closed undecided is moved aside, so a new one starts. Refused for a
-    landing's key, a key with no row, a document on another host, and a link that would open only on this host."""
+    session crew started for the key still runs, its link is printed again and nothing is started. One the user
+    approved or annotated before it ended is kept for crew card wait, its link printed again with a line saying so; one
+    that ended with no decision is forgotten, and one the user closed undecided is moved aside, so a new one starts.
+    Refused for a landing's key, a key with no row, a document on another host, and a link that would open only on this
+    host."""
     label, d = card_of(fleet, a)
     a.key.startswith("land/") and fail("a landing card has no document to read, so it has no session")
     row, props = card_row(fleet, label, a.key)
