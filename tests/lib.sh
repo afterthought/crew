@@ -16,6 +16,8 @@ unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_
 # A wt merge running the suite as its gate hands its hooks worktrunk's own variables, among them the file its shell
 # wrapper reads a cd from: a test's wt never writes there, or the merge ends trying to cd into a removed scratch dir.
 unset $(env | sed -n 's/^\(WORKTRUNK_[A-Za-z0-9_]*\)=.*/\1/p')
+# A test's wt, crew's tidy among them, reads its config and approvals under the simulated host's HOME, never the user's.
+unset XDG_CONFIG_HOME
 HOST=${HOST:-mac-studio}
 # The user at a shell, as crew names them in what it writes: <me>@<host>.
 me=$(python3 -c 'import getpass; print(getpass.getuser())')

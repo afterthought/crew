@@ -1,7 +1,9 @@
 # Every read of a team removes, with its branch, each worktree crew made in the team's kit checkout whose work is
 # over and that no slot holds: a bolt's once no plan has it, a unit's once it has merged or landed or no plan has
 # it. One with uncommitted changes, or a lock, is kept and named on each read. Nothing crew didn't make is touched,
-# and nothing is removed while a plan the kit's work goes in can't be read.
+# and nothing is removed while a plan the kit's work goes in can't be read. Each removal goes through the kit's own
+# wt remove, so its remove hooks run; one whose pre-remove hook fails, whose hooks wait for the user's approval on
+# the host, or with no wt on the host's path, is kept with its branch and named, never with wt's advice to skip.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -94,3 +96,69 @@ untouched
 expect_ok tidy
 lacks "$out" "removed"; lacks "$out" "kept"
 ok "once its file goes, or its lock, the next read removes it, and a read with nothing over says nothing"
+
+# A kit whose worktree config has merge hooks only: a finished place goes as before, and no approval is asked.
+mkdir -p "$k/.config"; printf '[pre-merge]\ngate = "true"\n' > "$k/.config/wt.toml"; commit_all "$k" "chore: gate merges"
+for u in merge-hooked hooked toolless; do change "$bd" $u 2 2; done; commit_all "$bd" "feat: merge-hooked, hooked and toolless merged"
+place "$k" in-flight merge-hooked >/dev/null
+expect_ok tidy
+has "$out" "$kd/places/merge-hooked and unit/merge-hooked are removed; the branch was at"
+lacks "$out" "approval"
+ok "a kit with merge hooks only sees its place go as before, with no approval asked"
+
+# A kit whose remove hooks tear down what it stood up for a worktree: its pre-remove hook logs whether the place's
+# files are there and fails while the box holds a marker for it; its post-remove hook logs whether they are still there.
+log=$T/hooks.log
+cat > "$k/.config/wt.toml" <<TOML
+[pre-merge]
+gate = "true"
+
+[pre-remove]
+teardown = "echo pre {{ worktree_name }} \$(test -e README.md && echo present || echo absent) >> $log; test ! -e \$HOME/fail-{{ worktree_name }}"
+
+[post-remove]
+after = "echo post {{ worktree_name }} \$(test -e {{ worktree_path }} && echo present || echo absent) >> $log"
+TOML
+commit_all "$k" "chore: tear down what a worktree stood up"
+place "$k" in-flight hooked >/dev/null
+over="unit hooked has merged into bolt/in-flight"
+expect_ok tidy
+has "$out" "$kd/places/hooked is kept, and unit/hooked with it: $over, and the kit's remove hooks wait for the user's approval on $box: wt config approvals add, in $k"
+lacks "$out" "--yes"; lacks "$out" "↳"
+[[ -d $kd/places/hooked ]] || fail "the place went before its hooks were approved"
+git -C "$k" rev-parse --verify -q unit/hooked >/dev/null || fail "unit/hooked went before its hooks were approved"
+[[ ! -e $log ]] || fail "a hook ran before it was approved:"$'\n'"$(cat "$log")"
+ok "remove hooks not approved on the host run nothing, and the place is kept with its branch, naming the approval"
+
+# The test stands in for the user, approving the kit's hooks on the box.
+as $box wt -C "$k" config approvals add --yes >/dev/null 2>&1 || fail "wt config approvals add failed"
+touch "$(home_of $box)/fail-hooked"
+for _ in 1 2; do
+  expect_ok tidy
+  has "$out" "$kd/places/hooked is kept, and unit/hooked with it: $over, and the kit's wt remove refused it: pre-remove command failed"
+  lacks "$out" "--no-hooks"; lacks "$out" "↳"
+  [[ -d $kd/places/hooked ]] || fail "the place went though its pre-remove hook failed"
+  git -C "$k" rev-parse --verify -q unit/hooked >/dev/null || fail "unit/hooked went though its place's hook failed"
+done
+eq "$(grep -c '^pre hooked present$' "$log")" "2"
+ok "a pre-remove hook that fails keeps the place and its branch, named without wt's advice to skip it, on every read"
+
+rm "$(home_of $box)/fail-hooked"
+expect_ok tidy
+has "$out" "$kd/places/hooked and unit/hooked are removed; the branch was at"
+[[ ! -d $kd/places/hooked ]] || fail "the place is still there once its hook passed"
+git -C "$k" rev-parse --verify -q unit/hooked >/dev/null && fail "unit/hooked is still there"
+eq "$(grep -c '^pre hooked present$' "$log")" "3"
+grep -q '^pre .* absent$' "$log" && fail "a pre-remove hook ran without the place's files:"$'\n'"$(cat "$log")"
+# wt runs the post-remove hook in the background once the place is gone; the stub sleep returns at once.
+for _ in $(seq 100); do grep -q '^post hooked' "$log" && break; python3 -c 'import time; time.sleep(0.1)'; done
+grep -qx 'post hooked absent' "$log" || fail "the post-remove hook never ran, or ran with the place there:"$'\n'"$(cat "$log")"
+ok "once the cause is cleared the next read runs the hooks, the place's files there before and gone after, and removes it and its branch"
+
+place "$k" in-flight toolless >/dev/null
+nowt() ( PATH=$(path_without wt); tidy )
+expect_ok nowt
+has "$out" "$kd/places/toolless is kept, and unit/toolless with it: unit toolless has merged into bolt/in-flight, and wt, the kit's worktree tool, is not on $box's path"
+[[ -d $kd/places/toolless ]] || fail "the place went with no wt to remove it"
+git -C "$k" rev-parse --verify -q unit/toolless >/dev/null || fail "unit/toolless went with no wt"
+ok "with no wt on the host's path the place is kept with its branch, and named"
