@@ -3,6 +3,13 @@
 # nobody greeted when it is already up, and a non-zero exit naming a missing session or partition.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
+# greets <agent>: the why of each greet entry on the agent in madswan's run record, one a line
+greets() {
+  as mac-studio python3 -c 'import glob, os, sys; sys.path.insert(0, sys.argv[1]); import record
+for f in sorted(glob.glob(os.path.expanduser("~/.local/state/crew/madswan/runs/*/*.rec"))):
+    for e in record.parse(open(f).read()):
+        if e["Act"] == "greet" and "agent/" + sys.argv[2] in e["On"]: print(e["Why"])' "$CREW/plugin/lib" "$1"
+}
 
 expect_ok crew operator up madswan
 has "$out" "madswan-operator-mac-studio started"
@@ -18,7 +25,8 @@ eq "$(grep -c . <<<"$greeting")" "1"
 has "$greeting" "what is moving and what waits on me"
 (( $(grep -n -- "tab create .*--label rail" "$CREW_TEST_LOG" | head -1 | cut -d: -f1) < ${greeting%%:*} )) ||
   fail "the operator agent was greeted before its rail tab was open"
-ok "the operator agent it starts is greeted once, after its rail tab is open"
+eq "$(greets madswan-operator-mac-studio)" "operator(madswan): greet madswan-operator-mac-studio"
+ok "the operator agent it starts is greeted once, after its rail tab is open, in its partition's run record"
 
 : > "$CREW_TEST_LOG"
 expect_ok crew operator up madswan
@@ -27,6 +35,7 @@ eq "$(herdr_state mac-studio madswan '.workspaces | length')" "1"
 eq "$(wc -l < "$CREW_TEST_CLAUDE_LOG" | tr -d ' ')" "1"
 grep -q "workspace create\|pane run\|agent prompt" "$CREW_TEST_LOG" && fail "a second operator up made, started or greeted something"
 lacks "$out" "greeted"
+eq "$(greets madswan-operator-mac-studio | wc -l | tr -d ' ')" "1"
 ok "run twice, it starts nothing, greets nobody and succeeds"
 
 HOST=chuck-herdr-alpha expect_ok crew operator up wldn; has "$out" "wldn-operator-chuck-herdr-alpha started"
