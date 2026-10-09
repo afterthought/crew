@@ -237,3 +237,29 @@ for want in "crew's move of the bolt to a fix that carries it onto main starts o
   has "$out" "$want"
 done
 ok "a landing's conflict becomes a fix that carries the bolt onto main, and the bolt is proven again before it lands"
+
+# A team's cards are its conductor's (briefs.11): ops and every stage post no card and make no area, ops writes what
+# a proof leaves the user in its proof file, the conductor asks it on the landing card before approval and treats a
+# failed step as a fix, and the card discipline the planner and the conductor share says crew refuses any other key.
+for role in construct coder verify ops; do
+  expect_ok crewpy brief swb-1 $role
+  has "$out" "Post no Pending You card and make no area: your team's cards are its conductor's, and crew refuses any other."
+done
+expect_ok crewpy brief swb-1 ops
+for want in "under *Left for the user*" "what they will see when it worked" "Each is ⏳ in the glyph list, waiting on the user." \
+  "clean but for the user's steps: the conductor asks them on the bolt's landing card, so you post no card for them"; do
+  has "$out" "$want"
+done
+expect_ok crewpy brief swb-1 conductor
+for want in "once ops's proof file reports it clean, or clean but for steps it leaves the user, keyed \`land/<bolt>/<head>\`" \
+  "the card asks them first" "the steps are the card's \`action\`" "Approving it then means the user took them, they worked" \
+  "A note on the landing card that a step failed is a defect, never a landing" \
+  "When the proof is clean, or clean but for the user's steps"; do
+  has "$out" "$want"
+done
+lacks "$out" "ops posts"; lacks "$out" "ops's card"
+for brief in "swb-1 conductor" "wldn planner"; do
+  expect_ok crewpy brief $brief
+  has "$out" "crew refuses a card you post under any key but a rail row's of your own, and an area under any key but \`create-area:<owner>/<kit>\`, and its refusal names the key to use."
+done
+ok "ops and every stage post no card, the landing card asks the proof's steps for the user first, and the card discipline says crew refuses any other key"
