@@ -8,7 +8,8 @@ claude has recorded its launch), the pane holds an idle agent with no name, as h
 a new session. `agent prompt <pane> /exit` ends that agent.
 
 Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status, and
-`herdr --session S stub agent <pane> [name]` puts an agent in a pane.
+`herdr --session S stub agent <pane> [name]` puts an agent in a pane. With CREW_TEST_BLOCKED naming agents, each one
+named so is stopped on a question in its pane (blocked) once it has its name, as a first run's consent stops Claude.
 
 It starts Python without its site packages and imports only what every call needs, since every test calls it often:
 not even the json package, whose import of re costs a call a third of its time, but json's own C parts, writing what
@@ -195,6 +196,8 @@ elif group == "agent" and cmd == "list":
 elif group == "agent" and cmd == "rename":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     st["agents"][p]["name"] = rest[1]
+    if rest[1] in os.environ.get("CREW_TEST_BLOCKED", "").split():
+        st["agents"][p]["status"] = "blocked"
     out({})
 elif group == "agent" and cmd == "prompt":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
