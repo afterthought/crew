@@ -9,7 +9,7 @@
 ## 2. The briefs
 
 - [x] 2.1 Every stage brief and ops's say in one shared sentence that they post no card and make no area (design.md, Task notes 2.1).
-- [ ] 2.2 ops writes what a proof leaves the user under *Left for the user* in its proof file and posts no card for it (design.md, Task notes 2.2).
+- [x] 2.2 ops writes what a proof leaves the user under *Left for the user* in its proof file and posts no card for it (design.md, Task notes 2.2).
 - [ ] 2.3 The conductor posts the landing card once the proof is clean or clean but for the user's steps, with those steps first on it, and treats a failed step as a fix, never a landing (design.md, Task notes 2.3).
 - [ ] 2.4 The card discipline the planner and the conductor share says crew refuses any other key and names the key to use (design.md, Task notes 2.4).
 - [ ] 2.5 `tests/t-briefs.sh` pins a phrase of each of 2.1 to 2.4 in the brief it lands in (design.md, Task notes 2.5). Verify `tests/suite t-briefs t-roles` ends with "0 failed".
