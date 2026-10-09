@@ -3626,6 +3626,61 @@ CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
 
 
+def card_refusal(fleet, name, label, tool, key):
+    """Whether the agent crew started may post a Pending You card (post_request) or make an area (create_area) under an
+    idempotency key: None to let the call through, else the refusal's words, naming the key to use (briefs.11). A card's
+    key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
+    from proposals.rec; a conductor's land/<bolt>/<head> for the bolt its team holds, or review/<unit>/<head> or
+    verify/<unit>/<stamp> for a unit of it, read from the plan. Every other agent owns no key. An area's key is
+    create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
+    partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
+    conductor's card; what can't be read is a Refusal naming it (read.1). The user's own name is never checked."""
+    kind, of = role(fleet, name)
+    if kind == "user":
+        return None
+    what = "an area" if tool == "create_area" else "a card"
+    if not isinstance(key, str) or not key:
+        return f"crew refuses {what} with no idempotencyKey."
+    said, cmd = f"crew refuses {what} under {key}", f"{crew.HOME}/plugin/bin/crew"
+    if tool == "create_area":
+        teams = [of] if kind in ("conductor", "team") else [] if kind == "other" else crew.partition_of(fleet, label)["teams"]
+        mine = sorted({f"create-area:{fleet['teams'][t]['kit']['repo']}" for t in teams})
+        if key in mine:
+            return None
+        return f"{said}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine else f"no kit's area is {name}'s to make.")
+    rail = f"from the `card:` line under its row in `{cmd} rail --label {label}`"
+    if kind == "planner":
+        repo, ref = state_of(fleet, label)
+        tip = fetch(repo, ref)
+        text = show(repo, tip, "proposals.rec") if tip else None
+        mine = [f"proposal/{p.get('Proposal')}" for p in Plan(text).recs("Proposal") if p.get("State") == "open"] if text else []
+        if key in mine:
+            return None
+        return (f"{said}: {name} posts a card only under proposal/<n> for a proposal of {label} open now, "
+                + (f"{either(mine)}, {rail}." if mine else "and none is open."))
+    if kind == "conductor":
+        plan = plans(fleet, [label])[0][3]
+        bolts = sorted(b for b, t in holdings(plan)[0].items() if t == of) if plan else []
+        units = [u.name() for b in bolts for u in plan.units_of(b)]
+        row, _, rest = key.partition("/")
+        if any(re.fullmatch(k, key) for k in CARD_KEYS) and (
+                (row == "land" and rest.split("/")[0] in bolts) or (row in ("review", "verify") and rest.split("/")[0] in units)):
+            return None
+        if not bolts:
+            return f"{said}: {name} posts a card only under a rail row's key of its own, and {of} holds no bolt, so none is."
+        mine = [f"land/{b}/<head>" for b in bolts] + (
+            [f"review/<unit>/<head> or verify/<unit>/<stamp> for unit {either(units)}"] if units else [])
+        return (f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, "
+                f"the head{' or stamp' if units else ''} {rail}.")
+    if kind == "team":
+        left = ("Write what a proof leaves that only the user can do or check in your proof file, under Left for the user: "
+                "the conductor asks it on the bolt's landing card." if name == f"{of}-ops"
+                else f"Say what you need with `{cmd} needs`, and the conductor gets it.")
+        return f"{said}: {name} owns no card key, since a team's cards are its conductor's. {left}"
+    return (f"{said}: {name} owns no card key, since only the planner and the conductors post cards. Tell the partition's "
+            "operator agents what you wait on, as your brief says.")
+
+
 def card_of(fleet, a):
     """The partition a card command runs as and the key's folder: refused with no partition, or a key that is not one
     of the rail's four."""

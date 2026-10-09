@@ -2,7 +2,7 @@
 
 ## 1. crew refuses a card or an area under another key
 
-- [ ] 1.1 `plan.py` decides, from the plan and the teams file, whether a crew agent may post a card under a key or make an area under a key, and gives the refusal's words naming the key to use (design.md, Task notes 1.1).
+- [x] 1.1 `plan.py` decides, from the plan and the teams file, whether a crew agent may post a card under a key or make an area under a key, and gives the refusal's words naming the key to use (design.md, Task notes 1.1).
 - [ ] 1.2 The card hook refuses Pending You's `post_request` and `create_area` from a crew session before the call runs, by that decision, refusing too when it cannot read what it decides from, and lets every other session and tool through (design.md, Task notes 1.2).
 - [ ] 1.3 `tests/t-cards.sh` holds every scenario of the three refusal requirements in the `rail-cards` delta (design.md, Task notes 1.3). Verify `tests/suite t-cards t-card-session` ends with "0 failed".
 
