@@ -9,6 +9,9 @@ in Card, and the row's key in Key when the card was posted with one of the four 
 with any other key is on agent/<the agent>, with no Key, since its key is text an agent wrote. Nothing written on the
 card is recorded: no title, summary, option, note or outcome.
 
+When a crew agent withdraws or closes a card with a row key, the hook then ends the plannotator session `crew card
+session` started for that key on this host, as `crew card end` does, so no card's session outlives its card.
+
 A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it, the record session-start keeps of
 it. Any other session, a result that is an error, and a tool of another server write nothing. The hook never fails a
 tool call."""
@@ -141,6 +144,9 @@ def main():
         key, on = posted(record, label, card) if isinstance(card, str) and REQUEST_ID.match(card) else (None, None)
     card = card if isinstance(card, str) and REQUEST_ID.match(card) else None
     record.emit(label, ACTS[tool], [on or f"agent/{agent}"], Card=card, Key=key)
+    if ACTS[tool] == "card.close" and key:
+        import plan
+        plan.end_session(label, key)
 
 
 if __name__ == "__main__":

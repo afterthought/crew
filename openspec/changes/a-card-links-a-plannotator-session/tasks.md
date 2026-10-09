@@ -11,7 +11,7 @@
 
 ## 2. A card's close ends its session
 
-- [ ] 2.1 The card hook ends the session for a keyed card's key when a crew agent closes or withdraws that card, and never fails the tool call (design.md, Task notes 2.1). Verify `tests/suite t-cards t-card-session` ends with "0 failed".
+- [x] 2.1 The card hook ends the session for a keyed card's key when a crew agent closes or withdraws that card, and never fails the tool call (design.md, Task notes 2.1). Verify `tests/suite t-cards t-card-session` ends with "0 failed".
 
 ## 3. The briefs and the rules
 

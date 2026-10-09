@@ -3,7 +3,9 @@
 # PostToolUse hook writes an entry for each card a crew agent posts, updates, withdraws or closes, naming its row, its
 # card and its key and nothing written on the card, from each shape of a tool's result; a card with no row key is on
 # its agent. An error, another server's tool and a session crew didn't start write nothing; a session herdr resumed is
-# known by what session-start recorded; and the hook never fails a tool call.
+# known by what session-start recorded; and the hook never fails a tool call. A keyed card's withdrawal or close ends
+# the plannotator session crew started for its key; an unkeyed card's ends nothing, nor does a key's close end a
+# session crew did not start.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -118,3 +120,73 @@ eq "$(entries | wc -l)" "$n"
 hooks=$(jq -c '.hooks.PostToolUse[0] | [.matcher, .hooks[0].command, .hooks[0].timeout]' "$CREW/plugin/hooks/hooks.json")
 eq "$hooks" '["mcp__.*__(post_request|update_request|cancel_request|ack_answer)","python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\"",10]'
 ok "input the hook can't read, or a record it can't write, is said and the tool call goes on; the plugin runs it after the four card tools"
+
+# The plannotator session crew card session leaves for a key on mac-studio: session <key> starts a stub plannotator on
+# a document of its own and records it as crew does; by_hand starts one crew did not; gone <pid> waits for it to end.
+cardsdir=$(home_of mac-studio)/.local/state/crew/cards/wldn
+started() {  # started <doc> <result file>: a stub plannotator on the document, in the background; prints its pid once listed
+  (export CREW_TEST_HOST=mac-studio HOME=$(home_of mac-studio) PLANNOTATOR_SKIP_BROWSER_OPEN=1 PLANNOTATOR_URL_HOST=auto
+   cd "$HOME" && exec plannotator annotate "$1" --gate --json --result-file "$2" >/dev/null 2>&1 </dev/null) &
+  local pid=$!
+  python3 -c 'import os, sys, time
+f, give_up = sys.argv[1], time.monotonic() + 5
+while not os.path.exists(f):
+    time.sleep(0.05)
+    if time.monotonic() > give_up:
+        sys.exit("plannotator never listed " + f)' "$(home_of mac-studio)/.stub-plannotator/$pid.json"
+  echo "$pid"
+}
+session() {
+  local d=$cardsdir/$1 doc=$T/doc-${1//\//-}.md pid
+  mkdir -p "$d"; echo "# $1" > "$doc"
+  pid=$(started "$doc" "$d/result.json")
+  jq -nc --argjson p "$pid" --arg d "$doc" '{pid: $p, document: $d, url: "http://mac-studio.ts.swancloud.net:19432", started: "2026-10-09T12:00:00Z"}' > "$d/session.json"
+  echo "$pid"
+}
+up() { kill -0 "$1" 2>/dev/null; }
+gone() { python3 -c 'import os, sys, time
+pid, give_up = int(sys.argv[1]), time.monotonic() + 5
+while True:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        break
+    if time.monotonic() > give_up:
+        sys.exit(f"pid {pid} is still running")
+    time.sleep(0.05)' "$1"; }
+
+call pendingyou post_request "$(post review/x/abc1234)" '{"structuredContent": {"requestId": "req_ses-1"}}' | cards
+call pendingyou post_request "$(post proposal/7)" '{"structuredContent": {"requestId": "req_ses-2"}}' | cards
+s1=$(session review/x/abc1234); s2=$(session proposal/7)
+call pendingyou ack_answer '{"name": "swb-1-conductor", "requestId": "req_ses-1", "version": 2, "outcome": "approved"}' \
+  '{"structuredContent": {"status": "resolved"}}' | cards
+gone "$s1"
+[[ ! -e $cardsdir/review/x/abc1234 ]] || fail "the answered card's key was not forgotten"
+up "$s2" || fail "closing one card ended another's session"
+call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_ses-2", "reason": "replaced by proposal 8"}' \
+  '{"structuredContent": {"status": "cancelled"}}' | cards
+gone "$s2"
+[[ ! -e $cardsdir/proposal/7 ]] || fail "the withdrawn card's key was not forgotten"
+eq "$(pick card.close '.Key')" "proposal/7"
+ok "an answered card's close and a withdrawn card each end the plannotator session crew started for its key"
+
+call pendingyou post_request "$(post 'my own key')" '{"structuredContent": {"requestId": "req_ses-3"}}' | cards
+call pendingyou post_request "$(post review/y/def5678)" '{"structuredContent": {"requestId": "req_ses-4"}}' | cards
+s3=$(session review/z/1234567)
+mine=$(started "$T/doc-mine.md" "$T/mine.json")
+call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_ses-3"}' '{"structuredContent": {"status": "cancelled"}}' | cards
+call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_ses-4"}' '{"structuredContent": {"status": "cancelled"}}' | cards
+up "$s3" || fail "an unkeyed card's close ended a session"
+up "$mine" || fail "a keyed card's close ended a session crew did not start"
+[[ -e $cardsdir/review/z/1234567/session.json ]] || fail "another key's session was forgotten"
+ok "an unkeyed card's close ends nothing, and a keyed card's close ends no session crew did not start for its key"
+
+call pendingyou post_request "$(post review/z/1234567)" '{"structuredContent": {"requestId": "req_ses-5"}}' | cards
+chmod 555 "$cardsdir/review/z"
+expect_ok cards <<<"$(call pendingyou ack_answer '{"requestId": "req_ses-5", "outcome": "done"}' '{"structuredContent": {"status": "resolved"}}')"
+chmod 755 "$cardsdir/review/z"
+has "$out" "crew cards:"
+eq "$(pick card.close '[.Card, .Key] | join(" ")')" "req_ses-5 review/z/1234567"
+up "$s3" || fail "a session was ended while its key could not be forgotten"
+kill "$s3" "$mine"
+ok "a session the hook can't end is said, the close is still recorded, and the tool call goes on"
