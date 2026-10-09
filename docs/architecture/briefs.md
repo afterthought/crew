@@ -29,7 +29,7 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 
 **[briefs.3]** Rules out: a task "deploy to dev and check". Source: `construct.md`; `bolt-teams` spec "A bolt is deployed and tested from its branch".
 
-**[briefs.4]** Rules out: "approve proposal 71"; "run `crew plan approve 71`"; a pane or browser opened by the conductor; a card's session, started with no browser, opens nothing. Source: ADR 0002; a-decision-is-shown-whole; `tests/t-briefs.sh`.
+**[briefs.4]** Rules out: "approve proposal 71"; "run `crew plan approve 71`"; a pane or browser opened by the conductor. Not ruled out: a card's session, started with no browser, which opens nothing. Source: ADR 0002; a-decision-is-shown-whole; `tests/t-briefs.sh`.
 
 **[briefs.5]** Rules out: a ruling from belief; an intent that names a function. Source: ADR 0004; rulings-rest-on-readings-and-intents-name-outcomes.
 
