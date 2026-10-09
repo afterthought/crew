@@ -10,4 +10,4 @@
 ## 2. The documents say it
 
 - [x] 2.1 The usage of `plugin/bin/crew`, README and the crew skill say that `crew main up`, `crew operator up` and `crew revive` greet each agent they start (design.md, Task notes 2.1). Verify `tests/suite t-docs` ends with "0 failed".
-- [ ] 2.2 `teams.7` reads as built and `_open.md` no longer lists it (design.md, Task notes 2.2). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 2.2 `teams.7` reads as built and `_open.md` no longer lists it (design.md, Task notes 2.2). Verify `tests/suite --affected` ends with "0 failed".
