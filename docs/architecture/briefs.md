@@ -29,7 +29,7 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 
 **[briefs.3]** Rules out: a task "deploy to dev and check". Source: `construct.md`; `bolt-teams` spec "A bolt is deployed and tested from its branch".
 
-**[briefs.4]** Rules out: "approve proposal 71"; "run `crew plan approve 71`"; plannotator opened by the conductor. Source: ADR 0002; a-decision-is-shown-whole; `tests/t-briefs.sh`.
+**[briefs.4]** Rules out: "approve proposal 71"; "run `crew plan approve 71`"; a pane or browser opened by the conductor; a card's session, started with no browser, opens nothing. Source: ADR 0002; a-decision-is-shown-whole; `tests/t-briefs.sh`.
 
 **[briefs.5]** Rules out: a ruling from belief; an intent that names a function. Source: ADR 0004; rulings-rest-on-readings-and-intents-name-outcomes.
 
@@ -39,6 +39,6 @@ The rules every role's brief holds to: what an agent may do, must never do, and 
 
 **[briefs.8]** Rules out: a dispatcher restarting a working conductor. Source: `plugin/skills/crew/SKILL.md`; `dispatcher.md`.
 
-**[briefs.9]** Rules out: a card with the files attached and no link; a browser opened on the host for a session whose link is on a card; annotations the user wrote that reach nobody. Source: ADR 0005 as amended 2026-10-08; signal 2026-10-08-swancloud-design-0f348337/01; the readings in that record. Not built: `_open.md`.
+**[briefs.9]** Rules out: a card with the files attached and no link; a browser opened on the host for a session whose link is on a card; annotations the user wrote that reach nobody. Source: ADR 0005 as amended 2026-10-08; signal 2026-10-08-swancloud-design-0f348337/01; the readings in that record; `crew card session` (`plan.py` `card_session`) and the card hook (`plugin/hooks/cards`), which ends a closed card's session; `tests/t-card-session.sh`, `tests/t-cards.sh`.
 
 **[briefs.10]** Rules out: a session offering to send findings to the conductors; a message to a dispatcher that is not about a bolt; an agent working out which operator on which host to tell. Source: ADR 0013; signal 2026-10-08-swancloud-operator-mac-studio-5fda4ef7/01 and the user's requirement on it. Not built: `_open.md`.
