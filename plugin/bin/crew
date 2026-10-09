@@ -7,8 +7,9 @@
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
 #                                      slot with the unit or fix it holds and its stage. It first frees each slot
 #                                      whose work has merged, been dropped or left the team's bolt, once its agent
-#                                      is not working, and removes the worktrees in the team's kit checkout whose
-#                                      work is over, naming one kept for uncommitted changes
+#                                      is not working, and removes, through the kit's wt remove, the worktrees in
+#                                      the team's kit checkout whose work is over, naming one kept for uncommitted
+#                                      changes or a remove hook
 #   crew up      <team>                open the team's workspace and start its conductor and ops
 #   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh,
 #                                      keeping only the slots of work still in flight on its bolt

@@ -7,4 +7,4 @@
 
 ## 2. Briefs and docs
 
-- [ ] 2.1 The conductor's and main-level ops' briefs, README's Teams paragraph and `crew status`'s usage say a worktree goes through the kit's remove hooks and what keeps one, and `plan.9`'s open item and its details' note go (design.md, Task notes 2.1). Verify `tests/suite t-briefs t-docs` ends with "0 failed".
+- [x] 2.1 The conductor's and main-level ops' briefs, README's Teams paragraph and `crew status`'s usage say a worktree goes through the kit's remove hooks and what keeps one, and `plan.9`'s open item and its details' note go (design.md, Task notes 2.1). Verify `tests/suite t-briefs t-docs` ends with "0 failed".

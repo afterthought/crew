@@ -94,7 +94,8 @@ done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
 expect_ok crewpy brief swb-1 conductor
 for want in "plan proposed <n>" "plan agree <n>" "plan approve <n>\`, never on your own judgment" "crew refuses it from you" \
-  "crew status swb-1\` once that agent settles" "tell the user once which worktree it is and what its work was"; do has "$out" "$want"; done
+  "crew status swb-1\` once that agent settles" "tell the user once which worktree it is and what its work was" \
+  "tell the user once which worktree it is and what crew named" "never approve or skip the kit's hooks yourself"; do has "$out" "$want"; done
 for want in "at any stage before it merges" "crew marks the unit amended" "code waits for that approval" \
   "When crew tells you a unit's intent was amended, run construct again" "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
 for want in "Send linked questions together" "with the documentation or reading it names" \
@@ -114,7 +115,7 @@ has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conduc
 expect_ok crewpy brief wldn main-ops
 for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main" "the bolt lands either way" \
   "through the bolt's conductor when the user approved its landing card on Pending You" \
-  "run \`wt merge\` in the background and wait for it to end"; do has "$out" "$want"; done
+  "run \`wt merge\` in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
 
