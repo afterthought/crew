@@ -32,7 +32,7 @@ second() { python3 -c 'import time; time.sleep(1.1)'; }  # what was committed be
 
 expect_ok crew unit run a construct
 expect_ok crew unit wait a --stuck 0 --timeout 0
-eq "$out" "swb-1-unit-1 is stuck in construct on a: quiet for 0 minutes, with nothing committed and nothing it needs said; crew could not read whether it waits on work of its own (no transcript for its session sid-$(pane swb-1-unit-1))"
+eq "$out" "swb-1-unit-1 is stuck in construct on a: quiet for 0 minutes, with nothing committed and nothing it needs said; crew could not read whether it waits on work of its own (no transcript for its session sid-$(pane swb-1-unit-1 | tr : -))"
 eq "$(ends)" "0"
 has "$(cat "$stages")" "unit-1 a construct "
 ok "a construct quiet past its limit with nothing committed is stuck, saying its session has no transcript to read; nothing is recorded"
@@ -85,7 +85,7 @@ ok "code run again on a ticked change ends only at a commit made since it began"
 mkdir -p "$reports"; old=$reports/verify-a-20260101-0000.md
 echo "an old report" > "$old"; touch -t 202601010000 "$old"
 expect_ok crew unit run a verify
-sid=sid-$(pane swb-1-unit-1)
+sid=sid-$(pane swb-1-unit-1 | tr : -)
 long=$(ago 30)
 transcript $box "$sid" >/dev/null <<EOF
 {"type":"assistant","timestamp":"$long","message":{"content":[{"type":"tool_use","name":"Bash"}]}}

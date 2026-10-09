@@ -131,13 +131,13 @@ ok "an excerpt in a line crew can't classify is found: named by the line's hash,
 p=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-2 | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-1 stub agent "$p" swb-2-conductor
 ts=$(ago 1); hc=${ts:0:10}-swb-2-conductor-77aa0011
-transcript $box "sid-$p" >/dev/null <<EOF
+transcript $box "sid-${p//:/-}" >/dev/null <<EOF
 {"type":"user","uuid":"77aa0011-0000-4000-8000-000000000001","timestamp":"$ts","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"cfn-lint: 0 errors, 4 warnings"}]}}
 EOF
 HOST=$box CREW_AGENT=swb-2-conductor expect_ok crew signal lint-warns "cfn-lint passes the templates with warnings." --excerpt "0 errors, 4 warnings"
 has "$out" "signal $hc/01-lint-warns: excerpt verified, asserted by tool"
 has "$(at signals/$hc/01-lint-warns.md)" "who: swb-2-conductor"
-has "$(at signals/$hc/capture.md)" "session: sid-$p"
+has "$(at signals/$hc/capture.md)" "session: sid-${p//:/-}"
 ok "the session is herdr's for the agent, and a tool's output is asserted by the agent that ran it"
 
 mkdir -p "$(home_of $box)/.local/state/swb-2-team"

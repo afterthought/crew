@@ -47,7 +47,7 @@ p=$(as $box herdr --session wldn-3 workspace create --cwd / --label wldn | jq -r
 as $box herdr --session wldn-3 stub agent "$p" wldn-planner
 CREW_AGENT=wldn-planner emit $box --act test.agent >/dev/null
 eq "$(field $box test.agent By)" "wldn-planner"
-eq "$(field $box test.agent Session)" "$box:sid-$p"
+eq "$(field $box test.agent Session)" "$box:sid-${p//:/-}"
 emit $box --act test.user >/dev/null
 eq "$(field $box test.user By)" "$(python3 -c 'import getpass; print(getpass.getuser())')@$box"
 eq "$(field $box test.user Session)" ""

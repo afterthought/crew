@@ -1,5 +1,7 @@
 # A write to an active bolt by anyone other than its conductor sends that conductor the commit's subject, marked as
-# crew's own notice; crew tell marks what it carries with its sender.
+# crew's own notice; crew tell marks what it carries with its sender. A tell, and a notice, reaches its agent as a
+# prompt or not at all: one waiting on a question in its pane, seen by herdr or by the mark crew's own hook leaves, or
+# one crew can't read that of, is told nothing and the tell fails saying why.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -74,3 +76,74 @@ ok "a unit added, or a dropped bolt no team held, tells no dispatcher"
 crew bolt drop console-pages "folded into tenant-environments" --requeue >/dev/null
 has "$(told)" "plan(console-pages): drop the bolt, its units queued ($me@mac-studio). Give a free team its next bolt."
 ok "a dropped bolt a team held tells the dispatchers, since the team is free"
+
+# The conductor on the box waits on a question in its pane, as wldn-ops did on 2026-10-07.
+box=chuck-herdr-alpha
+waiting="swb-1-conductor is waiting on a question in its pane: nothing was sent; tell it again once the question is answered"
+sid=$(as $box herdr --session wldn-1 agent get swb-1-conductor | jq -r .result.agent.agent_session.value)
+ask() {  # ask <call> <transcript>: the conductor opens a question for the user, as crew's hook on the box sees it
+  printf '{"session_id":"%s","transcript_path":"%s","tool_name":"AskUserQuestion","tool_use_id":"%s","tool_input":{}}' "$sid" "$2" "$1" |
+    as $box env CREW_AGENT=swb-1-conductor python3 "$CREW/plugin/hooks/questions"
+}
+tx=$(transcript $box "$sid" <<'EOF'
+{"type":"user","message":{"role":"user","content":"Which zone first?"}}
+EOF
+)
+
+as $box herdr --session wldn-1 stub status swb-1-conductor blocked
+: > "$CREW_TEST_LOG"
+expect_fail "$waiting" crew tell swb-1-conductor "Hold the zone work."
+eq "$(prompts swb-1)" ""
+as $box herdr --session wldn-1 stub status swb-1-conductor idle
+ok "a tell to an agent herdr reports blocked types nothing and fails, saying it waits on a question"
+
+ask toolu_q1 "$tx"
+: > "$CREW_TEST_LOG"
+expect_fail "$waiting" crew tell swb-1-conductor "Hold the zone work."
+eq "$(prompts swb-1)" ""
+ok "a tell to an agent herdr reports idle, with a question crew's hook saw it open, types nothing and fails the same way"
+
+: > "$CREW_TEST_LOG"
+expect_ok crew unit add zone-two "Zone two." --bolt tenant-environments
+has "$out" "$waiting"
+eq "$(prompts swb-1)" ""
+[[ $(stage zone-two) != none ]] || fail "the unit was not added"
+ok "crew's own notice to an agent waiting on a question is refused the same way, and the write goes on"
+
+cat >> "$tx" <<'EOF'
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_q1","content":"User has answered your questions"}]}}
+EOF
+: > "$CREW_TEST_LOG"
+expect_ok crew tell swb-1-conductor "Hold the zone work."
+eq "$(prompts swb-1)" "chuck-herdr-alpha wldn-1 agent prompt swb-1-conductor '[crew tell from $me@mac-studio] Hold the zone work.'"
+ok "once the transcript holds the question's answer, the same tell is delivered, marked as before"
+
+gone=$(home_of $box)/.claude/projects/-work/gone.jsonl
+ask toolu_q2 "$gone"
+: > "$CREW_TEST_LOG"
+expect_fail "could not tell swb-1-conductor on chuck-herdr-alpha: its transcript $gone is missing, so crew can't tell whether it is waiting on a question; nothing was sent" \
+  crew tell swb-1-conductor "Hold the zone work."
+eq "$(prompts swb-1)" ""
+ok "a question whose transcript crew can't read refuses the tell, naming what it could not read"
+
+echo $box > "$T/down"
+expect_fail "could not tell swb-1-conductor on chuck-herdr-alpha: chuck-herdr-alpha did not answer (ssh: connect to host chuck-herdr-alpha port 22: Operation timed out), so crew can't tell whether it is waiting on a question; nothing was sent" \
+  crew tell swb-1-conductor "Hold the zone work."
+rm "$T/down"
+ok "a host that does not answer refuses the tell, naming it"
+
+echo "{\"session_id\":\"$sid\",\"source\":\"resume\"}" | as $box python3 "$CREW/plugin/hooks/session-start"
+mkdir -p "$T/racing"
+cat > "$T/racing/herdr" <<EOF
+#!/usr/bin/env bash
+# stub herdr, with a question opening in the agent between crew's reading of it and its prompt
+[[ \${3:-} == agent && \${4:-} == prompt ]] && "$TESTS/stubs/herdr" "\$1" "\$2" stub status "\$5" blocked
+exec "$TESTS/stubs/herdr" "\$@"
+EOF
+chmod +x "$T/racing/herdr"
+: > "$CREW_TEST_LOG"
+PATH="$T/racing:$PATH" expect_fail "$waiting" crew tell swb-1-conductor "Race the question."
+has "$(prompts swb-1)" "Race the question."
+eq "$(herdr_state $box wldn-1 '[.agents[] | select(.name == "swb-1-conductor") | .prompts[] | select(contains("Race"))] | length')" "0"
+as $box herdr --session wldn-1 stub status swb-1-conductor idle
+ok "herdr's own agent_blocked, for a question opened since crew read the agent, is reported in the same words"

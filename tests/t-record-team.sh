@@ -43,7 +43,7 @@ op=$(herdr_state mac-studio wldn '.agents | to_entries[] | select(.value.name ==
 CREW_AGENT=wldn-operator-mac-studio crew up swb-1 >/dev/null 2>&1
 eq "$(field $box team.up On)" "team/swb-1 agent/swb-1-conductor agent/swb-1-ops"
 eq "$(field $box team.up By)" "wldn-operator-mac-studio"
-eq "$(field $box team.up Session)" "mac-studio:sid-$op"
+eq "$(field $box team.up Session)" "mac-studio:sid-${op//:/-}"
 eq "$(field mac-studio team.up On)" ""
 eq "$(field $box greet On)" "agent/swb-1-conductor team/swb-1"
 eq "$(count $box tell)" "0"

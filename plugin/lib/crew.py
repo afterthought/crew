@@ -14,7 +14,8 @@
                                       a main level's, this host's dispatcher's or operator agent's settings
   crew.py hosts <label>               the hosts where the partition's teams run: name, ssh name, crew there
   crew.py crew-at <host>              the crew command on a host
-  crew.py tell <agent> "<text>"       prompt an agent wherever it runs, the text marked [crew tell from <sender>]
+  crew.py tell <agent> "<text>"       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
+                                      refused, with nothing typed, while it waits on a question in its pane
   crew.py greet <team>                greet the team's conductor, marked [crew], once it is up and settled
   crew.py greet-agent <agent> [--wait <seconds>]
                                       greet an agent crew starts outside a team, with its role's greeting, the same way
@@ -36,6 +37,8 @@ EFFORTS = ("low", "medium", "high", "xhigh", "max")
 # The roles a team's entry may override, and those a partition's entry may: each is a definition in roles/.
 TEAM_ROLES = ("conductor", "ops", "construct", "coder", "verify")
 MAIN_ROLES = ("design", "planner", "main-ops", "dispatcher", "operator")
+# What tells whether an agent waits on a question crew's own hook saw it open: piped to the agent's host, whose crew may be older.
+QUESTIONS = (LIB / "questions.py").read_text()
 
 
 class Refusal(Exception):
@@ -228,34 +231,115 @@ def label_of_agent(fleet, name):
 def tell(fleet, name, text, record=True, sender=None):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
-    transcript, never take it for the user's typing. An agent that is not up is reported, not an error. A tell is in
-    the run record of the recipient's partition, with its length and never its text."""
+    transcript, never take it for the user's typing. A tell reaches its agent as a prompt or not at all (teams.11):
+    an agent that is not up, one waiting on a question in its pane, and one crew can't read that of is reported, with
+    nothing typed, and the tell fails. A tell is in the run record of the recipient's partition, with its length and
+    never its text."""
     host, session = place_of_agent(fleet, name)
+    status, asking, unread = waits_on_question(fleet, name)
+    if unread:
+        print(f"could not tell {name} on {host}: {unread}, so crew can't tell whether it is waiting on a question; "
+              "nothing was sent", file=sys.stderr)
+        return False
+    if status is None:
+        print(f"could not tell {name} on {host}: it is not up", file=sys.stderr)
+        return False
+    if asking:
+        print(waiting_said(name), file=sys.stderr)
+        return False
     mark = f"[crew tell from {sender}]" if sender else "[crew]"
     r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, f"{mark} {text}"])
     if r.returncode:
-        print(f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
+        # herdr's own check, at the moment of typing: a question opened since crew read the agent.
+        print(waiting_said(name) if herdr_error(r.stderr) == "agent_blocked"
+              else f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
     elif record:
         import record as rec  # record imports this module
         rec.emit(label_of_agent(fleet, name), "tell", on=[f"agent/{name}"], why=f"tell {name}", Chars=len(text))
     return r.returncode == 0
 
 
-def agent_get(fleet, name):
-    """An agent crew starts, as herdr's agent get answers wherever it runs, or None when it is not up."""
+def waiting_said(name):
+    return f"{name} is waiting on a question in its pane: nothing was sent; tell it again once the question is answered"
+
+
+def herdr_error(stderr):
+    """The code of the error herdr's CLI writes on standard error, {"error": {"code": ..., "message": ...}}, or None."""
+    for line in (stderr or "").splitlines():
+        try:
+            e = json.loads(line)["error"]
+        except (ValueError, KeyError, TypeError):
+            continue
+        if isinstance(e, dict) and isinstance(e.get("code"), str):
+            return e["code"]
+    return None
+
+
+def unanswered(host, r):
+    """What a failed run on a host says could not be read, or None when the host answered: a host that does not
+    answer exits 255, as ssh does."""
+    if host == this_host() or r.returncode != 255:
+        return None
+    return f"{host} did not answer ({((r.stderr or '').strip().splitlines() or ['ssh exited 255'])[-1]})"
+
+
+def read_agent(fleet, name):
+    """An agent crew starts, as herdr's agent get answers wherever it runs: (the agent, None), (None, None) when it is
+    not up, or (None, what could not be read) when its host does not answer or herdr's answer can't be read."""
     host, session = place_of_agent(fleet, name)
     r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "get", name])
+    if r.returncode:
+        return None, unanswered(host, r)
     try:
-        a = json.loads(r.stdout)["result"]["agent"] if r.returncode == 0 else None
+        a = json.loads(r.stdout)["result"]["agent"]
     except (ValueError, KeyError, TypeError):
-        return None
-    return a if isinstance(a, dict) else None
+        a = None
+    return (a, None) if isinstance(a, dict) else (None, f"herdr's answer on {host} about it can't be read")
+
+
+def agent_get(fleet, name):
+    """An agent crew starts, as herdr's agent get answers wherever it runs, or None when it is not up."""
+    return read_agent(fleet, name)[0]
 
 
 def agent_status(fleet, name):
     """An agent crew starts, as herdr sees it wherever it runs: idle, done, working, blocked, or None when it is not up."""
     a = agent_get(fleet, name)
     return a.get("agent_status") if a else None
+
+
+def waits_on_question(fleet, name):
+    """Whether an agent crew starts waits on a question in its pane, as a tell and a greeting read it: (herdr's status
+    of it, None when it is not up; whether it waits; what crew could not read to know, or None). It waits when herdr
+    reports it blocked, or when the mark crew's hook left as it opened a question or a plan for the user
+    (hooks/questions) is still open in its session, read by questions.py on its host. Either is enough: herdr reads
+    the dialog from the screen alone, and on 2026-10-07 took a tell into one it did not see. A host with no mark, such
+    as an agent started before the hook, reads as no question open, and herdr's reading alone guards it (the
+    a-tell-never-lands-in-a-question design, decision 5, departing from read.1)."""
+    host, _ = place_of_agent(fleet, name)
+    a, unread = read_agent(fleet, name)
+    if a is None:
+        return None, False, unread
+    status = a.get("agent_status")
+    if status == "blocked":
+        return status, True, None
+    sess = a.get("agent_session")
+    sid = sess.get("value") if isinstance(sess, dict) else None
+    if not isinstance(sid, str) or not sid:
+        return status, False, "herdr names no session for it"
+    r = on_machine(fleet, host, ["python3", "-", sid], input=QUESTIONS)
+    if r.returncode:
+        return status, False, unanswered(host, r) or (
+            f"crew's reading of its questions on {host} failed ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})")
+    try:
+        got = json.loads(r.stdout)
+    except ValueError:
+        got = None
+    if isinstance(got, dict) and isinstance(got.get("unread"), str):
+        return status, False, got["unread"]
+    if not isinstance(got, dict) or got.get("question") not in (None, "open", "answered"):
+        return status, False, f"crew's reading of its questions on {host} gave no answer crew reads"
+    return status, got["question"] == "open", None
 
 
 GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
@@ -282,8 +366,11 @@ def greet_agent(fleet, name, text, on, label, why, hint, wait=90):
     consent, is greeted once that is answered, for up to five minutes. Returns whether it was greeted; an agent that is
     not up is reported with the hint, one never ready with the crew tell that would greet it, and neither is an error."""
     deadline, asked = time.monotonic() + wait, False
-    while (s := agent_status(fleet, name)) not in ("idle", "done"):
-        if s == "blocked" and not asked:
+    while True:
+        s, asking, _ = waits_on_question(fleet, name)
+        if s in ("idle", "done") and not asking:
+            break  # what crew could not read, tell says
+        if asking and not asked:
             print(f"{name} is waiting on a question in its pane; answer it there and it will be greeted", file=sys.stderr)
             asked, deadline = True, time.monotonic() + 300
         if time.monotonic() >= deadline:
