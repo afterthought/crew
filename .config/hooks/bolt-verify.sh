@@ -5,10 +5,13 @@
 #
 #   sh .config/hooks/bolt-verify.sh
 #
-# It runs crew's whole suite, tests/run without the live test, on a copy of the revision the bolt holds when it is
-# started, exported with git archive into a scratch directory, so a later merge into the bolt never changes the
-# files under a run in progress; two merges in a row run side by side, each on its own revision. Each run records
-# its outcome in <git common dir>/bolt-verify/<bolt>/, where every worktree on the host reads it:
+# It runs crew's whole suite, tests/suite without the live test, on a copy of the revision the bolt holds when it
+# is started, exported with git archive into a scratch directory, so a later merge into the bolt never changes the
+# files under a run in progress; two merges in a row run side by side, each on its own revision. moon caches
+# nothing outside a git repository, so the copy is made one with a single commit, reading no host or user git
+# configuration, and its .moon/cache/outputs links to <git common dir>/moon-outputs as every checkout's does: a
+# test the merge's gate passed on the same tree is replayed. Each run records its outcome in
+# <git common dir>/bolt-verify/<bolt>/, where every worktree on the host reads it:
 #
 #   <rev>.rec   one recutils record: State (running | green | red), Rev, Subject, Started, Ended, Pid,
 #               Failed (one field per failing test), Log
@@ -114,8 +117,20 @@ trap 'stop 143' TERM
 if ! { git archive -o "$copy/.rev.tar" "$rev" && tar -x -f "$copy/.rev.tar" -C "$copy" && rm -f "$copy/.rev.tar"; } >>"$log" 2>&1; then
   echo "cannot export $rev into $copy" >>"$log"; unscratch; record red; exit 1
 fi
+# The copy as a repository of its own, its one commit the bolt's tree, and its archives the shared ones. No
+# variable a hook's caller set points git at the bolt's repository, and no host or user setting (a hook, signing)
+# applies to the commit.
+if ! (cd "$copy" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY &&
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null &&
+  git init -q -b main . && git add -A &&
+  git -c user.name=crew -c user.email=crew@localhost -c commit.gpgsign=false commit -q -m "$rev") >>"$log" 2>&1; then
+  echo "cannot make $copy a git repository holding $rev" >>"$log"; unscratch; record red; exit 1
+fi
+if ! { mkdir -p "$common/moon-outputs" "$copy/.moon/cache" && ln -s "$common/moon-outputs" "$copy/.moon/cache/outputs"; } >>"$log" 2>&1; then
+  echo "cannot link $copy/.moon/cache/outputs to $common/moon-outputs" >>"$log"; unscratch; record red; exit 1
+fi
 # Waited for in the background, so a signal reaches the trap at once rather than once the suite ends.
-(cd "$copy" && exec env CREW_TEST_LIVE= ./tests/run) </dev/null >>"$log" 2>&1 &
+(cd "$copy" && exec env CREW_TEST_LIVE= ./tests/suite) </dev/null >>"$log" 2>&1 &
 child=$!
 wait "$child"; status=$?
 child=
