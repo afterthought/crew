@@ -11,8 +11,8 @@
   # the checkout's absolute paths. moon reads no setting for where its cache lives, hence the link. A checkout that
   # is no git repository gets no link. moon runs the shell's own tools, never proto's from the home directory.
   enterShell = ''
-    if _moon_common="$(git -C ${config.devenv.root} rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
-      _moon_cache=${config.devenv.root}/.moon/cache
+    if _moon_common="$(git -C "${config.devenv.root}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+      _moon_cache="${config.devenv.root}/.moon/cache"
       [ -L "$_moon_cache" ] && rm -f "$_moon_cache"
       mkdir -p "$_moon_common/moon-outputs" "$_moon_cache"
       if [ ! -L "$_moon_cache/outputs" ]; then
