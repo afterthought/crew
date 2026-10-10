@@ -21,6 +21,7 @@ The rules for how crew is tested and gated. `core.md` binds here too; the how-to
 - **[tests.5]** Every merge into a bolt and onto main is gated by the suite, and the full suite on the bolt after each merge is the bolt's verification; the suite runs as one moon task per test file, in parallel, replayed on an identical tree.
 - **[tests.6]** Every rule a brief carries is pinned by a phrase `tests/t-briefs.sh` checks.
 - **[tests.7]** A Claude session in a crew checkout works inside crew's devenv shell, entered at its start by the checkout's SessionStart hook; no CLAUDE.md, README, brief or skill tells an agent to wrap a command in `devenv shell --`, and only worktrunk's merge hooks enter the shell themselves.
+- **[tests.8]** A test waits on a condition, never on the clock: no fixed sleep decides an outcome, every wait it makes has a limit that holds on a host under heavy load, and a verification that reddens only because the host was busy is a defect of the test, fixed before the next bolt lands.
 
 ## Details
 
@@ -37,3 +38,5 @@ The rules for how crew is tested and gated. `core.md` binds here too; the how-to
 **[tests.6]** Rules out: a brief rule with no phrase in `t-briefs.sh`. Source: fix a2ea85e; rulings-rest-on-readings design. Five brief fixes have no phrase: `_open.md`.
 
 **[tests.7]** Rules out: `devenv shell -- tests/run` in CLAUDE.md; a brief telling an agent to wrap a command; the shell entered by crew-role or by the plugin. Source: signal `2026-10-08-swancloud-planner-0ca5793d/01-agents-run-inside-the-shell-and-only-affected-tests`; swancloud's record 0003, "The shell"; agents-work-inside-crews-devenv-shell; `tests/t-dev-shell.sh`.
+
+**[tests.8]** Rules out: `sleep 1.1` standing for "a later second"; a sixty-second stuck limit as a proof of "never stuck"; a rerun as the fix. Read on 2026-10-10: `t-stage-ends` and `t-amend` failed under a load average of 247 on mac-studio and passed alone (signal 2026-10-10-crw-1-conductor-e7003d11/01); `t-stage-ends.sh` 31 sleeps 1.1 s so a commit lands in a later second and 94, 101 and 134 wait with stuck limits of 60 s and an hour; the host's load was 53, 105 and 202 at 23:52 local. Source: `tests.5`; ADR 0008; `tests-hold-under-a-loaded-host`, not built: `_open.md`.
