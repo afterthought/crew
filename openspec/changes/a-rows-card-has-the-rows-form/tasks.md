@@ -15,7 +15,7 @@
 
 ## 3. The docs
 
-- [ ] 3.1 `briefs.13` reads as built, `_open.md` no longer lists it, and README says a row's card has its row's form, a review's an approval with a note, and crew refuses another (design.md, Task notes 3.1). Verify `tests/suite t-docs` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
+- [x] 3.1 `briefs.13` reads as built, `_open.md` no longer lists it, and README says a row's card has its row's form, a review's an approval with a note, and crew refuses another (design.md, Task notes 3.1). Verify `tests/suite t-docs` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
 
 ## Workflow follow-up
 
