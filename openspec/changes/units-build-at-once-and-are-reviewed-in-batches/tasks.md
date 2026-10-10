@@ -15,7 +15,7 @@
 - [x] 2.1 crew reads a unit's Touches before code, refuses code without them, names an overlap in the later unit's code prompt, and gives verify the paths changed and not declared (design.md, Decision 4; Task notes 2.1). Verify `tests/suite --affected` ends with "0 failed".
 - [x] 2.2 Each of the conductor's waits forecasts conflicts with `git merge-tree`, writing no ref, and a forecast reaches the later unit once: told when idle, in its next stage's prompt, or as a settle stage (design.md, Decision 5; Task notes 2.2). Verify `tests/suite --affected` ends with "0 failed".
 - [x] 2.3 A dependent's place takes its After units' heads when it is made and is rebased onto the bolt when each merges, only while its agent is idle; an amended After unit is carried to its dependent; two unmerged units forecast to conflict are ordered by `After` (design.md, Decisions 2 and 5; Task notes 2.3). Verify `tests/suite --affected` ends with "0 failed".
-- [ ] 2.4 The settle stage starts for a verified unit a forecast or amendment reaches, and ends at a commit made since it began, or stops short when nothing needs to change (design.md, Decision 6; Task notes 2.4). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 2.4 The settle stage starts for a verified unit a forecast or amendment reaches, and ends at a commit made since it began, or stops short when nothing needs to change (design.md, Decision 6; Task notes 2.4). Verify `tests/suite --affected` ends with "0 failed".
 
 ## 3. Batches
 

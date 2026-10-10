@@ -3068,7 +3068,7 @@ def started(eid):
 
 class Owed:
     """A stage crew owes an end, from its line in the team's stages file: <slot> <unit, fix branch or bolt> <stage>
-    <start entry id> <object>. A unit's stages are construct, code, verify and merge; a fix's, fix and merge, its name
+    <start entry id> <object>. A unit's stages are construct, code, verify, settle and merge; a fix's, fix and merge, its name
     its branch and its object fix/<bolt>/<name>; ops's proof of a bolt is proof, in the slot ops."""
 
     def __init__(self, t, fields):
@@ -3156,8 +3156,9 @@ def deliverable(fleet, t, o, place=None):
     """What an owed stage has delivered since it began, read on the team's host: (its object, what the wait says of
     it), or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning
     complete; code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since
-    the start; merge: the bolt holding the unit's change, or the fix's commits; a fix: a commit on its branch since the
-    start; the proof: a proof file for the bolt saved since the start. A start crew can't read delivers nothing."""
+    the start; settle: a commit on the unit's branch since the start (teams.14); merge: the bolt holding the unit's
+    change, or the fix's commits; a fix: a commit on its branch since the start; the proof: a proof file for the bolt
+    saved since the start. A start crew can't read delivers nothing."""
     main = t["kit"]["main"]
     if o.start is None:
         return None, f"no start crew can read in its entry {o.eid}"
@@ -3178,6 +3179,8 @@ def deliverable(fleet, t, o, place=None):
     fresh = bool(head) and at is not None and at >= o.start
     if o.fix:
         return (f"{o.obj or o.name}@{head}", f"its branch is at {head}") if fresh else (None, "nothing committed since it began")
+    if o.stage == "settle":
+        return (f"unit/{o.name}@{head}", f"its branch is at {head}, ready to merge") if fresh else (None, "nothing committed since it began")
     if o.stage == "code":
         done, total = ticks(main, o.branch(), o.name)
         if fresh and total and done == total:
