@@ -14,7 +14,7 @@ crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
 for u in landed archived squashed verifying coding approved reviewing constructing ready-one; do
   crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null 2>&1
 done
-crew unit add waits "Unit waits." --bolt tenant-environments --after coding >/dev/null 2>&1
+crew unit add waits "Unit waits." --bolt tenant-environments --after constructing >/dev/null 2>&1
 crew unit add later "Later." --repo switchboard-kit --source signals/x/01-y >/dev/null 2>&1
 crew unit add zone-one "Zone one." --bolt apex-zones >/dev/null 2>&1
 crew unit add zone-two "Zone two." --bolt apex-zones --after zone-one >/dev/null 2>&1
@@ -39,6 +39,7 @@ else git -C "$kd/bolts/tenant-environments" merge -q --squash unit/squashed && c
 eq "$(git -C "$k" rev-list --count bolt/tenant-environments ^main)" "1"
 pv=$(place "$k" tenant-environments verifying); change "$pv" verifying 3 3; commit_all "$pv" "feat(verifying)"
 pc=$(place "$k" tenant-environments coding); change "$pc" coding 4 9; commit_all "$pc" "feat(coding)"
+# A Reviewed-by commit, as crew unit approve made before review went, is read by nothing.
 pa=$(place "$k" tenant-environments approved); change "$pa" approved 0 2; commit_all "$pa" "docs(approved)"
 git -C "$pa" commit -q --allow-empty -m "review(approved): approved" --trailer "Reviewed-by: Test User"
 pr=$(place "$k" tenant-environments reviewing); change "$pr" reviewing 0 2; commit_all "$pr" "docs(reviewing)"
@@ -49,7 +50,7 @@ git -C "$k" worktree add -q --track -b fix/tenant-environments/edge-sign-in "$kd
 expect_ok crew bolts --json; j=$out
 eq "$(grep -c ' ssh chuck-herdr-alpha ' "$CREW_TEST_LOG")" "1"
 st() { jq -r --arg u "$1" '[.partitions[].plans[].bolts[].units[] | select(.unit == $u) | .stage] | first' <<<"$j"; }
-for pair in landed:landed archived:landed squashed:merged verifying:verify coding:code approved:approved reviewing:review \
+for pair in landed:landed archived:landed squashed:merged verifying:verify coding:code approved:planned reviewing:planned \
             constructing:construct ready-one:ready waits:waiting zone-one:ready zone-two:waiting map-one:ready; do
   eq "$(st "${pair%%:*}")" "${pair#*:}"
 done

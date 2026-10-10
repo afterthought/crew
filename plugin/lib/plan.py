@@ -826,21 +826,24 @@ def amended(mark):
 
 def place_stage(pl, mark=None):
     """The stage of a unit that has neither landed nor merged, from its place and its Amended mark. A marked unit is
-    amended until construct runs again, in construct while its head is still where construct started, and in review
-    once it has moved, whatever its tasks say. Otherwise: verify, code, approved, review or construct, from its tasks,
-    its planning and its review."""
-    if mark:
-        return "amended" if amended(mark) else "construct" if not pl or pl.get("head") == mark else "review"
+    amended until construct runs again, and in construct while its head is still where construct started; once that
+    construct has committed the mark stops counting (plan.6). Otherwise: verify, code, planned or construct, from its
+    tasks and its planning."""
+    if mark and (amended(mark) or not pl or pl.get("head") == mark):
+        return "amended" if amended(mark) else "construct"
     done, total = pl["tasks"] or (0, 0)
-    return ("verify" if total and done == total else "code" if done else
-            "approved" if pl["planning"] and pl["reviewed"] else "review" if pl["planning"] else "construct")
+    return "verify" if total and done == total else "code" if done else "planned" if pl["planning"] else "construct"
+
+
+# The stages at which a unit has finished construct: its change is committed, and a unit after it may be constructed.
+CONSTRUCTED = ("planned", "code", "verify", "merged", "landed")
 
 
 class Stages:
     """Each unit's stage, read from its kit on its team's host. The first rule that holds is the stage:
-    landed, merged, then amended, construct or review for a unit the plan marks amended, then verify, code, approved,
-    review, construct, then ready or waiting by its After units; a unit with no bolt is queued, and one whose host
-    does not answer is unknown."""
+    landed, merged, then amended or construct for a unit the plan marks amended whose construct has not committed again,
+    then verify, code, planned, construct, then ready or waiting by whether its After units have finished construct
+    (plan.13); a unit with no bolt is queued, and one whose host does not answer is unknown."""
 
     def __init__(self, fleet, plan, survey):
         self.fleet, self.plan, self.survey, self.memo = fleet, plan, survey, {}
@@ -887,7 +890,7 @@ class Stages:
                 res["stage"] = place_stage(pl, u.get("Amended"))
                 return res
         deps = [self.of(a)["stage"] for a in u.all("After")]
-        res["stage"] = "unknown" if "unknown" in deps else ("ready" if all(d in ("merged", "landed") for d in deps) else "waiting")
+        res["stage"] = "unknown" if "unknown" in deps else ("ready" if all(d in CONSTRUCTED for d in deps) else "waiting")
         return res
 
     def bolt_state(self, b):
@@ -2603,8 +2606,8 @@ HEAD = r"""cd "$1" && git rev-parse HEAD"""
 
 
 def mark_amended(fleet, label, unit, bolt, head):
-    """The plan marks a unit amended at the head construct starts again from, so its code, verify and merge wait for
-    the user's review of what construct writes. Returns the write's commit. What the write says goes to standard
+    """The plan marks a unit amended at the head construct starts again from, so its code, verify and merge wait until
+    what construct writes is committed (plan.6). Returns the write's commit. What the write says goes to standard
     error: bash crew reads standard output as the stage's variables."""
     def change(w):
         u = w.unit(unit)
@@ -2615,27 +2618,55 @@ def mark_amended(fleet, label, unit, bolt, head):
         return write(fleet, label, change, f"plan({bolt}): {unit} amended, construct runs again")
 
 
+def local_entries(label, days=30):
+    """This host's run record of the label, from days back, oldest first."""
+    runs = record.ROOT / label / "runs" / crew.this_host()
+    since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=days)).isoformat()
+    out = []
+    for f in sorted(runs.glob("*.rec")) if runs.is_dir() else []:
+        if f.stem >= since:
+            out += record.parse(f.read_text())
+    return sorted(out, key=lambda e: (e["At"], e["Id"]))
+
+
+def verified(label, unit, entries=None):
+    """Whether a unit has delivered its verify since it was last constructed or coded, from the run record of the host
+    its stages run on: a delivered verify end later than every construct or code start of it."""
+    done = None
+    for e in entries if entries is not None else local_entries(label):
+        if e.get("Refused"):
+            continue
+        if e.get("Act") == "stage.start" and any(o in e["On"] for o in (f"stage/{unit}/construct", f"stage/{unit}/code")):
+            done = False
+        elif e.get("Act") == "stage.end" and f"stage/{unit}/verify" in e["On"] and e.get("Ended") == "delivered":
+            done = True
+    return bool(done)
+
+
 def run_check(fleet, a):
     """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent. Construct
-    is run again at any stage before merge, and on a unit with an approved change, or one already amended, it first
-    marks the unit amended in the plan: a write the conductor of the team holding its bolt, or the user, makes. Code,
-    verify and merge wait while the mark stands."""
+    starts once each After unit has finished construct, never waiting on a merge (plan.13), and is run again at any
+    stage before merge; on a unit whose change is committed, or one already amended, it first marks the unit amended in
+    the plan: a write the conductor of the team holding its bolt, or the user, makes. Code starts once the change is
+    committed, with no review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits
+    until each After unit has merged (teams.5); settle runs only for a unit that has delivered its verify."""
     label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
     u = plan.unit(a.unit)
     bolt = u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first")
     t = fleet["teams"][plan.bolt(bolt).get("Team")]
-    s = Stages(fleet, plan, survey(fleet, [(t["name"], bolt)])).of(a.unit)
+    st_all = Stages(fleet, plan, survey(fleet, [(t["name"], bolt)]))
+    s = st_all.of(a.unit)
     st, place, mark = s["stage"], f"{t['kit']['dir']}/places/{a.unit}", u.get("Amended")
     st != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
     words = f" {a.words}" if a.words else ""
     amended_at = entry = ""
     if a.stage == "construct":
         if st == "waiting":
-            deps = [d for d in u.all("After") if Stages(fleet, plan, survey(fleet, [(t["name"], bolt)])).of(d)["stage"] not in ("merged", "landed")]
-            fail(f"unit {a.unit} is waiting: it comes after " + ", ".join(deps) + ", not yet merged into its bolt")
+            deps = [d for d in u.all("After") if st_all.of(d)["stage"] not in CONSTRUCTED]
+            fail(f"unit {a.unit} is waiting: it comes after " + ", ".join(deps) + ", whose change is not committed yet")
         st not in ("merged", "landed") or fail(f"unit {a.unit} has " + ("merged into its bolt" if st == "merged" else "landed on main")
                                                + ": a defect in it is a fix (crew fix), and a new need is a new unit")
-        marking = bool(mark) or st in ("approved", "code", "verify")
+        marking = bool(mark) or st in ("planned", "code", "verify")
         if marking:
             kind, team = role(fleet, os.environ.get("CREW_AGENT"))
             kind == "user" or (kind, team) == ("conductor", t["name"]) or fail(
@@ -2649,12 +2680,12 @@ def run_check(fleet, a):
         sources = u.all("Source")
         again = " This unit's intent was amended; revise the existing change to it." if amended(mark) else ""
         prompt = f"/opsx:propose {a.unit} {u.get('Intent')}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + again + words
-    elif mark:
+    elif st in ("amended", "construct") and mark:
         fail(f"unit {a.unit} was amended and " + (f"construct has not been run again (crew unit run {a.unit} construct)" if st == "amended"
-                                                  else f"waits for the user's review (crew unit approve {a.unit})"))
+                                                  else "its change is being written again, and has not been committed"))
     elif a.stage == "code":
-        st != "review" or fail(f"unit {a.unit} is in review: code waits until the user approves it (crew unit approve {a.unit})")
-        st in ("approved", "code", "verify") or fail(f"unit {a.unit} is in {st}, with no approved change to code yet")
+        st in ("planned", "code", "verify") or fail(f"unit {a.unit} is in {st}: " + (
+            "code waits until its change is committed" if st == "construct" else "it has no change to code yet"))
         prompt = f"/opsx:apply {a.unit}{words}"
     elif a.stage == "verify":
         if st == "code":
@@ -2663,13 +2694,20 @@ def run_check(fleet, a):
                    f"unit {a.unit} is in code, with {n} task{'' if n == 1 else 's'} still open")  # titles are typed text
         st == "verify" or fail(f"unit {a.unit} is in {st}: verify waits until every task is ticked")
         prompt = f"/opsx:verify {a.unit}{words}"
+    elif a.stage == "settle":
+        st == "verify" and verified(label, a.unit) or fail(
+            f"unit {a.unit} is in {st}" + (", and has not delivered its verify" if st == "verify" else "")
+            + ": settle runs only for a unit that has delivered its verify and waits to merge")
+        a.words or fail(f"settle {a.unit} with what reached it: crew unit run {a.unit} settle \"<the forecast or the amendment>\"")
+        prompt = f"Settle {a.unit}:{words}"
     else:
         st == "verify" or fail(f"unit {a.unit} is in {st}: it merges once every task is ticked and verify has run")
+        ahead = [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")]
+        not ahead or fail(f"unit {a.unit} merges after " + ", ".join(ahead) + ", not yet merged into bolt/" + bolt)
         prompt = f"Merge {a.unit} into bolt/{bolt}: wt merge bolt/{bolt} --no-squash --no-remove{words}"
-    # The rail row the stage ends, whose card the conductor closes: a review built again, or a verify report acted on.
-    # Bash crew names the card once the stage has started (stage_ended_row), since starting it can still be refused.
-    ends = (f"review/{a.unit}" if a.stage == "construct" and st == "review" else
-            f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else "")
+    # The rail row the stage ends, whose card the conductor closes: a verify report acted on. Bash crew names the card
+    # once the stage has started (stage_ended_row), since starting it can still be refused.
+    ends = f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else ""
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
     print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry))
 
@@ -3090,7 +3128,7 @@ def deliverable(fleet, t, o, place=None):
             planned = bool(json.loads(status).get("isPlanningComplete")) if status else False
         except (ValueError, AttributeError):
             planned = False
-    return (f"unit/{o.name}@{head}", f"its change is committed at {head}, ready for review") if planned else (None, "its planning not complete")
+    return (f"unit/{o.name}@{head}", f"its change is committed at {head}") if planned else (None, "its planning not complete")
 
 
 @contextlib.contextmanager
@@ -4097,7 +4135,7 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("--label")
     x = sub.add_parser("_run")
     x.add_argument("unit")
-    x.add_argument("stage", choices=("construct", "code", "verify", "merge"))
+    x.add_argument("stage", choices=("construct", "code", "verify", "settle", "merge"))
     x.add_argument("words", nargs="?", default="")
     x.add_argument("--label")
     x = sub.add_parser("_ended")

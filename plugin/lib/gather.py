@@ -10,7 +10,7 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
 for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree,
 its head and the head's time; each place under <dir>/places with its branch, its head and the head's time, its change's
-tasks, whether its planning is complete and whether it has a review since the bolt; each fix branched from a bolt;
+tasks and whether its planning is complete; each fix branched from a bolt;
 and each unit's newest verify report in the reports folders, with its path and time. With sites, each worktree's
 devurl names and the host's portless routes; with board, each team's slots, one {slot, kind, name, place} per line
 of its slots file, and each folder under openspec/explorations/ on main with the first line of its first .md file.
@@ -223,12 +223,12 @@ def change_tasks(change):
         return []
 
 
-def place(path, unit, bolt):
-    """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, the open
-    tasks, and its review. The tasks and the planning are read from the change's files, or through openspec when
-    planned() hands the change to it."""
+def place(path, unit):
+    """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, and the
+    open tasks. The tasks and the planning are read from the change's files, or through openspec when planned() hands
+    the change to it."""
     info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None,
-            "head_at": head_at(path, "HEAD"), "tasks": None, "planning": False, "reviewed": False, "open": []}
+            "head_at": head_at(path, "HEAD"), "tasks": None, "planning": False, "open": []}
     change = os.path.join(path, "openspec", "changes", unit)
     tasks = change_tasks(change)
     info["open"] = [d for done, d in tasks if not done]
@@ -246,9 +246,6 @@ def place(path, unit, bolt):
         status = run(["openspec", "status", "--change", unit, "--json"], path)
         if status:
             info["planning"] = bool(json.loads(status).get("isPlanningComplete"))
-    if bolt:
-        log = run(["git", "log", "--format=%(trailers:key=Reviewed-by,valueonly)", f"bolt/{bolt}..unit/{unit}"], path) or ""
-        info["reviewed"] = bool(log.strip())
     return info
 
 
@@ -332,7 +329,7 @@ def kit(req, sites=False, running=None, board=False):
         if branch.startswith("unit/"):
             unit = branch[5:]
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
-            out["places"][unit] = dict(place(path, unit, bolt), branch=branch, bolt=bolt)
+            out["places"][unit] = dict(place(path, unit), branch=branch, bolt=bolt)
         elif branch.startswith("fix/"):
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
             out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt)})

@@ -1,4 +1,4 @@
-# crew unit add|split|order|after|move|drop|approve, and each scenario of the bolt-plan spec they answer.
+# crew unit add|split|order|after|move|drop, and each scenario of the bolt-plan spec they answer.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -37,9 +37,14 @@ expect_ok crew unit order a --last; eq "$(plan -t Unit -e "Bolt = 'tenant-enviro
 expect_fail "is not in tenant-environments with a" crew unit order a --before elsewhere
 ok "order moves a unit within its bolt"
 
-pa=$(place "$k" tenant-environments a); change "$pa" a 1 3; commit_all "$pa" "feat(a): change, one task done"
-eq "$(stage a)" "code"; eq "$(stage b)" "waiting"
-ok "a unit after one in code is waiting"
+pa=$(place "$k" tenant-environments a); mkdir -p "$pa/openspec/changes/a"; printf '# Proposal\n\n## Why\n\nx\n' > "$pa/openspec/changes/a/proposal.md"
+commit_all "$pa" "docs(a): proposal"
+eq "$(stage a)" "construct"; eq "$(stage b)" "waiting"
+change "$pa" a 0 3; commit_all "$pa" "docs(a): the change"
+eq "$(stage a)" "planned"; eq "$(stage b)" "ready"
+rewrite "$pa/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$pa" "feat(a): one task done"
+eq "$(stage a)" "code"; eq "$(stage b)" "ready"
+ok "a unit after one still in construct is waiting, and ready once that one's change is committed, never waiting on its merge"
 
 expect_fail "unit a is in code, so it is no longer split; add the remainder as a new unit instead" crew unit split a "Narrower." --into a-rest "The rest."
 expect_ok crew unit split c "Unit c, narrowed." --into c-rest "The rest of c." --into c-more "More of c."
@@ -50,35 +55,16 @@ ok "split narrows a unit and adds the remainder right after it, and is refused o
 pd=$(place "$k" tenant-environments d); mkdir -p "$pd/openspec/changes/d"; printf '# Proposal\n\n## Why\n\nx\n' > "$pd/openspec/changes/d/proposal.md"
 commit_all "$pd" "docs(d): proposal"
 eq "$(stage d)" "construct"
-expect_fail "its change's planning is not complete" crew unit approve d
 pc=$(place "$k" tenant-environments c); change "$pc" c 0 2; commit_all "$pc" "docs(c): the change"
-eq "$(stage c)" "review"
-p=$(as chuck-herdr-alpha herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
-as chuck-herdr-alpha herdr --session wldn-1 stub agent "$p" swb-1-conductor  # up, so it can be told
-: > "$CREW_TEST_LOG"
-expect_ok crew unit approve c; has "$out" "unit c approved"
-lacks "$out" "Pending You"
-grep -qF "agent prompt swb-1-conductor '[crew] Unit c was approved by $me@mac-studio. Close your Pending You card for review/c, if one is open, with what was done.'" \
-  "$CREW_TEST_LOG" || fail "the conductor was not told to close its review card:"$'\n'"$(calls)"
-eq "$(git -C "$pc" log -1 --format=%s)" "review(c): approved"
-has "$(git -C "$pc" log -1 --format='%(trailers:key=Reviewed-by,valueonly)')" "Test User <test@example.com>"
-eq "$(git -C "$pc" diff HEAD~1 --stat)" ""
-eq "$(stage c)" "approved"
-ok "approve is an empty Reviewed-by commit, refused before planning is complete; its conductor is told to close the review's card"
+eq "$(stage c)" "planned"
+ok "a unit whose change's planning is complete is planned, and one whose isn't is in construct"
 
-change "$pd" d 0 2; commit_all "$pd" "docs(d): the change"
-: > "$CREW_TEST_LOG"
-CREW_AGENT=swb-1-conductor expect_ok crew unit approve d
-eq "$(tail -1 <<<"$out")" "Close your Pending You card for review/d, if one is open, with what was done."
-grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told of its own approval:"$'\n'"$(calls)"
-ok "the conductor approving on the user's word is shown the line that closes the review's card, and told nothing"
-
-# The bolt moves on, and the approved unit is rebased onto it.
+# The bolt moves on, and the planned unit is rebased onto it.
 echo more > "$kd/bolts/tenant-environments/bolt-work"; commit_all "$kd/bolts/tenant-environments" "feat: bolt work"
 git -C "$pc" rebase -q bolt/tenant-environments
 git -C "$pc" merge-base --is-ancestor bolt/tenant-environments unit/c || fail "c was not rebased"
-eq "$(stage c)" "approved"
-ok "the approval survives a rebase onto a newer bolt tip"
+eq "$(stage c)" "planned"
+ok "a planned unit is still planned after a rebase onto a newer bolt tip"
 
 expect_fail "a queued unit has none" crew unit move c queue
 expect_fail "bolt apex-zones is held by no team, so it has no branch to rebase c onto" crew unit move c apex-zones
@@ -88,8 +74,8 @@ eq "$(plan -t Unit -e "Unit = 'c'" -P Bolt)" "console-pages"
 git -C "$pc" merge-base --is-ancestor bolt/console-pages unit/c || fail "c was not rebased onto console-pages"
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/c)" "bolt/console-pages"
 git -C "$k" merge-base --is-ancestor bolt/tenant-environments unit/c && fail "c still carries tenant-environments' commits"
-eq "$(stage c)" "approved"
-ok "moving a unit with a worktree rebases its branch onto the new bolt, approval and all"
+eq "$(stage c)" "planned"
+ok "moving a unit with a worktree rebases its branch onto the new bolt"
 
 echo d > "$pd/same-file"; commit_all "$pd" "feat(d): same file"
 echo console > "$kd/bolts/console-pages/same-file"; commit_all "$kd/bolts/console-pages" "feat: same file, otherwise"

@@ -4,6 +4,11 @@
 $schema: 'https://moonrepo.dev/schemas/project.json'
 
 tasks:
+  t-after:
+    command: 'tests/run t-after'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-after.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-amend:
     command: 'tests/run t-amend'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-amend.sh']

@@ -12,7 +12,7 @@ CREW_AGENT= crew unit add b "Unit b." --bolt tenant-environments >/dev/null
 CREW_AGENT= crew unit add c "Unit c." --bolt tenant-environments >/dev/null
 CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
 crew unit run a construct >/dev/null; crew unit run b construct >/dev/null; crew unit run c construct >/dev/null
-change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"; crew unit approve a >/dev/null
+change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/a" "feat(a): built"
 expect_ok crew unit run a merge
 slot=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-1") | .key')
@@ -37,7 +37,7 @@ git -C "$k" ls-tree -d --name-only bolt/tenant-environments openspec/changes/ | 
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1 units"
 ok "once the bolt holds the change, the place is removed, the slot freed, and the unit reads merged"
 
-change "$kd/places/c" c 0 2; commit_all "$kd/places/c" "docs(c): the change"; crew unit approve c >/dev/null
+change "$kd/places/c" c 0 2; commit_all "$kd/places/c" "docs(c): the change"
 rewrite "$kd/places/c/openspec/changes/c/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/c" "feat(c): built"
 crew unit run c merge >/dev/null
 cslot=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-3") | .key')

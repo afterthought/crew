@@ -14,7 +14,6 @@ for u in a b c; do crew unit run $u construct >/dev/null; done
 change "$kd/places/a" a 0 3; commit_all "$kd/places/a" "docs(a): the change"
 change "$kd/places/b" b 0 3; commit_all "$kd/places/b" "docs(b): the change"
 change "$kd/places/c" c 0 3; rm "$kd/places/c/openspec/changes/c/design.md"; commit_all "$kd/places/c" "docs(c): the change, no design yet"
-crew unit approve b >/dev/null
 rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/b" "feat(b): task 1"
 
 # Shims ahead of the real git, python3 and openspec log, per host, each fetch of a state branch into crew's cache,
@@ -34,7 +33,7 @@ left() { ls -A "$(home_of "$1")/.cache/crew/reads" 2>/dev/null || true; }
 : > "$T/reads.log"
 expect_ok crew status swb-1
 has "$out" "swb-1-unit-1"
-has "$(grep swb-1-unit-1 <<<"$out")" "a  review"
+has "$(grep swb-1-unit-1 <<<"$out")" "a  planned"
 has "$(grep swb-1-unit-2 <<<"$out")" "b  code 1/3"
 has "$(grep swb-1-unit-3 <<<"$out")" "c  construct"
 eq "$(reads $box fetch) $(reads $box gather) $(reads $box openspec)" "1 1 0"

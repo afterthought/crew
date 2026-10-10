@@ -1,6 +1,7 @@
-# A unit in flight goes back through construct and review: the plan's Amended mark, the stage it gives a unit
-# whatever its tasks say, construct run again at any stage before merge, code, verify and merge refused while the
-# mark stands, and crew unit approve clearing it. Each scenario of unit-amendments' bolt-plan and bolt-teams specs.
+# A unit in flight goes back through construct: the plan's Amended mark, the stage it gives a unit whatever its tasks
+# say until construct has committed again, construct run again at any stage before merge, code, verify and merge
+# refused while the mark counts, and the unit going on from its tasks once construct has committed, with no approval
+# asked. Each scenario of the bolt-plan and bolt-teams specs on amending a unit in flight.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -41,25 +42,24 @@ eq "$(plan -t Unit -e "Unit = 'coding'" -P Amended)" "proposal/4"
 by_hand "p.unit('coding').drop('Amended')"
 ok "a plan from before the mark still reads, and state init or the next write brings its descriptors in step"
 
-# Units with ticked tasks, approved once, in each state of the mark, beside one never amended.
+# Units with ticked tasks in each state of the mark, beside one never amended.
 for u in m-proposal m-intent m-started m-committed; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null 2>&1; done
 crew bolt give swb-1 tenant-environments >/dev/null 2>&1
 for u in coding m-proposal m-intent m-started m-committed; do
   p=$(place "$k" tenant-environments $u); change "$p" $u 2 3; commit_all "$p" "docs($u): the change"
-  git -C "$p" commit -q --allow-empty -m "review($u): approved" --trailer "Reviewed-by: Test User"
 done
 started=$(git -C "$k" rev-parse unit/m-started); committed=$(git -C "$k" rev-parse unit/m-committed)
 git -C "$kd/places/m-committed" commit -q --allow-empty -m "docs(m-committed): the change again"
 mark m-proposal proposal/4; mark m-intent intent; mark m-started "$started"; mark m-committed "$committed"
 expect_ok crew bolts --json; j=$out
 st() { jq -r --arg u "$1" '[.partitions[].plans[].bolts[].units[] | select(.unit == $u) | .stage] | first' <<<"$j"; }
-for pair in coding:code m-proposal:amended m-intent:amended m-started:construct m-committed:review; do eq "$(st "${pair%%:*}")" "${pair#*:}"; done
+for pair in coding:code m-proposal:amended m-intent:amended m-started:construct m-committed:code; do eq "$(st "${pair%%:*}")" "${pair#*:}"; done
 expect_ok crew bolts
 has "$out" "  m-proposal                               amended      places/m-proposal"
 has "$out" "  m-started                                construct    places/m-started"
-has "$out" "  m-committed                              review       places/m-committed"
+has "$out" "  m-committed                              code 2/3     places/m-committed"
 has "$out" "  coding                                   code 2/3     places/coding"
-ok "a marked unit reads amended, construct while its head is where construct started, and review once it has moved, whatever its tasks"
+ok "a marked unit reads amended, construct while its head is where construct started, and from its tasks once construct has committed"
 
 # Construct run again, by the conductor and by the user.
 last() {
@@ -89,66 +89,44 @@ eq "$(field $box stage.start Commit stage/coding/construct)" "WilldanGroup/crew-
 has "$(git --git-dir "$ws" log -1 --format=%B wldn/main)" "Crew-Entry: $(field $box stage.start Id stage/coding/construct)"
 ok "construct on a unit in code marks it amended at its head, in the conductor's write, and starts a fresh agent with the user's words"
 
-expect_fail "unit coding was amended and waits for the user's review (crew unit approve coding)" crew unit run coding code
-has "$(field $box stage.start Refused stage/coding/code)" "unit coding was amended and waits for the user's review"
-expect_fail "unit coding is in construct: its change is being written again, and has not been committed" crew unit approve coding
+expect_fail "unit coding was amended and its change is being written again, and has not been committed" crew unit run coding code
+has "$(field $box stage.start Refused stage/coding/code)" "unit coding was amended and its change is being written again"
+for s in verify merge; do
+  expect_fail "unit coding was amended and its change is being written again, and has not been committed" crew unit run coding $s
+  has "$(field $box stage.start Refused stage/coding/$s)" "unit coding was amended and its change is being written again"
+done
 echo "Written again." >> "$kd/places/coding/openspec/changes/coding/design.md"; commit_all "$kd/places/coding" "docs(coding): written again"
-eq "$(stage coding)" "review"
+eq "$(stage coding)" "code"
 as $box herdr --session wldn-1 stub status "$(pane swb-1-unit-1)" idle
 expect_ok crew unit wait coding
-has "$out" "swb-1-unit-1 delivered construct on coding: its change is committed at $(git -C "$k" rev-parse --short unit/coding), ready for review"
-eq "$(field $box stage.end Result stage/coding/construct)" "review"
+has "$out" "swb-1-unit-1 delivered construct on coding: its change is committed at $(git -C "$k" rev-parse --short unit/coding)"
+eq "$(field $box stage.end Result stage/coding/construct)" "code"
 eq "$(field $box stage.end Ended stage/coding/construct)" "delivered"
-expect_fail "unit coding was amended and waits for the user's review (crew unit approve coding)" crew unit run coding verify
-has "$(field $box stage.start Refused stage/coding/verify)" "unit coding was amended and waits for the user's review"
-expect_fail "unit coding was amended and waits for the user's review (crew unit approve coding)" crew unit run coding merge
-has "$(field $box stage.start Refused stage/coding/merge)" "unit coding was amended and waits for the user's review"
-ok "once construct commits the unit is in review, though tasks are ticked, and code, verify and merge are refused entries until it is approved"
-
-before=$(git -C "$k" rev-parse unit/coding)
-expect_ok crew unit approve coding
-has "$out" "unit coding approved"
-eq "$(git -C "$k" log -1 --format=%s unit/coding)" "review(coding): approved"
-eq "$(plan -t Unit -e "Unit = 'coding'" -P Amended)" ""
-eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(tenant-environments): coding approved after amendment (swb-1-conductor)"
-eq "$(stage coding)" "code"
-eq "$(field mac-studio unit.approve Commit unit/coding)" "WilldanGroup/switchboard-kit@$(git -C "$k" rev-parse unit/coding) WilldanGroup/crew-state@$(tip)"
 expect_ok crew unit run coding code
 eq "$(prompt_to "$(pane swb-1-unit-1)")" "'/opsx:apply coding'"
-ok "approving clears the mark in the plan, and the unit carries on from its tasks"
+ok "code, verify and merge are refused entries while construct runs again; once it commits the unit goes on from its tasks, nobody asked to approve"
 
-# A unit approved with no task ticked, sent back by the user at a shell, whose approval's plan write fails once.
+# A planned unit, sent back by the user at a shell.
 unset CREW_AGENT
 crew unit add fresh "Unit fresh." --bolt tenant-environments >/dev/null 2>&1
 pf=$(place "$k" tenant-environments fresh); change "$pf" fresh 0 2; commit_all "$pf" "docs(fresh): the change"
-crew unit approve fresh >/dev/null
-CREW_AGENT=swb-2-conductor expect_fail "unit fresh is in approved, so construct run again marks it amended: a plan write only swb-1-conductor or the user makes" \
+eq "$(stage fresh)" "planned"
+CREW_AGENT=swb-2-conductor expect_fail "unit fresh is in planned, so construct run again marks it amended: a plan write only swb-1-conductor or the user makes" \
   crew unit run fresh construct
 CREW_AGENT=wldn-planner expect_fail "a plan write only swb-1-conductor or the user makes" crew unit run fresh construct
 eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" ""
 expect_ok crew unit run fresh construct "The user wants a table."
 eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" "$(git -C "$k" rev-parse unit/fresh)"
 has "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "fresh amended, construct runs again ($me@mac-studio)"
+eq "$(stage fresh)" "construct"
+CREW_AGENT=swb-1-conductor expect_fail "unit fresh was amended and its change is being written again" crew unit run fresh code
 echo table >> "$pf/openspec/changes/fresh/design.md"; commit_all "$pf" "docs(fresh): a table"
-eq "$(stage fresh)" "review"
-printf '#!/usr/bin/env bash\nexit 1\n' > "$ws/hooks/pre-receive"; chmod +x "$ws/hooks/pre-receive"
-expect_fail "the push of wldn/main" crew unit approve fresh
-rm "$ws/hooks/pre-receive"
-approval=$(git -C "$k" rev-parse unit/fresh)
-eq "$(git -C "$k" log -1 --format=%s unit/fresh)" "review(fresh): approved"
-eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" "$(git -C "$k" rev-parse unit/fresh~2)"
-eq "$(stage fresh)" "review"
-expect_ok crew unit approve fresh
-has "$out" "unit fresh was approved at ${approval:0:7} on unit/fresh, after construct ran again"
-eq "$(git -C "$k" rev-parse unit/fresh)" "$approval"
-eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" ""
-eq "$(stage fresh)" "approved"
-ok "the user sends an approved unit back to construct; run again after a failed plan write, approve only clears the mark"
+eq "$(stage fresh)" "planned"
+ok "the user sends a planned unit back to construct, which marks it, and it is planned again once construct commits"
 
-# An intent amended: construct has not been run again, so code and approval are refused; construct says why it runs.
+# An intent amended: construct has not been run again, so code is refused; construct says why it runs.
 export CREW_AGENT=swb-1-conductor
 expect_fail "unit m-intent was amended and construct has not been run again (crew unit run m-intent construct)" crew unit run m-intent code
-expect_fail "unit m-intent is in amended: construct has not been run again since it was amended" crew unit approve m-intent
 expect_ok crew unit run m-intent construct
 has "$(prompt_to "$(pane swb-1-unit-3)")" "/opsx:propose m-intent Unit m-intent. This unit"
 has "$(prompt_to "$(pane swb-1-unit-3)")" "s intent was amended; revise the existing change to it.'"

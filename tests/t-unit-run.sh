@@ -1,7 +1,8 @@
 # Unit slots and crew unit run <unit> construct|code|verify|merge: a free slot is taken, refused when every slot
 # is in flight; construct makes places/<unit> on unit/<unit> from the bolt; each stage ends the slot's agent and
-# starts a fresh one from that stage's definition, then sends its prompt; code waits for the approval and
-# verify for every task ticked. A stage that ends a rail row names the row's card to the conductor that owns it.
+# starts a fresh one from that stage's definition, then sends its prompt; construct waits for each After unit's change,
+# code for the unit's own change to be committed, with no review between, and verify for every task ticked. A stage
+# that ends a rail row names the row's card to the conductor that owns it.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -36,21 +37,21 @@ eq "$(prompt_to "$p1")" "'/opsx:propose a Unit a. Sources: books/x.md; switchboa
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1 units"
 ok "construct takes a free slot, makes the unit's place from the bolt, and starts a fresh agent at high effort"
 
-expect_fail "unit b is waiting: it comes after a, not yet merged into its bolt" crew unit run b construct
+expect_fail "unit b is waiting: it comes after a, whose change is not committed yet" crew unit run b construct
 eq "$(wc -l < "$slots" | tr -d ' ')" "1"
 [[ ! -d $kd/places/b ]] || fail "b's place was made"
-ok "a unit waiting on another is refused, and takes no slot"
+ok "a unit after one whose change is not committed is refused construct, and takes no slot"
 
+expect_fail "unit a is in construct: code waits until its change is committed" crew unit run a code
 change "$kd/places/a" a 0 3; commit_all "$kd/places/a" "docs(a): the change"
-expect_fail "unit a is in review: code waits until the user approves it (crew unit approve a)" crew unit run a code
-crew unit approve a >/dev/null
+eq "$(stage a)" "planned"; eq "$(stage b)" "ready"
 : > "$CREW_TEST_LOG"
 expect_ok crew unit run a code
 has "$out" "swb-1-unit-1 has a: code"
 grep -q "^$box wldn-1 agent prompt $p1 /exit" "$CREW_TEST_LOG" || fail "the construct agent was not ended"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $kd/places/a"
 eq "$(prompt_to "$p1")" "'/opsx:apply a'"
-ok "code is refused before the approval, then starts fresh in the same slot at xhigh"
+ok "code is refused until the change is committed, then starts fresh in the same slot at xhigh with nobody asked to approve"
 
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
 expect_fail "unit a is in code, with these tasks still open: 1.2 task 2; 1.3 task 3" crew unit run a verify
@@ -78,10 +79,10 @@ expect_fail "swb-1-unit-2 is working; add --force to end it anyway." crew unit r
 expect_ok crew unit run c construct "Use the words the user gave." --force
 ok "a working stage is ended only with --force"
 
-# The stage that ends a rail row names its card: construct again on a unit in review ends its review, and construct,
-# code or merge on a unit in verify ends its verify report's row.
+# The stage that ends a rail row names its card: construct, code or merge on a unit in verify ends its verify
+# report's row. Construct again on a planned unit marks it amended and ends no row.
 change "$kd/places/d" d 0 2; commit_all "$kd/places/d" "docs(d): the change"
-eq "$(stage d)" "review"
+eq "$(stage d)" "planned"
 # A construct refused because the slot's agent is working starts nothing, so it names no card, to anyone.
 p3=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-3") | .key')
 as $box herdr --session wldn-1 stub status "$p3" working
@@ -93,14 +94,9 @@ done
 grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told to close a card for a stage that never started"
 as $box herdr --session wldn-1 stub status "$p3" idle
 expect_ok crew unit run d construct "Name the tenant in the title."
-has "$out" "Close your Pending You card for review/d, if one is open, with what was done."
-grep -q "agent prompt swb-1-conductor" "$CREW_TEST_LOG" && fail "the conductor was told of its own run"
-p=$(as chuck-herdr-alpha herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
-as chuck-herdr-alpha herdr --session wldn-1 stub agent "$p" swb-1-conductor  # up, so it can be told
-CREW_AGENT= expect_ok crew unit run d construct "Again."
 lacks "$out" "Pending You"
-grep -qF "agent prompt swb-1-conductor '[crew] $me@mac-studio ran construct on unit d. Close your Pending You card for review/d, if one is open, with what was done.'" \
-  "$CREW_TEST_LOG" || fail "the conductor was not told to close its review card:"$'\n'"$(calls)"
+eq "$(stage d)" "construct"
+expect_fail "unit d was amended and its change is being written again, and has not been committed" crew unit run d code
 change "$kd/places/e" e 2 2; commit_all "$kd/places/e" "feat(e): done"
 eq "$(stage e)" "verify"
 expect_ok crew unit run e verify
@@ -109,4 +105,11 @@ for s in code merge; do
   expect_ok crew unit run e $s
   has "$out" "Close your Pending You card for verify/e, if one is open, with what was done."
 done
-ok "construct again on a unit in review, and code or merge on one in verify, name the row's card: shown to its conductor, told to it otherwise"
+p=$(as chuck-herdr-alpha herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
+as chuck-herdr-alpha herdr --session wldn-1 stub agent "$p" swb-1-conductor  # up, so it can be told
+: > "$CREW_TEST_LOG"
+CREW_AGENT= expect_ok crew unit run e code
+lacks "$out" "Pending You"
+grep -qF "agent prompt swb-1-conductor '[crew] $me@mac-studio ran code on unit e. Close your Pending You card for verify/e, if one is open, with what was done.'" \
+  "$CREW_TEST_LOG" || fail "the conductor was not told to close its verify card:"$'\n'"$(calls)"
+ok "construct again on a planned unit names no card, and code or merge on one in verify name the verify row's card: shown to its conductor, told to it otherwise"

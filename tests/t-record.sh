@@ -112,10 +112,6 @@ ok "a capture, a curation move, and a unit queued from a signal with its route e
 crew bolt give swb-1 >/dev/null 2>&1
 eq "$(field mac-studio bolt.give On)" "bolt/tenant-environments team/swb-1"
 eq "$(field mac-studio bolt.give Commit)" "WilldanGroup/crew-state@$(tip wldn/main)"
-pl=$(place "$k" tenant-environments b); change "$pl" b 0 2; commit_all "$pl" "docs(b): the change"
-CREW_AGENT=swb-1-conductor crew unit approve b >/dev/null
-eq "$(field mac-studio unit.approve On)" "unit/b"
-eq "$(field mac-studio unit.approve Commit)" "WilldanGroup/switchboard-kit@$(git -C "$k" rev-parse unit/b)"
 crew bolt new solo "One unit ZQXN." --repo switchboard-kit >/dev/null
 crew unit add solo-one "Solo ZQXO." --bolt solo >/dev/null
 crew bolt give swb-2 solo >/dev/null 2>&1

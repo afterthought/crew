@@ -86,23 +86,22 @@ eq "$(field $box stage.start On stage/a/construct)" "stage/a/construct unit/a ag
 eq "$(field $box stage.start By stage/a/construct)" "swb-1-conductor"
 stages=$(home_of $box)/.local/state/swb-1-team/stages
 [[ $(cat "$stages") == "unit-1 a construct "*" unit/a" ]] || fail "the stages file does not owe construct's end: $(cat "$stages")"
-change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"
-expect_fail "unit a is in review: code waits until the user approves it" crew unit run a code
+expect_fail "unit a is in construct: code waits until its change is committed" crew unit run a code
 eq "$(field $box stage.start On stage/a/code)" "unit/a stage/a/code"
-has "$(field $box stage.start Refused stage/a/code)" "unit a is in review"
-ok "a stage's start is recorded with its slot's agent and owed an end; code before the approval is a refused entry"
+has "$(field $box stage.start Refused stage/a/code)" "unit a is in construct"
+change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"
+ok "a stage's start is recorded with its slot's agent and owed an end; code before the change is committed is a refused entry"
 
 as $box herdr --session wldn-1 stub status "$s1" idle
 expect_ok crew unit wait a
 has "$out" "swb-1-unit-1 delivered construct on a: its change is committed at $(git -C "$k" rev-parse --short unit/a)"
 eq "$(field $box stage.end On stage/a/construct)" "stage/a/construct unit/a agent/swb-1-unit-1"
-eq "$(field $box stage.end Result stage/a/construct)" "review"
+eq "$(field $box stage.end Result stage/a/construct)" "planned"
 eq "$(field $box stage.end Head stage/a/construct)" "$(git -C "$k" rev-parse --short unit/a)"
 eq "$(field $box stage.end Ended stage/a/construct)" "delivered"
 eq "$(field $box stage.end Delivered stage/a/construct)" "unit/a@$(git -C "$k" rev-parse --short unit/a)"
 eq "$(field $box stage.end Observed stage/a/construct)" ""
 eq "$(cat "$stages")" ""
-crew unit approve a >/dev/null
 expect_ok crew unit run a code
 s1=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-1") | .key')
 as $box herdr --session wldn-1 stub status "$s1" working

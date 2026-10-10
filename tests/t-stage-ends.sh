@@ -43,17 +43,16 @@ expect_ok crew unit wait a --stuck 0 --timeout 0
 eq "$out" "construct on a is still running after the wait's 0 ms: swb-1-unit-1 is working; nothing is recorded yet"
 status swb-1-unit-1 idle
 expect_ok crew unit wait a
-eq "$out" "swb-1-unit-1 delivered construct on a: its change is committed at $(short unit/a), ready for review"
+eq "$out" "swb-1-unit-1 delivered construct on a: its change is committed at $(short unit/a)"
 eq "$(field stage.end Ended stage/a/construct)" "delivered"
 eq "$(field stage.end Delivered stage/a/construct)" "unit/a@$(short unit/a)"
-eq "$(field stage.end Result stage/a/construct)" "review"
+eq "$(field stage.end Result stage/a/construct)" "planned"
 eq "$(field stage.end Observed stage/a/construct)" ""
 eq "$(cat "$stages")" ""
 expect_ok crew unit wait a
 eq "$out" "construct on a has ended: swb-1-unit-1 delivered unit/a@$(short unit/a)"
 ok "a committed change ends construct only once its agent stops working, and the wait records it with the head it delivered"
 
-crew unit approve a >/dev/null
 expect_ok crew unit run a code
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
 expect_ok crew unit wait a --stuck 0 --timeout 0
@@ -149,7 +148,6 @@ eq "$(field stage.end Ended stage/b/construct)" "short"
 ok "with a wait running, a stop-short's words are its answer and nobody else's; no stop-short's words are in the run record"
 
 change "$kd/places/b" b 0 2; commit_all "$kd/places/b" "docs(b): the change"
-crew unit approve b >/dev/null
 expect_ok crew unit run b code
 rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/b" "feat(b): task 1"
 looks() { grep -c " agent get swb-1-unit-2$" "$CREW_TEST_LOG" || true; }
