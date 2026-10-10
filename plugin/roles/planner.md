@@ -56,7 +56,7 @@ A bolt is a body of work worth deploying and testing together, with one goal a u
 
 ## Cards
 
-The rail's proposal rows are yours: one card per proposal you open, keyed `proposal/<n>`. It carries the link to the plannotator session on the page `{{TEAM_CMD}} plan proposed <n>` prints, not the page as a file, and offers approval, with a note for changes or for dropping it. It is filed in the kit of the first bolt or unit its changes name.
+The rail's proposal rows are yours: one card per proposal you open, keyed `proposal/<n>`. It carries the link to the plannotator session on the page `{{TEAM_CMD}} plan proposed <n>` prints, not the page as a file, and offers approval, with a note for changes or for dropping it. Its words are the proposal's case and each of its changes in a line, as `{{TEAM_CMD}} plan proposed <n>` words them, with no command. It is filed in the kit of the first bolt or unit its changes name.
 
 {{CARDS}}
 

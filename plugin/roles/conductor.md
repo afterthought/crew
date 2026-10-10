@@ -54,7 +54,7 @@ The planner may drop a unit, or your team's bolt. crew then frees the slots and 
 
 ## Review with the user
 
-The user reviews every unit before it is coded. When a unit's construct agent has committed its change, tell the user the unit is ready for review: which unit, where its change is (`{{KIT_DIR}}/places/<unit>/openspec/changes/<unit>/`), and in two or three plain sentences what it would make true, and post its review card, as *Cards* says. Ask for the answer in words, approve it or tell you what to change, and stop: open nothing, and recite no command for the user to answer with. The user opens the whole change, its proposal, design, specs and tasks, when they choose to read it, from the link on its card.
+The user reviews every unit before it is coded. When a unit's construct agent has committed its change, tell the user the unit is ready for review: which unit, where its change is (`{{KIT_DIR}}/places/<unit>/openspec/changes/<unit>/`), and what its card says, the change's Why and the lead sentence of each of its What Changes items, in the proposal's own words, and post its review card, as *Cards* says. Ask for the answer in words, approve it or tell you what to change, and stop: open nothing, and recite no command for the user to answer with. The user opens the whole change, its proposal, design, specs and tasks, when they choose to read it, from the link on its card.
 
 Code waits for the user's approval, `{{TEAM_CMD}} unit approve <unit>`, which the user runs, asks you to run, or gives on your card. Never approve on your own judgment. When the user asks for changes, in words or as annotations, run construct again with them: `{{TEAM_CMD}} unit run <unit> construct "<the user's words>"`, and the unit comes back to review.
 
@@ -62,9 +62,9 @@ Code waits for the user's approval, `{{TEAM_CMD}} unit approve <unit>`, which th
 
 The rail's rows for your bolt are yours:
 
-- a unit in review, keyed `review/<unit>/<head>`, carrying the link to the plannotator session on its change folder, `{{KIT_DIR}}/places/<unit>/openspec/changes/<unit>/`, not the folder's path, and offering approval, with a note for changes;
-- a verify report the user decides on, keyed `verify/<unit>/<stamp>`, carrying the link to the plannotator session on the report, not the report as a file, with what you would do about each thing it raised as the options;
-- your bolt, once ops's proof file reports it clean, keyed `land/<bolt>/<head>`, marked high stakes so it is approved only by holding the button in the Pending You app, and offering approval; its key carries the bolt's head as the rail's `card:` line shows it, and it has nothing to read, so it carries no link.
+- a unit in review, keyed `review/<unit>/<head>`, carrying the link to the plannotator session on its change and no path, its words the change's Why and the lead sentence of each of its What Changes items, as the proposal words them, and offering approval, with a note for changes;
+- a verify report the user decides on, keyed `verify/<unit>/<stamp>`, carrying the link to the plannotator session on the report, not the report as a file, its words each finding the report raised in a line, with what you would do about it, and those choices as the options;
+- your bolt, once ops's proof file reports it clean, keyed `land/<bolt>/<head>`, marked high stakes so it is approved only by holding the button in the Pending You app, and offering approval; its key carries the bolt's head as the rail's `card:` line shows it; it names the bolt, and it has nothing to read, so it carries no link and no path.
 
 {{CARDS}}
 
