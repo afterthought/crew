@@ -10,7 +10,7 @@
 - [x] 2.1 One flow read of a partition gives the board's data: its four lanes, every rail row as a marker on its object with its card, and the attention line, in the fields of *The JSON* (design: *What each lane reads*, *Markers*, *The JSON*; Task notes 2.1; `read.1`, `read.3`).
 - [x] 2.2 The board's text prints the header, the four lanes in order and the attention line, one object to a line with its marker in the gutter, cut to the terminal's width and plain under `NO_COLOR` or a pipe (design: *The text*; Task notes 2.2).
 - [x] 2.3 `crew board [--label L] [--json]` prints the board or its JSON, makes no reading folder, and is in the usage header, README and SKILL.md, with `tests/t-docs.sh` passing (design: *The command*; Task notes 2.3; `code.2`, `docs.2`).
-- [ ] 2.4 `tests/t-board.sh` passes, proving each requirement of the `crew-board` delta but the last, that the board prints no answering command and writes nothing, and `tests/moon.yml` is regenerated (Task notes 2.4; `state.4`, `tests.2`).
+- [x] 2.4 `tests/t-board.sh` passes, proving each requirement of the `crew-board` delta but the last, that the board prints no answering command and writes nothing, and `tests/moon.yml` is regenerated (Task notes 2.4; `state.4`, `tests.2`).
 
 ## 3. The board tab
 

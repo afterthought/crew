@@ -14,6 +14,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-amend-intent.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-board:
+    command: 'tests/run t-board'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-board.sh', '/tests/stubs-sites/**/*']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-bolt:
     command: 'tests/run t-bolt'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-bolt.sh']

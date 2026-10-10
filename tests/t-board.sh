@@ -1,0 +1,195 @@
+# crew board: the flow of a partition as four lanes in order (Inception, Bolt plan, Construction, Operation) and the
+# attention line, one object to a line; every rail row a marker on its object with its card, never a line of its own;
+# the same board as JSON; read from the plan, the proposals, the moves, the signals, the kits and the run record, and
+# writing nothing. Each scenario of the crew-board spec.
+# Reads: tests/stubs-sites/
+. "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
+export PATH="$TESTS/stubs-sites:$PATH"
+world
+wb=$(blueprints WilldanGroup/willdan-blueprints)
+ws=$(remote WilldanGroup/crew-state)
+k=$(kit chuck-herdr-alpha willdan switchboard-kit); kd=$(dirname "$k")
+crew state init wldn >/dev/null
+export CREW_LABEL=wldn
+box=chuck-herdr-alpha
+tip() { git --git-dir "$ws" rev-parse wldn/main; }
+proposal() { printf '%s\n' "$@" > "$T/proposal.rec"; echo "$T/proposal.rec"; }
+# Times are set, as in t-rail: at <minutes ago> as git takes it, shown <minutes ago> <format>, commit_at <minutes ago>
+# <dir> <message>.
+now=$(date +%s)
+at() { echo "@$((now - $1 * 60)) +0000"; }
+shown() { python3 -c 'import sys, time; print(time.strftime(sys.argv[2], time.localtime(int(sys.argv[1]))))' "$((now - $1 * 60))" "${2:-%Y-%m-%d %H:%M}"; }
+commit_at() { git -C "$2" add -A && GIT_COMMITTER_DATE=$(at "$1") git -C "$2" commit -qm "$3"; }
+# lane <board> <heading>: the lines of one lane, up to the next heading; line_of <text> <words>: the lines holding them
+lane() { awk -v g="$2" '$0 == g {on = 1; next} /^[^ !✓✎]/ {on = 0} on' <<<"$1"; }
+line_of() { grep -F -- "$2" <<<"$1" || true; }
+j() { jq -r "$1" <<<"$json"; }
+
+expect_ok crew board --label wldn
+has "$(head -1 <<<"$out")" "wldn board, as of "
+has "$(head -1 <<<"$out")" "read from $box, mac-studio"
+eq "$(grep -E '^[A-Za-z]' <<<"$out" | tail -n +2 | tr '\n' '|')" "Inception|Bolt plan|Construction|Operation|attention|"
+eq "$(grep -c '^  none$' <<<"$out")" "5"
+lacks "$out" $'\033'
+ok "with nothing in flight, the header and the four lanes in order, each saying none, then attention saying none; plain into a pipe"
+
+CREW_LABEL= expect_ok crew board
+eq "$(grep -oE '^[a-z]+ board, as of' <<<"$out" | tr '\n' '|')" "wldn board, as of|madswan board, as of|swancloud board, as of|"
+has "$(awk '/^madswan board/ {on = 1} /^swancloud board/ {on = 0} on' <<<"$out")" "! the plan, madswan/main of afterthought/crew-state: not started"
+ok "with no label outside any agent, one board per partition in the teams file, one after another"
+
+# Inception: two signals wldn-planner captured from a meeting, in the blueprints; one note of the user's, on the
+# flywheel's branch; an exploration on the kit's main.
+w=$T/bp; clone WilldanGroup/willdan-blueprints "$w"; cap=2026-10-01-planning; mkdir -p "$w/signals/$cap"
+printf -- '---\ncapture: %s\nsource: meeting\ncaptured_by: wldn-planner\nevent_date: 2026-10-01\nsignals: 2\n---\n\nThe planning meeting.\n' "$cap" > "$w/signals/$cap/capture.md"
+printf -- '---\nsignal: %s/01-zones\nkind: ask\n---\n\nEvery apex should be a zone of its own.\n\n> "zones" - 00:10\n' "$cap" > "$w/signals/$cap/01-zones.md"
+printf -- '---\nsignal: %s/02-tenants\nkind: constraint\n---\n\nTenants never share an environment.\n' "$cap" > "$w/signals/$cap/02-tenants.md"
+commit_all "$w" "signals: the planning meeting"; git -C "$w" push -q origin main
+note=$(crew signal plans-are-checked "Plans should be checked before they run." | sed -n 's/^signal \([^: ]*\)[: ].*/\1/p')
+mkdir -p "$k/openspec/explorations/command-cost"
+printf '\n> Reading: what each crew command costs, read 2026-10-01.\n\nMore.\n' > "$k/openspec/explorations/command-cost/reading.md"
+commit_all "$k" "docs: a reading"
+
+# Bolt plan: a planned bolt with a unit, and a queued unit.
+crew bolt new apex-zones "Apexes are zones." --repo switchboard-kit >/dev/null
+crew unit add zone-one "Zone one." --bolt apex-zones >/dev/null
+crew unit add zone-two "Zone two." --repo switchboard-kit --source docs/zones.md >/dev/null
+
+# Construction: swb-1 holds tenant-environments, with unit a in code in a slot and its dev server running, b in review
+# with a card open, c with a verify report newer than its last commit, and a fix; swb-2 holds console-pages, whose
+# only unit has merged; brd-1 holds board-done, whose only unit has landed on main.
+crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
+for u in a b c; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
+crew bolt give swb-1 tenant-environments >/dev/null 2>&1
+pa=$(place "$k" tenant-environments a); change "$pa" a 1 2; commit_at 90 "$pa" "feat(a): task 1"
+pb=$(place "$k" tenant-environments b); change "$pb" b 0 2; commit_at 80 "$pb" "docs(b): the change"
+pc=$(place "$k" tenant-environments c); change "$pc" c 2 2; commit_at 70 "$pc" "feat(c): done"
+reports=$(home_of $box)/.local/state/swb-1-team/reports; mkdir -p "$reports"
+rc=$reports/verify-c-$(shown 60 %Y%m%d-%H%M).md; touch -t "$(shown 60 %Y%m%d%H%M.%S)" "$rc"
+fix=$kd/places/fix-tenant-environments--edge; git -C "$k" worktree add -q --track -b fix/tenant-environments/edge "$fix" bolt/tenant-environments
+printf 'unit-1 unit a %s\nunit-2 unit b %s\nunit-3 unit c %s\nunit-4 fix fix/tenant-environments/edge %s\n' "$pa" "$pb" "$pc" "$fix" \
+  > "$(home_of $box)/.local/state/swb-1-team/slots"
+echo $box > "$(home_of $box)/.devurl-label"
+printf 'unit-a--switchboard-kit\nbolt-tenant-environments--switchboard-kit\n' > "$(home_of $box)/.portless-routes"
+crew bolt new console-pages "The console lists them." --repo switchboard-kit >/dev/null
+crew unit add page-one "Page one." --bolt console-pages >/dev/null
+crew bolt give swb-2 console-pages >/dev/null 2>&1
+pp=$(place "$k" console-pages page-one); change "$pp" page-one 2 2; commit_at 50 "$pp" "feat(page-one): done"
+GIT_COMMITTER_DATE=$(at 40) git -C "$kd/bolts/console-pages" merge -q --no-ff -m "merge page-one" unit/page-one
+bk=$(kit $box willdan breadboard-kit)
+crew bolt new board-done "Boards are done." --repo breadboard-kit >/dev/null
+crew unit add done-one "Done one." --bolt board-done >/dev/null
+crew bolt give brd-1 board-done >/dev/null 2>&1
+change "$bk" done-one 2 2; commit_all "$bk" "feat(done-one): done, on main"
+# card <host> <agent> <act> <object> <card> [key]: a card entry, written as crew's hook writes it, on the owner's host
+card() { CREW_AGENT=$2 as "$1" python3 "$CREW/plugin/lib/record.py" emit --label wldn --act "$3" --on "$4" --field "Card=$5" ${6:+--field "Key=$6"} >/dev/null; }
+card $box swb-1-conductor card.post unit/b req_rev-1 "review/b/$(git -C "$pb" rev-parse --short=7 HEAD)"
+
+expect_ok crew board --label wldn; b=$out
+inc=$(lane "$b" Inception)
+has "$(line_of "$inc" "signals captured by wldn-planner")" "2 not moved, the oldest captured 2026-10-01"
+has "$(line_of "$inc" "signals captured by $me@mac-studio")" "1 not moved"
+has "$(line_of "$inc" "Every apex should be a zone of its own.")" "    ask  Every apex should be a zone of its own.  $cap/01-zones"
+has "$(line_of "$inc" "Tenants never share")" "    constraint  Tenants never share an environment.  $cap/02-tenants"
+has "$(line_of "$inc" "Plans should be checked")" "    ask  Plans should be checked before they run.  $note"
+eq "$(line_of "$inc" "command-cost")" "  exploration  switchboard-kit command-cost  Reading: what each crew command costs, read 2026-10-01."
+ok "Inception lists the signals no move has taken, by who captured them with how many and the oldest, and each exploration on the kit's main with its first line"
+
+crew unit add zone-three "Zone three." --bolt apex-zones --signal "$cap/01-zones" >/dev/null
+expect_ok crew board --label wldn; inc=$(lane "$out" Inception)
+lacks "$inc" "Every apex should be a zone"
+has "$(line_of "$inc" "signals captured by wldn-planner")" "1 not moved"
+has "$inc" "Tenants never share an environment."
+ok "a signal routed to a unit leaves the board, and its capturer's group counts one fewer"
+
+bp=$(lane "$b" "Bolt plan")
+eq "$(line_of "$bp" "apex-zones")" "  switchboard-kit apex-zones  Apexes are zones."
+eq "$(line_of "$bp" "zone-one")" "    zone-one  ready"
+eq "$(line_of "$bp" "zone-two")" "  switchboard-kit zone-two  queued  docs/zones.md"
+lacks "$bp" "tenant-environments"
+ok "Bolt plan lists each bolt no team holds with its repository, goal and units with their stages, and the queue with each unit's sources"
+
+con=$(lane "$b" Construction)
+eq "$(line_of "$con" "tenant-environments  swb-1")" "  switchboard-kit tenant-environments  swb-1 on $box"
+eq "$(line_of "$con" "  a  ")" "    a  code 1/2  unit-1  https://unit-a--switchboard-kit--$box.dev.swancloud.net"
+eq "$(line_of "$con" "fix/tenant-environments/edge")" "    fix/tenant-environments/edge  fix  unit-4"
+eq "$(line_of "$con" "  server  ")" "    server  https://bolt-tenant-environments--switchboard-kit--$box.dev.swancloud.net"
+eq "$(grep -n "" <<<"$con" | grep -E 'tenant-environments  swb-1|  a  code|  b  review|  c  verify|fix/tenant|server' | cut -d: -f1 | tr '\n' ' ')" "1 2 3 4 5 6 "
+ok "Construction shows a held bolt as a ledger: its head, each unit in plan order with its stage, tasks, slot and dev server, its fix, and its own server at the foot"
+
+eq "$(line_of "$con" "  b  ")" "✓   b  review  unit-2  card open, asked by swb-1-conductor"
+eq "$(grep -c review <<<"$b")" "1"
+eq "$(line_of "$con" "  c  ")" "✎   c  verify 2/2  unit-3  no card open"
+eq "$(line_of "$con" "console-pages")" "✓ switchboard-kit console-pages  swb-2 on $box  no card open"
+eq "$(line_of "$con" "page-one")" "    page-one  merged"
+lacks "$(line_of "$con" "  b  ")" "http"; lacks "$(line_of "$con" "  b  ")" "server"
+ok "each rail row is a marker on its object's line with its card: a unit in review, a verify report, a bolt to land; and a unit with no server shows none"
+
+eq "$(line_of "$con" "board-done")" "! breadboard-kit board-done  brd-1 on $box  landed"
+has "$(lane "$b" attention)" "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"
+ok "a held bolt whose every unit has landed carries ! on its head, and the attention line names it"
+
+expect_ok crew plan propose "$(proposal 'Case: The console gets a bolt of its own.' 'Do: bolt new console-two "The console, again." --repo switchboard-kit')"
+card mac-studio wldn-planner card.post proposal/1 req_prop-1 proposal/1
+expect_ok crew board --label wldn; b=$out
+eq "$(line_of "$(lane "$b" "Bolt plan")" "proposal 1")" "✓ proposal 1 by $me@mac-studio  The console gets a bolt of its own.  card open, asked by wldn-planner"
+ok "an open proposal is listed with its number, who proposed it and its case, its marker saying whose card is open"
+
+ak=$(kit mac-studio willdan atlas-kit)
+crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
+crew unit add map-one "Map one." --bolt atlas-maps >/dev/null
+crew bolt give atl-1 atlas-maps >/dev/null 2>&1
+change "$ak" map-one 2 2; commit_all "$ak" "feat(map-one): done, on main"
+crew bolt land atlas-maps >/dev/null 2>&1
+landed=$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M"))')
+old=$(python3 -c 'import datetime; t = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=8); print(t.strftime("%Y-%m-%d"), t.strftime("%Y-%m-%dT%H:%M:%SZ"))')
+printf 'Id: old-landing\nAt: %s\nHost: mac-studio\nBy: wldn-ops\nAct: bolt.land\nOn: bolt/old-maps\nOn: unit/old-map\n\n' "${old#* }" \
+  >> "$(home_of mac-studio)/.local/state/crew/wldn/runs/mac-studio/${old% *}.rec"
+expect_ok crew board --label wldn; op=$(lane "$out" Operation)
+eq "$(grep -c . <<<"$op")" "1"
+has "$op" "  atlas-maps  landed "
+has "$op" " by $me@mac-studio  atl-1  map-one"
+lacks "$op" "old-maps"
+ok "Operation lists a bolt landed this week with when, by whom, its team and its units, and not one landed eight days ago"
+
+records() { cat "$(home_of mac-studio)"/.local/state/crew/wldn/runs/*/*.rec "$(home_of $box)"/.local/state/crew/wldn/runs/*/*.rec 2>/dev/null | wc -l || true; }
+before=$(tip); n=$(records)
+expect_ok crew board --label wldn
+lacks "$out" "crew plan approve"; lacks "$out" "crew unit approve"; lacks "$out" "crew tell"
+crew board --label wldn --json >/dev/null; HOST=$box crew board --label wldn >/dev/null
+eq "$(tip)" "$before"; eq "$(records)" "$n"
+eq "$(git -C "$k" status --porcelain)" ""
+ok "the board answers nothing: no approving or telling command in it, the flywheel's branch and the run record as they were"
+
+expect_ok crew board --label wldn --json; json=$out
+eq "$(j 'keys | join(" ")')" "from partitions read_at unread"
+eq "$(j '.partitions[0] | keys | join(" ")')" "attention bolt_plan construction hosts inception label operation plan"
+eq "$(j '.partitions[0].plan')" "$(tip)"
+eq "$(j '.partitions[0].inception.signals[0] | keys | join(" ")')" "at captured_by first home kind signal"
+eq "$(j '.partitions[0].inception.explorations[0] | "\(.kit) \(.name)"')" "switchboard-kit command-cost"
+eq "$(j '.partitions[0].bolt_plan.proposals[0] | keys | join(" ")')" "by case markers opened proposal waiting"
+eq "$(j '.partitions[0].bolt_plan.planned[0] | keys | join(" ")')" "bolt goal repo units"
+eq "$(j '.partitions[0].bolt_plan.queue[0] | keys | join(" ")')" "repo sources unit"
+te='.partitions[0].construction[] | select(.bolt == "tenant-environments")'
+eq "$(j "$te | keys | join(\" \")")" "bolt fixes goal host markers repo state team units url"
+eq "$(j "$te | .team")" "swb-1"
+eq "$(j "$te | .units[0] | keys | join(\" \")")" "markers slot stage tasks unit url worktree"
+eq "$(j "$te | .units[] | select(.unit == \"b\") | .markers[0] | \"\(.group) \(.key) \(.glyph) \(.card.by)\"")" "review review/b/$(git -C "$pb" rev-parse --short=7 HEAD) ✓ swb-1-conductor"
+eq "$(j "$te | .units[] | select(.unit == \"a\") | \"\(.tasks | join(\"/\")) \(.markers | length)\"")" "1/2 0"
+eq "$(j "$te | .fixes[0] | keys | join(\" \")")" "fix merged slot url worktree"
+eq "$(j '.partitions[0].operation[0] | "\(.bolt) \(.team) \(.units | join(","))"')" "atlas-maps atl-1 map-one"
+eq "$(j '.partitions[0].attention[0] | keys | join(" ")')" "name what why"
+eq "$(j '.partitions[0].hosts | to_entries | map("\(.key)=\(.value)") | join(" ")')" "$box=true mac-studio=true"
+ok "the board's JSON holds each lane's objects, the ledger's team, each marker's group, card key and card, the attention items and the hosts"
+
+echo $box > "$T/down"
+expect_ok crew board --label wldn; b=$out
+has "$(head -1 <<<"$b")" "read from mac-studio"
+has "$(lane "$b" attention)" "! $box did not answer (its kits: "
+has "$(lane "$b" attention)" "its run record: "
+con=$(lane "$b" Construction)
+eq "$(line_of "$con" "tenant-environments  swb-1")" "  switchboard-kit tenant-environments  swb-1 on $box  unknown"
+eq "$(line_of "$con" "  a  ")" "    a  unknown"
+has "$(lane "$b" "Bolt plan")" "proposal 1"
+rm "$T/down"
+ok "a host that does not answer is named in the attention line, its ledgers' units from the plan with their stages unknown, and the rest shown"
