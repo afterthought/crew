@@ -30,11 +30,28 @@ done
 lacks "$out" "plannotator-tui"
 for want in "open nothing, and recite no command" "The user opens the whole change" "never its number alone"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" "never run \`plannotator\` yourself" \
-  "carrying the link to the plannotator session on its change folder" "not the folder's path" \
+  "carrying the link to the plannotator session on its change and no path" \
   "carrying the link to the plannotator session on the report, not the report as a file" "it has nothing to read, so it carries no link"; do
   has "$out" "$want"
 done
 ok "a conductor's review and verify cards link the session crew starts on what they ask the user to read, and it opens nothing"
+cards_say() {  # the card discipline the planner's and the conductor's briefs share
+  for want in "begins with the link to the card's plannotator session, then names the bolt" "in the document's own words" \
+    "never reworded" "No card carries a path" "an empty list as its files touched" \
+    'one entry in its links, labelled "Read and annotate it in plannotator"' "The link is no artifact" \
+    "update its summary, background and links together"; do
+    has "$out" "$want"
+  done
+  lacks "$out" "as its artifact of kind"
+}
+cards_say
+for want in "its words the change's Why and the lead sentence of each of its What Changes items, as the proposal words them" \
+  "its words each finding the report raised in a line, with what you would do about it" "it names the bolt, and it has nothing to read, so it carries no link and no path" \
+  "the change's Why and the lead sentence of each of its What Changes items, in the proposal's own words, and post its review card"; do
+  has "$out" "$want"
+done
+lacks "$out" "two or three plain sentences"
+ok "a conductor's cards and its ready-for-review message say the document's own words, the link and the bolt first, and no path"
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`review/<unit>/<head>\`" "keyed \`verify/<unit>/<stamp>\`" \
   "keyed \`land/<bolt>/<head>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." "post its verify card" \
   "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." \
@@ -67,6 +84,8 @@ for want in "An intent names the outcome and the records that govern it" "never 
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" \
   "carries the link to the plannotator session on the page" "not the page as a file"; do has "$out" "$want"; done
+cards_say
+has "$out" "Its words are the proposal's case and each of its changes in a line, as \`"; has "$out" "plan proposed <n>\` words them, with no command."
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\`" "or answers your card" \
   "close the old proposal's card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
   "A row's key changes when what it asks changes" "Pending You gives that card back"; do
