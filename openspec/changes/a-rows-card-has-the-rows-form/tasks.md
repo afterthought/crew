@@ -8,7 +8,7 @@
 
 ## 2. The briefs
 
-- [ ] 2.1 The conductor's and planner's *Cards* name each row's card in Pending You's kinds, the landing card a high-stakes approval whose yes tells main-level ops to land and never a step to land it (design.md, decision 3; Task notes 2.1).
+- [x] 2.1 The conductor's and planner's *Cards* name each row's card in Pending You's kinds, the landing card a high-stakes approval whose yes tells main-level ops to land and never a step to land it (design.md, decision 3; Task notes 2.1).
 - [ ] 2.2 The card discipline says a row's card takes its row's form and crew refuses another (design.md, decision 3; Task notes 2.2).
 - [ ] 2.3 The operator agent's brief posts no card, sends nothing for a wait whose card is open on the rail, and shows a wait with none as a notification (design.md, decision 4; Task notes 2.3).
 - [ ] 2.4 `tests/t-briefs.sh` pins 2.1 to 2.3 in the filled briefs (design.md, Task notes 2.4). Verify `tests/suite t-briefs t-roles` ends with "0 failed".
