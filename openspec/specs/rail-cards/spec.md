@@ -251,7 +251,7 @@ Before `update_request` runs on a card a crew agent on this host posted under a 
 - **THEN** crew refuses the update, and the card stays high stakes
 
 ### Requirement: crew checks only a row's card in a crew session
-crew SHALL let pass, unchecked, a card whose key is no row's, any card in a session crew did not start, and a tool of another server.
+crew SHALL check only sessions it started: any card in a session crew did not start, and a tool of another server, SHALL pass unchecked. In a session crew started, every card is checked: a row's card for its form, and every key against the rows the agent owns, as the requirement on keys below says.
 
 #### Scenario: The user's own session
 - **WHEN** the user, in a session crew did not start, posts any card under any key

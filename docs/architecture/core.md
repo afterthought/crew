@@ -18,7 +18,7 @@ State
 
 - **[state.1]** Every write to a flywheel's branch is one commit made by a crew command that fetches the tip into crew's bare cache, applies its change there, checks the result with `recfix --check` and crew's own rules, commits only its own paths through a temporary index, and pushes without force; a refused push is applied again to the new tip, and nothing is ever merged.
 - **[state.2]** The plan holds only intent and the marks on it; every stage is read from the kits, and nothing records by hand how far work has got.
-- **[state.3]** A kit's main changes only when the partition's main-level ops lands a proven bolt on the user's word through the kit's merge hooks, or fixes a landing that broke main, on the user's word, through the same hooks; nothing else is committed to a main.
+- **[state.3]** A kit's main changes only when the partition's main-level ops lands a proven bolt on the user's word through the kit's merge hooks, or fixes a landing that broke main, on the user's word, through the same hooks; nothing else of a kit's code or specs is committed to a main, but the user's own commits and the design agent's records under `docs/`, which its brief has it commit there.
 - **[state.4]** crew runs no service: state is recutils files any clone reads with `recsel`, and every view is computed from those files and the run record with nothing running and nothing written.
 - **[state.5]** Nothing crew runs, and nothing a brief tells an agent to run, pushes with force; crew's only pushes go to `<label>/main` of a state repository.
 
@@ -51,7 +51,7 @@ Code
 
 **[state.2]** Rules out: a `Stage` or `Date` field in `plan.rec`; a status file beside the plan. Not ruled out: the marks `Amended` and, once built, `Hold`. Source: `bolt-plan` spec "A unit's stage is read from the kits"; `plan.py` 71–94.
 
-**[state.3]** Rules out: a unit, chore or archive committed straight to main; a landing with `--no-hooks`. Not ruled out: main-level ops's fix on main after a landing broke it, on the user's word (the `main-level` spec). Source: `bolt-teams` spec "A bolt lands on main on the user's word"; `main-level` spec; ADR 0006 drivers; `main-ops.md`.
+**[state.3]** Rules out: a unit, chore or archive committed straight to main by an agent; a landing with `--no-hooks`. Not ruled out: main-level ops's fix on main after a landing broke it, on the user's word (the `main-level` spec); the user's own commits, among them the archive sweep of 2026-10-10 (crew a3caf5b to 94e31e3, swancloud 4fee795 to 54f849f, run on the user's word, nothing pushed), which `roles.1` already allows; the design agent's records, as its brief says. Source: `bolt-teams` spec "A bolt lands on main on the user's word"; `main-level` spec; ADR 0006 drivers; `main-ops.md`.
 
 **[state.4]** Rules out: a daemon; a view that commits or appends on refresh. Source: `openspec/config.yaml`; `flywheel-state` spec "plain files"; ADR 0002; `tests/t-rail.sh`.
 

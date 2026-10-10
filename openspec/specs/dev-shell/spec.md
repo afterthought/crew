@@ -1,7 +1,7 @@
 # dev-shell Specification
 
 ## Purpose
-TBD - created by archiving change agents-work-inside-crews-devenv-shell. Update Purpose after archive.
+Every agent and person working in a crew checkout works inside crew's devenv shell, entered once at the session's start by the checkout's own hook and never by wrapping a command: the tools crew declares are on the path, the tests run only there, and a session that cannot enter the shell is told so rather than left to run outside it.
 
 ## Requirements
 
