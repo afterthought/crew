@@ -4,15 +4,19 @@
   python3 gather.py '<request>'      or, sent over ssh:  python3 - '<request>' < gather.py
 
 The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
-"reports": [<a team's verify reports folder, ~ allowed>, ...]}], "sites": <true to also read each worktree's dev
-server names with devurl, and the host's running portless routes>}.
+"reports": [<a team's verify reports folder, ~ allowed>, ...], "slots": {<team>: <its slots file, ~ allowed>}}],
+"sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
+"board": <true to also read each team's slots file and the explorations on the kit's main>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
 for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree,
 its head and the head's time; each place under <dir>/places with its branch, its head and the head's time, its change's
 tasks, whether its planning is complete and whether it has a review since the bolt; each fix branched from a bolt;
-and each unit's newest verify report in the reports folders, with its path and time. It reads with git, the file
-system and, for a change whose workflow it does not read itself, openspec, and changes nothing. It needs nothing but
-python3's standard library, since it is sent to hosts whose crew may be older."""
+and each unit's newest verify report in the reports folders, with its path and time. With sites, each worktree's
+devurl names and the host's portless routes; with board, each team's slots, one {slot, kind, name, place} per line
+of its slots file, and each folder under openspec/explorations/ on main with the first line of its first .md file.
+It reads with git, the file system, devurl and portless and, for a change whose workflow it does not read itself,
+openspec, and changes nothing. It needs nothing but python3's standard library, since it is sent to hosts whose crew
+may be older."""
 import datetime, json, os, re, subprocess, sys
 
 
@@ -274,7 +278,35 @@ def routes():
     return found if out is not None else None
 
 
-def kit(req, sites=False, running=None):
+def slots(files):
+    """Each team's slots, from its slots file: {team: [{slot, kind, name, place}]}, one per non-blank line of four
+    fields; a file that isn't there gives [], and a line of another shape is skipped."""
+    out = {}
+    for team, path in files.items():
+        try:
+            with open(os.path.expanduser(path), encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            lines = []
+        out[team] = [dict(zip(("slot", "kind", "name", "place"), l.split())) for l in lines if len(l.split()) == 4]
+    return out
+
+
+def explorations(main):
+    """Each folder under openspec/explorations/ on main, in name order, with the first non-blank line of its first .md
+    file, its leading "> " dropped; None when it has no .md file or that line can't be read."""
+    out = []
+    for path in (run(["git", "ls-tree", "-d", "--name-only", "main", "openspec/explorations/"], main) or "").splitlines():
+        name = path.rstrip("/").rsplit("/", 1)[-1]
+        files = (run(["git", "ls-tree", "--name-only", "main", f"openspec/explorations/{name}/"], main) or "").splitlines()
+        md = next((f for f in files if f.endswith(".md")), None)
+        text = run(["git", "show", f"main:{md}"], main) if md else None
+        first = next((l.strip() for l in (text or "").splitlines() if l.strip()), None)
+        out.append({"name": name, "first": first[2:] if first and first.startswith("> ") else first})
+    return out
+
+
+def kit(req, sites=False, running=None, board=False):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
         return {"ok": False, "error": f"no checkout at {main}"}
@@ -308,10 +340,13 @@ def kit(req, sites=False, running=None):
         out["sites"] = {path: devurl(path) for path, branch in at.items()
                         if os.path.dirname(path) in (places, os.path.join(kdir, "bolts")) and branch}
         out["routes"] = running
+    if board:
+        out["slots"] = slots(req.get("slots", {}))
+        out["explorations"] = explorations(main)
     return out
 
 
 if __name__ == "__main__":
     request = json.loads(sys.argv[1])
     running = routes() if request.get("sites") else None
-    print(json.dumps({k["main"]: kit(k, request.get("sites"), running) for k in request["kits"]}))
+    print(json.dumps({k["main"]: kit(k, request.get("sites"), running, request.get("board")) for k in request["kits"]}))
