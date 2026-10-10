@@ -41,6 +41,26 @@ KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
         (re.compile(r"^review/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "unit/{}"),
         (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
         (re.compile(r"^land/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "bolt/{}"))
+# The form each row's card takes, in Pending You's kinds of card, by the row's shape: the kinds it may be, whether it is
+# marked high stakes, whether it must carry options (True) or may carry none (False), whether it may carry steps, and
+# the form in the briefs' words. A landing card's steps are those a proof leaves the user, never the landing itself.
+FORMS = {
+    "proposal": dict(kinds=("approve",), high=False, options=False, steps=False,
+                     says="a proposal's card is an approval, kind \"approve\", with a note for changes or for dropping "
+                          "it, and no options or steps"),
+    "review": dict(kinds=("review",), high=False, options=False, steps=False,
+                   says="a review's card is a review, kind \"review\": looks good or needs changes, with a note, and no "
+                        "options or steps"),
+    "verify": dict(kinds=("choice", "multi"), high=False, options=True, steps=False,
+                   says="a verify report's card is a choice, kind \"choice\", or \"multi\" when the user may pick "
+                        "several findings, whose options are what you would do about them, and no steps"),
+    "land": dict(kinds=("approve",), high=True, options=False, steps=True,
+                 says="a landing's card is an approval, kind \"approve\", marked high stakes with highStakes true, "
+                      "whose yes has you tell main-level ops to land; it has no options, and no step or command for "
+                      "the user to land it"),
+}
+# What in a landing card's step lands the bolt: main-level ops's act on the user's yes.
+LANDS = ("bolt land", "wt merge")
 # How far back a close looks for its card's post.
 DAYS = 30
 
@@ -114,6 +134,46 @@ def keyed(key):
         if m:
             return key, obj.format(m.group(1))
     return None, None
+
+
+def form_refusal(key, given, update=False):
+    """None for a card in its row's form, else the words that refuse it: the form its row's card takes, and each thing
+    wrong with this one. An update is checked only for what it changes: its kind was checked when it was posted."""
+    form = FORMS[key.split("/")[0]]
+    kind, options, action = given.get("kind"), given.get("options"), given.get("action")
+    steps = action.get("steps") if isinstance(action, dict) else None
+    steps = [s for s in steps if isinstance(s, dict)] if isinstance(steps, list) else []
+    has_options = isinstance(options, list) and len(options) > 0
+    wrong = []
+    if "questions" in given:
+        wrong.append("gives it questions" if update else "is a grouped card of questions")
+    if not update:
+        if not isinstance(kind, str):
+            wrong.append("names no kind")
+        elif kind not in form["kinds"]:
+            wrong.append(f"is {'an' if kind[:1] in 'aeiou' else 'a'} \"{kind}\"")
+    if form["high"]:
+        if update and "highStakes" in given and given["highStakes"] is not True:
+            wrong.append("clears its high stakes")
+        elif not update and given.get("highStakes") is not True:
+            wrong.append("is not marked high stakes")
+    if form["options"] is False and has_options:
+        wrong.append("gives it options" if update else "has options")
+    elif form["options"] is True and not has_options and not update:
+        wrong.append("has no options")
+    if steps and not form["steps"]:
+        wrong.append("gives it steps for the user to take" if update else "has steps for the user to take")
+    for s in steps if form["steps"] else []:
+        said = " ".join(v for v in (s.get("text"), s.get("command")) if isinstance(v, str))
+        if any(act in said for act in LANDS):
+            wrong.append(f"{'gives it' if update else 'has'} a step that lands the bolt: \"{said}\"")
+    if not wrong:
+        return None
+    says = form["says"][0].upper() + form["says"][1:]
+    listed = wrong[0] if len(wrong) == 1 else ", ".join(wrong[:-1]) + ", and " + wrong[-1]
+    if update:
+        return f"crew refuses this change to card {key}. {says}. This change {listed}. Change the card without it."
+    return f"crew refuses card {key}. {says}. This card {listed}. Post it again in that form."
 
 
 def posted(record, label, card):
