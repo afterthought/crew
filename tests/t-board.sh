@@ -57,8 +57,8 @@ crew bolt new apex-zones "Apexes are zones." --repo switchboard-kit >/dev/null
 crew unit add zone-one "Zone one." --bolt apex-zones >/dev/null
 crew unit add zone-two "Zone two." --repo switchboard-kit --source docs/zones.md >/dev/null
 
-# Construction: swb-1 holds tenant-environments, with unit a in code in a slot and its dev server running, b in review
-# with a card open, c with a verify report newer than its last commit, and a fix; swb-2 holds console-pages, whose
+# Construction: swb-1 holds tenant-environments, with unit a in code in a slot and its dev server running, b planned,
+# c with a verify report newer than its last commit and a card open, and a fix; swb-2 holds console-pages, whose
 # only unit has merged; brd-1 holds board-done, whose only unit has landed on main.
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 for u in a b c; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
@@ -85,7 +85,8 @@ crew bolt give brd-1 board-done >/dev/null 2>&1
 change "$bk" done-one 2 2; commit_all "$bk" "feat(done-one): done, on main"
 # card <host> <agent> <act> <object> <card> [key]: a card entry, written as crew's hook writes it, on the owner's host
 card() { CREW_AGENT=$2 as "$1" python3 "$CREW/plugin/lib/record.py" emit --label wldn --act "$3" --on "$4" --field "Card=$5" ${6:+--field "Key=$6"} >/dev/null; }
-card $box swb-1-conductor card.post unit/b req_rev-1 "review/b/$(git -C "$pb" rev-parse --short=7 HEAD)"
+stamp=$(basename "$rc" .md); stamp=${stamp#verify-c-}
+card $box swb-1-conductor card.post unit/c req_ver-1 "verify/c/$stamp"
 
 expect_ok crew board --label wldn; b=$out
 inc=$(lane "$b" Inception)
@@ -133,16 +134,16 @@ eq "$(line_of "$con" "tenant-environments  swb-1")" "  switchboard-kit tenant-en
 eq "$(line_of "$con" "  a  ")" "    a  code 1/2  unit-1  https://unit-a--switchboard-kit--$box.dev.swancloud.net"
 eq "$(line_of "$con" "fix/tenant-environments/edge")" "    fix/tenant-environments/edge  fix  unit-4"
 eq "$(line_of "$con" "  server  ")" "    server  https://bolt-tenant-environments--switchboard-kit--$box.dev.swancloud.net"
-eq "$(grep -n "" <<<"$con" | grep -E 'tenant-environments  swb-1|  a  code|  b  review|  c  verify|fix/tenant|server' | cut -d: -f1 | tr '\n' ' ')" "1 2 3 4 5 6 "
+eq "$(grep -n "" <<<"$con" | grep -E 'tenant-environments  swb-1|  a  code|  b  planned|  c  verify|fix/tenant|server' | cut -d: -f1 | tr '\n' ' ')" "1 2 3 4 5 6 "
 ok "Construction shows a held bolt as a ledger: its head, each unit in plan order with its stage, tasks, slot and dev server, its fix, and its own server at the foot"
 
-eq "$(line_of "$con" "  b  ")" "✓   b  review  unit-2  card open, asked by swb-1-conductor"
-eq "$(grep -c review <<<"$b")" "1"
-eq "$(line_of "$con" "  c  ")" "✎   c  verify 2/2  unit-3  no card open"
+eq "$(line_of "$con" "  b  ")" "    b  planned  unit-2"
+eq "$(line_of "$con" "  c  ")" "✎   c  verify 2/2  unit-3  card open, asked by swb-1-conductor"
+eq "$(grep -c verify <<<"$b")" "1"
 eq "$(line_of "$con" "console-pages")" "✓ switchboard-kit console-pages  swb-2 on $box  no card open"
 eq "$(line_of "$con" "page-one")" "    page-one  merged"
 lacks "$(line_of "$con" "  b  ")" "http"; lacks "$(line_of "$con" "  b  ")" "server"
-ok "each rail row is a marker on its object's line with its card: a unit in review, a verify report, a bolt to land; and a unit with no server shows none"
+ok "each rail row is a marker on its object's line with its card: a verify report, a bolt to land; and a unit with no server shows none"
 
 eq "$(line_of "$con" "board-done")" "! breadboard-kit board-done  brd-1 on $box  landed"
 has "$(lane "$b" attention)" "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"
@@ -193,7 +194,7 @@ te='.partitions[0].construction[] | select(.bolt == "tenant-environments")'
 eq "$(j "$te | keys | join(\" \")")" "bolt fixes goal host markers repo state team units url"
 eq "$(j "$te | .team")" "swb-1"
 eq "$(j "$te | .units[0] | keys | join(\" \")")" "markers slot stage tasks unit url worktree"
-eq "$(j "$te | .units[] | select(.unit == \"b\") | .markers[0] | \"\(.group) \(.key) \(.glyph) \(.card.by)\"")" "review review/b/$(git -C "$pb" rev-parse --short=7 HEAD) ✓ swb-1-conductor"
+eq "$(j "$te | .units[] | select(.unit == \"c\") | .markers[0] | \"\(.group) \(.key) \(.glyph) \(.card.by)\"")" "verify verify/c/$stamp ✎ swb-1-conductor"
 eq "$(j "$te | .units[] | select(.unit == \"a\") | \"\(.tasks | join(\"/\")) \(.markers | length)\"")" "1/2 0"
 eq "$(j "$te | .fixes[0] | keys | join(\" \")")" "fix merged slot url worktree"
 eq "$(j '.partitions[0].operation[0] | "\(.bolt) \(.team) \(.units | join(","))"')" "atlas-maps atl-1 map-one"
@@ -226,7 +227,7 @@ ok "with no frame, the board tab says the rail tab's loop writes it and how to o
 mask() { sed -E 's/^(  [0-9]{4}-.{11}  ).{7}/\1AGE    /'; }
 expect_ok crew _views wldn; views=$out
 expect_ok crew rail --label wldn
-has "$views" "review/b/"; has "$views" "land/console-pages/"
+has "$views" "verify/c/"; has "$views" "land/console-pages/"
 eq "$(tail -n +2 <<<"$views" | mask)" "$(tail -n +2 <<<"$out" | mask)"
 eq "$(jq -S 'del(.read_at)' "$frame")" "$(crew board --label wldn --json | jq -S 'del(.read_at)')"
 ls -A "$(dirname "$frame")" | grep -v '^wldn.json$' && fail "a temporary frame was left"

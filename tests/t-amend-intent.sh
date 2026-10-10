@@ -23,7 +23,6 @@ crew unit add queued-one "Later work." --repo switchboard-kit >/dev/null 2>&1
 crew bolt give swb-1 tenant-environments >/dev/null 2>&1
 for u in cfn-lint-treefmt the-deploy-is-logged; do
   p=$(place "$k" tenant-environments $u); change "$p" $u 1 3; commit_all "$p" "docs($u): the change"
-  git -C "$p" commit -q --allow-empty -m "review($u): approved" --trailer "Reviewed-by: Test User"
 done
 change "$kd/bolts/tenant-environments" merged-one 2 2; commit_all "$kd/bolts/tenant-environments" "feat(merged-one): merged"
 c=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
@@ -44,8 +43,7 @@ eq "$(plan -t Unit -e "Unit = 'the-deploy-is-logged'" -P Amended)" "intent"
 eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(tenant-environments): amend the-deploy-is-logged ($me@mac-studio)"
 eq "$(stage the-deploy-is-logged)" "amended"
 eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
-has "$(prompts swb-1)" "intent was amended by the user. Run construct again (crew unit run the-deploy-is-logged construct); it returns to the user"
-has "$(prompts swb-1)" "review. Close any Pending You card you have open for review/the-deploy-is-logged or verify/the-deploy-is-logged.'"
+has "$(prompts swb-1)" "intent was amended by the user. Run construct again (crew unit run the-deploy-is-logged construct); once it has committed, the unit goes on from its tasks. Close any Pending You card you have open for verify/the-deploy-is-logged.'"
 ok "a unit in code amended by the user is marked amended, and its conductor is told to run construct again, once"
 
 before=$(tip)
@@ -72,7 +70,7 @@ expect_ok crew plan proposed 1
 has "$out" "1. **Amend unit \`cfn-lint-treefmt\`** in bolt \`tenant-environments\` (swb-1), now in code"
 has "$out" "   Intent, as it stands: Unit cfn-lint-treefmt."
 has "$out" "   Intent, as proposed:  cfn-lint in treefmt fails the check on a warning as well as an error"
-has "$out" "   On approval: swb-1's conductor runs construct again, and the unit returns to your review."
+has "$out" "   On approval: swb-1's conductor runs construct again, and once that has committed the unit goes on from its tasks with no approval asked, its revised change due for the next batch."
 has "$out" "- swb-1-conductor, to agree, or tell wldn-planner why not"
 eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(proposal 1): propose: amend cfn-lint-treefmt (wldn-planner)"
 ok "an amendment is proposed with the intent unchanged, its conductor is told, and its page shows both intents, the stage and what follows"
@@ -86,7 +84,7 @@ eq "$(plan -t Unit -e "Unit = 'cfn-lint-treefmt'" -P Intent)" "cfn-lint in treef
 eq "$(plan -t Unit -e "Unit = 'cfn-lint-treefmt'" -P Amended)" "proposal/1"
 eq "$(stage cfn-lint-treefmt)" "amended"
 eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
-has "$(prompts swb-1)" "intent was amended by proposal 1. Run construct again (crew unit run cfn-lint-treefmt construct); it returns to the user"
+has "$(prompts swb-1)" "intent was amended by proposal 1. Run construct again (crew unit run cfn-lint-treefmt construct); once it has committed, the unit goes on from its tasks."
 eq "$(field unit.amend From unit/cfn-lint-treefmt)" "proposal/1"
 has "$(field unit.amend Commit unit/cfn-lint-treefmt)" "WilldanGroup/crew-state@$(tip)"
 expect_ok crew plan proposed 1; has "$out" "Closed"

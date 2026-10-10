@@ -102,9 +102,12 @@ expect_ok crew unit wait coding
 has "$out" "swb-1-unit-1 delivered construct on coding: its change is committed at $(git -C "$k" rev-parse --short unit/coding)"
 eq "$(field $box stage.end Result stage/coding/construct)" "code"
 eq "$(field $box stage.end Ended stage/coding/construct)" "delivered"
+eq "$(plan -t Unit -e "Unit = 'coding'" -P Amended)" ""
+eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(tenant-environments): coding constructed again, its mark cleared (swb-1-conductor)"
+git --git-dir "$ws" show "wldn/main:runs/$box/$(date -u +%F).rec" | grep -q "^Act: stage.end" || fail "the write that clears the mark carries no construct end"
 expect_ok crew unit run coding code
 eq "$(prompt_to "$(pane swb-1-unit-1)")" "'/opsx:apply coding'"
-ok "code, verify and merge are refused entries while construct runs again; once it commits the unit goes on from its tasks, nobody asked to approve"
+ok "code, verify and merge are refused entries while construct runs again; once it commits the unit goes on from its tasks, nobody asked to approve, and the write carrying construct's end clears the mark"
 
 # A planned unit, sent back by the user at a shell.
 unset CREW_AGENT
@@ -122,7 +125,10 @@ eq "$(stage fresh)" "construct"
 CREW_AGENT=swb-1-conductor expect_fail "unit fresh was amended and its change is being written again" crew unit run fresh code
 echo table >> "$pf/openspec/changes/fresh/design.md"; commit_all "$pf" "docs(fresh): a table"
 eq "$(stage fresh)" "planned"
-ok "the user sends a planned unit back to construct, which marks it, and it is planned again once construct commits"
+eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" "$(git -C "$k" rev-parse unit/fresh~1)"
+HOST=$box crew status swb-1 >/dev/null 2>&1
+eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" ""
+ok "the user sends a planned unit back to construct, which marks it, and it is planned again once construct commits; the team's next read clears the mark"
 
 # An intent amended: construct has not been run again, so code is refused; construct says why it runs.
 export CREW_AGENT=swb-1-conductor

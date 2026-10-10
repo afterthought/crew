@@ -12,9 +12,9 @@
 # no card key; a call crew can't check is refused naming what it could not read; and a session crew didn't start,
 # another server's tool and the other card tools are not checked for their key. Each refusal scenario of the rail-cards
 # spec. A row's card of the agent's own, posted or changed, the hook then refuses in another form than its row's, naming
-# the form: a landing card that is a step, not high stakes, or has options or a step that lands it; a review card that
-# is no approval with a note; a verify card with no options; a proposal card that is no approval; a grouped card; and a
-# change that clears a landing's high stakes or gives a card options or steps its row's has not. A card under no row's
+# the form: a landing card that is a step, not high stakes, or has options or a step that lands it; a verify card with
+# no options; a proposal card that is no approval, or one with options or steps; a grouped card; and a change that
+# clears a landing's high stakes or gives a card options or steps its row's has not. A card under no row's
 # key is refused for its key, not its form; a change to a card posted on no row's key here, a session crew didn't start
 # and another server's tool pass unchecked; what it can't check, its own input among it, is refused, while the record
 # half never fails.
@@ -32,21 +32,21 @@ as mac-studio python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import re
 sys.stdout.write(record.DESCRIPTOR.replace(" Card Key\n", "\n"))' "$CREW/plugin/lib" > "$runs/$day.rec"
 lacks "$(cat "$runs/$day.rec")" "Card"
 crew state init wldn >/dev/null
-CREW_AGENT=swb-1-conductor CREW_LABEL=wldn emit --act card.post --on unit/x --field Card=req_old-1 --field Key=review/x/abc1234 >/dev/null
-eq "$(recsel -t Entry -e "Act = 'card.post'" -P Card,Key,On "$runs/$day.rec")" $'req_old-1\nreview/x/abc1234\nunit/x'
+CREW_AGENT=swb-1-conductor CREW_LABEL=wldn emit --act card.post --on unit/x --field Card=req_old-1 --field Key=verify/x/20261007-1400 >/dev/null
+eq "$(recsel -t Entry -e "Act = 'card.post'" -P Card,Key,On "$runs/$day.rec")" $'req_old-1\nverify/x/20261007-1400\nunit/x'
 expect_ok crew events --push --label wldn
 carried=$(git --git-dir "$ws" show "wldn/main:runs/mac-studio/$day.rec")
 printf '%s\n' "$carried" > "$T/carried.rec"
 recfix --check "$T/carried.rec" || fail "the carried file fails recfix --check"
-eq "$(recsel -t Entry -e "Act = 'card.post'" -P Card,Key "$T/carried.rec")" $'req_old-1\nreview/x/abc1234'
+eq "$(recsel -t Entry -e "Act = 'card.post'" -P Card,Key "$T/carried.rec")" $'req_old-1\nverify/x/20261007-1400'
 has "$(crew events --label wldn)" "card.post     swb-1-conductor"
-has "$(crew events --label wldn)" "unit/x (card review/x/abc1234 req_old-1)"
+has "$(crew events --label wldn)" "unit/x (card verify/x/20261007-1400 req_old-1)"
 ok "a day's file begun before Card and Key takes an entry with them, and is carried under the descriptor that allows them"
 
 rm "$runs/$day.rec"
-CREW_AGENT=swb-1-conductor CREW_LABEL=wldn emit --act card.post --on unit/y --field Card=req_new-1 --field Key=review/y/def5678 >/dev/null
+CREW_AGENT=swb-1-conductor CREW_LABEL=wldn emit --act card.post --on unit/y --field Card=req_new-1 --field Key=verify/y/20261007-1500 >/dev/null
 recfix --check "$runs/$day.rec" || fail "a new day's file fails recfix --check"
-eq "$(recsel -t Entry -e "Act = 'card.post'" -P Card,Key "$runs/$day.rec")" $'req_new-1\nreview/y/def5678'
+eq "$(recsel -t Entry -e "Act = 'card.post'" -P Card,Key "$runs/$day.rec")" $'req_new-1\nverify/y/20261007-1500'
 ok "a day's file begun now allows Card and Key"
 
 # The hook, fed as Claude Code feeds it after a Pending You tool.
@@ -68,10 +68,10 @@ export CREW_AGENT=swb-1-conductor CREW_LABEL=wldn
 asked='{"name": "swb-1-conductor", "title": "Review x ZQXTITLE", "summary": "ZQXSUMMARY", "options": [{"label": "ZQXOPTION"}], "areaId": "area_1"}'
 post() { jq -c --arg k "$1" '. + {idempotencyKey: $k}' <<<"$asked"; }
 
-call pendingyou post_request "$(post review/x/abc1234)" \
+call pendingyou post_request "$(post verify/x/20261007-1400)" \
   '{"content": [{"type": "text", "text": "Posted."}], "structuredContent": {"requestId": "req_abc-1", "status": "pending", "version": 1}}' | cards
 eq "$(pick card.post '[.Act, .By, .Session, (.On | join(" ")), .Card, .Key] | join(" ")')" \
-  "card.post swb-1-conductor mac-studio:sid-1 unit/x req_abc-1 review/x/abc1234"
+  "card.post swb-1-conductor mac-studio:sid-1 unit/x req_abc-1 verify/x/20261007-1400"
 call pendingyou post_request "$(post verify/x/20261007-1412)" \
   '[{"type": "text", "text": "{\"requestId\": \"req_abc-2\", \"status\": \"pending\", \"version\": 1}"}]' | cards
 eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/x req_abc-2 verify/x/20261007-1412"
@@ -81,17 +81,17 @@ call pendingyou post_request "$(post proposal/4)" '{"structuredContent": {"reque
 eq "$(entries card.post | jq -r '"\(.On[0]) \(.Card) \(.Key)"' | tail -2 | tr '\n' ' ')" \
   "bolt/tenant-environments req_abc-3 land/tenant-environments/abc1234 proposal/4 req_abc-4 proposal/4 "
 # As Claude Code 2.1.292 gives Pending You's result: the text alone, a string of JSON.
-call pendingyou post_request "$(post review/y/def5678)" \
+call pendingyou post_request "$(post verify/y/20261007-1500)" \
   '"{\"requestId\":\"req_5de3dad46fba41068fba\",\"threadId\":\"req_5de3dad46fba41068fba\",\"status\":\"pending\",\"version\":1}"' | cards
-eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/y req_5de3dad46fba41068fba review/y/def5678"
+eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/y req_5de3dad46fba41068fba verify/y/20261007-1500"
 ok "a post's entry names its row, its card and its key, from structuredContent, a text block of JSON, a plain string of JSON, or a plugin's server"
 
 call pendingyou update_request '{"name": "swb-1-conductor", "requestId": "req_abc-1", "title": "ZQXTITLE again"}' \
   '{"structuredContent": {"requestId": "req_abc-1", "status": "pending", "version": 2}}' | cards
-eq "$(pick card.update '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/x req_abc-1 review/x/abc1234"
+eq "$(pick card.update '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/x req_abc-1 verify/x/20261007-1400"
 call pendingyou ack_answer '{"name": "swb-1-conductor", "requestId": "req_abc-1", "version": 2, "outcome": "ZQXOUTCOME"}' \
   '{"structuredContent": {"status": "resolved"}}' | cards
-eq "$(pick card.close '[.By, (.On | join(" ")), .Card, .Key] | join(" ")')" "swb-1-conductor unit/x req_abc-1 review/x/abc1234"
+eq "$(pick card.close '[.By, (.On | join(" ")), .Card, .Key] | join(" ")')" "swb-1-conductor unit/x req_abc-1 verify/x/20261007-1400"
 call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_abc-3", "reason": "ZQXREASON"}' \
   '[{"type": "text", "text": "{\"status\": \"cancelled\"}"}]' | cards
 eq "$(pick card.close '[(.On | join(" ")), .Card, .Key] | join(" ")')" "bolt/tenant-environments req_abc-3 land/tenant-environments/abc1234"
@@ -103,11 +103,13 @@ call pendingyou post_request "$(post 'my own key ZQXKEY')" '{"structuredContent"
 eq "$(pick card.post '[(.On | join(" ")), .Card, (.Key // "-")] | join(" ")')" "agent/swb-1-conductor req_abc-5 -"
 call pendingyou post_request "$(post land/tenant-environments)" '{"structuredContent": {"requestId": "req_abc-10"}}' | cards
 eq "$(pick card.post '[(.On | join(" ")), .Card, (.Key // "-")] | join(" ")')" "agent/swb-1-conductor req_abc-10 -"
-call pendingyou post_request "$(post review/x/abc1234)" '{"content": [{"type": "text", "text": "Posted."}]}' | cards
-eq "$(pick card.post '[(.On | join(" ")), (.Card // "-"), .Key] | join(" ")')" "unit/x - review/x/abc1234"
+call pendingyou post_request "$(post review/x/abc1234)" '{"structuredContent": {"requestId": "req_abc-11"}}' | cards
+eq "$(pick card.post '[(.On | join(" ")), .Card, (.Key // "-")] | join(" ")')" "agent/swb-1-conductor req_abc-11 -"
+call pendingyou post_request "$(post verify/x/20261007-1400)" '{"content": [{"type": "text", "text": "Posted."}]}' | cards
+eq "$(pick card.post '[(.On | join(" ")), (.Card // "-"), .Key] | join(" ")')" "unit/x - verify/x/20261007-1400"
 recfix --check "$runs/$day.rec" || fail "the hook's entries fail recfix --check"
 eq "$(grep -rl ZQX "$(home_of mac-studio)/.local/state/crew" || true)" ""
-ok "an unkeyed card, or one under a bolt's bare land/<bolt>, is on its agent with no Key, a result with no id is a post with no Card, and nothing written on a card is recorded"
+ok "an unkeyed card, one under a bolt's bare land/<bolt> or under a review's key, which is no row's, is on its agent with no Key, a result with no id is a post with no Card, and nothing written on a card is recorded"
 
 # A landing card posted under the bare land/<bolt> by a crew from before landings were keyed by the bolt's head.
 emit --act card.post --on bolt/tenant-environments --field Card=req_old-1 --field Key=land/tenant-environments >/dev/null
@@ -117,11 +119,11 @@ eq "$(pick card.close '[(.On | join(" ")), .Card, .Key] | join(" ")')" "bolt/ten
 ok "a card posted under a key that is no longer a row's is closed under the key and row of its post, with no session to end"
 
 n=$(entries | wc -l)
-call pendingyou post_request "$(post review/x/abc1234)" '{"isError": true, "content": [{"type": "text", "text": "refused"}]}' | cards
+call pendingyou post_request "$(post verify/x/20261007-1400)" '{"isError": true, "content": [{"type": "text", "text": "refused"}]}' | cards
 call pendingyou ack_answer '{"requestId": "req_abc-2"}' '{"deny": "not yours"}' | cards
-call github post_request "$(post review/x/abc1234)" '{"structuredContent": {"requestId": "req_abc-6"}}' | cards
+call github post_request "$(post verify/x/20261007-1400)" '{"structuredContent": {"requestId": "req_abc-6"}}' | cards
 call pendingyou get_request '{"requestId": "req_abc-2"}' '{"structuredContent": {"requestId": "req_abc-2"}}' | cards
-CREW_AGENT= CREW_LABEL= cards <<<"$(call pendingyou post_request "$(post review/x/abc1234)" '{"structuredContent": {"requestId": "req_abc-7"}}' sid-none)"
+CREW_AGENT= CREW_LABEL= cards <<<"$(call pendingyou post_request "$(post verify/x/20261007-1400)" '{"structuredContent": {"requestId": "req_abc-7"}}' sid-none)"
 eq "$(entries | wc -l)" "$n"
 ok "an error, a denial, another server's tool, a read and a session crew didn't start write nothing"
 
@@ -178,13 +180,13 @@ while True:
         sys.exit(f"pid {pid} is still running")
     time.sleep(0.05)' "$1"; }
 
-call pendingyou post_request "$(post review/x/abc1234)" '{"structuredContent": {"requestId": "req_ses-1"}}' | cards
+call pendingyou post_request "$(post verify/x/20261007-1400)" '{"structuredContent": {"requestId": "req_ses-1"}}' | cards
 call pendingyou post_request "$(post proposal/7)" '{"structuredContent": {"requestId": "req_ses-2"}}' | cards
-s1=$(session review/x/abc1234); s2=$(session proposal/7)
+s1=$(session verify/x/20261007-1400); s2=$(session proposal/7)
 call pendingyou ack_answer '{"name": "swb-1-conductor", "requestId": "req_ses-1", "version": 2, "outcome": "approved"}' \
   '{"structuredContent": {"status": "resolved"}}' | cards
 gone "$s1"
-[[ ! -e $cardsdir/review/x/abc1234 ]] || fail "the answered card's key was not forgotten"
+[[ ! -e $cardsdir/verify/x/20261007-1400 ]] || fail "the answered card's key was not forgotten"
 up "$s2" || fail "closing one card ended another's session"
 call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_ses-2", "reason": "replaced by proposal 8"}' \
   '{"structuredContent": {"status": "cancelled"}}' | cards
@@ -194,22 +196,22 @@ eq "$(pick card.close '.Key')" "proposal/7"
 ok "an answered card's close and a withdrawn card each end the plannotator session crew started for its key"
 
 call pendingyou post_request "$(post 'my own key')" '{"structuredContent": {"requestId": "req_ses-3"}}' | cards
-call pendingyou post_request "$(post review/y/def5678)" '{"structuredContent": {"requestId": "req_ses-4"}}' | cards
-s3=$(session review/z/1234567)
+call pendingyou post_request "$(post verify/y/20261007-1500)" '{"structuredContent": {"requestId": "req_ses-4"}}' | cards
+s3=$(session verify/z/20261007-1600)
 mine=$(started "$T/doc-mine.md" "$T/mine.json")
 call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_ses-3"}' '{"structuredContent": {"status": "cancelled"}}' | cards
 call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_ses-4"}' '{"structuredContent": {"status": "cancelled"}}' | cards
 up "$s3" || fail "an unkeyed card's close ended a session"
 up "$mine" || fail "a keyed card's close ended a session crew did not start"
-[[ -e $cardsdir/review/z/1234567/session.json ]] || fail "another key's session was forgotten"
+[[ -e $cardsdir/verify/z/20261007-1600/session.json ]] || fail "another key's session was forgotten"
 ok "an unkeyed card's close ends nothing, and a keyed card's close ends no session crew did not start for its key"
 
-call pendingyou post_request "$(post review/z/1234567)" '{"structuredContent": {"requestId": "req_ses-5"}}' | cards
-chmod 555 "$cardsdir/review/z"
+call pendingyou post_request "$(post verify/z/20261007-1600)" '{"structuredContent": {"requestId": "req_ses-5"}}' | cards
+chmod 555 "$cardsdir/verify/z"
 expect_ok cards <<<"$(call pendingyou ack_answer '{"requestId": "req_ses-5", "outcome": "done"}' '{"structuredContent": {"status": "resolved"}}')"
-chmod 755 "$cardsdir/review/z"
+chmod 755 "$cardsdir/verify/z"
 has "$out" "crew cards:"
-eq "$(pick card.close '[.Card, .Key] | join(" ")')" "req_ses-5 review/z/1234567"
+eq "$(pick card.close '[.Card, .Key] | join(" ")')" "req_ses-5 verify/z/20261007-1600"
 up "$s3" || fail "a session was ended while its key could not be forgotten"
 kill "$s3" "$mine"
 ok "a session the hook can't end is said, the close is still recorded, and the tool call goes on"
@@ -252,26 +254,26 @@ has "$why" "swb-1-ops owns no card key, since a team's cards are its conductor's
 has "$why" "in your proof file, under Left for the user"
 why=$(denied swb-1-ops post_request 'gateway check ZQXKEY')
 has "$why" "swb-1-ops owns no card key"
-why=$(denied swb-1-unit-2 post_request review/x/abc1234)
+why=$(denied swb-1-unit-2 post_request verify/x/20261007-1412)
 has "$why" "swb-1-unit-2 owns no card key, since a team's cards are its conductor's"
 has "$why" "/plugin/bin/crew needs"
 ok "a team's ops and its unit slots are refused a card under any key: a team's cards are its conductor's"
 
 eq "$(gate swb-1-conductor post_request land/tenant-environments/abc1234 '{"kind": "approve", "highStakes": true}')" ""
-eq "$(gate swb-1-conductor post_request review/x/abc1234 '{"kind": "approve"}')" ""
 eq "$(gate swb-1-conductor post_request verify/checked/20261007-1412 '{"kind": "choice", "options": [{"id": "fix", "label": "Fix it"}]}')" ""
 eq "$(gate wldn-planner post_request proposal/1 '{"kind": "approve"}')" ""
-ok "a conductor's own landing, review and verify keys, and the planner's open proposal, go through"
+ok "a conductor's own landing and verify keys, and the planner's open proposal, go through"
 
-rows="land/tenant-environments/<head> or review/<unit>/<head> or verify/<unit>/<stamp> for unit x or checked, the head or stamp from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`"
+rows="land/tenant-environments/<head> or verify/<unit>/<stamp> for unit x or checked, the head or stamp from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`"
 why=$(denied swb-1-conductor post_request gateway-check-tenant-environments)
 eq "$why" "crew refuses a card under gateway-check-tenant-environments: swb-1-conductor posts a card only under a rail row's key of its own: $rows."
-why=$(denied swb-1-conductor post_request review/z/abc1234)
+why=$(denied swb-1-conductor post_request verify/z/20261007-1412)
 has "$why" "swb-1-conductor posts a card only under a rail row's key of its own: $rows"
 has "$(denied swb-1-conductor post_request land/console-pages/abc1234)" "$rows"
+has "$(denied swb-1-conductor post_request review/x/abc1234)" "$rows"
 has "$(denied swb-1-conductor post_request land/tenant-environments)" "$rows"
 has "$(denied brd-1-conductor post_request land/tenant-environments/abc1234)" "brd-1 holds no bolt"
-ok "a conductor's key of its own making, a bolt's bare land/<bolt>, and another team's row, are refused naming the keys that are its own"
+ok "a conductor's key of its own making, a review's key, which is no row's, a bolt's bare land/<bolt>, and another team's row, are refused naming the keys that are its own"
 
 why=$(denied wldn-planner post_request proposal/2)
 eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, proposal/1, from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`."
@@ -349,33 +351,32 @@ passes post_request "$(card land/tenant-environments/abc1234 "$(jq -c '. + {acti
 refused post_request "$(card land/tenant-environments/abc1234 "$(jq -c ". + $two" <<<"$landing")")" "This card has options."
 ok "a landing card is refused as a step, unmarked high stakes, with options or with a step that lands it, and passes as a high-stakes approval, with steps a proof leaves"
 
-approval="A review's card is an approval, kind \"approve\", whose yes approves the unit and whose no carries a note for changes"
-passes post_request "$(card review/x/abc1234 '{"kind": "approve"}')"
-refused post_request "$(card review/x/abc1234 '{"kind": "review"}')" "$approval" 'This card is a "review".'
-refused post_request "$(card review/x/abc1234 '{"kind": "fyi"}')" "$approval" 'This card is a "fyi".'
-refused post_request "$(card review/x/abc1234 "$(jq -c '{kind: "approve"} + .' <<<"$two")")" "$approval" "This card has options."
-refused post_request "$(card review/x/abc1234 '{"kind": "approve", "action": {"steps": [{"text": "Read the change"}]}}')" \
-  "This card has steps for the user to take."
 refused post_request "$(card verify/checked/20261007-1412 '{"kind": "approve"}')" \
   "A verify report's card is a choice" 'This card is an "approve", and has no options.'
 refused post_request "$(card verify/checked/20261007-1412 '{"kind": "choice"}')" "This card has no options."
 passes post_request "$(card verify/checked/20261007-1412 "$(jq -c '{kind: "choice"} + .' <<<"$two")")"
 passes post_request "$(card verify/checked/20261007-1412 "$(jq -c '{kind: "multi"} + .' <<<"$two")")"
+approval="A proposal's card is an approval, kind \"approve\", with a note for changes or for dropping it"
 CREW_AGENT=wldn-planner passes post_request "$(card proposal/1 '{"kind": "approve"}')"
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "review"}')" "$approval" 'This card is a "review".'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "fyi"}')" "$approval" 'This card is a "fyi".'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 "$(jq -c '{kind: "approve"} + .' <<<"$two")")" "$approval" "This card has options."
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "approve", "action": {"steps": [{"text": "Read the change"}]}}')" \
+  "This card has steps for the user to take."
 CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "action", "action": {"steps": [{"text": "Approve it", "command": "crew plan approve 1"}]}}')" \
-  "A proposal's card is an approval, kind \"approve\", with a note for changes or for dropping it" 'This card is an "action"'
+  "$approval" 'This card is an "action"'
 CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"questions": [{"id": "go", "kind": "approve", "title": "Approve proposal 1?"}]}')" \
   "This card is a grouped card of questions, and names no kind."
 refused post_request "$(card agent-note-1 '{"kind": "action", "action": {"steps": [{"text": "Land it", "command": "crew bolt land tenant-environments"}]}}')" \
   "crew refuses a card under agent-note-1: swb-1-conductor posts a card only under a rail row's key of its own"
 refused post_request "$(card land/y '{"kind": "action"}')" "crew refuses a card under land/y: swb-1-conductor posts a card only under"
-ok "a review card is an approval with a note, a verify card a choice with options, a proposal card an approval; a card under no row's key is refused for its key, not its form"
+ok "a verify card is a choice with options, a proposal card an approval with a note; a card under no row's key is refused for its key, not its form"
 
 eq "$(entries | wc -l)" "$n"
 ok "a check writes nothing to the run record"
 
 call pendingyou post_request "$(card land/tenant-environments/abc1234 "$landing")" '{"structuredContent": {"requestId": "req_land-1"}}' | cards
-call pendingyou post_request "$(card review/x/abc1234 '{"kind": "approve"}')" '{"structuredContent": {"requestId": "req_rev-1"}}' | cards
+CREW_AGENT=wldn-planner call pendingyou post_request "$(card proposal/1 '{"kind": "approve"}')" '{"structuredContent": {"requestId": "req_rev-1"}}' | CREW_AGENT=wldn-planner cards
 call pendingyou post_request "$(card agent-note-2 '{"kind": "fyi"}')" '{"structuredContent": {"requestId": "req_own-1"}}' | cards
 change() { jq -nc --arg r "$1" --argjson f "$2" '{name: "swb-1-conductor", requestId: $r, expectedVersion: 1, changeNote: "ZQXNOTE"} + $f'; }
 refused update_request "$(change req_land-1 '{"highStakes": false}')" \
@@ -385,7 +386,7 @@ refused update_request "$(change req_land-1 '{"action": {"steps": [{"text": "Lan
   "This change gives it a step that lands the bolt"
 passes update_request "$(change req_land-1 '{"title": "Land bolt y ZQXTITLE"}')"
 passes update_request "$(change req_land-1 '{"highStakes": true}')"
-refused update_request "$(change req_rev-1 "$two")" "crew refuses this change to card review/x/abc1234." "This change gives it options."
+refused update_request "$(change req_rev-1 "$two")" "crew refuses this change to card proposal/1." "This change gives it options."
 refused update_request "$(change req_rev-1 '{"action": {"steps": [{"text": "Read it"}]}}')" "This change gives it steps for the user to take."
 passes update_request "$(change req_own-1 "$two")"
 passes update_request "$(change req_nowhere-1 '{"highStakes": false}')"

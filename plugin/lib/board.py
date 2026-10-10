@@ -25,7 +25,7 @@ from crew import Refusal, fail  # noqa: E402
 
 # Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button, or an answer
 # in the user's own words.
-GLYPH = {"proposals": "✓", "review": "✓", "land": "✓", "verify": "✎"}
+GLYPH = {"proposals": "✓", "land": "✓", "verify": "✎"}
 ATTENTION = "!"
 # The frame the rail tab's loop writes for the board tab, by label.
 FRAMES = pathlib.Path.home() / ".cache/crew/board"
@@ -203,7 +203,7 @@ def board_data(fleet, labels, read, now):
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "stage": s["stage"], "tasks": s["tasks"], "slot": slot("unit", u.name()),
                                             "worktree": s["worktree"], "url": url(s["worktree"]),
-                                            "markers": markers(rows, cards, l, "review", u.name()) + markers(rows, cards, l, "verify", u.name())})
+                                            "markers": markers(rows, cards, l, "verify", u.name())})
                 ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "worktree": f["path"], "url": url(f["path"])}
                                    for f in k.get("fixes", []) if f["bolt"] == b.name()]
                 construction.append(ledger)

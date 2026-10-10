@@ -45,7 +45,6 @@ crew unit  order <unit> --before <unit>|--first|--last
 crew unit  after <unit> <unit>...|--none
 crew unit  move <unit> <bolt>|queue [--unblocks <bolt>]
 crew unit  drop <unit> "<reason>"
-crew unit  approve <unit>
 ```
 
 Each partition keeps one recutils `plan.rec`, for all its kits, on its flywheel's branch of its state repository (see State). It holds only intent: Bolt and Unit records, in build order. A Source is a path in the partition's first blueprints repo, or `<owner>/<name>:<path>` in another. Every stage is read from the kits, one call per host. A command fetches the branch and reads each kit once on each host it runs on, however many steps it has, and a step that makes or removes a worktree leaves the next to read that kit again; a wait, the rail tab and `crew events --follow` read afresh each time they look. A unit's tasks and planning mean what OpenSpec means by them, read from the change's files when it uses OpenSpec's spec-driven workflow and through `openspec` otherwise. A write fetches the branch over https into crew's bare cache of the repo (`~/.cache/crew/git/<owner>/<name>.git`), applies itself to the tip, checks each file it changed with `recfix --check` and the plan with crew's rules, commits through a temporary index, and pushes without force; a push refused because someone wrote first is applied again to the new tip, up to five times. Nothing is ever merged. A write that touches a bolt a team holds sends that team's conductor the commit's subject.

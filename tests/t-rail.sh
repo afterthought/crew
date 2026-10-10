@@ -1,4 +1,4 @@
-# crew rail: everything that waits on the user, in four groups in order (proposals, review, verify, land), each row
+# crew rail: everything that waits on the user, in its groups in order (proposals, verify, land), each row
 # with when it began to wait, how long ago that was and the commands that answer it, oldest first; read from the plan,
 # the proposals, the kits and the run record, and writing nothing. Each scenario of the crew-rail spec, and opening a
 # proposal in plannotator with crew plan proposed <n> --open. Each row has its card key and says whether a Pending You
@@ -26,10 +26,10 @@ line_of() { grep -F -- "$2" <<<"$1" || true; }
 
 expect_ok crew rail --label wldn
 has "$out" "What waits on you (wldn), as of "
-eq "$(grep -E '^[a-z]+$' <<<"$out" | tr '\n' ' ')" "proposals review verify land "
-eq "$(grep -c '^  none$' <<<"$out")" "4"
-lacks "$out" "card:"; lacks "$out" "open cards with no row"
-ok "with nothing waiting, the four groups are printed in order, each with none"
+eq "$(grep -E '^[a-z]+$' <<<"$out" | tr '\n' ' ')" "proposals verify land "
+eq "$(grep -c '^  none$' <<<"$out")" "3"
+lacks "$out" "card:"; lacks "$out" "open cards with no row"; lacks "$out" "review"
+ok "with nothing waiting, the groups are printed in order, each with none, and there is no review group"
 
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
 for u in early late checked stale; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
@@ -51,7 +51,6 @@ pz=$(place "$k" apex-zones zone-one); change "$pz" zone-one 2 2; commit_at 40 "$
 GIT_COMMITTER_DATE=$(at 30) git -C "$kd/bolts/apex-zones" merge -q --no-ff -m "merge zone-one" unit/zone-one
 
 expect_ok crew rail --label wldn; r=$out
-eq "$(group "$r" review)" "  none"
 lacks "$r" "unit early"; lacks "$r" "unit late"; lacks "$r" "unit approve"
 ok "a unit whose change is committed waits on nobody: code starts with no review, and the rail lists no unit for one"
 
@@ -178,6 +177,6 @@ has "$stray" '    answer: crew tell atl-1-conductor "Close your Pending You card
 has "$(group "$out" proposals)" "    card:   proposal/1, open, asked by wldn-planner"
 has "$(group "$out" proposals)" "proposal 1 (wldn)"
 has "$out" "$box did not answer"; has "$out" "its units and bolts may also wait on you"
-eq "$(grep -c '^  none$' <<<"$out")" "3"
+eq "$(grep -c '^  none$' <<<"$out")" "2"
 rm "$T/down"
 ok "a host that does not answer is named, the proposals and their cards are still listed, a stray card of its teams is not, and the exit is zero"

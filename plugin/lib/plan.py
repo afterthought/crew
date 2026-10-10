@@ -14,8 +14,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
                                              the moves where the partition's blueprints repos have them
   crew bolts [<bolt>] [--label L] [--json]   every bolt and unit of the plans, each unit's stage read from its kit
-  crew rail [--label L]                      what waits on the user: open proposals, units in review, verify reports
-                                             and bolts to land, each with when it began to wait, what answers it and
+  crew rail [--label L]                      what waits on the user: open proposals, verify reports and bolts to
+                                             land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone
   crew card session|wait|end <key>           a plannotator session on what the rail row with that card key asks the
@@ -40,7 +40,6 @@ five times. A write that changes several files is one commit, and it carries the
   crew unit after <unit> <unit>...|--none
   crew unit move <unit> <bolt>|queue [--unblocks <bolt>]
   crew unit drop <unit> "<reason>"
-  crew unit approve <unit>                   the user's review, an empty Reviewed-by: commit on unit/<unit>
   crew plan propose <file> [--replaces <n>]  the planner's proposal: a Case and the plan commands it would run (Do)
   crew plan proposed [<n>] [--json] [--open] the open proposals, or one as the user reads it; --open writes that to a
                                              file on this host and opens it in plannotator
@@ -619,13 +618,13 @@ def holdings(plan):
 
 
 def lost_rows(before, after):
-    """The rail rows each team lost in a write, {team: rows}: review/<unit> and verify/<unit> for each unit no longer in
-    a bolt it holds, and land/<bolt> for each bolt it no longer holds. A landing, a drop and a move all lose rows."""
+    """The rail rows each team lost in a write, {team: rows}: verify/<unit> for each unit no longer in a bolt it holds,
+    and land/<bolt> for each bolt it no longer holds. A landing, a drop and a move all lose rows."""
     (bolts0, units0), (bolts1, units1) = before, after
     out = {}
     for u, t in units0.items():
         if units1.get(u) != t:
-            out.setdefault(t, []).extend([f"review/{u}", f"verify/{u}"])
+            out.setdefault(t, []).append(f"verify/{u}")
     for b, t in bolts0.items():
         if bolts1.get(b) != t:
             out.setdefault(t, []).append(f"land/{b}")
@@ -1177,58 +1176,6 @@ fi
 UNREBASE = r"""cd "$1" && git reset -q --hard "$2" && git branch -q --set-upstream-to="bolt/$3" "unit/$4" """
 
 
-# The approval commit, printed as "made <sha>"; or, given the head an amended unit's construct started from, the
-# approval already made since then, as "found <sha>", so an approval whose plan write failed only clears the mark.
-APPROVE = r"""cd "$1" || exit 1
-if [ -n "$3" ]; then
-  had=$(git log --format='%H %(trailers:key=Reviewed-by,valueonly,separator=%x2C)' "$3..HEAD" 2>/dev/null | awk 'NF > 1 {print $1; exit}')
-  if [ -n "$had" ]; then echo "found $had"; exit 0; fi
-fi
-git commit -q --allow-empty -m "review($2): approved" --trailer "Reviewed-by: $(git config user.name) <$(git config user.email)>"
-echo "made $(git rev-parse HEAD)"
-"""
-
-
-def unit_approve(fleet, a):
-    """crew unit approve <unit>: the user's review, an empty Reviewed-by commit on unit/<unit>. A unit marked amended
-    has its mark cleared in the plan as well, after which its stage is read from its tasks again."""
-    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-    s = unit_stage(fleet, plan, a.unit)
-    u = plan.unit(a.unit)
-    mark, bolt = u.get("Amended"), u.get("Bolt")
-    if s["stage"] == "approved":
-        print(f"unit {a.unit} is already approved")
-        return
-    s["stage"] == "review" or fail(f"unit {a.unit} is in {s['stage']}: " + (
-        "construct has not been run again since it was amended" if s["stage"] == "amended" else
-        "its change is being written again, and has not been committed" if s["stage"] == "construct" and mark else
-        "its change's planning is not complete" if s["stage"] == "construct" else
-        "it has no change to review yet" if s["stage"] in ("ready", "waiting", "queued") else
-        s.get("why", "it is past review")))
-    t = fleet["teams"][plan.bolt(bolt).get("Team")]
-    made, sha = host_run(fleet, t["machine"], APPROVE, s["worktree"], a.unit, mark or "").split()
-    READ.drop_kit(t["machine"], t["kit"]["main"])
-    print(f"unit {a.unit} approved: {sha[:7]} on unit/{a.unit}" if made == "made" else
-          f"unit {a.unit} was approved at {sha[:7]} on unit/{a.unit}, after construct ran again")
-    commits, eid = [f"{t['kit']['repo']}@{sha}"], None
-    conductor = f"{t['name']}-conductor"
-    if mark:
-        def change(w):
-            u = w.unit(a.unit)
-            u.get("Amended") == mark or fail(f"unit {a.unit} was sent back to construct again since it was read: approve it "
-                                             "once its change is in review")
-            u.drop("Amended")
-            w.quiet.add(t["name"])  # told below that the unit was approved, rather than the write's subject
-            return [bolt]
-        commits.append(f"{repo}@{write(fleet, label, change, f'plan({bolt}): {a.unit} approved after amendment')}")
-        eid = CONTEXT["eid"]
-    record.emit(label, "unit.approve", [f"unit/{a.unit}"], commit=commits, why=f"review({a.unit}): approved", eid=eid)
-    if agent() == conductor:
-        print(close_card(f"review/{a.unit}"))
-    else:
-        crew.tell(fleet, conductor, f"Unit {a.unit} was approved by {agent()}. {close_card(f'review/{a.unit}')}")
-
-
 # ------------------------------------------------------------------------------------------ who writes what
 
 # The commands that write the plan directly, and the one role each agent crew started may use them in.
@@ -1513,8 +1460,8 @@ def op_unit_amend(ctx, a):
             return
         by = f"proposal {ctx.n}" if not ctx.direct else "the user"
         if not crew.tell(ctx.fleet, f"{team['name']}-conductor", f"Unit {a.unit}'s intent was amended by {by}. Run construct again "
-                         f"(crew unit run {a.unit} construct); it returns to the user's review. Close any Pending You card "
-                         f"you have open for review/{a.unit} or verify/{a.unit}."):
+                         f"(crew unit run {a.unit} construct); once it has committed, the unit goes on from its tasks. Close "
+                         f"any Pending You card you have open for verify/{a.unit}."):
             print(f"{team['name']}-conductor is not up: unit {a.unit} waits, amended, for construct to be run again")
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
 
@@ -2102,9 +2049,10 @@ def amendment(fleet, plan, a):
     where = (f"bolt `{b}`" + (f" ({team})" if team else "")) if b else f"the queue of {u.get('Repo')}"
     st = s["stage"]
     now = ("" if st == "queued" else f", its stage unknown ({s.get('why')})" if st == "unknown" else
-           f", now in {st}" if st in ("construct", "review", "code", "verify") else f", now {st}")
+           f", now in {st}" if st in ("construct", "planned", "code", "verify") else f", now {st}")
     return [f"**Amend unit `{a.unit}`** in {where}{now}", f"Intent, as it stands: {u.get('Intent')}", f"Intent, as proposed:  {a.intent}",
-            f"On approval: {team}'s conductor runs construct again, and the unit returns to your review." if s["worktree"] and team else
+            f"On approval: {team}'s conductor runs construct again, and once that has committed the unit goes on from its "
+            "tasks with no approval asked, its revised change due for the next batch." if s["worktree"] and team else
             "On approval: its intent is replaced; it has no change written yet, so nothing else changes."]
 
 
@@ -3163,6 +3111,31 @@ def record_end(fleet, t, o, ended, delivered=None, late=False, now=None):
                 Observed="late" if late else None)
 
 
+def unmark(fleet, t, o):
+    """Once an amended unit's construct has delivered, its mark stops counting, and crew removes it from the plan in a
+    write that carries the construct's end (plan.6). A mark that still waits for construct, one set again meanwhile, or
+    a write that fails is said on standard error and changes nothing else: the mark no longer counts either way."""
+    if o.proof or o.fix or o.stage != "construct":
+        return
+    plan = plan_of(fleet, t["label"])
+    u = plan.unit(o.name) if plan else None
+    mark = u.get("Amended") if u else None
+    if not mark or amended(mark):
+        return
+
+    def change(w):
+        v = w.unit(o.name)
+        v.get("Amended") == mark or fail(f"unit {o.name} was marked again since its construct ended")
+        v.drop("Amended")
+        w.quiet.add(t["name"])  # its conductor learns the end from its wait, not from this write
+        return [v.get("Bolt")] if v.get("Bolt") else []
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            write(fleet, t["label"], change, f"plan({u.get('Bolt')}): {o.name} constructed again, its mark cleared")
+    except Refusal as e:
+        print(f"unit {o.name}'s Amended mark is left in the plan, and no longer counts: {e}", file=sys.stderr)
+
+
 def end_owed(fleet, t, o, ended, delivered=None, then=None):
     """Record an owed stage's end and remove its line, under the stages file's lock, unless another command recorded
     it first. then(lines) runs under the same lock once the end is recorded. Returns whether this call recorded it."""
@@ -3214,6 +3187,9 @@ def stage_ends(fleet, a):
         for o, how, got in ended:
             record_end(fleet, t, o, how, got, late=how == "delivered", now=now)
         lines[:] = keep
+    for o, how, _ in ended:
+        if how == "delivered":
+            unmark(fleet, t, o)
 
 
 # ------------------------------------------------------------------------------------------------- the wait
@@ -3322,6 +3298,7 @@ def stage_wait(fleet, a):
             got, missing = deliverable(fleet, t, o, place) if status != "working" else (None, None)
             if got:
                 if end_owed(fleet, t, o, "delivered", got):
+                    unmark(fleet, t, o)
                     print(f"{agent} delivered {o.phrase()}: {missing}")
                     return
                 continue
@@ -3468,7 +3445,7 @@ def bolts_view(fleet, a):
 
 # ------------------------------------------------------------------------------------------------ crew rail
 
-RAIL = ("proposals", "review", "verify", "land")
+RAIL = ("proposals", "verify", "land")
 
 
 def utc(iso):
@@ -3550,7 +3527,7 @@ def rail_rows(fleet, found, sv, props, times):
     """What waits on the user in the plans read, from the open proposals and when each was proposed, and the kits as
     surveyed: each row's group, its partition, its card key, the time it began to wait (shown as a date alone when that
     is all that is known), what it is, its commands, and the document its card asks the user to read: ("page", label,
-    n) for a proposal, (host, path) for a review's change folder or a verify report, None for a landing."""
+    n) for a proposal, (host, path) for a verify report, None for a landing."""
     rows, here = [], crew.this_host()
     for d in props:
         l, n = d["label"], d["proposal"]
@@ -3578,12 +3555,6 @@ def rail_rows(fleet, found, sv, props, times):
                 s, pl = st.of(u.name())["stage"], k["places"].get(u.name())
                 if not pl:
                     continue
-                if s == "review":
-                    rows.append(dict(group="review", label=l, key=f"review/{u.name()}/{(pl.get('head') or '')[:7]}",
-                                     at=utc(pl.get("head_at")), what=[f"unit {u.name()} ({l}), {team} on {host}"],
-                                     doc=(host, f"{pl['path']}/openspec/changes/{u.name()}/"),
-                                     cmds=[("open", opener(fleet, host, here, f"{pl['path']}/openspec/changes/{u.name()}/")),
-                                           ("answer", f"crew unit approve {u.name()} --label {l}")]))
                 report = k.get("reports", {}).get(u.name())
                 if s == "verify" and report and pl.get("head_at") and utc(report["at"]) > utc(pl["head_at"]):
                     stamp = re.fullmatch(r"verify-.+-(\d{8}-\d{4})\.md", os.path.basename(report["path"]))
@@ -3602,8 +3573,8 @@ def rail_rows(fleet, found, sv, props, times):
 
 def stray_cards(fleet, found, sv, rows, cards, unread):
     """The open cards that match no row, oldest first. A card is left out when whether it has a row can't be known: its
-    own host's record did not answer, so its close may not have been read, or it is a review, verify or land card of a
-    unit or bolt whose team's host did not answer."""
+    own host's record did not answer, so its close may not have been read, or it is a verify or land card of a unit or
+    bolt whose team's host did not answer."""
     plans_, rowed, out = {l: p for l, _, _, p in found if p}, {(r["label"], r["key"]) for r in rows}, []
     for c in cards:
         if (c["label"], c["key"]) in rowed:
@@ -3611,7 +3582,7 @@ def stray_cards(fleet, found, sv, rows, cards, unread):
         down = {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
         if c["host"] in down:
             continue
-        m = re.match(r"(review|verify|land)/([a-z0-9][a-z0-9-]*)", c["key"] or "")
+        m = re.match(r"(verify|land)/([a-z0-9][a-z0-9-]*)", c["key"] or "")
         if m:
             plan, kind, name = plans_[c["label"]], m.group(1), m.group(2)
             u = plan.unit(name) if kind != "land" else None
@@ -3642,7 +3613,7 @@ def rail_read(fleet, labels, board=False):
 
 
 def rail_text(fleet, labels, read, now):
-    """The rail as crew rail prints it, from a read rail_read made: four groups in order, each row with when it began to
+    """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
     wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it and
     whose, oldest first; then any open card whose row is gone, with the tell that asks its owner to close it. A host
     is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more (the board's)
@@ -3696,9 +3667,8 @@ def rail_view(fleet, a):
 # key's slashes as folders: session.json (pid, document, url, started), and plannotator's result.json once the user
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
-# The rail's four card keys, as crew's card hook reads them.
-CARD_KEYS = (r"proposal/\d+", r"review/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}",
-             r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}")
+# The rail's card keys, as crew's card hook reads them.
+CARD_KEYS = (r"proposal/\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}")
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
 
@@ -3707,11 +3677,11 @@ def card_refusal(fleet, name, label, tool, key):
     """Whether the agent crew started may post a Pending You card (post_request) or make an area (create_area) under an
     idempotency key: None to let the call through, else the refusal's words, naming the key to use (briefs.11). A card's
     key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
-    from proposals.rec; a conductor's land/<bolt>/<head> for the bolt its team holds, or review/<unit>/<head> or
-    verify/<unit>/<stamp> for a unit of it, read from the plan. Every other agent owns no key. An area's key is
-    create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
-    partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
-    conductor's card; what can't be read is a Refusal naming it (read.1). The user's own name is never checked."""
+    from proposals.rec; a conductor's land/<bolt>/<head> for the bolt its team holds, or verify/<unit>/<stamp> for a
+    unit of it, read from the plan. Every other agent owns no key. An area's key is create-area:<owner>/<kit> for a kit
+    the agent's team builds or, for the main level, a kit of any team of its partition, read from the teams file. The
+    state branch is fetched once (plan.12), and only for the planner's or a conductor's card; what can't be read is a
+    Refusal naming it (read.1). The user's own name is never checked."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
@@ -3741,12 +3711,12 @@ def card_refusal(fleet, name, label, tool, key):
         units = [u.name() for b in bolts for u in plan.units_of(b)]
         row, _, rest = key.partition("/")
         if any(re.fullmatch(k, key) for k in CARD_KEYS) and (
-                (row == "land" and rest.split("/")[0] in bolts) or (row in ("review", "verify") and rest.split("/")[0] in units)):
+                (row == "land" and rest.split("/")[0] in bolts) or (row == "verify" and rest.split("/")[0] in units)):
             return None
         if not bolts:
             return f"{said}: {name} posts a card only under a rail row's key of its own, and {of} holds no bolt, so none is."
         mine = [f"land/{b}/<head>" for b in bolts] + (
-            [f"review/<unit>/<head> or verify/<unit>/<stamp> for unit {either(units)}"] if units else [])
+            [f"verify/<unit>/<stamp> for unit {either(units)}"] if units else [])
         return (f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, "
                 f"the head{' or stamp' if units else ''} {rail}.")
     if kind == "team":
@@ -3760,10 +3730,10 @@ def card_refusal(fleet, name, label, tool, key):
 
 def card_of(fleet, a):
     """The partition a card command runs as and the key's folder: refused with no partition, or a key that is not one
-    of the rail's four."""
+    of the rail's."""
     label = default_label(fleet, a) or fail("crew card runs as the card's partition: run it as a crew agent, or add --label")
     any(re.fullmatch(k, a.key) for k in CARD_KEYS) or fail(
-        f"{a.key} is not a card key: proposal/<n>, review/<unit>/<head>, verify/<unit>/<stamp> or land/<bolt>/<head>")
+        f"{a.key} is not a card key: proposal/<n>, verify/<unit>/<stamp> or land/<bolt>/<head>")
     return label, CARDS / label / a.key
 
 
@@ -3828,7 +3798,7 @@ def card_result(d):
 
 def card_row(fleet, label, key):
     """The rail row of one partition with that card key, read as crew rail reads its rows, without the run record:
-    only the proposals for a proposal's key, only the host of the unit's team for a review's or a verify report's."""
+    only the proposals for a proposal's key, only the host of the unit's team for a verify report's."""
     found = plans(fleet, [label])
     plan = found[0][3]
     kind, name = key.split("/")[:2]
@@ -4084,9 +4054,6 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("unit")
     x.add_argument("reason")
     x.add_argument("--label")
-    x = un.add_parser("approve")
-    x.add_argument("unit")
-    x.add_argument("--label")
 
     pp = sub.add_parser("plan").add_subparsers(dest="sub", required=True)
     x = pp.add_parser("propose")
@@ -4185,7 +4152,7 @@ COMMANDS = {
     ("bolt", "land"): bolt_land,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
-    ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")), ("unit", "approve"): unit_approve,
+    ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
     ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
@@ -4199,7 +4166,7 @@ ACTS = {
     ("bolt", "drop"): "bolt.drop", ("bolt", "land"): "bolt.land", ("unit", "add"): "unit.add", ("unit", "split"): "unit.split",
     ("unit", "amend"): "unit.amend",
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
-    ("unit", "approve"): "unit.approve", ("signal", None): "capture", ("signal-move", None): "signal.move",
+    ("signal", None): "capture", ("signal-move", None): "signal.move",
     ("_run", None): "stage.start", ("_needs", None): "stage.end",
     ("plan", "propose"): "plan.propose", ("plan", "agree"): "plan.agree", ("plan", "approve"): "plan.approve",
     ("plan", "drop"): "plan.drop",

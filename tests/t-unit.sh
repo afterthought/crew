@@ -57,7 +57,8 @@ commit_all "$pd" "docs(d): proposal"
 eq "$(stage d)" "construct"
 pc=$(place "$k" tenant-environments c); change "$pc" c 0 2; commit_all "$pc" "docs(c): the change"
 eq "$(stage c)" "planned"
-ok "a unit whose change's planning is complete is planned, and one whose isn't is in construct"
+expect_fail "invalid choice: 'approve'" crew unit approve c
+ok "a unit whose change's planning is complete is planned, and one whose isn't is in construct; there is no approval to give"
 
 # The bolt moves on, and the planned unit is rebased onto it.
 echo more > "$kd/bolts/tenant-environments/bolt-work"; commit_all "$kd/bolts/tenant-environments" "feat: bolt work"

@@ -8,7 +8,7 @@
 ## 1. Stages without a review gate
 
 - [x] 1.1 A unit's stage reads as the `bolt-plan` delta lists it: construct waits on each After unit's construct and never on a merge, code is accepted at `planned`, merge waits on each After unit's merge, and settle runs only for a verified unit (design.md, Decisions 1 to 3 and 6; Task notes 1.1). Verify `tests/suite --affected` ends with "0 failed".
-- [ ] 1.2 `crew unit approve`, the `review` rail row and its card key are gone, and an amended unit's mark stops counting once its construct has committed again (design.md, Decision 3; Task notes 1.2). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 1.2 `crew unit approve`, the `review` rail row and its card key are gone, and an amended unit's mark stops counting once its construct has committed again (design.md, Decision 3; Task notes 1.2). Verify `tests/suite --affected` ends with "0 failed".
 
 ## 2. Building side by side
 

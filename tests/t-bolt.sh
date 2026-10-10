@@ -53,7 +53,7 @@ as chuck-herdr-alpha herdr --session wldn-1 stub agent "$p" swb-1-conductor  # u
 expect_ok crew bolt land tenant-environments
 has "$out" "plan(tenant-environments): land the bolt"
 has "$out" "tenant-environments has landed and swb-1 holds no bolt"
-grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for review/the-deploy-names-its-host-tenant, verify/the-deploy-names-its-host-tenant or land/tenant-environments.'" \
+grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for verify/the-deploy-names-its-host-tenant or land/tenant-environments.'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
 has "$out" "$kd/bolts/tenant-environments and bolt/tenant-environments are removed; the branch was at"
 [[ ! -d $kd/bolts/tenant-environments ]] || fail "the bolt's worktree is still there"

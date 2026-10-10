@@ -21,7 +21,7 @@ The PostToolUse half is the hook run with no argument, after a Pending You tool 
 (update_request), withdraws (cancel_request) or closes (ack_answer) a card, in a session crew started, and writes one
 entry: card.post, card.update or card.close. The entry names the rail row's object in On (proposal/<n>, unit/<unit> or
 bolt/<bolt>, from the card's key), the card's id in Card, and the row's key in Key when the card was posted with one of
-the four row keys as its idempotencyKey. A card with any other key is on agent/<the agent>, with no Key, since its key
+the row keys as its idempotencyKey. A card with any other key is on agent/<the agent>, with no Key, since its key
 is text an agent wrote. Nothing written on the card is recorded: no title, summary, option, note or outcome.
 
 When a crew agent withdraws or closes a card with a row key, the hook then ends the plannotator session `crew card
@@ -46,9 +46,8 @@ KEYED = ("post_request", "create_area")
 FORMED = ("post_request", "update_request")
 ACTS = {"post_request": "card.post", "update_request": "card.update", "cancel_request": "card.close", "ack_answer": "card.close"}
 REQUEST_ID = re.compile(r"^req_[A-Za-z0-9-]{1,40}$")
-# The rail's four row keys, and the object of each.
+# The rail's row keys, and the object of each.
 KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
-        (re.compile(r"^review/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "unit/{}"),
         (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
         (re.compile(r"^land/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "bolt/{}"))
 # The form each row's card takes, in Pending You's kinds of card, by the row's shape: the kinds it may be, whether it is
@@ -58,9 +57,6 @@ FORMS = {
     "proposal": dict(kinds=("approve",), high=False, options=False, steps=False,
                      says="a proposal's card is an approval, kind \"approve\", with a note for changes or for dropping "
                           "it, and no options or steps"),
-    "review": dict(kinds=("approve",), high=False, options=False, steps=False,
-                   says="a review's card is an approval, kind \"approve\", whose yes approves the unit and whose no "
-                        "carries a note for changes, with no options or steps"),
     "verify": dict(kinds=("choice", "multi"), high=False, options=True, steps=False,
                    says="a verify report's card is a choice, kind \"choice\", or \"multi\" when the user may pick "
                         "several findings, whose options are what you would do about them, and no steps"),
