@@ -28,7 +28,7 @@ REQUEST_ID = re.compile(r"^req_[A-Za-z0-9-]{1,40}$")
 KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
         (re.compile(r"^review/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "unit/{}"),
         (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
-        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)$"), "bolt/{}"))
+        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "bolt/{}"))
 # How far back a close looks for its card's post.
 DAYS = 30
 
@@ -144,7 +144,8 @@ def main():
         key, on = posted(record, label, card) if isinstance(card, str) and REQUEST_ID.match(card) else (None, None)
     card = card if isinstance(card, str) and REQUEST_ID.match(card) else None
     record.emit(label, ACTS[tool], [on or f"agent/{agent}"], Card=card, Key=key)
-    if ACTS[tool] == "card.close" and key:
+    # A key posted before its row's form changed (a bare land/<bolt>) is still closed under it, and has no session.
+    if ACTS[tool] == "card.close" and keyed(key)[0]:
         import plan
         plan.end_session(label, key)
 

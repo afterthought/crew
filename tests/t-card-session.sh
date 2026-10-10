@@ -96,7 +96,8 @@ lacks "$(calls)" "opened a browser"
 ok "a verify card's session is on the report, beside the review's, each on its own port"
 
 before=$(listed $box)
-expect_fail "a landing card has no document to read" crew card session land/tenant-environments
+expect_fail "a landing card has no document to read" crew card session land/tenant-environments/abc1234
+expect_fail "is not a card key" crew card session land/tenant-environments
 expect_fail "is not a card key" crew card session review/x/HEAD
 expect_fail "is on chuck-herdr-alpha, not mac-studio" crew card session "review/x/$hx"
 CREW_LABEL= expect_fail "runs as the card's partition" crew card session proposal/1

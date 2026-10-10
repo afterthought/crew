@@ -3593,7 +3593,7 @@ def rail_view(fleet, a):
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # The rail's four card keys, as crew's card hook reads them.
 CARD_KEYS = (r"proposal/\d+", r"review/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}",
-             r"land/[a-z0-9][a-z0-9-]*")
+             r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}")
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
 
@@ -3603,7 +3603,7 @@ def card_of(fleet, a):
     of the rail's four."""
     label = default_label(fleet, a) or fail("crew card runs as the card's partition: run it as a crew agent, or add --label")
     any(re.fullmatch(k, a.key) for k in CARD_KEYS) or fail(
-        f"{a.key} is not a card key: proposal/<n>, review/<unit>/<head>, verify/<unit>/<stamp> or land/<bolt>")
+        f"{a.key} is not a card key: proposal/<n>, review/<unit>/<head>, verify/<unit>/<stamp> or land/<bolt>/<head>")
     return label, CARDS / label / a.key
 
 

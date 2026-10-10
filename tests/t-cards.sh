@@ -5,7 +5,7 @@
 # its agent. An error, another server's tool and a session crew didn't start write nothing; a session herdr resumed is
 # known by what session-start recorded; and the hook never fails a tool call. A keyed card's withdrawal or close ends
 # the plannotator session crew started for its key; an unkeyed card's ends nothing, nor does a key's close end a
-# session crew did not start.
+# session crew did not start, and a card posted under a key that is no longer a row's closes under it.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -63,11 +63,11 @@ eq "$(pick card.post '[.Act, .By, .Session, (.On | join(" ")), .Card, .Key] | jo
 call pendingyou post_request "$(post verify/x/20261007-1412)" \
   '[{"type": "text", "text": "{\"requestId\": \"req_abc-2\", \"status\": \"pending\", \"version\": 1}"}]' | cards
 eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/x req_abc-2 verify/x/20261007-1412"
-call plugin_pendingyou_pendingyou post_request "$(post land/tenant-environments)" \
+call plugin_pendingyou_pendingyou post_request "$(post land/tenant-environments/abc1234)" \
   '{"content": [{"type": "text", "text": "not json"}, {"type": "text", "text": "{\"requestId\": \"req_abc-3\", \"version\": 1}"}]}' | cards
 call pendingyou post_request "$(post proposal/4)" '{"structuredContent": {"requestId": "req_abc-4"}}' | cards
 eq "$(entries card.post | jq -r '"\(.On[0]) \(.Card) \(.Key)"' | tail -2 | tr '\n' ' ')" \
-  "bolt/tenant-environments req_abc-3 land/tenant-environments proposal/4 req_abc-4 proposal/4 "
+  "bolt/tenant-environments req_abc-3 land/tenant-environments/abc1234 proposal/4 req_abc-4 proposal/4 "
 # As Claude Code 2.1.292 gives Pending You's result: the text alone, a string of JSON.
 call pendingyou post_request "$(post review/y/def5678)" \
   '"{\"requestId\":\"req_5de3dad46fba41068fba\",\"threadId\":\"req_5de3dad46fba41068fba\",\"status\":\"pending\",\"version\":1}"' | cards
@@ -82,18 +82,27 @@ call pendingyou ack_answer '{"name": "swb-1-conductor", "requestId": "req_abc-1"
 eq "$(pick card.close '[.By, (.On | join(" ")), .Card, .Key] | join(" ")')" "swb-1-conductor unit/x req_abc-1 review/x/abc1234"
 call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_abc-3", "reason": "ZQXREASON"}' \
   '[{"type": "text", "text": "{\"status\": \"cancelled\"}"}]' | cards
-eq "$(pick card.close '[(.On | join(" ")), .Card, .Key] | join(" ")')" "bolt/tenant-environments req_abc-3 land/tenant-environments"
+eq "$(pick card.close '[(.On | join(" ")), .Card, .Key] | join(" ")')" "bolt/tenant-environments req_abc-3 land/tenant-environments/abc1234"
 call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_elsewhere-9"}' '{"structuredContent": {"status": "cancelled"}}' | cards
 eq "$(pick card.close '[(.On | join(" ")), .Card, (.Key // "")] | join(" ")')" "agent/swb-1-conductor req_elsewhere-9 "
 ok "an update, an answer acknowledged and a card withdrawn name the card and the row and key of its post; a card posted elsewhere is on its agent"
 
 call pendingyou post_request "$(post 'my own key ZQXKEY')" '{"structuredContent": {"requestId": "req_abc-5"}}' | cards
 eq "$(pick card.post '[(.On | join(" ")), .Card, (.Key // "-")] | join(" ")')" "agent/swb-1-conductor req_abc-5 -"
+call pendingyou post_request "$(post land/tenant-environments)" '{"structuredContent": {"requestId": "req_abc-10"}}' | cards
+eq "$(pick card.post '[(.On | join(" ")), .Card, (.Key // "-")] | join(" ")')" "agent/swb-1-conductor req_abc-10 -"
 call pendingyou post_request "$(post review/x/abc1234)" '{"content": [{"type": "text", "text": "Posted."}]}' | cards
 eq "$(pick card.post '[(.On | join(" ")), (.Card // "-"), .Key] | join(" ")')" "unit/x - review/x/abc1234"
 recfix --check "$runs/$day.rec" || fail "the hook's entries fail recfix --check"
 eq "$(grep -rl ZQX "$(home_of mac-studio)/.local/state/crew" || true)" ""
-ok "an unkeyed card is on its agent with no Key, a result with no id is a post with no Card, and nothing written on a card is recorded"
+ok "an unkeyed card, or one under a bolt's bare land/<bolt>, is on its agent with no Key, a result with no id is a post with no Card, and nothing written on a card is recorded"
+
+# A landing card posted under the bare land/<bolt> by a crew from before landings were keyed by the bolt's head.
+emit --act card.post --on bolt/tenant-environments --field Card=req_old-1 --field Key=land/tenant-environments >/dev/null
+expect_ok cards <<<"$(call pendingyou ack_answer '{"requestId": "req_old-1", "outcome": "landed"}' '{"structuredContent": {"status": "resolved"}}')"
+lacks "$out" "crew cards:"
+eq "$(pick card.close '[(.On | join(" ")), .Card, .Key] | join(" ")')" "bolt/tenant-environments req_old-1 land/tenant-environments"
+ok "a card posted under a key that is no longer a row's is closed under the key and row of its post, with no session to end"
 
 n=$(entries | wc -l)
 call pendingyou post_request "$(post review/x/abc1234)" '{"isError": true, "content": [{"type": "text", "text": "refused"}]}' | cards
