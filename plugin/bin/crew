@@ -781,11 +781,12 @@ case $cmd in
     ensure_flow; ensure_rail
     greet_started ${started[@]+"${started[@]}"}; wait ;;
   _rail)  # crew _rail <label>: the rail tab's list, printed again every 30 seconds and as soon as the run record gains
-    # an entry; a burst of entries refreshes it once. Once the follow ends, it refreshes on the clock alone.
+    # an entry; a burst of entries refreshes it once. Once the follow ends, it refreshes on the clock alone. Each refresh
+    # is one read (crew _views), which prints the rail as crew rail does and writes the board for the board tab.
     label=${2:?usage: crew _rail <label>}
     exec 3< <(bash "$0" events --follow --label "$label" 2>/dev/null)
     while :; do
-      out=$(bash "$0" rail --label "$label" 2>&1 || true)
+      out=$(bash "$0" _views "$label" 2>&1 || true)
       printf '\033[H\033[2J%s\n' "$out"
       if read -r -t 30 -u 3 _; then
         while read -r -t 2 -u 3 _; do :; done

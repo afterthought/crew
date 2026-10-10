@@ -14,7 +14,7 @@
 
 ## 3. The board tab
 
-- [ ] 3.1 The rail tab's loop makes one read each refresh, prints the rail from it as `crew rail` prints it, and writes the board's frame whole for the board tab (design: *The rail tab's loop hands the board to the board tab*; Task notes 3.1; `state.4`).
+- [x] 3.1 The rail tab's loop makes one read each refresh, prints the rail from it as `crew rail` prints it, and writes the board's frame whole for the board tab (design: *The rail tab's loop hands the board to the board tab*; Task notes 3.1; `state.4`).
 - [ ] 3.2 `crew operator up` opens one `board` tab after `rail` that draws the latest frame at its own width, says how old a stale frame is, and says how to open both tabs afresh when there is none (design: *The rail tab's loop hands the board to the board tab*; Task notes 3.2; `roles.4`).
 - [ ] 3.3 `tests/t-board.sh` proves one read serves both tabs and the board tab's three states, `tests/t-record-team.sh` proves the tab is opened once, and README and `_open.md` say the board is drawn (Task notes 3.3; `tests.2`, `docs.2`).
 - [ ] 3.4 `tests/suite t-board t-rail t-record-team t-reads-once t-sites t-bolts t-docs` ends with "0 failed" (Task notes 3.4).
