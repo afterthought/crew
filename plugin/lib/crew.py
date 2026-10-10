@@ -130,6 +130,16 @@ def load():
             f"(swancloud's lib/crew-teams.nix), which gives every partition one")
         isinstance(p["state"], str) and re.match(r"^[^/\s]+/[^/\s]+$", p["state"]) or fail(
             f"{what}: 'state' is its state repository as GitHub owner/name, not {json.dumps(p['state'])}")
+        # The partition's batch setting: a batch of its constructed changes is due every `every` of them or every
+        # `hours` hours (briefs.12). Never a default: swancloud's lib/crew-teams.nix writes it for every partition.
+        r = p.get("review")
+        isinstance(r, dict) and "every" in r and "hours" in r or fail(
+            f"{what} in {TEAMS} has no batch setting ('review', with 'every' and 'hours'): regenerate {TEAMS} from the "
+            f"machine's configuration (swancloud's lib/crew-teams.nix), which gives every partition one")
+        isinstance(r["every"], int) and not isinstance(r["every"], bool) and r["every"] > 0 or fail(
+            f"{what}: 'review.every' is how many changes make a batch, a whole number of at least 1, not {json.dumps(r['every'])}")
+        isinstance(r["hours"], (int, float)) and not isinstance(r["hours"], bool) and r["hours"] > 0 or fail(
+            f"{what}: 'review.hours' is how many hours make a batch due, a number above 0, not {json.dumps(r['hours'])}")
         host, sess = session_of(hosts, f"{what}'s main level", machine, session)
         if sess.get("partition") != name:
             fail(f"{what}'s main level runs in {machine}'s session {session}, which is in partition {sess.get('partition')}, not {name}")

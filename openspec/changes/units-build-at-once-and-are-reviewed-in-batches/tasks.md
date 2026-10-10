@@ -20,7 +20,7 @@
 ## 3. Batches
 
 - [ ] 3.1 Due changes are counted across the partition from the run record, a batch is due at N or at T hours, the planner starts the reviewer with `crew review <label>`, the reviewer's file is its deliverable, the planner posts cards of at most five units keyed `batch/<n>-<k>`, which the card hook allows, `crew card session` starts one session for each unit of a card on its team's host, and a bolt is offered for landing only once every unit's latest change has been in a batch (design.md, Decision 7; Task notes 3.1). Verify `tests/suite --affected` ends with "0 failed".
-- [ ] 3.2 crew refuses a partition whose teams-file entry carries no batch setting, naming the field; the setting itself is written by swancloud's unit `partitions-carry-their-batch-setting`, landed first (design.md, Decision 10; Task notes 3.2). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 3.2 crew refuses a partition whose teams-file entry carries no batch setting, naming the field; the setting itself is written by swancloud's unit `partitions-carry-their-batch-setting`, landed first (design.md, Decision 10; Task notes 3.2). Verify `tests/suite --affected` ends with "0 failed".
 
 ## 4. Merging through sluice
 

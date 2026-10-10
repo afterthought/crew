@@ -61,13 +61,13 @@ teams_json() { cat <<'EOF'
 { "version": 2,
   "partitions": [
     { "label": "wldn", "partition": "clients/willdan", "blueprints": ["WilldanGroup/willdan-blueprints"],
-      "state": "WilldanGroup/crew-state",
+      "state": "WilldanGroup/crew-state", "review": {"every": 5, "hours": 4},
       "machine": "chuck-herdr-alpha", "session": "wldn-3" },
     { "label": "madswan", "partition": "business", "blueprints": ["afterthought/blueprints", "agentplot/blueprints"],
-      "state": "afterthought/crew-state",
+      "state": "afterthought/crew-state", "review": {"every": 5, "hours": 4},
       "machine": "mac-studio", "session": "madswan-1" },
     { "label": "swancloud", "partition": "personal", "blueprints": ["afterthought/blueprints"],
-      "state": "afterthought/crew-state",
+      "state": "afterthought/crew-state", "review": {"every": 5, "hours": 4},
       "machine": "mac-studio", "session": "swancloud-1" } ],
   "teams": [
     { "name": "swb-1", "system": "Switchboard", "machine": "chuck-herdr-alpha", "session": "wldn-1",

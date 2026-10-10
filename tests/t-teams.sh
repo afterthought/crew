@@ -52,6 +52,22 @@ world_teams
 expect_ok crewpy teams
 ok "a partition without a state repository, or with one not named owner/name, is refused, naming the fix"
 
+edit teams "del $(part wldn)['review']"
+expect_fail "partition wldn in" crewpy teams
+has "$out" "has no batch setting ('review', with 'every' and 'hours')"; has "$out" "swancloud's lib/crew-teams.nix"
+world_teams
+edit teams "del $(part madswan)['review']['hours']"
+expect_fail "partition madswan in" crewpy teams; has "$out" "has no batch setting ('review', with 'every' and 'hours')"
+world_teams
+edit teams "$(part madswan)['review']['every'] = 0"
+expect_fail "partition madswan: 'review.every' is how many changes make a batch, a whole number of at least 1, not 0" crewpy teams
+world_teams
+edit teams "$(part swancloud)['review']['hours'] = '4'"
+expect_fail "partition swancloud: 'review.hours' is how many hours make a batch due, a number above 0, not \"4\"" crewpy teams
+world_teams
+expect_ok crewpy teams
+ok "a partition without its batch setting, or with one crew can't read, is refused, naming the field and the fix"
+
 # A team in a clients/willdan session naming afterthought's blueprints: refused, naming wldn's blueprints repos.
 edit hosts "d['hosts']['mac-studio']['sessions']['wldn-5']['repos'].append('afterthought/blueprints')"
 edit teams "$(team atl-1)['repos'] = ['atlas-kit', 'blueprints']"
