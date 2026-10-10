@@ -161,7 +161,17 @@ HOST=$box expect_ok crew card session "$vx2"; p4=$(rec $box "$vx2" .pid)
 eq "$(listed $box)" "$p4"
 ok "a session the user closed undecided is said so and started again with its result moved aside, and one killed ends with no decision and is started again"
 
+looked() { grep -c . "$T/plannotator-sessions.log" 2>/dev/null || true; }
+n=$(looked)
 HOST=$box crew card wait "$vx2" > "$T/wait.out" 2>&1 & waiting=$!
+python3 - "$T/plannotator-sessions.log" "$n" <<'EOF2'
+import sys, time
+give_up = time.monotonic() + 10
+while sum(1 for _ in open(sys.argv[1])) <= int(sys.argv[2]):
+    if time.monotonic() > give_up:
+        sys.exit("the wait never looked at plannotator's sessions")
+    time.sleep(0.05)
+EOF2
 HOST=$box expect_ok crew card end "$vx2"
 eq "$out" "ended $vx2's session, plannotator pid $p4"
 settle gone "$p4"

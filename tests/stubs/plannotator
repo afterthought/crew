@@ -13,7 +13,8 @@ $CREW_TEST_LOG. It then waits for the decision a test writes to $HOME/.stub-plan
 object ({"decision": "approved", "feedback": ...}, "annotated", or "dismissed"), and writes it as plannotator does:
 atomically to the result file and to stdout, then exits. Killed first, it writes no result.
 
-`plannotator sessions --json` lists the registered sessions whose pid is alive.
+`plannotator sessions --json` lists the registered sessions whose pid is alive, and, for the test alone, adds a line
+to $CREW_TEST_ROOT/plannotator-sessions.log, so a test knows a wait has looked.
 
 It ends by itself when its registry is gone, as when tests/run removes a passed test's scratch directory, or after
 five minutes, so no stub outlives its test for long."""
@@ -47,6 +48,9 @@ def live():
 
 args = sys.argv[1:]
 if args[:1] == ["sessions"]:
+    if os.environ.get("CREW_TEST_ROOT"):
+        with open(os.path.join(os.environ["CREW_TEST_ROOT"], "plannotator-sessions.log"), "a") as log:
+            log.write(f"{os.environ.get('CREW_TEST_HOST', '?')} sessions\n")
     if "--json" in args:
         print(json.dumps([dict({k: s[k] for k in LISTED if k != "index"}, index=i) for i, s in enumerate(live(), 1)]))
     else:
