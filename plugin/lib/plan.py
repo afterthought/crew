@@ -781,20 +781,23 @@ GATHER = (LIB / "gather.py").read_text()
 LATER = ("code", "verify", "merged", "landed")
 
 
-def survey(fleet, held, sites=False):
+def survey(fleet, held, sites=False, board=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)]. The answer is
     per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
-    the host's running portless routes too. Each kit is asked for the verify reports of every team that builds it on
-    that host. A kit the command has already read is not asked again, and what a host answers is kept for the
-    command's later steps; a sites survey is neither served nor kept."""
+    the host's running portless routes too; board implies sites and adds each team's slots and the explorations on
+    each kit's main, for the board. Each kit is asked for the verify reports, and with board the slots, of every team
+    that builds it on that host. A kit the command has already read is not asked again, and what a host answers is
+    kept for the command's later steps; a sites survey is neither served nor kept."""
+    sites = sites or board
     hosts = {}
     for team, bolt in held:
         t = fleet["teams"].get(team)
         if not t:
             continue
+        mates = sorted(o["name"] for o in fleet["teams"].values() if o["machine"] == t["machine"] and o["kit"]["main"] == t["kit"]["main"])
         k = hosts.setdefault(t["machine"], {}).setdefault(t["kit"]["main"], {"main": t["kit"]["main"], "dir": t["kit"]["dir"], "bolts": [],
-            "reports": sorted({f"~/.local/state/{o['name']}-team/reports" for o in fleet["teams"].values()
-                               if o["machine"] == t["machine"] and o["kit"]["main"] == t["kit"]["main"]})})
+            "reports": [f"~/.local/state/{o}-team/reports" for o in mates],
+            **({"slots": {o: f"~/.local/state/{o}-team/slots" for o in mates}} if board else {})})
         if bolt and bolt not in k["bolts"]:
             k["bolts"].append(bolt)
     out = {}
@@ -802,7 +805,8 @@ def survey(fleet, held, sites=False):
         have = {} if sites else {m: k for m, k in READ.kits(host).items() if m in kits}
         ask = [k for m, k in kits.items() if m not in have]
         if ask:
-            r = crew.on_machine(fleet, host, ["python3", "-", json.dumps({"kits": ask, "sites": sites})], input=GATHER)
+            req = {"kits": ask, "sites": sites, **({"board": True} if board else {})}
+            r = crew.on_machine(fleet, host, ["python3", "-", json.dumps(req)], input=GATHER)
             if r.returncode:
                 out[host] = {"ok": False, "error": ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]}
                 continue
@@ -3466,8 +3470,10 @@ def rail_record(fleet, found, props):
     and the record's files are named by the UTC day. Returns when each open proposal was proposed, {(label,
     proposal/<n>): time}, from the earliest plan.propose entry naming it (a proposal whose entry isn't found is left
     out); the cards open, each {label, card, key, on, by, host, at}, from each card.post with a Card that no later
-    card.close of that Card closes; and the hosts whose record did not answer, {label: hosts}."""
-    times, cards, unread = {}, [], {}
+    card.close of that Card closes; the hosts whose record did not answer, {label: hosts}; the landings, each
+    {label, bolt, units, at, by, host}, from each bolt.land entry not refused, oldest first; and the team each bolt was
+    given to, {(label, bolt): team}, from the newest bolt.give entry naming it that was not refused."""
+    times, cards, unread, landings, gives = {}, [], {}, [], {}
     today = datetime.datetime.now(datetime.timezone.utc).date()
     for l in [l for l, _, _, p in found if p]:
         since = today - datetime.timedelta(days=CARD_DAYS)
@@ -3488,8 +3494,18 @@ def rail_record(fleet, found, props):
                                                   by=e.get("By"), host=e.get("Host"), at=utc(e["At"])))
             elif act == "card.close" and e.get("Card"):
                 posted.pop(e["Card"], None)
+            elif act == "bolt.land" and not e.get("Refused"):
+                bolt = next((o[5:] for o in e["On"] if o.startswith("bolt/")), None)
+                if bolt:
+                    landings.append(dict(label=l, bolt=bolt, units=[o[5:] for o in e["On"] if o.startswith("unit/")], at=utc(e["At"]),
+                                         by=e.get("By"), host=e.get("Host")))
+            elif act == "bolt.give" and not e.get("Refused"):
+                bolt = next((o[5:] for o in e["On"] if o.startswith("bolt/")), None)
+                team = next((o[5:] for o in e["On"] if o.startswith("team/")), None)
+                if bolt and team:
+                    gives[(l, bolt)] = team
         cards += posted.values()
-    return times, cards, unread
+    return times, cards, unread, landings, gives
 
 
 def rail_rows(fleet, found, sv, props, times):
@@ -3569,20 +3585,33 @@ def stray_cards(fleet, found, sv, rows, cards, unread):
     return sorted(out, key=lambda c: (c["at"], c["card"]))
 
 
-def rail_view(fleet, a):
-    """crew rail [--label L]: what waits on the user, in four groups in order, each row with when it began to wait, how
-    long ago that was, the commands that answer it, and its card key with whether a card is open for it and whose,
-    oldest first; then any open card whose row is gone, with the tell that asks its owner to close it. Read from the
-    plans, the proposals, the kits and the run record; nothing is written."""
-    label = default_label(fleet, a)
-    labels = [label] if label else list(fleet["partitions"])
+def rail_read(fleet, labels, board=False):
+    """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
+    found and the errors of those that could not be read, the survey, the open proposals, the cards, the hosts whose
+    record did not answer, the landings and gives, and the rows. The survey is of each host holding a bolt; with board,
+    of every team of the labels, with the bolt it holds or none, and its dev servers, slots and explorations too, for
+    the board (board.py), from which the rail's text is made as well. Nothing is written."""
     errors = {}
     found = plans(fleet, labels, errors)
-    sv = survey(fleet, [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")])
+    held = [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")]
+    if board:
+        held += [(t, None) for l in labels for t in crew.partition_of(fleet, l)["teams"]]
+    sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
-    times, cards, unread = rail_record(fleet, found, props)
-    rows = rail_rows(fleet, found, sv, props, times)
-    now = datetime.datetime.now(datetime.timezone.utc)
+    times, cards, unread, landings, gives = rail_record(fleet, found, props)
+    return dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
+                gives=gives, rows=rail_rows(fleet, found, sv, props, times))
+
+
+def rail_text(fleet, labels, read, now):
+    """The rail as crew rail prints it, from a read rail_read made: four groups in order, each row with when it began to
+    wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it and
+    whose, oldest first; then any open card whose row is gone, with the tell that asks its owner to close it. A host
+    is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more (the board's)
+    gives the same text."""
+    found, rows, cards = read["found"], read["rows"], read["cards"]
+    holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
+    sv = {h: v for h, v in read["sv"].items() if h in holding}
     lines = [f"What waits on you ({', '.join(labels)}), as of {now.astimezone():%H:%M:%S}"]
     for g in RAIL:
         lines += ["", g]
@@ -3597,7 +3626,7 @@ def rail_view(fleet, a):
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
             lines += [f"    {'card:':<8}{r['key']}, open, asked by {c['by']}" for c in cards
                       if (c["label"], c["key"]) == (r["label"], r["key"])] or [f"    {'card:':<8}{r['key']}, none open"]
-    stray = stray_cards(fleet, found, sv, rows, cards, unread)
+    stray = stray_cards(fleet, found, sv, rows, cards, read["unread"])
     if stray:
         lines += ["", "open cards with no row:"]
     for c in stray:
@@ -3608,9 +3637,19 @@ def rail_view(fleet, a):
     for h, v in sv.items():
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
-    print("\n".join(lines))
-    if errors:
-        sys.exit("\n".join(errors.values()))
+    return "\n".join(lines)
+
+
+def rail_view(fleet, a):
+    """crew rail [--label L]: what waits on the user, as rail_text gives it, read from the plans, the proposals, the
+    kits and the run record; nothing is written. It prints everything it could read, then exits non-zero naming each
+    plan it could not."""
+    label = default_label(fleet, a)
+    labels = [label] if label else list(fleet["partitions"])
+    read = rail_read(fleet, labels)
+    print(rail_text(fleet, labels, read, datetime.datetime.now(datetime.timezone.utc)))
+    if read["errors"]:
+        sys.exit("\n".join(read["errors"].values()))
 
 
 # ------------------------------------------------------------------------------------------------ crew card

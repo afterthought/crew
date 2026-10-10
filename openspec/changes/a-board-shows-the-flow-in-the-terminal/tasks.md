@@ -3,7 +3,7 @@
 ## 1. The read the board needs
 
 - [x] 1.1 Asked for the board, gather.py answers each team's slots and each kit's explorations on main beside what it answers now, and `tests/t-sites.sh` and `tests/t-reads-once.sh` still pass (design: *One read, two renderings*; Task notes 1.1; `read.2`, `code.1`).
-- [ ] 1.2 `survey` can make the board's read, `rail_record` also gives the landings and gives it reads, and the rail's text is made from a read it is handed, with `tests/t-rail.sh` passing untouched (design: *One read, two renderings*; Task notes 1.2; `plan.12`).
+- [x] 1.2 `survey` can make the board's read, `rail_record` also gives the landings and gives it reads, and the rail's text is made from a read it is handed, with `tests/t-rail.sh` passing untouched (design: *One read, two renderings*; Task notes 1.2; `plan.12`).
 
 ## 2. crew board
 
