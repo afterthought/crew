@@ -104,6 +104,23 @@ has "$(line_of "$inc" "signals captured by wldn-planner")" "1 not moved"
 has "$inc" "Tenants never share an environment."
 ok "a signal routed to a unit leaves the board, and its capturer's group counts one fewer"
 
+# Captures another tool wrote on the blueprints' main: one whose at has no zone, read as UTC, and one in +02:00. The
+# board's JSON gives both in UTC; its text says their age, read in a zone that is not UTC.
+utc_at() { python3 -c 'import datetime, sys; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=int(sys.argv[1]))).astimezone(datetime.timezone(datetime.timedelta(hours=int(sys.argv[2])))).strftime(sys.argv[3]))' "$@"; }
+for c in 2026-10-02-otter:"$(utc_at 3 0 %Y-%m-%dT%H:%M:%S)" 2026-10-03-otter:"$(utc_at 5 2 %Y-%m-%dT%H:%M:%S+02:00)"; do
+  mkdir -p "$w/signals/${c%%:*}"
+  printf -- '---\ncapture: %s\nsource: otter\nat: %s\nsignals: 1\n---\n' "${c%%:*}" "${c#*:}" > "$w/signals/${c%%:*}/capture.md"
+  printf -- '---\nsignal: %s/01-said\nkind: ask\n---\n\nSaid in %s.\n' "${c%%:*}" "${c%%:*}" > "$w/signals/${c%%:*}/01-said.md"
+done
+commit_all "$w" "signals: two otter captures"; git -C "$w" push -q origin main
+TZ=Pacific/Honolulu expect_ok crew board --label wldn
+has "$(line_of "$(lane "$out" Inception)" "signals captured by otter")" "2 not moved, the oldest captured 5h 0"
+expect_ok crew board --label wldn --json; json=$out
+eq "$(j '[.partitions[0].inception.signals[] | select(.signal | endswith("-otter/01-said")) | .at[:13]] | join(" ")')" "$(utc_at 5 0 %Y-%m-%dT%H) $(utc_at 3 0 %Y-%m-%dT%H)"
+eq "$(j '[.partitions[0].inception.signals[] | select(.signal | endswith("-otter/01-said")) | .at | test("^[0-9-]{10}T[0-9:]{8}Z$")] | all')" "true"
+git -C "$w" rm -rq signals/2026-10-02-otter signals/2026-10-03-otter; git -C "$w" commit -qm "signals: the otter captures gone"; git -C "$w" push -q origin main
+ok "a capture whose at has no zone is read as UTC, and the board's JSON gives every capture's time in UTC, oldest first"
+
 bp=$(lane "$b" "Bolt plan")
 eq "$(line_of "$bp" "apex-zones")" "  switchboard-kit apex-zones  Apexes are zones."
 eq "$(line_of "$bp" "zone-one")" "    zone-one  ready"

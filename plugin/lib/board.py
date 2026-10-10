@@ -31,6 +31,7 @@ ATTENTION = "!"
 FRAMES = pathlib.Path.home() / ".cache/crew/board"
 STALE = 90  # seconds: three of the rail tab's periods
 SIGNAL = re.compile(r"^signals/([^/]+)/([0-9]{2}-[^/]+)\.md$")
+DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 STYLES = {"bold": "\033[1m", "dim": "\033[2m"}
 
 
@@ -39,13 +40,20 @@ def iso(t):
 
 
 def when(at):
-    """A time the board was handed, an ISO time or a date alone, as an aware datetime; None when it is neither."""
+    """A time the board was handed, an ISO time or a date alone, as an aware datetime, one without a zone taken as UTC
+    (a date as its midnight there); None when it is neither."""
     try:
-        if at and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", at):
-            return datetime.datetime.fromisoformat(at).replace(tzinfo=datetime.timezone.utc)
-        return plan.utc(at)
+        t = datetime.datetime.fromisoformat(at.replace("Z", "+00:00")) if at else None
     except ValueError:
         return None
+    return t if not t or t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)
+
+
+def stamp(at):
+    """A capture's time as the board's data holds it: a date alone as it is, a time in UTC whatever zone it was
+    written in; None when it is neither. The board's text says it in the reader's own time."""
+    t = when(at)
+    return None if not t else at if DATE.fullmatch(at) else iso(t)
 
 
 # ------------------------------------------------------------------------------------------------- the read
@@ -73,8 +81,8 @@ def texts(repo, tip, paths):
 
 def signals_at(repo, tip, home, moved):
     """Each signal at tip whose id has no move, with its capture's captured_by (its source when it has none) and when
-    the capture was made (its at, else its event_date, which is what a signal's age counts from), its kind and the
-    first line of its body."""
+    the capture was made (its at, else its event_date, which is what a signal's age counts from, as stamp gives it),
+    its kind and the first line of its body."""
     sigs = [m.groups() for m in map(SIGNAL.match, plan.git(repo, "ls-tree", "-r", "--name-only", tip, "--", "signals/").splitlines()) if m]
     sigs = [(c, n) for c, n in sigs if f"{c}/{n}" not in moved]
     got = texts(repo, tip, sorted({f"signals/{c}/capture.md" for c, _ in sigs}) + [f"signals/{c}/{n}.md" for c, n in sigs])
@@ -83,7 +91,7 @@ def signals_at(repo, tip, home, moved):
         cap, text = got.get(f"signals/{c}/capture.md"), got.get(f"signals/{c}/{n}.md")
         body = re.sub(r"^---\n.*?\n---\n", "", text or "", count=1, flags=re.S)
         out.append({"signal": f"{c}/{n}", "home": home, "captured_by": plan.field(cap, "captured_by") or plan.field(cap, "source") or None,
-                    "at": plan.field(cap, "at") or plan.field(cap, "event_date") or None, "kind": plan.field(text, "kind") or None,
+                    "at": stamp(plan.field(cap, "at") or plan.field(cap, "event_date")), "kind": plan.field(text, "kind") or None,
                     "first": next((l.strip() for l in body.splitlines() if l.strip()), None)})
     return out
 
