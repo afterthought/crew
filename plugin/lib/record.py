@@ -42,16 +42,16 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Heads Paths Reached Forecast Card Key
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Card Key
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
 # it delivered, as an object) and Observed, a tell's Chars, the Amended of a construct's start that marked its unit
-# amended, a forecast's Heads (the later unit's and the other's, <name>@<sha>), its conflicting Paths and how it Reached
+# amended, the After units' heads a construct's place Took, a forecast's Heads (the later unit's and the other's, <name>@<sha>), its conflicting Paths and how it Reached
 # the later unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), and a
 # card act's Card (the Pending You card's id) and Key (the rail row's card key).
-EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Heads", "Paths", "Reached", "Forecast",
-         "Card", "Key")
+EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
+         "Forecast", "Card", "Key")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")

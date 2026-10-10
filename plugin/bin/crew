@@ -449,8 +449,8 @@ carry() {  # carry <slot>: the fix carries the bolt onto main (plan _carry said 
   reap
 }
 reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
-  # bolt, been dropped from the plan or left the team's bolt, once its agent is not working; then remove the
-  # worktrees whose work is over
+  # bolt, been dropped from the plan or left the team's bolt, once its agent is not working; rebase each dependent
+  # whose After unit has merged, once its agent is not working; then remove the worktrees whose work is over
   local slot kind name stage rest
   if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" >/dev/null 2>&1 || true; fi
   while read -r slot kind name stage rest; do
@@ -469,6 +469,7 @@ reap() {  # record the stages that ended with nobody waiting; free every slot wh
       *) echo "$(name_of "$slot") is free: $name has merged into its bolt" ;;
     esac
   done < <(plan _slots "$TEAM" 2>/dev/null || true)
+  plan _rebase "$TEAM" || true
   plan _tidy "$TEAM" || true
 }
 unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit no longer in the team's bolt
@@ -664,6 +665,8 @@ case $cmd in
     amended=(); [[ -n $AMENDED ]] && amended=(--field Amended=yes --commit "$AMENDED" --id "$ENTRY")
     # The forecasts its prompt carries, named on its start so none is carried twice.
     [[ -n $FORECAST ]] && amended+=(--field "Forecast=$FORECAST")
+    # The heads of the units it comes after that a construct's new place took.
+    [[ -n $TOOK ]] && amended+=(--field "Took=$TOOK")
     run_stage "$slot" "$stage" "$PROMPT" stage.start "$unit" "unit/$unit" --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")" \
       ${amended[@]+"${amended[@]}"}
     echo "$(name_of "$slot") has $unit: $stage, in $PLACE"

@@ -2551,6 +2551,25 @@ def in_bolt(fleet, a):
 
 
 HEAD = r"""cd "$1" && git rev-parse HEAD"""
+# A dependent's place takes the head of each unmerged After unit, as it stands, while it holds nothing of its own beyond
+# the bolt and their work: printed as "<unit> <head>" for each it holds. A merge that conflicts is undone, the place put
+# back where it was, and printed as "conflict <unit> <paths...>", exit 3. Never a push, never a write to their branches.
+TAKE = r"""cd "$1" || exit 1
+unit=$2 bolt=$3; shift 3
+start=$(git rev-parse HEAD)
+refs=(); for a; do refs+=("refs/heads/unit/$a"); done
+[ -z "$(git rev-list -n1 HEAD --not "refs/heads/bolt/$bolt" "${refs[@]}")" ] || exit 0
+for a; do
+  if ! git merge-base --is-ancestor "unit/$a" HEAD; then
+    if ! git merge -q --no-edit -m "chore($unit): build on $a as it stands" "unit/$a" >/dev/null 2>&1; then
+      paths=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+      git merge --abort >/dev/null 2>&1; git reset -q --keep "$start"
+      echo "conflict $a $paths"; exit 3
+    fi
+  fi
+  echo "$a $(git rev-parse --short=7 "unit/$a")"
+done
+"""
 
 
 def mark_amended(fleet, label, unit, bolt, head):
@@ -2646,11 +2665,35 @@ def overlapping(plan, st_all, k, unit, mine):
     return out
 
 
-def undeclared(fleet, t, bolt, unit, entries):
-    """The paths a unit changed against its bolt that no Touches entry matches, its own change's folder aside."""
-    _, out = kit_git(fleet, t, t["kit"]["main"], "diff", "--name-only", f"bolt/{bolt}...unit/{unit}")
+def undeclared(fleet, t, bolt, unit, entries, deps=()):
+    """The paths a unit changed against its bolt that no Touches entry matches, its own change's folder aside. A
+    dependent's place holds its After units' work as it stood: a path only their commits changed is theirs, not the
+    dependent's."""
+    main = t["kit"]["main"]
+    _, out = kit_git(fleet, t, main, "diff", "--name-only", f"bolt/{bolt}...unit/{unit}")
+    paths = [p for p in out.splitlines() if p]
+    held = [f"refs/heads/unit/{d}" for d in deps if head_of(fleet, t, main, f"unit/{d}")]
+    if held:
+        _, mine = kit_git(fleet, t, main, "log", "--format=", "--name-only", "--no-merges", f"unit/{unit}", "--not", f"refs/heads/bolt/{bolt}", *held)
+        paths = [p for p in paths if p in set(mine.splitlines())]
     own = f"openspec/changes/{unit}/"
-    return [p for p in out.splitlines() if p and not p.startswith(own) and not any(matches(e, p) for e in entries)]
+    return [p for p in paths if not p.startswith(own) and not any(matches(e, p) for e in entries)]
+
+
+def take(fleet, t, place, unit, bolt, deps):
+    """A dependent's place takes the head of each unmerged After unit with a branch, as it stands, while it holds
+    nothing of its own (TAKE): the heads it holds, as "<unit>@<head>" words for its construct's start. Refused, with the
+    place as it was, when two of them conflict."""
+    if not deps:
+        return ""
+    r = crew.on_machine(fleet, t["machine"], ["bash", "-c", TAKE, "crew", place, unit, bolt, *deps])
+    READ.drop_kit(t["machine"], t["kit"]["main"])
+    if r.returncode == 3:
+        _, other, *paths = r.stdout.strip().splitlines()[-1].split()
+        fail(f"unit {unit}'s place can't take {other}'s work with the rest it comes after: they conflict on {', '.join(paths)}; "
+             "order the units it comes after with crew unit after, then run construct again")
+    r.returncode == 0 or fail(f"on {t['machine']}: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
+    return " ".join(f"{a}@{h}" for a, h in (l.split() for l in r.stdout.strip().splitlines() if l))
 
 
 def run_check(fleet, a):
@@ -2683,6 +2726,8 @@ def run_check(fleet, a):
                 f"unit {a.unit} is in {st}, so construct run again marks it amended: a plan write only {t['name']}-conductor "
                 "or the user makes")
         make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        took = take(fleet, t, place, a.unit, bolt, [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")
+                                                   and (st_all.kit(plan.bolt(bolt))[0] or {"places": {}})["places"].get(d)])
         if marking:
             head = s.get("head") or host_run(fleet, t["machine"], HEAD, place)
             if head != mark:
@@ -2707,7 +2752,7 @@ def run_check(fleet, a):
         st == "verify" or fail(f"unit {a.unit} is in {st}: verify waits until every task is ticked")
         k, _ = st_all.kit(plan.bolt(bolt))
         got = (k["places"].get(a.unit) or {}).get("touches") or {}
-        loose = undeclared(fleet, t, bolt, a.unit, got.get("entries", []))
+        loose = undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After"))
         prompt = f"/opsx:verify {a.unit}{words}" + (
             (" Changed and not declared in its Touches: " + ", ".join(loose) + "."
              + ("" if "entries" in got else f" Its change declares no Touches: {got.get('missing')}.")) if loose else "")
@@ -2729,7 +2774,8 @@ def run_check(fleet, a):
     # once the stage has started (stage_ended_row), since starting it can still be refused.
     ends = f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else ""
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
-    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids)))
+    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids),
+             TOOK=took if a.stage == "construct" else ""))
 
 
 def stage_ended_row(fleet, a):
@@ -3334,6 +3380,13 @@ def forecast_words(t, k, bolt, unit, other, paths):
             f"intents, run the tests those paths affect, and commit. " + change_words(main, kdir, k, bolt, other))
 
 
+def amendment_words(t, k, bolt, after):
+    """What an amended After unit says to its dependent: that it was constructed again, and its revised change."""
+    return (f"{after}, which you come after, was constructed again, and you are not held for it: build on its revised "
+            "change, keeping yours true to it. Your place holds its work as it stood when your place was made, and is "
+            f"rebased onto the bolt once it merges. " + change_words(t["kit"]["main"], t["kit"]["dir"], k, bolt, after))
+
+
 def owed_by_unit(t):
     """The stages the team's stages file owes, by the unit or fix each is of."""
     with stages_file(t, shared=True) as lines:
@@ -3361,12 +3414,120 @@ def deliver(fleet, t, entries, unit, stage, words):
     return "prompt"
 
 
+# A dependent's place rebased onto its bolt: printed "rebased" when it moved, nothing when it was already there; a
+# rebase that conflicts is aborted, the place as it was, and printed "conflict <paths...>", exit 3.
+ONTO = r"""cd "$1" || exit 1
+bolt=$2
+git merge-base --is-ancestor "refs/heads/bolt/$bolt" HEAD && exit 0
+if git rebase -q "refs/heads/bolt/$bolt" >/dev/null 2>&1; then echo rebased; exit 0; fi
+paths=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+git rebase --abort >/dev/null 2>&1
+echo "conflict $paths"; exit 3
+"""
+
+
+def landed_at(main, bolt, unit):
+    """The commit on a bolt that brought a unit's change there, the first that holds its folder; None when it holds none."""
+    out = gather.run(["git", "log", "--format=%H", "--reverse", f"refs/heads/bolt/{bolt}", "--", f"openspec/changes/{unit}"], main)
+    return (out or "").split("\n")[0].strip() or None
+
+
+def clean(path):
+    """Whether a worktree has nothing uncommitted and nothing in progress, as plan.9 reads a worktree crew may move."""
+    st = subprocess.run(["git", "-C", path, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
+    if st.returncode or st.stdout.strip():
+        return False
+    for f, _ in IN_PROGRESS:
+        at = subprocess.run(["git", "-C", path, "rev-parse", "--path-format=absolute", "--git-path", f], capture_output=True,
+                            text=True, env=gitenv()).stdout.strip()
+        if at and os.path.exists(at):
+            return False
+    return True
+
+
+def rebase_dependents(fleet, t, plan, st, say):
+    """Each unmerged unit of the team's bolt with a place, one of whose After units has merged since its place last
+    met the bolt, is rebased onto the bolt, only while its agent is not working and its place is clean (teams.2, plan.9):
+    the bolt's commits drop out of it. A rebase that conflicts is aborted, the place as it was, and returned to reach
+    the dependent as a conflict does: [(bolt, unit, paths)]. say(text) reports what was done or left."""
+    main, out = t["kit"]["main"], []
+    owed = owed_by_unit(t)
+    for b in held_by(plan, t["name"]):
+        k, _ = st.kit(b)
+        if not k:
+            continue
+        for u in plan.units_of(b.name()):
+            pl = k["places"].get(u.name())
+            if not pl or st.of(u.name())["stage"] in ("merged", "landed", "unknown"):
+                continue
+            merged = [a for a in u.all("After") if st.of(a)["stage"] in ("merged", "landed")]
+            due = [a for a in merged if (lambda c: c and subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", c, f"refs/heads/unit/{u.name()}"],
+                                                                       env=gitenv()).returncode != 0)(landed_at(main, b.name(), a))]
+            if not due:
+                continue
+            o = owed.get(u.name())
+            if o and crew.agent_status(fleet, o.agent) == "working":
+                say(f"{u.name()} waits to be rebased onto bolt/{b.name()}, now that {', '.join(due)} merged: its agent is working")
+                continue
+            if not clean(pl["path"]):
+                say(f"{u.name()} waits to be rebased onto bolt/{b.name()}, now that {', '.join(due)} merged: {pl['path']} has "
+                    "uncommitted changes or work in progress")
+                continue
+            r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name()], capture_output=True, text=True, env=gitenv())
+            READ.drop_kit(t["machine"], main)
+            if r.returncode == 3:
+                out.append((b.name(), u.name(), r.stdout.strip().split()[1:], due))
+                say(f"rebasing {u.name()} onto bolt/{b.name()} conflicts: its place is as it was, and it is told")
+            elif r.returncode:
+                say(f"{u.name()} was not rebased onto bolt/{b.name()}: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
+            elif r.stdout.strip() == "rebased":
+                record.emit(t["label"], "unit.rebase", [f"unit/{u.name()}", f"bolt/{b.name()}"], frm=[f"unit/{a}" for a in due],
+                            why=f"unit({u.name()}): rebase onto bolt/{b.name()}, now that {', '.join(due)} merged")
+                say(f"{u.name()} is rebased onto bolt/{b.name()}, now that {', '.join(due)} merged")
+    return out
+
+
+def rebase_cmd(fleet, a):
+    """crew _rebase <team>: the team's read rebases each dependent whose After unit has merged (rebase_dependents); a
+    conflict waits for the conductor's next wait, which tells the dependent."""
+    t = crew.team_of(fleet, a.team)
+    plan = plan_of(fleet, t["label"])
+    if plan:
+        rebase_dependents(fleet, t, plan, stages_for(fleet, plan, held_by(plan, t["name"])), print)
+
+
+def amendments(t, plan, st, entries):
+    """For each dependent with a place, each After unit constructed again since the dependent's construct took its
+    head: [(bolt, dependent, after unit, its new head)], read from this host's run record. A construct whose head the
+    dependent already holds, such as one recorded late, is no amendment."""
+    out = []
+    for b in held_by(plan, t["name"]):
+        for u in plan.units_of(b.name()):
+            if st.of(u.name())["stage"] in ("merged", "landed", "unknown") or not u.all("After"):
+                continue
+            starts = [e for e in entries if e.get("Act") == "stage.start" and f"stage/{u.name()}/construct" in e["On"] and not e.get("Refused")]
+            if not starts:
+                continue
+            since = (starts[0]["At"], starts[0]["Id"])
+            took = dict(w.split("@", 1) for e in starts for w in (e.get("Took") or "").split() if "@" in w)
+            for a in u.all("After"):
+                ends = [e for e in entries if e.get("Act") == "stage.end" and f"stage/{a}/construct" in e["On"]
+                        and e.get("Ended") == "delivered" and (e["At"], e["Id"]) > since]
+                head = (ends[-1].get("Delivered") or "").rpartition("@")[2] if ends else ""
+                held = took.get(a)
+                if head and head != held and not (held and subprocess.run(
+                        ["git", "-C", t["kit"]["main"], "merge-base", "--is-ancestor", head, held], env=gitenv()).returncode == 0):
+                    out.append((b.name(), u.name(), a, head))
+    return out
+
+
 def reach(fleet, t):
     """On each of the conductor's waits, before it waits: for each unmerged unit of the team's bolt with a place, git
     merge-tree on the team's host forecasts its merge with the bolt and with each unmerged unit ahead of it in the file's
-    order, writing no ref. A conflict is a forecast for the later unit, recorded once for a pair of heads (`forecast`,
-    with both heads, the paths and how it reached the unit) and reaching it once (deliver). The earlier unit is told
-    nothing. A forecast between two unmerged units gives the later After on the earlier, in a write that is the waiting
+    order, writing no ref; a unit that conflicts with the bolt resolves that first, and is forecast against the units
+    ahead of it once it is clean with the bolt. A conflict is a forecast for the later unit, recorded once for a pair of
+    heads (`forecast`, with both heads, the paths and how it reached the unit) and reaching it once (deliver). The
+    earlier unit is told nothing. A forecast between two unmerged units gives the later After on the earlier, in a write that is the waiting
     conductor's own (plan.13, roles.1). What crew can't read or write here is said on standard error, and the wait
     goes on (teams.12)."""
     label, main = t["label"], t["kit"]["main"]
@@ -3377,8 +3538,37 @@ def reach(fleet, t):
     bolts = held_by(plan, t["name"])
     with READ.fresh():
         st = stages_for(fleet, plan, bolts)
+    say = lambda text: print(text, file=sys.stderr)
+    met = rebase_dependents(fleet, t, plan, st, say)
+    if met:
+        with READ.fresh():
+            st = stages_for(fleet, plan, bolts)
     entries = local_entries(label)
-    done = {e.get("Heads") for e in entries if e.get("Act") == "forecast" and e.get("Heads")}
+    done = {e.get("Heads") for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Heads")}
+    for bolt, name, paths, due in met:
+        k, _ = st.kit(plan.bolt(bolt))
+        pl = (k or {"places": {}})["places"].get(name)
+        bhead = (k or {"bolts": {}})["bolts"].get(bolt, {}).get("head")
+        heads = f"{name}@{(pl or {}).get('head', '')[:7]} bolt/{bolt}@{(bhead or '')[:7]}"
+        if not pl or not bhead or heads in done:
+            continue
+        way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, bolt, name, f"bolt/{bolt}", paths))
+        if way:
+            record.emit(label, "forecast", [f"unit/{name}", f"bolt/{bolt}"], why=f"unit({name}): rebase onto bolt/{bolt} conflicts",
+                        Heads=heads, Paths=" ".join(paths), Reached=way)
+            done.add(heads)
+    for bolt, name, a, ahead in amendments(t, plan, st, entries):
+        heads = f"{name} {a}@{ahead}"
+        if heads in done:
+            continue
+        k, _ = st.kit(plan.bolt(bolt))
+        if not k:
+            continue
+        way = deliver(fleet, t, entries, name, st.of(name)["stage"], amendment_words(t, k, bolt, a))
+        if way:
+            record.emit(label, "amendment", [f"unit/{name}", f"unit/{a}"], why=f"unit({name}): {a} was constructed again",
+                        Heads=heads, Reached=way)
+            done.add(heads)
     for b in bolts:
         k, why = st.kit(b)
         if not k:
@@ -3392,13 +3582,15 @@ def reach(fleet, t):
             others = ([(f"bolt/{b.name()}", bolt_head)] if bolt_head else []) + [(o.name(), k["places"][o.name()]["head"]) for o in live[:i]]
             for other, ohead in others:
                 heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
-                if heads in done:
-                    continue
                 paths = merge_tree(main, ohead, head)
                 if paths is None:
                     print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
                     continue
                 if not paths:
+                    continue
+                if heads in done:
+                    if other.startswith("bolt/"):
+                        break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
                     continue
                 if not other.startswith("bolt/") and other not in u.all("After"):
                     def change(w, name=name, other=other):
@@ -3418,20 +3610,23 @@ def reach(fleet, t):
                     record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
                                 why=f"unit({name}): forecast to conflict with {other}", Heads=heads, Paths=" ".join(paths), Reached=way)
                     done.add(heads)
+                if other.startswith("bolt/"):
+                    break
 
 
 def carried_forecasts(fleet, t, plan, st_all, bolt, unit):
-    """The forecasts waiting to reach a unit in its next stage's prompt: this host's forecast entries for it that reached
-    it by prompt and that no stage start of it has carried since. Returns their ids and their words."""
+    """The forecasts and amendments waiting to reach a unit in its next stage's prompt: this host's entries for it that
+    reached it by prompt and that no stage start of it has carried since. Returns their ids and their words."""
     entries = local_entries(t["label"])
     taken = {i for e in entries if e.get("Act") == "stage.start" and f"unit/{unit}" in e["On"] for i in (e.get("Forecast") or "").split()}
-    waiting = [e for e in entries if e.get("Act") == "forecast" and e.get("Reached") == "prompt" and e["On"][:1] == [f"unit/{unit}"]
-               and e["Id"] not in taken]
+    waiting = [e for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Reached") == "prompt"
+               and e["On"][:1] == [f"unit/{unit}"] and e["Id"] not in taken]
     if not waiting:
         return [], []
     k, _ = st_all.kit(plan.bolt(bolt))
-    return [e["Id"] for e in waiting], [forecast_words(t, k, bolt, unit, e["On"][1][5:] if e["On"][1].startswith("unit/") else e["On"][1],
-                                                      (e.get("Paths") or "").split()) for e in waiting]
+    other = lambda e: e["On"][1][5:] if e["On"][1].startswith("unit/") else e["On"][1]
+    return [e["Id"] for e in waiting], [amendment_words(t, k, bolt, other(e)) if e["Act"] == "amendment" else
+                                        forecast_words(t, k, bolt, unit, other(e), (e.get("Paths") or "").split()) for e in waiting]
 
 
 # ------------------------------------------------------------------------------------------------- the wait
@@ -4372,6 +4567,8 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("team")
     x = sub.add_parser("_tidy")
     x.add_argument("team")
+    x = sub.add_parser("_rebase")
+    x.add_argument("team")
     x = sub.add_parser("_in-bolt")
     x.add_argument("unit")
     x.add_argument("team")
@@ -4400,7 +4597,7 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
