@@ -4,24 +4,25 @@ refuses a card or an area under a key that is not the agent's own, and a row's c
 After it posts, updates, withdraws or closes a card, the card is an entry in its partition's run record, so the rail
 knows which of its rows has a card open, and whose.
 
-The PreToolUse half runs before Pending You's post_request, create_area or update_request in a session crew started.
-Before a card is posted or an area made, it asks plan.card_refusal whether the agent may use the call's
-idempotencyKey: a card's must be a rail row's key the agent owns, which only the planner and the conductors have, and
-an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key is refused in words naming
-the key to use, and so is a call crew could not check, in words saying to post it again later, since a card crew let
-through can't be taken back (read.1). A card posted under a row's key the agent owns is then checked against its row's
-form (FORMS); a change is checked when this host's card.post entry for the card names a row key, for what the change
-gives it: a landing card's high stakes cleared, options on an approval, steps on any card but a landing's, or a
-landing step that lands the bolt. A card in another form is refused with the form to use. A refused call never reaches
-Pending You. What the form check cannot check, the run record among it, is refused with what failed. A change to a card
-under any other key, or to a card this host has no post of, passes unchecked.
+The PreToolUse half is the hook run as `cards --before`, before Pending You's post_request, create_area or
+update_request in a session crew started. Before a card is posted or an area made, it asks plan.card_refusal whether the
+agent may use the call's idempotencyKey: a card's must be a rail row's key the agent owns, which only the planner and
+the conductors have, and an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key is
+refused in words naming the key to use, and so is a call crew could not check, in words saying to post it again later,
+since a card crew let through can't be taken back (read.1). A card posted under a row's key the agent owns is then
+checked against its row's form (FORMS); a change is checked when this host's card.post entry for the card names a row
+key, for what the change gives it: a landing card's high stakes cleared, options on an approval, steps on any card but
+a landing's, or a landing step that lands the bolt. A card in another form is refused with the form to use. A refused
+call never reaches Pending You. What the half cannot otherwise check, its own input that is not a JSON object and the
+run record among it, is refused with what failed. A change to a card under any other key, or to a card this host has
+no post of, passes unchecked.
 
-The PostToolUse half runs after a Pending You tool that posts (post_request), updates (update_request), withdraws
-(cancel_request) or closes (ack_answer) a card, in a session crew started, and writes one entry: card.post, card.update
-or card.close. The entry names the rail row's object in On (proposal/<n>, unit/<unit> or bolt/<bolt>, from the card's
-key), the card's id in Card, and the row's key in Key when the card was posted with one of the four row keys as its
-idempotencyKey. A card with any other key is on agent/<the agent>, with no Key, since its key is text an agent wrote.
-Nothing written on the card is recorded: no title, summary, option, note or outcome.
+The PostToolUse half is the hook run with no argument, after a Pending You tool that posts (post_request), updates
+(update_request), withdraws (cancel_request) or closes (ack_answer) a card, in a session crew started, and writes one
+entry: card.post, card.update or card.close. The entry names the rail row's object in On (proposal/<n>, unit/<unit> or
+bolt/<bolt>, from the card's key), the card's id in Card, and the row's key in Key when the card was posted with one of
+the four row keys as its idempotencyKey. A card with any other key is on agent/<the agent>, with no Key, since its key
+is text an agent wrote. Nothing written on the card is recorded: no title, summary, option, note or outcome.
 
 When a crew agent withdraws or closes a card with a row key, the hook then ends the plannotator session `crew card
 session` started for that key on this host, as `crew card end` does, so no card's session outlives its card.
@@ -30,7 +31,7 @@ A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it,
 it. A session with a CREW_AGENT but no CREW_LABEL is a crew agent whose partition crew can't tell: its card or area is
 refused, naming the missing CREW_LABEL, and nothing it does is recorded. Any other session, and a tool of another
 server, is neither checked nor recorded; a result that is an error writes nothing. The PostToolUse half never fails a
-tool call."""
+tool call, whatever its input."""
 import datetime
 import json
 import os
@@ -251,17 +252,22 @@ def refusal(hook):
     return (key_refusal(hook, tool) if tool in KEYED else None) or (form_check(hook, tool) if tool in FORMED else None)
 
 
+def check():
+    """The PreToolUse half: deny the call with why crew refuses its card or area, or print nothing to let it through."""
+    try:
+        hook = json.load(sys.stdin)
+        if not isinstance(hook, dict):
+            raise ValueError("the hook's input is not a JSON object")
+        reason = refusal(hook)
+    except Exception as e:  # a card crew can't check is refused, never let through unchecked
+        reason = f"crew could not check this card's form: {e}"
+    if reason:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                 "permissionDecisionReason": reason}}))
+
+
 def main():
     hook = json.load(sys.stdin)
-    if hook.get("hook_event_name") == "PreToolUse":
-        try:
-            reason = refusal(hook)
-        except Exception as e:  # a card crew can't check is refused, never let through unchecked
-            reason = f"crew could not check this card's form: {e}"
-        if reason:
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                                     "permissionDecisionReason": reason}}))
-        return
     m = re.fullmatch(r"mcp__(.+)__([a-z_]+)", hook.get("tool_name") or "")
     if not m or not is_pending_you(m.group(1)) or m.group(2) not in ACTS:
         return
@@ -293,6 +299,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--before"]:
+        check()
+        sys.exit(0)
     try:
         main()
     except Exception as e:  # a tool call is never failed by crew's bookkeeping after it, nor by input it can't read

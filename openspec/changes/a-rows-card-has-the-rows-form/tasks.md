@@ -3,7 +3,7 @@
 ## 1. crew refuses a row's card in another form
 
 - [x] 1.1 The card hook knows each row's form, the review card's an approval with a note, and says what is wrong with a card that departs from it (design.md, decision 1; Task notes 1.1).
-- [ ] 1.2 Before Pending You's `post_request` or `update_request` runs in a crew session, the hook refuses a row's card in another form with the form to use, refuses what it cannot check, its own input unreadable among it, and lets every other card, session and server through (design.md, decision 2; Task notes 1.2).
+- [x] 1.2 Before Pending You's `post_request` or `update_request` runs in a crew session, the hook refuses a row's card in another form with the form to use, refuses what it cannot check, its own input unreadable among it, and lets every other card, session and server through (design.md, decision 2; Task notes 1.2).
 - [ ] 1.3 `tests/t-cards.sh` covers each row's form refused and let through, the review card as an approval, an update that takes a landing card out of high stakes, input the check cannot read, and the cards and sessions the check leaves alone (design.md, Task notes 1.3). Verify `tests/suite t-cards` ends with "0 failed".
 
 ## 2. The briefs

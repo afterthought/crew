@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\"",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\" --before",
             "timeout": 30
           }
         ]
