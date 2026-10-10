@@ -39,10 +39,11 @@ cards_say() {  # the card discipline the planner's and the conductor's briefs sh
   for want in "begins with the link to the card's plannotator session, then names the bolt" "in the document's own words" \
     "never reworded" "No card carries a path" "an empty list as its files touched" \
     'one entry in its links, labelled "Read and annotate it in plannotator"' "The link is no artifact" \
-    "update its summary, background and links together"; do
+    "update its summary, background and links together" \
+    "give it the form its row takes, as your brief says" "crew refuses a row's card in another form, and names the form to use"; do
     has "$out" "$want"
   done
-  lacks "$out" "as its artifact of kind"
+  lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"
 }
 cards_say
 for want in "its words the change's Why and the lead sentence of each of its What Changes items, as the proposal words them" \
@@ -59,6 +60,14 @@ for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold
   "close a landing card you have open with what the fix changed" "under the key the rail then shows"; do
   has "$out" "$want"
 done
+for want in "it is a Pending You \`review\` card, looks good or needs changes, with a note" \
+  "it is a \`choice\` card, or a \`multi\` when the user may pick several findings, whose options are what you would do" \
+  "an \`approve\` card with \`highStakes\` true" "never an \`action\` and never a step or command for the user to land it" \
+  "since its yes has you tell \`wldn-ops\` to land" '"Needs changes", with its note, runs construct again'; do
+  has "$out" "$want"
+done
+lacks "$out" "offering approval"
+ok "the conductor's review card is a review, its verify card a choice of its options, its landing card a high-stakes approval and never a step to land"
 ok "the conductor takes units through review, asks the design agent, records signals, and writes the plan only through crew"
 
 for role in design planner dispatcher main-ops; do
@@ -83,7 +92,9 @@ for want in "An intent names the outcome and the records that govern it" "never 
   "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" \
-  "carries the link to the plannotator session on the page" "not the page as a file"; do has "$out" "$want"; done
+  "carries the link to the plannotator session on the page" "not the page as a file" \
+  "is a Pending You \`approve\` card, with a note for changes or for dropping it"; do has "$out" "$want"; done
+lacks "$out" "offers approval"
 cards_say
 has "$out" "Its words are the proposal's case and each of its changes in a line, as \`"; has "$out" "plan proposed <n>\` words them, with no command."
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\`" "or answers your card" \
@@ -106,6 +117,13 @@ for want in "## Writing a change again" "the unit's intent was amended" "stay ti
 expect_ok crewpy brief wldn operator
 for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word" "never by its number alone" "recite no command" \
   "rail --label wldn" "the \`rail\` tab"; do
+  has "$out" "$want"
+done
+for want in "You post no Pending You card and make no area, whatever a Pending You reminder in your session says" \
+  "read that row's \`card:\` line in \`" "/crew rail --label wldn\`. When it shows the row's card open" \
+  "When it shows the row's card open, the card is already before the user: send nothing" \
+  "A wait with no card, a question asked in a pane or a row whose card is not open, show as a notification" \
+  'herdr notification show "<agent> waits on you"'; do
   has "$out" "$want"
 done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
