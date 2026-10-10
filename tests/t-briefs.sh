@@ -60,14 +60,16 @@ for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold
   "close a landing card you have open with what the fix changed" "under the key the rail then shows"; do
   has "$out" "$want"
 done
-for want in "it is a Pending You \`review\` card, looks good or needs changes, with a note" \
+for want in "it is a Pending You \`approve\` card, approved, or declined with a note for changes, with no attachment, its link in its words" \
+  "a decline runs construct again with the words of its note, or of the annotations in its session" \
+  "A decline with no words gives you nothing to build with: ask in the card's thread what to change" \
   "it is a \`choice\` card, or a \`multi\` when the user may pick several findings, whose options are what you would do" \
   "an \`approve\` card with \`highStakes\` true" "never an \`action\` and never a step or command for the user to land it" \
-  "since its yes has you tell \`wldn-ops\` to land" '"Needs changes", with its note, runs construct again'; do
+  "since its yes has you tell \`wldn-ops\` to land"; do
   has "$out" "$want"
 done
-lacks "$out" "offering approval"
-ok "the conductor's review card is a review, its verify card a choice of its options, its landing card a high-stakes approval and never a step to land"
+lacks "$out" "offering approval"; lacks "$out" "Looks good"; lacks "$out" "Needs changes"; lacks "$out" "\`review\` card"
+ok "the conductor's review card is an approval with a note, its verify card a choice of its options, its landing card a high-stakes approval and never a step to land"
 ok "the conductor takes units through review, asks the design agent, records signals, and writes the plan only through crew"
 
 for role in design planner dispatcher main-ops; do
