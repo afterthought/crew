@@ -74,6 +74,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-fix.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-forecast:
+    command: 'tests/run t-forecast'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-forecast.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-fresh:
     command: 'tests/run t-fresh'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-fresh.sh']

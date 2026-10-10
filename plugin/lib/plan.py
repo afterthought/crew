@@ -2722,11 +2722,14 @@ def run_check(fleet, a):
         ahead = [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")]
         not ahead or fail(f"unit {a.unit} merges after " + ", ".join(ahead) + ", not yet merged into bolt/" + bolt)
         prompt = f"Merge {a.unit} into bolt/{bolt}: wt merge bolt/{bolt} --no-squash --no-remove{words}"
+    # What reached the unit while no stage of it ran: forecasts, carried in this stage's prompt and named on its start.
+    ids, said = carried_forecasts(fleet, t, plan, st_all, bolt, a.unit)
+    prompt += "".join(" " + x for x in said)
     # The rail row the stage ends, whose card the conductor closes: a verify report acted on. Bash crew names the card
     # once the stage has started (stage_ended_row), since starting it can still be refused.
     ends = f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else ""
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
-    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry))
+    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids)))
 
 
 def stage_ended_row(fleet, a):
@@ -3261,6 +3264,176 @@ def stage_ends(fleet, a):
             unmark(fleet, t, o)
 
 
+# ----------------------------------------------------------------------------------- what reaches a unit
+
+def merge_tree(main, ours, theirs):
+    """The paths git merge-tree forecasts in conflict when theirs is merged into ours, [] for a clean merge, or None when
+    git can't tell. It writes objects and no ref."""
+    r = subprocess.run(["git", "-C", main, "merge-tree", "--write-tree", "--name-only", "--no-messages", ours, theirs],
+                       capture_output=True, text=True, env=gitenv())
+    if r.returncode == 0:
+        return []
+    if r.returncode != 1:
+        return None
+    paths = []
+    for line in r.stdout.split("\n")[1:]:
+        if not line:
+            break
+        if line not in paths:
+            paths.append(line)
+    return paths
+
+
+def case_of(text):
+    """A proposal's Why, and the lead sentence of each of its What Changes items, in its own words."""
+    sections, cur = {}, None
+    for line in (text or "").splitlines():
+        m = re.match(r"^##\s+(.*?)\s*$", line)
+        if m:
+            cur = sections.setdefault(m.group(1).lower(), [])
+        elif cur is not None:
+            cur.append(line)
+    why = " ".join(l.strip() for l in sections.get("why", []) if l.strip())
+    items = [re.split(r"(?<=[.!?])\s", m.group(1).strip(), maxsplit=1)[0]
+             for m in (re.match(r"^\s*[-*]\s+(.*)$", l) for l in sections.get("what changes", [])) if m]
+    return why, items
+
+
+def change_words(main, kdir, k, bolt, unit):
+    """Where another unit's change is, and its Why and What Changes as its proposal words them: read in its place while
+    it has one, else on the bolt."""
+    pl = k["places"].get(unit)
+    if pl:
+        path = f"{pl['path']}/openspec/changes/{unit}/"
+        try:
+            text = pathlib.Path(path, "proposal.md").read_text()
+        except OSError:
+            text = None
+    else:
+        path = f"{kdir}/bolts/{bolt}/openspec/changes/{unit}/"
+        text = gather.run(["git", "show", f"bolt/{bolt}:openspec/changes/{unit}/proposal.md"], main)
+    why, items = case_of(text)
+    return (f"{unit}'s change is {path}." + (f" Its Why: {why}" if why else "")
+            + (" What it changes: " + " ".join(items) if items else ""))
+
+
+def forecast_words(t, k, bolt, unit, other, paths):
+    """What a forecast says to the later unit: the conflicting paths, how to resolve them keeping both intents, and the
+    other unit's change, or, for a conflict with the bolt, the change of each unit merged since the unit's place was
+    made (teams.13)."""
+    main, kdir, on = t["kit"]["main"], t["kit"]["dir"], ", ".join(paths)
+    if other == f"bolt/{bolt}":
+        base = gather.run(["git", "merge-base", f"bolt/{bolt}", f"unit/{unit}"], main)
+        since = [c for c in gather.changes(main, f"bolt/{bolt}") if c not in (gather.changes(main, base.strip()) if base else [])]
+        return (f"Your branch is forecast to conflict with bolt/{bolt} on {on}. Rebase your place onto the bolt "
+                f"(git rebase bolt/{bolt}), resolve each conflict keeping both changes' intents, run the tests those paths "
+                "affect, and commit." + "".join(" Merged since your place was made: " + change_words(main, kdir, k, bolt, c)
+                                                  for c in since))
+    return (f"Your merge after {other}, ahead of you in the bolt and not merged, is forecast to conflict on {on}. You merge "
+            f"after it: take its work into your place (git merge unit/{other}), resolve each conflict keeping both changes' "
+            f"intents, run the tests those paths affect, and commit. " + change_words(main, kdir, k, bolt, other))
+
+
+def owed_by_unit(t):
+    """The stages the team's stages file owes, by the unit or fix each is of."""
+    with stages_file(t, shared=True) as lines:
+        return {Owed(t, l).name: Owed(t, l) for l in lines if not Owed(t, l).proof}
+
+
+def deliver(fleet, t, entries, unit, stage, words):
+    """How a forecast or an amendment reaches a unit, once (teams.12): told, while a stage of it is owed and its agent is
+    up and not working; as a settle stage, when it has delivered its verify and waits to merge; else carried in its next
+    stage's prompt. None while its stage's agent is working, or when telling it or starting its settle failed, so the
+    next wait tries again."""
+    o = owed_by_unit(t).get(unit)
+    status = crew.agent_status(fleet, o.agent) if o else None
+    if o and status == "working":
+        return None
+    if o and status:
+        return "told" if crew.tell(fleet, o.agent, words) else None
+    if stage == "verify" and verified(t["label"], unit, entries):
+        r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "unit", "run", unit, "settle", words))
+        if r.returncode:
+            print(f"crew could not start {unit}'s settle stage: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1],
+                  file=sys.stderr)
+            return None
+        return "settle"
+    return "prompt"
+
+
+def reach(fleet, t):
+    """On each of the conductor's waits, before it waits: for each unmerged unit of the team's bolt with a place, git
+    merge-tree on the team's host forecasts its merge with the bolt and with each unmerged unit ahead of it in the file's
+    order, writing no ref. A conflict is a forecast for the later unit, recorded once for a pair of heads (`forecast`,
+    with both heads, the paths and how it reached the unit) and reaching it once (deliver). The earlier unit is told
+    nothing. A forecast between two unmerged units gives the later After on the earlier, in a write that is the waiting
+    conductor's own (plan.13, roles.1). What crew can't read or write here is said on standard error, and the wait
+    goes on (teams.12)."""
+    label, main = t["label"], t["kit"]["main"]
+    plan = plan_of(fleet, label)
+    if plan is None:
+        print(f"no forecast: {label}'s plan could not be read", file=sys.stderr)
+        return
+    bolts = held_by(plan, t["name"])
+    with READ.fresh():
+        st = stages_for(fleet, plan, bolts)
+    entries = local_entries(label)
+    done = {e.get("Heads") for e in entries if e.get("Act") == "forecast" and e.get("Heads")}
+    for b in bolts:
+        k, why = st.kit(b)
+        if not k:
+            print(f"no forecast for {b.name()}: {why}", file=sys.stderr)
+            continue
+        live = [u for u in plan.units_of(b.name()) if k["places"].get(u.name()) and k["places"][u.name()].get("head")
+                and st.of(u.name())["stage"] not in ("merged", "landed", "unknown")]
+        bolt_head = k["bolts"].get(b.name(), {}).get("head")
+        for i, u in enumerate(live):
+            name, head = u.name(), k["places"][u.name()]["head"]
+            others = ([(f"bolt/{b.name()}", bolt_head)] if bolt_head else []) + [(o.name(), k["places"][o.name()]["head"]) for o in live[:i]]
+            for other, ohead in others:
+                heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
+                if heads in done:
+                    continue
+                paths = merge_tree(main, ohead, head)
+                if paths is None:
+                    print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
+                    continue
+                if not paths:
+                    continue
+                if not other.startswith("bolt/") and other not in u.all("After"):
+                    def change(w, name=name, other=other):
+                        v = w.unit(name)
+                        w.unit(other)
+                        if other not in v.all("After"):
+                            v.add("After", other, after="Intent")
+                        return [b.name()]
+                    try:
+                        with contextlib.redirect_stdout(sys.stderr):
+                            write(fleet, label, change, f"plan({b.name()}): {name} after {other}, forecast to conflict",
+                                  act="unit.after", on=[f"unit/{name}", f"bolt/{b.name()}"])
+                    except Refusal as e:
+                        print(f"{name} is not put after {other}: {e}", file=sys.stderr)
+                way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, b.name(), name, other, paths))
+                if way:
+                    record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
+                                why=f"unit({name}): forecast to conflict with {other}", Heads=heads, Paths=" ".join(paths), Reached=way)
+                    done.add(heads)
+
+
+def carried_forecasts(fleet, t, plan, st_all, bolt, unit):
+    """The forecasts waiting to reach a unit in its next stage's prompt: this host's forecast entries for it that reached
+    it by prompt and that no stage start of it has carried since. Returns their ids and their words."""
+    entries = local_entries(t["label"])
+    taken = {i for e in entries if e.get("Act") == "stage.start" and f"unit/{unit}" in e["On"] for i in (e.get("Forecast") or "").split()}
+    waiting = [e for e in entries if e.get("Act") == "forecast" and e.get("Reached") == "prompt" and e["On"][:1] == [f"unit/{unit}"]
+               and e["Id"] not in taken]
+    if not waiting:
+        return [], []
+    k, _ = st_all.kit(plan.bolt(bolt))
+    return [e["Id"] for e in waiting], [forecast_words(t, k, bolt, unit, e["On"][1][5:] if e["On"][1].startswith("unit/") else e["On"][1],
+                                                      (e.get("Paths") or "").split()) for e in waiting]
+
+
 # ------------------------------------------------------------------------------------------------- the wait
 
 POLL = 10  # seconds between a wait's reads
@@ -3339,6 +3512,10 @@ def stage_wait(fleet, a):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         fail(f"a wait on {agent}'s stage is already running: its answer is the one to read")
+    try:
+        reach(fleet, t)
+    except Refusal as e:
+        print(f"no forecast: {e}", file=sys.stderr)
     held = {l.split()[0]: l.split() for l in (team_state(t) / "slots").read_text().splitlines() if l.strip()} \
         if (team_state(t) / "slots").exists() else {}
     with stages_file(t, shared=True) as lines:

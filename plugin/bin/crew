@@ -646,9 +646,9 @@ case $cmd in
     [[ ${2:-} == free ]] && { unit_free "${@:3}"; exit 0; }
     [[ ${2:-} == wait ]] && { unit_wait "${@:3}"; exit $?; }
     [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
-    unit=${3:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
-    stage=${4:?usage: crew unit run <unit> construct|code|verify|merge [\"<words>\"]}
-    case $stage in construct | code | verify | merge) ;; *) echo "no stage '$stage'; stages: construct code verify merge" >&2; exit 2 ;; esac
+    unit=${3:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
+    stage=${4:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
+    case $stage in construct | code | verify | settle | merge) ;; *) echo "no stage '$stage'; stages: construct code verify settle merge" >&2; exit 2 ;; esac
     e=$(plan _team-of "$unit") || exit 1; eval "$e"
     load_team "$TEAM"; forward; ensure_state; reap; free_elsewhere "$unit"
     slot=$(slot_of "$unit"); taken=0
@@ -662,6 +662,8 @@ case $cmd in
     ensure_slot_pane "$slot" "$PLACE"
     # A construct that marked the unit amended says so, and is the entry the plan's commit names.
     amended=(); [[ -n $AMENDED ]] && amended=(--field Amended=yes --commit "$AMENDED" --id "$ENTRY")
+    # The forecasts its prompt carries, named on its start so none is carried twice.
+    [[ -n $FORECAST ]] && amended+=(--field "Forecast=$FORECAST")
     run_stage "$slot" "$stage" "$PROMPT" stage.start "$unit" "unit/$unit" --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")" \
       ${amended[@]+"${amended[@]}"}
     echo "$(name_of "$slot") has $unit: $stage, in $PLACE"

@@ -505,7 +505,7 @@ def bolt_place(t):
 
 
 # A unit's stages and the definition each is started from.
-STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "merge": "coder", "fix": "coder"}
+STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "settle": "coder", "merge": "coder", "fix": "coder"}
 def launch(fleet, scope, role, extra=None):
     """How crew-role starts a role: its folder, agent name, partition, the definition it comes from, the
     folders it may also reach, and the model and effort after the teams file's override."""
