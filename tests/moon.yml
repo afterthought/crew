@@ -234,6 +234,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-tidy.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-touches:
+    command: 'tests/run t-touches'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-touches.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-transcript:
     command: 'tests/run t-transcript'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-transcript.sh']

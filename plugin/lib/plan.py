@@ -2591,6 +2591,68 @@ def verified(label, unit, entries=None):
     return bool(done)
 
 
+# ------------------------------------------------------------------------------------------------- Touches
+
+WILD = re.compile(r"[*?]")
+
+
+def matches(entry, path):
+    """Whether a Touches entry, a path or glob relative to the kit's root, matches a path: * and ? within one part of
+    the path, ** across parts; a path with no wildcard matches itself and anything under it."""
+    entry = entry.strip()
+    entry = entry[2:] if entry.startswith("./") else entry
+    if not WILD.search(entry):
+        e = entry.rstrip("/")
+        return path == e or path.startswith(e + "/")
+    rx = "".join(".*" if part == "**" else "[^/]*" if part == "*" else "[^/]" if part == "?" else re.escape(part)
+                 for part in re.split(r"(\*\*|\*|\?)", entry))
+    return re.fullmatch(rx, path) is not None
+
+
+def overlaps(a, b):
+    """Whether two Touches entries overlap: one matches the other, or both are globs whose literal parts up to their
+    first wildcard are one the start of the other."""
+    if matches(a, b) or matches(b, a):
+        return True
+    if WILD.search(a) and WILD.search(b):
+        pa, pb = WILD.split(a, 1)[0], WILD.split(b, 1)[0]
+        return pa.startswith(pb) or pb.startswith(pa)
+    return False
+
+
+def declared(k, unit, why):
+    """A unit's Touches entries from its place as read, refused naming what is missing (read.1)."""
+    got = (k["places"].get(unit) or {}).get("touches") or {"missing": "crew could not read its proposal"}
+    "entries" in got or fail(f"unit {unit}'s {why} is refused: its change must declare what it touches, and {got['missing']}; "
+                             f"construct ends proposal.md with `## Touches` and a fenced list of paths or globs")
+    return got["entries"]
+
+
+def overlapping(plan, st_all, k, unit, mine):
+    """What a unit's Touches overlap among the unmerged units ahead of it in its bolt that have a place: the prompt's
+    words for each, naming the entries and the other unit's change."""
+    out = []
+    for o in plan.units_of(plan.unit(unit).get("Bolt")):
+        if o.name() == unit:
+            break
+        pl = k["places"].get(o.name())
+        if not pl or st_all.of(o.name())["stage"] in ("merged", "landed") or "entries" not in (pl.get("touches") or {}):
+            continue
+        pairs = [(m, t) for m in mine for t in pl["touches"]["entries"] if overlaps(m, t)]
+        if pairs:
+            on = "; ".join(m if m == t else f"{m} against {t}" for m, t in pairs)
+            out.append(f"Its Touches overlap those of {o.name()}, ahead of it in the bolt and not merged, on {on}; "
+                       f"{o.name()}'s change is {pl['path']}/openspec/changes/{o.name()}/.")
+    return out
+
+
+def undeclared(fleet, t, bolt, unit, entries):
+    """The paths a unit changed against its bolt that no Touches entry matches, its own change's folder aside."""
+    _, out = kit_git(fleet, t, t["kit"]["main"], "diff", "--name-only", f"bolt/{bolt}...unit/{unit}")
+    own = f"openspec/changes/{unit}/"
+    return [p for p in out.splitlines() if p and not p.startswith(own) and not any(matches(e, p) for e in entries)]
+
+
 def run_check(fleet, a):
     """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent. Construct
     starts once each After unit has finished construct, never waiting on a merge (plan.13), and is run again at any
@@ -2634,14 +2696,21 @@ def run_check(fleet, a):
     elif a.stage == "code":
         st in ("planned", "code", "verify") or fail(f"unit {a.unit} is in {st}: " + (
             "code waits until its change is committed" if st == "construct" else "it has no change to code yet"))
-        prompt = f"/opsx:apply {a.unit}{words}"
+        k, _ = st_all.kit(plan.bolt(bolt))
+        told = overlapping(plan, st_all, k, a.unit, declared(k, a.unit, "code"))
+        prompt = f"/opsx:apply {a.unit}{words}" + "".join(" " + x for x in told)
     elif a.stage == "verify":
         if st == "code":
             n = len(s["open"])
             refuse(f"unit {a.unit} is in code, with these tasks still open: " + "; ".join(s["open"]),
                    f"unit {a.unit} is in code, with {n} task{'' if n == 1 else 's'} still open")  # titles are typed text
         st == "verify" or fail(f"unit {a.unit} is in {st}: verify waits until every task is ticked")
-        prompt = f"/opsx:verify {a.unit}{words}"
+        k, _ = st_all.kit(plan.bolt(bolt))
+        got = (k["places"].get(a.unit) or {}).get("touches") or {}
+        loose = undeclared(fleet, t, bolt, a.unit, got.get("entries", []))
+        prompt = f"/opsx:verify {a.unit}{words}" + (
+            (" Changed and not declared in its Touches: " + ", ".join(loose) + "."
+             + ("" if "entries" in got else f" Its change declares no Touches: {got.get('missing')}.")) if loose else "")
     elif a.stage == "settle":
         st == "verify" and verified(label, a.unit) or fail(
             f"unit {a.unit} is in {st}" + (", and has not delivered its verify" if st == "verify" else "")

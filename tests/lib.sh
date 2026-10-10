@@ -191,11 +191,12 @@ EOF
 # clone <owner/name> <dir>: a checkout of a bare remote, as a session's space keeps it
 clone() { git clone -q "$(remote "$1")" "$2"; }
 
-# change <dir> <name> [done] [total]: an OpenSpec change with planning complete and <done> of <total> tasks ticked
+# change <dir> <name> [done] [total]: an OpenSpec change with planning complete and <done> of <total> tasks ticked,
+# its proposal ending with the paths it touches, src/<name>/**
 change() {
   local c=$1/openspec/changes/$2 i n=${4:-3} d=${3:-0}
   mkdir -p "$c/specs/x"
-  printf '# Proposal\n\n## Why\n\nx\n\n## What Changes\n\n- y\n' > "$c/proposal.md"
+  printf '# Proposal\n\n## Why\n\nx\n\n## What Changes\n\n- y\n\n## Touches\n\n```\nsrc/%s/**\n```\n' "$2" > "$c/proposal.md"
   printf '# Design\n\nz\n' > "$c/design.md"
   printf '## ADDED Requirements\n\n### Requirement: X\nThe system SHALL x.\n\n#### Scenario: s\n- **WHEN** a\n- **THEN** b\n' > "$c/specs/x/spec.md"
   { echo "## 1. Work"; echo; for ((i = 1; i <= n; i++)); do if ((i <= d)); then echo "- [x] 1.$i task $i"; else echo "- [ ] 1.$i task $i"; fi; done; } > "$c/tasks.md"

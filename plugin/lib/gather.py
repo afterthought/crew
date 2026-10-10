@@ -10,7 +10,7 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
 for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree,
 its head and the head's time; each place under <dir>/places with its branch, its head and the head's time, its change's
-tasks and whether its planning is complete; each fix branched from a bolt;
+tasks, whether its planning is complete and the paths its proposal declares it touches; each fix branched from a bolt;
 and each unit's newest verify report in the reports folders, with its path and time. With sites, each worktree's
 devurl names and the host's portless routes; with board, each team's slots, one {slot, kind, name, place} per line
 of its slots file, and each folder under openspec/explorations/ on main with the first line of its first .md file.
@@ -223,13 +223,46 @@ def change_tasks(change):
         return []
 
 
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def touches(text):
+    """What a proposal declares it touches: the lines of the one fenced block under its `## Touches` heading, each a
+    path or glob relative to the kit's root ({"entries": [...]}), or what is missing ({"missing": ...}): the heading,
+    the block before the next heading, or any line in it."""
+    if text is None:
+        return {"missing": "it has no proposal.md"}
+    lines = text.split("\n")
+    at = next((i for i, l in enumerate(lines) if re.fullmatch(r"##[ \t]+Touches[ \t]*\r?", l)), None)
+    if at is None:
+        return {"missing": "its proposal.md has no `## Touches` heading"}
+    for i in range(at + 1, len(lines)):
+        if re.match(r"^#{1,2}[ \t]", lines[i]):
+            break
+        m = FENCE.match(lines[i])
+        if m:
+            entries = []
+            for l in lines[i + 1:]:
+                if l.strip().startswith(m.group(1)) and not l.strip().strip(m.group(1)[0]):
+                    break
+                if l.strip():
+                    entries.append(l.strip())
+            return {"entries": entries} if entries else {"missing": "the block under its `## Touches` heading is empty"}
+    return {"missing": "its `## Touches` heading holds no fenced block"}
+
+
 def place(path, unit):
-    """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, and the
-    open tasks. The tasks and the planning are read from the change's files, or through openspec when planned() hands
-    the change to it."""
+    """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, the open
+    tasks, and what its proposal declares it touches. The tasks and the planning are read from the change's files, or
+    through openspec when planned() hands the change to it."""
     info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None,
             "head_at": head_at(path, "HEAD"), "tasks": None, "planning": False, "open": []}
     change = os.path.join(path, "openspec", "changes", unit)
+    try:
+        with open(os.path.join(change, "proposal.md"), encoding="utf-8", errors="replace", newline="") as f:
+            info["touches"] = touches(f.read())
+    except OSError:
+        info["touches"] = touches(None)
     tasks = change_tasks(change)
     info["open"] = [d for done, d in tasks if not done]
     planning = planned(change, path)
