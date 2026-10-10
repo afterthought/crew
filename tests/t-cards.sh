@@ -10,7 +10,13 @@
 # open proposal or its conductor's bolt and units, and an area under any key but create-area: and a kit of its own,
 # naming the key to use; a team's ops and slots and the main level's other agents own no card key; a call crew can't
 # check is refused naming what it could not read; and a session crew didn't start, another server's tool and the other
-# card tools are neither checked nor refused. Each refusal scenario of the rail-cards spec.
+# card tools are not checked for their key. Each refusal scenario of the rail-cards spec. A row's card of the agent's
+# own, posted or changed, the hook then refuses in another form than its row's, naming the form: a landing card that is
+# a step, not high stakes, or has options or a step that lands it; a review card that is no review; a verify card with
+# no options; a proposal card that is no approval; a grouped card; and a change that clears a landing's high stakes or
+# gives a card options or steps its row's has not. A card under no row's key is refused for its key, not its form; a
+# change to a card posted on no row's key here, a session crew didn't start and another server's tool pass unchecked;
+# what it can't check is refused.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -223,8 +229,11 @@ crew plan drop 2 "not now" >/dev/null
 # pre <server> <tool> <input> [session]: the hook's input before one tool call, as Claude Code gives it
 pre() { jq -nc --arg t "mcp__$1__$2" --argjson i "$3" --arg s "${4:-sid-1}" \
   '{session_id: $s, hook_event_name: "PreToolUse", cwd: "/work", tool_name: $t, tool_input: $i}'; }
-# gate <agent> <tool> <key>: what the hook prints before that agent's call under that key
-gate() { CREW_AGENT=$1 cards <<<"$(pre pendingyou "$2" "$(jq -nc --arg k "$3" '{name: "x", title: "ZQXTITLE", idempotencyKey: $k}')")"; }
+# gate <agent> <tool> <key> [fields]: what the hook prints before that agent's call under that key, with the fields given
+gate() {
+  local f=${4-'{}'}
+  CREW_AGENT=$1 cards <<<"$(pre pendingyou "$2" "$(jq -nc --arg k "$3" --argjson f "$f" '{name: "x", title: "ZQXTITLE", idempotencyKey: $k} + $f')")"
+}
 # denied <agent> <tool> <key>: the reason the call is denied with; fails when it is let through
 denied() {
   local o; o=$(gate "$@")
@@ -243,10 +252,10 @@ has "$why" "swb-1-unit-2 owns no card key, since a team's cards are its conducto
 has "$why" "/plugin/bin/crew needs"
 ok "a team's ops and its unit slots are refused a card under any key: a team's cards are its conductor's"
 
-eq "$(gate swb-1-conductor post_request land/tenant-environments/abc1234)" ""
-eq "$(gate swb-1-conductor post_request review/x/abc1234)" ""
-eq "$(gate swb-1-conductor post_request verify/checked/20261007-1412)" ""
-eq "$(gate wldn-planner post_request proposal/1)" ""
+eq "$(gate swb-1-conductor post_request land/tenant-environments/abc1234 '{"kind": "approve", "highStakes": true}')" ""
+eq "$(gate swb-1-conductor post_request review/x/abc1234 '{"kind": "review"}')" ""
+eq "$(gate swb-1-conductor post_request verify/checked/20261007-1412 '{"kind": "choice", "options": [{"id": "fix", "label": "Fix it"}]}')" ""
+eq "$(gate wldn-planner post_request proposal/1 '{"kind": "approve"}')" ""
 ok "a conductor's own landing, review and verify keys, and the planner's open proposal, go through"
 
 rows="land/tenant-environments/<head> or review/<unit>/<head> or verify/<unit>/<stamp> for unit x or checked, the head or stamp from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`"
@@ -293,5 +302,99 @@ eq "$(CREW_AGENT=swb-1-ops cards <<<"$(pre pendingyou update_request '{"requestI
 eq "$(entries | wc -l)" "$n"
 eq "$(grep -rl ZQX "$(home_of mac-studio)/.local/state/crew" || true)" ""
 hooks=$(jq -c '.hooks.PreToolUse[1] | [.matcher, .hooks[0].command, .hooks[0].timeout]' "$CREW/plugin/hooks/hooks.json")
-eq "$hooks" '["mcp__.*__(post_request|create_area)","python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\"",30]'
-ok "a session crew didn't start, another server's tool and any other card tool are neither checked nor refused, nothing is recorded before a call, and the plugin runs the check before the two"
+eq "$hooks" '["mcp__.*__(post_request|create_area|update_request)","python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/cards\"",30]'
+ok "a session crew didn't start, another server's tool and any other card tool are not checked for their key, nothing is recorded before a call, and the plugin runs the check before the three"
+
+# The hook, fed as Claude Code feeds it before a Pending You tool: a row's card, or a change to one, in another form
+# than its row's is refused with the form to use, and the call is never made.
+# The cards are swb-1-conductor's, under keys of its own, and the planner's for its open proposal.
+export CREW_AGENT=swb-1-conductor
+# card <key> <fields>: a post's input under the key, with the fields given
+card() { jq -nc --arg k "$1" --argjson f "$2" '{name: "swb-1-conductor", title: "ZQXTITLE", idempotencyKey: $k} + $f'; }
+refused() {  # refused <tool> <input> <phrase>...: the call is refused before it is made, its reason holding each phrase
+  local tool=$1 input=$2 p why; shift 2
+  expect_ok cards <<<"$(pre pendingyou "$tool" "$input")"
+  eq "$(jq -r '.hookSpecificOutput | "\(.hookEventName) \(.permissionDecision)"' <<<"$out")" "PreToolUse deny"
+  why=$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$out")
+  for p in "$@"; do has "$why" "$p"; done
+}
+passes() {  # passes <tool> <input> [server] [session]: the hook prints nothing, and the call goes on
+  expect_ok cards <<<"$(pre "${3:-pendingyou}" "$1" "$2" "${4:-sid-1}")"
+  eq "$out" ""
+}
+landing='{"kind": "approve", "highStakes": true}'
+two='{"options": [{"id": "fix", "label": "Fix both"}, {"id": "merge", "label": "Merge as it is"}]}'
+n=$(entries | wc -l)
+
+refused post_request "$(card land/tenant-environments/abc1234 '{"kind": "action", "action": {"steps": [{"text": "Land the bolt", "command": "crew bolt land tenant-environments"}]}}')" \
+  "crew refuses card land/tenant-environments/abc1234." "A landing's card is an approval" "marked high stakes" "whose yes has you tell main-level ops to land" \
+  'This card is an "action", is not marked high stakes, and has a step that lands the bolt'
+refused post_request "$(card land/tenant-environments/abc1234 '{"kind": "approve"}')" "This card is not marked high stakes."
+refused post_request "$(card land/tenant-environments/abc1234 '{"kind": "approve", "highStakes": false}')" "This card is not marked high stakes."
+passes post_request "$(card land/tenant-environments/abc1234 "$landing")"
+refused post_request "$(card land/tenant-environments/abc1234 "$(jq -c '. + {action: {steps: [{text: "Land it", command: "crew bolt land tenant-environments"}]}}' <<<"$landing")")" \
+  'has a step that lands the bolt: "Land it crew bolt land tenant-environments"'
+refused post_request "$(card land/tenant-environments/abc1234 "$(jq -c '. + {action: {steps: [{text: "Merge the bolt with wt merge main"}]}}' <<<"$landing")")" \
+  "has a step that lands the bolt"
+passes post_request "$(card land/tenant-environments/abc1234 "$(jq -c '. + {action: {steps: [{text: "Open the gateway on your Mac"}]}}' <<<"$landing")")"
+refused post_request "$(card land/tenant-environments/abc1234 "$(jq -c ". + $two" <<<"$landing")")" "This card has options."
+ok "a landing card is refused as a step, unmarked high stakes, with options or with a step that lands it, and passes as a high-stakes approval, with steps a proof leaves"
+
+refused post_request "$(card review/x/abc1234 '{"kind": "approve"}')" \
+  "A review's card is a review, kind \"review\": looks good or needs changes, with a note" 'This card is an "approve".'
+passes post_request "$(card review/x/abc1234 '{"kind": "review"}')"
+refused post_request "$(card review/x/abc1234 "$(jq -c '{kind: "review"} + .' <<<"$two")")" "This card has options."
+refused post_request "$(card review/x/abc1234 '{"kind": "review", "action": {"steps": [{"text": "Read the change"}]}}')" \
+  "This card has steps for the user to take."
+refused post_request "$(card verify/checked/20261007-1412 '{"kind": "approve"}')" \
+  "A verify report's card is a choice" 'This card is an "approve", and has no options.'
+refused post_request "$(card verify/checked/20261007-1412 '{"kind": "choice"}')" "This card has no options."
+passes post_request "$(card verify/checked/20261007-1412 "$(jq -c '{kind: "choice"} + .' <<<"$two")")"
+passes post_request "$(card verify/checked/20261007-1412 "$(jq -c '{kind: "multi"} + .' <<<"$two")")"
+CREW_AGENT=wldn-planner passes post_request "$(card proposal/1 '{"kind": "approve"}')"
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "action", "action": {"steps": [{"text": "Approve it", "command": "crew plan approve 1"}]}}')" \
+  "A proposal's card is an approval, kind \"approve\", with a note for changes or for dropping it" 'This card is an "action"'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"questions": [{"id": "go", "kind": "approve", "title": "Approve proposal 1?"}]}')" \
+  "This card is a grouped card of questions, and names no kind."
+refused post_request "$(card review/x/abc1234 '{"kind": "fyi"}')" 'This card is a "fyi".'
+refused post_request "$(card agent-note-1 '{"kind": "action", "action": {"steps": [{"text": "Land it", "command": "crew bolt land tenant-environments"}]}}')" \
+  "crew refuses a card under agent-note-1: swb-1-conductor posts a card only under a rail row's key of its own"
+refused post_request "$(card land/y '{"kind": "action"}')" "crew refuses a card under land/y: swb-1-conductor posts a card only under"
+ok "a review card is a review, a verify card a choice with options, a proposal card an approval; a card under no row's key is refused for its key, not its form"
+
+eq "$(entries | wc -l)" "$n"
+ok "a check writes nothing to the run record"
+
+call pendingyou post_request "$(card land/tenant-environments/abc1234 "$landing")" '{"structuredContent": {"requestId": "req_land-1"}}' | cards
+call pendingyou post_request "$(card review/x/abc1234 '{"kind": "review"}')" '{"structuredContent": {"requestId": "req_rev-1"}}' | cards
+call pendingyou post_request "$(card agent-note-2 '{"kind": "fyi"}')" '{"structuredContent": {"requestId": "req_own-1"}}' | cards
+change() { jq -nc --arg r "$1" --argjson f "$2" '{name: "swb-1-conductor", requestId: $r, expectedVersion: 1, changeNote: "ZQXNOTE"} + $f'; }
+refused update_request "$(change req_land-1 '{"highStakes": false}')" \
+  "crew refuses this change to card land/tenant-environments/abc1234." "A landing's card is an approval" "This change clears its high stakes."
+refused update_request "$(change req_land-1 '{"highStakes": null}')" "This change clears its high stakes."
+refused update_request "$(change req_land-1 '{"action": {"steps": [{"text": "Land it", "command": "crew bolt land tenant-environments"}]}}')" \
+  "This change gives it a step that lands the bolt"
+passes update_request "$(change req_land-1 '{"title": "Land bolt y ZQXTITLE"}')"
+passes update_request "$(change req_land-1 '{"highStakes": true}')"
+refused update_request "$(change req_rev-1 "$two")" "crew refuses this change to card review/x/abc1234." "This change gives it options."
+refused update_request "$(change req_rev-1 '{"action": {"steps": [{"text": "Read it"}]}}')" "This change gives it steps for the user to take."
+passes update_request "$(change req_own-1 "$two")"
+passes update_request "$(change req_nowhere-1 '{"highStakes": false}')"
+ok "a change that clears a landing's high stakes, gives an approval or a review options or steps, or lands the bolt is refused; a card with no post here, or under no row's key, is not checked"
+
+CREW_AGENT= CREW_LABEL= passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" pendingyou sid-none
+passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" github
+passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" plugin_github_github
+refused post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" 'This card is an "action"'
+expect_ok cards <<<"$(pre plugin_pendingyou_pendingyou post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')")"
+has "$out" '"permissionDecision": "deny"'
+expect_ok cards <<<"$(pre pendingyou cancel_request '{"requestId": "req_land-1", "reason": "ZQXREASON"}')"
+eq "$out" ""
+ok "a session crew didn't start, another server's tool and a withdrawal are not checked; a plugin's Pending You is"
+
+chmod 000 "$runs/$day.rec"
+refused update_request "$(change req_land-1 '{"title": "Land bolt y again"}')" "crew could not check this card's form:"
+chmod 644 "$runs/$day.rec"
+refused update_request '"not an object"' "crew could not check this card's form: its input is not an object"
+eq "$(grep -rl ZQX "$(home_of mac-studio)/.local/state/crew" || true)" ""
+ok "a card the hook can't check is refused, saying what failed"
