@@ -282,6 +282,33 @@ for f in "$rw" "$ra"; do
 done
 ok "run again with the commit as the bolt has it, each carries the bolt, none changed by the resolution"
 
+# The reading comes before the judgment, whatever it is. A fix with no commits beyond main merges as a fix, with
+# range-diff's lines above it, or git's words without the usage git prints after them. When range-diff itself fails,
+# crew names it in git's words and judges the same: the fix that carries the bolt still moves it.
+echo read > "$k/read"; commit_all "$k" "docs: main moves past the bolt"
+nb=fix/tenant-environments/nothing-beyond
+expect_ok crew fix swb-1 nothing-beyond "Carry the bolt onto main."
+git -C "$kd/places/fix-tenant-environments--nothing-beyond" rebase -q --onto main "$bt"
+expect_ok crew fix swb-1 nothing-beyond --merge
+has "$out" "git range-diff main..$bt main..$nb"
+lacks "$out" "usage: git range-diff"
+has "$out" "$nb does not carry the bolt onto main (it has no commits beyond main): merging it as a fix"
+eq "$(merge_prompts "$nb")" "1"; eq "$(git -C "$k" rev-parse "$bt")" "$new"
+mkdir -p "$T/range-diff-fails"
+printf '#!/usr/bin/env bash\nfor a; do [[ $a == range-diff ]] && { echo "fatal: range-diff refused by this test" >&2; exit 128; }; done\nexec %q "$@"\n' \
+  "$(command -v git)" > "$T/range-diff-fails/git"
+chmod +x "$T/range-diff-fails/git"
+rf=fix/tenant-environments/range-fails
+expect_ok crew fix swb-1 range-fails "Carry the bolt onto main."
+GIT_COMMITTER_DATE=$(ago -1) git -C "$kd/places/fix-tenant-environments--range-fails" rebase -q main
+old=$(git -C "$k" rev-parse "$bt"); new=$(git -C "$k" rev-parse "$rf")
+PATH=$T/range-diff-fails:$PATH expect_ok crew fix swb-1 range-fails --merge
+has "$out" "git range-diff main..$bt main..$rf could not be read: fatal: range-diff refused by this test"
+lacks "$out" "the reading, which judges nothing"
+has "$out" "bolt/tenant-environments moved from ${old:0:7} to ${new:0:7}: $rf carries the bolt's $n commits onto main (0 changed by the resolution)"
+eq "$(git -C "$k" rev-parse "$bt")" "$new"; eq "$(merge_prompts "$rf")" "0"
+ok "a fix with nothing beyond main is read too, and a range-diff that fails is named in git's words and the judgment holds"
+
 echo more > "$k/more"; commit_all "$k" "docs: more on main"
 own=fix/tenant-environments/own-commit; op=$kd/places/fix-tenant-environments--own-commit
 expect_ok crew fix swb-1 own-commit "Carry the bolt onto main."
