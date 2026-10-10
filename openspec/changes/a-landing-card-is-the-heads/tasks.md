@@ -9,7 +9,7 @@
 ## 2. The briefs and the docs
 
 - [x] 2.1 The card discipline says a row whose key changes gets its old card closed with what changed and a new card under the new key, and the conductor's brief keys its landing card `land/<bolt>/<head>` and closes an open one when a fix moves the bolt (design.md, Task notes 2.1). Verify `tests/suite t-briefs t-roles` ends with "0 failed".
-- [ ] 2.2 README names the landing key with the bolt's head and says a bolt proven again on a new head gets a new card (design.md, Task notes 2.2). Verify `tests/suite t-docs` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
+- [x] 2.2 README names the landing key with the bolt's head and says a bolt proven again on a new head gets a new card (design.md, Task notes 2.2). Verify `tests/suite t-docs` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
 
 ## Workflow follow-up
 
