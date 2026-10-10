@@ -65,6 +65,11 @@
 #   crew rail  [--label L]             what waits on the user: proposals, reviews, verify reports and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
 #                                      You card; then any open card whose row is gone
+#   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
+#                                      no move has taken, explorations), Bolt plan (proposals, planned bolts, the
+#                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and
+#                                      dev servers) and Operation (bolts landed this week); each rail row a marker on
+#                                      its object, what needs attention at the foot; it answers nothing
 #   crew card  session|wait|end <key> [--label L]
 #                                      the plannotator session on what a rail row's card asks the user to read:
 #                                      session starts it on this host with no browser and prints its link (the
@@ -135,7 +140,7 @@ reading() {
   this_host > "$CREW_READ/host"
 }
 case $cmd in
-  bolts | bolt | signal | state | plan | rail | card | trace | sites | list | tell) ;;
+  bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | sites | list | tell) ;;
   events | _rail) unset CREW_READ ;;
   unit) case ${2:-} in run | free | wait) reading ;; esac ;;
   *) reading ;;
@@ -584,6 +589,7 @@ case $cmd in
   bolts | bolt | signal | state | plan | rail | card) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   events | trace) exec python3 "$here/../lib/record.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;
+  board | _views | _board) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
   status)
     if [[ -n ${2:-} ]]; then load_team "$2"; forward; ensure_state; reap; status
