@@ -118,7 +118,7 @@ ok "a proposal opens in plannotator, beside the caller in herdr and inline elsew
 
 # card <host> <agent> <act> <object> <card> [key]: a card entry, written as crew's hook writes it, on the owner's host
 card() { CREW_AGENT=$2 as "$1" python3 "$CREW/plugin/lib/record.py" emit --label wldn --act "$3" --on "$4" --field "Card=$5" ${6:+--field "Key=$6"} >/dev/null; }
-he=$(git -C "$pe" rev-parse --short=7 HEAD); hl=$(git -C "$pl" rev-parse --short=7 HEAD)
+he=$(git -C "$pe" rev-parse --short=7 HEAD); hl=$(git -C "$pl" rev-parse --short=7 HEAD); hb=$(git -C "$kd/bolts/apex-zones" rev-parse --short=7 HEAD)
 : > "$CREW_TEST_LOG"
 expect_ok crew rail --label wldn; r=$out
 eq "$(grep -c 'runs/\*/\*.rec' "$CREW_TEST_LOG")" "1"
@@ -127,10 +127,10 @@ has "$(group "$r" proposals)" "    card:   proposal/2, none open"
 eq "$(grep -A3 -F "unit early (wldn)" <<<"$r" | tail -1)" "    card:   review/early/$he, none open"
 has "$(group "$r" review)" "    card:   review/late/$hl, none open"
 has "$(group "$r" verify)" "    card:   verify/checked/$(shown 100 %Y%m%d-%H%M), none open"
-eq "$(grep -A2 -F "bolt apex-zones (wldn)" <<<"$r" | tail -1)" "    card:   land/apex-zones, none open"
+eq "$(grep -A2 -F "bolt apex-zones (wldn)" <<<"$r" | tail -1)" "    card:   land/apex-zones/$hb, none open"
 eq "$(grep -c '^    card:   ' <<<"$r")" "6"
 lacks "$r" "open cards with no row"
-ok "every row has its card key, after its commands: a proposal's number, a review's head, a verify report's stamp, a bolt's name"
+ok "every row has its card key, after its commands: a proposal's number, a review's head, a verify report's stamp, a bolt's head"
 
 card $box swb-1-conductor card.post unit/early req_rev-1 "review/early/$he"
 has "$(group "$(crew rail --label wldn)" review)" "    card:   review/early/$he, open, asked by swb-1-conductor"
@@ -154,6 +154,19 @@ grep -qE "^  $(date +%Y-%m-%d) [0-9]{2}:[0-9]{2}  (<1m|[0-9]m) +review/late/0000
   || fail "the card keyed for an older head is not listed:"$'\n'"$r"
 has "$stray" '    answer: crew tell swb-1-conductor "Close your Pending You card review/late/0000000: its row is gone."'
 ok "a card keyed for an older head has no row, and is listed after the groups with the tell that asks its owner to close it"
+
+card $box swb-2-conductor card.post bolt/apex-zones req_land-1 land/apex-zones/0000000
+expect_ok crew rail --label wldn; r=$out
+eq "$(grep -A2 -F "bolt apex-zones (wldn)" <<<"$r" | tail -1)" "    card:   land/apex-zones/$hb, none open"
+stray=$(awk '$0 == "open cards with no row:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$r")
+eq "$(grep -cE '^  [0-9]' <<<"$stray")" "2"
+grep -qE "^  $(date +%Y-%m-%d) [0-9]{2}:[0-9]{2}  (<1m|[0-9]m) +land/apex-zones/0000000 \(wldn\), asked by swb-2-conductor on $box$" <<<"$stray" \
+  || fail "the landing card keyed for an older head of the bolt is not listed:"$'\n'"$r"
+has "$stray" '    answer: crew tell swb-2-conductor "Close your Pending You card land/apex-zones/0000000: its row is gone."'
+card $box swb-2-conductor card.post bolt/apex-zones req_land-2 "land/apex-zones/$hb"
+expect_ok crew rail --label wldn
+eq "$(grep -A2 -F "bolt apex-zones (wldn)" <<<"$out" | tail -1)" "    card:   land/apex-zones/$hb, open, asked by swb-2-conductor"
+ok "a landing card keyed for an older head of its bolt has no row and is listed with the tell to close it; one under the bolt's head is the row's"
 
 crew unit approve early --label wldn >/dev/null
 expect_ok crew rail --label wldn

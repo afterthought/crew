@@ -3511,9 +3511,9 @@ def rail_rows(fleet, found, sv, props, times):
                                      cmds=[("open", opener(fleet, host, here, report["path"])),
                                            ("answer", f'crew tell {team}-conductor "On {u.name()}\'s verify report: "')]))
             stages = [st.of(u.name())["stage"] for u in units]
-            at = k["bolts"].get(b.name(), {}).get("head_at")
-            if stages and at and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
-                rows.append(dict(group="land", label=l, key=f"land/{b.name()}", at=utc(at), doc=None, what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
+            at, head = k["bolts"].get(b.name(), {}).get("head_at"), k["bolts"].get(b.name(), {}).get("head")
+            if stages and at and head and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
+                rows.append(dict(group="land", label=l, key=f"land/{b.name()}/{head[:7]}", at=utc(at), doc=None, what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
                                  cmds=[("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]))
     return rows
 
