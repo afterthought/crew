@@ -3,7 +3,7 @@
 ## 0. Before anything else
 
 - [x] 0.1 unit-amendments and the-rail-is-answered-through-cards are archived, so this change's deltas find the requirements they added (design.md, Decision 0; Task notes 0.1). Verify `openspec validate units-build-at-once-and-are-reviewed-in-batches --strict` reports the change valid.
-- [ ] 0.2 `openspec/changes/concurrent-units` is gone, and the rules that cite it cite this change (design.md, Decision 0; Task notes 0.2). Verify `openspec validate units-build-at-once-and-are-reviewed-in-batches --strict` reports the change valid and `tests/suite --affected` ends with "0 failed".
+- [x] 0.2 `openspec/changes/concurrent-units` is gone, and the rules that cite it cite this change (design.md, Decision 0; Task notes 0.2). Verify `openspec validate units-build-at-once-and-are-reviewed-in-batches --strict` reports the change valid and `tests/suite --affected` ends with "0 failed".
 
 ## 1. Stages without a review gate
 

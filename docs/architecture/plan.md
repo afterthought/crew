@@ -38,7 +38,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 **[plan.5]** Rules out: an `--unblocks` unit in the queue. Source: fix 902336e; `plan-proposals` spec "Work a bolt in flight needs to land goes into that bolt".
 
-**[plan.6]** Rules out: `unit split` on a unit in code; construct on a merged unit; an amended unit held for the user's approval. Source: `bolt-plan` spec; unit-amendments design; ADR 0014 (D5); `plan.py` 1328–1330, 1409, 1449. The code holds an amended unit for `crew unit approve` until `concurrent-units` lands: `_open.md`.
+**[plan.6]** Rules out: `unit split` on a unit in code; construct on a merged unit; an amended unit held for the user's approval. Source: `bolt-plan` spec; unit-amendments design; ADR 0014 (D5); `plan.py` 1328–1330, 1409, 1449. The code holds an amended unit for `crew unit approve` until `units-build-at-once-and-are-reviewed-in-batches` lands: `_open.md`.
 
 **[plan.7]** Rules out: a unit named after an archived change. Source: `plan.py` 808–817.
 
@@ -52,7 +52,7 @@ The rules for the plan, proposals, stages, worktrees and every write to a flywhe
 
 **[plan.12]** Rules out: a second `gather` in one command; a stage fact that disagrees with openspec. The direct reading knows openspec's own spec-driven schema; a change of any other schema, of a spec-driven its kit or user redefines, or with metadata crew does not read, is read through `openspec`. Source: `openspec/explorations/command-cost/reading.md`; ADR 0008; a-command-reads-the-kits-once; `plan.py` `Reading`, `fetch`, `land`, `survey`; `gather.py` `tasks_of`, `planned`; `tests/t-stage-facts.sh`, `tests/t-reads-once.sh`.
 
-**[plan.13]** Rules out: `After` set by hand between units that only touch the same files; a dependent's construct before its dependency's change is committed; a dependent's construct held for its dependency's merge; a dependent merged before its dependency; `After` as sequencing. Not ruled out: the `After` a conductor sets on a forecast conflict between two unmerged units (`teams.12`). Source: ADR 0011; ADR 0014 (D1 to D3); `bolt-plan` spec "The file's order and dependencies are the plan". The code holds construct until the dependency merges until `concurrent-units` lands: `_open.md`.
+**[plan.13]** Rules out: `After` set by hand between units that only touch the same files; a dependent's construct before its dependency's change is committed; a dependent's construct held for its dependency's merge; a dependent merged before its dependency; `After` as sequencing. Not ruled out: the `After` a conductor sets on a forecast conflict between two unmerged units (`teams.12`). Source: ADR 0011; ADR 0014 (D1 to D3); `bolt-plan` spec "The file's order and dependencies are the plan". The code holds construct until the dependency merges until `units-build-at-once-and-are-reviewed-in-batches` lands: `_open.md`.
 
 **[plan.14]** Rules out: a deploy implied by `crew bolt land`; a deploy whose contents are remembered rather than read; main-ops running a deploy; a `manual` deploy approved anywhere but its card; an after-deploy list of what a check could assert; a step for the user that lives only in a pane. Source: ADR 0012 as amended 2026-10-08 and 2026-10-09; `main-level` spec; swancloud ADR 0018, 0019; the versions statement on channels. Not built: `_open.md`.
 
