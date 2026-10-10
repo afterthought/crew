@@ -7,8 +7,8 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 "reports": [<a team's verify reports folder, ~ allowed>, ...]}], "sites": <true to also read each worktree's dev
 server names with devurl, and the host's running portless routes>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
-for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree
-and the time of its head; each place under <dir>/places with its branch, its head and the head's time, its change's
+for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree,
+its head and the head's time; each place under <dir>/places with its branch, its head and the head's time, its change's
 tasks, whether its planning is complete and whether it has a review since the bolt; each fix branched from a bolt;
 and each unit's newest verify report in the reports folders, with its path and time. It reads with git, the file
 system and, for a change whose workflow it does not read itself, openspec, and changes nothing. It needs nothing but
@@ -291,6 +291,7 @@ def kit(req, sites=False, running=None):
         wt = os.path.join(kdir, "bolts", b)
         out["bolts"][b] = {"exists": exists, "changes": changes(main, f"bolt/{b}") if exists else [],
                            "worktree": wt if at.get(wt) == f"bolt/{b}" else None,
+                           "head": (run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}^{{commit}}"], main) or "").strip() or None if exists else None,
                            "head_at": head_at(main, f"refs/heads/bolt/{b}") if exists else None}
     places = os.path.join(kdir, "places")
     for path, branch in at.items():
