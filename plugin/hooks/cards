@@ -11,10 +11,10 @@ an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). An
 the key to use, and so is a call crew could not check, in words saying to post it again later, since a card crew let
 through can't be taken back (read.1). A card posted under a row's key the agent owns is then checked against its row's
 form (FORMS); a change is checked when this host's card.post entry for the card names a row key, for what the change
-gives it: a landing card's high stakes cleared, options on an approval or a review, steps on any card but a landing's,
-or a landing step that lands the bolt. A card in another form is refused with the form to use. A refused call never
-reaches Pending You. What the form check cannot check, the run record among it, is refused with what failed. A change
-to a card under any other key, or to a card this host has no post of, passes unchecked.
+gives it: a landing card's high stakes cleared, options on an approval, steps on any card but a landing's, or a
+landing step that lands the bolt. A card in another form is refused with the form to use. A refused call never reaches
+Pending You. What the form check cannot check, the run record among it, is refused with what failed. A change to a card
+under any other key, or to a card this host has no post of, passes unchecked.
 
 The PostToolUse half runs after a Pending You tool that posts (post_request), updates (update_request), withdraws
 (cancel_request) or closes (ack_answer) a card, in a session crew started, and writes one entry: card.post, card.update
@@ -57,9 +57,9 @@ FORMS = {
     "proposal": dict(kinds=("approve",), high=False, options=False, steps=False,
                      says="a proposal's card is an approval, kind \"approve\", with a note for changes or for dropping "
                           "it, and no options or steps"),
-    "review": dict(kinds=("review",), high=False, options=False, steps=False,
-                   says="a review's card is a review, kind \"review\": looks good or needs changes, with a note, and no "
-                        "options or steps"),
+    "review": dict(kinds=("approve",), high=False, options=False, steps=False,
+                   says="a review's card is an approval, kind \"approve\", whose yes approves the unit and whose no "
+                        "carries a note for changes, with no options or steps"),
     "verify": dict(kinds=("choice", "multi"), high=False, options=True, steps=False,
                    says="a verify report's card is a choice, kind \"choice\", or \"multi\" when the user may pick "
                         "several findings, whose options are what you would do about them, and no steps"),
