@@ -22,6 +22,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `plan.8`, `teams.5` as restated 2026-10-10: the carrying fix judged by its commits, count, order, message and author, not by `git range-diff`'s pairing (`a-carrying-fix-is-judged-by-its-commits`); `plan _carry` judges by range-diff at creation factor 60 and misses a commit whose context main rewrote.
 - `plan.15`: an approved amendment runs construct again by its own act and a restarted conductor picks it up (`an-amendment-runs-construct-again-itself`); today the conductor runs it on a notice it can lose.
 - `briefs.14`, ADR 0004 as amended, ADR 0016: sources govern over an intent's mechanism, and a spike beside the design agent (`a-spike-runs-beside-the-design-agent`); no brief says which governs, and crew has no spike.
+- ADR 0005 as amended 2026-10-10, the image clause: a screenshot on a card is an uploaded image artifact, never a path (`an-image-on-a-card-is-uploaded`); the card discipline says nothing of images.
 - `docs.6`: what a change holds, in `construct.md` and `openspec/config.yaml` (`a-change-holds-what-is-true-and-what-is-proved`).
 - `signals.6`: a program's captures landed on the flywheel's branch (`machine-captures-land-on-the-flywheels-branch`, after `daily-pass-lands-through-crew`).
 - `signals.7`: curation on a cadence (`curation-runs-on-a-cadence`, after `curate-into-agenda`).
