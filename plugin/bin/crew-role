@@ -2,8 +2,8 @@
 # Run one role in the current pane, started from its agent definition (plugin/roles/<role>.md):
 #
 #   crew-role <team> conductor|ops [resume]
-#   crew-role <team> unit-<n> construct|code|verify|merge|fix
-#   crew-role <label> design|planner|ops|dispatcher|operator [resume]
+#   crew-role <team> unit-<n> construct|code|verify|settle|merge|fix
+#   crew-role <label> design|planner|ops|reviewer|dispatcher|operator [resume]
 #
 # The definition's frontmatter gives the model and effort, unless the teams file's `roles` overrides them for
 # that team or partition; its body, filled from the teams file, is appended to Claude Code's own system prompt.

@@ -36,7 +36,7 @@ NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 # The roles a team's entry may override, and those a partition's entry may: each is a definition in roles/.
 TEAM_ROLES = ("conductor", "ops", "construct", "coder", "verify")
-MAIN_ROLES = ("design", "planner", "main-ops", "dispatcher", "operator")
+MAIN_ROLES = ("design", "planner", "main-ops", "dispatcher", "operator", "reviewer")
 # What tells whether an agent waits on a question crew's own hook saw it open: piped to the agent's host, whose crew may be older.
 QUESTIONS = (LIB / "questions.py").read_text()
 
@@ -215,7 +215,7 @@ def place_of_agent(fleet, name):
         return t["machine"], t["session"]
     for p in fleet["partitions"].values():
         l = p["label"]
-        if name in (f"{l}-design", f"{l}-planner", f"{l}-ops"):
+        if name in (f"{l}-design", f"{l}-planner", f"{l}-ops", f"{l}-reviewer"):
             return p["machine"], p["session"]
         m = re.match(rf"^{re.escape(l)}-dispatch-(.+)$", name)
         if m:
@@ -233,7 +233,7 @@ def label_of_agent(fleet, name):
     if t:
         return t["label"]
     for l in fleet["partitions"]:
-        if name in (f"{l}-design", f"{l}-planner", f"{l}-ops") or re.match(rf"^{re.escape(l)}-(dispatch|operator)-.+$", name):
+        if name in (f"{l}-design", f"{l}-planner", f"{l}-ops", f"{l}-reviewer") or re.match(rf"^{re.escape(l)}-(dispatch|operator)-.+$", name):
             return l
     return None
 
@@ -413,7 +413,8 @@ def greet_standing(fleet, name, wait=90):
                       f"crew up {t['name']} greets its conductor")
     label = label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
     host, _ = place_of_agent(fleet, name)
-    role = name[len(label) + 1:]  # design, planner, ops, dispatch-<host> or operator-<host>
+    role = name[len(label) + 1:]  # design, planner, ops, reviewer, dispatch-<host> or operator-<host>
+    role != "reviewer" or fail(f"{name} is sent its batch as its prompt by crew review, and is not greeted")
     role = role if role in GREETINGS else role.split("-")[0]
     text = GREETINGS[role].format(label=label, host=host)
     if role == "operator":
@@ -535,7 +536,7 @@ def launch(fleet, scope, role, extra=None):
         p = partition_of(fleet, scope)
         label, roles, host = p["label"], p["roles"], this_host()
         main = dict(cwd=p["checkout"], dirs=[d for d in blueprints_on(fleet, label, p["machine"])[1:] + kits_on(fleet, label, p["machine"])])
-        if role in ("design", "planner", "ops"):
+        if role in ("design", "planner", "ops", "reviewer"):
             spec = dict(main, defn="main-ops" if role == "ops" else role, name=f"{label}-{role}")
         elif role == "dispatcher":
             dispatch_place(fleet, label, host)
@@ -546,7 +547,7 @@ def launch(fleet, scope, role, extra=None):
             sess = operator_session(fleet, label, host)
             spec = dict(defn="operator", name=f"{label}-operator-{host}", cwd=sess["dir"], dirs=[])
         else:
-            fail(f"no role '{role}' at {label}'s main level. roles: design planner ops dispatcher operator")
+            fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer dispatcher operator")
     meta, _ = definition(spec["defn"])
     o = roles.get(spec["defn"], {})
     return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]))
@@ -712,7 +713,7 @@ def main_tokens(fleet, p, role, self_name):
                            f"with {t['units']} unit slots; its conductor is `{t['name']}-conductor`")
     kits = sorted({t["kit"]["name"] for t in teams})
     names = {"design": f"{label}-design", "planner": f"{label}-planner", "main-ops": f"{label}-ops",
-             "dispatcher": f"{label}-dispatch-{host}", "operator": f"{label}-operator-{host}"}
+             "dispatcher": f"{label}-dispatch-{host}", "operator": f"{label}-operator-{host}", "reviewer": f"{label}-reviewer"}
     tok = {
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
@@ -720,6 +721,7 @@ def main_tokens(fleet, p, role, self_name):
         "CARDS": cards_how(cmd, label, kits_named({t["kit"]["repo"]: t["kit"] for t in teams}.values())), "RESULTS": RESULTS,
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
+        "REVIEWER": f"{label}-reviewer", "REVIEWS": f"~/.local/state/crew/{label}-main/reports",
         "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",
         "KIT_CHECKOUTS": ", ".join(f"`{c}`" for c in kits_on(fleet, label, p["machine"])) or "none on this host",
         "TEAMS": "\n".join(team_line(t) for t in teams) or "- no team yet",

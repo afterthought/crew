@@ -1,4 +1,4 @@
-# crew rail: everything that waits on the user, in its groups in order (proposals, verify, land), each row
+# crew rail: everything that waits on the user, in its groups in order (proposals, batches, verify, land), each row
 # with when it began to wait, how long ago that was and the commands that answer it, oldest first; read from the plan,
 # the proposals, the kits and the run record, and writing nothing. Each scenario of the crew-rail spec, and opening a
 # proposal in plannotator with crew plan proposed <n> --open. Each row has its card key and says whether a Pending You
@@ -26,8 +26,8 @@ line_of() { grep -F -- "$2" <<<"$1" || true; }
 
 expect_ok crew rail --label wldn
 has "$out" "What waits on you (wldn), as of "
-eq "$(grep -E '^[a-z]+$' <<<"$out" | tr '\n' ' ')" "proposals verify land "
-eq "$(grep -c '^  none$' <<<"$out")" "3"
+eq "$(grep -E '^[a-z]+$' <<<"$out" | tr '\n' ' ')" "proposals batches verify land "
+eq "$(grep -c '^  none$' <<<"$out")" "4"
 lacks "$out" "card:"; lacks "$out" "open cards with no row"; lacks "$out" "review"
 ok "with nothing waiting, the groups are printed in order, each with none, and there is no review group"
 
@@ -177,6 +177,6 @@ has "$stray" '    answer: crew tell atl-1-conductor "Close your Pending You card
 has "$(group "$out" proposals)" "    card:   proposal/1, open, asked by wldn-planner"
 has "$(group "$out" proposals)" "proposal 1 (wldn)"
 has "$out" "$box did not answer"; has "$out" "its units and bolts may also wait on you"
-eq "$(grep -c '^  none$' <<<"$out")" "2"
+eq "$(grep -c '^  none$' <<<"$out")" "3"
 rm "$T/down"
 ok "a host that does not answer is named, the proposals and their cards are still listed, a stray card of its teams is not, and the exit is zero"

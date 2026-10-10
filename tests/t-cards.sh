@@ -7,17 +7,17 @@
 # the plannotator session crew started for its key; an unkeyed card's ends nothing, nor does a key's close end a
 # session crew did not start, and a card posted under a key that is no longer a row's closes under it. Run as
 # `cards --before`, before a card is posted or an area made, the hook refuses a crew agent's card under any key but a
-# rail row's of its own, the planner's open proposal or its conductor's bolt and units, and an area under any key but
-# create-area: and a kit of its own, naming the key to use; a team's ops and slots and the main level's other agents own
-# no card key; a call crew can't check is refused naming what it could not read; and a session crew didn't start,
-# another server's tool and the other card tools are not checked for their key. Each refusal scenario of the rail-cards
-# spec. A row's card of the agent's own, posted or changed, the hook then refuses in another form than its row's, naming
-# the form: a landing card that is a step, not high stakes, or has options or a step that lands it; a verify card with
-# no options; a proposal card that is no approval, or one with options or steps; a grouped card; and a change that
-# clears a landing's high stakes or gives a card options or steps its row's has not. A card under no row's
-# key is refused for its key, not its form; a change to a card posted on no row's key here, a session crew didn't start
-# and another server's tool pass unchecked; what it can't check, its own input among it, is refused, while the record
-# half never fails.
+# rail row's of its own, the planner's open proposal or batch card or its conductor's bolt and units, and an area under
+# any key but create-area: and a kit of its own, naming the key to use; a team's ops and slots and the main level's
+# other agents own no card key; a call crew can't check is refused naming what it could not read; and a session crew
+# didn't start, another server's tool and the other card tools are not checked for their key. Each refusal scenario of
+# the rail-cards spec. A row's card of the agent's own, posted or changed, the hook then refuses in another form than
+# its row's, naming the form: a landing card that is a step, not high stakes, or has options or a step that lands it; a
+# verify card with no options; a proposal card that is no approval, or one with options or steps; a grouped card; and
+# a change that clears a landing's high stakes or gives a card options or steps its row's has not; a batch card's form
+# is not checked. A card under no row's key is refused for its key, not its form; a change to a card posted on no row's
+# key here, a session crew didn't start and another server's tool pass unchecked; what it can't check, its own input
+# among it, is refused, while the record half never fails.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -80,11 +80,13 @@ call plugin_pendingyou_pendingyou post_request "$(post land/tenant-environments/
 call pendingyou post_request "$(post proposal/4)" '{"structuredContent": {"requestId": "req_abc-4"}}' | cards
 eq "$(entries card.post | jq -r '"\(.On[0]) \(.Card) \(.Key)"' | tail -2 | tr '\n' ' ')" \
   "bolt/tenant-environments req_abc-3 land/tenant-environments/abc1234 proposal/4 req_abc-4 proposal/4 "
+call pendingyou post_request "$(post batch/3-2)" '{"structuredContent": {"requestId": "req_abc-12"}}' | cards
+eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "batch/3 req_abc-12 batch/3-2"
 # As Claude Code 2.1.292 gives Pending You's result: the text alone, a string of JSON.
 call pendingyou post_request "$(post verify/y/20261007-1500)" \
   '"{\"requestId\":\"req_5de3dad46fba41068fba\",\"threadId\":\"req_5de3dad46fba41068fba\",\"status\":\"pending\",\"version\":1}"' | cards
 eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/y req_5de3dad46fba41068fba verify/y/20261007-1500"
-ok "a post's entry names its row, its card and its key, from structuredContent, a text block of JSON, a plain string of JSON, or a plugin's server"
+ok "a post's entry names its row, its card and its key, a batch card's its batch, from structuredContent, a text block of JSON, a plain string of JSON, or a plugin's server"
 
 call pendingyou update_request '{"name": "swb-1-conductor", "requestId": "req_abc-1", "title": "ZQXTITLE again"}' \
   '{"structuredContent": {"requestId": "req_abc-1", "status": "pending", "version": 2}}' | cards
@@ -231,6 +233,10 @@ printf '%s\n' 'Case: The queue gets a unit.' 'Do: unit add queued "Queued." --re
 printf '%s\n' 'Case: The queue gets another.' 'Do: unit add later "Later." --repo switchboard-kit' > "$T/p2.rec"
 crew plan propose "$T/p1.rec" >/dev/null 2>&1; crew plan propose "$T/p2.rec" >/dev/null 2>&1
 crew plan drop 2 "not now" >/dev/null
+# A batch of seven, as the run record holds one: two cards, the second closed.
+units7=$(for u in a b c d e f g; do printf '%s:swb-1@abc1234 ' "u$u"; done)
+CREW_AGENT=wldn-reviewer emit --act review.batch --on batch/1 --field Batch=1 --field "Units=$units7" >/dev/null
+CREW_AGENT=wldn-planner emit --act card.close --on batch/1 --field Card=req_b-1 --field Key=batch/1-2 >/dev/null
 # The hook, run as the plugin runs it before a Pending You tool.
 check() { as mac-studio python3 "$CREW/plugin/hooks/cards" --before; }
 # pre <server> <tool> <input> [session]: the hook's input before one tool call, as Claude Code gives it
@@ -276,10 +282,13 @@ has "$(denied brd-1-conductor post_request land/tenant-environments/abc1234)" "b
 ok "a conductor's key of its own making, a review's key, which is no row's, a bolt's bare land/<bolt>, and another team's row, are refused naming the keys that are its own"
 
 why=$(denied wldn-planner post_request proposal/2)
-eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, proposal/1, from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`."
+eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, or batch/<n>-<k> for a card of one of its batches open now, proposal/1 or batch/1-1, from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`."
+eq "$(gate wldn-planner post_request batch/1-1 '{"questions": [{"id": "which", "kind": "multi", "title": "Which need notes?"}, {"id": "notes", "kind": "text", "title": "The notes"}]}')" ""
+has "$(denied wldn-planner post_request batch/1-2)" "proposal/1 or batch/1-1"
+has "$(denied swb-1-conductor post_request batch/1-1)" "swb-1-conductor posts a card only under a rail row's key of its own"
 has "$(denied wldn-design post_request proposal/1)" "wldn-design owns no card key, since only the planner and the conductors post cards"
 has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "Tell the partition's operator agents what you wait on"
-ok "the planner is refused a closed proposal's key, naming the open one, and the main level's other agents own no key"
+ok "the planner is refused a closed proposal's or batch card's key, naming the open ones, and passes under an open batch card's, whose form is not checked; a conductor is refused a batch's key, and the main level's other agents own no key"
 
 why=$(denied swb-1-conductor create_area area:swb-1-conductor)
 eq "$why" "crew refuses an area under area:swb-1-conductor: swb-1-conductor makes a kit's area only under create-area:WilldanGroup/switchboard-kit."

@@ -141,6 +141,12 @@ elif group == "tab" and cmd == "create":
     st["tabs"][tab] = {"workspace": ws, "label": opt("--label", tab)}
     p = new_pane(ws, tab, opt("--cwd", os.environ["HOME"]))
     out({"tab": {"tab_id": tab, "label": st["tabs"][tab]["label"]}, "root_pane": {"pane_id": p}})
+elif group == "tab" and cmd == "close":
+    rest[0] in st["tabs"] or die(f"no tab {rest[0]}")
+    del st["tabs"][rest[0]]
+    for p in [p for p, v in st["panes"].items() if v["tab"] == rest[0]]:
+        close_pane(p)
+    out({})
 elif group == "tab" and cmd == "rename":
     rest[0] in st["tabs"] or die(f"no tab {rest[0]}")
     st["tabs"][rest[0]]["label"] = rest[1]

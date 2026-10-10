@@ -19,6 +19,16 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-amend-intent.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-batch-cards:
+    command: 'tests/run t-batch-cards'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-batch-cards.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-batches:
+    command: 'tests/run t-batches'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-batches.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-board:
     command: 'tests/run t-board'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-board.sh', '/tests/stubs-sites/**/*']

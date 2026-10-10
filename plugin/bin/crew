@@ -767,6 +767,33 @@ case $cmd in
         done < <(py hosts "$LABEL") ;;
       *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;;
     esac ;;
+  review)  # crew review <label> [--wait [--timeout <ms>]]: the partition's reviewer, fresh for one batch, in a review tab
+    # of the main level's workspace beside the planner; --wait waits for its summary, records the batch and closes its tab
+    load_main "${2:-}"; forward; ensure_state
+    if [[ ${3:-} == --wait ]]; then
+      limit=(); [[ ${4:-} == --timeout ]] && { [[ ${5:-} =~ ^[0-9]+$ ]] || { echo "--timeout takes a number of milliseconds" >&2; exit 2; }; limit=(--timeout "$5"); }
+      rc=0; out=$(plan _review-wait "$LABEL" ${limit[@]+"${limit[@]}"}) || rc=$?
+      if [[ $rc == 0 ]]; then
+        stop reviewer || true; close_pane reviewer
+        t=$(get "$layout" tab:review); [[ -n $t ]] && { h tab close "$t" >/dev/null 2>&1 || true; drop "$layout" tab:review; }
+        echo "batch summary: $out"
+      fi
+      exit $rc
+    fi
+    [[ -n ${3:-} ]] && { echo "usage: crew review <label> [--wait [--timeout <ms>]]" >&2; exit 2; }
+    [[ -z $(agent_status "$(pane_of reviewer)") ]] || { echo "$(name_of reviewer) is still reviewing a batch: crew review $LABEL --wait waits for its summary" >&2; exit 1; }
+    [[ -n $(get "$layout" "$(ws_key "$LABEL")") ]] || { echo "$LABEL's main level is not up: crew main up $LABEL" >&2; exit 1; }
+    e=$(plan _review "$LABEL") || exit 1; eval "$e"
+    p=$(pane_of reviewer)
+    if ! pane_live "$p"; then  # the tab is kept in the layout, so the batch's end closes it
+      t=$(h tab create --workspace "$(get "$layout" "$(ws_key "$LABEL")")" --cwd "$CWD" --label review --no-focus)
+      put "$layout" tab:review "$(jq -r '.result.tab.tab_id' <<<"$t")"; put "$panes" reviewer "$(jq -r '.result.root_pane.pane_id' <<<"$t")"
+    fi
+    start reviewer || exit 1
+    h agent prompt "$(pane_of reviewer)" "$PROMPT" >/dev/null
+    on=(--on "batch/$N" --on "agent/$(name_of reviewer)"); for u in $NAMES; do on+=(--on "unit/$u"); done
+    entry --label "$LABEL" --act review.start "${on[@]}" --field "Batch=$N" --field "Units=$UNITS" --why "batch($N): start review"
+    echo "$(name_of reviewer) is reviewing batch $N of $LABEL, into $FILE: crew review $LABEL --wait waits for it" ;;
   _dispatch)  # crew _dispatch up|down|status <label>: this host's dispatcher of the partition
     sub=${2:-}; load_dispatch "${3:?}"; ensure_state
     case $sub in

@@ -14,14 +14,14 @@ five times. A write that changes several files is one commit, and it carries the
   crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
                                              the moves where the partition's blueprints repos have them
   crew bolts [<bolt>] [--label L] [--json]   every bolt and unit of the plans, each unit's stage read from its kit
-  crew rail [--label L]                      what waits on the user: open proposals, verify reports and bolts to
-                                             land, each with when it began to wait, what answers it and
+  crew rail [--label L]                      what waits on the user: open proposals, review batches, verify reports
+                                             and bolts to land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone
-  crew card session|wait|end <key>           a plannotator session on what the rail row with that card key asks the
-                                             user to read, started on this host with no browser and its link printed;
-                                             the user's decision in it, waited for; and its end, which a card's close
-                                             brings too
+  crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
+                                             user to read, started on this host with no browser and its link printed,
+                                             a batch card's one per unit on that unit's team's host; the user's decision
+                                             in it, waited for; and its end, which a card's close brings too
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
@@ -1131,6 +1131,9 @@ def bolt_land(fleet, a):
         s = st.of(u)
         s["stage"] != "unknown" or fail(f"cannot tell whether unit {u} has landed: {s.get('why')}")
         s["stage"] == "landed" or fail(f"unit {u} has not landed on main: it is {s['stage']}")
+    outside = [u for u, *_ in due_changes(plan, partition_entries(fleet, label)) if u in units]
+    not outside or fail(f"bolt {a.bolt} lands only once every unit's latest change has been in a batch, and {either(outside)} "
+                        + ("has" if len(outside) == 1 else "have") + f" not: a batch is due for them (crew review {label})")
     # A bolt landed on a main that lags GitHub's can't be pushed without force, and force would erase what it lacks.
     gap = host_run(fleet, t["machine"], BEHIND, t["kit"]["main"]).split()
     if gap and int(gap[1]):
@@ -3714,6 +3717,10 @@ def stage_wait(fleet, a):
         reach(fleet, t)
     except Refusal as e:
         print(f"no forecast: {e}", file=sys.stderr)
+    try:
+        batch_check(fleet, t)
+    except Refusal as e:
+        print(f"no batch reckoned: {e}", file=sys.stderr)
     held = {l.split()[0]: l.split() for l in (team_state(t) / "slots").read_text().splitlines() if l.strip()} \
         if (team_state(t) / "slots").exists() else {}
     with stages_file(t, shared=True) as lines:
@@ -3743,6 +3750,11 @@ def stage_wait(fleet, a):
             if got:
                 if end_owed(fleet, t, o, "delivered", got):
                     unmark(fleet, t, o)
+                    if o.stage == "construct" and not o.fix and not o.proof:
+                        try:  # the change it delivered is due, and may make a batch due now
+                            batch_check(fleet, t)
+                        except Refusal as e:
+                            print(f"no batch reckoned: {e}", file=sys.stderr)
                     print(f"{agent} delivered {o.phrase()}: {missing}")
                     return
                 continue
@@ -3887,9 +3899,176 @@ def bolts_view(fleet, a):
         sys.exit("\n".join(errors.values()))
 
 
+# ------------------------------------------------------------------------------------------------- batches
+
+BATCH_DAYS = 60  # how far back the run record is read for constructs and batches
+CARD_UNITS = 5  # Pending You's limit on a choice's options: a batch card holds at most five units
+UNIT_AT = re.compile(r"^([a-z0-9][a-z0-9-]*):([a-z0-9][a-z0-9-]*)@([0-9a-f]{4,40})$")
+
+
+def reviews(label):
+    """The partition's reviews folder on its main level's host, where each batch's summary is written."""
+    return pathlib.Path.home() / f".local/state/crew/{label}-main/reports"
+
+
+def batch_file(label, n):
+    return reviews(label) / f"batch-{label}-{n}.md"
+
+
+def units_of_batch(e):
+    """A review entry's units, in order, as (unit, team, commit)."""
+    return [m.groups() for m in (UNIT_AT.match(w) for w in (e.get("Units") or "").split()) if m]
+
+
+def partition_entries(fleet, label, days=BATCH_DAYS):
+    """The partition's run record from days back, from its branch and every host it runs on, refused naming what did not
+    answer (read.1): what is due can't be told from part of it."""
+    since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=days)).isoformat()
+    entries, missing = record.gather(fleet, [label], since)
+    not missing or fail("crew can't tell which changes have been in a batch: " + "; ".join(f"{k} did not answer ({v})" for k, v in missing.items()))
+    return entries
+
+
+def batches(entries):
+    """The partition's review batches, oldest first: (number, when, [(unit, team, commit)])."""
+    return [(int(e["Batch"]), e["At"], units_of_batch(e)) for e in entries
+            if e.get("Act") == "review.batch" and not e.get("Refused") and (e.get("Batch") or "").isdigit()]
+
+
+def due_changes(plan, entries):
+    """Each change due for the user's review, in the plan's order: a unit of a bolt a team holds whose last delivered
+    construct left a commit no batch has held it at, as (unit, team, commit, when it was constructed)."""
+    latest = {}
+    for e in entries:
+        if e.get("Act") != "stage.end" or e.get("Ended") != "delivered" or e.get("Refused"):
+            continue
+        st = next((o for o in e["On"] if o.startswith("stage/") and o.endswith("/construct")), None)
+        unit = st.split("/")[1] if st else None
+        got = e.get("Delivered") or ""
+        if unit and got.startswith(f"unit/{unit}@"):
+            latest[unit] = (got.rpartition("@")[2], e["At"])
+    held = {(u, sha) for _, _, us in batches(entries) for u, _, sha in us}
+    out = []
+    for u in plan.units():
+        b = plan.bolt(u.get("Bolt")) if u.get("Bolt") else None
+        if b and b.get("Team") and u.name() in latest and (u.name(), latest[u.name()][0]) not in held:
+            out.append((u.name(), b.get("Team"), *latest[u.name()]))
+    return out
+
+
+def batch_check(fleet, t):
+    """On each wait of a conductor of the partition: the changes due across the partition, counted from the run
+    record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
+    one due, or at once when the team's bolt has every unit merged and some unit's latest change has been in no batch.
+    crew then tells the partition's planner once, `batch.due` in the run record, until the next batch is delivered
+    (briefs.12). What crew can't read is said on standard error, and the wait goes on."""
+    label = t["label"]
+    setting = fleet["partitions"][label]["review"]
+    plan = plan_of(fleet, label)
+    if plan is None:
+        return
+    entries = partition_entries(fleet, label)
+    due = due_changes(plan, entries)
+    if not due:
+        return
+    done = [e["At"] for e in entries if e.get("Act") == "review.batch"]
+    last = max(done) if done else None
+    if any(e.get("Act") == "batch.due" and (last is None or e["At"] > last) for e in entries):
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    clock = utc(last) if last else min(utc(at) for *_, at in due)
+    why = []
+    if len(due) >= setting["every"]:
+        why.append(f"{len(due)} changes are due, and a batch is every {setting['every']}")
+    if now - clock >= datetime.timedelta(hours=setting["hours"]):
+        why.append(f"{setting['hours']} hours have passed since " + ("the last batch" if last else "the first of them was constructed"))
+    held = held_by(plan, t["name"])
+    if held:
+        st = stages_for(fleet, plan, held)
+        for b in held:
+            units = plan.units_of(b.name())
+            waiting = [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]
+            if units and waiting and all(st.of(u.name())["stage"] in ("merged", "landed") for u in units):
+                why.append(f"bolt {b.name()} has every unit merged, and lands only once {either(waiting)} "
+                           + ("has" if len(waiting) == 1 else "have") + " been in a batch")
+    if not why:
+        return
+    planner = f"{label}-planner"
+    text = (f"A batch of {label}'s changes is due: " + ", ".join(f"{u} ({team})" for u, team, *_ in due) + f"; " + "; ".join(why)
+            + f". Start its reviewer with crew review {label}, wait for the summary with crew review {label} --wait, then post its cards.")
+    if crew.tell(fleet, planner, text):
+        record.emit(label, "batch.due", [f"agent/{planner}"] + [f"unit/{u}" for u, *_ in due], why=f"batch: due, {len(due)} changes",
+                    Count=len(due))
+
+
+def reading_command(fleet, label, team, sha, unit):
+    """How the reviewer, on the main level's host, reads a unit's change at a commit in its kit on the team's host."""
+    t, here = fleet["teams"][team], fleet["partitions"][label]["machine"]
+    pre = "" if t["machine"] == here else f"ssh -o BatchMode=yes {t['ssh']} "
+    return (f"list its files with `{pre}git -C {t['kit']['main']} ls-tree -r --name-only {sha} openspec/changes/{unit}/` and read "
+            f"each with `{pre}git -C {t['kit']['main']} show {sha}:<path>`")
+
+
+def review_start(fleet, a):
+    """crew _review <label>: the batch the partition's reviewer is started for, as shell assignments for bash crew: its
+    number (N), the file it writes (FILE), its units as <unit>:<team>@<commit> (UNITS) and by name (NAMES), and its
+    prompt (PROMPT), naming each change, its team, its kit and host, and how to read it at its commit. Refused when no
+    change is due."""
+    p = crew.partition_of(fleet, a.label)
+    label = p["label"]
+    CONTEXT["label"] = label
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+    plan = read(repo, ref, tip)
+    entries = partition_entries(fleet, label)
+    due = due_changes(plan, entries)
+    due or fail(f"no change of {label} is due for a batch: every unit's latest change has been in one")
+    n = 1 + max([int(e["Batch"]) for e in entries if e.get("Act") in ("review.start", "review.batch") and (e.get("Batch") or "").isdigit()] or [0])
+    f = batch_file(label, n)
+    prompt = (f"Review batch {n} of {label}, {len(due)} change{'' if len(due) == 1 else 's'}, and write its summary to {f}. "
+              + " ".join(f"{u} ({team}, {fleet['teams'][team]['kit']['name']} on {fleet['teams'][team]['machine']}, at {sha}): "
+                         f"{reading_command(fleet, label, team, sha, u)}." for u, team, sha, _ in due))
+    print(sh(N=n, FILE=f, UNITS=" ".join(f"{u}:{team}@{sha}" for u, team, sha, _ in due), NAMES=" ".join(u for u, *_ in due),
+             PROMPT=prompt))
+
+
+def review_wait(fleet, a):
+    """crew _review-wait <label>: wait, on the main level's host, for the summary of the batch the reviewer was last
+    started for, written since it started: once it is, the batch is recorded (`review.batch`, its number and each unit
+    at the commit its change was read at) and the file's path printed. A batch already recorded is printed at once.
+    Exit 3 when the timeout passes first, 1 when the reviewer is gone with no summary written."""
+    label = crew.partition_of(fleet, a.label)["label"]
+    CONTEXT["label"] = label
+    entries = local_entries(label, BATCH_DAYS)
+    starts = [e for e in entries if e.get("Act") == "review.start" and not e.get("Refused") and (e.get("Batch") or "").isdigit()]
+    starts or fail(f"no batch of {label} has been started: crew review {label} starts one")
+    s = starts[-1]
+    n, f = int(s["Batch"]), batch_file(label, s["Batch"])
+    if any(e.get("Act") == "review.batch" and e.get("Batch") == s["Batch"] for e in entries):
+        print(f)
+        return
+    begun, deadline = utc(s["At"]), time.monotonic() + a.timeout / 1000
+    while True:
+        try:
+            written = f.stat().st_mtime >= begun.timestamp()
+        except OSError:
+            written = False
+        if written:
+            record.emit(label, "review.batch", [f"batch/{n}"] + [f"unit/{u}" for u, *_ in units_of_batch(s)],
+                        why=f"batch({n}): reviewed", Batch=n, Units=s.get("Units"))
+            print(f)
+            return
+        if crew.agent_status(fleet, f"{label}-reviewer") is None:
+            fail(f"{label}-reviewer is no longer running, and batch {n}'s summary {f} was not written")
+        if time.monotonic() >= deadline:
+            print(f"batch {n}'s review is still running after the wait's {a.timeout} ms: nothing is recorded yet", file=sys.stderr)
+            sys.exit(3)
+        time.sleep(POLL)
+
+
 # ------------------------------------------------------------------------------------------------ crew rail
 
-RAIL = ("proposals", "verify", "land")
+RAIL = ("proposals", "batches", "verify", "land")
 
 
 def utc(iso):
@@ -3924,35 +4103,41 @@ CARD_DAYS = 14
 
 
 def rail_record(fleet, found, props):
-    """What the rail reads of the run record, in one read of each partition whose plan was read: from 14 days back, or
-    from the day before its oldest open proposal's Opened when that is earlier, since Opened is the writing host's date
-    and the record's files are named by the UTC day. Returns when each open proposal was proposed, {(label,
-    proposal/<n>): time}, from the earliest plan.propose entry naming it (a proposal whose entry isn't found is left
-    out); the cards open, each {label, card, key, on, by, host, at}, from each card.post with a Card that no later
-    card.close of that Card closes; the hosts whose record did not answer, {label: {host: why}}; the landings, each
-    {label, bolt, units, at, by, host}, from each bolt.land entry not refused, oldest first; and the team each bolt was
-    given to, {(label, bolt): team}, from the newest bolt.give entry naming it that was not refused."""
-    times, cards, unread, landings, gives = {}, [], {}, [], {}
+    """What the rail reads of the run record, in one read of each partition whose plan was read: from 60 days back, for
+    the batches and the constructs they hold, or from the day before its oldest open proposal's Opened when that is
+    earlier, since Opened is the writing host's date and the record's files are named by the UTC day. Returns when each
+    open proposal was proposed, {(label, proposal/<n>): time}, from the earliest plan.propose entry naming it (a
+    proposal whose entry isn't found is left out); the cards open, each {label, card, key, on, by, host, at}, from each
+    card.post of the last 14 days with a Card that no later card.close of that Card closes; the hosts whose record did
+    not answer, {label: {host: why}}; the landings, each {label, bolt, units, at, by, host}, from each bolt.land entry
+    not refused, oldest first; the team each bolt was given to, {(label, bolt): team}, from the newest bolt.give entry
+    naming it that was not refused; and what the batches hold, {label: {"batches": [(n, at, units)], "closed": card
+    keys closed, "due": units whose latest change no batch has held}}, the last None for a partition whose record did
+    not all answer, since then it can't be told."""
+    times, cards, unread, landings, gives, held = {}, [], {}, [], {}, {}
     today = datetime.datetime.now(datetime.timezone.utc).date()
-    for l in [l for l, _, _, p in found if p]:
-        since = today - datetime.timedelta(days=CARD_DAYS)
+    fresh = utc(f"{today - datetime.timedelta(days=CARD_DAYS)}T00:00:00Z")
+    for l, _, _, plan in [f for f in found if f[3]]:
+        since = today - datetime.timedelta(days=BATCH_DAYS)
         opened = [d["opened"] for d in props if d["label"] == l]
         if opened:
             since = min(since, datetime.date.fromisoformat(min(opened)) - datetime.timedelta(days=1))
         entries, missing = record.gather(fleet, [l], since.isoformat())
         unread[l] = missing
-        posted = {}
+        posted, closed = {}, set()
         for e in entries:
             act = e.get("Act")
             if act == "plan.propose" and not e.get("Refused"):
                 for o in e["On"]:
                     if o.startswith("proposal/"):
                         times.setdefault((l, o), utc(e["At"]))
-            elif act == "card.post" and e.get("Card"):
+            elif act == "card.post" and e.get("Card") and utc(e["At"]) >= fresh:
                 posted.setdefault(e["Card"], dict(label=l, card=e["Card"], key=e.get("Key"), on=(e["On"] or [None])[0],
                                                   by=e.get("By"), host=e.get("Host"), at=utc(e["At"])))
             elif act == "card.close" and e.get("Card"):
                 posted.pop(e["Card"], None)
+                if e.get("Key"):
+                    closed.add(e["Key"])
             elif act == "bolt.land" and not e.get("Refused"):
                 bolt = next((o[5:] for o in e["On"] if o.startswith("bolt/")), None)
                 if bolt:
@@ -3964,15 +4149,20 @@ def rail_record(fleet, found, props):
                 if bolt and team:
                     gives[(l, bolt)] = team
         cards += posted.values()
-    return times, cards, unread, landings, gives
+        held[l] = dict(batches=batches(entries), closed=closed, due=None if missing else {u for u, *_ in due_changes(plan, entries)})
+    return times, cards, unread, landings, gives, held
 
 
-def rail_rows(fleet, found, sv, props, times):
-    """What waits on the user in the plans read, from the open proposals and when each was proposed, and the kits as
-    surveyed: each row's group, its partition, its card key, the time it began to wait (shown as a date alone when that
-    is all that is known), what it is, its commands, and the document its card asks the user to read: ("page", label,
-    n) for a proposal, (host, path) for a verify report, None for a landing."""
-    rows, here = [], crew.this_host()
+def rail_rows(fleet, found, sv, props, times, held=None):
+    """What waits on the user in the plans read, from the open proposals and when each was proposed, the batches the
+    run record holds (held, as rail_record reads it), and the kits as surveyed: each row's group, its partition, its
+    card key, the time it began to wait (shown as a date alone when that is all that is known), what it is, its
+    commands, and the document its card asks the user to read: ("page", label, n) for a proposal, ("batch", label, n)
+    for a batch card, whose units each have a session of their own, (host, path) for a verify report, None for a
+    landing. A batch of more than five units is a row for each five, keyed batch/<n>-<k>, until its card closes. A bolt
+    with every unit merged is a landing row, offered for landing only once every unit's latest change has been in a
+    batch: until then the row names the units that have not, and offers nothing (briefs.12)."""
+    rows, here, held = [], crew.this_host(), held or {}
     for d in props:
         l, n = d["label"], d["proposal"]
         what = [f"proposal {n} ({l}), by {d['by']}: {d['case'].splitlines()[0][:70]}"]
@@ -3983,6 +4173,21 @@ def rail_rows(fleet, found, sv, props, times):
                          date=None if at else d["opened"], what=what, doc=("page", l, n),
                          cmds=[("read", f"crew plan proposed {n} --label {l}"), ("open", f"crew plan proposed {n} --label {l} --open"),
                                ("answer", f"crew plan approve {n} --label {l}")]))
+    for l, h in held.items():
+        main = fleet["partitions"][l]["machine"]
+        for n, at, units in h["batches"]:
+            cards_ = [units[i:i + CARD_UNITS] for i in range(0, len(units), CARD_UNITS)]
+            for k, part in enumerate(cards_, 1):
+                key = f"batch/{n}-{k}"
+                if key in h["closed"]:
+                    continue
+                home = fleet["hosts"].get(main, {}).get("home")
+                f = str(batch_file(l, n)) if main == here else f"{home}/.local/state/crew/{l}-main/reports/batch-{l}-{n}.md" if home else None
+                rows.append(dict(group="batches", label=l, key=key, at=utc(at), doc=("batch", l, n),
+                                 units=[u for u, *_ in part], teams={u: team for u, team, _ in part},
+                                 what=[f"batch {n} ({l}), card {k} of {len(cards_)}: " + ", ".join(f"{u} ({team})" for u, team, _ in part)],
+                                 cmds=([("open", opener(fleet, main, here, f))] if f else [])
+                                 + [("answer", f'crew tell {l}-planner "On batch {n}, these need notes: "')]))
     for l, _, _, plan in found:
         if not plan:
             continue
@@ -4010,8 +4215,17 @@ def rail_rows(fleet, found, sv, props, times):
             stages = [st.of(u.name())["stage"] for u in units]
             at, head = k["bolts"].get(b.name(), {}).get("head_at"), k["bolts"].get(b.name(), {}).get("head")
             if stages and at and head and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
-                rows.append(dict(group="land", label=l, key=f"land/{b.name()}/{head[:7]}", at=utc(at), doc=None, what=[f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"],
-                                 cmds=[("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]))
+                due = held.get(l, {}).get("due")
+                outside = [u.name() for u in units if due is not None and u.name() in due]
+                what = [f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"]
+                cmds = [("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]
+                if due is None and l in held:
+                    what, cmds = what + ["whether every unit's latest change has been in a batch can't be told: a host did not answer"], []
+                elif outside:
+                    what = what + [f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have")
+                                   + " been in a batch, which is due for them"]
+                    cmds = []
+                rows.append(dict(group="land", label=l, key=f"land/{b.name()}/{head[:7]}", at=utc(at), doc=None, what=what, cmds=cmds))
     return rows
 
 
@@ -4051,9 +4265,9 @@ def rail_read(fleet, labels, board=False):
         held += [(t, None) for l in labels for t in crew.partition_of(fleet, l)["teams"]]
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
-    times, cards, unread, landings, gives = rail_record(fleet, found, props)
+    times, cards, unread, landings, gives, batched = rail_record(fleet, found, props)
     return dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
-                gives=gives, rows=rail_rows(fleet, found, sv, props, times))
+                gives=gives, rows=rail_rows(fleet, found, sv, props, times, batched))
 
 
 def rail_text(fleet, labels, read, now):
@@ -4112,20 +4326,31 @@ def rail_view(fleet, a):
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # The rail's card keys, as crew's card hook reads them.
-CARD_KEYS = (r"proposal/\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}")
+CARD_KEYS = (r"proposal/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}")
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
+
+
+def batch_keys(fleet, label):
+    """The keys of the partition's batch cards whose row is open, as the rail reads them: batch/<n>-<k> for each card,
+    of at most five units, of each batch the run record holds, but those a card's close has named. Refused naming what
+    did not answer (read.1), since a close it did not read may be on it."""
+    entries = partition_entries(fleet, label)
+    closed = {e["Key"] for e in entries if e.get("Act") == "card.close" and e.get("Card") and e.get("Key")}
+    keys = [f"batch/{n}-{k}" for n, _, units in batches(entries) for k in range(1, (len(units) + CARD_UNITS - 1) // CARD_UNITS + 1)]
+    return [k for k in keys if k not in closed]
 
 
 def card_refusal(fleet, name, label, tool, key):
     """Whether the agent crew started may post a Pending You card (post_request) or make an area (create_area) under an
     idempotency key: None to let the call through, else the refusal's words, naming the key to use (briefs.11). A card's
     key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
-    from proposals.rec; a conductor's land/<bolt>/<head> for the bolt its team holds, or verify/<unit>/<stamp> for a
-    unit of it, read from the plan. Every other agent owns no key. An area's key is create-area:<owner>/<kit> for a kit
-    the agent's team builds or, for the main level, a kit of any team of its partition, read from the teams file. The
-    state branch is fetched once (plan.12), and only for the planner's or a conductor's card; what can't be read is a
-    Refusal naming it (read.1). The user's own name is never checked."""
+    from proposals.rec, or batch/<n>-<k> for a card of one of its batches whose row is open, read from the run record; a
+    conductor's land/<bolt>/<head> for the bolt its team holds, or verify/<unit>/<stamp> for a unit of it, read from the
+    plan. Every other agent owns no key. An area's key is create-area:<owner>/<kit> for a kit the agent's team builds
+    or, for the main level, a kit of any team of its partition, read from the teams file. The state branch is fetched
+    once (plan.12), and only for the planner's or a conductor's card; what can't be read is a Refusal naming it
+    (read.1). The user's own name is never checked."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
@@ -4147,8 +4372,11 @@ def card_refusal(fleet, name, label, tool, key):
         mine = [f"proposal/{p.get('Proposal')}" for p in Plan(text).recs("Proposal") if p.get("State") == "open"] if text else []
         if key in mine:
             return None
-        return (f"{said}: {name} posts a card only under proposal/<n> for a proposal of {label} open now, "
-                + (f"{either(mine)}, {rail}." if mine else "and none is open."))
+        mine += batch_keys(fleet, label)
+        if key in mine:
+            return None
+        return (f"{said}: {name} posts a card only under proposal/<n> for a proposal of {label} open now, or batch/<n>-<k> "
+                f"for a card of one of its batches open now, " + (f"{either(mine)}, {rail}." if mine else "and none is open."))
     if kind == "conductor":
         plan = plans(fleet, [label])[0][3]
         bolts = sorted(b for b, t in holdings(plan)[0].items() if t == of) if plan else []
@@ -4172,13 +4400,21 @@ def card_refusal(fleet, name, label, tool, key):
             "operator agents what you wait on, as your brief says.")
 
 
-def card_of(fleet, a):
-    """The partition a card command runs as and the key's folder: refused with no partition, or a key that is not one
-    of the rail's."""
+def card_of(fleet, a, unit_needed=True):
+    """The partition a card command runs as and the key's folder, a batch card's per unit: refused with no partition, a
+    key that is not one of the rail's, a batch card's key with no unit where one is needed, and a unit with any other
+    key."""
     label = default_label(fleet, a) or fail("crew card runs as the card's partition: run it as a crew agent, or add --label")
     any(re.fullmatch(k, a.key) for k in CARD_KEYS) or fail(
-        f"{a.key} is not a card key: proposal/<n>, verify/<unit>/<stamp> or land/<bolt>/<head>")
-    return label, CARDS / label / a.key
+        f"{a.key} is not a card key: proposal/<n>, batch/<n>-<k>, verify/<unit>/<stamp> or land/<bolt>/<head>")
+    batch = a.key.startswith("batch/")
+    if batch:
+        a.unit or not unit_needed or fail(f"a batch card has a session for each of its units: crew card {a.sub} {a.key} <unit>")
+    else:
+        not a.unit or fail(f"only a batch card's key takes a unit, and {a.key} is not one")
+    if a.unit:
+        crew.NAME.match(a.unit) or fail(f"a unit's name is lowercase words with dashes, not {a.unit}")
+    return label, CARDS / label / a.key / a.unit if batch and a.unit else CARDS / label / a.key
 
 
 def plannotator_sessions():
@@ -4241,18 +4477,24 @@ def card_result(d):
 
 
 def card_row(fleet, label, key):
-    """The rail row of one partition with that card key, read as crew rail reads its rows, without the run record:
-    only the proposals for a proposal's key, only the host of the unit's team for a verify report's."""
+    """The rail row of one partition with that card key, read as crew rail reads its rows: only the proposals for a
+    proposal's key, only the run record's batches for a batch card's, only the host of the unit's team for a verify
+    report's."""
     found = plans(fleet, [label])
     plan = found[0][3]
     kind, name = key.split("/")[:2]
     held = []
-    if kind != "proposal" and plan and plan.unit(name):
+    if kind not in ("proposal", "batch") and plan and plan.unit(name):
         b = plan.bolt(plan.unit(name).get("Bolt"))
         held = [(b.get("Team"), b.name())] if b and b.get("Team") else []
     sv = survey(fleet, held)
     props = open_proposals(fleet, [label], found) if kind == "proposal" and plan else []
-    row = next((r for r in rail_rows(fleet, found, sv, props, {}) if r["key"] == key), None)
+    batched = {}
+    if kind == "batch" and plan:
+        _, _, unread, _, _, batched = rail_record(fleet, found, [])
+        not unread.get(label) or fail(f"crew can't tell whether {key}'s card is still open: "
+                                      + "; ".join(f"{h} did not answer" for h in sorted(unread[label])))
+    row = next((r for r in rail_rows(fleet, found, sv, props, {}, batched) if r["key"] == key), None)
     if row:
         return row, props
     down = [f"{h} did not answer ({v['error']})" for h, v in sv.items() if not v["ok"]]
@@ -4270,8 +4512,10 @@ def card_stop(proc):
 
 
 def card_session(fleet, a):
-    """crew card session <key> [--label L]: a plannotator session on the document the rail row with that card key asks
-    the user to read, started on this host with an Approve button and no browser, and its link printed. While the
+    """crew card session <key> [<unit>] [--label L]: a plannotator session on the document the rail row with that card
+    key asks the user to read, started on this host with an Approve button and no browser, and its link printed; for a
+    batch card, one session for each unit it holds, on that unit's whole change, started on the host the teams file
+    names for the unit's team (code.3) and refused for a unit the card does not hold. While the
     session crew started for the key still runs, its link is printed again and nothing is started. One the user
     approved or annotated before it ended is kept for crew card wait, its link printed again with a line saying so; one
     that ended with no decision is forgotten, and one the user closed undecided is moved aside, so a new one starts.
@@ -4280,8 +4524,15 @@ def card_session(fleet, a):
     label, d = card_of(fleet, a)
     a.key.startswith("land/") and fail("a landing card has no document to read, so it has no session")
     row, props = card_row(fleet, label, a.key)
-    where, doc = row["doc"][0], row["doc"][1:]
     here = crew.this_host()
+    if row["doc"][0] == "batch":
+        a.unit in row["units"] or fail(f"{a.key} holds {either(row['units'])}, not {a.unit}: its sessions are its units'")
+        t = fleet["teams"].get(row["teams"][a.unit]) or fail(f"{a.unit}'s team {row['teams'][a.unit]} is not in the teams file")
+        if t["machine"] != here:
+            return forward_card(fleet, t, a, label)
+        where, doc, name = here, (change_folder(fleet, t, a.unit),), f"{a.key}'s session of {a.unit}"
+    else:
+        where, doc, name = row["doc"][0], row["doc"][1:], f"{a.key}'s session"
     where in ("page", here) or fail(f"{a.key}'s document is on {where}, not {here}: its session starts there, from its owner")
     d.mkdir(parents=True, exist_ok=True)
     with open(d / ".lock", "w") as lock:
@@ -4289,15 +4540,15 @@ def card_session(fleet, a):
         s = card_recorded(d)
         if s:
             listed, why = plannotator_sessions()
-            listed is not None or fail(f"crew can't tell whether {a.key}'s session still runs: {why}")
+            listed is not None or fail(f"crew can't tell whether {name} still runs: {why}")
             if serving(listed, s):
                 print(s["url"])
                 return
             decided = card_result(d)
             if decided and decided[0] != "dismissed":
                 print(s["url"])
-                print(f"the user decided in {a.key}'s session before it ended: crew card wait {a.key} gives the decision",
-                      file=sys.stderr)
+                print(f"the user decided in {name} before it ended: crew card wait {a.key}{' ' + a.unit if a.unit else ''} gives "
+                      "the decision", file=sys.stderr)
                 return
             if decided:
                 (d / "result.json").rename(d / f"result.{re.sub(r'[-:]', '', s['started'])}.json")
@@ -4327,21 +4578,59 @@ def card_session(fleet, a):
                 break
             if proc.poll() is not None:
                 said = (d / "err").read_text().strip().splitlines()
-                fail(f"plannotator ended before {a.key}'s session was ready" + (f": {said[-1]}" if said else f", exit {proc.returncode}"))
+                fail(f"plannotator ended before {name} was ready" + (f": {said[-1]}" if said else f", exit {proc.returncode}"))
             if time.monotonic() > deadline:
                 card_stop(proc)
-                fail(f"plannotator did not list {a.key}'s session within {CARD_START} seconds" + (f" ({why})" if why else "")
+                fail(f"plannotator did not list {name} within {CARD_START} seconds" + (f" ({why})" if why else "")
                      + ", so crew ended it")
             time.sleep(0.2)
         host = urllib.parse.urlsplit(got["url"]).hostname or ""
         if host in ("localhost", "::1") or host.startswith("127."):
             card_stop(proc)
-            fail(f"plannotator gave {a.key}'s session the link {got['url']}, which would open only on {here}, so crew ended it: "
+            fail(f"plannotator gave {name} the link {got['url']}, which would open only on {here}, so crew ended it: "
                  "a card's session needs PLANNOTATOR_URL_HOST naming the host on the tailnet (swancloud sets it to auto)")
         tmp = d / ".session.json"
         tmp.write_text(json.dumps({"pid": proc.pid, "document": doc, "url": got["url"], "started": started}) + "\n")
         tmp.replace(d / "session.json")
     print(got["url"])
+
+
+def change_folder(fleet, t, unit):
+    """A unit's whole change on its team's host, this one: in its place while it has one, else on its bolt's worktree,
+    else on the kit's main, open or archived."""
+    k = survey(fleet, [(t["name"], None)]).get(t["machine"], {})
+    kit = k.get("kits", {}).get(t["kit"]["main"], {}) if k.get("ok") else {}
+    kit.get("ok") or fail(f"{t['kit']['main']} on {t['machine']} could not be read: {kit.get('error') or k.get('error')}")
+    pl = kit["places"].get(unit)
+    where = [f"{pl['path']}/openspec/changes/{unit}"] if pl else []
+    where += [f"{w}/openspec/changes/{unit}" for w in (b["worktree"] for b in kit["bolts"].values()) if w]
+    where += [f"{t['kit']['main']}/openspec/changes/{unit}"]
+    where += sorted(str(x) for x in pathlib.Path(t["kit"]["main"], "openspec/changes/archive").glob(f"????-??-??-{unit}"))
+    return next((w for w in where if os.path.isdir(w)), None) or fail(f"unit {unit}'s change is in no checkout of {t['kit']['name']} on {t['machine']}")
+
+
+def forward_card(fleet, t, a, label):
+    """A batch card's command for one of its units, run on the host the teams file names for that unit's team (code.3),
+    as the one asking here; its output passed on, and its failure this command's."""
+    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "card", a.sub, a.key, a.unit, "--label", label))
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    if r.returncode:
+        sys.exit(r.returncode)
+
+
+def batch_team(fleet, label, key, unit):
+    """The team of a unit a batch card holds, from the batch in the run record, whether or not the card is still open."""
+    n, k = (int(x) for x in key.split("/")[1].split("-"))
+    entries = partition_entries(fleet, label)
+    for m, _, units in batches(entries):
+        if m == n:
+            part = units[(k - 1) * CARD_UNITS:k * CARD_UNITS]
+            names = [u for u, *_ in part]
+            names or fail(f"batch {n} of {label} has no card {k}")
+            team = next((tm for u, tm, _ in part if u == unit), None) or fail(f"{key} holds {either(names)}, not {unit}")
+            return fleet["teams"].get(team) or fail(f"{unit}'s team {team} is not in the teams file")
+    fail(f"{label}'s run record holds no batch {n}")
 
 
 def card_wait(fleet, a):
@@ -4350,33 +4639,39 @@ def card_wait(fleet, a):
     they are, closed in plannotator with no decision, or ended with no decision; a decision made before the wait began
     is printed at once. A session crew ended, its card closed, is said so. Refused for a key with no session started."""
     label, d = card_of(fleet, a)
-    card_recorded(d) or fail(f"no session was started for card {a.key}: crew card session {a.key} starts one")
+    if a.unit:
+        t = batch_team(fleet, label, a.key, a.unit)
+        if t["machine"] != crew.this_host():
+            return forward_card(fleet, t, a, label)
+    name = f"{a.key} {a.unit}" if a.unit else a.key
+    card_recorded(d) or fail(f"no session was started for card {name}: crew card session {name} starts one")
     said = {"approved": "approved", "annotated": "annotated", "dismissed": "closed in plannotator with no decision"}
     while True:
         decided = card_result(d)
         if decided:
-            print(f"{a.key}: {said[decided[0]]}")
+            print(f"{name}: {said[decided[0]]}")
             if decided[1]:
                 print(decided[1], end="" if decided[1].endswith("\n") else "\n")
             return
         s = card_recorded(d)
         if s is None:
-            print(f"{a.key}: crew ended its session, as its card closed or crew card end was run")
+            print(f"{name}: crew ended its session, as its card closed or crew card end was run")
             return
         listed, _ = plannotator_sessions()  # a list that can't be read says nothing: the wait goes on
         if listed is not None and not serving(listed, s) and not card_result(d) and card_recorded(d) == s:
-            print(f"{a.key}: the session ended with no decision")
+            print(f"{name}: the session ended with no decision")
             return
         time.sleep(CARD_POLL)
 
 
-def end_session(label, key):
-    """End the plannotator session crew started for a card key on this host, and forget the key: its folder goes
-    first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only while plannotator lists it
-    as serving the recorded document (read.4). Returns what it did, in words. crew's card hook runs it when a crew
-    agent closes or withdraws a keyed card."""
+def end_session(label, key, unit=None):
+    """End the plannotator session crew started for a card key on this host, a batch card's for one of its units, and
+    forget it: its folder goes first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only
+    while plannotator lists it as serving the recorded document (read.4). Returns what it did, in words. crew's card
+    hook runs it when a crew agent closes or withdraws a keyed card."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
-    d = CARDS / label / key
+    d = CARDS / label / key / unit if unit else CARDS / label / key
+    key = f"{key} {unit}" if unit else key
     if not d.is_dir():
         return f"no session was running for {key}"
     try:
@@ -4403,9 +4698,28 @@ def end_session(label, key):
 
 
 def card_end(fleet, a):
-    """crew card end <key> [--label L]: end the session crew started for a card key, and forget the key."""
-    label, _ = card_of(fleet, a)
-    print(end_session(label, a.key))
+    """crew card end <key> [<unit>] [--label L]: end the session crew started for a card key, and forget the key; a batch
+    card's for one of its units on that unit's team's host, or with no unit for each of its units, as its close does."""
+    label, _ = card_of(fleet, a, unit_needed=False)
+    if not a.key.startswith("batch/"):
+        print(end_session(label, a.key))
+        return
+    names = [a.unit] if a.unit else card_units(fleet, label, a.key)
+    for u in names:
+        t = batch_team(fleet, label, a.key, u)
+        if t["machine"] != crew.this_host():
+            forward_card(fleet, t, argparse.Namespace(**dict(vars(a), unit=u)), label)
+        else:
+            print(end_session(label, a.key, u))
+
+
+def card_units(fleet, label, key):
+    """The units a batch card holds, from the batch in the run record."""
+    n, k = (int(x) for x in key.split("/")[1].split("-"))
+    for m, _, units in batches(partition_entries(fleet, label)):
+        if m == n:
+            return [u for u, *_ in units[(k - 1) * CARD_UNITS:k * CARD_UNITS]]
+    fail(f"{label}'s run record holds no batch {n}")
 
 
 # ----------------------------------------------------------------------------------------------------- the CLI
@@ -4427,6 +4741,7 @@ def parser(cls=argparse.ArgumentParser):
     for c in ("session", "wait", "end"):
         x = ca.add_parser(c)
         x.add_argument("key")
+        x.add_argument("unit", nargs="?")
         x.add_argument("--label")
 
     bo = sub.add_parser("bolt").add_subparsers(dest="sub", required=True)
@@ -4572,6 +4887,11 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("team")
     x = sub.add_parser("_rebase")
     x.add_argument("team")
+    x = sub.add_parser("_review")
+    x.add_argument("label")
+    x = sub.add_parser("_review-wait")
+    x.add_argument("label")
+    x.add_argument("--timeout", type=int, default=3600000)
     x = sub.add_parser("_in-bolt")
     x.add_argument("unit")
     x.add_argument("team")
@@ -4600,7 +4920,7 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,

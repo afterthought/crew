@@ -25,8 +25,8 @@ branch first, then whatever each host it can reach has not yet carried.
   record.py trace <object> [--label L]    one bolt's, unit's or signal's history, read from the entries alone
 
 An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, team/<team>, agent/<name>,
-stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, and what a stage delivered in a file of the team's
-reports folder: report/<file name> and proof/<file name>."""
+stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of the partition), and
+what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>."""
 import argparse, datetime, getpass, json, os, pathlib, queue, re, signal, subprocess, sys, tempfile, threading
 
 LIB = pathlib.Path(__file__).resolve().parent
@@ -42,20 +42,21 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Card Key
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
 # it delivered, as an object) and Observed, a tell's Chars, the Amended of a construct's start that marked its unit
 # amended, the After units' heads a construct's place Took, a forecast's Heads (the later unit's and the other's, <name>@<sha>), its conflicting Paths and how it Reached
-# the later unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), and a
-# card act's Card (the Pending You card's id) and Key (the rail row's card key).
+# the later unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), a review
+# batch's Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's
+# Count, and a card act's Card (the Pending You card's id) and Key (the rail row's card key).
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
-         "Forecast", "Card", "Key")
+         "Forecast", "Batch", "Units", "Count", "Card", "Key")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
-KINDS = ("unit/", "bolt/", "queue/", "signals/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/", "proof/")
+KINDS = ("unit/", "bolt/", "queue/", "signals/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/", "proof/", "batch/")
 
 _count = 0
 _session = ...  # resolved once per process
@@ -354,6 +355,8 @@ def line(e, zoe=False):
         s += f" (conflict on {e['Paths']}" + (f", {e['Reached']}" if e.get("Reached") else "") + ")"
     if e.get("Forecast"):
         s += f" (carrying {e['Forecast']})"
+    if e.get("Count"):
+        s += f" ({e['Count']} due)"
     if e.get("Key") or e.get("Card"):
         s += " (card " + " ".join(x for x in (e.get("Key"), e.get("Card")) if x) + ")"
     if e.get("Refused"):
