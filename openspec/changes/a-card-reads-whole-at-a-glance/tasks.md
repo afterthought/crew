@@ -8,7 +8,7 @@
 
 ## 2. The rule is built
 
-- [ ] 2.1 `briefs.9` no longer names the card discipline as standing against it, `_open.md` no longer lists it, and README says where a card's link sits and that a card carries no path (design.md, Task notes 2.1). Verify `tests/suite t-docs` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
+- [x] 2.1 `briefs.9` no longer names the card discipline as standing against it, `_open.md` no longer lists it, and README says where a card's link sits and that a card carries no path (design.md, Task notes 2.1). Verify `tests/suite t-docs` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
 
 ## Workflow follow-up
 
