@@ -24,6 +24,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `briefs.14`, ADR 0004 as amended, ADR 0016: sources govern over an intent's mechanism, and a spike beside the design agent (`a-spike-runs-beside-the-design-agent`); no brief says which governs, and crew has no spike.
 - ADR 0005 as amended 2026-10-10, the image clause: a screenshot on a card is an uploaded image artifact, never a path (`an-image-on-a-card-is-uploaded`); the card discipline says nothing of images.
 - ADR 0005 as amended 2026-10-10: a card's session ended by crew on every rail read once its card is closed or its row gone (`a-cards-session-ends-with-its-card`); today only the owner's hook ends it, and eleven idle servers ran on mac-studio.
+- `teams.15`: a stage's prompt taken or sent again, never left typed (`a-stages-prompt-is-taken-or-sent-again`); `run_stage` types and reads nothing back.
 - `docs.6`: what a change holds, in `construct.md` and `openspec/config.yaml` (`a-change-holds-what-is-true-and-what-is-proved`).
 - `signals.6`: a program's captures landed on the flywheel's branch (`machine-captures-land-on-the-flywheels-branch`, after `daily-pass-lands-through-crew`).
 - `signals.7`: curation on a cadence (`curation-runs-on-a-cadence`, after `curate-into-agenda`).
