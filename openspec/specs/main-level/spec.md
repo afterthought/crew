@@ -29,6 +29,22 @@ Every agent crew starts outside a team, the main level's three, each dispatcher 
 - **WHEN** the user runs `crew main down swancloud` and then `crew main up swancloud`
 - **THEN** each of its agents starts and is greeted, and picks up its role from the rail and the bolts without the user or the operator agent telling it to
 
+#### Scenario: Brought up again while it is up
+- **WHEN** `crew main up wldn` runs while its agents and dispatchers are up
+- **THEN** none is started and none is greeted
+
+#### Scenario: Revived after a restart
+- **WHEN** a host restarts, `wldn-design`'s pane comes back with no agent in it, and `crew revive` runs there
+- **THEN** `wldn-design` is brought back and greeted once, and no agent that came back by itself is greeted
+
+#### Scenario: An agent waiting on a question
+- **WHEN** `crew main up wldn` starts `wldn-planner` stopped on a question in its pane
+- **THEN** the design agent and ops are greeted without waiting on it, the command says `wldn-planner` waits on a question and will be greeted once it is answered, and it is greeted once, after the answer
+
+#### Scenario: An agent that never settles
+- **WHEN** an agent `crew main up` started is still not ready to greet when crew stops waiting for it
+- **THEN** the command says so, names the `crew tell` that would greet it, and still succeeds
+
 ### Requirement: The design agent elaborates on main
 The design agent SHALL keep the partition's design true on main: the books, specs and constitution in its blueprints repos and kits, the decision records, and the curation of signals with the moves `attach`, `challenge`, `new-territory`, `answered` and `drop`, each written only through `crew signal move`. It SHALL answer a conductor's design question. Work its elaboration calls for SHALL be queued as units, never put into a bolt by the design agent, each with an intent that names the outcome and sources that name the records governing it, never the mechanism.
 

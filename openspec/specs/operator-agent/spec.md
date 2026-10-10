@@ -6,15 +6,15 @@ A standing agent in each operator session that works for the user. It says where
 ## Requirements
 
 ### Requirement: The operator agent starts with its operator session
-`crew operator up <label>` SHALL start the operator agent, `<label>-operator-<host>`, in a herdr workspace named `operator` in the session named `<label>` on the host it runs on. When the agent is already up, it SHALL do nothing and succeed. When the session or the partition is unknown, it SHALL exit non-zero, naming what is missing.
+`crew operator up <label>` SHALL start the operator agent, `<label>-operator-<host>`, in a herdr workspace named `operator` in the session named `<label>` on the host it runs on, and greet it once it is up, as the `main-level` spec greets every agent crew starts outside a team: told, in a message marked as crew's, to read where the partition stands and carry on with what is its role's. When the agent is already up, it SHALL do nothing, greet nobody, and succeed. When the session or the partition is unknown, it SHALL exit non-zero, naming what is missing.
 
 #### Scenario: Started by the host
 - **WHEN** the `madswan` operator session starts on mac-studio and its supervisor runs `crew operator up madswan`
-- **THEN** `madswan-operator-mac-studio` is running in the `operator` workspace of that session
+- **THEN** `madswan-operator-mac-studio` is running in the `operator` workspace of that session, and is greeted once
 
 #### Scenario: Run twice
 - **WHEN** `crew operator up wldn` runs while the agent is up
-- **THEN** nothing is started and the command succeeds
+- **THEN** nothing is started, nobody is greeted, and the command succeeds
 
 ### Requirement: The operator agent works for the user
 The operator agent SHALL answer where the partition's work stands from `crew bolts`, `crew status` and `crew sites`, and what waits on the user from `crew rail`. It SHALL carry a request to the agent whose job it is, in the user's words:
