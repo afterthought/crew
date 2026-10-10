@@ -2822,33 +2822,26 @@ def place_cmd(fleet, a):
     make_place(fleet, crew.team_of(fleet, a.team), a.path, a.branch, a.base, track=True)
 
 
-# One line of `git range-diff --no-color --no-patch`, as git 2.54 prints it: "<i>:  <sha> <op> <j>:  <sha> <subject>",
-# its op = (the same patch), ! (paired, changed), < (in the first range alone) or > (in the second alone), a side with
-# no commit "-:  -------", and <i> padded on the left once there are ten. --no-patch leaves out the diff a ! prints.
-RANGE = re.compile(r"^\s*(\d+|-):\s+([0-9a-f]+|-+)\s+([=!<>])\s+(\d+|-):\s+([0-9a-f]+|-+)\s?(.*)$")
-
-
-def pairing(text):
-    """Whether range-diff, from the bolt's commits beyond main to a fix's, pairs each of the bolt's commits with the
-    fix's commit in the same place, the same or changed, and leaves no commit of either unpaired: (how many changed,
-    None) when it does, else (None, why not), naming each commit that found no pair by short sha and subject. A line
-    that is not range-diff's is refused, quoted."""
-    rows = []
-    for line in text.splitlines():
-        m = RANGE.match(line)
-        m or fail(f"git range-diff printed a line crew cannot read: {line!r}")
-        rows.append(m.groups())
-    named = lambda rs: ", ".join(f"{sha} ({subject})" for sha, subject in rs)
-    lone = [(r[1], r[5]) for r in rows if r[2] == "<"]
-    own = [(r[4], r[5]) for r in rows if r[2] == ">"]
+def not_the_bolts(bolt, fix):
+    """Why a fix's commits beyond main are not the bolt's replayed in order, or None when they are: as many, and in each
+    place the bolt's commit's message and author. Commits are matched by those, each used once, oldest first, and the
+    reason names each commit of either side left without a match by short sha and subject."""
+    if len(bolt) == len(fix) and all(b["who"] == f["who"] for b, f in zip(bolt, fix)):
+        return None
+    left, lone = list(fix), []
+    for b in bolt:
+        i = next((i for i, f in enumerate(left) if f["who"] == b["who"]), None)
+        if i is None:
+            lone.append(b)
+        else:
+            del left[i]
+    named = lambda cs: ", ".join(f"{c['short']} ({c['subject']})" for c in cs)
     why = []
     if lone:
-        why.append(f"the bolt's commit{'s' if len(lone) > 1 else ''} {named(lone)} found no pair in it")
-    if own:
-        why.append(f"its commit{'s' if len(own) > 1 else ''} {named(own)} pair{'' if len(own) > 1 else 's'} with none of the bolt's")
-    if not why and any(r[0] != r[3] for r in rows):
-        why.append("its commits pair out of order")
-    return (None, "; ".join(why)) if why else (sum(r[2] == "!" for r in rows), None)
+        why.append(f"the bolt's commit{'s' if len(lone) > 1 else ''} {named(lone)} {'are' if len(lone) > 1 else 'is'} not in it")
+    if left:
+        why.append(f"its commit{'s' if len(left) > 1 else ''} {named(left)} {'are' if len(left) > 1 else 'is'} none of the bolt's")
+    return "; ".join(why) or "its commits are the bolt's in another order"
 
 
 def kit_git(fleet, t, where, *args, ok=(0,)):
@@ -2864,6 +2857,48 @@ def head_of(fleet, t, where, ref):
     """The commit a branch of the kit is at, or None when there is no such branch."""
     rc, out = kit_git(fleet, t, where, "rev-parse", "--verify", "-q", f"refs/heads/{ref}^{{commit}}", ok=(0, 1))
     return out if rc == 0 and out else None
+
+
+def commits_beyond(fleet, t, where, base, head):
+    """The commits from base to head, oldest first, each with its sha, short sha, subject, and what makes it that commit
+    (who): its author's name and email and its whole message as git stores it. One git log, each commit ended by NUL,
+    which no message holds, and its fields by newlines, which no sha, subject, name or email holds."""
+    out = kit_git(fleet, t, where, "log", "--reverse", "--topo-order", "--no-show-signature", "-z", "--abbrev=7",
+                  "--format=%H%n%h%n%s%n%an%n%ae%n%B", f"{base}..{head}")[1]
+    commits = []
+    for rec in out.split("\0")[:-1]:
+        f = rec.split("\n", 5)
+        len(f) == 6 or fail(f"git log of {base[:7]}..{head[:7]} in {where} printed a commit crew cannot read: {rec[:80]!r}")
+        commits.append({"sha": f[0], "short": f[1], "subject": f[2], "who": (f[3], f[4], f[5])})
+    return commits
+
+
+def patch_ids(fleet, t, where, base, *heads):
+    """Each commit's patch id from base to each head, by sha: git patch-id --stable over git log -p, on the team's host.
+    A commit whose patch is empty has none."""
+    text = "".join(kit_git(fleet, t, where, "log", "-p", "--no-color", "--no-ext-diff", "--format=commit %H", f"{base}..{h}")[1]
+                   + "\n" for h in heads)
+    r = crew.on_machine(fleet, t["machine"], ["git", "-C", where, "patch-id", "--stable"], input=text)
+    r.returncode == 0 or fail(f"git patch-id in {where} on {t['machine']} failed: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
+    ids = {}
+    for line in r.stdout.splitlines():
+        m = re.fullmatch(r"([0-9a-f]+) ([0-9a-f]+)", line)
+        m or fail(f"git patch-id in {where} printed a line crew cannot read: {line!r}")
+        ids[m.group(2)] = m.group(1)
+    return ids
+
+
+def range_reading(fleet, t, where, base, old, new, bolt, fix):
+    """git range-diff of the bolt's commits beyond main and the fix's, on standard error as git printed it: the reading
+    the conductor can look at, which decides nothing and which crew does not parse (plan.8)."""
+    ranges = f"main..bolt/{bolt} main..{fix}"
+    r = crew.on_machine(fleet, t["machine"], ["git", "-C", where, "range-diff", "--no-color", "--no-patch", f"{base}..{old}", f"{base}..{new}"])
+    if r.returncode:
+        print(f"git range-diff {ranges} could not be read: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"), file=sys.stderr)
+        return
+    print(f"git range-diff {ranges}, the reading, which judges nothing: crew judges by each commit's message and author, in order", file=sys.stderr)
+    if r.stdout.strip():
+        print(r.stdout.rstrip("\n"), file=sys.stderr)
 
 
 # What keeps a worktree from moving, by the file its git dir holds while it is in progress.
@@ -2900,8 +2935,10 @@ def carry_cmd(fleet, a):
     """Whether a fix carries its bolt onto main, as shell assignments for bash crew (teams.9): CARRIES=yes with the
     bolt's head (OLD), the fix's (NEW), how many of the bolt's commits it carries (COMMITS) and how many the
     resolution changed (CHANGED); or CARRIES=no and why not (WHY). It carries when the bolt's head is not in the fix,
-    and range-diff pairs each of the bolt's commits beyond the kit's main with the fix's in the same place, the same
-    or changed, with none of either left over. With --move, the bolt's branch is moved to the fix's head."""
+    and the fix holds as many commits beyond the kit's main as the bolt, in order each the bolt's commit in the same
+    place replayed: the same message and author, its patch the same or changed, by patch id (plan.8). git range-diff
+    of the two is printed on standard error as the reading, deciding nothing. With --move, the bolt's branch is moved
+    to the fix's head."""
     t = crew.team_of(fleet, a.team)
     main = t["kit"]["main"]
     if a.move:
@@ -2914,15 +2951,20 @@ def carry_cmd(fleet, a):
     rc, _ = kit_git(fleet, t, main, "merge-base", "--is-ancestor", old, new, ok=(0, 1))
     if rc == 0:
         return no("it holds the bolt's head")
-    n = int(kit_git(fleet, t, main, "rev-list", "--count", f"{base}..{old}")[1])
-    if not n:
+    bolt = commits_beyond(fleet, t, main, base, old)
+    if not bolt:
         return no(f"bolt/{a.bolt} has no commits beyond main")
-    if not int(kit_git(fleet, t, main, "rev-list", "--count", f"{base}..{new}")[1]):
+    fix = commits_beyond(fleet, t, main, base, new)
+    if not fix:
         return no("it has no commits beyond main")
-    changed, why = pairing(kit_git(fleet, t, main, "range-diff", "--no-color", "--no-patch", f"{base}..{old}", f"{base}..{new}")[1])
+    why = not_the_bolts(bolt, fix)
+    if not why:
+        ids = patch_ids(fleet, t, main, base, old, new)
+        changed = sum(ids.get(b["sha"]) != ids.get(f["sha"]) for b, f in zip(bolt, fix))
+    range_reading(fleet, t, main, base, old, new, a.bolt, a.fix)
     if why:
         return no(why)
-    print(sh(CARRIES="yes", OLD=old, NEW=new, COMMITS=n, CHANGED=changed))
+    print(sh(CARRIES="yes", OLD=old, NEW=new, COMMITS=len(bolt), CHANGED=changed))
 
 
 def plan_of(fleet, label):
