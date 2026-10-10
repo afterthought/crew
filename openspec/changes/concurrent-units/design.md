@@ -24,13 +24,13 @@ Pages whose areas this touches: `plan.md` (`plan.py`, `gather.py`), `teams.md` (
 **Non-Goals:**
 - Building sluice, or crew's side of it beyond the merge stage's command and the kit's opt-in.
 - Amending a merged unit. A defect is a fix, new work a new unit.
-- Moving proposal, verify or landing cards off plannotator sessions. Only batch cards are read in Pending You alone.
+- Moving any card off plannotator sessions: a batch card links one session per unit, as a review card did, and is answered in Pending You.
 
 ## Decisions
 
-### 0. unit-amendments is archived first
+### 0. unit-amendments and the cards change are archived first
 
-Its deltas to `bolt-plan`, `bolt-teams` and `plan-proposals` speak of re-approval. It is archived before any other task of this change, so that this change's MODIFIED deltas to "A unit in flight goes back through construct and review" and "An amendment is read as before and after" find their requirements in `openspec/specs/`.
+unit-amendments' deltas to `bolt-plan`, `bolt-teams` and `plan-proposals` speak of re-approval. It is archived before any other task of this change, so that this change's MODIFIED deltas to "A unit in flight goes back through construct and review" and "An amendment is read as before and after" find their requirements in `openspec/specs/`. The cards change, the-rail-is-answered-through-cards, holds the only statement of the card keys, "Each rail row has a card key", and of who posts a row's card; it is archived the same way, so that this change's delta to `rail-cards`, the review key removed and the batch key added, finds them (`docs.4`; the user, 2026-10-10, on the design agent's card).
 
 ### 1. Construct in waves (D1)
 
@@ -81,7 +81,7 @@ The earlier unit is never changed for it. `coder.md` gains how: read the other c
 - **What is due.** A unit's change is due each time a construct stage of it ends delivered: the `stage.end` entry names construct's commit. A batch entry, `review.batch`, names the partition, a batch number, and each unit with its team and the commit its change was read at. A change is due while no batch names the unit at its latest construct commit. Everything is read from the run record and the kits (`state.2`, `state.4`).
 - **When.** A batch spans the partition, all its teams. On each wait of a conductor of the partition, crew counts the partition's due changes and reads the time of its last `review.batch`. With N or more due, or T hours or more since the last batch and at least one due, a batch is due, and crew tells the partition's planner once, `batch.due` in the run record, with the count. N and T come from the partition's entry in the teams file (decision 10).
 - **The reviewer.** A main-level role, `reviewer` (`plugin/roles/reviewer.md`, its model and effort in its frontmatter, `teams.6`). The planner starts it with `crew review <label>` in a `review` tab of the main level's workspace, beside the planner, on the main level's host; it is sent the due units and their commits as its prompt, the way a stage is (`roles.4`), and is not greeted (`teams.7` names the standing agents). It reads each change whole at its commit, through the kit on the team's host, and writes `{{REPORTS}}/batch-<label>-<n>.md`: one section per unit with its team, what the change does, the decisions it took, its risks, its Touches, and what the user would likely care about, in the change's own words where it can. The file is its deliverable (`teams.4`); `crew review <label> --wait` returns its path, and the `review.batch` entry is written when it is delivered. The reviewer writes nothing else (`briefs.1` as amended) and its tab is closed when it ends.
-- **The cards.** The planner posts them. `briefs.11` makes a team's cards its conductor's and keeps them from stage agents; a batch is the partition's, not a team's. The planner already owns the partition's rail rows (`proposal/<n>`), has the card discipline filled into its brief, and stays up to act on an answer, where the reviewer ends at its file. One card holds at most five units, Pending You's limit on a choice's options; a batch of more is split, each card keyed `batch/<n>-<k>` and a rail row of its own, added to `CARD_KEYS` and the card hook. Each card's body carries each unit's summary and a link to each unit's whole change, its proposal, design, specs and tasks; it asks one choice of several, "which need notes?", listing its units, and one question in words for the notes (`briefs.9` as amended). No plannotator session is started. An agent never answers it (`roles.2`).
+- **The cards.** The planner posts them. `briefs.11` makes a team's cards its conductor's and keeps them from stage agents; a batch is the partition's, not a team's. The planner already owns the partition's rail rows (`proposal/<n>`), has the card discipline filled into its brief, and stays up to act on an answer, where the reviewer ends at its file. One card holds at most five units, Pending You's limit on a choice's options; a batch of more is split, each card keyed `batch/<n>-<k>` and a rail row of its own, added to `CARD_KEYS` and the card hook. Each card's body carries each unit's summary and, first in its words and among its links, the link to a plannotator session crew starts on that unit's whole change, its proposal, design, specs and tasks, one session per unit, started by `crew card session` with the batch's key and the unit, as a review card's was, with no browser opened on the host (`briefs.9`); it asks one choice of several, "which need notes?", listing its units, and one question in words for the notes, answered in Pending You, a session's annotations read as that unit's notes. The sessions end when the card closes. An agent never answers it (`roles.2`). (The first draft started no session; the user (2026-10-10, on the design agent's card req_efe92149919a475b8ae1: a plannotator session per unit).)
 - **Answers.** A unit not picked is fine. For each unit picked, the planner sends the notes verbatim to that unit's team's conductor (`crew tell`); the planner drives no team (`briefs.1`). The conductor runs `crew unit run <unit> construct "<the notes>"` for an unmerged unit, held while that unit's construct is running until it settles (`briefs.5`); the unit goes on with no approval, and its revised change is due again. For a merged unit, a defect is a fix with the user's words, and new work a tell to the planner.
 - **Landing guard.** `rail_rows` offers `land/<bolt>` only once every unit's latest construct commit is named by a `review.batch`. When the proof is clean and some are not, a batch is due at once; the conductor's landing card names them, and `crew bolt land` is refused while any remains outside a batch. "Appeared in a batch" is the test, as ruled: an unanswered card does not hold a landing.
 
@@ -100,7 +100,7 @@ A kit opts into sluice by a flag in its config, read with the kit. Opted in, the
 
 ### 10. The partition's batch setting
 
-`teams.json` gains, per partition, `review: {every: <N>, hours: <T>}`. crew reads both and refuses a partition without them (`code.5`: no field has a default in crew). The defaults, N = 5 to match a card's five options and T = 4, live in swancloud's `lib/crew-teams.nix`, which writes the file. That edit is a task of this change made in swancloud, not in crew.
+`teams.json` gains, per partition, `review: {every: <N>, hours: <T>}`. crew reads both and refuses a partition without them (`code.5`: no field has a default in crew). The defaults, N = 5 to match a card's five options and T = 4, live in swancloud's `lib/crew-teams.nix`, which writes the file. That edit is swancloud's own unit, `partitions-carry-their-batch-setting`, which lands and deploys before this change does; this change's task is crew's refusal (the user, 2026-10-10, on the design agent's card).
 
 ### 11. Rules
 
@@ -163,13 +163,17 @@ The dependent's place at construct, the rebase at an After unit's merge, the ame
 
 The settle stage: `run_check`, its prompt, its deliverable in `stage_ends` (a commit since the stage began).
 
+### 0.2
+
+The cards change is archived as unit-amendments is; the `rail-cards` delta of this change then applies.
+
 ### 3.1
 
 `review.batch` and `batch.due`; the partition-wide count; `crew review <label>` and `--wait`; the reviewer role and its tab; the `batch/<n>-<k>` key in `CARD_KEYS` and the card hook; the split at five; the landing guard in `rail_rows` and `bolt land`.
 
 ### 3.2
 
-swancloud's `lib/crew-teams.nix` writes `review = { every = 5; hours = 4; }` for every partition, and crew's `teams.json` reader requires it (`code.5`). The swancloud edit is a commit in swancloud, made by whoever works this task on the user's word, not in crew's bolt.
+crew's `teams.json` reader requires `review` on every partition (`code.5`). swancloud's `lib/crew-teams.nix` writes `review = { every = 5; hours = 4; }` for every partition in its own unit, `partitions-carry-their-batch-setting`, landed and deployed first; crew's reader ignores the field until this change lands, so the order holds.
 
 ### 4.1
 
