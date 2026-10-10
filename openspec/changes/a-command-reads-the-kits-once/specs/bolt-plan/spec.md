@@ -15,6 +15,10 @@ crew SHALL derive each unit's stage from its kit on the team's host. The first r
 
 A task, a ticked task and a complete planning mean what OpenSpec means by them. crew SHALL read them from the change's files without the `openspec` command line when the change uses OpenSpec's own spec-driven workflow, and through `openspec` otherwise; on the same worktree both readings SHALL agree.
 
+#### Scenario: An amended unit with ticked tasks
+- **WHEN** a unit in code is marked amended and construct has been run again and has committed
+- **THEN** its stage is `review`, though some of its tasks are ticked
+
 #### Scenario: A squashed merge
 - **WHEN** a unit was merged into its bolt with `wt merge`, and its worktree and branch were removed
 - **THEN** its stage is still `merged`, read from the change folder on `bolt/<bolt>`
