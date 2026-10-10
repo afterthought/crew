@@ -220,6 +220,7 @@ ok "the kit's post-merge hooks run on the bolt's new head, with the bolt as thei
 
 rm "$k/.config/wt.toml" "$T/hook-ran"
 echo "# switchboard-kit, main's once more" > "$k/README.md"; commit_all "$k" "docs: main's title once more"
+seq 1 20 > "$k/twenty"; commit_all "$k" "docs: twenty lines"  # the bolt holds them too once this carry puts it on main
 nh=fix/tenant-environments/no-hooks
 expect_ok crew fix swb-1 no-hooks "Carry the bolt onto main: the landing stopped on README.md once more."
 replay "$kd/places/fix-tenant-environments--no-hooks" "# switchboard-kit, main's once more and the bolt's"
@@ -232,18 +233,69 @@ eq "$(git -C "$bd" rev-parse HEAD)" "$new"; eq "$(merge_prompts "$nh")" "0"
 [[ ! -e $T/hook-ran ]] || fail "a hook ran for a kit with no post-merge hooks"
 ok "a kit with no post-merge hooks moves the bolt and says no checks run on it"
 
+# A replay whose context main rewrote: the bolt changes line 10 of twenty, main rewrites the lines around it, and the
+# faithful replay is too unlike the original for range-diff to pair them at its defaults. crew judges by the commits,
+# so the fix carries the bolt, and range-diff's view is printed beside the judgment as the reading.
+seq 1 20 | sed 's/^10$/ten/' > "$bd/twenty"; commit_all "$bd" "feat: ten"
+seq 1 20 | sed -E 's/^(7|8|9|11|12|13)$/main &/' > "$k/twenty"; commit_all "$k" "docs: main's lines around ten"
+cx=fix/tenant-environments/context; cxp=$kd/places/fix-tenant-environments--context
+expect_ok crew fix swb-1 context "Carry the bolt onto main: the landing stopped on twenty."
+git -C "$cxp" rebase main >/dev/null 2>&1 && fail "the replay did not stop on twenty"
+seq 1 20 | sed -E 's/^(7|8|9|11|12|13)$/main &/; s/^10$/ten/' > "$cxp/twenty"; git -C "$cxp" add twenty
+GIT_EDITOR=true GIT_COMMITTER_DATE=$(ago -1) git -C "$cxp" rebase --continue >/dev/null 2>&1 || fail "the replay did not finish"
+old=$(git -C "$k" rev-parse "$bt"); new=$(git -C "$k" rev-parse "$cx"); n=$(git -C "$k" rev-list --count "main..$bt")
+expect_ok crew fix swb-1 context --merge
+has "$out" "git range-diff main..$bt main..$cx, the reading, which judges nothing: crew judges by each commit's message and author, in order"
+has "$out" "$n:  ${old:0:7} < -:  ------- feat: ten"
+has "$out" "-:  ------- > $n:  ${new:0:7} feat: ten"
+has "$out" "bolt/tenant-environments moved from ${old:0:7} to ${new:0:7}: $cx carries the bolt's $n commits onto main (1 changed by the resolution)"
+eq "$(git -C "$k" rev-parse "$bt")" "$new"; eq "$(git -C "$bd" rev-parse HEAD)" "$new"
+eq "$(git -C "$bd" show HEAD:twenty | sed -n 9,11p | tr '\n' ' ')" "main 9 ten main 11 "
+eq "$(merge_prompts "$cx")" "0"
+ok "a replay whose context main rewrote carries the bolt though range-diff leaves it unpaired, and range-diff is printed as the reading"
+
+# A fix that rewords one of the bolt's commits, or gives it another author, holds a commit that is not the bolt's: it
+# merges as a fix, naming the bolt's commit that is not in it and its own in that place, though range-diff pairs the
+# two. Run again with that commit as the bolt has it, the fix carries the bolt, and frees its slot.
+# amend <fix> <git commit --amend's options>: the fix's last commit amended, after its stage began
+amend() { GIT_COMMITTER_DATE=$(ago -1) git -C "$kd/places/fix-tenant-environments--${1##*/}" commit -q --amend "${@:2}"; }
+rw=fix/tenant-environments/reworded
+expect_ok crew fix swb-1 reworded "Carry the bolt onto main."
+amend "$rw" -m "feat: ten" -m "Line ten is the bolt's."
+expect_ok crew fix swb-1 reworded --merge
+has "$out" "$rw does not carry the bolt onto main (the bolt's commit $(git -C "$k" rev-parse --short=7 "$bt") (feat: ten) is not in it; its commit $(git -C "$k" rev-parse --short=7 "$rw") (feat: ten) is none of the bolt's): merging it as a fix"
+has "$out" "$n:  ${new:0:7} ! $n:  $(git -C "$k" rev-parse --short=7 "$rw") feat: ten"
+eq "$(merge_prompts "$rw")" "1"; eq "$(git -C "$k" rev-parse "$bt")" "$new"
+ra=fix/tenant-environments/re-authored
+expect_ok crew fix swb-1 re-authored "Carry the bolt onto main."
+amend "$ra" --no-edit --author "Someone Else <else@example.com>"
+expect_ok crew fix swb-1 re-authored --merge
+has "$out" "$ra does not carry the bolt onto main (the bolt's commit $(git -C "$k" rev-parse --short=7 "$bt") (feat: ten) is not in it; its commit $(git -C "$k" rev-parse --short=7 "$ra") (feat: ten) is none of the bolt's): merging it as a fix"
+eq "$(merge_prompts "$ra")" "1"; eq "$(git -C "$k" rev-parse "$bt")" "$new"
+ok "a fix that rewords or re-authors one of the bolt's commits merges as a fix, naming that commit both ways"
+for f in "$rw" "$ra"; do
+  expect_ok crew fix swb-1 "${f##*/}" "Carry the bolt onto main, each commit with the bolt's message and author."
+  amend "$f" -m "feat: ten" --reset-author
+  old=$(git -C "$k" rev-parse "$bt"); new=$(git -C "$k" rev-parse "$f")
+  expect_ok crew fix swb-1 "${f##*/}" --merge
+  has "$out" "bolt/tenant-environments moved from ${old:0:7} to ${new:0:7}: $f carries the bolt's $n commits onto main (0 changed by the resolution)"
+done
+ok "run again with the commit as the bolt has it, each carries the bolt, none changed by the resolution"
+
 echo more > "$k/more"; commit_all "$k" "docs: more on main"
 own=fix/tenant-environments/own-commit; op=$kd/places/fix-tenant-environments--own-commit
 expect_ok crew fix swb-1 own-commit "Carry the bolt onto main."
 git -C "$op" rebase -q main; echo own > "$op/own"; commit_all "$op" "fix: one of its own"
 expect_ok crew fix swb-1 own-commit --merge
-has "$out" "$own does not carry the bolt onto main (its commit $(git -C "$k" rev-parse --short=7 "$own") (fix: one of its own) pairs with none of the bolt's): merging it as a fix"
+has "$out" "$own does not carry the bolt onto main (its commit $(git -C "$k" rev-parse --short=7 "$own") (fix: one of its own) is none of the bolt's): merging it as a fix"
+has "$out" "git range-diff main..$bt main..$own, the reading, which judges nothing"
+has "$out" "-:  ------- > $((n + 1)):  $(git -C "$k" rev-parse --short=7 "$own") fix: one of its own"
 eq "$(merge_prompts "$own")" "1"; eq "$(git -C "$k" rev-parse "$bt")" "$new"
 drop=fix/tenant-environments/drops-one; dp=$kd/places/fix-tenant-environments--drops-one
 expect_ok crew fix swb-1 drops-one "Carry the bolt onto main."
-git -C "$dp" rebase -q main; git -C "$dp" rebase -q --onto "$drop~2" "$drop~1"
+git -C "$dp" rebase -q main; git -C "$dp" rebase -q --onto "$drop~3" "$drop~2"
 expect_ok crew fix swb-1 drops-one --merge
-has "$out" "$drop does not carry the bolt onto main (the bolt's commit $(git -C "$k" rev-parse --short=7 "$bt~1") (feat: two) found no pair in it): merging it as a fix"
+has "$out" "$drop does not carry the bolt onto main (the bolt's commit $(git -C "$k" rev-parse --short=7 "$bt~2") (feat: two) is not in it): merging it as a fix"
 eq "$(merge_prompts "$drop")" "1"; eq "$(git -C "$k" rev-parse "$bt")" "$new"
 stays=fix/tenant-environments/never-replayed
 expect_ok crew fix swb-1 never-replayed "Carry the bolt onto main."
