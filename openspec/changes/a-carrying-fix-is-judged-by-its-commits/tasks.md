@@ -7,4 +7,4 @@
 
 ## 2. The docs say so
 
-- [ ] 2.1 README, the crew skill and `crew`'s usage header say a carrying fix is judged by its commits' count, order, message and author with range-diff printed as the reading, `_open.md` no longer lists it, and the `plan.8` and `teams.5` details name what builds it, and `tests/suite --affected` ends with "0 failed" (design: *Docs*; Task notes 2.1; `docs.2`).
+- [x] 2.1 README, the crew skill and `crew`'s usage header say a carrying fix is judged by its commits' count, order, message and author with range-diff printed as the reading, `_open.md` no longer lists it, and the `plan.8` and `teams.5` details name what builds it, and `tests/suite --affected` ends with "0 failed" (design: *Docs*; Task notes 2.1; `docs.2`).
