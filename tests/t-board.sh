@@ -1,7 +1,8 @@
 # crew board: the flow of a partition as four lanes in order (Inception, Bolt plan, Construction, Operation) and the
 # attention line, one object to a line; every rail row a marker on its object with its card, never a line of its own;
 # the same board as JSON; read from the plan, the proposals, the moves, the signals, the kits and the run record, and
-# writing nothing. Each scenario of the crew-board spec.
+# writing nothing. Each scenario of the crew-board spec, the board tab among them: one read of the rail tab's loop
+# prints the rail and writes the board's frame, which the board tab draws, fresh, stale or not yet written.
 # Reads: tests/stubs-sites/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 export PATH="$TESTS/stubs-sites:$PATH"
@@ -193,3 +194,48 @@ eq "$(line_of "$con" "  a  ")" "    a  unknown"
 has "$(lane "$b" "Bolt plan")" "proposal 1"
 rm "$T/down"
 ok "a host that does not answer is named in the attention line, its ledgers' units from the plan with their stages unknown, and the rest shown"
+
+# The board tab: the rail tab's loop runs crew _views each refresh, one read that prints the rail and writes the
+# board's frame; the board tab runs crew _board, which draws the latest frame.
+frame=$(home_of mac-studio)/.cache/crew/board/wldn.json
+expect_ok crew _board wldn --once
+has "$out" "No board for wldn yet: the rail tab's loop writes it each time it refreshes"
+has "$out" "close the operator workspace's rail tab and run crew operator up wldn"
+[[ ! -e $frame ]] || fail "a board tab wrote a frame"
+ok "with no frame, the board tab says the rail tab's loop writes it and how to open both tabs afresh"
+
+# mask: a rail's lines with each row's age left out, since a minute can turn between two reads
+mask() { sed -E 's/^(  [0-9]{4}-.{11}  ).{7}/\1AGE    /'; }
+expect_ok crew _views wldn; views=$out
+expect_ok crew rail --label wldn
+has "$views" "review/b/"; has "$views" "land/console-pages/"
+eq "$(tail -n +2 <<<"$views" | mask)" "$(tail -n +2 <<<"$out" | mask)"
+eq "$(jq -S 'del(.read_at)' "$frame")" "$(crew board --label wldn --json | jq -S 'del(.read_at)')"
+ls -A "$(dirname "$frame")" | grep -v '^wldn.json$' && fail "a temporary frame was left"
+ok "one refresh of the rail tab prints what crew rail prints and writes, whole, the board crew board --json prints"
+
+expect_ok crew _board wldn --once; drawn=$out
+eq "$(tail -n +2 <<<"$drawn")" "$(crew board --label wldn | tail -n +2)"
+lacks "$(head -1 <<<"$drawn")" " ago"
+read_at=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+jq --arg t "$read_at" '.read_at = $t' "$frame" > "$frame.new" && mv "$frame.new" "$frame"
+expect_ok crew _board wldn --once
+has "$(head -1 <<<"$out")" "wldn board, as of $(python3 -c 'import datetime, sys; print(datetime.datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00")).astimezone().strftime("%H:%M:%S"))' "$read_at") (5m ago: the rail tab has not refreshed it since)"
+eq "$(tail -n +2 <<<"$out")" "$(tail -n +2 <<<"$drawn")"
+printf '{"read_at": ' > "$frame"
+expect_ok crew _board wldn --once; has "$out" "No board for wldn yet"
+ok "the board tab draws the latest frame as crew board does, a frame read five minutes ago headed with its age, and half a frame as none"
+
+# Shims ahead of the real git and python3 log, per host, each fetch of the state branch and each gather.py run.
+mkdir -p "$T/shim"
+shim() {  # shim <command> <bash test of "$@" that logs <what>> <what>
+  printf '#!/usr/bin/env bash\nif %s; then echo "${CREW_TEST_HOST:-?} %s" >> %q; fi\nexec %q "$@"\n' "$2" "$3" "$T/reads.log" "$(command -v "$1")" > "$T/shim/$1"
+  chmod +x "$T/shim/$1"
+}
+shim git '[[ " $* " == *" fetch "*refs/crew/wldn/main* ]]' fetch
+shim python3 '[[ ${1:-} == - ]]' gather
+reads() { grep -c "^$1 $2\$" "$T/reads.log" || true; }
+: > "$T/reads.log"
+PATH="$T/shim:$PATH" expect_ok crew _views wldn
+eq "$(reads mac-studio fetch) $(reads mac-studio gather) $(reads $box gather) $(reads $box fetch)" "1 1 1 0"
+ok "one refresh fetches the state branch once and reads each host's kits once, for the rail and the board"
