@@ -36,6 +36,8 @@ The rules below go into the briefs, and so into every partition's agents at thei
 - **Rule the outcome and the constraints, not the sequence.** The design agent says what must be true and what must not change, and leaves the steps to the construct, which brings its own reading back. A sequence ruled from belief breaks one step per fact.
 - **Answer linked questions together.** A construct's related questions are answered as one, after reading, not one at a time as they arrive.
 
+- **The sources govern, and a stage that finds the intent saying more says so** (2026-10-10, after madswan's measurement page: the planner's intent named the measurement and its sample points, the design agent's record of what the user wanted landed on the kit's main three seconds after the bolt was cut, the construct read that record and followed the intent, and the user got a review card for the wrong page; signal 2026-10-10-madswan-design-3d7ef799/01, the user: "You knew what I wanted ... That is not what came out on the other end, so something got lost."). A unit's intent names the outcome and its sources, read from the kit's main as they stand when the stage starts, govern the how; where the intent says more than its sources or says otherwise, the stage builds from the sources and names the difference first in its final message, and the conductor tells the planner, which proposes the intent corrected.
+
 ### The planner
 
 - **An intent names the outcome and the records that govern it.** Not the mechanism. The how lives in the design's records, which the construct reads, so a changed mechanism changes no intent.
