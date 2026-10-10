@@ -3470,7 +3470,7 @@ def rail_record(fleet, found, props):
     and the record's files are named by the UTC day. Returns when each open proposal was proposed, {(label,
     proposal/<n>): time}, from the earliest plan.propose entry naming it (a proposal whose entry isn't found is left
     out); the cards open, each {label, card, key, on, by, host, at}, from each card.post with a Card that no later
-    card.close of that Card closes; the hosts whose record did not answer, {label: hosts}; the landings, each
+    card.close of that Card closes; the hosts whose record did not answer, {label: {host: why}}; the landings, each
     {label, bolt, units, at, by, host}, from each bolt.land entry not refused, oldest first; and the team each bolt was
     given to, {(label, bolt): team}, from the newest bolt.give entry naming it that was not refused."""
     times, cards, unread, landings, gives = {}, [], {}, [], {}
@@ -3481,7 +3481,7 @@ def rail_record(fleet, found, props):
         if opened:
             since = min(since, datetime.date.fromisoformat(min(opened)) - datetime.timedelta(days=1))
         entries, missing = record.gather(fleet, [l], since.isoformat())
-        unread[l] = set(missing)
+        unread[l] = missing
         posted = {}
         for e in entries:
             act = e.get("Act")
@@ -3570,7 +3570,7 @@ def stray_cards(fleet, found, sv, rows, cards, unread):
     for c in cards:
         if (c["label"], c["key"]) in rowed:
             continue
-        down = {h for h, v in sv.items() if not v["ok"]} | unread.get(c["label"], set())
+        down = {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
         if c["host"] in down:
             continue
         m = re.match(r"(review|verify|land)/([a-z0-9][a-z0-9-]*)", c["key"] or "")
