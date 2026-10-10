@@ -2890,11 +2890,13 @@ def patch_ids(fleet, t, where, base, *heads):
 
 def range_reading(fleet, t, where, base, old, new, bolt, fix):
     """git range-diff of the bolt's commits beyond main and the fix's, on standard error as git printed it: the reading
-    the conductor can look at, which decides nothing and which crew does not parse (plan.8)."""
+    the conductor can look at, which decides nothing and which crew does not parse (plan.8). When range-diff fails, as
+    it does on a side with no commits beyond main, it is named in git's words, up to the usage git prints after them."""
     ranges = f"main..bolt/{bolt} main..{fix}"
     r = crew.on_machine(fleet, t["machine"], ["git", "-C", where, "range-diff", "--no-color", "--no-patch", f"{base}..{old}", f"{base}..{new}"])
     if r.returncode:
-        print(f"git range-diff {ranges} could not be read: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"), file=sys.stderr)
+        words = (r.stderr or r.stdout).strip().split("\n\n")[0]
+        print(f"git range-diff {ranges} could not be read: " + (words or f"exit {r.returncode}"), file=sys.stderr)
         return
     print(f"git range-diff {ranges}, the reading, which judges nothing: crew judges by each commit's message and author, in order", file=sys.stderr)
     if r.stdout.strip():
@@ -2936,9 +2938,9 @@ def carry_cmd(fleet, a):
     bolt's head (OLD), the fix's (NEW), how many of the bolt's commits it carries (COMMITS) and how many the
     resolution changed (CHANGED); or CARRIES=no and why not (WHY). It carries when the bolt's head is not in the fix,
     and the fix holds as many commits beyond the kit's main as the bolt, in order each the bolt's commit in the same
-    place replayed: the same message and author, its patch the same or changed, by patch id (plan.8). git range-diff
-    of the two is printed on standard error as the reading, deciding nothing. With --move, the bolt's branch is moved
-    to the fix's head."""
+    place replayed: the same message and author, its patch the same or changed, by patch id (plan.8). Whenever the fix
+    does not hold the bolt's head, git range-diff of the two is printed on standard error as the reading, before and
+    whatever the judgment, deciding nothing. With --move, the bolt's branch is moved to the fix's head."""
     t = crew.team_of(fleet, a.team)
     main = t["kit"]["main"]
     if a.move:
@@ -2951,6 +2953,7 @@ def carry_cmd(fleet, a):
     rc, _ = kit_git(fleet, t, main, "merge-base", "--is-ancestor", old, new, ok=(0, 1))
     if rc == 0:
         return no("it holds the bolt's head")
+    range_reading(fleet, t, main, base, old, new, a.bolt, a.fix)
     bolt = commits_beyond(fleet, t, main, base, old)
     if not bolt:
         return no(f"bolt/{a.bolt} has no commits beyond main")
@@ -2958,12 +2961,10 @@ def carry_cmd(fleet, a):
     if not fix:
         return no("it has no commits beyond main")
     why = not_the_bolts(bolt, fix)
-    if not why:
-        ids = patch_ids(fleet, t, main, base, old, new)
-        changed = sum(ids.get(b["sha"]) != ids.get(f["sha"]) for b, f in zip(bolt, fix))
-    range_reading(fleet, t, main, base, old, new, a.bolt, a.fix)
     if why:
         return no(why)
+    ids = patch_ids(fleet, t, main, base, old, new)
+    changed = sum(ids.get(b["sha"]) != ids.get(f["sha"]) for b, f in zip(bolt, fix))
     print(sh(CARRIES="yes", OLD=old, NEW=new, COMMITS=len(bolt), CHANGED=changed))
 
 
