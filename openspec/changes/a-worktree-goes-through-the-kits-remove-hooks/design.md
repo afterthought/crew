@@ -52,6 +52,7 @@ The call runs with gitenv's environment minus every `WORKTRUNK_*` variable, so a
 
 ### Reading what wt said
 
+- **Exit 0 and the worktree still there**: wt exited 0 and left its folder standing, so the worktree and branch are kept, said (`read.1`); crew drops its read of the kit, and the next read tries again.
 - **Exit 0 and the JSON readable**: the worktree is removed when the one object's `path` is the worktree's path; `branch_outcome` `not_attempted` means the branch was left to crew, and `tidy` goes on to its branch step as today. Any other `branch_outcome`, an absent field, or JSON crew cannot parse: the worktree is removed and the branch is not touched, said (`read.1`, `read.2`). crew drops its read of the kit either way, as today.
 - **Exit non-zero**: the worktree and branch are kept. crew reads wt's stderr: when a line says `Cannot prompt for approval`, the kit's hooks wait for the user's approval; otherwise crew names each line that begins `✗`, and when there is none, the last non-empty line, and when stderr is empty, `wt remove exited <n>`. A line that begins `↳` is never passed on: those advise `--no-hooks` or `--yes`.
 - **wt not on the host's path** (`FileNotFoundError`): kept, said.
@@ -66,6 +67,7 @@ With `<over>` the reason its work is over, as `tidy` already words it (`unit x h
 - a hook failed: `<path> is kept, and <branch> with it: <over>, and the kit's wt remove refused it: <wt's ✗ lines, joined with "; ">`.
 - approval: `<path> is kept, and <branch> with it: <over>, and the kit's remove hooks wait for the user's approval on <host>: wt config approvals add, in <main>`.
 - no wt: `<path> is kept, and <branch> with it: <over>, and wt, the kit's worktree tool, is not on <host>'s path`.
+- left standing: `<path> is kept, and <branch> with it: <over>, and the kit's wt remove exited 0 and left it there`.
 - branch unread: `<path> is removed, and <branch> is kept: crew could not read what wt remove said of the branch`.
 
 The "uncommitted changes" and "locked" messages are unchanged.
