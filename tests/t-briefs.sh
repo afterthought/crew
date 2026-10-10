@@ -36,8 +36,10 @@ for want in "crew card session" "crew card wait" "answeredHere" "Never open a br
 done
 ok "a conductor's review and verify cards link the session crew starts on what they ask the user to read, and it opens nothing"
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`review/<unit>/<head>\`" "keyed \`verify/<unit>/<stamp>\`" \
-  "keyed \`land/<bolt>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." "post its verify card" \
-  "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit."; do
+  "keyed \`land/<bolt>/<head>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." "post its verify card" \
+  "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." \
+  "A row's key changes when what it asks changes" "Pending You gives that card back" \
+  "close a landing card you have open with what the fix changed" "under the key the rail then shows"; do
   has "$out" "$want"
 done
 ok "the conductor takes units through review, asks the design agent, records signals, and writes the plan only through crew"
@@ -66,7 +68,8 @@ for want in "Never name a proposal by its number alone" "recite no command"; do 
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" \
   "carries the link to the plannotator session on the page" "not the page as a file"; do has "$out" "$want"; done
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\`" "or answers your card" \
-  "close the old proposal's card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit"; do
+  "close the old proposal's card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
+  "A row's key changes when what it asks changes" "Pending You gives that card back"; do
   has "$out" "$want"
 done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
@@ -200,7 +203,7 @@ for want in "git rebase --abort" "Tell the bolt's conductor and the user that co
   has "$out" "$want"
 done
 expect_ok crewpy brief swb-1 conductor
-for want in "Carry the bolt onto main" "prove the bolt again" "post the landing card again only once that proof is clean" \
+for want in "Carry the bolt onto main" "prove the bolt again" "post the landing card again, under the bolt's new head, only once that proof is clean" \
   "fix swb-1 <name> --merge\` as for any fix"; do
   has "$out" "$want"
 done
