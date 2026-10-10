@@ -89,26 +89,31 @@ def signals_at(repo, tip, home, moved):
 
 
 def signals(fleet, label, tip):
-    """The label's signals no move has taken, in both homes: the flywheel's branch at the tip the plan was read from,
-    and main of the partition's first blueprints repo; and why the blueprints repo could not be read, or None."""
-    repo, _ = plan.state_of(fleet, label)
-    moved = {m.get("Signal") for m in plan.Plan(plan.show(repo, tip, "moves.rec") or "").recs("Move")} if tip else set()
-    out = signals_at(repo, tip, "branch", moved) if tip else []
+    """The label's signals no move has taken, in both homes: the flywheel's branch at the tip the plan was read from
+    (None when the branch is not started, so nothing is moved), and main of the partition's first blueprints repo;
+    and each home that could not be read, {what: why}. When the branch's signals and moves can't be read, which
+    signals are moved can't be known, and none is listed (read.1)."""
+    repo, ref = plan.state_of(fleet, label)
+    try:
+        moved = {m.get("Signal") for m in plan.Plan(plan.show(repo, tip, "moves.rec") or "").recs("Move")} if tip else set()
+        out = signals_at(repo, tip, "branch", moved) if tip else []
+    except Refusal as e:
+        return [], {f"{ref} of {repo}": str(e)}
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
     try:
         btip = plan.fetch(srepo, "main")
         out += signals_at(srepo, btip, "blueprints", moved) if btip else []
     except Refusal as e:
-        return out, str(e)
-    return out, None
+        return out, {f"main of {srepo}": str(e)}
+    return out, {}
 
 
 def flow_read(fleet, labels):
     """One read of the labels' flow, which makes both the rail and the board: the rail's read with every team of the
-    labels surveyed, its dev servers, slots and explorations too (plan.rail_read), and each label's signals."""
+    labels surveyed, its dev servers, slots and explorations too (plan.rail_read), and the signals of each label whose
+    plan was read; a plan that could not be read leaves its moves unknown, and is named already."""
     read = plan.rail_read(fleet, labels, board=True)
-    tips = {l: t for l, _, t, _ in read["found"]}
-    read["signals"] = {l: signals(fleet, l, tips.get(l)) for l in labels}
+    read["signals"] = {l: signals(fleet, l, tip) for l, _, tip, _ in read["found"]}
     return read
 
 
@@ -149,9 +154,8 @@ def board_data(fleet, labels, read, now):
         attention += [{"what": "plan", "name": n, "why": why} for n, why in read["errors"].items() if n.startswith(f"{l}/main of ") or n == f"the plan of {l}"]
         if found and not tip:
             attention.append({"what": "plan", "name": f"{l}/main of {repo}", "why": "not started, so there is no plan to read"})
-        sigs, swhy = read["signals"].get(l, ([], None))
-        if swhy:
-            attention.append({"what": "signals", "name": f"main of {p['blueprints'][0]}", "why": swhy})
+        sigs, sunread = read["signals"].get(l, ([], {}))
+        attention += [{"what": "signals", "name": n, "why": why} for n, why in sunread.items()]
 
         explorations = []
         for kit in dict.fromkeys(fleet["teams"][t]["kit"]["name"] for t in sorted(p["teams"])):

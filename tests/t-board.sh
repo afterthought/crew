@@ -37,6 +37,7 @@ ok "with nothing in flight, the header and the four lanes in order, each saying 
 CREW_LABEL= expect_ok crew board
 eq "$(grep -oE '^[a-z]+ board, as of' <<<"$out" | tr '\n' '|')" "wldn board, as of|madswan board, as of|swancloud board, as of|"
 has "$(awk '/^madswan board/ {on = 1} /^swancloud board/ {on = 0} on' <<<"$out")" "! the plan, madswan/main of afterthought/crew-state: not started"
+has "$(awk '/^madswan board/ {on = 1} /^swancloud board/ {on = 0} on' <<<"$out")" "! the signals on main of afterthought/blueprints: could not fetch main of afterthought/blueprints"
 ok "with no label outside any agent, one board per partition in the teams file, one after another"
 
 # Inception: two signals wldn-planner captured from a meeting, in the blueprints; one note of the user's, on the
@@ -239,3 +240,13 @@ reads() { grep -c "^$1 $2\$" "$T/reads.log" || true; }
 PATH="$T/shim:$PATH" expect_ok crew _views wldn
 eq "$(reads mac-studio fetch) $(reads mac-studio gather) $(reads $box gather) $(reads $box fetch)" "1 1 1 0"
 ok "one refresh fetches the state branch once and reads each host's kits once, for the rail and the board"
+
+# A plan that can't be read: the board says so, lists no signal as unmoved, since which are moved can't be known, and
+# exits non-zero once it has printed everything else.
+st=$T/state; git clone -q -b wldn/main "$ws" "$st"; printf '\nBolt: broken\n' >> "$st/plan.rec"
+commit_all "$st" "a plan recfix refuses"; git -C "$st" push -q origin wldn/main
+expect_fail "wldn/main of WilldanGroup/crew-state" crew board --label wldn
+has "$(lane "$out" attention)" "! the plan, wldn/main of WilldanGroup/crew-state: "
+eq "$(lane "$out" Inception)" "  exploration  switchboard-kit command-cost  Reading: what each crew command costs, read 2026-10-01."
+eq "$(lane "$out" Construction)" "  none"
+ok "a plan that can't be read is named in the attention line, no signal is listed as unmoved, and the exit is non-zero"
