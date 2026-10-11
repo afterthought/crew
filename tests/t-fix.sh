@@ -282,6 +282,31 @@ for f in "$rw" "$ra"; do
 done
 ok "run again with the commit as the bolt has it, each carries the bolt, none changed by the resolution"
 
+# A fix that replays the bolt's commits in another order holds every one of them, but not each in its place: it merges
+# as a fix, saying so. Run again with them in the bolt's order, it carries the bolt and frees its slot.
+# swap <fix>: the fix's last two commits swapped, the last replayed onto the one before both and the other picked after
+# it, after its stage began
+swap() {
+  local p=$kd/places/fix-tenant-environments--${1##*/} first
+  first=$(git -C "$p" rev-parse HEAD~1)
+  GIT_COMMITTER_DATE=$(ago -1) git -C "$p" rebase -q --onto HEAD~2 HEAD~1
+  GIT_COMMITTER_DATE=$(ago -1) git -C "$p" cherry-pick "$first" >/dev/null
+}
+sw=fix/tenant-environments/swapped
+expect_ok crew fix swb-1 swapped "Carry the bolt onto main."
+swap "$sw"
+eq "$(git -C "$k" log --format=%s -2 "$sw" | tr '\n' ' ')" "feat: three feat: ten "
+expect_ok crew fix swb-1 swapped --merge
+has "$out" "$sw does not carry the bolt onto main (its commits are the bolt's in another order): merging it as a fix"
+eq "$(merge_prompts "$sw")" "1"; eq "$(git -C "$k" rev-parse "$bt")" "$new"
+expect_ok crew fix swb-1 swapped "Carry the bolt onto main, its commits in the bolt's order."
+swap "$sw"
+old=$(git -C "$k" rev-parse "$bt"); new=$(git -C "$k" rev-parse "$sw")
+expect_ok crew fix swb-1 swapped --merge
+has "$out" "bolt/tenant-environments moved from ${old:0:7} to ${new:0:7}: $sw carries the bolt's $n commits onto main (0 changed by the resolution)"
+eq "$(merge_prompts "$sw")" "1"
+ok "a fix that holds the bolt's commits in another order merges as a fix, saying so, and carries the bolt once in its order"
+
 # The reading comes before the judgment, whatever it is. A fix with no commits beyond main merges as a fix, with
 # range-diff's lines above it, or git's words without the usage git prints after them. When range-diff itself fails,
 # crew names it in git's words and judges the same: the fix that carries the bolt still moves it.
