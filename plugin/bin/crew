@@ -682,6 +682,13 @@ case $cmd in
         entry --label "$LABEL" --act stage.start --on "stage/$unit/$stage" --on "unit/$unit" --refused "all $UNITS of $TEAM's slots are in flight"; exit 1; }
       taken=1
     fi
+    # A construct whose slot's agent is working is refused before plan _run can write the plan, so an amended unit
+    # whose construct cannot start keeps its mark, and reads amended.
+    if [[ $stage == construct && $force == 0 && $(agent_status "$(pane_of "$slot")") == working ]]; then
+      err="$(name_of "$slot") is working; add --force to end it anyway."
+      echo "$err" >&2; [[ $taken == 1 ]] && drop "$held" "$slot"
+      entry --label "$LABEL" --act stage.start --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")" --refused "$err"; exit 1
+    fi
     if ! e=$(plan _run "$unit" "$stage" "${5:-}"); then [[ $taken == 1 ]] && drop "$held" "$slot"; exit 1; fi
     eval "$e"
     ensure_slot_pane "$slot" "$PLACE"

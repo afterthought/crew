@@ -1437,8 +1437,9 @@ def op_unit_split(ctx, a):
 
 def op_unit_amend(ctx, a):
     """A unit's intent replaced. One that has a worktree has a change written for the old intent, so it is marked
-    amended, proposal/<n> inside an approval and intent when the user runs it, and its conductor is told to run
-    construct again. Merged work is not amended."""
+    amended, proposal/<n> inside an approval and intent when the user runs it, and once the write has landed the
+    amendment runs its construct again on its team's host, in the name of whoever applied it, and tells its conductor
+    what started or why nothing did (plan.15). Merged work is not amended."""
     label, plan = ctx.locate("Unit", a.unit)
     s = unit_stage(ctx.fleet, plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(
@@ -1448,6 +1449,8 @@ def op_unit_amend(ctx, a):
     bolt = plan.unit(a.unit).get("Bolt")
     team = ctx.fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
     mark = (f"proposal/{ctx.n}" if not ctx.direct else "intent") if s["worktree"] else None
+    # The verify row the unit held before the amendment: its card is named when the construct cannot start.
+    row = f"verify/{a.unit}" if s["stage"] == "verify" else None
 
     def change(w):
         u = w.unit(a.unit)
@@ -1462,10 +1465,26 @@ def op_unit_amend(ctx, a):
         if not (mark and team):
             return
         by = f"proposal {ctx.n}" if not ctx.direct else "the user"
-        if not crew.tell(ctx.fleet, f"{team['name']}-conductor", f"Unit {a.unit}'s intent was amended by {by}. Run construct again "
-                         f"(crew unit run {a.unit} construct); once it has committed, the unit goes on from its tasks. Close "
-                         f"any Pending You card you have open for verify/{a.unit}."):
-            print(f"{team['name']}-conductor is not up: unit {a.unit} waits, amended, for construct to be run again")
+        conductor = f"{team['name']}-conductor"
+        r = crew.on_machine(ctx.fleet, team["machine"], crew.crew_argv(ctx.fleet, team["machine"], "unit", "run", a.unit, "construct"))
+        said = (r.stdout + r.stderr).strip()
+        if said:
+            print(said)
+        if r.returncode == 0:
+            m = re.search(rf"^(\S+) has {re.escape(a.unit)}: construct, in ", r.stdout, re.M)
+            slot = m.group(1) if m else f"a slot of {team['name']}"
+            text = (f"Unit {a.unit}'s intent was amended by {by}, and construct runs again on it in {slot}: wait for it "
+                    f"(crew unit wait {a.unit}); once it has committed, the unit goes on from its tasks.")
+            unsaid = f"construct runs again on unit {a.unit} in {slot}"
+        else:
+            why = ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].rstrip(".")
+            print(f"construct did not start on unit {a.unit}: {why}")
+            text = (f"Unit {a.unit}'s intent was amended by {by}, and construct did not start: {why}. Run it once it can "
+                    f"(crew unit run {a.unit} construct); once it has committed, the unit goes on from its tasks."
+                    + (f" {close_card(row)}" if row else ""))
+            unsaid = f"unit {a.unit} waits, amended, for construct to be run again"
+        if not crew.tell(ctx.fleet, conductor, text):
+            print(f"{conductor} is not up: {unsaid}")
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
 
 
