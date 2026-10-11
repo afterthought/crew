@@ -155,7 +155,7 @@ reading() {
   this_host > "$CREW_READ/host"
 }
 case $cmd in
-  bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | sites | list | tell) ;;
+  bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell) ;;
   events | _rail) unset CREW_READ ;;
   unit) case ${2:-} in run | free | wait) reading ;; esac ;;
   *) reading ;;
@@ -610,6 +610,7 @@ case $cmd in
   list) teams ;;
   bolts | bolt | signal | state | plan | rail | card) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   events | trace) exec python3 "$here/../lib/record.py" "${args[@]}" ;;
+  page) exec python3 "$here/../lib/page.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;
   board | _views | _board) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;

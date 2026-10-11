@@ -100,7 +100,7 @@ ok "a unit whose host does not answer has no stage, and the host is named"
 
 # The file: the data in its one block, as JSON, and nothing loaded from outside it; typed text stays in the data.
 crew signal ends-the-block "Ends </script><b>here</b> & more." >/dev/null
-as mac-studio python3 "$CREW/plugin/lib/page.py" page wldn --out "$T/page.html" >/dev/null || fail "page.py could not write the page"
+expect_ok crew page wldn --out "$T/page.html"
 block() { python3 -c 'import re, sys; t = open(sys.argv[1]).read(); m = re.findall(r"<script type=\"application/json\" id=\"data\">(.*?)</script>", t, re.S); print(m[0] if len(m) == 1 else "")' "$1"; }
 outside() { python3 -c 'import re, sys; print(re.sub(r"(<script type=\"application/json\" id=\"data\">).*?(</script>)", r"\1\2", open(sys.argv[1]).read(), flags=re.S))' "$1"; }
 json=$(block "$T/page.html"); [[ -n $json ]] || fail "no data block in the page"
@@ -113,3 +113,43 @@ lacks "$(cat "$T/page.html")" "{{DATA}}"
 has "$rest" 'id="hide"'; has "$rest" 'id="find"'; has "$rest" 'id="bars"'; has "$rest" "prefers-color-scheme: dark"
 has "$rest" "Nothing has been recorded"
 ok "the page holds its data in one block, escaped so typed text cannot end it, and loads nothing from outside the file"
+
+# The command: the page written whole where it says, its path and what it was made from printed, nothing appended.
+mine=$(home_of mac-studio)/.local/state/crew/wldn
+record() { cat "$mine"/runs/*/*.rec; }
+before=$(record)
+expect_ok crew page wldn
+eq "$(sed -n 1p <<<"$out")" "$mine/page.html"
+made="^as of [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}Z · wldn/main $(git --git-dir "$ws" rev-parse --short=7 wldn/main)\$"
+[[ $(sed -n 2p <<<"$out") =~ $made ]] || fail "expected the header line, got: $(sed -n 2p <<<"$out")"
+eq "$(wc -l <<<"$out" | tr -d ' ')" "2"
+[[ -f $mine/page.html ]] || fail "no page at $mine/page.html"
+eq "$(block "$mine/page.html" | jq -r .made.commit)" "$(git --git-dir "$ws" rev-parse wldn/main)"
+eq "$(ls -A "$mine" | grep -c '^\.page')" "0"
+eq "$(record)" "$before"
+ok "crew page writes the page whole under the partition's state folder, prints its path and as of when and which commit, and appends no entry"
+
+echo "$box" > "$T/down"
+expect_ok crew page wldn
+rm "$T/down"
+has "$(sed -n 3p <<<"$out")" "$box did not answer"
+has "$(block "$mine/page.html" | jq -r '.made.unreachable | keys | join(" ")')" "$box"
+ok "a host that does not answer is named, and the page is still written"
+
+cp "$mine/page.html" "$T/earlier.html"
+mv "$ws" "$ws.away"
+expect_fail "no page is written: wldn/main of WilldanGroup/crew-state could not be read" crew page wldn
+mv "$ws.away" "$ws"
+cmp -s "$mine/page.html" "$T/earlier.html" || fail "the earlier page was changed"
+expect_fail "no partition 'nope'" crew page nope
+expect_fail "--since takes a date" crew page wldn --since yesterday-ish
+ok "when the branch cannot be read nothing is written and the branch is named; an unknown partition or time is refused"
+
+blueprints afterthought/blueprints >/dev/null
+crew state init swancloud >/dev/null
+rm -rf "$(home_of mac-studio)/.local/state/crew/swancloud/runs"
+expect_ok crew page swancloud
+has "$out" "nothing has been recorded"
+json=$(block "$(home_of mac-studio)/.local/state/crew/swancloud/page.html")
+eq "$(j '.entries | length') $(j '.nodes | length')" "0 0"
+ok "an empty record writes a page saying nothing has been recorded"
