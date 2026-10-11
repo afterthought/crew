@@ -4447,20 +4447,21 @@ def stray_cards(fleet, found, sv, rows, cards, unread):
     return sorted(out, key=lambda c: (c["at"], c["card"]))
 
 
-def sweep_sessions(fleet, found, sv, rows, cards, unread, held):
+def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     """End the card sessions crew started whose card is closed or whose row is gone, on every host of each partition
     whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
-    as live every row key less each the record holds as closed with no card open under it, and as blind the key
-    prefixes it can't judge, verify/<unit>/ for each unit of a bolt whose team's kit was not read and batch/ while the
-    record did not answer whole, when no key is taken out for being closed either (read.1). A host the survey found not
-    answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why "its row
-    is gone" or "its card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
+    as live every row key less each the record holds as closed with no card open under it (batched, what the batches
+    hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge,
+    verify/<unit>/ for each unit of a bolt whose team's kit was not read and batch/ while the record did not answer
+    whole, when no key is taken out for being closed either (read.1). A host the survey found not answering is not
+    asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why "its row is gone" or "its
+    card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
     ended, unchecked = [], []
     for l, _, _, plan in found:
         if not plan:
             continue
         rowed = {r["key"] for r in rows if r["label"] == l}
-        closed = set() if unread.get(l) else held[l]["closed"] - {c["key"] for c in cards if c["label"] == l}
+        closed = set() if unread.get(l) else batched[l]["closed"] - {c["key"] for c in cards if c["label"] == l}
         blind = ["batch/"] if unread.get(l) else []
         st = Stages(fleet, plan, sv)
         blind += [f"verify/{u.name()}/" for b in plan.bolts() if b.get("Team") and not st.kit(b)[0] for u in plan.units_of(b.name())]
