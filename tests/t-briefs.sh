@@ -24,17 +24,16 @@ lacks "$out" "ending with the suite green"
 ok "the coder, verify and construct run only the tests a change affects, and leave the whole suite to the merge gate"
 
 expect_ok crewpy brief swb-1 conductor
-for want in "unit approve" "review" "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
+for want in "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
   has "$out" "$want"
 done
-lacks "$out" "plannotator-tui"
-for want in "open nothing, and recite no command" "The user opens the whole change" "never its number alone"; do has "$out" "$want"; done
+lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
+for want in "open nothing, and recite no command" "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" "never run \`plannotator\` yourself" \
-  "carrying the link to the plannotator session on its change and no path" \
   "carrying the link to the plannotator session on the report, not the report as a file" "it has nothing to read, so it carries no link"; do
   has "$out" "$want"
 done
-ok "a conductor's review and verify cards link the session crew starts on what they ask the user to read, and it opens nothing"
+ok "a conductor's verify card links the session crew starts on the report, and it opens nothing"
 cards_say() {  # the card discipline the planner's and the conductor's briefs share
   for want in "begins with the link to the card's plannotator session, then names the bolt" "in the document's own words" \
     "never reworded" "No card carries a path" "an empty list as its files touched" \
@@ -46,31 +45,27 @@ cards_say() {  # the card discipline the planner's and the conductor's briefs sh
   lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"
 }
 cards_say
-for want in "its words the change's Why and the lead sentence of each of its What Changes items, as the proposal words them" \
-  "its words each finding the report raised in a line, with what you would do about it" "it names the bolt, and it has nothing to read, so it carries no link and no path" \
-  "the change's Why and the lead sentence of each of its What Changes items, in the proposal's own words, and post its review card"; do
+for want in "its words each finding the report raised in a line, with what you would do about it" \
+  "it names the bolt, and it has nothing to read, so it carries no link and no path"; do
   has "$out" "$want"
 done
-lacks "$out" "two or three plain sentences"
-ok "a conductor's cards and its ready-for-review message say the document's own words, the link and the bolt first, and no path"
-for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`review/<unit>/<head>\`" "keyed \`verify/<unit>/<stamp>\`" \
+lacks "$out" "two or three plain sentences"; lacks "$out" "post its review card"
+ok "a conductor's cards say the document's own words, the link and the bolt first, and no path"
+for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`verify/<unit>/<stamp>\`" \
   "keyed \`land/<bolt>/<head>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." "post its verify card" \
   "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." \
   "A row's key changes when what it asks changes" "Pending You gives that card back" \
   "close a landing card you have open with what the fix changed" "under the key the rail then shows"; do
   has "$out" "$want"
 done
-for want in "it is a Pending You \`approve\` card, approved, or declined with a note for changes, with no attachment, its link in its words" \
-  "a decline runs construct again with the words of its note, or of the annotations in its session" \
-  "A decline with no words gives you nothing to build with: ask in the card's thread what to change" \
-  "it is a \`choice\` card, or a \`multi\` when the user may pick several findings, whose options are what you would do" \
+for want in "it is a \`choice\` card, or a \`multi\` when the user may pick several findings, whose options are what you would do" \
   "an \`approve\` card with \`highStakes\` true" "never an \`action\` and never a step or command for the user to land it" \
   "since its yes has you tell \`wldn-ops\` to land"; do
   has "$out" "$want"
 done
 lacks "$out" "offering approval"; lacks "$out" "Looks good"; lacks "$out" "Needs changes"; lacks "$out" "\`review\` card"
-ok "the conductor's review card is an approval with a note, its verify card a choice of its options, its landing card a high-stakes approval and never a step to land"
-ok "the conductor takes units through review, asks the design agent, records signals, and writes the plan only through crew"
+ok "the conductor's verify card is a choice of its options, its landing card a high-stakes approval and never a step to land"
+ok "the conductor keeps its units moving, asks the design agent, records signals, and writes the plan only through crew"
 
 for role in design planner dispatcher main-ops; do
   expect_ok crewpy brief wldn $role
@@ -109,7 +104,7 @@ expect_ok crewpy brief swb-1 conductor
 for want in "plan proposed <n>" "plan agree <n>" "plan approve <n>\`, never on your own judgment" "crew refuses it from you" \
   "crew status swb-1\` once that agent settles" "tell the user once which worktree it is and what its work was" \
   "tell the user once which worktree it is and what crew named" "never approve or skip the kit's hooks yourself"; do has "$out" "$want"; done
-for want in "at any stage before it merges" "crew marks the unit amended" "code waits for that approval" \
+for want in "at any stage before it merges" "crew marks the unit amended" "the unit goes on from its tasks with no approval asked" \
   "When crew tells you a unit's intent was amended, run construct again" "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
 for want in "Send linked questions together" "with the documentation or reading it names" \
   "holds corrections to a unit in construct"; do has "$out" "$want"; done
@@ -283,3 +278,47 @@ for brief in "swb-1 conductor" "wldn planner"; do
   has "$out" "crew refuses a card you post under any key but a rail row's of your own, and an area under any key but \`create-area:<owner>/<kit>\`, and its refusal names the key to use."
 done
 ok "ops and every stage post no card, the landing card asks the proof's steps for the user first, and the card discipline says crew refuses any other key"
+
+# Units build at once and are reviewed in batches (teams.12 to teams.14, briefs.1, briefs.2, briefs.4, briefs.12): the
+# conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
+# a unit; the planner runs the reviewer and posts each batch's cards; construct writes Touches as a block crew reads;
+# the coder keeps both intents, settles, corrects only Touches, and submits where the kit uses sluice; verify names what
+# was changed and not declared; the reviewer writes its summary and nothing else.
+expect_ok crewpy brief swb-1 conductor
+for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned\`" "with nobody asked to approve it" \
+  "You post no card for a unit, and open nothing for a batch" "run construct again with them, word for word" \
+  "hold the notes until it settles" "Overlapping *Touches* never hold a unit back" "crew puts the later after the earlier itself" \
+  "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
+  "the card names them too" "or \`wt submit\` where the kit merges through sluice" "changed and did not declare in its Touches"; do
+  has "$out" "$want"
+done
+for gone in "build them one after the other" "When in doubt, don't" "## Review with the user"; do lacks "$out" "$gone"; done
+expect_ok crewpy brief wldn planner
+for want in "## Batches" "review wldn\`" "review wldn --wait\`" "card session batch/<n>-<k> <unit> --label wldn" \
+  "\"which need notes?\"" "card wait batch/<n>-<k> <unit> --label wldn" "send each picked unit's notes, verbatim, to its team's conductor" \
+  "A unit not picked is fine" "you never run a stage" "Never answer a batch card yourself" "keyed \`batch/<n>-<k>\`" "of at most five units"; do
+  has "$out" "$want"
+done
+lacks "$out" "the user reviews the change written for the new intent"
+expect_ok crewpy brief swb-1 construct
+for want in "End the proposal with \`## Touches\`" "one fenced block listing every path or glob" "refuses code without it" \
+  "The revised change goes into the next batch" "The user reads it in a batch, while it is built"; do
+  has "$out" "$want"
+done
+lacks "$out" "Two units are built side by side only when"; lacks "$out" "back in review"
+expect_ok crewpy brief swb-1 coder
+for want in "Settle <unit>: <what reached it>" "keeping both changes' intents" "The earlier unit is never changed for it" \
+  "The one part of it you may edit is the \`## Touches\` block" "\`wt submit bolt/<bolt>\`" "A unit you come after, constructed again"; do
+  has "$out" "$want"
+done
+lacks "$out" "the user reviewed and approved it"
+expect_ok crewpy brief swb-1 verify; has "$out" "\"changed and not declared\""
+expect_ok crewpy brief wldn reviewer
+[[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/reviewer.md left ${BASH_REMATCH[0]} unfilled"
+for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but this file" "at the commit the prompt names" \
+  "**What it does**" "**The decisions it took**" "**Its risks**" "**Its Touches**" "**What the user would likely care about**"; do
+  has "$out" "$want"
+done
+expect_ok crewpy brief wldn design; has "$out" "\`wldn-reviewer\`, started fresh for each batch"
+expect_ok crewpy brief swb-1 ops; has "$out" "(construct, code, verify, settle, merge)"
+ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"

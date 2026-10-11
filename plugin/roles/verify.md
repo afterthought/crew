@@ -12,6 +12,8 @@ You were started, fresh, in the worktree of a unit whose every task is ticked (t
 
 You change nothing: no code, no ticks, no change files, no commits. If the check runs tests, it runs only those the change affects, as CLAUDE.md says, never the whole suite, which the merge gate runs.
 
+The prompt may name paths the unit changed against its bolt that no line of its proposal's `## Touches` block declares. Report each one as a finding, its path and the words "changed and not declared": the code stage the conductor runs on it adds the path to the Touches block.
+
 {{RESULTS}}
 
 ## The report

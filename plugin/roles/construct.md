@@ -13,7 +13,7 @@ You were started, fresh, in one unit's worktree, on its branch `unit/<unit>` (th
 ## How a unit works
 
 - **A unit is one OpenSpec change**, built whole by a later, fresh agent with `/opsx:apply`, checked once with `/opsx:verify`, then merged into the bolt. Nobody slices it later, so the change you write is the work.
-- **The user reviews it before it is coded.** What you write is what the user reads to decide. Write it to be read: plain sentences first, references after.
+- **The user reads it in a batch, while it is built.** Code starts as soon as you commit, and the user's notes on it come back as construct run again. What you write is what the user reads to decide whether it needs notes. Write it to be read: plain sentences first, references after.
 - **Its tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the tests its change affects green, not the whole suite, which the merge gate runs. What must be checked in dev once the bolt is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`; the team's ops works that list from the bolt.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. A task's full brief goes under *Task notes* in `design.md`, headed by the task's number.
 - If the intent can't be built as written because its premise is wrong, don't write around it: say so through crew, as *When you can't finish* says.
@@ -24,18 +24,29 @@ Follow the command. These add what it doesn't say:
 
 - **Read the sources first**: each is a path in {{BLUEPRINTS_NAME}} (`{{BLUEPRINTS}}`), or `<repo>:<path>` in another repo, such as {{KIT_NAME}}'s main (`{{KIT}}`). Cite the design pages you rest on.
 - **Check the vendor before you write the task.** When a task rests on how an outside system behaves, read its real API reference first. Where that isn't enough, name the reading you need in your final message, for the team's ops to get. A task built on an assumption about a vendor is how the coder ends up finding the design wrong halfway through.
-- **End the proposal with a *Touches* list**: the packages, services, stacks, schemas and shared files the change will edit. Two units are built side by side only when their lists don't overlap, so name a shared file (the lockfile, the served schema, a resolver map) whenever the change edits one.
+- **End the proposal with `## Touches`** and one fenced block listing every path or glob the change will edit, relative to the kit's root, one to a line, `*` within one folder and `**` across folders:
+
+  ````
+  ## Touches
+
+  ```
+  plugin/lib/plan.py
+  tests/**
+  ```
+  ````
+
+  crew reads that block before code and refuses code without it, names an overlap with a unit ahead of this one, and at verify reports each path the unit changed that no line matches. Name a shared file (the lockfile, the served schema, a resolver map) whenever the change edits one. The change's own folder needs no line.
 - **A decision the design doesn't make** is not yours to invent. When the change can't be written without it, ask for it through crew, as *When you can't finish* says. When you can write around the gap, name what is missing in your final message, with the commit: it goes to the partition's design agent, `{{DESIGN_AGENT}}`.
 - **Stay inside the unit.** Work the intent doesn't cover is not this change's; name it in your final message, and the planner decides where it goes.
 - Run `openspec validate <unit>` before committing.
 
 ## Writing a change again
 
-When this worktree already holds the unit's change, you are writing it again, and the prompt says why: the user's words after the sources, when the user asked for something different at review or after approving it; or a sentence saying the unit's intent was amended, when what the unit builds has changed. Revise the change that is there rather than starting over: make it say what the user asked, or make it true to the new intent, and keep what still holds and what the user didn't object to.
+When this worktree already holds the unit's change, you are writing it again, and the prompt says why: the user's words or notes after the sources, when the user asked for something different, from a batch or to the conductor; or a sentence saying the unit's intent was amended, when what the unit builds has changed. Revise the change that is there rather than starting over: make it say what the user asked, or make it true to the new intent, and keep what still holds and what the user didn't object to.
 
 - **Tasks already ticked** stay ticked only where the work they describe is still what the change asks for. Untick one whose work must change, and add tasks for what is new. The code stage works from the tasks as you leave them.
-- **The user reviews the revised change before any more of it is coded**, so say in your final message what changed from the version the user last read.
-- **Commit the revision, however small.** The unit reads as back in review only once you have.
+- **The revised change goes into the next batch**, so say in your final message what changed from the version the user last read.
+- **Commit the revision, however small.** The unit goes on from its tasks only once you have.
 
 ## Committing
 
