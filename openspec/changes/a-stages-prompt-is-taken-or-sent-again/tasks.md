@@ -2,7 +2,7 @@
 
 ## 1. Reading whether a prompt was taken
 
-- [ ] 1.1 `transcript.py` says where a session's transcript ends and whether it received a given prompt past that point, runnable on the agent's host (design.md, Task notes 1.1). Verify `tests/suite t-transcript` ends with "0 failed".
+- [x] 1.1 `transcript.py` says where a session's transcript ends and whether it received a given prompt past that point, runnable on the agent's host (design.md, Task notes 1.1). Verify `tests/suite t-transcript` ends with "0 failed".
 - [ ] 1.2 The stub herdr writes each prompt it is sent into the stub session's transcript, and can be told to leave prompts typed and untaken until a `ctrl+c` clears them (design.md, Task notes 1.2). Verify `tests/suite t-greet t-unit-run t-fix t-stage-ends` ends with "0 failed".
 
 ## 2. One sending that is taken or sent again

@@ -31,8 +31,25 @@ A wait on a stage reads the same transcript for the work the agent started in th
 2026-10-08: a Bash call run in the background is answered by a record whose toolUseResult holds
 "backgroundTaskId": "<id>"; and when that work ends, the session receives a string holding <task-notification> with
 <task-id><id></task-id> in it, recorded as a queue-operation and again as an attachment. When these stop holding, a
-quiet agent waiting on its own work reads as waiting on nothing, and is reported stuck sooner; never as finished."""
-import datetime, hashlib, json, pathlib, re
+quiet agent waiting on its own work reads as waiting on nothing, and is reported stuck sooner; never as finished.
+
+When crew sends an agent a prompt, a stage's, a greeting or ops's proof request, it reads here whether Claude received
+it (teams.15). Run on the agent's host, sent there as questions.py is, it answers one JSON object and writes nothing:
+
+  python3 - end <session>                      where the session's transcript ends: {"path": <path>, "size": <bytes>},
+                                               {"path": null, "size": 0} when it has none yet, or {"unread": "<what>"}
+  python3 - received <session> <offset> <text> whether a complete line past that many bytes is the prompt as Claude
+                                               received it: {"received": true|false}, or {"unread": "<what>"}
+
+It knows four more facts of the format, read from Claude Code 2.1.292's transcripts of a construct's session 0bd4a771
+of 2026-10-10 and swc-2-conductor's session e78bbab4 of 2026-10-08: a fresh session's transcript does not exist until
+its first prompt, its SessionStart hook's record written with the prompt's; a plain prompt is a record of type user
+whose message.content is the text as sent, crew's mark included; a slash command is a user record holding
+<command-name>/<command></command-name> and <command-args>, the arguments as typed; and a prompt sent while the agent
+works is recorded at once as {"type": "queue-operation", "operation": "enqueue", "content": "<text>"}, then as a user
+record when Claude submits it. When these stop holding, no prompt reads as received: crew sends each twice and reports
+its stage as never started, loudly, never as a stage that began."""
+import datetime, hashlib, json, pathlib, re, sys
 
 # A crew signal command line that carries an excerpt, the agent's own or an echo of it: from `crew signal` to the end of
 # its line, a backslash-newline running it on, when a word after it starts --excerpt.
@@ -45,6 +62,9 @@ ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 FRESH = datetime.timedelta(minutes=15)
 NOTICE = "<task-notification>"
 TASK_ID = re.compile(r"<task-id>(.*?)</task-id>", re.S)
+SESSION = re.compile(r"[A-Za-z0-9._:-]+")
+# A prompt that is a slash command: the command, then its arguments.
+COMMAND_LINE = re.compile(r"/(\S+)(?:\s+(.*))?", re.S)
 
 
 def collapse(s):
@@ -54,7 +74,7 @@ def collapse(s):
 
 def find(session):
     """A session's transcript: the first of ~/.claude*/projects/*/<session id>.jsonl, or None."""
-    if not session or not re.fullmatch(r"[A-Za-z0-9._:-]+", session):
+    if not session or not SESSION.fullmatch(session):
         return None
     found = sorted(pathlib.Path.home().glob(f".claude*/projects/*/{session}.jsonl"))
     return found[0] if found else None
@@ -118,13 +138,16 @@ def unverified(reason):
     return Verdict("unverified", reason)
 
 
-def lines(path):
+def lines(path, start=0):
     """The transcript's complete lines, as (number, the line's bytes, its JSON value), a trailing partial line left
-    out, since Claude Code may be writing it; or the reason it can't be read."""
+    out, since Claude Code may be writing it; or the reason it can't be read. With start, only the lines that begin at
+    that many bytes in or later, numbered from there."""
     try:
         data = path.read_bytes()
     except OSError as e:
         return f"the transcript {path} can't be read: {e.strerror or e}"
+    if start:  # a line that began before start is not read, though it ends after it
+        data = data[start:] if data[start - 1:start] == b"\n" else data[start:].partition(b"\n")[2]
     out = []
     parts = data.split(b"\n")
     for n, raw in enumerate(parts[:-1], 1):  # the last part is empty, or a line not yet finished
@@ -248,3 +271,63 @@ def last_at(path):
         return None
     times = [t for t in (stamp(v.get("timestamp")) for _, _, v in found if isinstance(v, dict)) if t]
     return max(times) if times else None
+
+
+def unnamed(session):
+    """What crew can't read of a session it is not given an id it reads, or None."""
+    return None if session and SESSION.fullmatch(session) else f"session id {json.dumps(session)} is not one crew reads"
+
+
+def end(session):
+    """Where a session's transcript ends, noted before crew sends it a prompt: its path and length in bytes, no path
+    and 0 when it has none yet, or what could not be read."""
+    if unnamed(session):
+        return {"unread": unnamed(session)}
+    path = find(session)
+    if path is None:
+        return {"path": None, "size": 0}
+    try:
+        return {"path": str(path), "size": path.stat().st_size}
+    except OSError as e:
+        return {"unread": f"the transcript {path} can't be read: {e.strerror or e}"}
+
+
+def received(session, offset, text):
+    """Whether the session received the prompt crew sent as text, in a complete line of its transcript that begins
+    offset bytes in or later: a record of type user any of whose strings holds the text, whitespace collapsed; for a
+    text that is a slash command, a user record holding <command-name>/<command></command-name> whose <command-args>
+    are the text's arguments, whitespace collapsed; or a queue-operation enqueue whose content holds the text. A record
+    of type assistant never counts, and a session with no transcript yet has received nothing."""
+    if unnamed(session):
+        return {"unread": unnamed(session)}
+    path = find(session)
+    if path is None:
+        return {"received": False}
+    found = lines(path, offset)
+    if isinstance(found, str):
+        return {"unread": found}
+    needle = collapse(text)
+    m = COMMAND_LINE.fullmatch(text.strip())
+    name, args = (f"<command-name>/{m.group(1)}</command-name>", collapse(m.group(2) or "")) if m else (None, None)
+    for _, _, v in found:
+        if kind(v) == "user":
+            for s in strings(v):
+                if needle in collapse(s):
+                    return {"received": True}
+                a = ARGS.search(s) if name and s.lstrip().startswith("<command-") and name in s else None
+                if a and collapse(a.group(1)) == args:
+                    return {"received": True}
+        elif (kind(v) == "queue-operation" and v.get("operation") == "enqueue" and isinstance(v.get("content"), str)
+              and needle in collapse(v["content"])):
+            return {"received": True}
+    return {"received": False}
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if a[:1] == ["end"] and len(a) == 2:
+        print(json.dumps(end(a[1])))
+    elif a[:1] == ["received"] and len(a) == 4 and a[2].isdigit():
+        print(json.dumps(received(a[1], int(a[2]), a[3])))
+    else:
+        sys.exit("usage: transcript.py end <session> | received <session> <offset> <text>")

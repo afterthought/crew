@@ -2,7 +2,8 @@
 # whitespace aside, but the crew signal command lines that carry an excerpt, what the agent wrote, and the writing of
 # an excerpt's file. The grade, the source record (the latest that holds the words) and who asserted it. Claude Code
 # writes the running command's record only once it returns, so the transcript is taken for the live session's when its
-# last record was written in the last 15 minutes; a paraphrase is refused only then.
+# last record was written in the last 15 minutes; a paraphrase is refused only then. And whether a session received
+# a prompt crew sent, read past where its transcript ended before the sending, as crew reads it on the agent's host.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 h=mac-studio
@@ -147,3 +148,50 @@ EOF
 eq "$(verdict s-file "the words I wrote myself" /tmp/e.txt)" "refused unknown None None"
 eq "$(verdict s-file "the words I wrote myself")" "verified tool 1 u-16"
 ok "with --excerpt-file, the records that wrote the file are not searched"
+
+# Whether a session received the prompt crew sent, read from the lines its transcript gained past where it ended before
+# the sending (teams.15), run as crew runs it on the agent's host: piped to python3.
+taken() { as $h python3 - "$@" < "$CREW/plugin/lib/transcript.py"; }
+eq "$(taken end s-fresh)" '{"path": null, "size": 0}'
+eq "$(taken received s-fresh 0 "Fix: The banner flickers.")" '{"received": false}'
+ok "a session with no transcript yet ends at 0 and has received nothing"
+
+f=$(transcript $h s-sent <<'EOF'
+{"type":"user","message":{"role":"user","content":"[crew] Read where your bolt stands, then carry on."}}
+{"type":"user","message":{"role":"user","content":"Carry on with the sign-in."}}
+EOF
+)
+n=$(wc -c < "$f" | tr -d ' ')
+eq "$(taken end s-sent)" "{\"path\": \"$f\", \"size\": $n}"
+cat >> "$f" <<'EOF'
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Fix: The banner flickers. [crew tell from swb-1-conductor] Carry on."}]}}
+{"type":"user","message":{"role":"user","content":"Fix:   The banner\n flickers."}}
+{"type":"user","message":{"role":"user","content":"<command-message>opsx:apply</command-message>\n<command-name>/opsx:apply</command-name>\n<command-args>edge-groups Close   the groups.</command-args>"}}
+{"type":"queue-operation","operation":"enqueue","content":"[crew tell from swb-1-conductor] Carry on."}
+EOF
+eq "$(taken received s-sent "$n" "Fix: The banner flickers.")" '{"received": true}'
+eq "$(taken received s-sent "$n" "/opsx:apply edge-groups Close the groups.")" '{"received": true}'
+eq "$(taken received s-sent "$n" "[crew tell from swb-1-conductor] Carry on.")" '{"received": true}'
+ok "a plain prompt, a slash command with its arguments and a queued prompt are received, whitespace aside"
+
+eq "$(taken received s-sent 0 "[crew] Read where your bolt stands, then carry on.")" '{"received": true}'
+eq "$(taken received s-sent "$n" "[crew] Read where your bolt stands, then carry on.")" '{"received": false}'
+eq "$(taken received s-sent "$((n - 10))" "Carry on with the sign-in.")" '{"received": false}'
+ok "a marked greeting is received only past the point noted before it was sent; a line begun before that point is not read"
+
+f=$(transcript $h s-said <<'EOF'
+{"type":"user","message":{"role":"user","content":"<command-name>/opsx:verify</command-name>\n<command-args>edge-groups</command-args>"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Merge a into bolt/b: wt merge bolt/b --no-squash --no-remove"}]}}
+EOF
+)
+eq "$(taken received s-said 0 "Merge a into bolt/b: wt merge bolt/b --no-squash --no-remove")" '{"received": false}'
+eq "$(taken received s-said 0 "/opsx:verify edge-groups Close the groups.")" '{"received": false}'
+eq "$(taken received s-said 0 "/opsx:apply edge-groups")" '{"received": false}'
+eq "$(taken received s-said 0 "/opsx:verify edge-groups")" '{"received": true}'
+ok "the agent's own words quoting a prompt, and a slash command with other arguments or another name, are not received"
+
+printf '%s\nthis is not JSON\n' '{"type":"user","message":{"content":"Carry on."}}' | transcript $h s-garbled-sent >/dev/null
+eq "$(taken received s-garbled-sent 0 "Carry on.")" '{"unread": "the transcript is not JSON lines"}'
+eq "$(taken end ../x)" '{"unread": "session id \"../x\" is not one crew reads"}'
+eq "$(taken received "" 0 "Carry on.")" '{"unread": "session id \"\" is not one crew reads"}'
+ok "a transcript that is not JSON lines, and a session id crew does not read, are unread"
