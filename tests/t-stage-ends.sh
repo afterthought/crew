@@ -2,7 +2,7 @@
 # began; the wait that returns with it and records its end; the stuck clock, which runs only while the agent waits on
 # nothing of its own and says when it could not read that; a stop-short through crew needs, carried to the waiting
 # wait or told to the conductor and never put in the run record; a wait that sees a tick made while it waits; a gone
-# agent; a fix's wait; and ops's proof.
+# agent; a fix's wait; and ops's proof, whose request is taken or sent again, and never started when it is not.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
@@ -233,6 +233,18 @@ eq "$(field stage.end On stage/tenant-environments/proof)" "stage/tenant-environ
 eq "$(field stage.end Delivered stage/tenant-environments/proof)" "proof/proof-tenant-environments-20261008-1630.md"
 eq "$(field stage.end Why stage/tenant-environments/proof)" "bolt(tenant-environments): proof ended"
 ok "crew prove asks ops for the proof and owes its end, and its wait returns with the proof file ops saved"
+
+export CREW_TAKEN_WITHIN=1
+as $box herdr --session wldn-1 stub leave swb-1-ops 2
+: > "$CREW_TEST_LOG"
+expect_fail "the proof of tenant-environments never started, and no proof is owed: crew prove swb-1 asks ops again" crew prove swb-1
+has "$out" "swb-1-ops did not take its prompt, sent twice; nothing is left typed"
+eq "$(grep -c "^$box wldn-1 agent prompt swb-1-ops '\[crew tell from swb-1-conductor\] Deploy the bolt" "$CREW_TEST_LOG")" "2"
+eq "$(field stage.start Refused stage/tenant-environments/proof)" "swb-1-ops did not take its prompt, sent twice; nothing is left typed"
+lacks "$(cat "$stages")" "ops tenant-environments proof"
+eq "$(herdr_state $box wldn-1 '.agents[] | select(.name == "swb-1-ops") | .typed // ""')" ""
+unset CREW_TAKEN_WITHIN
+ok "a proof whose request ops never took, sent twice, never started: recorded refused, nothing typed, and no proof owed"
 
 touch -t 202601010000 "$proof"
 expect_ok crew prove swb-1 "Only the sign-in this time."

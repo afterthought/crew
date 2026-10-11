@@ -591,7 +591,11 @@ prove() {  # prove "<words>": ask ops to prove the team's bolt, and owe the proo
   fi
   # A proof still owed is over once another is asked for.
   if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" --slot ops --ending >/dev/null 2>&1 || true; fi
-  py tell "$TEAM-ops" "Deploy the bolt and work the Proof in dev list of each of its units.${words:+ $words}" || exit 1
+  # The request is taken or sent again (teams.15); one ops never took, or one crew can't tell it took, starts no proof.
+  if ! err=$(py tell "$TEAM-ops" "Deploy the bolt and work the Proof in dev list of each of its units.${words:+ $words}" --taken 2>&1); then
+    echo "$err" >&2; echo "the proof of $bolt never started, and no proof is owed: crew prove $TEAM asks ops again" >&2
+    entry --label "$LABEL" --act stage.start --on "stage/$bolt/proof" --on "bolt/$bolt" --on "agent/$TEAM-ops" --refused "$err"; exit 1
+  fi
   id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act stage.start --on "stage/$bolt/proof" --on "bolt/$bolt" \
     --on "agent/$TEAM-ops" --why "bolt($bolt): start proof" || true)
   [[ -n $id ]] && echo "ops $bolt proof $id bolt/$bolt" >> "$STATE/stages"
