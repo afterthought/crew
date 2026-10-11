@@ -29,6 +29,8 @@ shim python3 '[[ ${1:-} == - && ${2:-} == "{"* ]]' gather
 shim openspec true openspec
 export PATH="$T/shim:$PATH"
 reads() { grep -c "^$1 $2\$" "$T/reads.log" || true; }
+# A host reads its own kits in crew's process, which says so here; another host's are piped to its python3.
+export CREW_TEST_READS=$T/reads.log
 left() { ls -A "$(home_of "$1")/.cache/crew/reads" 2>/dev/null || true; }
 
 : > "$T/reads.log"

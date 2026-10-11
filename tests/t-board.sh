@@ -281,6 +281,8 @@ shim git '[[ " $* " == *" fetch "*refs/crew/wldn/main* ]]' fetch
 shim python3 '[[ ${1:-} == - ]]' gather
 reads() { grep -c "^$1 $2\$" "$T/reads.log" || true; }
 : > "$T/reads.log"
+# A host reads its own kits in crew's process, which says so here; another host's are piped to its python3.
+export CREW_TEST_READS=$T/reads.log
 PATH="$T/shim:$PATH" expect_ok crew _views wldn
 eq "$(reads mac-studio fetch) $(reads mac-studio gather) $(reads $box gather) $(reads $box fetch)" "1 1 1 0"
 ok "one refresh fetches the state branch once and reads each host's kits once, for the rail and the board"

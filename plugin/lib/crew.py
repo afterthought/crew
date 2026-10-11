@@ -713,11 +713,27 @@ def operator_session(fleet, label, host):
     return sess
 
 
-def env(t):
+def reach(fleet, machine):
+    """What bash crew needs to run a command again on the machine it acts on, given with the command's env so that
+    forwarding starts no Python of its own: on another host, the crew there (REMOTE_CREW, or REMOTE_CREW_REFUSED
+    saying why there is none) and the caller's Claude session (CALLER_SESSION, empty for the user); on this host,
+    nothing."""
+    if machine == this_host():
+        return {}
+    import record as rec  # record imports this module
+    out = {"CALLER_SESSION": rec.session() or ""}
+    try:
+        out["REMOTE_CREW"] = crew_at(fleet, machine)
+    except Refusal as e:
+        out["REMOTE_CREW_REFUSED"] = str(e)
+    return out
+
+
+def env(fleet, t):
     pairs = {
         "TEAM": t["name"], "SYSTEM": t["system"], "MACHINE": t["machine"], "SSH_TARGET": t["ssh"], "SESSION": t["session"],
         "LABEL": t["label"], "CREW_HOME": str(HOME), "KIT": t["kit"]["main"], "KIT_DIR": t["kit"]["dir"], "KIT_NAME": t["kit"]["name"],
-        "BLUEPRINTS": t["blueprints"]["main"], "UNITS": str(t["units"]), "HOST_KIND": t.get("kind", ""),
+        "BLUEPRINTS": t["blueprints"]["main"], "UNITS": str(t["units"]), "HOST_KIND": t.get("kind", ""), **reach(fleet, t["machine"]),
     }
     return "\n".join(f"{k}={shlex.quote(v)}" for k, v in pairs.items()) + f'\nSTATE="$HOME/.local/state/{t["name"]}-team"'
 
@@ -989,20 +1005,21 @@ def launch_shell(fleet, scope, role, extra):
 def env_main(fleet, label):
     p = partition_of(fleet, label)
     return shell(KIND="main", LABEL=label, MACHINE=p["machine"], SSH_TARGET=p["ssh"], SESSION=p["session"], CWD=p["checkout"],
-                 STATE=f"$HOME/.local/state/crew/{label}-main")
+                 STATE=f"$HOME/.local/state/crew/{label}-main", **reach(fleet, p["machine"]))
 
 
 def env_dispatch(fleet, label, host):
     session = dispatch_place(fleet, label, host)
     bps = blueprints_on(fleet, label, host)
     return shell(KIND="dispatch", LABEL=label, HOST=host, MACHINE=host, SSH_TARGET=fleet["hosts"][host]["ssh"], SESSION=session,
-                 CWD=bps[0] if bps else fleet["hosts"][host]["sessions"][session]["dir"], STATE=f"$HOME/.local/state/crew/{label}-dispatch")
+                 CWD=bps[0] if bps else fleet["hosts"][host]["sessions"][session]["dir"], STATE=f"$HOME/.local/state/crew/{label}-dispatch",
+                 **reach(fleet, host))
 
 
 def env_operator(fleet, label, host):
     sess = operator_session(fleet, label, host)
     return shell(KIND="operator", LABEL=label, HOST=host, MACHINE=host, SSH_TARGET=fleet["hosts"][host]["ssh"], SESSION=label,
-                 CWD=sess["dir"], STATE=f"$HOME/.local/state/crew/{label}-operator")
+                 CWD=sess["dir"], STATE=f"$HOME/.local/state/crew/{label}-operator", **reach(fleet, host))
 
 
 def here(fleet):
@@ -1033,7 +1050,7 @@ def main(a):
     elif a[:1] == ["labels"]:
         print("\n".join(fleet["partitions"]))
     elif a[:1] == ["env"] and len(a) == 2:
-        print(env(team_of(fleet, a[1])))
+        print(env(fleet, team_of(fleet, a[1])))
     elif a[:1] == ["brief"] and len(a) >= 3:
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:

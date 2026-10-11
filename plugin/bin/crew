@@ -203,9 +203,11 @@ local_here() { [[ $(this_host) == "$MACHINE" ]]; }
 # Who asks, and the Claude session behind them, go with a command run on another host, so what it records there names them.
 identity() { echo "CREW_AGENT=${CREW_AGENT:-$(id -un)@$(this_host)}"; }
 session_of() { python3 "$here/../lib/record.py" session 2>/dev/null || true; }
-there() {  # there <host's ssh name> <crew on that host> <args...>: run a crew command on another host
-  local target=$1 remote=$2; shift 2
-  ssh -o BatchMode=yes "$target" "$(printf '%q ' env "$(identity)" "CREW_LABEL=${CREW_LABEL:-}" "CREW_SESSION=$(session_of)" bash "$remote" "$@")"
+there() {  # there <host's ssh name> <crew on that host> <args...>: run a crew command on another host. The caller's
+  # session is the one the env of what is acted on gave (CALLER_SESSION, empty for the user), else asked of record.py.
+  local target=$1 remote=$2 sid; shift 2
+  if [[ ${CALLER_SESSION+set} ]]; then sid=$CALLER_SESSION; else sid=$(session_of); fi
+  ssh -o BatchMode=yes "$target" "$(printf '%q ' env "$(identity)" "CREW_LABEL=${CREW_LABEL:-}" "CREW_SESSION=$sid" bash "$remote" "$@")"
 }
 # An entry in the run record (lib/record.py), written after the act. A failure is said on standard error and
 # changes nothing about the command.
@@ -217,9 +219,11 @@ record_agents() {  # record_agents <act> <why> [role...]: one entry for an act o
   (( ${#on[@]} )) || return 0
   entry --label "$LABEL" --act "$act" "${on[@]}" --why "$why"
 }
-forward() {  # what is acted on lives on its host: run this same command there, unless this is that host
+forward() {  # what is acted on lives on its host: run this same command there, unless this is that host. The crew
+  # there came with the env (REMOTE_CREW, or REMOTE_CREW_REFUSED saying why there is none).
   local_here && return 0
-  local remote; remote=$(py crew-at "$MACHINE") || exit 1
+  [[ -z ${REMOTE_CREW_REFUSED:-} ]] || { echo "$REMOTE_CREW_REFUSED" >&2; exit 1; }
+  local remote=${REMOTE_CREW:-}; [[ -n $remote ]] || remote=$(py crew-at "$MACHINE") || exit 1
   there "$SSH_TARGET" "$remote" "${orig[@]}"; exit $?
 }
 
@@ -486,9 +490,9 @@ carry() {  # carry <slot>: the fix carries the bolt onto main (plan _carry said 
 }
 reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
   # bolt, been dropped from the plan or left the team's bolt, once its agent is not working; rebase each dependent
-  # whose After unit has merged, once its agent is not working; then remove the worktrees whose work is over
+  # whose After unit has merged, once its agent is not working; then remove the worktrees whose work is over. Two
+  # processes: the ends and the slots in one, the rebase and the tidy in the other.
   local slot kind name stage rest
-  if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" >/dev/null 2>&1 || true; fi
   while read -r slot kind name stage rest; do
     case $stage in merged | landed | dropped | left) ;; *) continue ;; esac
     if [[ $(agent_status "$(pane_of "$slot")") == working ]]; then
@@ -504,9 +508,8 @@ reap() {  # record the stages that ended with nobody waiting; free every slot wh
       left) echo "$(name_of "$slot") is free: $name has left $TEAM's bolt" ;;
       *) echo "$(name_of "$slot") is free: $name has merged into its bolt" ;;
     esac
-  done < <(plan _slots "$TEAM" 2>/dev/null || true)
-  plan _rebase "$TEAM" || true
-  plan _tidy "$TEAM" || true
+  done < <(plan _slots "$TEAM" --ends 2>/dev/null || true)
+  plan _rebase "$TEAM" --tidy || true
 }
 unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit no longer in the team's bolt
   local unit=${1:?usage: crew unit free <unit> [--team <team>]} team= t slot path out rc=0

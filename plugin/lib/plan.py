@@ -470,9 +470,13 @@ def commit(repo, parent, files, message):
     with tempfile.TemporaryDirectory() as d:
         idx = {"GIT_INDEX_FILE": str(pathlib.Path(d) / "index")}
         git(repo, "read-tree", *([parent] if parent else ["--empty"]), env=idx)
-        for path, text in files.items():
-            blob = git(repo, "hash-object", "-w", "--stdin", input=text)
-            git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=idx)
+        # Every file's blob in one hash-object, and every path into the index in one update-index.
+        paths, texts = list(files), []
+        for i, path in enumerate(paths):
+            texts.append(pathlib.Path(d) / f"blob-{i}")
+            texts[-1].write_text(files[path])
+        blobs = git(repo, "hash-object", "-w", "--stdin-paths", input="".join(f"{t}\n" for t in texts)).split("\n")
+        git(repo, "update-index", "--add", "--index-info", input="".join(f"100644 {b}\t{p}\n" for b, p in zip(blobs, paths)), env=idx)
         tree = git(repo, "write-tree", env=idx)
     return git(repo, "commit-tree", tree, *(["-p", parent] if parent else []), "-F", "-", input=message)
 
@@ -781,6 +785,26 @@ GATHER = (LIB / "gather.py").read_text()
 LATER = ("code", "verify", "merged", "landed")
 
 
+def gathered(fleet, host, req):
+    """gather.py's answer to a request on a host, and None; or None and the last line of why it failed. On this host
+    it is read in this process, as the same JSON, sparing a Python start each read; on another it is piped to that
+    host's python3, since its crew may be older (code.1)."""
+    if host == crew.this_host():
+        if os.environ.get("CREW_TEST_READS"):  # crew's tests count a command's reads of the kits, a piped one by its python3
+            with open(os.environ["CREW_TEST_READS"], "a") as f:
+                f.write(f"{host} gather\n")
+        try:
+            running = gather.routes() if req.get("sites") else None
+            return json.loads(json.dumps({k["main"]: gather.kit(k, req.get("sites"), running, req.get("board")) for k in req["kits"]})), None
+        except Exception as e:
+            import traceback
+            return None, traceback.format_exception_only(e)[-1].strip()
+    r = crew.on_machine(fleet, host, ["python3", "-", json.dumps(req)], input=GATHER)
+    if r.returncode:
+        return None, ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]
+    return json.loads(r.stdout), None
+
+
 def survey(fleet, held, sites=False, board=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)]. The answer is
     per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
@@ -806,11 +830,10 @@ def survey(fleet, held, sites=False, board=False):
         ask = [k for m, k in kits.items() if m not in have]
         if ask:
             req = {"kits": ask, "sites": sites, **({"board": True} if board else {})}
-            r = crew.on_machine(fleet, host, ["python3", "-", json.dumps(req)], input=GATHER)
-            if r.returncode:
-                out[host] = {"ok": False, "error": ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]}
+            got, error = gathered(fleet, host, req)
+            if error:
+                out[host] = {"ok": False, "error": error}
                 continue
-            got = json.loads(r.stdout)
             if not sites:
                 READ.keep_kits(host, {m: k for m, k in got.items() if k.get("ok")})
             have.update(got)
@@ -3089,9 +3112,34 @@ def slot_stages(fleet, t):
     return out
 
 
+@contextlib.contextmanager
+def silenced():
+    """Standing for a step bash ran with its output thrown away and its failure ignored (`>/dev/null 2>&1 || true`): what
+    it and the processes it starts write goes nowhere, and a refusal or error in it is dropped."""
+    sys.stdout.flush(), sys.stderr.flush()
+    saved = os.dup(1), os.dup(2)
+    null = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(null, 1), os.dup2(null, 2)
+        yield
+    except Exception:
+        pass
+    finally:
+        sys.stdout.flush(), sys.stderr.flush()
+        os.dup2(saved[0], 1), os.dup2(saved[1], 2)
+        for fd in (null, *saved):
+            os.close(fd)
+
+
 def slots_cmd(fleet, a):
-    """Each slot of the team on this host: what it holds and that work's stage, read from the kit and the plan's marks."""
-    for s in slot_stages(fleet, crew.team_of(fleet, a.team)):
+    """Each slot of the team on this host: what it holds and that work's stage, read from the kit and the plan's marks.
+    With --ends, the ends the team's stages file owes are recorded first, as `_ends <team>` records them, its output and
+    any failure dropped: one process for a team's read where there were two."""
+    t = crew.team_of(fleet, a.team)
+    if a.ends and (team_state(t) / "stages").exists() and (team_state(t) / "stages").stat().st_size:
+        with silenced():
+            stage_ends(fleet, argparse.Namespace(team=a.team, slot=None, ending=False))
+    for s in slot_stages(fleet, t):
         tasks = s["counts"] if s["counts"] and s["stage"] in ("code", "verify") else "-"
         print(s["slot"], s["kind"], s["name"], s["stage"], tasks, s["place"])
 
@@ -3627,12 +3675,23 @@ def rebase_dependents(fleet, t, plan, st, say):
 
 
 def rebase_cmd(fleet, a):
-    """crew _rebase <team>: the team's read rebases each dependent whose After unit has merged (rebase_dependents); a
-    conflict waits for the conductor's next wait, which tells the dependent."""
+    """crew _rebase <team> [--tidy]: the team's read rebases each dependent whose After unit has merged
+    (rebase_dependents); a conflict waits for the conductor's next wait, which tells the dependent. With --tidy, the
+    team's tidy runs after it, as `_tidy <team>` would, whether or not the rebase was refused: one process where there
+    were two."""
     t = crew.team_of(fleet, a.team)
-    plan = plan_of(fleet, t["label"])
-    if plan:
-        rebase_dependents(fleet, t, plan, stages_for(fleet, plan, held_by(plan, t["name"])), print)
+    try:
+        plan = plan_of(fleet, t["label"])
+        if plan:
+            rebase_dependents(fleet, t, plan, stages_for(fleet, plan, held_by(plan, t["name"])), print)
+    except Refusal as e:
+        if not a.tidy:
+            raise
+        sys.stdout.flush()
+        print(e, file=sys.stderr)
+    if a.tidy:
+        sys.stdout.flush(), sys.stderr.flush()
+        tidy(fleet, a)
 
 
 def amendments(t, plan, st, entries):
@@ -5021,10 +5080,12 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("--move", nargs=2, metavar=("OLD", "NEW"))
     x = sub.add_parser("_slots")
     x.add_argument("team")
+    x.add_argument("--ends", action="store_true")
     x = sub.add_parser("_tidy")
     x.add_argument("team")
     x = sub.add_parser("_rebase")
     x.add_argument("team")
+    x.add_argument("--tidy", action="store_true")
     x = sub.add_parser("_merging")
     x.add_argument("team")
     x.add_argument("bolt")
