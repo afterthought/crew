@@ -8,6 +8,8 @@ What is still open now that every page is written. A working file: an item leave
 - **Who is told about a finding outside a bolt**: the conductor and main-ops briefs say the planner, the ops brief the conductor, the planner brief the design agent; curation-and-agenda, approved and placed, settles it as "a noticing agent captures and tells nobody" when it lands.
 - **`gitenv()` for every git call**: used for the cache and the tidy, not for `stage_ends` or `gather.py`.
 
+- **Why mac-studio's Pending You sign-in changed** between 2026-10-09 23:09Z and 2026-10-11 14:00Z (connection `con_8d8f…` to `con_b41d…`), orphaning every card posted before: main-ops's reading (ADR 0005 as amended 2026-10-11).
+
 ## Accepted, not built
 
 Each is a queued or placed unit; the rule stands and the code catches up.
@@ -38,6 +40,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 
 ## Code against a rule
 
+- `briefs.13`, ADR 0005 as amended 2026-10-11: the card hook's landing form demands `highStakes`, which Pending You refuses on an approval ("Approve requests give their risk in approve.risk."), so no landing card posts; `conductor.md` *Cards*, `tests/t-cards.sh` and `tests/t-briefs.sh` say the flag, and `rail-cards`'s scenario "A landing card not marked high stakes" names it. A fix on main by main-level ops on the user's word: the form is an `approve` of risk high, not reversible, with why, and the check reads the risk (signal 2026-10-11-crw-2-conductor-27bc8685/01).
 - `tests.6`: the brief fixes 21d82af, ec593d5, 63bab58, e3d75cb and 902336e added no phrase to `t-briefs.sh`. A chore.
 - `teams.6`: `openspec/config.yaml` says every agent runs on Opus 5.5; the design agent and planner run on Fable 5.1. Fixed with this file. README's Roles table names models as documentation of the frontmatter, which the `agent-models` spec's "nowhere else" should allow; amend the spec at its next delta.
 - Specs lagging built code, to fix at archive: `bolt-teams` (fix naming `fix/<bolt>/<name>` at `places/fix-<bolt>--<name>`; the git tab only on a Mac; a slot freed when its unit leaves the bolt); `main-level` and `bolt-plan` (an agent's signals on the flywheel's branch; "one plan per blueprints repo"); `plan-proposals` (`unit amend` as a proposable command); `run-record` (a move's commit is the state branch's); `operator-agent` (the operator writes the teams file on the user's word).
