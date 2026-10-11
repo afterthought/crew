@@ -70,7 +70,7 @@ eq "$(stage c)" "planned"
 expect_ok crew unit wait c --timeout 0
 eq "$(told swb-1-unit-3)" ""
 expect_ok crew unit run b verify
-has "$(prompt_to "$(pane swb-1-unit-2)")" "'/opsx:verify b a, which you come after, was constructed again"
+has "$(prompt_to swb-1-unit-2)" "'/opsx:verify b a, which you come after, was constructed again"
 ok "an After unit constructed again reaches each dependent once, told or in its next prompt, and holds neither"
 
 # a merges as wt merge does: rebased onto a bolt that has moved, then fast-forwarded.
@@ -105,5 +105,5 @@ eq "$(git -C "$k" rev-parse unit/d)" "$dh"
 ok "a rebase that conflicts is undone, the place as it was, and reaches the dependent as a conflict does"
 
 expect_ok crew unit run b merge
-has "$(prompt_to "$(pane swb-1-unit-2)")" "'Merge b into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
+has "$(prompt_to swb-1-unit-2)" "'Merge b into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
 ok "a dependent merges once the unit it comes after has merged"

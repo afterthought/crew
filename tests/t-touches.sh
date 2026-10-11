@@ -12,7 +12,6 @@ for u in a b c; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/
 crew bolt give swb-1 >/dev/null 2>&1
 export CREW_AGENT=swb-1-conductor
 prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
-pane() { herdr_state $box wldn-1 ".agents | to_entries[] | select(.value.name == \"$1\") | .key"; }
 # touches <unit> <entries...>: the unit's proposal ends with a Touches block holding the entries, committed
 touches() {
   local u=$1 f=$kd/places/$1/openspec/changes/$1/proposal.md; shift
@@ -36,11 +35,11 @@ touches b plugin/lib/plan.py 'tests/**'
 touches c 'docs/**'
 : > "$CREW_TEST_LOG"
 expect_ok crew unit run a code
-eq "$(prompt_to "$(pane swb-1-unit-1)")" "'/opsx:apply a'"
+eq "$(prompt_to swb-1-unit-1)" "'/opsx:apply a'"
 expect_ok crew unit run b code
-eq "$(prompt_to "$(pane swb-1-unit-2)")" "'/opsx:apply b Its Touches overlap those of a, ahead of it in the bolt and not merged, on plugin/lib/plan.py; a'\"'\"'s change is $kd/places/a/openspec/changes/a/.'"
+eq "$(prompt_to swb-1-unit-2)" "'/opsx:apply b Its Touches overlap those of a, ahead of it in the bolt and not merged, on plugin/lib/plan.py; a'\"'\"'s change is $kd/places/a/openspec/changes/a/.'"
 expect_ok crew unit run c code "Mind the docs."
-eq "$(prompt_to "$(pane swb-1-unit-3)")" "'/opsx:apply c Mind the docs. Its Touches overlap those of a, ahead of it in the bolt and not merged, on docs/** against docs/a.md; a'\"'\"'s change is $kd/places/a/openspec/changes/a/.'"
+eq "$(prompt_to swb-1-unit-3)" "'/opsx:apply c Mind the docs. Its Touches overlap those of a, ahead of it in the bolt and not merged, on docs/** against docs/a.md; a'\"'\"'s change is $kd/places/a/openspec/changes/a/.'"
 ok "code starts for every unit; a later unit's prompt names the entries it overlaps of each unmerged unit ahead of it, and that unit's change"
 
 mkdir -p "$kd/places/b/plugin/lib" "$kd/places/b/tests"
@@ -48,5 +47,5 @@ echo x > "$kd/places/b/plugin/lib/plan.py"; echo t > "$kd/places/b/tests/t-x.sh"
 mkdir -p "$kd/places/b/docs"; echo d > "$kd/places/b/docs/b.md"
 rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/b" "feat(b): built"
 expect_ok crew unit run b verify
-eq "$(prompt_to "$(pane swb-1-unit-2)")" "'/opsx:verify b Changed and not declared in its Touches: README.md, docs/b.md.'"
+eq "$(prompt_to swb-1-unit-2)" "'/opsx:verify b Changed and not declared in its Touches: README.md, docs/b.md.'"
 ok "verify's prompt names each path the unit changed against its bolt and did not declare, and none of its own change"

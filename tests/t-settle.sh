@@ -13,7 +13,6 @@ crew bolt give swb-1 >/dev/null 2>&1
 export CREW_AGENT=swb-1-conductor
 reports=$(home_of $box)/.local/state/swb-1-team/reports; mkdir -p "$reports"
 last_launch() { tail -1 "$CREW_TEST_CLAUDE_LOG" | jq -r '([.argv | to_entries[] | select(.value == "--name") | .key][0]) as $i | "\(.argv[0:4] | join(" ")) | \(.argv[$i + 1]) | \(.cwd)"'; }
-pane() { herdr_state $box wldn-1 ".agents | to_entries[] | select(.value.name == \"$1\") | .key"; }
 prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
 for u in a b; do crew unit run $u construct >/dev/null; change "$kd/places/$u" $u 1 2; commit_all "$kd/places/$u" "docs($u): the change"; crew unit wait $u >/dev/null; done
 
@@ -30,14 +29,14 @@ ok "settle is refused for a unit in code, one in verify that has not delivered i
 expect_ok crew unit run a settle "Your branch is forecast to conflict with bolt/tenant-environments on x."
 has "$out" "swb-1-unit-1 has a: settle, in $kd/places/a"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $kd/places/a"
-eq "$(prompt_to "$(pane swb-1-unit-1)")" "'Settle a: Your branch is forecast to conflict with bolt/tenant-environments on x.'"
+eq "$(prompt_to swb-1-unit-1)" "'Settle a: Your branch is forecast to conflict with bolt/tenant-environments on x.'"
 expect_ok crew unit wait a --stuck 0 --timeout 0
 has "$out" "swb-1-unit-1 is stuck in settle on a: quiet for 0 minutes, with nothing committed since it began"
 echo resolved > "$kd/places/a/x"; commit_all "$kd/places/a" "fix(a): keep both intents"
 expect_ok crew unit wait a
 eq "$out" "swb-1-unit-1 delivered settle on a: its branch is at $(git -C "$k" rev-parse --short unit/a), ready to merge"
 expect_ok crew unit run a merge
-has "$(prompt_to "$(pane swb-1-unit-1)")" "'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
+has "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
 ok "a verified unit's settle starts fresh from the coder's brief with what reached it, ends at its commit, and the unit merges with no verify again"
 
 rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/b" "feat(b): done"

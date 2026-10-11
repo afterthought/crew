@@ -76,15 +76,15 @@ expect_ok crew unit wait b --timeout 0
 eq "$(entries forecast | jq -r 'select(.On[0] == "unit/d") | [(.On | join(" ")), .Paths, .Reached] | join(" | ")')" "unit/d bolt/tenant-environments | other.txt | prompt"
 eq "$(told swb-1-unit-3)" ""
 eq "$(entries forecast | jq -r 'select(.On[0] == "unit/c") | [(.On | join(" ")), .Paths, .Reached] | join(" | ")')" "unit/c bolt/tenant-environments | third.txt | settle"
-has "$(prompt_to "$(pane swb-1-unit-4)")" "'Settle c: Your branch is forecast to conflict with bolt/tenant-environments on third.txt. Rebase your place onto the bolt (git rebase bolt/tenant-environments)"
+has "$(prompt_to swb-1-unit-4)" "'Settle c: Your branch is forecast to conflict with bolt/tenant-environments on third.txt. Rebase your place onto the bolt (git rebase bolt/tenant-environments)"
 eq "$(entries stage.start | jq -r 'select(.On[0] == "stage/c/settle") | .By')" "swb-1-conductor"
 ok "a unit with no stage running keeps its forecast for its next stage, and a verified unit waiting to merge gets a settle stage"
 
 : > "$CREW_TEST_LOG"
 expect_ok crew unit run d code
-has "$(prompt_to "$(pane swb-1-unit-3)")" "'/opsx:apply d Your branch is forecast to conflict with bolt/tenant-environments on other.txt."
+has "$(prompt_to swb-1-unit-3)" "'/opsx:apply d Your branch is forecast to conflict with bolt/tenant-environments on other.txt."
 id=$(entries forecast | jq -r 'select(.On[0] == "unit/d") | .Id')
 eq "$(entries stage.start | jq -r 'select(.On[0] == "stage/d/code") | .Forecast')" "$id"
 expect_ok crew unit run d code
-eq "$(prompt_to "$(pane swb-1-unit-3)")" "'/opsx:apply d'"
+eq "$(prompt_to swb-1-unit-3)" "'/opsx:apply d'"
 ok "the next stage's prompt carries the forecast once, and its start names the forecast it carried"
