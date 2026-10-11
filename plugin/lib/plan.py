@@ -4260,7 +4260,7 @@ def review_wait(fleet, a):
 
 # ------------------------------------------------------------------------------------------------ crew rail
 
-RAIL = ("proposals", "batches", "verify", "land")
+RAIL = ("proposals", "batches", "verify", "land", "deploys")
 
 
 def utc(iso):
@@ -4306,7 +4306,7 @@ def rail_record(fleet, found, props):
     naming it that was not refused; and what the batches hold, {label: {"batches": [(n, at, units)], "closed": card
     keys closed, "due": units whose latest change no batch has held}}, the last None for a partition whose record did
     not all answer, since then it can't be told."""
-    times, cards, unread, landings, gives, held = {}, [], {}, [], {}, {}
+    times, cards, unread, landings, gives, held, deploys = {}, [], {}, [], {}, {}, []
     today = datetime.datetime.now(datetime.timezone.utc).date()
     fresh = utc(f"{today - datetime.timedelta(days=CARD_DAYS)}T00:00:00Z")
     for l, _, _, plan in [f for f in found if f[3]]:
@@ -4342,7 +4342,10 @@ def rail_record(fleet, found, props):
                     gives[(l, bolt)] = team
         cards += posted.values()
         held[l] = dict(batches=batches(entries), closed=closed, due=None if missing else {u for u, *_ in due_changes(plan, entries)})
-    return times, cards, unread, landings, gives, held
+        import deploy  # deploy.py imports nothing of this module
+        deploys += [dict(r, at=utc(r["at"]), doc=None) for r in deploy.rows(fleet, l, [e for e in entries if (e.get("Act") or "").startswith("deploy.")
+                                                                                       and e.get("Host") == fleet["partitions"][l]["machine"]])]
+    return times, cards, unread, landings, gives, held, deploys
 
 
 def rail_rows(fleet, found, sv, props, times, held=None):
@@ -4457,9 +4460,9 @@ def rail_read(fleet, labels, board=False):
         held += [(t, None) for l in labels for t in crew.partition_of(fleet, l)["teams"]]
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
-    times, cards, unread, landings, gives, batched = rail_record(fleet, found, props)
+    times, cards, unread, landings, gives, batched, deploys = rail_record(fleet, found, props)
     return dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
-                gives=gives, rows=rail_rows(fleet, found, sv, props, times, batched))
+                gives=gives, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
 
 
 def rail_text(fleet, labels, read, now):
@@ -4518,7 +4521,8 @@ def rail_view(fleet, a):
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # The rail's card keys, as crew's card hook reads them.
-CARD_KEYS = (r"proposal/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}")
+CARD_KEYS = (r"proposal/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}",
+             r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"deploy-step/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}/\d+")
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
 
@@ -4583,12 +4587,22 @@ def card_refusal(fleet, name, label, tool, key):
             [f"verify/<unit>/<stamp> for unit {either(units)}"] if units else [])
         return (f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, "
                 f"the head{' or stamp' if units else ''} {rail}.")
+    if kind == "main-ops":
+        import deploy  # the partition's deploy rows, read where its main level runs
+        p = crew.partition_of(fleet, label)
+        if p["machine"] != crew.this_host():
+            return f"{said}: {name} posts its deploys' cards on {p['machine']}, where {label}'s deploys are kept."
+        mine = deploy.open_keys(label)
+        if key in mine:
+            return None
+        return (f"{said}: {name} posts a card only under a deploy row's key of {label} open now, "
+                + (f"{either(mine)}, {rail}." if mine else "and none is open."))
     if kind == "team":
         left = ("Write what a proof leaves that only the user can do or check in your proof file, under Left for the user: "
                 "the conductor asks it on the bolt's landing card." if name == f"{of}-ops"
                 else f"Say what you need with `{cmd} needs`, and the conductor gets it.")
         return f"{said}: {name} owns no card key, since a team's cards are its conductor's. {left}"
-    return (f"{said}: {name} owns no card key, since only the planner and the conductors post cards. Tell the partition's "
+    return (f"{said}: {name} owns no card key, since only the planner, the conductors and main-level ops post cards. Tell the partition's "
             "operator agents what you wait on, as your brief says.")
 
 
@@ -4683,7 +4697,7 @@ def card_row(fleet, label, key):
     props = open_proposals(fleet, [label], found) if kind == "proposal" and plan else []
     batched = {}
     if kind == "batch" and plan:
-        _, _, unread, _, _, batched = rail_record(fleet, found, [])
+        _, _, unread, _, _, batched, _ = rail_record(fleet, found, [])
         not unread.get(label) or fail(f"crew can't tell whether {key}'s card is still open: "
                                       + "; ".join(f"{h} did not answer" for h in sorted(unread[label])))
     row = next((r for r in rail_rows(fleet, found, sv, props, {}, batched) if r["key"] == key), None)

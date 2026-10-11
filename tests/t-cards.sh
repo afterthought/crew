@@ -29,8 +29,8 @@ emit() { as mac-studio python3 "$CREW/plugin/lib/record.py" emit --label wldn "$
 
 # A day's file begun under the descriptor from before Card and Key, as a host that ran an older crew today has it.
 mkdir -p "$runs"
-as mac-studio python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import record
-sys.stdout.write(record.DESCRIPTOR.replace(" Card Key\n", "\n"))' "$CREW/plugin/lib" > "$runs/$day.rec"
+as mac-studio python3 -c 'import re, sys; sys.path.insert(0, sys.argv[1]); import record
+sys.stdout.write(re.sub(r" Card Key[^\n]*\n", "\n", record.DESCRIPTOR))' "$CREW/plugin/lib" > "$runs/$day.rec"
 lacks "$(cat "$runs/$day.rec")" "Card"
 crew state init wldn >/dev/null
 CREW_AGENT=swb-1-conductor CREW_LABEL=wldn emit --act card.post --on unit/x --field Card=req_old-1 --field Key=verify/x/20261007-1400 >/dev/null
@@ -287,8 +287,8 @@ eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only 
 eq "$(gate wldn-planner post_request batch/1-1 '{"questions": [{"id": "which", "kind": "multi", "title": "Which need notes?"}, {"id": "notes", "kind": "text", "title": "The notes"}]}')" ""
 has "$(denied wldn-planner post_request batch/1-2)" "proposal/1 or batch/1-1"
 has "$(denied swb-1-conductor post_request batch/1-1)" "swb-1-conductor posts a card only under a rail row's key of its own"
-has "$(denied wldn-design post_request proposal/1)" "wldn-design owns no card key, since only the planner and the conductors post cards"
-has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "Tell the partition's operator agents what you wait on"
+has "$(denied wldn-design post_request proposal/1)" "wldn-design owns no card key, since only the planner, the conductors and main-level ops post cards"
+has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "deploys"
 ok "the planner is refused a closed proposal's or batch card's key, naming the open ones, and passes under an open batch card's, whose form is not checked; a conductor is refused a batch's key, and the main level's other agents own no key"
 
 why=$(denied swb-1-conductor create_area area:swb-1-conductor)

@@ -26,7 +26,11 @@ Land one bolt at a time.
 
 ## Deploying main
 
-A landing deploys nothing (`plan.14`). Where the kit's deployer records its deploys through crew, it offers each deploy on its own card and runs it once the user holds that card: you watch its record and deploy nothing yourself. Until the kit's deployer does (swancloud's waits on crew's deploy commands), deploy that kit's main only on the user's word for that deploy, given in this pane or on a card you post for it, the way the kit's CLAUDE.md says, and say what you deployed and what now runs it. A landing is never that word.
+A landing deploys nothing (`plan.14`). A kit's deployer deploys main, under each environment's policy, and asks crew for the user's word through you:
+
+- **An offer.** The deployer offers a `manual` environment a deploy of main's checked head with `crew deploy offer`, and the rail shows it under *deploys*, keyed `deploy/<env>/<head>`. Post its card under that key: an `approve` card naming the environment, the commit and what it carries since the environment's last deploy (`git -C <kit>/main log --oneline <from>..<to>`), with its risk high and not reversible, why in one line. Its approval is the user's word: run the row's answer, `{{TEAM_CMD}} deploy approve <env> --to <sha> --label {{LABEL}}`, and close the card. The deployer deploys that commit at its next run and records it as it runs; you watch `{{TEAM_CMD}} rail --label {{LABEL}}` and its record, and deploy nothing yourself. A declined card is closed with the user's words, and nothing is recorded: the offer stays until a newer one replaces it.
+- **A step only the user can take.** An after-deploy step whose doer is the user is a row under *deploys*, keyed `deploy-step/<env>/<head>/<n>`. Post its card under that key, the step's words first, with what to run or open; when the user says it is done, or declines it, run the row's `done` or `decline` command and close the card.
+- **A kit with no deployer.** Deploy its main only on the user's word for that deploy, given in this pane or on a card, the way the kit's CLAUDE.md says, and say what you deployed and what now runs it. A landing is never that word.
 
 ## After landing
 
