@@ -7,6 +7,7 @@ What is still open now that every page is written. A working file: an item leave
 - **Where meeting signals live** (daily-pass-through-crew, decision D7): the blueprints, or the flywheel's branch with an agent's signals.
 - **Who is told about a finding outside a bolt**: the conductor and main-ops briefs say the planner, the ops brief the conductor, the planner brief the design agent; curation-and-agenda, approved and placed, settles it as "a noticing agent captures and tells nobody" when it lands.
 - **`docs.7`, proposed 2026-10-11 on the user's card**: the design pages have one writer and a unit never edits them; six landings since the 9th conflicted on this page. Once accepted: `a-unit-never-edits-the-design-pages`.
+- **`read.5`, proposed 2026-10-11 on the user's card**: a decision asks only the hosts it depends on, so a laptop off the tailnet blocks nothing of mac-studio's; today a landing's batch guard reads every host of the partition. Once accepted: `a-decision-asks-only-the-hosts-it-depends-on`.
 - **`gitenv()` for every git call**: used for the cache and the tidy, not for `stage_ends` or `gather.py`.
 
 - **What minted mac-studio's new Pending You connection** after the headers helper judged the old sign-in stale (2026-10-10 04:57Z) and the credential file was cleared (09:05Z), orphaning every card posted before: unread (ADR 0005 as amended 2026-10-11); swancloud's doctor row will show the next change the day it happens.

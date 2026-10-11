@@ -35,6 +35,7 @@ Reading
 - **[read.2]** crew reads another tool's output only by facts checked against the tool as it is now, and guards an absent field so a missing value never becomes text.
 - **[read.3]** A command that reads several hosts names each host that does not answer and still shows everything else.
 - **[read.4]** crew never takes over something it did not make for the work in hand: an existing place or branch, a pane whose agent still runs, or a worktree outside its own layout is refused or left alone.
+- **[read.5]** A decision asks a host only for what that host alone holds: a team's host for its teams' constructs and changes, the main level's host for the partition's batches; a host that runs no team of the partition is never asked for a decision; and a host that does not answer blocks only the decisions about work on it, never another host's landing nor the partition's batch clock, which counts what answers and catches up when the host does. (Proposed 2026-10-11, put to the user on a card as `briefs.15` has it; accepted only on their yes.)
 
 Code
 
@@ -72,6 +73,8 @@ Code
 **[read.3]** Rules out: a listing that stops at the first dead host. Source: `bolt-plan` spec "What is in flight can be read from anywhere"; `crew-sites` spec; `run-record` spec.
 
 **[read.4]** Rules out: starting a role over a running agent; a fix adopting an existing place; tidying a hand-made worktree. Source: fixes 499cd3b, 5e11de2, f6d7b11; worktrees-go-with-their-work.
+
+**[read.5]** Rules out: a landing on mac-studio refused because macbook-pro, which runs no team, is off the tailnet (crw-3, 2026-10-11: crew main held units-build-at-once-and-are-reviewed-in-batches at 26e22a4 and `crew bolt land` refused to close it, "crew can't tell which changes have been in a batch: macbook-pro did not answer"; the user: "Hmm this seems like a design issue that we need to talk about. The laptop isn't going to be on most of the time", signal 2026-10-11-crw-3-conductor-883e3042/01); a partition's run record gathered from every host it runs on for a decision one host's entries settle. Not ruled out: `read.3`'s listing, which asks every host and names the silent ones. Source: `read.1`, `read.3`; `record.gather`, which reads every host of the partition for `partition_entries`, so `batch_due` and the landing's guard refuse when any is silent: the fix is `a-decision-asks-only-the-hosts-it-depends-on`, queued once the rule is accepted: `_open.md`.
 
 **[code.1]** Rules out: `import yaml`; `gather.py` importing `crew`. Source: `plan.py` 57–65; `gather.py` 13–15; `devenv.nix`; ADR 0008, for moon.
 
