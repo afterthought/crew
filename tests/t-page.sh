@@ -9,7 +9,7 @@ export CREW_LABEL=wldn
 emit() { as mac-studio python3 "$CREW/plugin/lib/record.py" emit --label wldn "$@" >/dev/null; }
 # the page's data, as crew page draws it, printed rather than written
 pagedata() { as "$HOST" python3 "$CREW/plugin/lib/page.py" page wldn --json "$@"; }
-j() { jq -r "$1" <<<"$json"; }
+j() { jq -r "$@" <<<"$json"; }
 json=$(pagedata) || fail "crew page --json: $json"
 before=$(j '.entries | length')  # crew state init's own
 start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -36,6 +36,13 @@ emit --act unit.move --on unit/v --on bolt/c --from bolt/b --why "plan(c): move 
 json=$(pagedata) || fail "crew page --json: $json"
 eq "$(j '[.edges[] | select(.from == "unit/v" or .to == "unit/v") | "\(.from)>\(.to)"] | join(" ")')" "unit/v>bolt/c"
 ok "a unit's move draws a line to the bolt it moved to, none from the bolt it left"
+
+for n in $(j '.nodes[].id'); do
+  expect_ok crew trace "$n"
+  eq "$(j --arg n "$n" '.histories[$n][] as $i | .entries[$i] | "\(.At[5:10]) \(.At[11:19]) \(.Act)"')" "$(awk '{print $1, $2, $3}' <<<"$out")"
+done
+eq "$(j '[.histories["unit/u"][] as $i | .entries[$i].Act] | sort | join(" ")')" "bolt.land plan.propose signal.move unit.add unit.move"
+ok "for every node, the page's history is the entries crew trace prints for it, in the same order"
 
 json=$(pagedata --since "$(date -u -v+1d +%F 2>/dev/null || date -u -d tomorrow +%F)") || fail "crew page --json --since: $json"
 eq "$(j '.nodes | length') $(j '.entries | length') $(j '.edges | length')" "0 0 0"

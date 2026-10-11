@@ -4,7 +4,7 @@
 
 - [x] 1.1 `record.py` exports the lineage walk as one function that `crew trace` calls, takes `agenda/` names whole, and every existing trace test passes unchanged (design: *Data: entries decide, state labels*, *What must not break*; Task notes 1.1).
 - [x] 1.2 `page.py` builds nodes, edges and per-node histories from the gathered entries for the five kinds, with `--since`, and the fixture gives five linked nodes, four edges and an unmoved signal with none (design: *Data: entries decide, state labels*; Task notes 1.2; `state.4`).
-- [ ] 1.3 For every node of the fixture, the page's history holds the entries `crew trace` prints for it, in the same order (design: *Checked against the trace*; Task notes 1.3).
+- [x] 1.3 For every node of the fixture, the page's history holds the entries `crew trace` prints for it, in the same order (design: *Checked against the trace*; Task notes 1.3).
 - [ ] 1.4 Every node carries its label and present status from the state at the commit its entries were read at, a node the state no longer holds is labelled from its entries, and a unit's stage is blank when its host does not answer (design: *Data: entries decide, state labels*; Task notes 1.4; `record.3`, `read.3`).
 
 ## 2. The page
