@@ -67,8 +67,9 @@ def data(entries, since=None):
 
 def from_entries(node, entries):
     """A node the state no longer holds: its label, the Why of its newest entry that has one, and what it became, from
-    the newest act naming it that took it out of the plan and was not refused, else None."""
-    mine = [e for e in reversed(entries) if record.names(e, node["id"])]
+    the newest act on it that took it out of the plan and was not refused, else None. Its entries are those that act
+    on it, naming it in On; one that names it only in From is another object's."""
+    mine = [e for e in reversed(entries) if node["id"] in e["On"]]
     node["label"] = next((e["Why"] for e in mine if e.get("Why")), None)
     node["status"] = next((GONE[e["Act"]] for e in mine if e.get("Act") in GONE and not e.get("Refused")), None)
     node["gone"] = True

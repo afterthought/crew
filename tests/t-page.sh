@@ -1,15 +1,21 @@
 # crew page: a flywheel's lineage page, drawn from its run record alone. Its objects are the signals, agenda items,
 # proposals, units and bolts the entries name, each linked to what the same entry names in the next column; each
-# object's history is what crew trace prints for it.
+# object's history is what crew trace prints for it. Labels and present status come from the flywheel's state at the
+# commit the entries were read at; one the state no longer holds is labelled from its entries, and a unit whose host
+# does not answer has no stage.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
+k=$(kit chuck-herdr-alpha willdan switchboard-kit)
 crew state init wldn >/dev/null
+box=chuck-herdr-alpha
+ws=$(remote WilldanGroup/crew-state)
 export CREW_LABEL=wldn
 emit() { as mac-studio python3 "$CREW/plugin/lib/record.py" emit --label wldn "$@" >/dev/null; }
 # the page's data, as crew page draws it, printed rather than written
 pagedata() { as "$HOST" python3 "$CREW/plugin/lib/page.py" page wldn --json "$@"; }
 j() { jq -r "$@" <<<"$json"; }
+node() { j --arg n "$1" ".nodes[] | select(.id == \$n) | $2"; }
 json=$(pagedata) || fail "crew page --json: $json"
 before=$(j '.entries | length')  # crew state init's own
 start=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -49,3 +55,45 @@ eq "$(j '.nodes | length') $(j '.entries | length') $(j '.edges | length')" "0 0
 json=$(pagedata --since "$start") || fail "crew page --json --since $start: $json"
 eq "$(j '.nodes | length') $(j '.edges | length') $(j '[.entries[] | select(.Act != "state.init")] | length')" "8 5 8"
 ok "--since keeps the entries from then on, and the nodes, lines and histories they make"
+
+# The state: a bolt swb-1 holds with unit a in code, unit c from a routed signal, and unit d dropped; a proposal; and
+# agenda item 8, which the fixture's signal.move names.
+crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
+crew unit add a "Unit a." --bolt tenant-environments >/dev/null
+crew bolt give swb-1 tenant-environments >/dev/null 2>&1
+pa=$(place "$k" tenant-environments a); change "$pa" a 1 2; commit_all "$pa" "feat(a): task 1"
+sig=$(crew signal plans-are-checked "Plans should be
+checked before they run." | sed -n 's/^signal \([^: ]*\)[: ].*/\1/p')
+crew unit add c "Unit c." --bolt tenant-environments --signal "$sig" >/dev/null
+crew unit add d "Unit d." --bolt tenant-environments >/dev/null
+crew unit drop d "Not needed." >/dev/null
+printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-two "The console, again." --repo switchboard-kit' > "$T/proposal.rec"
+crew plan propose "$T/proposal.rec" >/dev/null
+st=$T/state; git clone -q -b wldn/main "$ws" "$st"
+printf '%%rec: Item\n%%key: Item\n\nItem: 8\nLane: plan\nSubject: Plans are checked.\nState: open\nOpened: 2026-10-06\nBy: wldn-curator\n' > "$st/agenda.rec"
+commit_all "$st" "agenda: item 8"; git -C "$st" push -q origin wldn/main
+
+json=$(pagedata) || fail "crew page --json: $json"
+eq "$(j .made.commit)" "$(git --git-dir "$ws" rev-parse wldn/main)"
+eq "$(j '.made.unreachable | length')" "0"
+eq "$(node unit/a '[.label, .stage, .status] | join("|")')" "Unit a.|code|flight"
+eq "$(node unit/c '[.label, .stage, .status] | join("|")')" "Unit c.|ready|open"
+eq "$(node bolt/tenant-environments '[.label, .team, .status] | join("|")')" "Tenants hold environments.|swb-1|flight"
+eq "$(node "signals/$sig" '[.label, .status, (.facts | join(" "))] | join("|")')" "Plans should be checked before they run.|done|route"
+eq "$(node proposal/1 '[.label, .status] | join("|")')" "The console gets a bolt of its own.|open"
+eq "$(node agenda/8 '[.label, .status, (.facts | join(" "))] | join("|")')" "Plans are checked.|open|plan open"
+ok "each node carries its label and present status from the state: a unit's intent and stage, a bolt's goal and team, a signal's assertion and move, a proposal's case, an item's subject"
+
+eq "$(node unit/u '[.label, .status, .gone] | join("|")')" "plan(b): land the bolt|done|true"
+eq "$(node bolt/b '[.label, .status, .gone] | join("|")')" "plan(b): land the bolt|done|true"
+eq "$(node unit/d '[.label, .status] | join("|")')" "plan(tenant-environments): drop d|dropped"
+eq "$(node proposal/3 '.status')" "null"
+ok "a landed bolt and its units, gone from the plan, and a dropped unit are labelled from their newest entry, and a proposal the state never held has no status"
+
+echo "$box" > "$T/down"
+json=$(pagedata) || fail "crew page --json with $box down: $json"
+rm "$T/down"
+eq "$(node unit/a '[.label, .stage, .status] | map(. // "-") | join("|")')" "Unit a.|-|-"
+eq "$(node bolt/tenant-environments '.status')" "null"
+has "$(j '.made.unreachable | keys | join(" ")')" "$box"
+ok "a unit whose host does not answer has no stage, and the host is named"
