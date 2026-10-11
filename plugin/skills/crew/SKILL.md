@@ -11,7 +11,7 @@ A team builds one bolt at a time. Its standing roles are the **conductor** and *
 
 Each partition also has a main level: the design agent, the planner and ops in the `<label>` workspace of its session, and a dispatcher on each host its teams run on. The user reads the partition's constructed changes in batches across its teams: when one is due, crew tells the planner, which starts the reviewer (`crew review <label>`, fresh in a `review` tab, ended once its summary is written) and posts the batch's cards. The operator agent stands in each operator session.
 
-A partition's plan, the signals its agents record, their moves and its run record are files on its flywheel's branch, `<label>/main`, of the state repository the teams file names for it (`state`). They are written only through crew. The planner changes the plan only by proposals the user approves (`crew plan proposed` lists them; `crew plan approve <n>` is run only on the user's word), and you write none of it. A unit already in a bolt can be amended: its conductor runs construct again with the user's words, or an approved proposal's `unit amend` (or the user's `crew unit amend`) changes its intent. Either way `crew bolts` shows it `amended`, then `construct`, and once that construct has committed it goes on from its tasks, with nothing to approve, its revised change in the next batch. A new partition's branch is made once with `crew state init <label>`, which adopts any `plan/<label>` its blueprints repos still have.
+A partition's plan, the signals its agents record, their moves and its run record are files on its flywheel's branch, `<label>/main`, of the state repository the teams file names for it (`state`). They are written only through crew. The planner changes the plan only by proposals the user approves (`crew plan proposed` lists them; `crew plan approve <n>` is run only on the user's word), and you write none of it. A unit already in a bolt can be amended: its conductor runs construct again with the user's words, or an approved proposal's `unit amend` (or the user's `crew unit amend`) changes its intent and starts its construct again at once in the team's slot, telling the conductor. Either way `crew bolts` shows it `amended`, then `construct`, and once that construct has committed it goes on from its tasks, with nothing to approve, its revised change in the next batch. A new partition's branch is made once with `crew state init <label>`, which adopts any `plan/<label>` its blueprints repos still have.
 
 The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on the team's host wherever you run it.
 
@@ -28,7 +28,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | start a team that is not up | `crew up <team>` |
 | end everything a team has, close its panes, stand it up fresh | `crew rebuild <team>` |
 | give the conductor or ops a fresh session, same pane | `crew restart <team> [conductor\|ops]` |
-| bring back the conductor or ops after it died, conversation intact | `crew resume <team> [conductor\|ops]` |
+| bring back the conductor or ops after it died, conversation intact; a conductor brought back is sent the units of its bolt that wait amended | `crew resume <team> [conductor\|ops]` |
 | clear the conductor or ops and restore its name | `crew clear <team> conductor\|ops` |
 | end a team's sessions | `crew down <team>` |
 | free a slot still holding a unit no longer in the team's bolt | `crew unit free <unit> [--team <team>]` |

@@ -35,7 +35,7 @@ five times. A write that changes several files is one commit, and it carries the
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]
   crew unit amend <unit> "<new intent>"      a unit's intent replaced; one with a worktree is marked amended, and its
-                                             conductor runs construct again
+                                             construct runs again at once on its team's host, its conductor told
   crew unit order <unit> --before <unit>|--first|--last
   crew unit after <unit> <unit>...|--none
   crew unit move <unit> <bolt>|queue [--unblocks <bolt>]
