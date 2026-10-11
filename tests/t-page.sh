@@ -97,3 +97,19 @@ eq "$(node unit/a '[.label, .stage, .status] | map(. // "-") | join("|")')" "Uni
 eq "$(node bolt/tenant-environments '.status')" "null"
 has "$(j '.made.unreachable | keys | join(" ")')" "$box"
 ok "a unit whose host does not answer has no stage, and the host is named"
+
+# The file: the data in its one block, as JSON, and nothing loaded from outside it; typed text stays in the data.
+crew signal ends-the-block "Ends </script><b>here</b> & more." >/dev/null
+as mac-studio python3 "$CREW/plugin/lib/page.py" page wldn --out "$T/page.html" >/dev/null || fail "page.py could not write the page"
+block() { python3 -c 'import re, sys; t = open(sys.argv[1]).read(); m = re.findall(r"<script type=\"application/json\" id=\"data\">(.*?)</script>", t, re.S); print(m[0] if len(m) == 1 else "")' "$1"; }
+outside() { python3 -c 'import re, sys; print(re.sub(r"(<script type=\"application/json\" id=\"data\">).*?(</script>)", r"\1\2", open(sys.argv[1]).read(), flags=re.S))' "$1"; }
+json=$(block "$T/page.html"); [[ -n $json ]] || fail "no data block in the page"
+eq "$(j '[.nodes[].id] | join(" ")')" "$(pagedata | jq -r '[.nodes[].id] | join(" ")')"
+has "$(j '[.nodes[].label] | join("|")')" "Ends </script><b>here</b> & more."
+lacks "$(cat "$T/page.html")" "</script><b>"
+rest=$(outside "$T/page.html")
+for no in "<script src" "<link" "http://" "https://" "src=" "href=" "url("; do lacks "$rest" "$no"; done
+lacks "$(cat "$T/page.html")" "{{DATA}}"
+has "$rest" 'id="hide"'; has "$rest" 'id="find"'; has "$rest" 'id="bars"'; has "$rest" "prefers-color-scheme: dark"
+has "$rest" "Nothing has been recorded"
+ok "the page holds its data in one block, escaped so typed text cannot end it, and loads nothing from outside the file"

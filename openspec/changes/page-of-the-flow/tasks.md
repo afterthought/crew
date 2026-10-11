@@ -9,7 +9,7 @@
 
 ## 2. The page
 
-- [ ] 2.1 The template draws the five columns with their counts and lines, the selection with its history, the timeline, the filter and name box, in light and dark, from data inside the file and nothing outside it (design: *The file*; Task notes 2.1; `code.1`).
+- [x] 2.1 The template draws the five columns with their counts and lines, the selection with its history, the timeline, the filter and name box, in light and dark, from data inside the file and nothing outside it (design: *The file*; Task notes 2.1; `code.1`).
 - [ ] 2.2 `crew page <label> [--out <file>] [--since <time>]` writes the page whole, prints its path and header line, writes a page for an empty record, names a host that did not answer, and refuses with nothing written when the branch cannot be read (design: *Where it is written, and how it is opened*; Task notes 2.2; `read.1`, `record.1`, `code.2`).
 - [ ] 2.3 README, SKILL.md and the usage header say what `crew page` does, and `tests/t-docs.sh` passes (Task notes 2.3; `docs.2`).
 

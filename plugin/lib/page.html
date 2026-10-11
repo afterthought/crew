@@ -1,0 +1,342 @@
+<!doctype html>
+<!-- crew's lineage page: page.py puts the flywheel's data in the one placeholder below and writes the file whole.
+     Everything it draws is in this file: no font, script or style is loaded from anywhere. Every label is set as
+     text, never as markup. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crew lineage</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f7f7f5; --fg: #1d1d1f; --muted: #66666c; --card: #ffffff; --border: #d9d9de; --line: #b9b9c0;
+  --mark: #2f62c9; --open: #2f62c9; --flight: #b8720a; --done: #2b7d4f; --dropped: #8a8a90; --unknown: #c4c4ca;
+  --warn: #a8261b; --bar: #c9ccd4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151517; --fg: #e9e9eb; --muted: #9c9ca3; --card: #1f1f23; --border: #34343b; --line: #4d4d55;
+    --mark: #7ea6ff; --open: #7ea6ff; --flight: #e5a640; --done: #62c48d; --dropped: #8a8a90; --unknown: #5c5c63;
+    --warn: #ff8f84; --bar: #3d4049;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+#made { margin: 0; color: var(--muted); }
+#unreachable { margin: 4px 0 0; padding: 0; list-style: none; color: var(--warn); }
+#controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 12px 0; }
+#controls input[type=search] { font: inherit; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--card); color: var(--fg); min-width: 12em; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 12px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+  margin-right: 4px; vertical-align: -1px; background: var(--c); }
+#empty { padding: 24px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); }
+#board { position: relative; overflow-x: auto; padding-bottom: 8px; }
+#lines { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
+#lines line { stroke: var(--line); stroke-width: 1.5; }
+#lines line.marked { stroke: var(--mark); stroke-width: 2.5; }
+#cols { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 40px;
+  min-width: 1010px; }
+.col h2 { position: sticky; top: 0; display: flex; gap: 6px; align-items: baseline; }
+.col .count { color: var(--muted); font-weight: 400; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.none { margin: 0; color: var(--muted); font-style: italic; }
+.node { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--c, var(--unknown));
+  border-radius: 6px; padding: 6px 8px; cursor: pointer; transition: opacity .12s; overflow-wrap: anywhere; }
+.node:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+.node.gone { border-style: dashed; border-left-style: solid; }
+.node .name { font-weight: 600; font-size: 13px; }
+.node .label { color: var(--fg); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; }
+.node .facts { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.s-open { --c: var(--open); } .s-flight { --c: var(--flight); } .s-done { --c: var(--done); }
+.s-dropped { --c: var(--dropped); } .s-unknown { --c: var(--unknown); }
+.node.selected { box-shadow: 0 0 0 2px var(--mark); }
+body.selecting .node:not(.marked) { opacity: .35; }
+body.selecting #lines line:not(.marked) { opacity: .2; }
+#timeline { margin-top: 20px; }
+#bars { display: flex; align-items: flex-end; gap: 1px; height: 64px; border-bottom: 1px solid var(--border); }
+#bars .bar { flex: 1 1 0; min-width: 1px; position: relative; background: var(--bar); border-radius: 2px 2px 0 0; }
+#bars .bar.empty { background: transparent; }
+#bars .bar .sel { position: absolute; left: 0; right: 0; bottom: 0; background: var(--mark); border-radius: 2px 2px 0 0; }
+#bars .bar.on { outline: 1px solid var(--mark); }
+#axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: 2px; }
+#selection { margin-top: 20px; }
+#sel-label { color: var(--muted); margin: -4px 0 8px; max-width: 70em; }
+.scroll { overflow-x: auto; }
+#history { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+#history th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 10px 4px 0; white-space: nowrap; }
+#history td { padding: 3px 10px 3px 0; vertical-align: top; border-top: 1px solid var(--border); }
+#history td.at, #history td.act, #history td.commit, #history td.who { white-space: nowrap; }
+#history tr.refused td { color: var(--warn); }
+.copy { user-select: all; -webkit-user-select: all; white-space: nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">crew lineage</h1>
+  <p id="made"></p>
+  <ul id="unreachable"></ul>
+</header>
+<div id="controls">
+  <label><input type="checkbox" id="hide"> Hide closed and landed work</label>
+  <input type="search" id="find" placeholder="Narrow by name" aria-label="Narrow by name">
+  <div class="legend" aria-label="Colours">
+    <span class="s-open">open</span><span class="s-flight">in flight</span><span class="s-done">done</span>
+    <span class="s-dropped">dropped</span><span class="s-unknown">not known</span>
+  </div>
+</div>
+<p id="empty" hidden>Nothing has been recorded.</p>
+<div id="board"><svg id="lines" aria-hidden="true"></svg><div id="cols"></div></div>
+<section id="timeline" aria-label="Entries per day">
+  <h2>Entries per day</h2>
+  <div id="bars"></div>
+  <div id="axis"></div>
+</section>
+<section id="selection">
+  <h2 id="sel-title">Select an object to see its history.</h2>
+  <p id="sel-label"></p>
+  <div class="scroll"><table id="history" hidden>
+    <thead><tr><th>When (UTC)</th><th>Act</th><th>Who</th><th>Host</th><th>Commit</th><th>On ← from</th><th>Why</th><th>Session</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+</section>
+<script type="application/json" id="data">/*{{DATA}}*/</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("data").textContent);
+  var COLS = [["signals", "Signals"], ["agenda", "Agenda"], ["proposal", "Proposals"], ["unit", "Units"], ["bolt", "Bolts"]];
+  var KIND = { signals: "signal", agenda: "agenda item", proposal: "proposal", unit: "unit", bolt: "bolt" };
+  var byId = new Map(), out = new Map(), into = new Map(), nodeEl = new Map(), cols = [], lineEls = [], selected = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var board = $("board"), svg = $("lines"), NS = svg.namespaceURI, hide = $("hide"), find = $("find");
+
+  function el(tag, cls, text) {
+    var x = document.createElement(tag);
+    if (cls) x.className = cls;
+    if (text != null) x.textContent = text;
+    return x;
+  }
+  function push(m, k, v) { if (!m.has(k)) m.set(k, []); m.get(k).push(v); }
+  function when(at) { return at.slice(0, 10) + " " + at.slice(11, 19); }
+  function shown(n) {
+    if (n.kind === "signals") return n.name.split("/").pop();
+    if (n.kind === "agenda") return "item " + n.name;
+    if (n.kind === "proposal") return "proposal " + n.name;
+    return n.name;
+  }
+
+  D.nodes.forEach(function (n) { byId.set(n.id, n); });
+  D.edges.forEach(function (e) { push(out, e.from, e.to); push(into, e.to, e.from); });
+
+  // What the page was made from.
+  var m = D.made;
+  document.title = m.label + " lineage";
+  $("title").textContent = m.label + " lineage";
+  $("made").textContent = "as of " + m.at.slice(0, 10) + " " + m.at.slice(11, 16) + "Z · " + m.label + "/main " + m.commit.slice(0, 7)
+    + " of " + m.repo + (m.since ? " · since " + m.since : "");
+  Object.keys(m.unreachable || {}).forEach(function (h) {
+    $("unreachable").append(el("li", null, h + " did not answer: " + m.unreachable[h] + "; what it had not yet carried is not shown"));
+  });
+  var ids = Object.keys(D.entries);
+  if (!ids.length) {
+    $("empty").textContent = "Nothing has been recorded" + (m.since ? " since " + m.since : "") + ".";
+    $("empty").hidden = false;
+  }
+
+  // The columns, each object once, newest first.
+  COLS.forEach(function (c) {
+    var col = el("section", "col"), h = el("h2"), count = el("span", "count"), list = el("div", "list"), none = el("p", "none", "none");
+    h.append(el("span", null, c[1]), count);
+    col.append(h, list);
+    var mine = D.nodes.filter(function (n) { return n.kind === c[0]; });
+    mine.sort(function (a, b) { return a.first < b.first ? 1 : a.first > b.first ? -1 : a.id < b.id ? -1 : 1; });
+    mine.forEach(function (n) { var x = box(n); list.append(x); nodeEl.set(n.id, x); });
+    list.append(none);
+    cols.push({ count: count, none: none, nodes: mine });
+    $("cols").append(col);
+  });
+
+  function box(n) {
+    var x = el("div", "node s-" + (n.status || "unknown") + (n.gone ? " gone" : ""));
+    x.tabIndex = 0;
+    x.setAttribute("role", "button");
+    x.title = n.id + (n.gone ? " (no longer in the state; labelled from its entries)" : "");
+    x.append(el("div", "name", shown(n)));
+    if (n.label) x.append(el("div", "label", n.label));
+    var facts = (n.facts || []).filter(Boolean);
+    if (facts.length) x.append(el("div", "facts", facts.join(" · ")));
+    x.addEventListener("click", function () { select(n.id); });
+    x.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); }
+    });
+    return x;
+  }
+
+  function visible(n) {
+    if (n.id === selected) return true;
+    if (hide.checked && (n.status === "done" || n.status === "dropped")) return false;
+    var q = find.value.trim().toLowerCase();
+    return !q || n.id.toLowerCase().indexOf(q) >= 0 || (n.label || "").toLowerCase().indexOf(q) >= 0;
+  }
+
+  function layout() {
+    cols.forEach(function (c) {
+      var k = 0;
+      c.nodes.forEach(function (n) { var v = visible(n); nodeEl.get(n.id).hidden = !v; if (v) k++; });
+      c.count.textContent = k === c.nodes.length ? String(k) : k + " of " + c.nodes.length;
+      c.none.hidden = k > 0;
+    });
+    draw();
+    mark();
+  }
+
+  // A straight line from each object to each it led to, both shown.
+  function draw() {
+    svg.replaceChildren();
+    lineEls = [];
+    svg.setAttribute("width", board.scrollWidth);
+    svg.setAttribute("height", board.scrollHeight);
+    var b = board.getBoundingClientRect();
+    D.edges.forEach(function (e) {
+      var a = nodeEl.get(e.from), z = nodeEl.get(e.to);
+      if (!a || !z || a.hidden || z.hidden) return;
+      var ra = a.getBoundingClientRect(), rz = z.getBoundingClientRect();
+      var l = document.createElementNS(NS, "line");
+      l.setAttribute("x1", ra.right - b.left + board.scrollLeft);
+      l.setAttribute("y1", ra.top + ra.height / 2 - b.top + board.scrollTop);
+      l.setAttribute("x2", rz.left - b.left + board.scrollLeft);
+      l.setAttribute("y2", rz.top + rz.height / 2 - b.top + board.scrollTop);
+      svg.append(l);
+      lineEls.push({ l: l, e: e });
+    });
+  }
+
+  // Everything the selected object came from, and everything that came from it.
+  function closure(id) {
+    var seen = new Set([id]);
+    [out, into].forEach(function (g) {
+      var q = [id], here = new Set([id]);
+      while (q.length) {
+        (g.get(q.pop()) || []).forEach(function (y) { if (!here.has(y)) { here.add(y); seen.add(y); q.push(y); } });
+      }
+    });
+    return seen;
+  }
+
+  function mark() {
+    var on = selected ? closure(selected) : null;
+    document.body.classList.toggle("selecting", !!on);
+    nodeEl.forEach(function (x, id) {
+      x.classList.toggle("marked", !!on && on.has(id));
+      x.classList.toggle("selected", id === selected);
+      x.setAttribute("aria-pressed", id === selected ? "true" : "false");
+    });
+    lineEls.forEach(function (o) { o.l.classList.toggle("marked", !!on && on.has(o.e.from) && on.has(o.e.to)); });
+    history();
+    timeline();
+  }
+
+  function select(id) {
+    selected = selected === id ? null : id;
+    layout();
+  }
+
+  function cell(tr, text, cls, title) {
+    var td = el("td", cls, text);
+    if (title) td.title = title;
+    tr.append(td);
+    return td;
+  }
+
+  function history() {
+    var rows = $("rows");
+    rows.replaceChildren();
+    $("history").hidden = !selected;
+    if (!selected) {
+      $("sel-title").textContent = "Select an object to see its history.";
+      $("sel-label").textContent = "";
+      return;
+    }
+    var n = byId.get(selected);
+    $("sel-title").textContent = KIND[n.kind] + " " + n.name;
+    $("sel-label").textContent = n.label || "";
+    (D.histories[selected] || []).forEach(function (id) {
+      var e = D.entries[id];
+      if (!e) return;
+      var tr = el("tr", e.Refused ? "refused" : null), commits = e.Commit || [];
+      cell(tr, when(e.At), "at mono", e.Id);
+      cell(tr, e.Act || "?", "act mono");
+      cell(tr, e.By || "?", "who");
+      cell(tr, e.Host || "?", "who");
+      cell(tr, commits.map(function (c) { return c.split("@").pop().slice(0, 7); }).join(", ") || "-", "commit mono", commits.join("\n"));
+      cell(tr, (e.On || []).join(" ") + ((e.From || []).length ? " ← " + e.From.join(" ") : ""), "mono");
+      cell(tr, e.Refused ? "refused: " + e.Refused : e.Why || "");
+      var s = cell(tr, "");
+      var at = (e.Session || "").indexOf(":");
+      if (at > 0) {
+        s.append(el("code", "copy", "zoe " + e.Session.slice(at + 1)), " on ", el("code", "copy", e.Session.slice(0, at)));
+      }
+      rows.append(tr);
+    });
+  }
+
+  // Entries per day, from the first day recorded to the last; the selected object's entries marked on their days.
+  var days = [], perDay = new Map();
+  ids.forEach(function (id) { var d = D.entries[id].At.slice(0, 10); perDay.set(d, (perDay.get(d) || 0) + 1); });
+  if (ids.length) {
+    var sorted = Array.from(perDay.keys()).sort();
+    var t = Date.parse(sorted[0] + "T00:00:00Z"), last = Date.parse(sorted[sorted.length - 1] + "T00:00:00Z");
+    for (; t <= last; t += 86400000) days.push(new Date(t).toISOString().slice(0, 10));
+  }
+  var most = Math.max.apply(null, [1].concat(Array.from(perDay.values())));
+  var bars = days.map(function (d) {
+    var k = perDay.get(d) || 0, bar = el("div", "bar" + (k ? "" : " empty")), sel = el("div", "sel");
+    bar.style.height = (k ? Math.max(4, 100 * k / most) : 100) + "%";
+    bar.title = d + ": " + k + (k === 1 ? " entry" : " entries");
+    bar.append(sel);
+    $("bars").append(bar);
+    return { day: d, k: k, bar: bar, sel: sel };
+  });
+  if (days.length) {
+    $("axis").append(el("span", null, days[0]), el("span", null, days.length > 1 ? days[days.length - 1] : ""));
+  } else {
+    $("timeline").hidden = true;
+  }
+
+  function timeline() {
+    var mine = new Map();
+    if (selected) (D.histories[selected] || []).forEach(function (id) {
+      var e = D.entries[id];
+      if (e) { var d = e.At.slice(0, 10); mine.set(d, (mine.get(d) || 0) + 1); }
+    });
+    bars.forEach(function (b) {
+      var k = mine.get(b.day) || 0;
+      b.bar.classList.toggle("on", k > 0);
+      b.sel.style.height = b.k ? (100 * k / b.k) + "%" : "0";
+      b.bar.title = b.day + ": " + b.k + (b.k === 1 ? " entry" : " entries") + (k ? ", " + k + " of the selected " + KIND[byId.get(selected).kind] : "");
+    });
+  }
+
+  hide.checked = D.nodes.length > 40;
+  hide.addEventListener("change", layout);
+  find.addEventListener("input", layout);
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && selected) select(selected); });
+  var pending = false;
+  window.addEventListener("resize", function () {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(function () { pending = false; draw(); mark(); });
+  });
+  layout();
+})();
+</script>
+</body>
+</html>
