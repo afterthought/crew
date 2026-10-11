@@ -51,7 +51,9 @@ openspec/changes/concurrent-units/**
 plugin/lib/plan.py
 plugin/lib/gather.py
 plugin/lib/crew.py
+plugin/lib/record.py
 plugin/bin/crew
+plugin/bin/crew-role
 plugin/hooks/cards
 plugin/roles/conductor.md
 plugin/roles/planner.md
