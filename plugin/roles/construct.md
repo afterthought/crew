@@ -46,6 +46,7 @@ Follow the command. These add what it doesn't say:
 
 When this worktree already holds the unit's change, you are writing it again, and the prompt says why: the user's words or notes after the sources, when the user asked for something different, from a batch or to the conductor; or a sentence saying the unit's intent was amended, when what the unit builds has changed. Revise the change that is there rather than starting over: make it say what the user asked, or make it true to the new intent, and keep what still holds and what the user didn't object to.
 
+- **Read the sources afresh before you revise.** Read every source again as it stands on main now, and what each points at, as *Writing the change* says: the change that is there holds what they said when it was written, not what they say now.
 - **Tasks already ticked** stay ticked only where the work they describe is still what the change asks for. Untick one whose work must change, and add tasks for what is new. The code stage works from the tasks as you leave them.
 - **The revised change goes into the next batch**, so say in your final message what changed from the version the user last read.
 - **Commit the revision, however small.** The unit goes on from its tasks only once you have.

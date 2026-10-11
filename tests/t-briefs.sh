@@ -113,7 +113,8 @@ for want in "Send linked questions together" "with the documentation or reading 
   "holds corrections to a unit in construct"; do has "$out" "$want"; done
 expect_ok crewpy brief swb-1 construct
 for want in "## Writing a change again" "the unit's intent was amended" "stay ticked only where the work they describe" \
-  "Commit the revision, however small"; do has "$out" "$want"; done
+  "Commit the revision, however small" "Read the sources afresh before you revise" \
+  "the change that is there holds what they said when it was written, not what they say now"; do has "$out" "$want"; done
 for want in "as it stands on main now, and what each points at" "never the copy in this worktree" "signal show <id>" \
   "A source you cannot open stops you" "don't write the change from the intent in its place" "The sources govern how the unit is built" \
   "write the change from the sources" "open your final message with the difference" "first any difference between the intent and its sources" \
