@@ -39,4 +39,13 @@ Record 0004, as amended on 2026-10-10, already says a unit's sources govern how 
 
 ## Touches
 
-`plugin/lib/crew.py` (shared: every brief's signal-recording line), `plugin/roles/construct.md`, `plugin/roles/planner.md`, `plugin/roles/design.md`, `tests/t-briefs.sh`, `docs/architecture/_open.md` (shared), `openspec/specs/bolt-teams/spec.md` and `openspec/specs/main-level/spec.md` (by delta).
+`plugin/lib/crew.py` and `docs/architecture/_open.md` are shared files. The specs change only through this change's deltas, in its own folder.
+
+```
+plugin/lib/crew.py
+plugin/roles/construct.md
+plugin/roles/planner.md
+plugin/roles/design.md
+tests/t-briefs.sh
+docs/architecture/_open.md
+```
