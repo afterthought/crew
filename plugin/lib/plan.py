@@ -4525,6 +4525,7 @@ CARD_KEYS = (r"proposal/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8
              r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
+CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
 
 
 def batch_keys(fleet, label):
@@ -4875,13 +4876,14 @@ def card_wait(fleet, a):
 def end_session(label, key, unit=None):
     """End the plannotator session crew started for a card key on this host, a batch card's for one of its units, and
     forget it: its folder goes first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only
-    while plannotator lists it as serving the recorded document (read.4). Returns what it did, in words. crew's card
-    hook runs it when a crew agent closes or withdraws a keyed card."""
+    while plannotator lists it as serving the recorded document (read.4). Returns what it did, in words, and whether it
+    sent SIGTERM. crew's card hook runs it when a crew agent closes or withdraws a keyed card, and crew card sweep for
+    each session the rail judges dead."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
     d = CARDS / label / key / unit if unit else CARDS / label / key
     key = f"{key} {unit}" if unit else key
     if not d.is_dir():
-        return f"no session was running for {key}"
+        return f"no session was running for {key}", False
     try:
         s = card_recorded(d)
     except Refusal:
@@ -4894,16 +4896,16 @@ def end_session(label, key, unit=None):
             break
         p.rmdir()
     if not s:
-        return f"no session was recorded for {key}; its folder is removed"
+        return f"no session was recorded for {key}; its folder is removed", False
     if listed is None:
-        return f"crew can't read plannotator's sessions ({why}): it ended nothing, and {key} is forgotten"
+        return f"crew can't read plannotator's sessions ({why}): it ended nothing, and {key} is forgotten", False
     if not serving(listed, s):
-        return f"plannotator lists no session of pid {s['pid']} on {s['document']}: crew ended nothing, and {key} is forgotten"
+        return f"plannotator lists no session of pid {s['pid']} on {s['document']}: crew ended nothing, and {key} is forgotten", False
     try:
         os.kill(s["pid"], SIGTERM)
     except ProcessLookupError:
-        return f"{key}'s session had already ended, and {key} is forgotten"
-    return f"ended {key}'s session, plannotator pid {s['pid']}"
+        return f"{key}'s session had already ended, and {key} is forgotten", False
+    return f"ended {key}'s session, plannotator pid {s['pid']}", True
 
 
 def card_end(fleet, a):
@@ -4911,7 +4913,7 @@ def card_end(fleet, a):
     card's for one of its units on that unit's team's host, or with no unit for each of its units, as its close does."""
     label, _ = card_of(fleet, a, unit_needed=False)
     if not a.key.startswith("batch/"):
-        print(end_session(label, a.key))
+        print(end_session(label, a.key)[0])
         return
     names = [a.unit] if a.unit else card_units(fleet, label, a.key)
     for u in names:
@@ -4919,7 +4921,74 @@ def card_end(fleet, a):
         if t["machine"] != crew.this_host():
             forward_card(fleet, t, argparse.Namespace(**dict(vars(a), unit=u)), label)
         else:
-            print(end_session(label, a.key, u))
+            print(end_session(label, a.key, u)[0])
+
+
+def card_folder(rel):
+    """The card key and unit (None but for a batch card's) whose session a folder under ~/.local/state/crew/cards/<label>/
+    keeps, from its path there; None when the path is no key's folder."""
+    path = "/".join(rel.parts)
+    if any(re.fullmatch(k, path) for k in CARD_KEYS):
+        return path, None
+    key = "/".join(rel.parts[:2])
+    if len(rel.parts) == 3 and key.startswith("batch/") and any(re.fullmatch(k, key) for k in CARD_KEYS) and crew.NAME.match(rel.parts[2]):
+        return key, rel.parts[2]
+    return None
+
+
+def card_sweep(fleet, a):
+    """crew card sweep --label L: the rail's, run on each host of the partition with its judgment on standard input as
+    JSON, {"live": [card keys], "blind": [key prefixes]}. It ends, through end_session, each session crew recorded on
+    this host for the partition whose key is in no live entry and starts with no blind prefix, once it is at least two
+    minutes old by its own start against this host's clock and its folder's lock is free (crew card session holds it
+    while it starts one). It prints, as a JSON list, each session it acted on: its key, its unit (a batch card's) or
+    null, what it said, and whether it sent SIGTERM. A folder with no session.json, or whose path is no card key's, is
+    left alone, and a record it can't read is kept and said (read.1, read.4)."""
+    a.key is None or fail("crew card sweep takes no key: it judges every session crew recorded on this host, from the "
+                          "rail's judgment on standard input")
+    label = default_label(fleet, a) or fail("crew card sweep runs for a partition: add --label")
+    try:
+        j = json.loads(sys.stdin.read())
+    except ValueError:
+        j = None
+    (isinstance(j, dict) and set(j) == {"live", "blind"}
+     and all(isinstance(j[k], list) and all(isinstance(x, str) for x in j[k]) for k in j)) or fail(
+        'crew card sweep reads the rail\'s judgment on standard input as {"live": [card keys], "blind": [key prefixes]}')
+    live, blind, root = set(j["live"]), tuple(j["blind"]), CARDS / label
+    now, out = datetime.datetime.now(datetime.timezone.utc), []
+    for f in sorted(root.rglob("session.json")) if root.is_dir() else []:
+        found = card_folder(f.parent.relative_to(root))
+        if not found or found[0] in live or found[0].startswith(blind):
+            continue
+        key, unit = found
+        name = f"{key} {unit}" if unit else key
+        try:
+            lock = open(f.parent / ".lock", "a")
+        except FileNotFoundError:
+            continue  # ended while the sweep looked
+        with lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue  # its session is being started
+            try:
+                s = card_recorded(f.parent)
+            except Refusal as e:
+                out.append(dict(key=key, unit=unit, said=f"{e}; crew ended nothing, and keeps {name}", ended=False))
+                continue
+            if not s:
+                continue
+            try:
+                young = (now - utc(s["started"])).total_seconds() < CARD_GRACE
+            except (ValueError, TypeError):
+                out.append(dict(key=key, unit=unit, ended=False,
+                                said=f"crew can't read when {name}'s session started ({s['started']}): it ended nothing, and keeps {name}"))
+                continue
+            if young:
+                continue
+            said, ended = end_session(label, key, unit)
+            out.append(dict(key=key, unit=unit, said=said, ended=ended))
+    print(json.dumps(out))
 
 
 def card_units(fleet, label, key):
@@ -4952,6 +5021,10 @@ def parser(cls=argparse.ArgumentParser):
         x.add_argument("key")
         x.add_argument("unit", nargs="?")
         x.add_argument("--label")
+    x = ca.add_parser("sweep")  # the rail's, run on each host; a key or unit given is refused
+    x.add_argument("key", nargs="?")
+    x.add_argument("unit", nargs="?")
+    x.add_argument("--label")
 
     bo = sub.add_parser("bolt").add_subparsers(dest="sub", required=True)
     x = bo.add_parser("new")
@@ -5129,7 +5202,7 @@ def parser(cls=argparse.ArgumentParser):
 
 COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
-    ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end,
+    ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
