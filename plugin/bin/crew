@@ -120,7 +120,10 @@
 #   crew trace    <object>             one bolt's, unit's or signal's history: what was done, by whom, in which
 #                                      session, with which commit, and what it led to
 #   crew page     <label> [--out <file>] [--since <time>]
-#                                      the partition's lineage as one HTML file that loads nothing: its signals,
+#                                      the partition's page, one HTML file that loads nothing: it opens on the board,
+#                                      its four lanes drawn as the flywheel mockup draws them, narrowed to one team
+#                                      when chosen, kept across reloads, and its header linking each other partition's
+#                                      page beside it (../<label>/page.html); one switch away, the lineage: signals,
 #                                      agenda items, proposals, units and bolts as columns, a line from each to what
 #                                      it led to, and each one's history as crew trace prints it; written whole to
 #                                      ~/.local/state/crew/<label>/page.html on this host, or --out, and its path
