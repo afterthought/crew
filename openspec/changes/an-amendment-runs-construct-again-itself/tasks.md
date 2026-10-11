@@ -15,7 +15,3 @@
 
 - [x] 3.1 README (the amendment paragraph and the role table's conductor row), `plugin/skills/crew/SKILL.md`'s `crew resume` row, the usage header of `plugin/bin/crew` and the `crew unit amend` line of `plan.py`'s usage say that an amendment starts construct itself and a conductor brought back is told which units wait amended (`docs.2`). Verify `tests/suite t-docs` ends with "0 failed".
 - [x] 3.2 `plan.15`'s details in `docs/architecture/plan.md` drop "not built: `_open.md`", and `_open.md` no longer lists `plan.15`. Verify `tests/suite --affected` ends with "0 failed".
-
-## 4. Proof on real work
-
-- [ ] 4.1 Work design.md's *Proof on real work* once the bolt has landed and every host has pulled.

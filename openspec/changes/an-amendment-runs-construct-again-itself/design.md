@@ -80,7 +80,7 @@ None. crew has nothing to deploy; its proof before landing is the suite on the b
 
 ## Proof on real work
 
-Once the bolt has landed and every host has pulled, with conductors restarted:
+Worked by the partition's main-level ops once the bolt has landed and every host has pulled, with conductors restarted:
 - The planner proposes `unit amend` for a unit in review in a held bolt. The conductor agrees, and the user approves on its card. Within the approval, a fresh construct agent starts in the unit's slot, with the new intent and the planner's case in its prompt. The conductor is told to wait for it and to close its review card, and it does. `crew trace unit/<unit>` shows `plan.approve`, `unit.amend` and `stage.start` by the approver.
 - With the team's conductor down, approve an amendment to a unit of its bolt whose slot agent is working. The approval says construct did not start and why. `crew restart <team> conductor` greets the conductor with the unit named, and once the slot is free it starts the construct.
 
