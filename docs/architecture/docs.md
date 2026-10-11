@@ -31,4 +31,4 @@ The rules for where crew's design is written. `core.md` binds here too.
 
 **[docs.5]** Rules out: a change design naming no rule. Source: CLAUDE.md §Rules; `openspec/config.yaml`.
 
-**[docs.6]** Rules out: a *Proof after deploy* list of what a doctor row could assert; a task that is a deploy; a design that is a task list. Source: ADR 0012 point 3 as amended 2026-10-08; swancloud `testing.6`. `construct.md` and `openspec/config.yaml` say it once `a-change-holds-what-is-true-and-what-is-proved` lands: `_open.md`.
+**[docs.6]** Rules out: a *Proof after deploy* list of what a doctor row could assert; a task that is a deploy; a task worked only after the landing, which holds the code stage open at its last task (crw-3's coder, 2026-10-11: task 6.1 of units-build-at-once-and-are-reviewed-in-batches, the design's *Proof on real work* list repeated as a task, left code at 14 of 15; unit-amendments' 4.1 was the same and was archived open); a design that is a task list. Source: ADR 0012 point 3 as amended 2026-10-08; swancloud `testing.6`. `construct.md` and `openspec/config.yaml` say it once `a-change-holds-what-is-true-and-what-is-proved` lands: `_open.md`.
