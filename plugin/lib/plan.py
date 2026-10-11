@@ -4447,12 +4447,58 @@ def stray_cards(fleet, found, sv, rows, cards, unread):
     return sorted(out, key=lambda c: (c["at"], c["card"]))
 
 
-def rail_read(fleet, labels, board=False):
+def sweep_sessions(fleet, found, sv, rows, cards, unread, held):
+    """End the card sessions crew started whose card is closed or whose row is gone, on every host of each partition
+    whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
+    as live every row key less each the record holds as closed with no card open under it, and as blind the key
+    prefixes it can't judge, verify/<unit>/ for each unit of a bolt whose team's kit was not read and batch/ while the
+    record did not answer whole, when no key is taken out for being closed either (read.1). A host the survey found not
+    answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why "its row
+    is gone" or "its card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
+    ended, unchecked = [], []
+    for l, _, _, plan in found:
+        if not plan:
+            continue
+        rowed = {r["key"] for r in rows if r["label"] == l}
+        closed = set() if unread.get(l) else held[l]["closed"] - {c["key"] for c in cards if c["label"] == l}
+        blind = ["batch/"] if unread.get(l) else []
+        st = Stages(fleet, plan, sv)
+        blind += [f"verify/{u.name()}/" for b in plan.bolts() if b.get("Team") and not st.kit(b)[0] for u in plan.units_of(b.name())]
+        judged = json.dumps({"live": sorted(rowed - closed), "blind": sorted(blind)})
+        for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
+            if h in sv and not sv[h]["ok"]:
+                unchecked.append(dict(label=l, host=h, why=f"did not answer ({sv[h]['error']})"))
+                continue
+            try:
+                r = crew.on_machine(fleet, h, crew.crew_argv(fleet, h, "card", "sweep", "--label", l), input=judged)
+            except Refusal as e:
+                unchecked.append(dict(label=l, host=h, why=str(e)))
+                continue
+            if r.returncode:
+                said = ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]
+                unchecked.append(dict(label=l, host=h, why=f"did not answer ({said})" if r.returncode == 255 else f"its sweep failed ({said})"))
+                continue
+            try:
+                got = json.loads(r.stdout)
+            except ValueError:
+                got = None
+            if not (isinstance(got, list) and all(isinstance(x, dict) and isinstance(x.get("key"), str) and isinstance(x.get("said"), str)
+                                                  and (x.get("unit") is None or isinstance(x["unit"], str)) for x in got)):
+                unchecked.append(dict(label=l, host=h, why="its sweep printed no list of sessions crew reads"))
+                continue
+            ended += [dict(label=l, host=h, key=x["key"], unit=x.get("unit"), said=x["said"],
+                           why="its card is closed" if x["key"] in rowed else "its row is gone") for x in got]
+    return ended, unchecked
+
+
+def rail_read(fleet, labels, board=False, sweep=False):
     """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
     found and the errors of those that could not be read, the survey, the open proposals, the cards, the hosts whose
     record did not answer, the landings and gives, and the rows. The survey is of each host holding a bolt; with board,
     of every team of the labels, with the bolt it holds or none, and its dev servers, slots and explorations too, for
-    the board (board.py), from which the rail's text is made as well. Nothing is written."""
+    the board (board.py), from which the rail's text is made as well. With sweep, once the rows are made, the card
+    sessions whose card is closed or whose row is gone are ended on every host of the labels read, and what was ended
+    and which hosts were not checked are in the read (sweep_sessions). No state is written."""
     errors = {}
     found = plans(fleet, labels, errors)
     held = [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")]
@@ -4461,16 +4507,20 @@ def rail_read(fleet, labels, board=False):
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     times, cards, unread, landings, gives, batched, deploys = rail_record(fleet, found, props)
-    return dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
+    read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
                 gives=gives, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
+    if sweep:
+        read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], cards, unread, batched)
+    return read
 
 
 def rail_text(fleet, labels, read, now):
     """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
     wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it and
-    whose, oldest first; then any open card whose row is gone, with the tell that asks its owner to close it. A host
-    is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more (the board's)
-    gives the same text."""
+    whose, oldest first; then any open card whose row is gone, with the tell that asks its owner to close it; then, from
+    a read that swept, each card session ended, with its host and why, and each host whose sessions were not checked. A
+    host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more (the
+    board's) gives the same text."""
     found, rows, cards = read["found"], read["rows"], read["cards"]
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
@@ -4496,6 +4546,11 @@ def rail_text(fleet, labels, read, now):
                      f"asked by {c['by']} on {c['host']}")
         say = f"Close your Pending You card {c['key'] or c['card']}: its row is gone."
         lines.append(f"    {'answer:':<8}crew tell {shlex.quote(c['by'])} " + (f'"{say}"' if re.fullmatch(r"[\w/:. -]+", say) else shlex.quote(say)))
+    swept = [f"  {e['key']}{' ' + e['unit'] if e['unit'] else ''} ({e['label']}) on {e['host']}: {e['why']}; {e['said']}"
+             for e in read.get("ended") or []]
+    unswept = [f"  {u['host']} ({u['label']}): {u['why']}" for u in read.get("unchecked") or []]
+    lines += [""] if swept or unswept else []
+    lines += (["card sessions ended:"] + swept if swept else []) + (["card sessions not checked:"] + unswept if unswept else [])
     for h, v in sv.items():
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
@@ -4504,11 +4559,12 @@ def rail_text(fleet, labels, read, now):
 
 def rail_view(fleet, a):
     """crew rail [--label L]: what waits on the user, as rail_text gives it, read from the plans, the proposals, the
-    kits and the run record; nothing is written. It prints everything it could read, then exits non-zero naming each
-    plan it could not."""
+    kits and the run record. It ends the card sessions whose card is closed or whose row is gone, on every host of the
+    partitions read, and says which, and writes no state. It prints everything it could read, then exits non-zero
+    naming each plan it could not."""
     label = default_label(fleet, a)
     labels = [label] if label else list(fleet["partitions"])
-    read = rail_read(fleet, labels)
+    read = rail_read(fleet, labels, sweep=True)
     print(rail_text(fleet, labels, read, datetime.datetime.now(datetime.timezone.utc)))
     if read["errors"]:
         sys.exit("\n".join(read["errors"].values()))
