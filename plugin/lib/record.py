@@ -275,11 +275,14 @@ done
 """
 
 
-def on_branch(fleet, label, since_day):
-    """The entries carried to the label's branch of its state repository, from since_day on."""
+def on_branch(fleet, label, since_day, tips=None):
+    """The entries carried to the label's branch of its state repository, from since_day on. tips, when given, is
+    told the commit they were read at, {label: sha}, None for a branch not started."""
     import plan  # plan.py imports this module; its git layer is only needed here
     repo, ref = plan.state_of(fleet, label)
     tip = plan.fetch(repo, ref)
+    if tips is not None:
+        tips[label] = tip
     if not tip:
         return []
     out = []
@@ -289,10 +292,11 @@ def on_branch(fleet, label, since_day):
     return out
 
 
-def gather(fleet, labels, since_day):
+def gather(fleet, labels, since_day, tips=None):
     """Every entry of the labels' run records from since_day on: what each label's branch holds, then what each
     host has not yet carried, one call per host, duplicates dropped by Id and sorted by time then Id; and what did
-    not answer, with why. A host that does not answer is shown as far as it had carried."""
+    not answer, with why. A host that does not answer is shown as far as it had carried. tips, when given, is told
+    the commit each branch was read at, as on_branch tells it."""
     by_host = {}
     for l in labels:
         for h in hosts_of(fleet, l):
@@ -300,7 +304,7 @@ def gather(fleet, labels, since_day):
     entries, missing = {}, {}
     for l in labels:
         try:
-            for e in on_branch(fleet, l, since_day):
+            for e in on_branch(fleet, l, since_day, tips):
                 entries.setdefault(e["Id"], e)
         except Refusal as err:
             missing[f"{l}/main"] = str(err)
