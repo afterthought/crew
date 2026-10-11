@@ -519,10 +519,12 @@ GREETINGS = {
 
 
 def greet_agent(fleet, name, text, on, label, why, hint, wait=90):
-    """Greet an agent crew started: once it is up and settled, send it the text, marked [crew], and record a `greet`
-    entry on the objects `on` in the label's run record. One stopped on a question in its pane, such as a first run's
-    consent, is greeted once that is answered, for up to five minutes. Returns whether it was greeted; an agent that is
-    not up is reported with the hint, one never ready with the crew tell that would greet it, and neither is an error."""
+    """Greet an agent crew started: once it is up and settled, send it the text, marked [crew], taken or sent again
+    (teams.15), and record a `greet` entry on the objects `on` in the label's run record. One stopped on a question in
+    its pane, such as a first run's consent, is greeted once that is answered, for up to five minutes. Returns whether
+    it was greeted; an agent that is not up is reported with the hint, one never ready or that never took the greeting
+    with the crew tell that would greet it, one crew can't tell took it with what it could not read, and none is an
+    error."""
     deadline, asked = time.monotonic() + wait, False
     while True:
         s, asking, _ = waits_on_question(fleet, name)
@@ -536,7 +538,8 @@ def greet_agent(fleet, name, text, on, label, why, hint, wait=90):
                   else f"{name} was not ready to greet; once it is: crew tell {name} {shlex.quote(text)}", file=sys.stderr)
             return False
         time.sleep(2)
-    if not tell(fleet, name, text, record=False):
+    if not tell(fleet, name, text, record=False, taken=True, what="its greeting",
+                again=f"once it is ready: crew tell {name} {shlex.quote(text)}"):
         return False
     import record as rec  # record imports this module
     rec.emit(label, "greet", on=on, why=why)

@@ -2,7 +2,8 @@
 # and once it is answered when it starts stopped on a question, whether herdr sees the question or crew's own hook
 # saw it open. A conductor that is not up is told of, not an error. A conductor brought back is told which units of
 # its bolt wait amended: its greeting opens with them, and crew resume, which greets nobody, sends them as crew's
-# notice; a unit whose construct runs already is not named, and a plan crew cannot read is said.
+# notice; a unit whose construct runs already is not named, and a plan crew cannot read is said. A greeting is read
+# back from the conductor's transcript and sent once more when it was not taken; one never taken is said, not recorded.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -54,6 +55,39 @@ eq "$(grep -c "swb-1-conductor is waiting on a question in its pane; answer it t
 has "$out" "swb-1-conductor greeted"
 eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
 ok "a conductor herdr reports idle, with a question crew's hook saw it open, is greeted once the question is answered"
+
+# A greeting is taken or sent again (teams.15): read back from the conductor's transcript, sent once more when it is
+# left typed, and when the second is not taken either, nothing is left typed and no greeting is recorded.
+greets() {
+  python3 -c 'import glob, os, sys; sys.path.insert(0, sys.argv[1]); import record
+print(sum(1 for f in glob.glob(os.path.join(sys.argv[2], ".local/state/crew/wldn/runs/*/*.rec")) for e in record.parse(open(f).read())
+          if e["Act"] == "greet" and "agent/swb-1-conductor" in e["On"]))' "$CREW/plugin/lib" "$(home_of mac-studio)"
+}
+clears() { grep -c "^$box wldn-1 agent send-keys swb-1-conductor ctrl+c$" "$CREW_TEST_LOG" || true; }
+typed() { herdr_state $box wldn-1 '.agents[] | select(.name == "swb-1-conductor") | .typed // ""'; }
+export CREW_TAKEN_WITHIN=1
+n=$(greets)
+as $box herdr --session wldn-1 stub leave swb-1-conductor 1
+: > "$CREW_TEST_LOG"
+expect_ok crewpy greet swb-1
+has "$out" "swb-1-conductor greeted"
+eq "$(prompts swb-1 | wc -l | tr -d ' ')" "2"
+eq "$(clears)" "1"
+eq "$(greets)" "$((n + 1))"
+eq "$(typed)" ""
+ok "a greeting left typed is cleared and sent once more, and greeted once"
+
+as $box herdr --session wldn-1 stub leave swb-1-conductor 2
+: > "$CREW_TEST_LOG"
+expect_ok crewpy greet swb-1
+lacks "$out" "swb-1-conductor greeted"
+has "$out" "swb-1-conductor did not take its greeting, sent twice; nothing is left typed; once it is ready: crew tell swb-1-conductor 'Read where your bolt stands with"
+eq "$(prompts swb-1 | wc -l | tr -d ' ')" "2"
+eq "$(clears)" "2"
+eq "$(greets)" "$((n + 1))"
+eq "$(typed)" ""
+ok "a greeting not taken twice is not recorded, leaves nothing typed, and says the crew tell that would greet it"
+unset CREW_TAKEN_WITHIN
 
 
 ws=$(remote WilldanGroup/crew-state)
