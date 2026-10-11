@@ -24,7 +24,7 @@ branch first, then whatever each host it can reach has not yet carried.
   record.py events --push [--label L]     carry this host's entries to the branch now, in a commit of their own
   record.py trace <object> [--label L]    one bolt's, unit's or signal's history, read from the entries alone
 
-An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, team/<team>, agent/<name>,
+An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>, agent/<name>,
 stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of the partition), and
 what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>."""
 import argparse, datetime, getpass, json, os, pathlib, queue, re, signal, subprocess, sys, tempfile, threading
@@ -56,7 +56,8 @@ EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
-KINDS = ("unit/", "bolt/", "queue/", "signals/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/", "proof/", "batch/")
+KINDS = ("unit/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/", "proof/",
+         "batch/")
 
 _count = 0
 _session = ...  # resolved once per process
@@ -466,22 +467,25 @@ def followed(obj):
     return not obj.startswith(UNFOLLOWED)
 
 
-def trace(fleet, a):
-    """One object's history: every entry naming it, the entries of what it came from (an entry's From) and of what
-    came from it (the On of an entry whose From names it), until nothing is added. A bare name is tried as a unit,
-    then a bolt, then a signal."""
-    found, missing = gather(fleet, labels_for(fleet, a.label), "0000-00-00")
-    candidates = [a.object] if a.object.startswith(KINDS) else [f"{k}{a.object}" for k in ("unit/", "bolt/", "signals/")]
-    start = next((c for c in candidates if any(names(e, c) for e in found)), None)
-    if start is None:
-        for h, why in missing.items():
-            print(f"{h} did not answer: {why}", file=sys.stderr)
-        sys.exit(f"no entry names {' or '.join(candidates)}" + (" (some hosts did not answer)" if missing else ""))
+def named_by(entries):
+    """The entries naming each object, {object: [entry]}, as names() reads them: one index for many lineages."""
+    out = {}
+    for e in entries:
+        for o in dict.fromkeys(e["On"] + e["From"] + ([e["Delivered"]] if e.get("Delivered") else [])):
+            out.setdefault(o, []).append(e)
+    return out
+
+
+def lineage(entries, start, index=None):
+    """One object's history, the walk crew trace prints and the lineage page shows: every entry naming it, the entries
+    of what it came from (an entry's From) and of what came from it (the On of an entry whose From names it), until
+    nothing is added; sorted by time, then Id. index, when given, is named_by(entries), made once for many starts."""
+    index = named_by(entries) if index is None else index
     objs, chosen = {start}, {}
     while True:
         before = (len(objs), len(chosen))
-        for e in found:
-            if any(names(e, o) for o in objs):
+        for o in list(objs):
+            for e in index.get(o, ()):
                 chosen[e["Id"]] = e
         for e in list(chosen.values()):
             # What it came from. Where a unit moved from says where it was, not what it came from.
@@ -492,7 +496,19 @@ def trace(fleet, a):
                 objs.update(o for o in e["On"] if followed(o))
         if (len(objs), len(chosen)) == before:
             break
-    for e in sorted(chosen.values(), key=lambda e: (e["At"], e["Id"])):
+    return sorted(chosen.values(), key=lambda e: (e["At"], e["Id"]))
+
+
+def trace(fleet, a):
+    """One object's history, as lineage() walks it. A bare name is tried as a unit, then a bolt, then a signal."""
+    found, missing = gather(fleet, labels_for(fleet, a.label), "0000-00-00")
+    candidates = [a.object] if a.object.startswith(KINDS) else [f"{k}{a.object}" for k in ("unit/", "bolt/", "signals/")]
+    start = next((c for c in candidates if any(names(e, c) for e in found)), None)
+    if start is None:
+        for h, why in missing.items():
+            print(f"{h} did not answer: {why}", file=sys.stderr)
+        sys.exit(f"no entry names {' or '.join(candidates)}" + (" (some hosts did not answer)" if missing else ""))
+    for e in lineage(found, start):
         print(line(e, zoe=True))
     for h, why in missing.items():
         print(f"{h} did not answer: {why}")

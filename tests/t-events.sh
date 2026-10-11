@@ -180,4 +180,5 @@ eq "$out" "$from_signal"
 expect_ok crew trace "$u"
 eq "$out" "$from_signal"
 expect_fail "no entry names unit/nope" crew trace unit/nope
+expect_fail "no entry names agenda/8" crew trace agenda/8
 ok "a signal's trace and its unit's are the same chain, in order, each line with its session to open; nothing else comes in"
