@@ -137,9 +137,11 @@ ok "every main-level brief prints for wldn with no unfilled token"
 expect_ok crewpy brief wldn operator
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/operator.md left ${BASH_REMATCH[0]} unfilled"
 for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
+for want in "/crew page wldn\`" "open the file it prints in terminal-browser beside your pane" \
+  "on a box, give the user the path and say it opens from a Mac" "say as of when the page is, and name any host it could not read"; do has "$out" "$want"; done
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
-ok "the operator brief prints for wldn, opening sites on a Mac and giving the Mac URL on a box"
+ok "the operator brief prints for wldn, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
 
 # Every brief says who is speaking in the agent's pane; the six that record findings say how, with the excerpt, and
 # where crew writes the signal.

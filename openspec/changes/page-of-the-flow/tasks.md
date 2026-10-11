@@ -15,5 +15,5 @@
 
 ## 3. The operator agent, and the suite
 
-- [ ] 3.1 The operator brief has the agent make the page on request, open it beside its pane, and say as of when it is and any host it could not read, pinned in `tests/t-briefs.sh` (design: *Where it is written, and how it is opened*; Task notes 3.1; `briefs.1`, `tests.6`).
+- [x] 3.1 The operator brief has the agent make the page on request, open it beside its pane, and say as of when it is and any host it could not read, pinned in `tests/t-briefs.sh` (design: *Where it is written, and how it is opened*; Task notes 3.1; `briefs.1`, `tests.6`).
 - [ ] 3.2 `tests/moon.yml` is regenerated for `tests/t-page.sh`, and the tests this change affects end with "0 failed" (Task notes 3.2; `tests.2`).
