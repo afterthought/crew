@@ -31,7 +31,7 @@ When the unit was marked and its bolt is held by a team, `op_unit_amend`'s `afte
 
 When the construct cannot start, nothing is written before crew knows it can, so the unit keeps its `proposal/<n>` or `intent` mark and reads `amended`:
 - **The slot's agent is working.** Bash `crew unit run` refuses a construct whose slot's agent is working, without `--force`, once it has the slot and before `plan _run` writes the plan. Left to `run_stage`, the refusal would come after `plan _run` had moved the mark to the head, and the unit would read `construct` with no agent running it.
-- **The team is down.** Bash `crew unit run` refuses any stage while the team's state reads down, before `reap` or `plan _run` touch anything, and says `crew up <team>` brings it back.
+- **The team is down.** Bash `crew unit run` refuses any stage while the team's state reads down, before `reap` or `plan _run` touch anything, and says `crew up <team>` brings it back. This holds for code, verify and merge as much as for construct: a team taken down runs nothing until it is brought up, and the bolt-teams delta states it as its own requirement so it outlives this change.
 - **The host stops answering** between the stage read and the run. The run's failure is named by `crew.unanswered`, as a host that did not answer.
 
 In each, the refusal is recorded as a refused `stage.start`, and the amendment stands.
@@ -107,6 +107,10 @@ In `tests/t-amend-intent.sh`, the direct amendment and the approved proposal sce
 ### 1.2
 
 In `run_check`: `needs_role = not amended(mark) and (bool(mark) or st in ("approved", "code", "verify"))`. Marking itself (writing the head) still happens whenever `bool(mark) or st in (...)` and the head differs. The `again` sentence comes from the mark (Decision 3). The proposal's `Case` is read from `proposals.rec` at the tip `locate` returned, using the reader `at_tip` uses. `ends` for an amended unit is `place_stage(pl, None)`, which needs the place's reading. `Stages.of` keeps it in the survey's kit (`k["places"][unit]`), so expose it on `s` the way `head` is exposed rather than reading again. In `tests/t-amend.sh`, add a planner or ops caller starting construct on a `proposal/<n>`-marked unit, accepted, beside the existing refusal for a caller who would newly mark a unit in code.
+
+### 1.4
+
+The refusal is already built (`plugin/bin/crew`, the `$STATE/down` check in `unit run`); only its proof for the other stages is missing. In `tests/t-amend-intent.sh`, in the team-down scenario, after the existing `expect_fail … crew unit run the-deploy-is-logged construct`, run `crew unit run <a unit of swb-1's bolt> code` and expect it to fail with "swb-1 is down; crew up swb-1 brings it back"; assert the plan's tip has not moved, no slot pane was prompted, and the run record holds a refused `stage.start` on `stage/<unit>/code` saying "swb-1 is down". No code changes.
 
 ### 2.1
 

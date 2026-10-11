@@ -11,6 +11,7 @@ When the user approves a change to what a unit builds, nothing makes the unit st
 - **The old card is withdrawn by the conductor that owns it.** When construct starts on an amended unit, crew names the card that unit had open (its review card, or its verify card) to the team's conductor. The conductor is told when someone else started the construct, and sees it in the output when it ran the construct itself. When the construct could not start, crew's message about the amendment names that card instead.
 - **The conductor is told what is happening, not asked to do it.** If construct started, the conductor is told to wait for it and take the unit through review again. If it could not start (the team is down, the host stopped answering, or the slot's agent is still working), the conductor is told why and to run construct once it can. The approval stands, and the unit shows as `amended`. If the team's host does not answer when crew reads where the unit stands, crew cannot tell what the amendment would end, so it refuses the amendment and writes nothing (`read.1`).
 - **A conductor that is brought back finds amended units and starts them.** The greeting crew gives a conductor on `crew up`, `rebuild`, `restart` and `revive` names each unit of its bolt that shows as `amended`, which means no construct has run since the amendment, and tells it to start them. `crew resume` sends no greeting, so it sends the same line as a crew notice when there is such a unit. The conductor's brief now says: any unit of your bolt that `crew bolts` shows as `amended` gets its construct run.
+- **A team taken down starts no stage.** While a team is down, crew refuses to start any stage on its units (construct, code, verify or merge), says `crew up <team>` brings it back, and touches nothing. That is what keeps an amendment to a down team's unit waiting as `amended`.
 - **The proposal page says what approval now does:** "On approval: construct runs again at once in swb-1's slot, and the unit returns to your review."
 
 ## Capabilities
@@ -22,7 +23,7 @@ None.
 ### Modified Capabilities
 
 - `bolt-plan`: amending a unit with a worktree starts its construct again on the team's host, as part of the amendment, and its conductor is told what started or why nothing did.
-- `bolt-teams`: an amended intent from an approved proposal starts construct with no step left to the conductor. A conductor brought back is told which units are amended and starts them. Anyone may start construct on an amended unit.
+- `bolt-teams`: an amended intent from an approved proposal starts construct with no step left to the conductor. A conductor brought back is told which units are amended and starts them. Anyone may start construct on an amended unit. A team taken down starts no stage of any kind until it is brought up.
 - `plan-proposals`: an amendment's page says that approving it starts construct at once in the team's slot.
 
 ## Impact

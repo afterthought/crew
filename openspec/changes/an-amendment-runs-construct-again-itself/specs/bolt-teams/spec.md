@@ -38,6 +38,21 @@ When construct starts on a unit whose intent was amended, crew SHALL name to the
 - **WHEN** a conductor brought back runs `crew unit run <unit> construct` on an amended unit that was in verify before its amendment
 - **THEN** the command's output names the card for `verify/<unit>` to close
 
+### Requirement: A team taken down starts no stage
+While a team is down, from `crew down` or `crew close` until `crew up` brings it back, `crew unit run <unit> <stage>` SHALL be refused for every stage, construct, code, verify and merge alike, on any unit of the team's bolt, saying `<team> is down; crew up <team> brings it back`. The refusal SHALL come before crew frees or takes a slot, writes the plan or ends an agent, and SHALL be recorded as a refused `stage.start`.
+
+#### Scenario: Code on a team taken down
+- **WHEN** `crew unit run <unit> code` runs while the unit's team is down
+- **THEN** it is refused with "<team> is down; crew up <team> brings it back", the plan is not written, no slot's agent is sent anything, and the run record holds a refused `stage.start` for `stage/<unit>/code`
+
+#### Scenario: An amendment's construct on a team taken down
+- **WHEN** an amendment to a unit of a team that is down is applied
+- **THEN** its construct is refused the same way, and the unit keeps its mark and reads `amended`
+
+#### Scenario: The team is brought back
+- **WHEN** `crew up <team>` brings the team back
+- **THEN** `crew unit run` starts stages on its units again
+
 ### Requirement: A conductor brought back is told which units wait amended
 When crew starts or brings back a team's conductor with `crew up`, `crew rebuild`, `crew restart` or `crew revive`, its one greeting SHALL name each unit of its bolt whose stage is `amended`, and tell it to run construct on each. `crew resume`, which greets nobody, SHALL send the same words as a notice, and only when such a unit exists. When the plan or the bolt's kit cannot be read, the greeting or notice SHALL say so rather than name no unit.
 
