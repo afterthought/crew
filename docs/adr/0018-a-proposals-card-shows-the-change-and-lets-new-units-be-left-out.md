@@ -25,7 +25,7 @@ A proposal's card, posted by the planner under its row's key as today, is:
 2. A summary of three short lines: what the proposal is, the unit count before and after, the bolt's goal.
 3. The picture: a PNG twice a phone's width, uploaded as record 0005 has it, showing the bolt once approved in order, each dropped unit struck where it stood with its reason, each amended unit's old intent struck above the new, each new unit marked. The picture is drawn from the proposal's data by crew, with no browser and no agent's hand: by a renderer the kit puts on the host's path, named when absent, or by crew itself; a card with no picture still carries everything else.
 4. The change as text: a monospace block at most about forty characters a line, one line per change with its kind, and the bolt's order once approved with each unit marked, drawn from the same data.
-5. The whole proposal's plannotator link, first in the card's words as `briefs.9` has it: the picture and the text are the glance, the session is the whole.
+5. No plannotator link: the picture, the text and the case are the proposal whole, read on the card, and there is no session to open or to end (the user, 2026-10-11, approving proposal 102 with the note "I approve this although I don't think we really need a planotator for this one if we have the content right in the card and the picture", signal 2026-10-11-swancloud-planner-99c33984/01). Only a proposal the card cannot hold whole, one of more than fifteen new units, links the whole as `briefs.9` has it.
 6. The approve question, whose detail is the case as bullets and whose rationale says that a drop or an amendment is objected to in the card's own note, which the planner reads and answers with the proposal written again.
 7. One multiple-choice question per five units new to the bolt, added or moved in, every option ticked, each option the unit's name with its intent as detail and "cleared: not added; the rest still applies" as consequence; none when the proposal adds no unit. There is no text question, since Pending You makes every question required; the note is the place for words. A proposal with more than fifteen new units carries no unit question and links the whole.
 
@@ -43,6 +43,7 @@ The picture's animated form, the change a step at a time, belongs to crew's page
 
 - One unit in crew, `a-proposals-card-shows-the-change-and-lets-new-units-be-left-out`: the card's parts drawn from the plan's records and the proposal's `Case` and `Do` lines, the renderer read, the approval with cleared units, the splits gathered, the planner's brief and the card discipline, and the `rail-cards` and `plan-proposals` deltas.
 - `plan.3` and `briefs.13` amended; record 0005's proposal card bullet points here.
+- `briefs.9` narrowed on 2026-10-11 to a document the card cannot hold whole; the unit's intent, which named the link first, is amended by the planner's proposal.
 - The exploration's `gen.ts` is the construct's reading of what the picture, the text and the card's words are, not code crew ships: crew is Python with the standard library (`code.1`).
 
 ## Considered options
