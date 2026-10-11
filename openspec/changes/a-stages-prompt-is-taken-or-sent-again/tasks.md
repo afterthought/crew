@@ -7,7 +7,7 @@
 
 ## 2. One sending that is taken or sent again
 
-- [ ] 2.1 crew sends a prompt only once the agent is ready for input, reads its transcript, clears and sends once more when it was not taken, and answers taken, never or unread, with `crew.py stage-prompt` on the command line (design.md, Task notes 2.1). Verify `tests/suite t-prompt-taken` ends with "0 failed".
+- [x] 2.1 crew sends a prompt only once the agent is ready for input, reads its transcript, clears and sends once more when it was not taken, and answers taken, never or unread, with `crew.py stage-prompt` on the command line (design.md, Task notes 2.1). Verify `tests/suite t-prompt-taken` ends with "0 failed".
 - [ ] 2.2 A greeting not taken is sent once more, and when the second is not taken either, nothing is left typed, no greeting is recorded, and crew says so with the `crew tell` that would greet it (design.md, Task notes 2.2). Verify `tests/suite t-greet t-main` ends with "0 failed".
 
 ## 3. A stage begins or crew says it did not

@@ -14,8 +14,14 @@
                                       a main level's, this host's dispatcher's or operator agent's settings
   crew.py hosts <label>               the hosts where the partition's teams run: name, ssh name, crew there
   crew.py crew-at <host>              the crew command on a host
-  crew.py tell <agent> "<text>"       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
-                                      refused, with nothing typed, while it waits on a question in its pane
+  crew.py tell <agent> "<text>" [--taken]
+                                      prompt an agent wherever it runs, the text marked [crew tell from <sender>];
+                                      refused, with nothing typed, while it waits on a question in its pane; with
+                                      --taken, read back from its transcript and sent once more when not taken
+  crew.py stage-prompt <agent> "<prompt>"
+                                      send a stage's agent its prompt, unmarked, once it is ready for input, read back
+                                      from its transcript and sent once more when not taken: exits 0 when it is taken,
+                                      3 when the stage never started, and 1 when crew could not tell, saying why
   crew.py notice <agent> "<text>"     prompt an agent wherever it runs, the text marked [crew], as crew's own notice
   crew.py greet <team> [--first "<text>"]
                                       greet the team's conductor, marked [crew], once it is up and settled; the text,
@@ -42,6 +48,15 @@ TEAM_ROLES = ("conductor", "ops", "construct", "coder", "verify")
 MAIN_ROLES = ("design", "planner", "main-ops", "dispatcher", "operator", "reviewer")
 # What tells whether an agent waits on a question crew's own hook saw it open: piped to the agent's host, whose crew may be older.
 QUESTIONS = (LIB / "questions.py").read_text()
+# What reads whether an agent's session received a prompt crew sent: piped to the agent's host the same way.
+TRANSCRIPT = (LIB / "transcript.py").read_text()
+# A prompt taken or sent again (teams.15), in seconds: how long an agent is given to be ready for input before a
+# sending, a stage's fresh agent once it has started; how long crew reads on in the transcript of an agent that went to
+# work with no record of the prompt; and the pause after a ctrl+c, so that a press on an input already empty, which
+# arms Claude's "press again to exit", lapses before the prompt is sent again.
+READY_WAIT = 60
+WORKING_GRACE = 60
+CLEARED = 2
 
 
 class Refusal(Exception):
@@ -241,13 +256,14 @@ def label_of_agent(fleet, name):
     return None
 
 
-def tell(fleet, name, text, record=True, sender=None):
+def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again=""):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
     transcript, never take it for the user's typing. A tell reaches its agent as a prompt or not at all (teams.11):
     an agent that is not up, one waiting on a question in its pane, and one crew can't read that of is reported, with
-    nothing typed, and the tell fails. A tell is in the run record of the recipient's partition, with its length and
-    never its text."""
+    nothing typed, and the tell fails. With taken, the text is taken or sent again (send_taken), and a sending not
+    taken fails the tell, saying so of what was sent, with again, what to do once it is ready, when it was never
+    taken. A tell is in the run record of the recipient's partition, with its length and never its text."""
     host, session = place_of_agent(fleet, name)
     status, asking, unread = waits_on_question(fleet, name)
     if unread:
@@ -261,15 +277,24 @@ def tell(fleet, name, text, record=True, sender=None):
         print(waiting_said(name), file=sys.stderr)
         return False
     mark = f"[crew tell from {sender}]" if sender else "[crew]"
-    r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, f"{mark} {text}"])
-    if r.returncode:
-        # herdr's own check, at the moment of typing: a question opened since crew read the agent.
-        print(waiting_said(name) if herdr_error(r.stderr) == "agent_blocked"
-              else f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
-    elif record:
+    if taken:
+        how, why = send_taken(fleet, name, f"{mark} {text}")
+        if how == "never":
+            print(f"{name} did not take {what}, {why}; nothing is left typed" + (f"; {again}" if again else ""), file=sys.stderr)
+        elif how == "unread":
+            print(f"crew could not tell whether {name} took {what}: {why}; nothing more was sent", file=sys.stderr)
+        sent = how == "taken"
+    else:
+        r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, f"{mark} {text}"])
+        if r.returncode:
+            # herdr's own check, at the moment of typing: a question opened since crew read the agent.
+            print(waiting_said(name) if herdr_error(r.stderr) == "agent_blocked"
+                  else f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
+        sent = r.returncode == 0
+    if sent and record:
         import record as rec  # record imports this module
         rec.emit(label_of_agent(fleet, name), "tell", on=[f"agent/{name}"], why=f"tell {name}", Chars=len(text))
-    return r.returncode == 0
+    return sent
 
 
 def waiting_said(name):
@@ -329,30 +354,150 @@ def waits_on_question(fleet, name):
     the dialog from the screen alone, and on 2026-10-07 took a tell into one it did not see. A host with no mark, such
     as an agent started before the hook, reads as no question open, and herdr's reading alone guards it (the
     a-tell-never-lands-in-a-question design, decision 5, departing from read.1)."""
+    status, asking, sid, unread = agent_reading(fleet, name)
+    if status not in (None, "blocked") and not sid and not unread:
+        unread = "herdr names no session for it"
+    return status, asking, unread
+
+
+def agent_reading(fleet, name):
+    """What waits_on_question reads of an agent, with its session: (herdr's status of it, None when it is not up;
+    whether it waits on a question in its pane; the Claude session herdr names for it, or None; what crew could not
+    read, or None). Whether it waits is read from crew's own mark only when herdr names its session."""
     host, _ = place_of_agent(fleet, name)
     a, unread = read_agent(fleet, name)
     if a is None:
-        return None, False, unread
+        return None, False, None, unread
     status = a.get("agent_status")
-    if status == "blocked":
-        return status, True, None
     sess = a.get("agent_session")
     sid = sess.get("value") if isinstance(sess, dict) else None
-    if not isinstance(sid, str) or not sid:
-        return status, False, "herdr names no session for it"
-    r = on_machine(fleet, host, ["python3", "-", sid], input=QUESTIONS)
+    sid = sid if isinstance(sid, str) and sid else None
+    if status == "blocked":
+        return status, True, sid, None
+    if not sid:
+        return status, False, None, None
+    got = piped(fleet, host, QUESTIONS, "questions", sid)
+    if isinstance(got, str):
+        return status, False, sid, got
+    if got.get("question") not in (None, "open", "answered"):
+        return status, False, sid, f"crew's reading of its questions on {host} gave no answer crew reads"
+    return status, got["question"] == "open", sid, None
+
+
+def piped(fleet, host, script, what, *args):
+    """A reading crew pipes to python3 on a host, questions.py or transcript.py: its answer, one JSON object, or what
+    could not be read, its own {"unread": ...} among it."""
+    r = on_machine(fleet, host, ["python3", "-", *args], input=script)
     if r.returncode:
-        return status, False, unanswered(host, r) or (
-            f"crew's reading of its questions on {host} failed ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})")
+        return unanswered(host, r) or (
+            f"crew's reading of its {what} on {host} failed ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})")
     try:
         got = json.loads(r.stdout)
     except ValueError:
         got = None
     if isinstance(got, dict) and isinstance(got.get("unread"), str):
-        return status, False, got["unread"]
-    if not isinstance(got, dict) or got.get("question") not in (None, "open", "answered"):
-        return status, False, f"crew's reading of its questions on {host} gave no answer crew reads"
-    return status, got["question"] == "open", None
+        return got["unread"]
+    return got if isinstance(got, dict) else f"crew's reading of its {what} on {host} gave no answer crew reads"
+
+
+@functools.lru_cache(maxsize=None)
+def taken_within():
+    """How long crew reads an agent's transcript for a prompt it sent before taking it as not taken: 15 seconds, or
+    CREW_TAKEN_WITHIN's whole seconds, which only crew's tests set (tests.8)."""
+    v = os.environ.get("CREW_TAKEN_WITHIN")
+    if v is None:
+        return 15
+    v.isdigit() and int(v) > 0 or fail(f"CREW_TAKEN_WITHIN is a whole number of seconds above 0, not {json.dumps(v)}")
+    return int(v)
+
+
+def send_taken(fleet, name, text, ready_wait=READY_WAIT):
+    """Send an agent a prompt so that it is taken or sent again (teams.15). crew waits until the agent is ready for
+    input (ready_for), notes where its session's transcript ends, sends the text, and reads the transcript for it
+    (read_back). Not taken while the agent sits idle or done, its input is cleared with one ctrl+c, which Claude Code
+    documents as clearing the prompt input when nothing runs, and it is sent once more, from the wait; the second not
+    taken either, the input is cleared again. Returns ("taken", how many sendings), ("never", why) when the agent never
+    took it, or was never ready and nothing was typed, or ("unread", what) when crew could not tell whether it took
+    it: then nothing more is sent and nothing is pressed (read.1). herdr's own --wait gate is not used: it reads
+    whether the agent got busy, not whether the prompt landed, and herdr warns against sending again on it."""
+    host, session = place_of_agent(fleet, name)
+    taken_within()  # a limit crew can't read refuses before anything is typed
+    herdr = ["herdr", "--session", session, "agent"]
+    for sending in (1, 2):
+        sid, not_ready = ready_for(fleet, name, ready_wait)
+        if not_ready:
+            return not_ready
+        end = piped(fleet, host, TRANSCRIPT, "transcript", "end", sid)
+        if isinstance(end, str):
+            return "unread", end
+        if not isinstance(end.get("size"), int):
+            return "unread", f"crew's reading of its transcript on {host} gave no answer crew reads"
+        r = on_machine(fleet, host, herdr + ["prompt", name, text])
+        if r.returncode:
+            # herdr's own check, at the moment of typing, refuses a question opened since crew read the agent, typing nothing.
+            if herdr_error(r.stderr) == "agent_blocked":
+                return "never", "as it was waiting on a question in its pane"
+            return "unread", unanswered(host, r) or f"herdr on {host} did not send it ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})"
+        how, why = read_back(fleet, name, host, sid, end["size"], text)
+        if how != "not taken":
+            return (how, sending) if how == "taken" else (how, why)
+        r = on_machine(fleet, host, herdr + ["send-keys", name, "ctrl+c"])
+        if r.returncode:
+            return "unread", unanswered(host, r) or f"crew could not clear its input on {host}, so it may still hold the prompt"
+        if sending == 1:
+            time.sleep(CLEARED)
+    return "never", "sent twice"
+
+
+def ready_for(fleet, name, wait):
+    """Wait, up to wait seconds, until the agent is ready for input: herdr reports it idle or done, it waits on no
+    question in its pane, and herdr names its session. Returns (its session id, None), or (None, ("never", why)) when
+    it is not ready in time, or (None, ("unread", what))."""
+    deadline = time.monotonic() + wait
+    while True:
+        status, asking, sid, unread = agent_reading(fleet, name)
+        if unread:
+            return None, ("unread", unread)
+        if status in ("idle", "done") and not asking and sid:
+            return sid, None
+        if time.monotonic() >= deadline:
+            return None, ("never", "as it was not up" if status is None else "as it was waiting on a question in its pane"
+                          if asking else "as herdr named no session for it" if not sid else f"as herdr still reported it {status}")
+        time.sleep(1)
+
+
+def read_back(fleet, name, host, sid, size, text):
+    """Read, about once a second for up to taken_within() seconds, whether the agent's session received the text past
+    size bytes into its transcript, or from the start of the transcript of another session, when herdr names another
+    now. Returns ("taken", None) when it did; ("not taken", None) when the time passes with the agent idle or done;
+    ("unread", what) when crew cannot tell: the agent is blocked, gone, or still working WORKING_GRACE seconds on with
+    no record of the prompt, which it may have taken with the record still to come, or a reading failed."""
+    deadline, working = time.monotonic() + taken_within(), False
+    while True:
+        a, unread = read_agent(fleet, name)
+        sess = (a or {}).get("agent_session")
+        now = sess.get("value") if isinstance(sess, dict) and isinstance(sess.get("value"), str) and sess["value"] else sid
+        got = unread or piped(fleet, host, TRANSCRIPT, "transcript", "received", now, str(size if now == sid else 0), text)
+        if isinstance(got, str):
+            return "unread", got
+        if got.get("received") is True:
+            return "taken", None
+        if got.get("received") is not False:
+            return "unread", f"crew's reading of its transcript on {host} gave no answer crew reads"
+        if time.monotonic() >= deadline:
+            if working:
+                return "unread", (f"it went to work, and its transcript showed no prompt received {WORKING_GRACE} seconds "
+                                  "on, so it may have taken it")
+            status, asking, _, unread = agent_reading(fleet, name)
+            if unread:
+                return "unread", unread
+            if status in ("idle", "done") and not asking:
+                return "not taken", None
+            if status != "working":
+                return "unread", ("it is no longer up" if status is None else "it is waiting on a question in its pane"
+                                  if asking else f"herdr reports it {status}")
+            working, deadline = True, time.monotonic() + WORKING_GRACE
+        time.sleep(1)
 
 
 GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
@@ -906,9 +1051,13 @@ def main(a):
         print("\n".join(f"{k} {n}" for k, n in here(fleet)))
     elif a[:1] == ["crew-at"] and len(a) == 2:
         print(crew_at(fleet, a[1]))
-    elif a[:1] == ["tell"] and len(a) == 3:
+    elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
         import record as rec  # record imports this module
-        sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who()) else 1)
+        sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)
+    elif a[:1] == ["stage-prompt"] and len(a) == 3:
+        how, why = send_taken(fleet, a[1], a[2])
+        how == "taken" or print(why, file=sys.stderr)
+        sys.exit({"taken": 0, "never": 3}.get(how, 1))
     elif a[:1] == ["notice"] and len(a) == 3:
         sys.exit(0 if tell(fleet, a[1], a[2]) else 1)
     elif a[:1] == ["greet"] and (len(a) == 2 or (len(a) == 4 and a[2] == "--first")):

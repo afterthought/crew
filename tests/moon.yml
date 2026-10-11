@@ -139,6 +139,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-plan-roles.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-prompt-taken:
+    command: 'tests/run t-prompt-taken'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-prompt-taken.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-proposals:
     command: 'tests/run t-proposals'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-proposals.sh']
