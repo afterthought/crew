@@ -1,6 +1,7 @@
 # crew fix <team> <name> "<what is wrong>": fix/<bolt>/<name> from the team's bolt at places/fix-<bolt>--<name>, a
 # fresh code agent in a free slot with the words given, and a merge into the bolt like a unit's. No change, no plan
-# record. A fix's prompt not taken twice starts no stage, as a unit's does not.
+# record. A fix's prompt not taken twice starts no stage, as a unit's does not, nor does a fix whose agent stays on a
+# question in its pane, which is typed nothing.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
@@ -156,6 +157,21 @@ eq "$(git -C "$pc" branch --show-current)" ""
 CREW_AGENT=swb-2-conductor expect_ok crew fix swb-2 bolt-takes-main --merge
 has "$out" "swb-2-unit-1 has fix/console-pages/bolt-takes-main: merge, in $pc"
 ok "a fix's merge stopped partway through its rebase starts again in its own place"
+
+# A fix whose agent stays on a question in its pane is typed nothing and never started (teams.15). crew waits its full
+# time for the agent to be ready, so the fix runs in a slot of its own beside the cases below, its herdr calls logged
+# apart, and is read once they end. It goes on once the agent is on its question: its place made and its agent launched.
+edit teams "$(team swb-2)['units'] = 3"
+nr=fix/console-pages/never-ready
+unit_status() { herdr_state $box wldn-1 ".agents[] | select(.name == \"$1\") | .status" 2>/dev/null || true; }
+CREW_AGENT=swb-2-conductor CREW_TEST_BLOCKED=swb-2-unit-3 CREW_TEST_LOG=$T/never-ready.log \
+  crew fix swb-2 never-ready "The console never loads." > "$T/never-ready.out" 2>&1 & never_ready=$!
+for _ in $(seq 1200); do
+  [[ $(unit_status swb-2-unit-3) == blocked ]] && break
+  kill -0 $never_ready 2>/dev/null || break
+  /bin/sleep 0.1
+done
+[[ $(unit_status swb-2-unit-3) == blocked ]] || fail "swb-2-unit-3 never stopped on its question:"$'\n'"$(cat "$T/never-ready.out")"
 
 # A landing's rebase conflicted, and the team's fix carries the bolt onto main: the bolt's own commits replayed onto
 # the kit's main, the conflict resolved, and nothing else. crew moves the bolt's branch to the fix's head and runs the
@@ -371,3 +387,15 @@ has "$out" "$stays does not carry the bolt onto main (it holds the bolt's head):
 has "$out" "swb-1-unit-4 has $stays: merge, in $kd/places/fix-tenant-environments--never-replayed"
 eq "$(merge_prompts "$stays")" "1"; eq "$(git -C "$k" rev-parse "$bt")" "$new"
 ok "a fix with a commit of its own, one that drops one of the bolt's commits, and one never replayed merge as fixes, saying why"
+
+rc=0; wait $never_ready || rc=$?
+eq "$rc" "1"
+never="swb-2-unit-3 never took its fix prompt for $nr, as it was waiting on a question in its pane; the stage never started and nothing is left typed in its pane: run it again with crew fix swb-2 never-ready \"<what is wrong>\""
+has "$(cat "$T/never-ready.out")" "$never"
+has "$(cat "$T/never-ready.log")" "$box wldn-1 agent get swb-2-unit-3"
+grep -q "agent prompt .*'Fix: The console never loads.'" "$T/never-ready.log" &&
+  fail "a fix's prompt was typed to an agent waiting on a question:"$'\n'"$(cat "$T/never-ready.log")"
+eq "$(refused "$nr")" "$never"
+lacks "$(as $box cat .local/state/swb-2-team/stages)" "$nr"
+has "$(slots_of swb-2)" "unit-3 fix $nr"
+ok "a fix whose agent stays on a question in its pane is typed nothing, and never started: refused, owed nothing, its slot held"
