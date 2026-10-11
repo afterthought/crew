@@ -18,6 +18,7 @@
 # is not checked. A card under no row's key is refused for its key, not its form; a change to a card posted on no row's
 # key here, a session crew didn't start and another server's tool pass unchecked; what it can't check, its own input
 # among it, is refused, while the record half never fails.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null

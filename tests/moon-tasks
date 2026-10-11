@@ -2,10 +2,14 @@
 """Generate crew's moon tasks: tests/moon-tasks [--check].
 
 One task per tests/t-*.sh, written into tests/moon.yml, the live tests (t-*-live.sh) left out. Each task runs its
-one test through tests/run, tagged suite, and its inputs are everything the test reads from crew's tree: plugin/,
-which every command crosses, tests/run, tests/lib.sh, tests/stubs/, crew's devenv files, the test file itself and
-each path the test names on a `# Reads:` line of its opening comment (a directory as everything under it). moon
-replays a task whose inputs are unchanged since a pass, so an input left out could replay a stale pass.
+one test through tests/run, tagged suite, and its inputs are everything the test's outcome depends on in crew's tree
+(tests.10): the command core every crew command crosses (CORE: plugin/bin/, the modules plan.py and crew.py import),
+tests/run, tests/slot, tests/lib.sh, tests/stubs/, crew's devenv files, the test file itself and each path the test
+names on a `# Reads:` line of its opening comment (a directory as everything under it). The rest of plugin/ is a
+test's input only when it names it: plugin/hooks when it starts an agent, since the stub claude runs the
+session-start hook; plugin/roles when it reads a brief's words; board.py, page.py, page.html and sites.py when it
+runs them. moon replays a task whose inputs are unchanged since a pass, so an input left out could replay a stale
+pass; a landing's gate onto main runs every test afresh (.config/wt.toml), whatever the archives hold.
 
 With no argument it writes tests/moon.yml. With --check it writes nothing and exits 1, naming each, when a test has
 no task, a task has no test, a task is not what this would write, or a test refers to $CREW/<path> or $TESTS/<path>
@@ -20,7 +24,10 @@ import sys
 TESTS = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.dirname(TESTS)
 MOON_YML = os.path.join(TESTS, "moon.yml")
-COMMON = ["/plugin/**/*", "/tests/run", "/tests/lib.sh", "/tests/stubs/**/*", "/devenv.nix", "/devenv.lock"]
+# The command core: what every crew command runs, whichever test runs it.
+CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plugin/lib/record.py", "/plugin/lib/gather.py",
+        "/plugin/lib/transcript.py", "/plugin/lib/questions.py"]
+COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*", "/devenv.nix", "/devenv.lock"]
 HEADER = """\
 # Written by tests/moon-tasks from tests/t-*.sh; never edited by hand. After adding or removing a test, or changing
 # what one reads (its `# Reads:` line), run tests/moon-tasks and commit this file: tests/suite refuses to run while
@@ -78,7 +85,11 @@ def declared(name, text):
 
 
 def covered(path, inputs):
-    """The path, relative to crew's root, is one of the inputs or under one of them."""
+    """The path, relative to crew's root, is one of the inputs or under one of them. plugin/lib itself, the folder a
+    test puts on Python's path to import crew's modules, is covered by the core: a test importing a module beyond it
+    names that module."""
+    if path == "plugin/lib":
+        return True
     for i in inputs:
         if i.endswith("/**/*"):
             d = i[1:-5]

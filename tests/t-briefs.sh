@@ -1,4 +1,5 @@
 # Every brief prints for its team or partition with no token left unfilled.
+# Reads: plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 for role in conductor ops construct coder verify; do

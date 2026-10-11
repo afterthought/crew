@@ -3,6 +3,7 @@
 # openspec, and so does crew unit run before it makes the unit's place. A write whose push finds the branch moved
 # fetches it afresh and applies itself again. Nothing a command kept for its steps is left once it ends, refused or
 # not, and a reading a killed command left goes once it is a day old.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

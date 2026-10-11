@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run crew's tests: tests/run [name...]. Each test is tests/t-<name>.sh, run by bash in a scratch directory of
-# its own ($T) with tests/lib.sh to source. lib.sh gives each simulated host a scratch HOME holding fixture
+# its own ($T) with tests/lib.sh to source, in one of the host's test slots (tests/slot). lib.sh gives each simulated host a scratch HOME holding fixture
 # teams.json and herdr-hosts.json files, makes bare git remotes, and puts stub herdr, ssh, hostname, sleep,
 # plannotator and claude commands first on PATH. The stubs record their calls in $T/calls.log and $T/claude.log, so no test
 # ever reaches a real herdr session, a real host or a real agent. It runs only inside a devenv shell, so a test
@@ -39,7 +39,8 @@ for t in ${tests[@]+"${tests[@]}"}; do
   name=$(basename "$t" .sh)
   [[ -f $t ]] || { echo "no test $name" >&2; failed+=("$name"); continue; }
   T=$(scratch) || { echo "could not make a scratch directory under $tmp" >&2; exit 2; }
-  if (cd "$T" && T=$T bash "$t") >"$T/out" 2>&1; then
+  # The test runs in one of the host's test slots (tests/slot, tests.9), waiting its turn when every slot is taken.
+  if (cd "$T" && T=$T python3 "$TESTS/slot" bash "$t") >"$T/out" 2>&1; then
     pass=$((pass + 1)); echo "ok    $name"; [[ -n ${CREW_TEST_SHOW:-} ]] && sed 's/^/      /' "$T/out"; unscratch "$T"
   else
     failed+=("$name"); echo "FAIL  $name   (scratch kept: $T)"; tail -25 "$T/out" | sed 's/^/      /'

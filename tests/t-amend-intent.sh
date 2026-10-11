@@ -3,6 +3,7 @@
 # team's host in the applier's name and tells its conductor what started, or why nothing did and the card it ended;
 # merged work is refused. A proposal shows an amendment as before and after. Each scenario of unit-amendments' and
 # an-amendment-runs-construct-again-itself's bolt-plan, bolt-teams and plan-proposals specs.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

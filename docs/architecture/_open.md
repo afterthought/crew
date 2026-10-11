@@ -26,7 +26,6 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - ADR 0005 as amended 2026-10-10, the image clause: a screenshot on a card is an uploaded image artifact, never a path (`an-image-on-a-card-is-uploaded`); the card discipline says nothing of images.
 - ADR 0005 as amended 2026-10-10: a card's session ended by crew on every rail read once its card is closed or its row gone (`a-cards-session-ends-with-its-card`); today only the owner's hook ends it, and eleven idle servers ran on mac-studio.
 - `tests.8`: tests wait on conditions with limits that hold under load (`tests-hold-under-a-loaded-host`); `t-stage-ends` and `t-amend` sleep and time out, and redden under a load of 247.
-- `tests.9`: a host's suites bounded by its cores across teams (`suites-on-one-host-share-its-cores`); today each team's moon runs every test at once and two teams loaded mac-studio to 247.
 - ADR 0017: `crew usage`, token spend by partition, team, role, agent and model from crew's sessions and the transcripts (`crew-usage-sums-tokens-by-team-role-and-agent`); nothing reports spend today.
 - ADR 0018, `plan.3` and `briefs.13` as amended: a proposal's card drawn and in text with a choice per new unit, and the approval of the kept subset (`a-proposals-card-shows-the-change-and-lets-new-units-be-left-out`); today the card is prose and the approval is all or nothing.
 - `docs.6`: what a change holds, in `construct.md` and `openspec/config.yaml` (`a-change-holds-what-is-true-and-what-is-proved`).

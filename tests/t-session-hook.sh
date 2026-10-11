@@ -2,6 +2,7 @@
 # environment, the agent gets CREW_AGENT and CREW_LABEL back through CLAUDE_ENV_FILE and its pane its name.
 # Any other session, a subagent's, or input the hook can't read is left alone, and the hook always exits 0.
 # crew's PreToolUse hook marks a question or a plan a crew agent opens for the user, and a session's start clears it.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 hook() { python3 "$CREW/plugin/hooks/session-start"; }
 record="$HOME/.local/state/crew/sessions/sid-1"

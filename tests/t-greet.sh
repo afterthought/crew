@@ -4,6 +4,7 @@
 # its bolt wait amended: its greeting opens with them, and crew resume, which greets nobody, sends them as crew's
 # notice; a unit whose construct runs already is not named, and a plan crew cannot read is said. A greeting is read
 # back from the conductor's transcript and sent once more when it was not taken; one never taken is said, not recorded.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null

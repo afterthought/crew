@@ -1,6 +1,7 @@
 # crew operator up <label>, run on the host itself: the "operator" workspace in the session named <label>, the agent
 # <label>-operator-<host> started in the session's folder and greeted once its rail tab is open, nothing done and
 # nobody greeted when it is already up, and a non-zero exit naming a missing session or partition.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 # greets <agent>: the why of each greet entry on the agent in madswan's run record, one a line

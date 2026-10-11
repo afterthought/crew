@@ -3,6 +3,7 @@
 # refuses a unit the card does not hold, the key without a unit, and a card that has closed. crew card wait and end take
 # the unit the same way, end with no unit ends each unit's session, and a batch card's close through crew's hook ends
 # them too. Each scenario of the card-sessions spec on batch cards.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

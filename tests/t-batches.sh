@@ -5,6 +5,7 @@
 # its summary file ends the batch, recorded with each unit at its commit, and its tab closes; the rail lists each
 # batch as cards of at most five units; and a bolt with every unit merged is offered for landing only once every unit's
 # latest change has been in a batch. Each scenario of the review-batches and rail-cards specs crew holds.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

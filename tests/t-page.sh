@@ -6,6 +6,7 @@
 # with a host that does not answer in its attention, and opens on it: four lanes in the flywheel mockup's forms, for a
 # desktop and a phone, light and dark, with nothing loaded from outside the file; a header naming every partition, the
 # others linked to their pages beside it; and the partition's teams to narrow it to.
+# Reads: plugin/lib/board.py plugin/lib/page.py plugin/lib/page.html plugin/lib/sites.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null

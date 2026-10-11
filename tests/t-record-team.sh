@@ -4,6 +4,7 @@
 # when crew ends its agent first. Refusals that
 # would have moved work are entries. The operator workspace follows the run record in a flow tab, keeps what waits
 # on the user in a rail tab, with a shell below it, and draws the board in a board tab after it.
+# Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

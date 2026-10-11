@@ -2,6 +2,7 @@
 # it: from its last conversation, or fresh when it never had one, as for a main level never spoken to. Agents that
 # came back are left alone, a revived conductor is greeted, as is every agent revived outside a team, and a team or
 # main level taken down stays down. Only an agent crew starts outside a team is greeted as one.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

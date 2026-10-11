@@ -2,6 +2,7 @@
 # crew's own notice; crew tell marks what it carries with its sender. A tell, and a notice, reaches its agent as a
 # prompt or not at all: one waiting on a question in its pane, seen by herdr or by the mark crew's own hook leaves, or
 # one crew can't read that of, is told nothing and the tell fails saying why.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null

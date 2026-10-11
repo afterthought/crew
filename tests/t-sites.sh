@@ -1,6 +1,6 @@
 # crew sites: each host's bolts, units and fixes, the URL of each running dev server from the host's portless routes
 # matched by devurl's names, the URL rule for where crew runs, and an unreachable host named.
-# Reads: tests/stubs-sites/
+# Reads: tests/stubs-sites/ plugin/lib/sites.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 export PATH="$TESTS/stubs-sites:$PATH"
 team_world

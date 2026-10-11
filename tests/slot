@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Run a command in one of the host's test slots: tests/slot <command...> (tests.9).
+
+Every crew test on a host, whichever worktree, team or suite runs it, takes one of the host's slots first and holds it
+until the test ends, so the tests running at once on the host never outnumber its slots however many suites run side
+by side. A slot is a lock file, slot-<n>, in ~/.cache/crew/test-slots (CREW_TEST_SLOTS_DIR names another), held
+with flock for as long as the command or anything it leaves running has the file open, and let go by the system when
+the last of them ends, killed or not. The host has CREW_TEST_SLOTS slots, else two fewer than its cores and at least
+two, so the agents beside the tests keep some of the host. A command waits, polling, until a slot is free.
+
+A test runs with CREW_TEST_SLOT naming its slot. A suite or test started inside it (t-suite's) runs in that slot
+rather than waiting on another one its own test may be holding. Written for macOS, which has no flock command.
+"""
+import fcntl
+import os
+import pathlib
+import sys
+import time
+
+
+def count():
+    want = os.environ.get("CREW_TEST_SLOTS", "")
+    if want:
+        if not want.isdigit() or int(want) < 1:
+            sys.exit(f"tests/slot: CREW_TEST_SLOTS is '{want}', not a number of slots")
+        return int(want)
+    return max(2, (os.cpu_count() or 4) - 2)
+
+
+def take(d, n):
+    """The open file of a free slot, held; waits until one is."""
+    d.mkdir(parents=True, exist_ok=True)
+    while True:
+        for i in range(n):
+            fd = os.open(d / f"slot-{i}", os.O_RDWR | os.O_CREAT, 0o644)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                os.close(fd)
+                continue
+            return fd, i
+        time.sleep(0.2)
+
+
+def main(argv):
+    if not argv:
+        sys.exit("usage: tests/slot <command...>")
+    if not os.environ.get("CREW_TEST_SLOT"):
+        d = pathlib.Path(os.environ.get("CREW_TEST_SLOTS_DIR") or pathlib.Path.home() / ".cache/crew/test-slots")
+        fd, i = take(d, count())
+        os.set_inheritable(fd, True)
+        os.environ["CREW_TEST_SLOT"] = str(i)
+    try:
+        os.execvp(argv[0], argv)
+    except OSError as e:
+        sys.exit(f"tests/slot: cannot run {argv[0]}: {e}")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

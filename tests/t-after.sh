@@ -4,6 +4,7 @@
 # reaches its dependents, which are not held; when it merges, each dependent's place is rebased onto the bolt while its
 # agent is idle, the bolt's commits dropping out; and the dependent's merge is refused, naming it, until it has
 # merged. Each scenario of the bolt-plan and bolt-teams specs on After.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

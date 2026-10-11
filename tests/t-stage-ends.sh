@@ -3,6 +3,7 @@
 # nothing of its own and says when it could not read that; a stop-short through crew needs, carried to the waiting
 # wait or told to the conductor and never put in the run record; a wait that sees a tick made while it waits; a gone
 # agent; a fix's wait; and ops's proof, whose request is taken or sent again, and never started when it is not.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world

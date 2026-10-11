@@ -3,6 +3,7 @@
 # next read of the team once that agent settles, or by the user with crew unit free, which refuses a unit still in
 # the team's bolt and a worktree with uncommitted changes. A unit that leaves the team's bolt, queued again or moved to
 # another bolt, leaves its slot the same way, and crew rebuild keeps only the slots of work still in the bolt.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

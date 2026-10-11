@@ -2,6 +2,7 @@
 # fresh code agent in a free slot with the words given, and a merge into the bolt like a unit's. No change, no plan
 # record. A fix's prompt not taken twice starts no stage, as a unit's does not, nor does a fix whose agent stays on a
 # question in its pane, which is typed nothing.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world

@@ -9,6 +9,9 @@
 #   tests/suite --affected      the tasks whose inputs differ from the merge-base with main, uncommitted edits
 #                               included; the rest are not run
 #   tests/suite --force         every selected task run, none replayed
+#   tests/suite --gate <branch> the merge gate's run (.config/wt.toml) of a merge into that branch: as tests/suite,
+#                               and onto main as --force, so a landing runs every test afresh whatever the archives
+#                               hold (tests.10)
 #
 # Every selected task runs even when one fails. It prints a line per test in tests/run's words, `ok    t-<name>`,
 # with `   (replayed)` on one moon replayed, or `FAIL  t-<name>`; then each failing test's output; then
@@ -26,13 +29,16 @@ cd "$root" || exit 2
 
 affected= force=
 names=()
-for a in "$@"; do
-  case $a in
+while (( $# )); do
+  case $1 in
     --affected) affected=1 ;;
     --force) force=1 ;;
-    -*) echo "usage: tests/suite [--affected | --force] [name...]" >&2; exit 2 ;;
-    *) names+=("$a") ;;
+    --gate) [[ -n ${2:-} ]] || { echo "usage: tests/suite --gate <branch>" >&2; exit 2; }
+      [[ $2 == main ]] && force=1; shift ;;
+    -*) echo "usage: tests/suite [--affected | --force | --gate <branch>] [name...]" >&2; exit 2 ;;
+    *) names+=("$1") ;;
   esac
+  shift
 done
 [[ -n $affected && -n $force ]] && { echo "tests/suite: --affected and --force can't go together: --force runs every selected task" >&2; exit 2; }
 

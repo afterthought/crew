@@ -3,6 +3,7 @@
 # what reached it. It ends at a commit on the unit's branch made since it began, or when its agent stops short saying
 # nothing needs to change, and the unit then merges with no verify run again. Each scenario of the bolt-teams spec
 # "A unit waiting to merge settles".
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

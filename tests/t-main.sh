@@ -2,6 +2,7 @@
 # session, and a dispatcher in "<label> dispatch" on each host with a team of the partition: in the main level's
 # session on its own host, else in the session of the host's first team by name. Each agent it starts is greeted once,
 # marked as crew's, side by side: one waiting on a question is greeted once it is answered, holding back no other.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

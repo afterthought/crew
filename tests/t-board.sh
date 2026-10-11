@@ -3,7 +3,7 @@
 # the same board as JSON; read from the plan, the proposals, the moves, the signals, the kits and the run record, and
 # writing nothing. Each scenario of the crew-board spec, the board tab among them: one read of the rail tab's loop
 # prints the rail and writes the board's frame, which the board tab draws, fresh, stale or not yet written.
-# Reads: tests/stubs-sites/
+# Reads: tests/stubs-sites/ plugin/lib/board.py plugin/lib/sites.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 export PATH="$TESTS/stubs-sites:$PATH"
 world

@@ -3,6 +3,7 @@
 # of an unmerged unit ahead of it in the bolt starts code with the overlap and the other unit's change in its prompt,
 # overlap holding nothing; and verify's prompt names each path the unit changed against its bolt and did not declare,
 # its own change's folder aside. Each scenario of the bolt-teams spec on Touches.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

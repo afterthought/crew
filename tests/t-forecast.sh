@@ -3,6 +3,7 @@
 # told to its stage's agent once that is not working, carried in its next stage's prompt when no stage of it runs, or
 # as a settle stage when it has delivered its verify; a forecast between two unmerged units gives the later After on
 # the earlier. Each scenario of the bolt-teams spec on forecasts.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

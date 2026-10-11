@@ -5,6 +5,7 @@
 # that ends a rail row names the row's card to the conductor that owns it. A stage begins only once its agent's
 # transcript shows its prompt, sent once more when it does not; else it never started, and when crew cannot tell,
 # nothing more is sent or pressed.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

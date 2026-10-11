@@ -1,7 +1,9 @@
 # crew's suite runs as moon tasks. With the shell's real moon, in a scratch repository holding crew's
-# .moon/workspace.yml, tests/suite and tests/moon-tasks, a stand-in tests/run (it fails a test when plugin/ holds
+# .moon/workspace.yml, tests/suite and tests/moon-tasks, a stand-in tests/run (it fails a test when plugin/bin/ holds
 # red-<name>) and three stand-in tests: a first run runs every test side by side and replays none; a second replays
-# all; a test-only edit reruns that test alone; a plugin/ edit reruns all; a red test is named on one FAIL line with
+# all; a test-only edit reruns that test alone; an edit to crew's command core reruns all, and one to a plugin/ path
+# outside it reruns only the test naming it on its # Reads: line (tests.10); the gate of a landing onto main replays
+# nothing while a merge into a bolt's does; a red test is named on one FAIL line with
 # its output while the others still run, the exit is non-zero, and it runs again on the next run; __pycache__ under
 # plugin/ changes no hash; --force replays nothing; the live test gets no task and never runs; a new test with no
 # task, and a test reading a file of crew's its task doesn't name, refuse the run before anything runs; a second
@@ -16,11 +18,12 @@ zzz=$(type -a -P sleep | grep -vxF "$TESTS/stubs/sleep" | head -1)
 [[ -x $zzz ]] || fail "no sleep on PATH but the stub's"
 
 r=$T/repo
-mkdir -p "$r/.moon" "$r/tests/stubs" "$r/plugin"
+mkdir -p "$r/.moon" "$r/tests/stubs" "$r/plugin/bin" "$r/plugin/lib" "$r/plugin/roles"
 cp "$CREW/.moon/workspace.yml" "$r/.moon/"; cp "$CREW/tests/suite" "$CREW/tests/moon-tasks" "$r/tests/"
 printf '.moon/cache/\n__pycache__/\n' > "$r/.gitignore"
-touch "$r/devenv.nix" "$r/devenv.lock" "$r/tests/lib.sh" "$r/tests/stubs/herdr" "$r/README.md"
-echo 'print(1)' > "$r/plugin/x.py"
+touch "$r/devenv.nix" "$r/devenv.lock" "$r/tests/lib.sh" "$r/tests/slot" "$r/tests/stubs/herdr" "$r/README.md"
+touch "$r/plugin/bin/crew" "$r/plugin/lib/"{crew,record,gather,transcript,questions}.py "$r/plugin/roles/coder.md"
+echo 'print(1)' > "$r/plugin/lib/plan.py"
 # The stand-in tests/run: each run is logged in $T/ran.log. With $T/barrier, each test waits until all three have
 # started, so a run that is not side by side fails.
 cat > "$r/tests/run" <<EOF
@@ -33,11 +36,12 @@ if [ -e "$T/barrier" ]; then
     i=\$((i + 1)); [ \$i -gt 600 ] && { echo "FAIL  \$n   (never ran beside the others)"; exit 1; }; "$zzz" 0.1
   done
 fi
-if [ -e "plugin/red-\$n" ]; then echo "FAIL  \$n   (scratch kept: none)"; echo "      \$n is red"; echo "0 passed, 1 failed"; exit 1; fi
+if [ -e "plugin/bin/red-\$n" ]; then echo "FAIL  \$n   (scratch kept: none)"; echo "      \$n is red"; echo "0 passed, 1 failed"; exit 1; fi
 echo "ok    \$n"; echo "1 passed, 0 failed"
 EOF
 chmod +x "$r/tests/run"
 for n in a b c; do echo "# t-$n: a stand-in test." > "$r/tests/t-$n.sh"; done
+echo "# Reads: plugin/roles/" >> "$r/tests/t-c.sh"
 (cd "$r" && tests/moon-tasks) || fail "tests/moon-tasks could not write the tasks"
 git init -q "$r"; commit_all "$r" "chore: start"
 # link <checkout>: its archives a link into the git common dir, as crew's devenv shell makes it
@@ -75,13 +79,19 @@ has "$out" "ok    t-a   (replayed)"$'\n'"ok    t-b"$'\n'"ok    t-c   (replayed)"
 eq "$(ran)" "t-b"
 ok "an edit to one test reruns that test alone"
 
-echo 'print(2)' > "$r/plugin/x.py"
+echo 'print(2)' > "$r/plugin/lib/plan.py"
 suite
 eq "$rc" 0; has "$out" "3 passed (0 replayed), 0 failed"
 eq "$(ran)" "t-a t-b t-c"
-ok "an edit under plugin/ reruns every test"
+ok "an edit to crew's command core reruns every test"
 
-touch "$r/plugin/red-t-b"
+echo "edited" >> "$r/plugin/roles/coder.md"
+suite
+eq "$rc" 0; has "$out" "ok    t-a   (replayed)"$'\n'"ok    t-b   (replayed)"$'\n'"ok    t-c"$'\n'"3 passed (2 replayed), 0 failed"
+eq "$(ran)" "t-c"
+ok "an edit to a plugin/ path outside the core reruns only the test that names it"
+
+touch "$r/plugin/bin/red-t-b"
 suite
 eq "$rc" 1
 has "$out" "ok    t-a"$'\n'"FAIL  t-b"$'\n'"ok    t-c"$'\n'
@@ -98,13 +108,13 @@ has "$out" "2 passed (2 replayed), 1 failed"
 eq "$(ran)" "t-b"
 ok "a test that failed runs again on the next run, never replayed"
 
-rm "$r/plugin/red-t-b"
+rm "$r/plugin/bin/red-t-b"
 suite
 eq "$rc" 0; has "$out" "ok    t-a   (replayed)"$'\n'"ok    t-b"$'\n'"ok    t-c   (replayed)"$'\n'"3 passed (2 replayed), 0 failed"
 eq "$(ran)" "t-b"
 ok "back on a tree that passed, the others replay and the test that last failed here runs"
 
-mkdir -p "$r/plugin/__pycache__"; echo junk > "$r/plugin/__pycache__/x.cpython.pyc"
+mkdir -p "$r/plugin/lib/__pycache__"; echo junk > "$r/plugin/lib/__pycache__/plan.cpython.pyc"
 suite
 eq "$rc" 0; has "$out" "3 passed (3 replayed), 0 failed"
 eq "$(ran)" ""
@@ -116,6 +126,13 @@ eq "$(ran)" "t-a t-b t-c"
 suite b
 eq "$rc" 0; has "$out" "ok    t-b   (replayed)"$'\n'"1 passed (1 replayed), 0 failed"
 ok "--force runs every test without the cache, and named tests run alone"
+
+suite --gate bolt/b
+eq "$rc" 0; has "$out" "3 passed (3 replayed), 0 failed"
+suite --gate main
+eq "$rc" 0; has "$out" "3 passed (0 replayed), 0 failed"
+eq "$(ran)" "t-a t-b t-c"
+ok "the gate of a merge into a bolt replays, and the gate of a landing onto main runs every test afresh"
 
 echo "# t-sites-live: the live test." > "$r/tests/t-sites-live.sh"
 (cd "$r" && tests/moon-tasks) || fail "tests/moon-tasks could not write the tasks"

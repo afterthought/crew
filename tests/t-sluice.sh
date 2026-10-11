@@ -1,6 +1,7 @@
 # A kit opts into sluice by a flag in its config, `sluice = true` in its main checkout's .config/crew.toml: a unit's and
 # a fix's merge stage then submits with wt submit bolt/<bolt>, and otherwise merges with wt merge, one at a time; a
 # flag crew can't read refuses the merge, naming the file. Each scenario of the bolt-teams spec on merging.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha

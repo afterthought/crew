@@ -4,6 +4,7 @@
 # asked. Construct on a unit whose intent was amended is anyone's to start, sends the amendment's words read from the
 # mark, and names the card of the verify row the unit held before. Each scenario of the bolt-plan and bolt-teams specs
 # on amending a unit in flight, and of an-amendment-runs-construct-again-itself's bolt-teams.
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
