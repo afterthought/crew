@@ -11,12 +11,12 @@ The answer, on stdout, is JSON keyed by each kit's main checkout: the changes ma
 for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree,
 its head and the head's time; each place under <dir>/places with its branch, its head and the head's time, its change's
 tasks, whether its planning is complete and the paths its proposal declares it touches; each fix branched from a bolt;
-and each unit's newest verify report in the reports folders, with its path and time. With sites, each worktree's
-devurl names and the host's portless routes; with board, each team's slots, one {slot, kind, name, place} per line
-of its slots file, and each folder under openspec/explorations/ on main with the first line of its first .md file.
-It reads with git, the file system, devurl and portless and, for a change whose workflow it does not read itself,
-openspec, and changes nothing. It needs nothing but python3's standard library, since it is sent to hosts whose crew
-may be older."""
+each unit's newest verify report in the reports folders, with its path and time; and whether the kit merges through
+sluice, by the flag in its main checkout's .config/crew.toml. With sites, each worktree's devurl names and the host's
+portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
+folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
+system, devurl and portless and, for a change whose workflow it does not read itself, openspec, and changes nothing.
+It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
 import datetime, json, os, re, subprocess, sys
 
 
@@ -78,6 +78,26 @@ def fix_merged(main, branch, bolt):
     tip = (run(["git", "rev-parse", branch], main) or "").strip()
     return bool(born) and tip != born[-1] and subprocess.run(
         ["git", "merge-base", "--is-ancestor", branch, f"bolt/{bolt}"], cwd=main).returncode == 0
+
+
+def sluice(main):
+    """Whether a kit opts into sluice, by `sluice = true` in its main checkout's .config/crew.toml: (True or False,
+    None), False when it has no such file; or (None, why) when crew can't read it."""
+    path = os.path.join(main, ".config", "crew.toml")
+    if not os.path.exists(path):
+        return False, None
+    try:
+        import tomllib
+    except ImportError:
+        return None, f"python3 on this host has no tomllib to read {path}"
+    try:
+        with open(path, "rb") as f:
+            v = tomllib.load(f).get("sluice", False)
+    except (OSError, ValueError) as e:
+        return None, f"{path} can't be read: {e}"
+    if not isinstance(v, bool):
+        return None, f"{path}: 'sluice' is true or false, not {json.dumps(v)}"
+    return v, None
 
 
 def head_at(cwd, ref):
@@ -344,6 +364,7 @@ def kit(req, sites=False, running=None, board=False):
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
     out = {"ok": True, "main": changes(main, "main"), "bolts": {}, "places": {}, "fixes": [], "reports": reports(req.get("reports", []))}
+    out["sluice"], out["sluice_error"] = sluice(main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
     # asked for, or tracked by a place, that has no branch is marked missing.
     have = [r[len("refs/heads/bolt/"):] for r in (run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/"], main) or "").split()]

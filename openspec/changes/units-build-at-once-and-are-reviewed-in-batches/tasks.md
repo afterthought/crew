@@ -24,7 +24,7 @@
 
 ## 4. Merging through sluice
 
-- [ ] 4.1 A kit opts into sluice by a flag in its config, and its merge stage then runs `wt submit bolt/<bolt>`, else `wt merge` as now (design.md, Decision 8; Task notes 4.1). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 4.1 A kit opts into sluice by a flag in its config, and its merge stage then runs `wt submit bolt/<bolt>`, else `wt merge` as now (design.md, Decision 8; Task notes 4.1). Verify `tests/suite --affected` ends with "0 failed".
 
 ## 5. Briefs and docs
 

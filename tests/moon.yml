@@ -209,6 +209,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-sites.sh', '/tests/stubs-sites/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-sluice:
+    command: 'tests/run t-sluice'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-sluice.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-stage-ends:
     command: 'tests/run t-stage-ends'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-stage-ends.sh']

@@ -698,8 +698,11 @@ case $cmd in
       eval "$e"
       [[ $CARRIES == yes ]] && { carry "$slot"; exit 0; }
       echo "$fix does not carry the bolt onto main ($WHY): merging it as a fix" >&2
+      # wt merge, or wt submit where the kit opts into sluice (teams.5)
+      err=$(plan _merging "$TEAM" "$BOLT" 2>&1) || fix_refused fix.merge "$err"
+      eval "$err"
       ensure_slot_pane "$slot" "$path"
-      run_stage "$slot" merge "Merge $fix into bolt/$BOLT: wt merge bolt/$BOLT --no-squash --no-remove" fix.merge "$fix" "fix/$BOLT/$name" \
+      run_stage "$slot" merge "Merge $fix into bolt/$BOLT: $MERGE" fix.merge "$fix" "fix/$BOLT/$name" \
         --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
       echo "$(name_of "$slot") has $fix: merge, in $path"
     else

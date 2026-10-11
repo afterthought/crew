@@ -2699,6 +2699,24 @@ def take(fleet, t, place, unit, bolt, deps):
     return " ".join(f"{a}@{h}" for a, h in (l.split() for l in r.stdout.strip().splitlines() if l))
 
 
+def merge_command(t, k, bolt):
+    """How a unit or fix merges into its bolt (teams.5): `wt submit bolt/<bolt>` where the kit opts into sluice, its
+    pre-merge hooks the submit gate and sluice's verdict the merge gate; else `wt merge bolt/<bolt> --no-squash
+    --no-remove`, one merge at a time. Refused when the kit's flag can't be read (read.1)."""
+    k or fail(f"can't tell how {t['kit']['name']} merges: its checkout on {t['machine']} was not read")
+    k.get("sluice") is not None or fail(f"can't tell whether {t['kit']['name']} merges through sluice: {k.get('sluice_error')}")
+    return f"wt submit bolt/{bolt}" if k["sluice"] else f"wt merge bolt/{bolt} --no-squash --no-remove"
+
+
+def merging(fleet, a):
+    """crew _merging <team> <bolt>: the command a fix of the team merges into its bolt with, as a shell assignment
+    (MERGE) for bash crew."""
+    t = crew.team_of(fleet, a.team)
+    k = survey(fleet, [(t["name"], a.bolt)]).get(t["machine"], {})
+    kit = k.get("kits", {}).get(t["kit"]["main"]) if k.get("ok") else None
+    print(sh(MERGE=merge_command(t, kit if kit and kit.get("ok") else None, a.bolt)))
+
+
 def run_check(fleet, a):
     """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent. Construct
     starts once each After unit has finished construct, never waiting on a merge (plan.13), and is run again at any
@@ -2769,7 +2787,7 @@ def run_check(fleet, a):
         st == "verify" or fail(f"unit {a.unit} is in {st}: it merges once every task is ticked and verify has run")
         ahead = [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")]
         not ahead or fail(f"unit {a.unit} merges after " + ", ".join(ahead) + ", not yet merged into bolt/" + bolt)
-        prompt = f"Merge {a.unit} into bolt/{bolt}: wt merge bolt/{bolt} --no-squash --no-remove{words}"
+        prompt = f"Merge {a.unit} into bolt/{bolt}: {merge_command(t, st_all.kit(plan.bolt(bolt))[0], bolt)}{words}"
     # What reached the unit while no stage of it ran: forecasts, carried in this stage's prompt and named on its start.
     ids, said = carried_forecasts(fleet, t, plan, st_all, bolt, a.unit)
     prompt += "".join(" " + x for x in said)
@@ -4887,6 +4905,9 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("team")
     x = sub.add_parser("_rebase")
     x.add_argument("team")
+    x = sub.add_parser("_merging")
+    x.add_argument("team")
+    x.add_argument("bolt")
     x = sub.add_parser("_review")
     x.add_argument("label")
     x = sub.add_parser("_review-wait")
@@ -4920,7 +4941,7 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
-    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_merging", None): merging, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
