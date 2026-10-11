@@ -62,7 +62,7 @@ status() { rc=0; out=$(cd "$bw" && sh .config/hooks/bolt-status.sh 2>&1) || rc=$
 # until_state <rev> <state>: wait until that revision's record reads the state
 until_state() {
   local _
-  for _ in $(seq 200); do [[ $(sed -n 's/^State: //p' "$vd/$1.rec" 2>/dev/null) == "$2" ]] && return; /bin/sleep 0.1; done
+  for _ in $(seq 6000); do [[ $(sed -n 's/^State: //p' "$vd/$1.rec" 2>/dev/null) == "$2" ]] && return; /bin/sleep 0.1; done
   fail "the run of $1 never read $2:"$'\n'"$(cat "$vd/$1.rec" 2>&1)"
 }
 verify() { (cd "$bw" && devenv shell -- sh .config/hooks/bolt-verify.sh 2>&1); }
@@ -154,7 +154,7 @@ ok "a run whose process is gone reads interrupted, and the reading writes nothin
 
 touch "$T/hold"
 expect_ok verify; has "$out" "verifying bolt/b at $(git -C "$r" rev-parse --short "$r5") in the background"
-for _ in $(seq 200); do status; [[ $out == *"State: running"* ]] && break; /bin/sleep 0.1; done
+for _ in $(seq 6000); do status; [[ $out == *"State: running"* ]] && break; /bin/sleep 0.1; done
 eq "$rc" 1; has "$out" "State: running"; has "$out" "Rev: $r5"
 expect_fail "a run of bolt/b at $(git -C "$r" rev-parse --short "$r5") is in progress" verify
 rm "$T/hold"
@@ -183,7 +183,7 @@ expect_ok merge "$bw" main
 eq "$(rev main)" "$(rev bolt/b)"
 ok "a green bolt lands on main"
 
-for _ in $(seq 200); do grep -rqs "not verifying main" "$r/.git/wt/logs" && break; /bin/sleep 0.1; done
+for _ in $(seq 6000); do grep -rqs "not verifying main" "$r/.git/wt/logs" && break; /bin/sleep 0.1; done
 grep -rqs "not verifying main" "$r/.git/wt/logs" || fail "the post-merge hook of the landing never ran"
 eq "$(ls "$r/.git/bolt-verify")" "b"
 [[ ! -e $vd/$(rev main).rec ]] || fail "the landing on main was verified"

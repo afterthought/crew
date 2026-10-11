@@ -33,15 +33,17 @@ ok "events prints both hosts' entries in time order, narrows to one object, give
 
 ( export CREW_TEST_HOST=mac-studio HOME=$(home_of mac-studio); cd "$HOME" && exec "$CREW/plugin/bin/crew" events --follow --label wldn ) > "$T/follow" 2>&1 &
 fpid=$!
-/bin/sleep 2
+# Its tails are up once one follows the box's files: an entry written before then is never followed.
+tailing() { pgrep -f "tail -q -n 0 -F .*$T/hosts/$box/" >/dev/null; }
+until_ok tailing || fail "crew events --follow never started its tails"
 emit $box --act stage.start --on stage/a/construct --on unit/a --why "unit(a): start construct"
-for _ in $(seq 50); do grep -q "stage.start" "$T/follow" && break; /bin/sleep 0.2; done
+follows() { grep -q "stage.start" "$T/follow"; }; until_ok follows || true
 kill "$fpid"; wait "$fpid" 2>/dev/null || true
 has "$(cat "$T/follow")" "stage.start"
 has "$(cat "$T/follow")" "stage/a/construct unit/a"
 lacks "$(cat "$T/follow")" "unit.add"
-/bin/sleep 1
-pgrep -f "tail -q -n 0 -F .*$T/hosts" >/dev/null && fail "a tail outlived crew events --follow"
+untailed() { ! pgrep -f "tail -q -n 0 -F .*$T/hosts" >/dev/null; }
+until_ok untailed || fail "a tail outlived crew events --follow"
 ok "events --follow prints an entry another host writes while it runs, and leaves no tail behind"
 
 day=2026-10-05; sig=$day-swb-2-conductor/01-cfn-nag; u=cfn-nag-security-check

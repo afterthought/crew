@@ -29,7 +29,9 @@ field() { local a=$1 f=$2; shift 2; last "$a" "$@" | jq -r --arg f "$f" 'if (.[$
 record_of() { as $box bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec'; }
 ends() { record_of | grep -c "^Ended: " || true; }
 short() { git -C "$k" rev-parse --short "$1"; }
-second() { python3 -c 'import time; time.sleep(1.1)'; }  # what was committed before a stage is in an earlier second
+# earlier <place>: its head committed a minute ago, so what was committed before a stage is in an earlier second
+# however soon the stage starts, with no wait on the clock (tests.8)
+earlier() { (cd "$1" && GIT_COMMITTER_DATE="@$(( $(date +%s) - 60 )) +0000" git commit -q --amend --no-edit); }
 # session_transcript <session>: the transcript the stub herdr wrote the session's prompt to, as crew finds it
 session_transcript() { as $box bash -c 'ls "$HOME"/.claude*/projects/*/"$1".jsonl | sort | head -1' _ "$1"; }
 
@@ -74,7 +76,7 @@ eq "$(field stage.end Observed stage/a/code)" "late"
 eq "$(field stage.end Tasks stage/a/code)" "2/2"
 ok "code quiet with a task open has not ended, and no read records it; once every task is ticked its end is recorded late, once"
 
-second
+earlier "$kd/places/a"
 expect_ok crew unit run a code "Fix these findings from the verify report: the footer."
 expect_ok crew unit wait a --timeout 0
 eq "$out" "code on a is still running after the wait's 0 ms: swb-1-unit-1 has been quiet for 0 minutes, under the limit of 15 minutes; nothing is recorded yet"
@@ -135,10 +137,10 @@ eq "$(ends)" "$n"
 ok "with no wait running, a stop-short ends the stage and tells the conductor the words, marked as from the agent; the conductor and an agent with no stage owed are refused"
 
 expect_ok crew unit run b construct
-crew unit wait b --stuck 3600000 --timeout 120000 > "$T/wait.out" 2>&1 &
+crew unit wait b --stuck 3600000 --timeout 1800000 > "$T/wait.out" 2>&1 &
 waiting=$!
 lock=$(home_of $box)/.local/state/swb-1-team/waits/unit-2.lock
-for _ in $(seq 100); do
+for _ in $(seq 3000); do
   python3 -c 'import fcntl, sys; f = open(sys.argv[1], "a"); fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$lock" 2>/dev/null || break
   python3 -c 'import time; time.sleep(0.2)'
 done
@@ -157,9 +159,9 @@ expect_ok crew unit run b code
 rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/b" "feat(b): task 1"
 looks() { grep -c " agent get swb-1-unit-2$" "$CREW_TEST_LOG" || true; }
 n=$(looks)
-crew unit wait b --stuck 3600000 --timeout 120000 > "$T/wait.out" 2>&1 &
+crew unit wait b --stuck 3600000 --timeout 1800000 > "$T/wait.out" 2>&1 &
 waiting=$!
-for _ in $(seq 100); do (( $(looks) > n )) && break; python3 -c 'import time; time.sleep(0.2)'; done
+for _ in $(seq 3000); do (( $(looks) > n )) && break; python3 -c 'import time; time.sleep(0.2)'; done
 python3 -c 'import time; time.sleep(1)'
 kill -0 $waiting 2>/dev/null || fail "the wait returned before the last task was ticked: $(cat "$T/wait.out")"
 rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \] 1.2/- [x] 1.2/'; commit_all "$kd/places/b" "feat(b): task 2"

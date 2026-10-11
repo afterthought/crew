@@ -19,7 +19,7 @@ p=$(herdr workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_
 herdr stub agent "$p"
 echo '{"session_id":"sid-1","source":"resume"}' | CLAUDE_ENV_FILE="$T/env" HERDR_ENV=1 HERDR_PANE_ID="$p" HERDR_BIN_PATH="$TESTS/stubs/herdr" hook
 eq "$(cat "$T/env")" "export CREW_AGENT=swb-1-conductor CREW_LABEL=wldn"
-for _ in $(seq 50); do [[ $(herdr agent get "$p" | jq -r .result.agent.name) == swb-1-conductor ]] && break; /bin/sleep 0.1; done
+for _ in $(seq 6000); do [[ $(herdr agent get "$p" | jq -r .result.agent.name) == swb-1-conductor ]] && break; /bin/sleep 0.1; done
 eq "$(herdr agent get "$p" | jq -r .result.agent.name)" "swb-1-conductor"
 eq "$(env -i HOME="$HOME" PATH="$PATH" bash -c ". '$T/env'; echo \$CREW_AGENT \$CREW_LABEL")" "swb-1-conductor wldn"
 ok "a session herdr resumed gets its crew identity back and its pane renamed"

@@ -152,7 +152,7 @@ git -C "$k" rev-parse --verify -q unit/hooked >/dev/null && fail "unit/hooked is
 eq "$(grep -c '^pre hooked present$' "$log")" "3"
 grep -q '^pre .* absent$' "$log" && fail "a pre-remove hook ran without the place's files:"$'\n'"$(cat "$log")"
 # wt runs the post-remove hook in the background once the place is gone; the stub sleep returns at once.
-for _ in $(seq 100); do grep -q '^post hooked' "$log" && break; python3 -c 'import time; time.sleep(0.1)'; done
+for _ in $(seq 6000); do grep -q '^post hooked' "$log" && break; python3 -c 'import time; time.sleep(0.1)'; done
 grep -qx 'post hooked absent' "$log" || fail "the post-remove hook never ran, or ran with the place there:"$'\n'"$(cat "$log")"
 ok "once the cause is cleared the next read runs the hooks, the place's files there before and gone after, and removes it and its branch"
 

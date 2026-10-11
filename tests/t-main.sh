@@ -91,7 +91,7 @@ HOST=$box crew main down wldn >/dev/null
 : > "$CREW_TEST_LOG"
 answer() {
   local i
-  for i in $(seq 300); do
+  for i in $(seq 6000); do
     grep -q "agent prompt wldn-design '" "$CREW_TEST_LOG" && grep -q "agent prompt wldn-ops '" "$CREW_TEST_LOG" &&
       grep -q "^$box wldn-3 agent get wldn-planner\$" "$CREW_TEST_LOG" && break
     /bin/sleep 0.1
@@ -116,7 +116,7 @@ HOST=$box crew main down wldn >/dev/null
 : > "$CREW_TEST_LOG"
 answer() {
   local i
-  for i in $(seq 300); do
+  for i in $(seq 6000); do
     grep -q "agent prompt wldn-dispatch-mac-studio '" "$CREW_TEST_LOG" &&
       grep -q "^$box wldn-3 agent get wldn-dispatch-$box\$" "$CREW_TEST_LOG" && break
     /bin/sleep 0.1

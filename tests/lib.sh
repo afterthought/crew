@@ -33,6 +33,12 @@ crewpy() { as "$HOST" python3 "$CREW/plugin/lib/crew.py" "$@"; }
 remote() { echo "$T/remotes/$1.git"; }
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# The real sleep, for a test's own waits: the stub's returns at once.
+zzz=$(type -a -P sleep | grep -vxF "$TESTS/stubs/sleep" | head -1)
+# until_ok <cmd...>: wait until the command succeeds, looking every tenth of a second for up to ten minutes, a limit
+# that holds on a host under heavy load (tests.8); the wait ends as soon as it succeeds, and returns non-zero when it
+# never did.
+until_ok() { local end=$((SECONDS + 600)); until "$@"; do (( SECONDS < end )) || return 1; "$zzz" 0.1; done; }
 ok() { echo "ok: $*"; }
 # expect_ok <cmd...>: it succeeds; its output is in $out
 expect_ok() { out=$("$@" 2>&1) || fail "expected success: $*"$'\n'"$out"; }

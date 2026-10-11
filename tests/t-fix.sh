@@ -167,7 +167,7 @@ nr=fix/console-pages/never-ready
 unit_status() { herdr_state $box wldn-1 ".agents[] | select(.name == \"$1\") | .status" 2>/dev/null || true; }
 CREW_AGENT=swb-2-conductor CREW_TEST_BLOCKED=swb-2-unit-3 CREW_TEST_LOG=$T/never-ready.log \
   crew fix swb-2 never-ready "The console never loads." > "$T/never-ready.out" 2>&1 & never_ready=$!
-for _ in $(seq 1200); do
+for _ in $(seq 6000); do
   [[ $(unit_status swb-2-unit-3) == blocked ]] && break
   kill -0 $never_ready 2>/dev/null || break
   /bin/sleep 0.1
