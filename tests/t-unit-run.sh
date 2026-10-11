@@ -3,7 +3,8 @@
 # starts a fresh one from that stage's definition, then sends its prompt; construct waits for each After unit's change,
 # code for the unit's own change to be committed, with no review between, and verify for every task ticked. A stage
 # that ends a rail row names the row's card to the conductor that owns it. A stage begins only once its agent's
-# transcript shows its prompt, sent once more when it does not; else it never started.
+# transcript shows its prompt, sent once more when it does not; else it never started, and when crew cannot tell,
+# nothing more is sent or pressed.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -107,6 +108,24 @@ expect_ok crew unit run a merge
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $kd/places/a"
 eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
 ok "verify is refused until every task is ticked; verify and merge start fresh at their efforts"
+
+# A merge whose prompt crew cannot tell was taken (teams.15): the prompt is left typed and the agent goes on a question,
+# so once the time passes crew reads it waiting there, sends nothing more and presses nothing; the stage never started.
+export CREW_TAKEN_WITHIN=1
+merge="'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
+cant="crew could not tell whether swb-1-unit-1 took its merge prompt for a: it is waiting on a question in its pane; nothing more was sent, and the stage is taken as never started: run it again with crew unit run a merge"
+as $box herdr --session wldn-1 stub leave swb-1-unit-1 1 blocked
+: > "$CREW_TEST_LOG"
+expect_fail "$cant" crew unit run a merge
+lacks "$out" "swb-1-unit-1 has a: merge"
+eq "$(grep -cxF "$box wldn-1 agent prompt swb-1-unit-1 $merge" "$CREW_TEST_LOG")" "1"
+grep -q "agent send-keys swb-1-unit-1 ctrl+c" "$CREW_TEST_LOG" && fail "crew pressed ctrl+c in a pane it could not read:"$'\n'"$(calls)"
+eq "$(starts stage/a/merge | tail -1)" "refused: $cant"
+lacks "$(cat "$stages")" "unit-1 a merge "
+eq "$(cat "$slots")" "unit-1 unit a $kd/places/a"
+as $box herdr --session wldn-1 stub status swb-1-unit-1 idle
+unset CREW_TAKEN_WITHIN
+ok "a merge crew cannot tell was taken is neither sent again nor pressed, and is refused, owed nothing, its slot held"
 
 for u in c d e; do crew unit run $u construct >/dev/null; done
 expect_fail "all 4 of swb-1's slots are in flight: unit-1 holds a; unit-2 holds c; unit-3 holds d; unit-4 holds e" crew unit run f construct

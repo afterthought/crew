@@ -14,7 +14,7 @@
 
 - [x] 3.1 Every stage `run_stage` starts begins only when its prompt is taken, and is otherwise recorded as refused, owed no end, and reported as never started with how to run it again (design.md, Task notes 3.1). Verify `tests/suite t-unit-run t-fix t-stage-ends` ends with "0 failed".
 - [x] 3.2 Ops's proof request is taken or sent again, and a proof whose request is not taken is reported as never started with no proof owed (design.md, Task notes 3.2). Verify `tests/suite t-stage-ends` ends with "0 failed".
-- [ ] 3.3 A merge whose prompt crew cannot tell was taken fails through `crew unit run` saying crew could not tell, with a refused start, no end owed and no `ctrl+c` sent (design.md, Task notes 3.3). Verify `tests/suite t-unit-run` ends with "0 failed".
+- [x] 3.3 A merge whose prompt crew cannot tell was taken fails through `crew unit run` saying crew could not tell, with a refused start, no end owed and no `ctrl+c` sent (design.md, Task notes 3.3). Verify `tests/suite t-unit-run` ends with "0 failed".
 - [ ] 3.4 A fix whose agent stays on a question in its pane fails through `crew fix` saying it never took its prompt because it was waiting on a question, with nothing typed (design.md, Task notes 3.4). Verify `tests/suite t-fix` ends with "0 failed".
 
 ## 4. The docs and the rule
