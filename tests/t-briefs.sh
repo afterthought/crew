@@ -146,6 +146,7 @@ expect_fail "no definition 'conductor' for a main level" crewpy brief wldn condu
 ok "every main-level brief prints for wldn with no unfilled token"
 
 expect_ok crewpy brief wldn operator
+has "$out" "deployed by the partition's main-level ops, \`wldn-ops\`, on the user's yes for that deploy"; has "$out" "never hand the user a deploy command"
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/operator.md left ${BASH_REMATCH[0]} unfilled"
 for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
 for want in "/crew page wldn\`" "open the file it prints in terminal-browser beside your pane" \

@@ -45,8 +45,8 @@ Adding, removing, resizing or moving a team is yours, on the user's word. The te
 
 1. Edit the team's entry as the user asked: its name (`<code>-<number>`), what it builds, its machine and session, and its `units`, the coders it runs side by side. Put a team only in a session the user named for it. A session that exists is not one to fill: if the user named none, ask which.
 2. Check that the host still evaluates: `nix eval --raw .#darwinConfigurations.<mac>.config.system.build.toplevel.drvPath` for a Mac, `.#nixosConfigurations.<box>…` for a box. Then commit (`feat(crew): …`) and push swancloud's main.
-3. Ask the user to deploy the team's host: `clan machines update <mac>`, or `workspace update <box>`. You never deploy.
-4. Once the user says it is deployed, and the host's `~/.config/crew/teams.json` has the change, start a new team with `{{TEAM_CMD}} up <team>` if the user wants it up before it has a bolt; otherwise the dispatcher starts it with its first bolt. A team being removed is closed first with `{{TEAM_CMD}} close <team>`, once it holds no bolt.
+3. The team's host is deployed by the partition's main-level ops, `{{MAIN_OPS}}`, on the user's yes for that deploy (`plan.14`; swancloud's `deploy.1`): tell it which host and why, `{{TEAM_CMD}} tell {{MAIN_OPS}} "<host> needs a deploy for <the team change>"`, and wait for it to say the host is deployed. You never deploy, and never hand the user a deploy command.
+4. Once the host is deployed, and the host's `~/.config/crew/teams.json` has the change, start a new team with `{{TEAM_CMD}} up <team>` if the user wants it up before it has a bolt; otherwise the dispatcher starts it with its first bolt. A team being removed is closed first with `{{TEAM_CMD}} close <team>`, once it holds no bolt.
 
 Something the user mentions that is a finding rather than a request for any agent, such as a defect noticed in passing, is recorded as a signal, quoting the user's words: {{SIGNAL}}
 
