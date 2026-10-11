@@ -1,6 +1,6 @@
 # crew fix <team> <name> "<what is wrong>": fix/<bolt>/<name> from the team's bolt at places/fix-<bolt>--<name>, a
 # fresh code agent in a free slot with the words given, and a merge into the bolt like a unit's. No change, no plan
-# record.
+# record. A fix's prompt not taken twice starts no stage, as a unit's does not.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
@@ -39,6 +39,21 @@ expect_ok crew fix swb-1 edge-sign-in "It still answers an object."
 has "$out" "swb-1-unit-1 has $fb: code, in $fp"
 eq "$(as $box cat .local/state/swb-1-team/slots)" "unit-1 fix $fb $fp"
 ok "a fix in flight run again starts again in its own slot and place"
+
+export CREW_TAKEN_WITHIN=1
+never="swb-1-unit-1 never took its fix prompt for $fb, sent twice; the stage never started and nothing is left typed in its pane: run it again with crew fix swb-1 edge-sign-in \"<what is wrong>\""
+as $box herdr --session wldn-1 stub leave swb-1-unit-1 2
+: > "$CREW_TEST_LOG"
+expect_fail "$never" crew fix swb-1 edge-sign-in "It answers an object still."
+eq "$(grep -c "^$box wldn-1 agent prompt swb-1-unit-1 'Fix: It answers an object still.'$" "$CREW_TEST_LOG")" "2"
+eq "$(refused "$fb")" "$never"
+lacks "$(as $box cat .local/state/swb-1-team/stages)" "unit-1 $fb fix "
+eq "$(slots_of swb-1)" "unit-1 fix $fb $fp"
+expect_ok crew fix swb-1 edge-sign-in "It answers an object still."
+has "$out" "swb-1-unit-1 has $fb: code, in $fp"
+has "$(as $box cat .local/state/swb-1-team/stages)" "unit-1 $fb fix "
+unset CREW_TAKEN_WITHIN
+ok "a fix whose prompt was not taken twice never started: refused, owed nothing, its slot held; run again, it starts"
 
 echo fixed > "$fp/sign-in"; commit_all "$fp" "fix: the edge sign-in answers a string"
 expect_ok crew fix swb-1 edge-sign-in --merge

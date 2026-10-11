@@ -2,7 +2,8 @@
 # is in flight; construct makes places/<unit> on unit/<unit> from the bolt; each stage ends the slot's agent and
 # starts a fresh one from that stage's definition, then sends its prompt; construct waits for each After unit's change,
 # code for the unit's own change to be committed, with no review between, and verify for every task ticked. A stage
-# that ends a rail row names the row's card to the conductor that owns it.
+# that ends a rail row names the row's card to the conductor that owns it. A stage begins only once its agent's
+# transcript shows its prompt, sent once more when it does not; else it never started.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -18,7 +19,7 @@ crew unit add queued-one "Later." --repo switchboard-kit >/dev/null
 export CREW_AGENT=swb-1-conductor
 slots=$(home_of $box)/.local/state/swb-1-team/slots
 last_launch() { tail -1 "$CREW_TEST_CLAUDE_LOG" | jq -r '([.argv | to_entries[] | select(.value == "--name") | .key][0]) as $i | "\(.argv[0:4] | join(" ")) | \(.argv[$i + 1]) | \(.cwd)"'; }
-prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
+prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
 
 expect_fail "bolt tenant-environments is held by no team yet" crew unit run a construct
 CREW_AGENT= crew bolt give swb-1 >/dev/null 2>&1
@@ -33,7 +34,7 @@ eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" 
 eq "$(cat "$kd/places/a/.prepared")" "$k"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort high | swb-1-unit-1 | $kd/places/a"
 p1=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-1") | .key')
-eq "$(prompt_to "$p1")" "'/opsx:propose a Unit a. Sources: books/x.md; switchboard-kit:docs/y.md.'"
+eq "$(prompt_to swb-1-unit-1)" "'/opsx:propose a Unit a. Sources: books/x.md; switchboard-kit:docs/y.md.'"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1 units"
 ok "construct takes a free slot, makes the unit's place from the bolt, and starts a fresh agent at high effort"
 
@@ -50,20 +51,61 @@ expect_ok crew unit run a code
 has "$out" "swb-1-unit-1 has a: code"
 grep -q "^$box wldn-1 agent prompt $p1 /exit" "$CREW_TEST_LOG" || fail "the construct agent was not ended"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $kd/places/a"
-eq "$(prompt_to "$p1")" "'/opsx:apply a'"
+eq "$(prompt_to swb-1-unit-1)" "'/opsx:apply a'"
 ok "code is refused until the change is committed, then starts fresh in the same slot at xhigh with nobody asked to approve"
+
+# A stage begins only when its agent takes its prompt (teams.15): sent once more when it was left typed, and when the
+# second is not taken either, the stage never started, and the same command run again starts it.
+export CREW_TAKEN_WITHIN=1
+stages=$(home_of $box)/.local/state/swb-1-team/stages
+starts() {  # starts <object>: each stage.start on it in the box's run record, "started" or "refused: <why>", one a line
+  as $box python3 -c 'import glob, os, sys; sys.path.insert(0, sys.argv[1]); import record
+for e in sorted((e for f in glob.glob(os.path.expanduser("~/.local/state/crew/wldn/runs/*/*.rec")) for e in record.parse(open(f).read())
+                 if e["Act"] == "stage.start" and sys.argv[2] in e["On"]), key=lambda e: (e["At"], e["Id"])):
+    print("refused: " + e["Refused"] if e.get("Refused") else "started")' "$CREW/plugin/lib" "$1"
+}
+sent() { grep -c "^$box wldn-1 agent prompt swb-1-unit-1 '/opsx:apply a'$" "$CREW_TEST_LOG" || true; }
+n=$(starts stage/a/code | wc -l)
+as $box herdr --session wldn-1 stub leave swb-1-unit-1 1
+: > "$CREW_TEST_LOG"
+expect_ok crew unit run a code
+has "$out" "swb-1-unit-1 has a: code"
+eq "$(sent)" "2"
+eq "$(starts stage/a/code | wc -l | tr -d ' ')" "$((n + 1))"
+eq "$(starts stage/a/code | tail -1)" "started"
+has "$(cat "$stages")" "unit-1 a code "
+ok "a code stage whose prompt was left typed is sent it once more, and starts once"
+
+never="swb-1-unit-1 never took its code prompt for a, sent twice; the stage never started and nothing is left typed in its pane: run it again with crew unit run a code"
+as $box herdr --session wldn-1 stub leave swb-1-unit-1 2
+: > "$CREW_TEST_LOG"
+expect_fail "$never" crew unit run a code
+lacks "$out" "swb-1-unit-1 has a: code"
+eq "$(sent)" "2"
+eq "$(starts stage/a/code | tail -1)" "refused: $never"
+lacks "$(cat "$stages")" "unit-1 a code "
+eq "$(cat "$slots")" "unit-1 unit a $kd/places/a"
+eq "$(herdr_state $box wldn-1 '.agents[] | select(.name == "swb-1-unit-1") | .typed // ""')" ""
+expect_ok crew unit wait a --timeout 0
+has "$out" "code on a has ended"
+expect_ok crew unit run a code
+has "$out" "swb-1-unit-1 has a: code"
+eq "$(starts stage/a/code | tail -1)" "started"
+has "$(cat "$stages")" "unit-1 a code "
+unset CREW_TAKEN_WITHIN
+ok "a code stage whose prompt was not taken twice never started: refused, owed nothing, its slot held; run again, it starts"
 
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
 expect_fail "unit a is in code, with these tasks still open: 1.2 task 2; 1.3 task 3" crew unit run a verify
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/a" "feat(a): tasks 2 and 3"
 expect_ok crew unit run a verify
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort high | swb-1-unit-1 | $kd/places/a"
-eq "$(prompt_to "$p1")" "'/opsx:verify a'"
+eq "$(prompt_to swb-1-unit-1)" "'/opsx:verify a'"
 expect_ok crew unit run a code "Fix these findings from the verify: the error names no unit."
-eq "$(prompt_to "$p1")" "'/opsx:apply a Fix these findings from the verify: the error names no unit.'"
+eq "$(prompt_to swb-1-unit-1)" "'/opsx:apply a Fix these findings from the verify: the error names no unit.'"
 expect_ok crew unit run a merge
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $kd/places/a"
-eq "$(prompt_to "$p1")" "'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
+eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
 ok "verify is refused until every task is ticked; verify and merge start fresh at their efforts"
 
 for u in c d e; do crew unit run $u construct >/dev/null; done

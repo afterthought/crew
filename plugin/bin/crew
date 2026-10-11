@@ -533,11 +533,27 @@ free_elsewhere() {  # a unit moved from another team's bolt in this checkout lea
   done
 }
 run_stage() {  # run_stage <slot> <stage> <prompt> <act> <held name> <object> <--on X...>: end the slot's agent, start
-  # the stage fresh and send it its prompt. The start is recorded as <act>, and its end is owed in the stages file.
-  local slot=$1 stage=$2 prompt=$3 act=$4 what=$5 obj=$6 err id; shift 6
+  # the stage fresh and send it its prompt, taken or sent again (teams.15). The start is recorded as <act>, and its end
+  # is owed in the stages file. A prompt the agent never took, or one crew can't tell it took, starts no stage: the start
+  # is recorded refused, no end is owed, the slot and its idle agent stay, and the command fails saying how to run the
+  # stage again.
+  local slot=$1 stage=$2 prompt=$3 act=$4 what=$5 obj=$6 err id rc=0 agent again; shift 6
   if ! err=$(stop "$slot" 2>&1); then echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1; fi
   start "$slot" "$stage" || exit 1
-  h agent prompt "$(pane_of "$slot")" "$prompt" >/dev/null
+  agent=$(name_of "$slot")
+  err=$(py stage-prompt "$agent" "$prompt" 2>&1 >/dev/null) || rc=$?
+  if (( rc )); then
+    case $obj in
+      unit/*) again="crew unit run $what $stage" ;;
+      *) if [[ $stage == merge ]]; then again="crew fix $TEAM ${obj##*/} --merge"; else again="crew fix $TEAM ${obj##*/} \"<what is wrong>\""; fi ;;
+    esac
+    if (( rc == 3 )); then
+      err="$agent never took its $stage prompt for $what, $err; the stage never started and nothing is left typed in its pane: run it again with $again"
+    else
+      err="crew could not tell whether $agent took its $stage prompt for $what: $err; nothing more was sent, and the stage is taken as never started: run it again with $again"
+    fi
+    echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1
+  fi
   id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act "$act" "$@" --why "${obj%%/*}(${what##*/}): start $stage" || true)
   [[ -n $id ]] && echo "$slot $what $stage $id $obj" >> "$STATE/stages"
   return 0
