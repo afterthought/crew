@@ -74,7 +74,7 @@ An answer on a verify card runs code with the findings the user chose, or merge.
 
 When the user wants a unit changed, from a batch's notes or in words to you, at any stage before it merges, run construct again with the user's words: `{{TEAM_CMD}} unit run <unit> construct "<the user's words>"`. crew marks the unit amended, a fresh construct agent writes the change again in the unit's slot and place, and code, verify and merge are refused until that construct has committed. Then the unit goes on from its tasks with no approval asked, and its revised change is in the next batch: tell the user so, saying what changed. This is for how a unit builds what it builds. When what it builds changes, that is its intent: tell `{{PLANNER}}`, who proposes the amendment.
 
-When crew tells you a unit's intent was amended, run construct again on it without waiting to be asked, `{{TEAM_CMD}} unit run <unit> construct`.
+When the user approves an amendment to a unit's intent, crew starts construct on it again itself and tells you: wait for it (`{{TEAM_CMD}} unit wait <unit>`) and close the card crew names; once that construct has committed, the unit goes on from its tasks. Any unit of your bolt that `{{TEAM_CMD}} bolts` shows as `amended` has no construct running, because it could not start or was not started: run construct on it without waiting to be asked, `{{TEAM_CMD}} unit run <unit> construct`. crew names such units when it greets you or brings you back.
 
 A unit that has merged into the bolt is not changed this way: a defect in it is a fix, and anything new is a unit, the planner's.
 

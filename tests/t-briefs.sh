@@ -105,7 +105,8 @@ for want in "plan proposed <n>" "plan agree <n>" "plan approve <n>\`, never on y
   "crew status swb-1\` once that agent settles" "tell the user once which worktree it is and what its work was" \
   "tell the user once which worktree it is and what crew named" "never approve or skip the kit's hooks yourself"; do has "$out" "$want"; done
 for want in "at any stage before it merges" "crew marks the unit amended" "the unit goes on from its tasks with no approval asked" \
-  "When crew tells you a unit's intent was amended, run construct again" "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
+  "crew starts construct on it again itself and tells you" "Any unit of your bolt that" "crew bolts\` shows as \`amended\` has no construct running" \
+  "tell \`wldn-planner\`, who proposes the amendment"; do has "$out" "$want"; done
 for want in "Send linked questions together" "with the documentation or reading it names" \
   "holds corrections to a unit in construct"; do has "$out" "$want"; done
 expect_ok crewpy brief swb-1 construct

@@ -9,7 +9,7 @@
 ## 2. A conductor brought back starts amended units
 
 - [x] 2.1 The greeting of `crew up`, `rebuild`, `restart` and `revive` opens with the line `plan _amended <team>` prints, and `crew resume` sends that line as a `[crew]` notice when it is not empty (design.md, Decision 5; Task notes 2.1). Verify `tests/suite t-greet t-revive t-resume` ends with "0 failed".
-- [ ] 2.2 `conductor.md` says crew starts an approved amendment's construct and tells it, and that any unit `crew bolts` shows as `amended` gets its construct run; `tests/t-briefs.sh` pins those phrases in place of "When crew tells you a unit's intent was amended, run construct again" (design.md, Decision 5). Verify `tests/suite t-briefs` ends with "0 failed".
+- [x] 2.2 `conductor.md` says crew starts an approved amendment's construct and tells it, and that any unit `crew bolts` shows as `amended` gets its construct run; `tests/t-briefs.sh` pins those phrases in place of "When crew tells you a unit's intent was amended, run construct again" (design.md, Decision 5). Verify `tests/suite t-briefs` ends with "0 failed".
 
 ## 3. Docs
 
