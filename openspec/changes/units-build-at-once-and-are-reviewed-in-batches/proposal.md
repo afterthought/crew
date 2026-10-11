@@ -60,6 +60,7 @@ plugin/roles/planner.md
 plugin/roles/construct.md
 plugin/roles/coder.md
 plugin/roles/verify.md
+plugin/roles/main-ops.md
 plugin/roles/reviewer.md
 plugin/skills/crew/SKILL.md
 README.md

@@ -283,7 +283,8 @@ ok "ops and every stage post no card, the landing card asks the proof's steps fo
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
 # a unit; the planner runs the reviewer and posts each batch's cards; construct writes Touches as a block crew reads;
 # the coder keeps both intents, settles, corrects only Touches, and submits where the kit uses sluice; verify names what
-# was changed and not declared; the reviewer writes its summary and nothing else.
+# was changed and not declared; the reviewer writes its summary and nothing else; main-ops checks the landing row before
+# it merges a bolt into main.
 expect_ok crewpy brief swb-1 conductor
 for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned\`" "with nobody asked to approve it" \
   "You post no card for a unit, and open nothing for a batch" "run construct again with them, word for word" \
@@ -321,4 +322,9 @@ for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but t
 done
 expect_ok crewpy brief wldn design; has "$out" "\`wldn-reviewer\`, started fresh for each batch"
 expect_ok crewpy brief swb-1 ops; has "$out" "(construct, code, verify, settle, merge)"
+expect_ok crewpy brief wldn main-ops
+for want in "plugin/bin/crew rail --label wldn\` carries its answer" \
+  "your merge in step 3, not step 5, is what puts it on main" "while a unit's latest change has been in no batch"; do
+  has "$out" "$want"
+done
 ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"
