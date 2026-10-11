@@ -130,7 +130,7 @@ None. crew has nothing to deploy; its proof before landing is the suite on the b
 
 ## Proof on real work
 
-Once the bolt has landed and every host has pulled, with the standing agents restarted:
+Worked by the partition's main-level ops once the bolt has landed and every host has pulled, with the standing agents restarted:
 - Give a team a bolt of three units, one with `After` on another. The two without start construct at once; the dependent's construct starts once its After unit's change is committed, and its merge is refused until the After unit has merged.
 - Two units whose Touches overlap build side by side; the later one's code prompt names the overlap, a forecast conflict between them gives it `After` on the earlier, and it merges after it.
 - A verified unit forecast to conflict with the bolt gets a settle stage, which ends at its commit.
