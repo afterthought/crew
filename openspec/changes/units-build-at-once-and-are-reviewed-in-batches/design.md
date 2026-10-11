@@ -72,9 +72,11 @@ A forecast is recorded once for a pair of heads, `forecast` in the run record wi
 Each carries the other unit's change path, its proposal's *Why* and *What Changes*, and the conflicting paths.
 
 - **With the bolt.** The later unit resolves in its place, rebased onto the bolt (`teams.13`).
-- **Between two unmerged units.** The conductor sets `crew unit after <later> <earlier>` (`roles.1`: a conductor sets `After` within its own bolt), crew merges the earlier unit's head into the later unit's place as for a dependent, the later unit resolves there, and it merges after the earlier one (`plan.13` as amended).
+- **Between two unmerged units.** The conductor sets `crew unit after <later> <earlier>` (`roles.1`: a conductor sets `After` within its own bolt), and the later unit's agent takes the earlier unit's work into its place itself, `git merge unit/<earlier>`, resolves the conflict there and commits; the later unit merges after the earlier one (`plan.13` as amended). crew does not make this merge, as it takes an After unit's head into a dependent's new place (decision 2): a forecast merge conflicts by definition, so crew could not finish it, and it would abort it as it aborts a take that conflicts.
 
 The earlier unit is never changed for it. `coder.md` gains how: read the other change, keep both intents, run the tests the paths affect, commit.
+
+The later unit's agent merging the earlier unit's work, here and at a rebase, stands in for a merge queue. sluice ([agentplot/sluice](https://github.com/agentplot/sluice), its statement in `agentplot/blueprints:design/sluice/requirements.md`) orders what is submitted, tests each candidate as it would land and names the later submission at fault, so where a kit merges through it (decision 8) that is where these merges are meant to go. (The user, 2026-10-11, on the card for this change's verify.)
 
 ### 6. The settle stage
 

@@ -79,11 +79,11 @@ A predicted conflict SHALL reach the later unit once for the same two heads, wit
 - **THEN** nothing is told again
 
 ### Requirement: A forecast conflict between two units orders them
-When a conflict is forecast between two units that have both not merged, the later unit SHALL gain `After` on the earlier one, take the earlier unit's work into its place as a dependent does, resolve the conflict there, and merge after it.
+When a conflict is forecast between two units that have both not merged, the later unit SHALL gain `After` on the earlier one and merge after it, and the later unit's agent SHALL take the earlier unit's work into its place and resolve the conflict there.
 
 #### Scenario: Two unmerged units
 - **WHEN** a conflict is forecast between A and B, A first, neither merged
-- **THEN** B gains `After: A`, B's place takes A's head, B resolves the conflict in its place, and B's merge waits for A's
+- **THEN** B gains `After: A`, B's agent takes A's work into B's place and resolves the conflict there, and B's merge waits for A's
 
 ### Requirement: A unit waiting to merge settles
 A unit that has delivered its verify and waits to merge, and that a forecast conflict or an amended `After` unit reaches, SHALL be given a settle stage: a fresh agent in its slot, with the coder's brief, prompted with the forecast or the amendment. The stage's deliverable SHALL be a commit on `unit/<unit>` made since the stage began; when nothing needs to change, its agent SHALL stop short saying so, and the unit goes on to merge.
