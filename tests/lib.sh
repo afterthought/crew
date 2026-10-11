@@ -132,6 +132,18 @@ gitconfig() {  # every host's git: an identity, and github.com over https rewrit
 	defaultBranch = main
 [advice]
 	detachedHead = false
+[gc]
+	auto = 0
+[maintenance]
+	auto = false
+[receive]
+	autogc = false
+[fetch]
+	writeCommitGraph = false
+[pack]
+	threads = 1
+[index]
+	threads = 1
 [protocol "file"]
 	allow = always
 [url "file://$T/remotes/"]
