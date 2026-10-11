@@ -4,7 +4,8 @@
 # commit the entries were read at; one the state no longer holds is labelled from its entries, and a unit whose host
 # does not answer has no stage. The page also holds the partition's board, as crew board reads it at the same commit,
 # with a host that does not answer in its attention, and opens on it: four lanes in the flywheel mockup's forms, for a
-# desktop and a phone, light and dark, with nothing loaded from outside the file.
+# desktop and a phone, light and dark, with nothing loaded from outside the file; a header naming every partition, the
+# others linked to their pages beside it; and the partition's teams to narrow it to.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -110,7 +111,7 @@ eq "$(j '[.nodes[].id] | join(" ")')" "$(pagedata | jq -r '[.nodes[].id] | join(
 has "$(j '[.nodes[].label] | join("|")')" "Ends </script><b>here</b> & more."
 lacks "$(cat "$T/page.html")" "</script><b>"
 rest=$(outside "$T/page.html")
-for no in "<script src" "<link" "@import" "http://" "https://" "src=" "href=" "url("; do lacks "$rest" "$no"; done
+for no in "<script src" "<link" "@import" "http://" "https://" "src=" "url("; do lacks "$rest" "$no"; done
 lacks "$(cat "$T/page.html")" "{{DATA}}"
 has "$rest" 'id="hide"'; has "$rest" 'id="find"'; has "$rest" 'id="bars"'; has "$rest" "prefers-color-scheme: dark"
 has "$rest" "Nothing has been recorded"
@@ -124,6 +125,16 @@ for form in .quote .sheet .slip .ledger .record .mark.attention .lg-unit.buildin
 for sample in atlas plan-decisions books Manrope "JetBrains Mono"; do lacks "$rest" "$sample"; done
 lacks "$rest" "innerHTML"
 ok "the page opens on the board view: the four lanes in the mockup's forms, a phone layout under 760 px and its dark colours, with none of its sample data or fonts, and no state set as markup"
+
+teams=$(home_of mac-studio)/.config/crew/teams.json
+eq "$(grep -o 'href="[^"]*"' <<<"$rest" | sort | tr '\n' ' ')" "$(jq -r '.partitions[].label | select(. != "wldn") | "href=\"../\(.)/page.html\""' "$teams" | sort | tr '\n' ' ')"
+lacks "$rest" 'href="../wldn/page.html"'
+has "$rest" '<span class="part" aria-current="page">wldn</span>'
+eq "$(grep -o 'class="part"[^>]*>[a-z0-9-]*<' <<<"$rest" | sed 's/.*>\(.*\)</\1/' | tr '\n' ' ')" "$(jq -r '.partitions[].label' "$teams" | tr '\n' ' ')"
+eq "$(j '[.board.teams[].team] | join(" ")')" "swb-1 swb-2 brd-1 atl-1"
+eq "$(j '.board.teams[0] | "\(.team) \(.kit) \(.host)"')" "swb-1 switchboard-kit chuck-herdr-alpha"
+has "$rest" 'id="team"'; has "$rest" "history.replaceState"; has "$rest" '"crew-page:" + D.label'
+ok "the header names every partition in the teams file's order, its own marked current and each other linked to its page beside this one, and offers the partition's teams to narrow the board to"
 
 # The command: the page written whole where it says, its path and what it was made from printed, nothing appended.
 mine=$(home_of mac-studio)/.local/state/crew/wldn

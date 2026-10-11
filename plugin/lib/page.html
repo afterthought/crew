@@ -1,7 +1,8 @@
 <!doctype html>
-<!-- crew's page: page.py puts the flywheel's data in the one placeholder below and writes the file whole. It opens on
-     the partition's board, and its lineage is the flow view, one switch away. Everything it draws is in this file: no
-     font, script or style is loaded from anywhere. Every label is set as text, never as markup. -->
+<!-- crew's page: page.py puts the partitions' links and the flywheel's data in the two placeholders below and writes
+     the file whole. It opens on the partition's board, narrowed to the team last chosen, and its lineage is the flow
+     view, one switch away. Everything it draws is in this file: no font, script or style is loaded from anywhere, and
+     the only links are to the other partitions' pages beside it. Every label is set as text, never as markup. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -49,6 +50,13 @@ h1,h2,h3,h4{margin:0;font-weight:700;text-wrap:balance}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
 .seg button{padding:3px 10px;font-size:12px;font-weight:600;color:var(--ink2)}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.parts{display:flex;flex-wrap:wrap;gap:2px}
+.parts .part{padding:2px 6px;border-radius:4px;font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--ink3);text-decoration:none;white-space:nowrap}
+.parts a.part:hover{color:var(--ink);background:var(--surface2)}
+.parts .part[aria-current]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent);border-radius:4px 4px 0 0}
+.team{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3)}
+.team select{padding:3px 6px;font-size:12px;max-width:100%}
+body[data-view="flow"] .team{display:none}
 
 /* ---------- the board view ---------- */
 #view-board{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
@@ -227,9 +235,11 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
 </head>
 <body data-view="board">
 <header class="top">
+  <nav class="parts" aria-label="Partitions"><!--{{PARTITIONS}}--></nav>
   <div class="seg" role="group" aria-label="View">
     <button type="button" data-view="board" aria-pressed="true">board</button><button type="button" data-view="flow" aria-pressed="false">flow</button>
   </div>
+  <label class="team">team <select id="team"></select></label>
   <span class="meta mono" id="made"></span>
 </header>
 <main id="view-board" aria-label="Board">
@@ -741,7 +751,54 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     return layout;
   })();
 
-  // ------------------------------------------------------------------------------------------------ the views
+  // ------------------------------------------------------------------------------------------- the team and the view
+  // Each is kept in the page's address (#team=<name>&view=flow), so a reload or a page written over this one opens
+  // on it, and in the browser for this partition, for when the address names none. The browser may refuse its
+  // storage, on a page opened from disk or in a private window; the address alone then keeps it. A team the
+  // partition no longer has is shown as all teams, and the address is left as it is.
+  var KEY = "crew-page:" + D.label + ":";
+  function stored(k) { try { return localStorage.getItem(KEY + k); } catch (e) { return null; } }
+  function store(k, v) { try { localStorage.setItem(KEY + k, v); } catch (e) { /* the address keeps it */ } }
+  function fragment() {
+    var f = {};
+    location.hash.replace(/^#/, "").split("&").forEach(function (kv) {
+      var i = kv.indexOf("=");
+      if (i > 0) {
+        try { f[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1)); } catch (e) { /* not ours */ }
+      }
+    });
+    return f;
+  }
+  function keep(k, v) {
+    var f = fragment();
+    f[k] = v;
+    var hash = Object.keys(f).filter(function (x) { return f[x]; })
+      .map(function (x) { return encodeURIComponent(x) + "=" + encodeURIComponent(f[x]); }).join("&");
+    try {
+      history.replaceState(null, "", location.pathname + location.search + (hash ? "#" + hash : ""));
+    } catch (e) {
+      location.replace("#" + hash);
+    }
+    store(k, v);
+  }
+
+  var TEAMS = B.teams.map(function (t) { return t.team; }), pick = $("team");
+  pick.append(el("option", null, "all teams"));
+  pick.options[0].value = "";
+  B.teams.forEach(function (t) {
+    var o = el("option", null, t.team + " on " + t.host);
+    o.value = t.team;
+    o.title = t.kit;
+    pick.append(o);
+  });
+  function team(t) {
+    t = TEAMS.indexOf(t) >= 0 ? t : "";
+    pick.value = t;
+    document.body.dataset.team = t;
+    narrow(t);
+  }
+  pick.addEventListener("change", function () { team(pick.value); keep("team", pick.value); });
+
   var VIEWS = { board: $("view-board"), flow: $("view-flow") };
   function view(v) {
     v = VIEWS[v] ? v : "board";
@@ -751,10 +808,17 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     document.title = D.label + " " + v;
     if (v === "flow") flowShown();
   }
-  document.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { view(b.dataset.view); }); });
+  document.querySelectorAll(".seg button").forEach(function (b) {
+    b.addEventListener("click", function () { view(b.dataset.view); keep("view", b.dataset.view === "flow" ? "flow" : ""); });
+  });
 
-  narrow("");
-  view("board");
+  function open() {
+    var f = fragment();
+    team("team" in f ? f.team : stored("team"));
+    view("view" in f ? f.view : stored("view"));
+  }
+  window.addEventListener("hashchange", open);
+  open();
 })();
 </script>
 </body>

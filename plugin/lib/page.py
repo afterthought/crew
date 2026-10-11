@@ -14,7 +14,7 @@ how they are linked and each one's history are read from the run record's entrie
 the board read, at the commit the entries were read at, which a command fetches once (plan.12); no entry holds them
 (record.3). The file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and
 making it appends no entry (state.4, record.1)."""
-import argparse, datetime, json, os, pathlib, sys, tempfile
+import argparse, datetime, html, json, os, pathlib, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -23,6 +23,7 @@ from crew import Refusal, fail  # noqa: E402
 
 TEMPLATE = LIB / "page.html"
 DATA = "/*{{DATA}}*/"
+PARTITIONS = "<!--{{PARTITIONS}}-->"
 # The page's columns, in the flow's order.
 COLUMNS = ("signals/", "agenda/", "proposal/", "unit/", "bolt/")
 # Present status, as the page colours it: open, in flight, done or dropped; None when it can't be told.
@@ -133,14 +134,22 @@ def header(made):
             + (f" for the run record, {plan_tip[:7]} for the board and labels" if plan_tip and plan_tip != made["commit"] else ""))
 
 
+def nav(labels, label):
+    """The partitions in the teams file's order, this page's marked current and each other a link to its page beside
+    this one, as crew lays the pages out (../<label>/page.html), so pages served side by side are a step apart."""
+    return "".join(f'<span class="part" aria-current="page">{html.escape(l)}</span>' if l == label
+                   else f'<a class="part" href="../{html.escape(l)}/page.html">{html.escape(l)}</a>' for l in labels)
+
+
 def render(d):
-    """The page: the template with the data in its one placeholder, as JSON a script block can hold, every < escaped
-    so nothing in it can end the block."""
+    """The page: the template with the partitions' links in their placeholder, and the data in its own, as JSON a
+    script block can hold, every < escaped so nothing in it can end the block."""
     text = json.dumps(d, separators=(",", ":"), ensure_ascii=False)
     text = text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
     page = TEMPLATE.read_text()
-    page.count(DATA) == 1 or fail(f"{TEMPLATE} must hold its data placeholder {DATA} once")
-    return page.replace(DATA, text)
+    for mark in (DATA, PARTITIONS):
+        page.count(mark) == 1 or fail(f"{TEMPLATE} must hold its placeholder {mark} once")
+    return page.replace(PARTITIONS, nav(d["partitions"], d["label"])).replace(DATA, text)
 
 
 def write(path, text):
