@@ -1,36 +1,183 @@
 <!doctype html>
-<!-- crew's lineage page: page.py puts the flywheel's data in the one placeholder below and writes the file whole.
-     Everything it draws is in this file: no font, script or style is loaded from anywhere. Every label is set as
-     text, never as markup. -->
+<!-- crew's page: page.py puts the flywheel's data in the one placeholder below and writes the file whole. It opens on
+     the partition's board, and its lineage is the flow view, one switch away. Everything it draws is in this file: no
+     font, script or style is loaded from anywhere. Every label is set as text, never as markup. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>crew lineage</title>
+<title>crew</title>
 <style>
-:root {
+/* The page and its board view are styled as the flywheel mockup's phases view, agentplot/blueprints
+   design/flywheel-next/mockups/rail-and-board.html: its colour tokens, light and dark (lines 232 to 248), its base rules
+   (251 to 256), the header (263, 267), the hosts strip (281 to 291), .dot (351, 356), the segmented control (365 to
+   367), .lanes and .lane with Bolt plan's hatch (371, 431 to 439), .sec-h and .empty (440 to 442), .sheet and .slip (512
+   to 535), .ledger (574 to 599), .record (614 to 626), .quote (627 to 633), .marks and .mark (666 to 669), and the
+   phone's .lanes and .lane (from 1016: 1035, 1044). Its web fonts give way to their system fallbacks, the sheet's
+   minimum height is dropped, and so is the pointer over the forms, since nothing on the board is clicked. A restyle
+   starts there. */
+:root{
+  --bg:#EEF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --ink:#16202A; --ink2:#4A5763; --ink3:#7A8794;
+  --line:#D5DBE1; --line2:#E4E8EC; --accent:#0B6E79; --accent-ink:#FFFFFF; --accent-soft:#D9EEF0; --accent-hatch:rgba(11,110,121,.10);
+  --ok:#2E8B57; --warn:#B7791F; --crit:#B3362B; --lit:#FFF3C4; --lit-line:#E5C34A;
+  --top:46px; --hosts:40px;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#12171C; --surface:#1A2128; --surface2:#20282F; --ink:#E6EBEF; --ink2:#A9B4BE; --ink3:#74818C;
+  --line:#2A333C; --line2:#232C34; --accent:#4FB3BF; --accent-ink:#0E1A1C; --accent-soft:#173A3E; --accent-hatch:rgba(79,179,191,.10);
+  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#12171C; --surface:#1A2128; --surface2:#20282F; --ink:#E6EBEF; --ink2:#A9B4BE; --ink3:#74818C;
+  --line:#2A333C; --line2:#232C34; --accent:#4FB3BF; --accent-ink:#0E1A1C; --accent-soft:#173A3E; --accent-hatch:rgba(79,179,191,.10);
+  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; color-scheme:dark; }
+
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 var(--sans);overflow:hidden;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+input:focus,textarea:focus,select:focus,button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+h1,h2,h3,h4{margin:0;font-weight:700;text-wrap:balance}
+.mono{font-family:var(--mono)}
+
+/* ---------- the header ---------- */
+.top{flex:none;min-height:var(--top);display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .meta{margin-left:auto;color:var(--ink3);font-size:12px;overflow-wrap:anywhere}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{padding:3px 10px;font-size:12px;font-weight:600;color:var(--ink2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+
+/* ---------- the board view ---------- */
+#view-board{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.hosts{flex:none;min-height:var(--hosts);display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:4px 14px;border-bottom:1px solid var(--line);background:var(--surface2)}
+.hosts .lab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700;margin-right:4px;white-space:nowrap}
+.host{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px 3px 6px;font-size:12px;white-space:nowrap}
+.host .hn{font:600 12px var(--mono)}
+.host .hm{color:var(--ink3)}
+.host.gone{border-color:var(--warn)}
+.host.gone .hm b{color:var(--warn)}
+.hosts .sep{width:1px;height:20px;background:var(--line);margin:0 4px;flex:none}
+.hosts .mark{white-space:normal;overflow-wrap:anywhere}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.dot.gone{background:var(--crit)}
+.lanes{flex:1;min-height:0;overflow-x:auto;display:grid;grid-template-columns:minmax(225px,.95fr) minmax(185px,.6fr) minmax(330px,1.45fr) minmax(215px,.9fr)}
+.lane{overflow:auto;padding:10px 10px 60px;border-right:1px solid var(--line2)}
+.lane:last-child{border-right:0}
+.lane.plan{background:repeating-linear-gradient(-45deg,transparent 0 8px,var(--accent-hatch) 8px 9px),var(--bg);border-left:1px dashed var(--line);border-right:1px dashed var(--line)}
+.lane-h{display:flex;align-items:baseline;gap:8px;margin:2px 2px 10px;flex-wrap:wrap}
+.lane-h h2{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.lane-h .sub{font-size:11.5px;color:var(--ink3)}
+.lane-h .n{margin-left:auto;font:600 11px var(--mono);color:var(--ink3)}
+.lane-h .gate{font:600 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 5px}
+.lane-h .ro{font:600 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);border:1px solid var(--line);border-radius:3px;padding:0 5px}
+.sec-h{display:flex;align-items:baseline;gap:8px;margin:14px 2px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700}
+.sec-h .r{letter-spacing:0;text-transform:none;font-weight:500;font-size:11.5px}
+.empty{color:var(--ink3);font-size:12.5px;padding:6px 4px}
+/* a signal: no box, the quotation and its left rule; who captured them counted above */
+.counter{margin:12px 2px 0;font:600 11px var(--mono);color:var(--ink2)}
+.counter:first-child{margin-top:0}
+.quote{border-left:2px solid var(--line);padding:2px 0 2px 10px;margin:7px 0 4px;font-size:12px;color:var(--ink2)}
+.quote q{quotes:"“" "”";font-style:italic;color:var(--ink)}
+.quote .qm{display:block;font:11px var(--mono);color:var(--ink3);margin-top:3px}
+.quote .qm b{color:var(--ink2);font-weight:500}
+.quote .qm .dim{opacity:.65}
+/* an exploration: its kit greyed, its name, its first line */
+.xp{padding:4px 2px 6px;border-bottom:1px solid var(--line2);font-size:12px}
+.xp .xp-kit{font:11px var(--mono);color:var(--ink3);margin-right:6px}
+.xp .xp-n{font-weight:700}
+.xp .xp-t{color:var(--ink2)}
+/* sheet: a document (a proposal); title line, section rules, mono metadata */
+.sheet{position:relative;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--ink2);border-radius:1px;padding:10px 12px 9px;margin:0 8px 14px 4px;box-shadow:3px 3px 0 var(--line2);display:flex;flex-direction:column}
+.sheet .sh-k{font:600 9.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.sheet .sh-title{font-family:var(--sans);font-size:15px;font-weight:800;letter-spacing:-.01em;border-bottom:1px solid var(--ink);padding:1px 0 4px;margin-bottom:5px;line-height:1.2}
+.sheet .sh-meta{font:11px var(--mono);color:var(--ink3);line-height:1.5}
+.sheet .sh-foot{margin-top:auto;padding-top:6px;border-top:1px solid var(--line2);font:11px var(--mono);color:var(--ink3)}
+/* slip: a queued unit, hanging off the head above it */
+.slip{position:relative;margin:-8px 8px 12px 30px;background:var(--surface2);border:1px solid var(--line);border-left:0;border-radius:0 3px 3px 0;padding:5px 9px 6px;font-size:12px}
+.slip::before{content:"";position:absolute;left:-16px;top:-8px;width:15px;height:18px;border-left:2px solid var(--ink3);border-bottom:2px solid var(--ink3);border-radius:0 0 0 8px}
+.slip::after{content:"";position:absolute;left:-1px;top:6px;bottom:6px;width:2px;background:var(--ink3);border-radius:1px}
+.sec-h+.slip{margin-top:10px}
+.slip .sl-k{font:600 9.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-right:6px}
+.slip .sl-repo{font:11px var(--mono);color:var(--ink3);margin-right:6px}
+.slip .sl-n{font-weight:700;font-size:12.5px}
+.slip .sl-to{display:block;font:11px var(--mono);color:var(--ink2);margin-top:2px}
+/* ledger: a bolt is a machine; flat, square, units as a chain left to right */
+.ledger{background:var(--surface2);border:1px solid var(--ink3);border-radius:0;margin-bottom:12px;font-size:12px}
+.ledger .lg-head{display:flex;align-items:baseline;gap:8px;padding:5px 9px;background:var(--surface);border-bottom:1px solid var(--ink3);font:600 12px var(--mono)}
+.ledger .lg-head .lg-repo{color:var(--ink3);font-weight:400}
+.ledger .lg-head .lg-run{margin-left:auto;font-weight:400;color:var(--ink2);white-space:nowrap}
+.ledger .lg-chain{display:flex;flex-wrap:wrap;align-items:flex-start;padding:8px 6px 4px}
+.ledger .lg-unit{border:1px solid var(--line);background:var(--surface);padding:3px 7px;font:11.5px var(--mono);white-space:nowrap;max-width:100%;margin-bottom:4px}
+.ledger .lg-unit.merged{color:var(--ink3);background:transparent}
+.ledger .lg-unit.merged::before{content:"✓ ";color:var(--ok)}
+.ledger .lg-unit.building{border:1.5px solid var(--accent);color:var(--ink);white-space:normal;flex-basis:100%;padding:3px 5px 5px;min-width:0}
+.ledger .lg-unit.building .lg-un{font-weight:700}
+.ledger .lg-unit.building .lg-ut{color:var(--ink3);margin-left:6px}
+.ledger .lg-unit.queued{border-style:dashed;color:var(--ink2)}
+.ledger .lg-unit.queued .lg-ut{color:var(--ink3);margin-left:6px}
+.ledger .lg-unit .lg-at{display:block;color:var(--ink3);font-size:11px}
+.ledger .lg-arrow{color:var(--ink3);font:11px var(--mono);padding:3px 4px;margin-bottom:4px}
+.ledger .lg-mach{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 9px;border-top:1px dashed var(--ink3);font:11px var(--mono);color:var(--ink3)}
+.ledger .lg-mach .lg-fn{color:var(--ink2);font-weight:600}
+.ledger .lg-foot{display:flex;gap:10px;padding:5px 9px;border-top:1px solid var(--ink3);font:11px var(--mono);color:var(--ink3);overflow:hidden;background:var(--surface)}
+.ledger .lg-foot .ep{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ledger .marks{padding:0 9px 8px;margin-top:6px}
+.ledger .lg-unit .marks{padding:0;margin-top:4px}
+/* record: a landed bolt is history; no border, muted, its landing as a stamp */
+.record{padding:8px 4px 10px;margin-bottom:2px;border-bottom:1px solid var(--line2);color:var(--ink2);background:transparent}
+.record .rc-head{display:flex;align-items:baseline;gap:8px}
+.record .rc-name{font-weight:600;color:var(--ink2);font-size:13px}
+.record .rc-at{margin-left:auto;font:11px var(--mono);color:var(--ink3);white-space:nowrap}
+.record .rc-stamp{display:inline-block;margin:6px 0 2px;border:1.5px solid var(--ink3);border-radius:3px;padding:1px 7px;font:700 10.5px var(--mono);letter-spacing:.06em;color:var(--ink3);transform:rotate(-2deg);opacity:.85;text-transform:uppercase}
+.record .rc-env{font:11px var(--mono);color:var(--ink3);margin-top:3px}
+/* a marker: every decision sits on its object */
+.marks{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.mark{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 6px;background:var(--surface2)}
+.mark .mk-t{font-weight:500}
+.mark.approve{color:var(--accent);border-color:var(--accent)} .mark.answer{color:var(--crit);border-color:var(--crit)} .mark.attention{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+/* long names and addresses break rather than run past the edge */
+.sh-title,.sh-meta,.sh-foot,.sl-n,.sl-to,.lg-name,.lg-un,.lg-at,.lg-mach,.rc-name,.rc-env,.quote,.xp,.counter,.mark{overflow-wrap:anywhere}
+
+@media (max-width:759px){
+  :root{--hosts:38px}
+  html,body{height:auto}
+  body{display:block;overflow:visible}
+  .top{gap:6px 8px;padding:6px 10px}
+  .top .meta{margin-left:0;flex-basis:100%}
+  #view-board{display:block}
+  .lanes{grid-template-columns:1fr;grid-auto-rows:auto;overflow:visible}
+  .lane{overflow:visible;border-right:0;border-bottom:1px solid var(--line);padding-bottom:16px}
+  .ledger .lg-head{flex-wrap:wrap}
+  .ledger .lg-head .lg-run{margin-left:0;white-space:normal}
+  .ledger .lg-unit{white-space:normal}
+  .ledger .lg-foot .ep{white-space:normal;overflow-wrap:anywhere}
+  .record .rc-head{flex-wrap:wrap}
+  #view-flow{overflow:visible}
+}
+
+/* ---------- the flow view: the lineage, with its own colours ---------- */
+#view-flow {
   color-scheme: light dark;
   --bg: #f7f7f5; --fg: #1d1d1f; --muted: #66666c; --card: #ffffff; --border: #d9d9de; --line: #b9b9c0;
   --mark: #2f62c9; --open: #2f62c9; --flight: #b8720a; --done: #2b7d4f; --dropped: #8a8a90; --unknown: #c4c4ca;
   --warn: #a8261b; --bar: #c9ccd4;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  #view-flow {
     --bg: #151517; --fg: #e9e9eb; --muted: #9c9ca3; --card: #1f1f23; --border: #34343b; --line: #4d4d55;
     --mark: #7ea6ff; --open: #7ea6ff; --flight: #e5a640; --done: #62c48d; --dropped: #8a8a90; --unknown: #5c5c63;
     --warn: #ff8f84; --bar: #3d4049;
   }
 }
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+#view-flow { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px; background: var(--bg); color: var(--fg);
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-h1 { font-size: 18px; margin: 0 0 4px; }
-h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
-code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
-#made { margin: 0; color: var(--muted); }
-#unreachable { margin: 4px 0 0; padding: 0; list-style: none; color: var(--warn); }
-#controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 12px 0; }
+#view-flow h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
+#view-flow code, #view-flow .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+#unreachable { margin: 0; padding: 0; list-style: none; color: var(--warn); }
+#controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0 0 12px; }
 #controls input[type=search] { font: inherit; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--card); color: var(--fg); min-width: 12em; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 12px; }
@@ -78,12 +225,24 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
 .copy { user-select: all; -webkit-user-select: all; white-space: nowrap; }
 </style>
 </head>
-<body>
-<header>
-  <h1 id="title">crew lineage</h1>
-  <p id="made"></p>
-  <ul id="unreachable"></ul>
+<body data-view="board">
+<header class="top">
+  <div class="seg" role="group" aria-label="View">
+    <button type="button" data-view="board" aria-pressed="true">board</button><button type="button" data-view="flow" aria-pressed="false">flow</button>
+  </div>
+  <span class="meta mono" id="made"></span>
 </header>
+<main id="view-board" aria-label="Board">
+  <div class="hosts" id="strip" aria-label="Hosts and attention"></div>
+  <div class="lanes">
+    <section class="lane inception" id="lane-inception" aria-label="Inception"></section>
+    <section class="lane plan" id="lane-plan" aria-label="Bolt plan"></section>
+    <section class="lane construction" id="lane-construction" aria-label="Construction"></section>
+    <section class="lane operation" id="lane-operation" aria-label="Operation"></section>
+  </div>
+</main>
+<main id="view-flow" aria-label="Flow" hidden>
+<ul id="unreachable"></ul>
 <div id="controls">
   <label><input type="checkbox" id="hide"> Hide closed and landed work</label>
   <input type="search" id="find" placeholder="Narrow by name" aria-label="Narrow by name">
@@ -107,16 +266,13 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     <tbody id="rows"></tbody>
   </table></div>
 </section>
+</main>
 <script type="application/json" id="data">/*{{DATA}}*/</script>
 <script>
 (function () {
   "use strict";
   var D = JSON.parse(document.getElementById("data").textContent);
-  var COLS = [["signals", "Signals"], ["agenda", "Agenda"], ["proposal", "Proposals"], ["unit", "Units"], ["bolt", "Bolts"]];
-  var KIND = { signals: "signal", agenda: "agenda item", proposal: "proposal", unit: "unit", bolt: "bolt" };
-  var byId = new Map(), out = new Map(), into = new Map(), nodeEl = new Map(), cols = [], lineEls = [], selected = null;
   var $ = function (id) { return document.getElementById(id); };
-  var board = $("board"), svg = $("lines"), NS = svg.namespaceURI, hide = $("hide"), find = $("find");
 
   function el(tag, cls, text) {
     var x = document.createElement(tag);
@@ -124,218 +280,481 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     if (text != null) x.textContent = text;
     return x;
   }
-  function push(m, k, v) { if (!m.has(k)) m.set(k, []); m.get(k).push(v); }
-  function when(at) { return at.slice(0, 10) + " " + at.slice(11, 19); }
-  function shown(n) {
-    if (n.kind === "signals") return n.name.split("/").pop();
-    if (n.kind === "agenda") return "item " + n.name;
-    if (n.kind === "proposal") return "proposal " + n.name;
-    return n.name;
-  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
 
-  D.nodes.forEach(function (n) { byId.set(n.id, n); });
-  D.edges.forEach(function (e) { push(out, e.from, e.to); push(into, e.to, e.from); });
-
-  // What the page was made from.
+  // What the page was made from: when, and the commit of the branch; both commits, should the board's read have
+  // found the branch at another.
   var m = D.made;
-  document.title = m.label + " lineage";
-  $("title").textContent = m.label + " lineage";
   $("made").textContent = "as of " + m.at.slice(0, 10) + " " + m.at.slice(11, 16) + "Z · " + m.label + "/main " + m.commit.slice(0, 7)
+    + (m.plan && m.plan !== m.commit ? " for the run record, " + m.plan.slice(0, 7) + " for the board and labels" : "")
     + " of " + m.repo + (m.since ? " · since " + m.since : "");
-  Object.keys(m.unreachable || {}).forEach(function (h) {
-    $("unreachable").append(el("li", null, h + " did not answer: " + m.unreachable[h] + "; what it had not yet carried is not shown"));
-  });
-  var ids = Object.keys(D.entries);
-  if (!ids.length) {
-    $("empty").textContent = "Nothing has been recorded" + (m.since ? " since " + m.since : "") + ".";
-    $("empty").hidden = false;
+
+  // ------------------------------------------------------------------------------------------------ the board view
+  var B = D.board, readAt = Date.parse(B.read_at);
+
+  // How long before the board was read: a time in its two largest units, as crew says it (14m, 3h 05m, 2d 04h); a
+  // date alone in whole days. Null when it is neither.
+  function ago(at) {
+    if (!at) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(at)) return Math.max(0, Math.floor((readAt - Date.parse(at + "T00:00:00Z")) / 86400000)) + "d";
+    var t = Date.parse(at);
+    if (isNaN(t)) return null;
+    var mins = Math.floor((readAt - t) / 60000);
+    if (mins < 1) return "<1m";
+    if (mins < 60) return mins + "m";
+    var h = Math.floor(mins / 60);
+    if (h < 24) return h + "h " + pad(mins % 60) + "m";
+    return Math.floor(h / 24) + "d " + pad(h % 24) + "h";
+  }
+  // A time in the viewer's own zone.
+  function local(at) {
+    var t = new Date(at);
+    if (isNaN(t)) return at || "";
+    return t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate()) + " " + pad(t.getHours()) + ":" + pad(t.getMinutes());
   }
 
-  // The columns, each object once, newest first.
-  COLS.forEach(function (c) {
-    var col = el("section", "col"), h = el("h2"), count = el("span", "count"), list = el("div", "list"), none = el("p", "none", "none");
-    h.append(el("span", null, c[1]), count);
-    col.append(h, list);
-    var mine = D.nodes.filter(function (n) { return n.kind === c[0]; });
-    mine.sort(function (a, b) { return a.first < b.first ? 1 : a.first > b.first ? -1 : a.id < b.id ? -1 : 1; });
-    mine.forEach(function (n) { var x = box(n); list.append(x); nodeEl.set(n.id, x); });
-    list.append(none);
-    cols.push({ count: count, none: none, nodes: mine });
-    $("cols").append(col);
-  });
-
-  function box(n) {
-    var x = el("div", "node s-" + (n.status || "unknown") + (n.gone ? " gone" : ""));
-    x.tabIndex = 0;
-    x.setAttribute("role", "button");
-    x.title = n.id + (n.gone ? " (no longer in the state; labelled from its entries)" : "");
-    x.append(el("div", "name", shown(n)));
-    if (n.label) x.append(el("div", "label", n.label));
-    var facts = (n.facts || []).filter(Boolean);
-    if (facts.length) x.append(el("div", "facts", facts.join(" · ")));
-    x.addEventListener("click", function () { select(n.id); });
-    x.addEventListener("keydown", function (ev) {
-      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); }
-    });
+  // A lane: its head, then sections of objects, each object carrying the teams it belongs to; the empty line last.
+  var LANES = [];
+  function lane(id, title, sub, chip) {
+    var sec = $(id), h = el("div", "lane-h"), n = el("span", "n");
+    h.append(el("h2", null, title), el("span", "sub", sub));
+    if (chip) h.append(el("span", chip, chip === "ro" ? "observed" : "gate"));
+    h.append(n);
+    sec.append(h);
+    var L = { sec: sec, n: n, empty: el("div", "empty"), sections: [] };
+    LANES.push(L);
+    return L;
+  }
+  function section(L, head) {
+    var s = { head: head ? el("div", "sec-h", head) : null, objs: [] };
+    if (s.head) L.sec.append(s.head);
+    L.sections.push(s);
+    return s;
+  }
+  function obj(s, x, teams, weight) {
+    x.dataset.teams = (teams || []).join(" ");
+    s.objs.push({ el: x, n: weight || 1 });
     return x;
   }
 
-  function visible(n) {
-    if (n.id === selected) return true;
-    if (hide.checked && (n.status === "done" || n.status === "dropped")) return false;
-    var q = find.value.trim().toLowerCase();
-    return !q || n.id.toLowerCase().indexOf(q) >= 0 || (n.label || "").toLowerCase().indexOf(q) >= 0;
-  }
-
-  function layout() {
-    cols.forEach(function (c) {
-      var k = 0;
-      c.nodes.forEach(function (n) { var v = visible(n); nodeEl.get(n.id).hidden = !v; if (v) k++; });
-      c.count.textContent = k === c.nodes.length ? String(k) : k + " of " + c.nodes.length;
-      c.none.hidden = k > 0;
+  // Each marker on its object: ✓ an approval, ✎ an answer, with whether its card is open and who asked it; ! for
+  // attention. Nothing here answers anything.
+  var MARK = { "✓": "approve", "✎": "answer" };
+  function marks(x, ms, attention) {
+    var row = el("div", "marks");
+    (ms || []).forEach(function (k) {
+      var s = el("span", "mark " + (MARK[k.glyph] || ""));
+      s.append(el("span", null, k.glyph), el("span", "mk-t", k.card ? "card open, asked by " + k.card.by : "no card"));
+      s.title = k.key;
+      row.append(s);
     });
-    draw();
-    mark();
+    if (attention) row.append(el("span", "mark attention", "! " + attention));
+    if (row.childNodes.length) x.append(row);
   }
 
-  // A straight line from each object to each it led to, both shown.
-  function draw() {
-    svg.replaceChildren();
-    lineEls = [];
-    svg.setAttribute("width", board.scrollWidth);
-    svg.setAttribute("height", board.scrollHeight);
-    var b = board.getBoundingClientRect();
-    D.edges.forEach(function (e) {
-      var a = nodeEl.get(e.from), z = nodeEl.get(e.to);
-      if (!a || !z || a.hidden || z.hidden) return;
-      var ra = a.getBoundingClientRect(), rz = z.getBoundingClientRect();
-      var l = document.createElementNS(NS, "line");
-      l.setAttribute("x1", ra.right - b.left + board.scrollLeft);
-      l.setAttribute("y1", ra.top + ra.height / 2 - b.top + board.scrollTop);
-      l.setAttribute("x2", rz.left - b.left + board.scrollLeft);
-      l.setAttribute("y2", rz.top + rz.height / 2 - b.top + board.scrollTop);
-      svg.append(l);
-      lineEls.push({ l: l, e: e });
-    });
-  }
-
-  // Everything the selected object came from, and everything that came from it.
-  function closure(id) {
-    var seen = new Set([id]);
-    [out, into].forEach(function (g) {
-      var q = [id], here = new Set([id]);
-      while (q.length) {
-        (g.get(q.pop()) || []).forEach(function (y) { if (!here.has(y)) { here.add(y); seen.add(y); q.push(y); } });
+  // A bolt's units as a chain, in plan order: merged and landed as done links, a unit being built with its stage,
+  // tasks, slot and dev server, and every other one queued with its stage beside its name; all of them queued for a
+  // bolt no team holds.
+  var BUILDING = ["construct", "code", "verify", "settle"], MERGED = ["merged", "landed"];
+  function chain(x, units, queued) {
+    if (!units.length) return;
+    var c = el("div", "lg-chain");
+    units.forEach(function (u, i) {
+      if (i) c.append(el("span", "lg-arrow", "→"));
+      var kind = queued ? "queued" : MERGED.indexOf(u.stage) >= 0 ? "merged" : BUILDING.indexOf(u.stage) >= 0 ? "building" : "queued";
+      var link = el("div", "lg-unit " + kind);
+      link.append(el("span", "lg-un", u.unit));
+      if (kind === "merged") link.title = u.stage;
+      if (kind === "queued") link.append(el("span", "lg-ut", u.stage || "unknown"));
+      if (kind === "building") {
+        var tasks = (u.stage === "code" || u.stage === "verify") && u.tasks ? " " + u.tasks[0] + "/" + u.tasks[1] : "";
+        link.append(el("span", "lg-ut", u.stage + tasks));
+        var at = [u.slot, u.url].filter(Boolean).join(" · ");
+        if (at) link.append(el("span", "lg-at", at));
       }
+      marks(link, u.markers);
+      c.append(link);
     });
-    return seen;
+    x.append(c);
+  }
+  function ledgerHead(x, repo, bolt, run) {
+    var h = el("div", "lg-head");
+    if (repo) h.append(el("span", "lg-repo", repo));
+    h.append(el("span", "lg-name", bolt));
+    if (run) h.append(el("span", "lg-run", run));
+    x.append(h);
   }
 
-  function mark() {
-    var on = selected ? closure(selected) : null;
-    document.body.classList.toggle("selecting", !!on);
-    nodeEl.forEach(function (x, id) {
-      x.classList.toggle("marked", !!on && on.has(id));
-      x.classList.toggle("selected", id === selected);
-      x.setAttribute("aria-pressed", id === selected ? "true" : "false");
-    });
-    lineEls.forEach(function (o) { o.l.classList.toggle("marked", !!on && on.has(o.e.from) && on.has(o.e.to)); });
-    history();
-    timeline();
-  }
-
-  function select(id) {
-    selected = selected === id ? null : id;
-    layout();
-  }
-
-  function cell(tr, text, cls, title) {
-    var td = el("td", cls, text);
-    if (title) td.title = title;
-    tr.append(td);
-    return td;
-  }
-
-  function history() {
-    var rows = $("rows");
-    rows.replaceChildren();
-    $("history").hidden = !selected;
-    if (!selected) {
-      $("sel-title").textContent = "Select an object to see its history.";
-      $("sel-label").textContent = "";
-      return;
+  // The hosts the board asked, a silent one marked, then what needs attention. Never narrowed.
+  var strip = $("strip");
+  strip.append(el("span", "lab", "hosts"));
+  Object.keys(B.hosts).forEach(function (h) {
+    var v = B.hosts[h], pill = el("span", "host" + (v === true ? "" : " gone")), hm = el("span", "hm");
+    if (v === true) {
+      hm.textContent = "answered";
+    } else {
+      hm.append(el("b", null, "did not answer"));
+      pill.title = v;
     }
-    var n = byId.get(selected);
-    $("sel-title").textContent = KIND[n.kind] + " " + n.name;
-    $("sel-label").textContent = n.label || "";
-    (D.histories[selected] || []).forEach(function (id) {
-      var e = D.entries[id];
-      if (!e) return;
-      var tr = el("tr", e.Refused ? "refused" : null), commits = e.Commit || [];
-      cell(tr, when(e.At), "at mono", e.Id);
-      cell(tr, e.Act || "?", "act mono");
-      cell(tr, e.By || "?", "who");
-      cell(tr, e.Host || "?", "who");
-      cell(tr, commits.map(function (c) { return c.split("@").pop().slice(0, 7); }).join(", ") || "-", "commit mono", commits.join("\n"));
-      cell(tr, (e.On || []).join(" ") + ((e.From || []).length ? " ← " + e.From.join(" ") : ""), "mono");
-      cell(tr, e.Refused ? "refused: " + e.Refused : e.Why || "");
-      var s = cell(tr, "");
-      var at = (e.Session || "").indexOf(":");
-      if (at > 0) {
-        s.append(el("code", "copy", "zoe " + e.Session.slice(at + 1)), " on ", el("code", "copy", e.Session.slice(0, at)));
+    pill.append(el("span", "dot" + (v === true ? "" : " gone")), el("span", "hn", h), hm);
+    strip.append(pill);
+  });
+  var SAID = {
+    host: function (a) { return a.name + " did not answer (" + a.why + ")"; },
+    plan: function (a) { return "the plan, " + a.name + ": " + a.why; },
+    signals: function (a) { return "the signals on " + a.name + ": " + a.why; },
+    landed: function (a) { return "bolt " + a.name + ": " + a.why; }
+  };
+  if (B.attention.length) strip.append(el("span", "sep"));
+  B.attention.forEach(function (a) {
+    strip.append(el("span", "mark attention", "! " + (SAID[a.what] ? SAID[a.what](a) : a.name + ": " + a.why)));
+  });
+
+  // Inception: the signals no move has taken, by who captured them, oldest first; then the explorations.
+  var inc = lane("lane-inception", "Inception", "signals not moved · explorations");
+  var sigs = section(inc, null), groups = new Map();
+  B.inception.signals.forEach(function (s) {
+    var k = s.captured_by || "";
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(s);
+  });
+  groups.forEach(function (mine, who) {
+    var g = el("div", "signals"), oldest = mine.map(function (s) { return ago(s.at); }).filter(Boolean)[0];
+    g.append(el("div", "counter", (who || "no one named") + " · " + mine.length + " not moved" + (oldest ? " · oldest " + oldest : "")));
+    mine.forEach(function (s) {
+      var q = el("div", "quote"), qm = el("span", "qm");
+      q.append(el("q", null, s.first || s.signal));
+      qm.append(el("b", null, s.kind || "-"), " · " + (ago(s.at) || "-") + " · ", el("span", "dim", s.signal));
+      q.append(qm);
+      g.append(q);
+    });
+    inc.sec.append(obj(sigs, g, mine[0].teams, mine.length));
+  });
+  var xps = section(inc, "explorations");
+  B.inception.explorations.forEach(function (e) {
+    var x = el("div", "xp");
+    x.append(el("span", "xp-kit", e.kit), el("span", "xp-n", e.name));
+    if (e.first) x.append(el("div", "xp-t", e.first));
+    inc.sec.append(obj(xps, x, e.teams));
+  });
+
+  // Bolt plan, the gate: each open proposal a sheet, each planned bolt a ledger no team holds, each queued unit a slip.
+  var bp = lane("lane-plan", "Bolt plan", "proposals · planned bolts · the queue", "gate");
+  var sheets = section(bp, null);
+  B.bolt_plan.proposals.forEach(function (d) {
+    var x = el("article", "sheet");
+    x.append(el("span", "sh-k", "proposal " + d.proposal), el("div", "sh-title", d.case || "proposal " + d.proposal),
+      el("div", "sh-meta", "by " + (d.by || "-") + " · opened " + (d.opened || "-")));
+    if (d.waiting.length) x.append(el("div", "sh-foot", "waiting on " + d.waiting.map(function (t) { return t + "-conductor"; }).join(", ")));
+    marks(x, d.markers);
+    bp.sec.append(obj(sheets, x, d.teams));
+  });
+  var planned = section(bp, "planned");
+  B.bolt_plan.planned.forEach(function (b) {
+    var x = el("div", "ledger");
+    ledgerHead(x, b.repo, b.bolt, null);
+    if (b.goal) x.title = b.goal;
+    chain(x, b.units, true);
+    bp.sec.append(obj(planned, x, b.teams));
+  });
+  var queue = section(bp, "queue");
+  B.bolt_plan.queue.slice().sort(function (a, b) { return (a.repo || "") < (b.repo || "") ? -1 : (a.repo || "") > (b.repo || "") ? 1 : 0; })
+    .forEach(function (u) {
+      var x = el("div", "slip");
+      x.append(el("span", "sl-k", "queued"));
+      if (u.repo) x.append(el("span", "sl-repo", u.repo));
+      x.append(el("span", "sl-n", u.unit));
+      if (u.sources.length) x.append(el("span", "sl-to", u.sources.join(", ")));
+      bp.sec.append(obj(queue, x, u.teams));
+    });
+
+  // Construction: each held bolt a ledger, headed by its repository, its name, its team and host, and its state when
+  // it is not active; its units as a chain, its fixes on the machinery row, its server at the foot.
+  var con = lane("lane-construction", "Construction", "held bolts · units in flight");
+  var ledgers = section(con, null);
+  B.construction.forEach(function (b) {
+    var x = el("div", "ledger");
+    ledgerHead(x, b.repo, b.bolt, (b.host ? b.team + " on " + b.host : b.team || "") + (b.state !== "active" ? " · " + b.state : ""));
+    if (b.goal) x.title = b.goal;
+    marks(x, b.markers, b.state === "landed" ? "every unit has landed, and the bolt is still in the plan" : null);
+    chain(x, b.units);
+    b.fixes.forEach(function (f) {
+      var r = el("div", "lg-mach");
+      r.append(el("span", null, f.merged ? "fix merged" : "fix"), el("span", "lg-fn", f.fix));
+      [f.slot, f.url].filter(Boolean).forEach(function (t) { r.append(el("span", null, t)); });
+      x.append(r);
+    });
+    if (b.url) {
+      var foot = el("div", "lg-foot");
+      foot.append(el("span", null, "server"), el("span", "ep", b.url));
+      x.append(foot);
+    }
+    con.sec.append(obj(ledgers, x, b.teams));
+  });
+
+  // Operation, observed: each bolt landed in the last seven days a record, newest first.
+  var op = lane("lane-operation", "Operation", "landed in the last 7 days", "ro");
+  var records = section(op, null);
+  B.operation.forEach(function (o) {
+    var x = el("div", "record"), h = el("div", "rc-head");
+    h.append(el("span", "rc-name", o.bolt), el("span", "rc-at", o.at ? local(o.at) : ""));
+    x.append(h, el("span", "rc-stamp", "landed" + (o.by ? " by " + o.by : "")));
+    var env = [o.team, o.units.join(", ")].filter(Boolean).join(" · ");
+    if (env) x.append(el("div", "rc-env", env));
+    op.sec.append(obj(records, x, o.teams));
+  });
+  LANES.forEach(function (L) { L.sec.append(L.empty); });
+
+  // Each lane shows the objects of the team chosen, or all of them; a section with none left loses its head, and a
+  // lane with none says so. Units and fixes go with their ledger.
+  function narrow(team) {
+    LANES.forEach(function (L) {
+      var k = 0;
+      L.sections.forEach(function (s) {
+        var shown = 0;
+        s.objs.forEach(function (o) {
+          var v = !team || o.el.dataset.teams.split(" ").indexOf(team) >= 0;
+          o.el.hidden = !v;
+          if (v) { shown++; k += o.n; }
+        });
+        if (s.head) s.head.hidden = !shown;
+      });
+      L.n.textContent = String(k);
+      L.empty.textContent = team ? "nothing here for " + team : "nothing here";
+      L.empty.hidden = k > 0;
+    });
+  }
+
+  // ------------------------------------------------------------------------------------------------ the flow view
+  var flowShown = (function () {
+    var COLS = [["signals", "Signals"], ["agenda", "Agenda"], ["proposal", "Proposals"], ["unit", "Units"], ["bolt", "Bolts"]];
+    var KIND = { signals: "signal", agenda: "agenda item", proposal: "proposal", unit: "unit", bolt: "bolt" };
+    var byId = new Map(), out = new Map(), into = new Map(), nodeEl = new Map(), cols = [], lineEls = [], selected = null;
+    var board = $("board"), svg = $("lines"), NS = svg.namespaceURI, hide = $("hide"), find = $("find");
+
+    function push(m, k, v) { if (!m.has(k)) m.set(k, []); m.get(k).push(v); }
+    function when(at) { return at.slice(0, 10) + " " + at.slice(11, 19); }
+    function shown(n) {
+      if (n.kind === "signals") return n.name.split("/").pop();
+      if (n.kind === "agenda") return "item " + n.name;
+      if (n.kind === "proposal") return "proposal " + n.name;
+      return n.name;
+    }
+
+    D.nodes.forEach(function (n) { byId.set(n.id, n); });
+    D.edges.forEach(function (e) { push(out, e.from, e.to); push(into, e.to, e.from); });
+
+    Object.keys(m.unreachable || {}).forEach(function (h) {
+      $("unreachable").append(el("li", null, h + " did not answer: " + m.unreachable[h] + "; what it had not yet carried is not shown"));
+    });
+    var ids = Object.keys(D.entries);
+    if (!ids.length) {
+      $("empty").textContent = "Nothing has been recorded" + (m.since ? " since " + m.since : "") + ".";
+      $("empty").hidden = false;
+    }
+
+    // The columns, each object once, newest first.
+    COLS.forEach(function (c) {
+      var col = el("section", "col"), h = el("h2"), count = el("span", "count"), list = el("div", "list"), none = el("p", "none", "none");
+      h.append(el("span", null, c[1]), count);
+      col.append(h, list);
+      var mine = D.nodes.filter(function (n) { return n.kind === c[0]; });
+      mine.sort(function (a, b) { return a.first < b.first ? 1 : a.first > b.first ? -1 : a.id < b.id ? -1 : 1; });
+      mine.forEach(function (n) { var x = box(n); list.append(x); nodeEl.set(n.id, x); });
+      list.append(none);
+      cols.push({ count: count, none: none, nodes: mine });
+      $("cols").append(col);
+    });
+
+    function box(n) {
+      var x = el("div", "node s-" + (n.status || "unknown") + (n.gone ? " gone" : ""));
+      x.tabIndex = 0;
+      x.setAttribute("role", "button");
+      x.title = n.id + (n.gone ? " (no longer in the state; labelled from its entries)" : "");
+      x.append(el("div", "name", shown(n)));
+      if (n.label) x.append(el("div", "label", n.label));
+      var facts = (n.facts || []).filter(Boolean);
+      if (facts.length) x.append(el("div", "facts", facts.join(" · ")));
+      x.addEventListener("click", function () { select(n.id); });
+      x.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); }
+      });
+      return x;
+    }
+
+    function visible(n) {
+      if (n.id === selected) return true;
+      if (hide.checked && (n.status === "done" || n.status === "dropped")) return false;
+      var q = find.value.trim().toLowerCase();
+      return !q || n.id.toLowerCase().indexOf(q) >= 0 || (n.label || "").toLowerCase().indexOf(q) >= 0;
+    }
+
+    function layout() {
+      cols.forEach(function (c) {
+        var k = 0;
+        c.nodes.forEach(function (n) { var v = visible(n); nodeEl.get(n.id).hidden = !v; if (v) k++; });
+        c.count.textContent = k === c.nodes.length ? String(k) : k + " of " + c.nodes.length;
+        c.none.hidden = k > 0;
+      });
+      draw();
+      mark();
+    }
+
+    // A straight line from each object to each it led to, both shown.
+    function draw() {
+      svg.replaceChildren();
+      lineEls = [];
+      svg.setAttribute("width", board.scrollWidth);
+      svg.setAttribute("height", board.scrollHeight);
+      var b = board.getBoundingClientRect();
+      D.edges.forEach(function (e) {
+        var a = nodeEl.get(e.from), z = nodeEl.get(e.to);
+        if (!a || !z || a.hidden || z.hidden) return;
+        var ra = a.getBoundingClientRect(), rz = z.getBoundingClientRect();
+        var l = document.createElementNS(NS, "line");
+        l.setAttribute("x1", ra.right - b.left + board.scrollLeft);
+        l.setAttribute("y1", ra.top + ra.height / 2 - b.top + board.scrollTop);
+        l.setAttribute("x2", rz.left - b.left + board.scrollLeft);
+        l.setAttribute("y2", rz.top + rz.height / 2 - b.top + board.scrollTop);
+        svg.append(l);
+        lineEls.push({ l: l, e: e });
+      });
+    }
+
+    // Everything the selected object came from, and everything that came from it.
+    function closure(id) {
+      var seen = new Set([id]);
+      [out, into].forEach(function (g) {
+        var q = [id], here = new Set([id]);
+        while (q.length) {
+          (g.get(q.pop()) || []).forEach(function (y) { if (!here.has(y)) { here.add(y); seen.add(y); q.push(y); } });
+        }
+      });
+      return seen;
+    }
+
+    function mark() {
+      var on = selected ? closure(selected) : null;
+      document.body.classList.toggle("selecting", !!on);
+      nodeEl.forEach(function (x, id) {
+        x.classList.toggle("marked", !!on && on.has(id));
+        x.classList.toggle("selected", id === selected);
+        x.setAttribute("aria-pressed", id === selected ? "true" : "false");
+      });
+      lineEls.forEach(function (o) { o.l.classList.toggle("marked", !!on && on.has(o.e.from) && on.has(o.e.to)); });
+      history();
+      timeline();
+    }
+
+    function select(id) {
+      selected = selected === id ? null : id;
+      layout();
+    }
+
+    function cell(tr, text, cls, title) {
+      var td = el("td", cls, text);
+      if (title) td.title = title;
+      tr.append(td);
+      return td;
+    }
+
+    function history() {
+      var rows = $("rows");
+      rows.replaceChildren();
+      $("history").hidden = !selected;
+      if (!selected) {
+        $("sel-title").textContent = "Select an object to see its history.";
+        $("sel-label").textContent = "";
+        return;
       }
-      rows.append(tr);
-    });
-  }
+      var n = byId.get(selected);
+      $("sel-title").textContent = KIND[n.kind] + " " + n.name;
+      $("sel-label").textContent = n.label || "";
+      (D.histories[selected] || []).forEach(function (id) {
+        var e = D.entries[id];
+        if (!e) return;
+        var tr = el("tr", e.Refused ? "refused" : null), commits = e.Commit || [];
+        cell(tr, when(e.At), "at mono", e.Id);
+        cell(tr, e.Act || "?", "act mono");
+        cell(tr, e.By || "?", "who");
+        cell(tr, e.Host || "?", "who");
+        cell(tr, commits.map(function (c) { return c.split("@").pop().slice(0, 7); }).join(", ") || "-", "commit mono", commits.join("\n"));
+        cell(tr, (e.On || []).join(" ") + ((e.From || []).length ? " ← " + e.From.join(" ") : ""), "mono");
+        cell(tr, e.Refused ? "refused: " + e.Refused : e.Why || "");
+        var s = cell(tr, "");
+        var at = (e.Session || "").indexOf(":");
+        if (at > 0) {
+          s.append(el("code", "copy", "zoe " + e.Session.slice(at + 1)), " on ", el("code", "copy", e.Session.slice(0, at)));
+        }
+        rows.append(tr);
+      });
+    }
 
-  // Entries per day, from the first day recorded to the last; the selected object's entries marked on their days.
-  var days = [], perDay = new Map();
-  ids.forEach(function (id) { var d = D.entries[id].At.slice(0, 10); perDay.set(d, (perDay.get(d) || 0) + 1); });
-  if (ids.length) {
-    var sorted = Array.from(perDay.keys()).sort();
-    var t = Date.parse(sorted[0] + "T00:00:00Z"), last = Date.parse(sorted[sorted.length - 1] + "T00:00:00Z");
-    for (; t <= last; t += 86400000) days.push(new Date(t).toISOString().slice(0, 10));
-  }
-  var most = Math.max.apply(null, [1].concat(Array.from(perDay.values())));
-  var bars = days.map(function (d) {
-    var k = perDay.get(d) || 0, bar = el("div", "bar" + (k ? "" : " empty")), sel = el("div", "sel");
-    bar.style.height = (k ? Math.max(4, 100 * k / most) : 100) + "%";
-    bar.title = d + ": " + k + (k === 1 ? " entry" : " entries");
-    bar.append(sel);
-    $("bars").append(bar);
-    return { day: d, k: k, bar: bar, sel: sel };
-  });
-  if (days.length) {
-    $("axis").append(el("span", null, days[0]), el("span", null, days.length > 1 ? days[days.length - 1] : ""));
-  } else {
-    $("timeline").hidden = true;
-  }
-
-  function timeline() {
-    var mine = new Map();
-    if (selected) (D.histories[selected] || []).forEach(function (id) {
-      var e = D.entries[id];
-      if (e) { var d = e.At.slice(0, 10); mine.set(d, (mine.get(d) || 0) + 1); }
+    // Entries per day, from the first day recorded to the last; the selected object's entries marked on their days.
+    var days = [], perDay = new Map();
+    ids.forEach(function (id) { var d = D.entries[id].At.slice(0, 10); perDay.set(d, (perDay.get(d) || 0) + 1); });
+    if (ids.length) {
+      var sorted = Array.from(perDay.keys()).sort();
+      var t = Date.parse(sorted[0] + "T00:00:00Z"), last = Date.parse(sorted[sorted.length - 1] + "T00:00:00Z");
+      for (; t <= last; t += 86400000) days.push(new Date(t).toISOString().slice(0, 10));
+    }
+    var most = Math.max.apply(null, [1].concat(Array.from(perDay.values())));
+    var bars = days.map(function (d) {
+      var k = perDay.get(d) || 0, bar = el("div", "bar" + (k ? "" : " empty")), sel = el("div", "sel");
+      bar.style.height = (k ? Math.max(4, 100 * k / most) : 100) + "%";
+      bar.title = d + ": " + k + (k === 1 ? " entry" : " entries");
+      bar.append(sel);
+      $("bars").append(bar);
+      return { day: d, k: k, bar: bar, sel: sel };
     });
-    bars.forEach(function (b) {
-      var k = mine.get(b.day) || 0;
-      b.bar.classList.toggle("on", k > 0);
-      b.sel.style.height = b.k ? (100 * k / b.k) + "%" : "0";
-      b.bar.title = b.day + ": " + b.k + (b.k === 1 ? " entry" : " entries") + (k ? ", " + k + " of the selected " + KIND[byId.get(selected).kind] : "");
-    });
-  }
+    if (days.length) {
+      $("axis").append(el("span", null, days[0]), el("span", null, days.length > 1 ? days[days.length - 1] : ""));
+    } else {
+      $("timeline").hidden = true;
+    }
 
-  hide.checked = D.nodes.length > 40;
-  hide.addEventListener("change", layout);
-  find.addEventListener("input", layout);
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && selected) select(selected); });
-  var pending = false;
-  window.addEventListener("resize", function () {
-    if (pending) return;
-    pending = true;
-    requestAnimationFrame(function () { pending = false; draw(); mark(); });
-  });
-  layout();
+    function timeline() {
+      var mine = new Map();
+      if (selected) (D.histories[selected] || []).forEach(function (id) {
+        var e = D.entries[id];
+        if (e) { var d = e.At.slice(0, 10); mine.set(d, (mine.get(d) || 0) + 1); }
+      });
+      bars.forEach(function (b) {
+        var k = mine.get(b.day) || 0;
+        b.bar.classList.toggle("on", k > 0);
+        b.sel.style.height = b.k ? (100 * k / b.k) + "%" : "0";
+        b.bar.title = b.day + ": " + b.k + (b.k === 1 ? " entry" : " entries") + (k ? ", " + k + " of the selected " + KIND[byId.get(selected).kind] : "");
+      });
+    }
+
+    hide.checked = D.nodes.length > 40;
+    hide.addEventListener("change", layout);
+    find.addEventListener("input", layout);
+    document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && selected) select(selected); });
+    var pending = false;
+    window.addEventListener("resize", function () {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(function () { pending = false; draw(); mark(); });
+    });
+    // Its lines are drawn where its objects stand, so it is laid out whenever it is shown.
+    return layout;
+  })();
+
+  // ------------------------------------------------------------------------------------------------ the views
+  var VIEWS = { board: $("view-board"), flow: $("view-flow") };
+  function view(v) {
+    v = VIEWS[v] ? v : "board";
+    Object.keys(VIEWS).forEach(function (k) { VIEWS[k].hidden = k !== v; });
+    document.body.dataset.view = v;
+    document.querySelectorAll(".seg button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.view === v ? "true" : "false"); });
+    document.title = D.label + " " + v;
+    if (v === "flow") flowShown();
+  }
+  document.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { view(b.dataset.view); }); });
+
+  narrow("");
+  view("board");
 })();
 </script>
 </body>

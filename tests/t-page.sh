@@ -3,7 +3,8 @@
 # object's history is what crew trace prints for it. Labels and present status come from the flywheel's state at the
 # commit the entries were read at; one the state no longer holds is labelled from its entries, and a unit whose host
 # does not answer has no stage. The page also holds the partition's board, as crew board reads it at the same commit,
-# with a host that does not answer in its attention.
+# with a host that does not answer in its attention, and opens on it: four lanes in the flywheel mockup's forms, for a
+# desktop and a phone, light and dark, with nothing loaded from outside the file.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -109,11 +110,20 @@ eq "$(j '[.nodes[].id] | join(" ")')" "$(pagedata | jq -r '[.nodes[].id] | join(
 has "$(j '[.nodes[].label] | join("|")')" "Ends </script><b>here</b> & more."
 lacks "$(cat "$T/page.html")" "</script><b>"
 rest=$(outside "$T/page.html")
-for no in "<script src" "<link" "http://" "https://" "src=" "href=" "url("; do lacks "$rest" "$no"; done
+for no in "<script src" "<link" "@import" "http://" "https://" "src=" "href=" "url("; do lacks "$rest" "$no"; done
 lacks "$(cat "$T/page.html")" "{{DATA}}"
 has "$rest" 'id="hide"'; has "$rest" 'id="find"'; has "$rest" 'id="bars"'; has "$rest" "prefers-color-scheme: dark"
 has "$rest" "Nothing has been recorded"
 ok "the page holds its data in one block, escaped so typed text cannot end it, and loads nothing from outside the file"
+
+has "$rest" '<body data-view="board">'
+has "$rest" "@media (max-width:759px)"; has "$rest" "prefers-color-scheme:dark"; has "$rest" ':root[data-theme="dark"]'
+for lane in Inception "Bolt plan" Construction Operation; do has "$rest" "aria-label=\"$lane\""; done
+has "$rest" "repeating-linear-gradient"; has "$rest" "design/flywheel-next/mockups/rail-and-board.html"
+for form in .quote .sheet .slip .ledger .record .mark.attention .lg-unit.building; do has "$rest" "$form"; done
+for sample in atlas plan-decisions books Manrope "JetBrains Mono"; do lacks "$rest" "$sample"; done
+lacks "$rest" "innerHTML"
+ok "the page opens on the board view: the four lanes in the mockup's forms, a phone layout under 760 px and its dark colours, with none of its sample data or fonts, and no state set as markup"
 
 # The command: the page written whole where it says, its path and what it was made from printed, nothing appended.
 mine=$(home_of mac-studio)/.local/state/crew/wldn
