@@ -29,8 +29,11 @@ record_of() { as $box bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec';
 ends() { record_of | grep -c "^Ended: " || true; }
 short() { git -C "$k" rev-parse --short "$1"; }
 second() { python3 -c 'import time; time.sleep(1.1)'; }  # what was committed before a stage is in an earlier second
+# session_transcript <session>: the transcript the stub herdr wrote the session's prompt to, as crew finds it
+session_transcript() { as $box bash -c 'ls "$HOME"/.claude*/projects/*/"$1".jsonl | sort | head -1' _ "$1"; }
 
 expect_ok crew unit run a construct
+rm "$(session_transcript "sid-$(pane swb-1-unit-1 | tr : -)")"  # a session whose transcript is gone
 expect_ok crew unit wait a --stuck 0 --timeout 0
 eq "$out" "swb-1-unit-1 is stuck in construct on a: quiet for 0 minutes, with nothing committed and nothing it needs said; crew could not read whether it waits on work of its own (no transcript for its session sid-$(pane swb-1-unit-1 | tr : -))"
 eq "$(ends)" "0"
@@ -85,14 +88,15 @@ mkdir -p "$reports"; old=$reports/verify-a-20260101-0000.md
 echo "an old report" > "$old"; touch -t 202601010000 "$old"
 expect_ok crew unit run a verify
 sid=sid-$(pane swb-1-unit-1 | tr : -)
+tx=$(session_transcript "$sid")
 long=$(ago 30)
-transcript $box "$sid" >/dev/null <<EOF
+cat > "$tx" <<EOF
 {"type":"assistant","timestamp":"$long","message":{"content":[{"type":"tool_use","name":"Bash"}]}}
 {"type":"user","timestamp":"$long","toolUseResult":{"stdout":"","backgroundTaskId":"b8y1gomwj"}}
 EOF
 expect_ok crew unit wait a --stuck 60000 --timeout 0
 eq "$out" "verify on a is still running after the wait's 0 ms: swb-1-unit-1 is waiting on 1 background task of its own; nothing is recorded yet"
-transcript $box "$sid" >/dev/null <<EOF
+cat > "$tx" <<EOF
 {"type":"assistant","timestamp":"$long","message":{"content":[{"type":"tool_use","name":"Bash"}]}}
 {"type":"user","timestamp":"$long","toolUseResult":{"stdout":"","backgroundTaskId":"b8y1gomwj"}}
 {"type":"queue-operation","timestamp":"$long","operation":"enqueue","content":"<task-notification>\n<task-id>b8y1gomwj</task-id>\n<status>completed</status>\n</task-notification>"}
