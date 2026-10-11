@@ -7,7 +7,7 @@ See proposal.md for why. How it works today, from unit-amendments (archived 2026
 - `op_unit_amend` (`plan.py` 1485) replaces the intent and, for a unit with a worktree, sets `Amended: proposal/<n>` (inside an approval) or `intent` (the user directly). Its `after` step tells the conductor to run construct and to close any card for `review/<unit>` or `verify/<unit>`. If that tell fails, all that is left is a printed line.
 - `run_check` (`plan.py` 2618) starts construct on a marked unit only for the user or the team's conductor (`marking = bool(mark) or st in (approved, code, verify)`). It moves the mark to the unit's head when construct starts, adds "This unit's intent was amended; revise the existing change to it." to the prompt, and names a card to close (`ENDS`) only when the stage is `review` or `verify`. On an `amended` unit that leaves `ENDS` empty.
 - `plan_approve` runs each op's `after` once the approval's commit has landed. `bolt_give` already runs bash crew on a team's host from Python: `crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], ...))`, carrying the asker's `CREW_AGENT`, `CREW_LABEL` and `CREW_SESSION` (`code.3`).
-- Bash `crew unit run` (`plugin/bin/crew` 647) forwards to the team's host, takes or reuses the unit's slot, calls `plan _run`, and through `run_stage` stops the slot's agent. Without `--force` it refuses to stop an agent that is working. It then starts the stage and, when `ENDS` is set, calls `plan _ended`, which prints the close-card line to the conductor when the conductor ran it and tells the conductor otherwise (`stage_ended_row`).
+- Bash `crew unit run` (`plugin/bin/crew` 647) forwards to the team's host, takes or reuses the unit's slot, calls `plan _run`, and through `run_stage` stops the slot's agent. Without `--force`, `run_stage` refuses to stop an agent that is working, but only after `plan _run` has written the plan. Nothing in it checks whether the team is down. It then starts the stage and, when `ENDS` is set, calls `plan _ended`, which prints the close-card line to the conductor when the conductor ran it and tells the conductor otherwise (`stage_ended_row`).
 - `greet_conductor` runs `py greet "$TEAM"` on `up`, `rebuild`, `restart` (unless `--no-greet`) and `revive`. `resume` greets nobody. `crew.py` cannot import `plan.py`, because `plan.py` imports it.
 
 Rules this rests on: `plan.15` (the rule this change builds), `plan.6` (the amended mark and the stages it gives), `plan.1` and `state.1` (the mark's move is a plan write like any other), `roles.1` and `roles.2` (only the user approves; the construct follows from an approval made on the user's word), `roles.4` (every notice is marked `[crew]`), `code.3` (the run goes to the team's host carrying the asker), `read.1` (a greeting that cannot read the plan says so), `teams.7` (one greeting per start), `teams.11` (a tell reaches its agent or fails), `briefs.11` (the cards are the conductor's), and `docs.2`. Area pages touched: `plan.md`, `teams.md`, `briefs.md`, `tests.md`, `docs.md`.
@@ -15,7 +15,7 @@ Rules this rests on: `plan.15` (the rule this change builds), `plan.6` (the amen
 ## Goals / Non-Goals
 
 **Goals:**
-- Once an amendment is approved, the only thing that can keep its construct from running is something crew names out loud: the host is down, the team is down, or the slot's agent is busy.
+- Once an amendment is approved, the only thing that can keep its construct from running is something crew names out loud: the host stopped answering, the team is down, or the slot's agent is busy. An amendment whose unit's stage crew cannot read is refused rather than approved blind.
 - Every way a conductor comes back up shows it the amended units waiting on it, worked out by crew from the kit and the plan, not from what the conductor remembers.
 
 **Non-Goals:**
@@ -28,6 +28,15 @@ Rules this rests on: `plan.15` (the rule this change builds), `plan.6` (the amen
 ### 1. The amendment's `after` runs construct on the team's host
 
 When the unit was marked and its bolt is held by a team, `op_unit_amend`'s `after` runs `crew unit run <unit> construct` on the team's host through `crew.on_machine(..., crew.crew_argv(...))`, the same way `bolt_give` runs `restart`. It prints whatever that command printed. This covers both a direct `crew unit amend` and an approval, because both run `after` once the write has landed. The run is recorded as the approver's `stage.start` with `Amended: yes`, through bash crew's existing path.
+
+When the construct cannot start, nothing is written before crew knows it can, so the unit keeps its `proposal/<n>` or `intent` mark and reads `amended`:
+- **The slot's agent is working.** Bash `crew unit run` refuses a construct whose slot's agent is working, without `--force`, once it has the slot and before `plan _run` writes the plan. Left to `run_stage`, the refusal would come after `plan _run` had moved the mark to the head, and the unit would read `construct` with no agent running it.
+- **The team is down.** Bash `crew unit run` refuses any stage while the team's state reads down, before `reap` or `plan _run` touch anything, and says `crew up <team>` brings it back.
+- **The host stops answering** between the stage read and the run. The run's failure is named by `crew.unanswered`, as a host that did not answer.
+
+In each, the refusal is recorded as a refused `stage.start`, and the amendment stands.
+
+**The host does not answer from the start.** Then `op_unit_amend`'s checks cannot read the unit's stage, so crew cannot tell whether the unit has merged or which card the amendment would end. The amendment, or the approval holding it, is refused naming the host, and nothing is written (`read.1`: a stage crew cannot tell is `unknown`, never a guess). The user approves again once the host answers.
 
 *Alternatives:* a pending-run file that the conductor's wait picks up. That is a status file, which `state.2` rules out, and it still depends on the conductor. A daemon. That breaks `state.4`.
 
@@ -82,6 +91,7 @@ None. crew has nothing to deploy; its proof before landing is the suite on the b
 
 Worked by the partition's main-level ops once the bolt has landed and every host has pulled, with conductors restarted:
 - The planner proposes `unit amend` for a unit in review in a held bolt. The conductor agrees, and the user approves on its card. Within the approval, a fresh construct agent starts in the unit's slot, with the new intent and the planner's case in its prompt. The conductor is told to wait for it and to close its review card, and it does. `crew trace unit/<unit>` shows `plan.approve`, `unit.amend` and `stage.start` by the approver.
+- With the team's host unreachable, approve an amendment to a unit of its bolt. The approval is refused naming the host, and the plan is unchanged.
 - With the team's conductor down, approve an amendment to a unit of its bolt whose slot agent is working. The approval says construct did not start and why. `crew restart <team> conductor` greets the conductor with the unit named, and once the slot is free it starts the construct.
 
 ## Task notes
@@ -90,7 +100,9 @@ Worked by the partition's main-level ops once the bolt has landed and every host
 
 In `op_unit_amend.after`: the team is `fleet["teams"][plan.bolt(bolt).get("Team")]`. Run `crew.on_machine(ctx.fleet, team["machine"], crew.crew_argv(ctx.fleet, team["machine"], "unit", "run", a.unit, "construct"))`, print stripped stdout and stderr, and judge started-or-not by the return code. Compute the row before the change from the stage read in the op's checks (`review` gives `review/<unit>`, `verify` gives `verify/<unit>`, anything else gives none) and keep it in the closure for the not-started notice. Send the notice with `crew.tell` as today. When the tell fails, print "<team>-conductor is not up: …" followed by whether construct is running or waits. A unit with no team (queued, or its bolt not given) is left as today: marked, with nothing to run.
 
-In `tests/t-amend-intent.sh`, the direct amendment and the approved proposal scenarios now expect a `swb-1-unit-<n>` agent prompted with `/opsx:propose …`, the conductor's notice saying construct runs again, and `stage.start` by the approver. Add a scenario where a stub slot agent is `working`: construct does not start, the stage reads `amended`, and the notice names the reason and the card.
+In bash `crew unit run`, refuse while `$STATE/down` exists, before `reap`, and refuse a construct whose slot's agent is `working` (no `--force`) before `plan _run`, dropping a slot it had just taken; record each as a refused `stage.start` (Decision 1). When the run fails, name a host that did not answer with `crew.unanswered`, else take the run's last error line.
+
+In `tests/t-amend-intent.sh`, the direct amendment and the approved proposal scenarios now expect a `swb-1-unit-<n>` agent prompted with `/opsx:propose …`, the conductor's notice saying construct runs again, and `stage.start` by the approver. Add scenarios where construct does not start, and in each the stage reads `amended` and the notice names the reason and the card: a stub slot agent `working`; the host's ssh failing only for the run; the team taken down with its conductor, where crew prints "<team>-conductor is not up". Add one where the host is down from the start: the amendment is refused with "cannot tell unit <unit>'s stage" and the plan's tip does not move.
 
 ### 1.2
 

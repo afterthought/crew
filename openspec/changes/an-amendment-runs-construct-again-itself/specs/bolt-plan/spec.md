@@ -13,8 +13,12 @@
 - **WHEN** an amendment to a unit in code is applied
 - **THEN** the unit's intent is the new one, the unit is marked amended, a fresh construct agent starts in the unit's slot on its team's host within the same command, and its conductor is told that construct runs again and to wait for it
 
+#### Scenario: The unit's stage cannot be read
+- **WHEN** an amendment to a unit with a worktree is applied while its team's host does not answer, so the unit's stage cannot be read
+- **THEN** the amendment, or the approval holding it, is refused naming the host that did not answer, and nothing is written
+
 #### Scenario: The construct cannot start
-- **WHEN** an amendment to a unit in flight is applied while its team's host does not answer, its team is not up, or the agent in its slot is still working
+- **WHEN** an amendment to a unit in flight is applied once its stage has been read, and its construct cannot start because its team's host stops answering before the run reaches it, its team is down, or the agent in its slot is still working
 - **THEN** the amendment stands, the unit's stage reads `amended`, the command says why construct did not start, and the conductor, when it can be told, is told why and to run construct once it can, with the card the amendment ended named
 
 #### Scenario: A merged unit
