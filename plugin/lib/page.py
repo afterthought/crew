@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""page.py: a flywheel's lineage page, one HTML file drawn from its run record.
+"""page.py: a flywheel's page, one HTML file: its board, and its lineage drawn from its run record.
 
   crew page <label> [--out <file>] [--since <time>]
-                                     the flywheel's signals, agenda items, proposals, units and bolts as columns, a
-                                     line for each link between two of them, a timeline of the entries beneath, and
-                                     each object's history; written whole to ~/.local/state/crew/<label>/page.html on
-                                     this host, or to --out, and its path printed with what it was made from
+                                     the partition's board, as crew board reads it, which the page opens on; and the
+                                     flywheel's signals, agenda items, proposals, units and bolts as columns, a line for
+                                     each link between two of them, a timeline of the entries beneath, and each
+                                     object's history; written whole to ~/.local/state/crew/<label>/page.html on this
+                                     host, or to --out, and its path printed with what it was made from
 
-Which objects there are, how they are linked and each one's history are read from the run record's entries alone, by
-the walk crew trace makes (record.lineage), so the page and the trace cannot disagree. Labels and present status are
-read from the flywheel's state at the commit the entries were read at; no entry holds them (record.3). The file holds
-its data, style and script, and loads nothing. Nothing reads it, it is never committed, and making it appends no entry
-(state.4, record.1)."""
+The board is the one read crew board makes (board.flow_read), of the one partition. Which objects the lineage holds,
+how they are linked and each one's history are read from the run record's entries alone, by the walk crew trace makes
+(record.lineage), so the page and the trace cannot disagree. Labels and present status are read from the plan and kits
+the board read, at the commit the entries were read at, which a command fetches once (plan.12); no entry holds them
+(record.3). The file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and
+making it appends no entry (state.4, record.1)."""
 import argparse, datetime, json, os, pathlib, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import crew, plan, record  # noqa: E402
+import board, crew, plan, record  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 TEMPLATE = LIB / "page.html"
@@ -75,18 +77,20 @@ def from_entries(node, entries):
     node["gone"] = True
 
 
-def describe(fleet, label, repo, tip, d):
+def describe(fleet, label, repo, tip, d, pl=None, sv=None):
     """Each node's label and present status, read from the flywheel's state at tip: a signal's assertion and whether
     a move has taken it; an item's subject, lane and state; a proposal's first line of case and its state; a unit's
-    intent and stage, read from its kit as crew bolts reads it; a bolt's goal, team and state. Returns the hosts whose
-    kits did not answer, {host: why}; their units' and bolts' stages are left blank."""
-    pl = plan.read(repo, f"{label}/main", tip)
+    intent and stage, read from its kit as crew bolts reads it; a bolt's goal, team and state. pl and sv, when given,
+    are the plan at tip and the survey of its kits another read already made, so neither is read again. Returns the
+    hosts whose kits did not answer, {host: why}; their units' and bolts' stages are left blank."""
+    pl = pl or plan.read(repo, f"{label}/main", tip)
 
     def recs(path, kind, key):
         text = plan.show(repo, tip, path)
         return {r.get(key): r for r in plan.Plan(text).recs(kind)} if text else {}
     proposals, items, moves = recs("proposals.rec", "Proposal", "Proposal"), recs("agenda.rec", "Item", "Item"), recs("moves.rec", "Move", "Signal")
-    sv = plan.survey(fleet, [(b.get("Team"), b.name()) for b in pl.bolts() if b.get("Team")])
+    if sv is None:
+        sv = plan.survey(fleet, [(b.get("Team"), b.name()) for b in pl.bolts() if b.get("Team")])
     st = plan.Stages(fleet, pl, sv)
     entries = list(d["entries"].values())
     for n in d["nodes"]:
@@ -122,7 +126,11 @@ def describe(fleet, label, repo, tip, d):
 # ------------------------------------------------------------------------------------------------- the file
 
 def header(made):
-    return f"as of {made['at'][:10]} {made['at'][11:16]}Z · {made['label']}/main {made['commit'][:7]}"
+    """As of when and which commit the page was drawn from; both commits, the run record's and the plan's, should the
+    board's read have found the branch at another (read.1)."""
+    plan_tip = made.get("plan")
+    return (f"as of {made['at'][:10]} {made['at'][11:16]}Z · {made['label']}/main {made['commit'][:7]}"
+            + (f" for the run record, {plan_tip[:7]} for the board and labels" if plan_tip and plan_tip != made["commit"] else ""))
 
 
 def render(d):
@@ -163,11 +171,20 @@ def page(fleet, a):
     if branch in missing:
         fail(f"no page is written: {branch} of {repo} could not be read ({missing.pop(branch)}), and the page names the commit it is drawn from")
     tip = tips.get(label) or fail(f"no page is written: {branch} of {repo} is not started, so there is no commit to draw from: crew state init {label}")
-    d = data(entries, stamp)
-    for h, why in describe(fleet, label, repo, tip, d).items():
-        missing.setdefault(h, why)
+    # The board's read, of this partition alone: the branch's tip is the one just fetched, so both views are of one
+    # commit. A host, plan or signal home it could not read is in the board's attention, and the page still written.
+    read = board.flow_read(fleet, [label])
     now = datetime.datetime.now(datetime.timezone.utc)
-    d["made"] = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "label": label, "repo": repo, "commit": tip, "since": stamp, "unreachable": missing}
+    bd = board.board_data(fleet, [label], read, now)
+    part = bd["partitions"][0]
+    pl = next((f[3] for f in read["found"] if f[0] == label and f[2] == part["plan"]), None)
+    d = data(entries, stamp)
+    for h, why in describe(fleet, label, repo, part["plan"] or tip, d, pl, read["sv"] if pl else None).items():
+        missing.setdefault(h, why)
+    d["made"] = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "label": label, "repo": repo, "commit": tip, "plan": part["plan"], "since": stamp,
+                 "unreachable": missing}
+    d["board"] = dict(part, read_at=bd["read_at"], unread=bd["unread"])
+    d["partitions"], d["label"] = list(fleet["partitions"]), label
     if a.json:
         print(json.dumps(d, indent=1))
         return

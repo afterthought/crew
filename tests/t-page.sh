@@ -2,7 +2,8 @@
 # proposals, units and bolts the entries name, each linked to what the same entry names in the next column; each
 # object's history is what crew trace prints for it. Labels and present status come from the flywheel's state at the
 # commit the entries were read at; one the state no longer holds is labelled from its entries, and a unit whose host
-# does not answer has no stage.
+# does not answer has no stage. The page also holds the partition's board, as crew board reads it at the same commit,
+# with a host that does not answer in its attention.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -129,12 +130,22 @@ eq "$(ls -A "$mine" | grep -c '^\.page')" "0"
 eq "$(record)" "$before"
 ok "crew page writes the page whole under the partition's state folder, prints its path and as of when and which commit, and appends no entry"
 
+json=$(block "$mine/page.html")
+eq "$(j .board.label) $(j .label)" "wldn wldn"
+eq "$(j '.board | [has("inception", "bolt_plan", "construction", "operation")] | all')" "true"
+eq "$(j '[.board.construction[].bolt] | join(" ")') $(j '[.board.construction[].team] | join(" ")')" "tenant-environments swb-1"
+eq "$(j '.partitions | join(" ")')" "$(jq -r '[.partitions[].label] | join(" ")' "$(home_of mac-studio)/.config/crew/teams.json")"
+eq "$(j .made.plan)" "$(j .made.commit)"
+eq "$(j '.board.attention | length')" "0"
+ok "the page holds the partition's board as crew board reads it, the teams file's partitions in order and its own label, its labels read at the commit the board read"
+
 echo "$box" > "$T/down"
 expect_ok crew page wldn
 rm "$T/down"
 has "$(sed -n 3p <<<"$out")" "$box did not answer"
 has "$(block "$mine/page.html" | jq -r '.made.unreachable | keys | join(" ")')" "$box"
-ok "a host that does not answer is named, and the page is still written"
+has "$(block "$mine/page.html" | jq -r '[.board.attention[] | select(.what == "host") | .name] | join(" ")')" "$box"
+ok "a host that does not answer is named, in the board's attention too, and the page is still written"
 
 cp "$mine/page.html" "$T/earlier.html"
 mv "$ws" "$ws.away"
