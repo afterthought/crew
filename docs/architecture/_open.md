@@ -28,6 +28,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `tests.8`: tests wait on conditions with limits that hold under load (`tests-hold-under-a-loaded-host`); `t-stage-ends` and `t-amend` sleep and time out, and redden under a load of 247.
 - `tests.9`: a host's suites bounded by its cores across teams (`suites-on-one-host-share-its-cores`); today each team's moon runs every test at once and two teams loaded mac-studio to 247.
 - ADR 0017: `crew usage`, token spend by partition, team, role, agent and model from crew's sessions and the transcripts (`crew-usage-sums-tokens-by-team-role-and-agent`); nothing reports spend today.
+- ADR 0018, `plan.3` and `briefs.13` as amended: a proposal's card drawn and in text with a choice per new unit, and the approval of the kept subset (`a-proposals-card-shows-the-change-and-lets-new-units-be-left-out`); today the card is prose and the approval is all or nothing.
 - `docs.6`: what a change holds, in `construct.md` and `openspec/config.yaml` (`a-change-holds-what-is-true-and-what-is-proved`).
 - `signals.6`: a program's captures landed on the flywheel's branch (`machine-captures-land-on-the-flywheels-branch`, after `daily-pass-lands-through-crew`).
 - `signals.7`: curation on a cadence (`curation-runs-on-a-cadence`, after `curate-into-agenda`).
