@@ -66,7 +66,7 @@ Code
 
 **[roles.4]** Rules out: `herdr agent prompt` from one agent to another; an unmarked notice. Not ruled out: `run_stage`'s `/opsx:…`, `Fix: …` and merge prompts, which a slash command cannot prefix; a quote of one is asserted by the conductor that ran the stage. Source: checked-capture design "Marking what crew sends"; `crew.py` 217–224; `transcript.py` `asserter`.
 
-**[read.1]** Rules out: a default partition; a stage guessed from a missing host; a tidy that removes when a plan can't be read. Source: fixes f734f28, d9c8a11, e413c48; bolt-teams design; `plan.py` 686–690.
+**[read.1]** Rules out: a default partition; a stage guessed from a missing host; a tidy that removes when a plan can't be read; a stage start crew could not read taken as never started (`run_stage`, 2026-10-11, crw-1's construct that went to work while crew recorded it refused: `teams.15` details). Source: fixes f734f28, d9c8a11, e413c48; bolt-teams design; `plan.py` 686–690.
 
 **[read.2]** Rules out: a field read from a transcript without a probe; a "null" path printed from a missing value. Source: fixes 0aa835d, e1ed1df, 5a481ae; checked-capture design.
 
