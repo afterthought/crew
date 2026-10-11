@@ -13,7 +13,7 @@ tip() { git --git-dir "$ws" rev-parse wldn/main; }
 prompts() { grep "^$box wldn-1 agent prompt $1-conductor " "$CREW_TEST_LOG" || true; }
 proposal() { printf '%s\n' "$@" > "$T/proposal.rec"; echo "$T/proposal.rec"; }
 pane() { herdr_state $box wldn-1 ".agents | to_entries[] | select(.value.name == \"$1\") | .key"; }
-prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
+prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
 # field <host> <act> <field> <object>: a field of the last entry of the act naming the object, in that host's run record
 field() {
   as "$1" python3 -c 'import glob, json, os, sys; sys.path.insert(0, sys.argv[1]); import record
@@ -50,7 +50,7 @@ eq "$(git --git-dir "$ws" log -2 --format=%s wldn/main)" "plan(tenant-environmen
 plan(tenant-environments): amend the-deploy-is-logged ($me@mac-studio)"
 eq "$(plan -t Unit -e "Unit = 'the-deploy-is-logged'" -P Amended)" "$(git -C "$k" rev-parse unit/the-deploy-is-logged)"
 eq "$(stage the-deploy-is-logged)" "construct"
-eq "$(prompt_to "$(pane swb-1-unit-1)")" "'/opsx:propose the-deploy-is-logged The deploy writes a log the operator can search. This unit'\"'\"'s intent was amended by the user; revise the existing change to it.'"
+eq "$(prompt_to swb-1-unit-1)" "'/opsx:propose the-deploy-is-logged The deploy writes a log the operator can search. This unit'\"'\"'s intent was amended by the user; revise the existing change to it.'"
 eq "$(field $box stage.start By stage/the-deploy-is-logged/construct)" "$me@mac-studio"
 eq "$(field $box stage.start Amended stage/the-deploy-is-logged/construct)" "yes"
 has "$(prompts swb-1)" "intent was amended by the user, and construct runs again on it in swb-1-unit-1: wait for it (crew unit wait the-deploy-is-logged); once it has committed, the unit goes on from its tasks."
@@ -70,7 +70,7 @@ has "$out" "construct did not start on unit the-deploy-is-logged: swb-1-unit-1 i
 eq "$(plan -t Unit -e "Unit = 'the-deploy-is-logged'" -P Intent,Amended)" $'The deploy writes a log the operator can search, kept for a year.\nintent'
 eq "$(git --git-dir "$ws" rev-parse wldn/main~1)" "$before"
 eq "$(stage the-deploy-is-logged)" "amended"
-grep -q "agent prompt $(pane swb-1-unit-1) " "$CREW_TEST_LOG" && fail "the working agent in the slot was sent something"
+grep -qE "agent prompt ($(pane swb-1-unit-1)|swb-1-unit-1) " "$CREW_TEST_LOG" && fail "the working agent in the slot was sent something"
 has "$(field $box stage.start Refused stage/the-deploy-is-logged/construct)" "swb-1-unit-1 is working"
 eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
 has "$(prompts swb-1)" "intent was amended by the user, and construct did not start: swb-1-unit-1 is working; add --force to end it anyway. Run it once it can (crew unit run the-deploy-is-logged construct); once it has committed, the unit goes on from its tasks."
@@ -130,10 +130,9 @@ done
 expect_ok crew plan proposed 1; has "$out" "Closed"
 ok "approval waits for the conductor, then replaces each intent, and starts each unit's construct in the approver's name"
 
-p2=$(pane swb-1-unit-2)
-has "$(prompt_to "$p2")" "/opsx:propose cfn-lint-treefmt cfn-lint in treefmt fails the check on a warning as well as an error This unit"
-has "$(prompt_to "$p2")" "s intent was amended by proposal 1; revise the existing change to it. The planner"
-has "$(prompt_to "$p2")" "s case, as the user approved it: cfn-lint is already in treefmt; what the unit should do is fail the check on a warning."
+has "$(prompt_to swb-1-unit-2)" "/opsx:propose cfn-lint-treefmt cfn-lint in treefmt fails the check on a warning as well as an error This unit"
+has "$(prompt_to swb-1-unit-2)" "s intent was amended by proposal 1; revise the existing change to it. The planner"
+has "$(prompt_to swb-1-unit-2)" "s case, as the user approved it: cfn-lint is already in treefmt; what the unit should do is fail the check on a warning."
 has "$(prompts swb-1)" "Unit cfn-lint-treefmt"
 has "$(prompts swb-1)" "intent was amended by proposal 1, and construct runs again on it in swb-1-unit-2: wait for it (crew unit wait cfn-lint-treefmt); once it has committed, the unit goes on from its tasks."
 has "$(prompts swb-1)" "intent was amended by proposal 1, and construct runs again on it in swb-1-unit-3: wait for it (crew unit wait in-verify)"
@@ -166,7 +165,7 @@ PATH="$T/drops:$PATH" expect_ok crew unit amend in-verify "in-verify reads its i
 has "$out" "construct did not start on unit in-verify: $box did not answer (ssh: connect to host $box port 22: Operation timed out)"
 eq "$(plan -t Unit -e "Unit = 'in-verify'" -P Intent,Amended)" $'in-verify reads its intent from the plan, once.\nintent'
 eq "$(stage in-verify)" "amended"
-grep -q "agent prompt $(pane swb-1-unit-3) " "$CREW_TEST_LOG" && fail "in-verify's slot was sent something"
+grep -qE "agent prompt ($(pane swb-1-unit-3)|swb-1-unit-3) " "$CREW_TEST_LOG" && fail "in-verify's slot was sent something"
 eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
 has "$(prompts swb-1)" "intent was amended by the user, and construct did not start: $box did not answer (ssh: connect to host $box port 22: Operation timed out). Run it once it can (crew unit run in-verify construct); once it has committed, the unit goes on from its tasks."
 has "$(prompts swb-1)" "Close your Pending You card for verify/in-verify, if one is open, with what was done.'"

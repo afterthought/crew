@@ -24,7 +24,7 @@ shim() {  # shim <command> <bash test of "$@" that logs <what>> <what>
   chmod +x "$T/shim/$1"
 }
 shim git '[[ " $* " == *" fetch "*refs/crew/* ]]' fetch
-shim python3 '[[ ${1:-} == - ]]' gather
+shim python3 '[[ ${1:-} == - && ${2:-} == "{"* ]]' gather
 shim openspec true openspec
 export PATH="$T/shim:$PATH"
 reads() { grep -c "^$1 $2\$" "$T/reads.log" || true; }
