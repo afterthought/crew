@@ -124,6 +124,11 @@ tasks:
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-operator.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-page:
+    command: 'tests/run t-page'
+    inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-page.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-plan-race:
     command: 'tests/run t-plan-race'
     inputs: ['/plugin/**/*', '/tests/run', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-plan-race.sh']
