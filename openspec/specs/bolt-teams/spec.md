@@ -111,11 +111,16 @@ The team's ops SHALL deploy and test from `<kit>/bolts/<bolt>`, into the one sha
 - **THEN** ops deploys the bolt and works each unit's proof list, and the conductor tells the user whether the bolt is ready to land
 
 ### Requirement: A bolt lands on main on the user's word
-A proven bolt SHALL be landed by the partition's main-level ops, which merges `bolt/<bolt>` into main through the kit's merge hooks, deploys main, and then runs `crew bolt land`. The bolt's worktree SHALL then be removed, unless it has uncommitted changes, and the team SHALL hold no bolt. A worktree that is kept SHALL NOT stop the landing. When the landing's rebase conflicts, main-level ops SHALL abort it so that nothing lands, and tell the bolt's conductor the commit that conflicted and the files, for the team to carry the bolt onto main by a fix.
+A proven bolt SHALL be landed by the partition's main-level ops, on the user's approval of its landing card, by one
+procedure: it merges `bolt/<bolt>` into main through the kit's merge hooks, pushes main without force, and then runs
+`crew bolt land`; it deploys nothing. The bolt's worktree SHALL then be removed, unless it has uncommitted changes, and
+the team SHALL hold no bolt. A worktree that is kept SHALL NOT stop the landing. When the landing's rebase conflicts,
+main-level ops SHALL abort it so that nothing lands, and tell the bolt's conductor the commit that conflicted and the
+files, for the team to carry the bolt onto main by a fix.
 
 #### Scenario: The bolt lands
-- **WHEN** the user says swb-1's bolt may land
-- **THEN** main holds every unit's change, the bolt's records are gone from the plan, and swb-1 can be given its next bolt
+- **WHEN** the user approves swb-1's landing card
+- **THEN** main holds every unit's change, GitHub's main holds it too, the bolt's records are gone from the plan, and swb-1 can be given its next bolt
 
 #### Scenario: The bolt's worktree has uncommitted changes
 - **WHEN** `crew bolt land` runs on a bolt whose worktree has a modified file

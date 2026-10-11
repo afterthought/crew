@@ -138,8 +138,9 @@ expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time"; do has "$out" "$want"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
-for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "Deploy main" "the bolt lands either way" \
-  "through the bolt's conductor when the user approved its landing card on Pending You" \
+for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
+  "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" "The word to land is also the word to push main" \
+  "git -C <kit>/main push origin main" "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
   "run \`wt merge\` in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
@@ -174,6 +175,7 @@ for brief in "swb-1 conductor" "swb-1 ops" "wldn main-ops" "wldn design" "wldn p
 done
 expect_ok crewpy brief wldn design; lacks "$out" "crew writes signals straight to"; has "$out" "signal show <signal id>"
 expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
+has "$out" "Never pass on a word to land, and never tell \`wldn-ops\` to land or deploy"
 ok "every brief says who speaks in its pane, and the six that record findings quote the words and say what a refusal means"
 ok "a signal names where what it points at lives, a unit carries it as a source, and the construct reads it, stops when it can't, and builds from its sources over its intent"
 

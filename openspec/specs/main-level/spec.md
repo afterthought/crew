@@ -102,12 +102,25 @@ A dispatcher SHALL run on each host where the partition's teams run, in a herdr 
 - **WHEN** the partition's teams run on the box and on mac-studio
 - **THEN** each host has its own dispatcher, and asking either one about allocation answers for its host only
 
-### Requirement: Main-level ops lands bolts and deploys main
-The main-level ops SHALL merge a proven bolt into main on the user's word, deploy main, and run `crew bolt land`. A failure after landing SHALL be a fix on main.
+### Requirement: Main-level ops lands bolts by one procedure
+The main-level ops SHALL land a proven bolt on the user's word, given by approving the bolt's landing card, which the
+bolt's conductor posts and passes on with `crew tell`, or said in ops's own pane: it SHALL fetch the kit's main, merge
+the bolt into main through the kit's merge hooks, push main without force, run `crew bolt land`, and, for crew, bring
+every host's checkout up to main. A landing SHALL deploy nothing. Until a kit's deployer records its deploys through
+crew, the main-level ops SHALL deploy that kit's main only on the user's word for that deploy. A failure after landing
+SHALL be a fix on main.
 
 #### Scenario: Landing
-- **WHEN** the user tells the planner that swb-1's bolt may land
-- **THEN** the main-level ops merges it, deploys main, and the plan no longer holds the bolt
+- **WHEN** the user approves swb-1's landing card and its conductor tells the main-level ops
+- **THEN** the main-level ops merges the bolt, pushes main, runs `crew bolt land`, and the plan no longer holds the bolt
+
+#### Scenario: No word from the planner
+- **WHEN** the planner tells the main-level ops that a bolt may land
+- **THEN** the main-level ops lands nothing until the user's approval of the landing card, or the user's words in its pane
+
+#### Scenario: A landing deploys nothing
+- **WHEN** a swancloud bolt lands
+- **THEN** nothing is deployed by the landing, and main is deployed only by a later act on the user's word for that deploy
 
 ### Requirement: Signals reach the plan only through a route
 Signals SHALL stay in the partition's first blueprints repo, in the signals model its `signals/README.md` gives. A bolt's agents SHALL record a finding outside their bolt as a signal there with `crew signal`. A signal SHALL become work only through a `route` move written by `crew unit add --signal`.

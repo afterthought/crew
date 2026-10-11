@@ -916,7 +916,7 @@ def main_tokens(fleet, p, role, self_name):
         f"{label}'s main level ({p['partition']}) runs in {tok['MAIN_PLACE']}, in the `{label}` workspace: `{label}-design`, the design "
         f"agent, keeps the design true on main and curates signals; `{label}-planner` plans the partition's bolts and posts its "
         f"review batches; `{label}-reviewer`, started fresh for each batch, summarizes its changes; `{label}-ops` lands "
-        f"proven bolts and deploys main. A dispatcher on each host the partition's teams run on gives that host's teams their bolts: "
+        f"proven bolts on the user's approval of their landing cards. A dispatcher on each host the partition's teams run on gives that host's teams their bolts: "
         f"{tok['DISPATCHERS']}. The operator agent in each of the partition's operator sessions works for the user: {tok['OPERATORS'] or 'none'}. "
         f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs. "
         f"{SENDERS}")
