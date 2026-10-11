@@ -876,7 +876,7 @@ class Stages:
                 res["why"] = why
                 return res
             pl = k["places"].get(name)
-            res["worktree"], res["head"] = (pl["path"], pl.get("head")) if pl else (None, None)
+            res["worktree"], res["head"], res["place"] = (pl["path"], pl.get("head"), pl) if pl else (None, None, None)
             if name in k["main"]:
                 res["stage"] = "landed"
                 return res
@@ -2721,10 +2721,12 @@ def run_check(fleet, a):
     """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent. Construct
     starts once each After unit has finished construct, never waiting on a merge (plan.13), and is run again at any
     stage before merge; on a unit whose change is committed, or one already amended, it first marks the unit amended in
-    the plan: a write the conductor of the team holding its bolt, or the user, makes. Code starts once the change is
-    committed, with no review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits
-    until each After unit has merged (teams.5); settle runs only for a unit that has delivered its verify."""
-    label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
+    the plan at its head. Where that write is what marks the unit, only the conductor of the team holding its bolt, or
+    the user, makes it; on a unit whose intent was amended, which the user approved, anyone starts its construct, and
+    the prompt carries the amendment's words, read from the mark. Code starts once the change is committed, with no
+    review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits until each After
+    unit has merged (teams.5); settle runs only for a unit that has delivered its verify."""
+    label, repo, tip, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
     u = plan.unit(a.unit)
     bolt = u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first")
     t = fleet["teams"][plan.bolt(bolt).get("Team")]
@@ -2741,11 +2743,20 @@ def run_check(fleet, a):
         st not in ("merged", "landed") or fail(f"unit {a.unit} has " + ("merged into its bolt" if st == "merged" else "landed on main")
                                                + ": a defect in it is a fix (crew fix), and a new need is a new unit")
         marking = bool(mark) or st in ("planned", "code", "verify")
-        if marking:
+        if marking and not amended(mark):
             kind, team = role(fleet, os.environ.get("CREW_AGENT"))
             kind == "user" or (kind, team) == ("conductor", t["name"]) or fail(
                 f"unit {a.unit} is in {st}, so construct run again marks it amended: a plan write only {t['name']}-conductor "
                 "or the user makes")
+        # The amendment's words, from the mark, so whoever starts the construct sends the same prompt.
+        again = ""
+        if mark == "intent":
+            again = " This unit's intent was amended by the user; revise the existing change to it."
+        elif amended(mark):
+            n = mark.split("/", 1)[1]
+            case = proposal(Plan(show(repo, tip, "proposals.rec") or PROPOSALS), n, label).get("Case")
+            again = (f" This unit's intent was amended by proposal {n}; revise the existing change to it. The planner's case, "
+                     f"as the user approved it: {' '.join(case.split())}")
         make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
         took = take(fleet, t, place, a.unit, bolt, [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")
                                                    and (st_all.kit(plan.bolt(bolt))[0] or {"places": {}})["places"].get(d)])
@@ -2754,7 +2765,6 @@ def run_check(fleet, a):
             if head != mark:
                 amended_at, entry = f"{repo}@{mark_amended(fleet, label, a.unit, bolt, head)}", CONTEXT["eid"]
         sources = u.all("Source")
-        again = " This unit's intent was amended; revise the existing change to it." if amended(mark) else ""
         prompt = f"/opsx:propose {a.unit} {u.get('Intent')}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + again + words
     elif st in ("amended", "construct") and mark:
         fail(f"unit {a.unit} was amended and " + (f"construct has not been run again (crew unit run {a.unit} construct)" if st == "amended"
@@ -2791,9 +2801,14 @@ def run_check(fleet, a):
     # What reached the unit while no stage of it ran: forecasts, carried in this stage's prompt and named on its start.
     ids, said = carried_forecasts(fleet, t, plan, st_all, bolt, a.unit)
     prompt += "".join(" " + x for x in said)
-    # The rail row the stage ends, whose card the conductor closes: a verify report acted on. Bash crew names the card
+    # The rail row the stage ends, whose card the conductor closes: a verify report acted on; for a unit whose intent
+    # was amended, the verify row its place reads without the mark, which the amendment ended. Bash crew names the card
     # once the stage has started (stage_ended_row), since starting it can still be refused.
-    ends = f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else ""
+    if a.stage == "construct" and amended(mark):
+        was = place_stage(s["place"]) if s.get("place") else None
+        ends = f"verify/{a.unit}" if was == "verify" else ""
+    else:
+        ends = f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else ""
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
     print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids),
              TOOK=took if a.stage == "construct" else ""))

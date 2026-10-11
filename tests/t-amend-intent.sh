@@ -95,8 +95,9 @@ export CREW_AGENT=swb-1-conductor
 expect_ok crew unit run cfn-lint-treefmt construct
 p1=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-1") | .key')
 has "$(grep "^$box wldn-1 agent prompt $p1 " "$CREW_TEST_LOG" | tail -1)" "/opsx:propose cfn-lint-treefmt cfn-lint in treefmt fails the check on a warning as well as an error This unit"
-has "$(grep "^$box wldn-1 agent prompt $p1 " "$CREW_TEST_LOG" | tail -1)" "s intent was amended; revise the existing change to it."
+has "$(grep "^$box wldn-1 agent prompt $p1 " "$CREW_TEST_LOG" | tail -1)" "s intent was amended by proposal 1; revise the existing change to it. The planner"
+has "$(grep "^$box wldn-1 agent prompt $p1 " "$CREW_TEST_LOG" | tail -1)" "s case, as the user approved it: cfn-lint is already in treefmt; what the unit should do is fail the check on a warning."
 eq "$(stage cfn-lint-treefmt)" "construct"
 trace=$(crew trace unit/cfn-lint-treefmt)
 eq "$(grep -v 'refused:' <<<"$trace" | awk '{print $3}' | tr '\n' ' ')" "unit.add plan.propose plan.agree plan.approve unit.amend stage.start "
-ok "the conductor runs construct again, the fresh agent is told the intent was amended, and the trace shows the way there"
+ok "the conductor runs construct again, the fresh agent is told the intent was amended by the proposal and given its case, and the trace shows the way there"

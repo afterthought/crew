@@ -1,7 +1,9 @@
 # A unit in flight goes back through construct: the plan's Amended mark, the stage it gives a unit whatever its tasks
 # say until construct has committed again, construct run again at any stage before merge, code, verify and merge
 # refused while the mark counts, and the unit going on from its tasks once construct has committed, with no approval
-# asked. Each scenario of the bolt-plan and bolt-teams specs on amending a unit in flight.
+# asked. Construct on a unit whose intent was amended is anyone's to start, sends the amendment's words read from the
+# mark, and names the card of the verify row the unit held before. Each scenario of the bolt-plan and bolt-teams specs
+# on amending a unit in flight, and of an-amendment-runs-construct-again-itself's bolt-teams.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -22,6 +24,13 @@ PY
   commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
 }
 mark() { by_hand "p.unit('$1').set('Amended', '$2')"; }
+# approved_by_hand <n> <case> <do>: proposals.rec on the branch holds proposal n, approved, as an approval leaves it
+approved_by_hand() {
+  local w=$T/hand; rm -rf "$w"; git clone -q -b wldn/main "$ws" "$w"
+  printf '\nProposal: %s\nCase: %s\nDo: %s\nState: approved\nOpened: 2026-10-10\nBy: wldn-planner\nClosed: 2026-10-10\n' "$1" "$2" "$3" >> "$w/proposals.rec"
+  recfix --check "$w/proposals.rec" || fail "proposal $1 by hand fails recfix --check"
+  commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+}
 old_schema='old = {plan.declares(q): q for q in plan.Plan(plan.HEADER.replace(" Amended", "")).paras if plan.declares(q)}; p.paras = [old.get(plan.declares(x), x) for x in p.paras]'
 
 # A branch started before the mark was allowed: it reads, and state init or any write brings its descriptors in step.
@@ -48,6 +57,7 @@ crew bolt give swb-1 tenant-environments >/dev/null 2>&1
 for u in coding m-proposal m-intent m-started m-committed; do
   p=$(place "$k" tenant-environments $u); change "$p" $u 2 3; commit_all "$p" "docs($u): the change"
 done
+rewrite "$kd/places/m-intent/openspec/changes/m-intent/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/m-intent" "feat(m-intent): the last task"
 started=$(git -C "$k" rev-parse unit/m-started); committed=$(git -C "$k" rev-parse unit/m-committed)
 git -C "$kd/places/m-committed" commit -q --allow-empty -m "docs(m-committed): the change again"
 mark m-proposal proposal/4; mark m-intent intent; mark m-started "$started"; mark m-committed "$committed"
@@ -130,19 +140,23 @@ HOST=$box crew status swb-1 >/dev/null 2>&1
 eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" ""
 ok "the user sends a planned unit back to construct, which marks it, and it is planned again once construct commits; the team's next read clears the mark"
 
-# An intent amended: construct has not been run again, so code is refused; construct says why it runs.
+# An intent amended, by the user, of a unit that was in verify: construct has not been run again, so code is
+# refused; the conductor brought back runs it, told why it runs and shown the card the amendment ended.
 export CREW_AGENT=swb-1-conductor
 expect_fail "unit m-intent was amended and construct has not been run again (crew unit run m-intent construct)" crew unit run m-intent code
+: > "$CREW_TEST_LOG"
 expect_ok crew unit run m-intent construct
+has "$out" "Close your Pending You card for verify/m-intent, if one is open, with what was done."
 has "$(prompt_to "$(pane swb-1-unit-3)")" "/opsx:propose m-intent Unit m-intent. This unit"
-has "$(prompt_to "$(pane swb-1-unit-3)")" "s intent was amended; revise the existing change to it.'"
+has "$(prompt_to "$(pane swb-1-unit-3)")" "s intent was amended by the user; revise the existing change to it.'"
 eq "$(plan -t Unit -e "Unit = 'm-intent'" -P Amended)" "$(git -C "$k" rev-parse unit/m-intent)"
 eq "$(stage m-intent)" "construct"
 : > "$CREW_TEST_LOG"; before=$(tip)
 expect_ok crew unit run m-intent construct --force
 eq "$(tip)" "$before"
 eq "$(field $box stage.start Amended stage/m-intent/construct)" ""
-ok "an amended intent waits for construct, which is told the intent was amended; run again before it commits, nothing is marked again"
+lacks "$out" "Close your Pending You card"
+ok "an amended intent waits for construct, which is told the intent was amended by the user and names the verify card; run again before it commits, nothing is marked again"
 
 # Merged work is not amended.
 CREW_AGENT= crew unit add e "Unit e." --bolt tenant-environments >/dev/null 2>&1
@@ -150,3 +164,17 @@ change "$kd/bolts/tenant-environments" e 2 2; commit_all "$kd/bolts/tenant-envir
 expect_fail "unit e has merged into its bolt: a defect in it is a fix (crew fix), and a new need is a new unit" crew unit run e construct
 has "$(field $box stage.start Refused stage/e/construct)" "unit e has merged into its bolt"
 ok "construct on a merged unit is refused"
+
+# An intent amended by an approved proposal: anyone may start its construct, the user having approved it, and the
+# fresh agent is given the planner's case; the mark moves in the starter's name.
+approved_by_hand 4 "The operator reads the deploy's log first." 'unit amend m-proposal "Unit m-proposal, amended."'
+by_hand "p.unit('m-proposal').set('Intent', 'Unit m-proposal, amended.')"
+export CREW_AGENT=wldn-planner
+expect_ok crew unit run m-proposal construct
+has "$out" "swb-1-unit-4 has m-proposal: construct"
+eq "$(prompt_to "$(pane swb-1-unit-4)")" "'/opsx:propose m-proposal Unit m-proposal, amended. This unit'\"'\"'s intent was amended by proposal 4; revise the existing change to it. The planner'\"'\"'s case, as the user approved it: The operator reads the deploy'\"'\"'s log first.'"
+eq "$(plan -t Unit -e "Unit = 'm-proposal'" -P Amended)" "$(git -C "$k" rev-parse unit/m-proposal)"
+eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(tenant-environments): m-proposal amended, construct runs again (wldn-planner)"
+eq "$(field $box stage.start Amended stage/m-proposal/construct)" "yes"
+eq "$(stage m-proposal)" "construct"
+ok "a planner starts construct on a unit an approved proposal amended, and its agent is given the planner's case"
