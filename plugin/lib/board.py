@@ -141,7 +141,11 @@ def markers(rows, cards, label, group, obj):
 
 
 def board_data(fleet, labels, read, now):
-    """The board of each label as data, the fields the page reads (`crew board --json`)."""
+    """The board of each label as data, the fields the page reads (`crew board --json`). Each partition lists its teams,
+    and each object of its lanes says the teams it belongs to, which is what the page narrows by: a held bolt and a
+    landing, its team; a signal, the team whose agent captured it; a proposal, the teams holding the bolts it names
+    and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
+    every team building its repository. A ledger's units and fixes are its own."""
     here = crew.this_host()
     rows, cards, sv = read["rows"], read["cards"], read["sv"]
     since = plan.utc(record.when(None)[1])
@@ -151,6 +155,13 @@ def board_data(fleet, labels, read, now):
         found = next(((repo, tip, pl) for x, repo, tip, pl in read["found"] if x == l), None)
         repo, tip, pl = found or (plan.state_of(fleet, l)[0], None, None)
         unread = read["unread"].get(l, {})
+        teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
+
+        def building(repo):
+            return [t["team"] for t in teams if repo and t["kit"] == repo]
+
+        def ordered(ts):
+            return [t for t in p["teams"] if t in ts]
         asked = set(crew.partition_hosts(fleet, l))
         hosts = {}
         for h in sorted(asked | (set(record.hosts_of(fleet, l)) if l in read["unread"] else set())):
@@ -170,11 +181,39 @@ def board_data(fleet, labels, read, now):
             for t in (fleet["teams"][x] for x in sorted(p["teams"]) if fleet["teams"][x]["kit"]["name"] == kit):
                 k = (sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}
                 if k.get("ok") and "explorations" in k:
-                    explorations += [{"kit": kit, "name": e["name"], "first": e["first"]} for e in k["explorations"]]
+                    explorations += [{"kit": kit, "name": e["name"], "first": e["first"], "teams": building(kit)} for e in k["explorations"]]
                     break
 
+        def proposal_teams(d):
+            """The teams of each bolt a proposal's changes name, the team holding it or else those building its
+            repository; and, where a change makes a bolt or names the queue, those building that bolt's repository or
+            the unit's. A change that names no repository adds none."""
+            bolts = {b.name(): (b.get("Team"), b.get("Repo")) for b in pl.bolts()}
+            units = {u.name(): u.get("Repo") for u in pl.units()}
+            out = []
+            for c in d["changes"]:
+                a = plan.do_args(l, c["do"])
+                key = (a.cmd, a.sub)
+                if key == ("bolt", "new"):
+                    bolts.setdefault(a.bolt, (None, a.repo))
+                elif key == ("unit", "add"):
+                    units[a.unit] = a.repo or bolts.get(a.bolt, (None, None))[1]
+                for n, _ in getattr(a, "into", None) or []:
+                    units[n] = units.get(a.unit)
+                for b in c["bolts"]:
+                    team, repo = bolts.get(b, (None, None))
+                    out += [team] if team else building(repo)
+                # a move that touches fewer than two bolts leaves or joins the queue; any other change touching none
+                # is a bolt it makes or a queued unit
+                if len(c["bolts"]) < (2 if key == ("unit", "move") else 1):
+                    out += building(bolts.get(a.bolt, (None, None))[1] if a.cmd == "bolt" else units.get(a.unit))
+            return ordered(out)
+
+        def captured(s):
+            kind, of = plan.role(fleet, s["captured_by"])
+            return [of] if kind in ("conductor", "team") and of in p["teams"] else []
         proposals = [{"proposal": d["proposal"], "by": d["by"], "opened": d["opened"], "case": (d["case"] or "").splitlines()[0] if d["case"] else None,
-                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d["proposal"]))}
+                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d["proposal"])), "teams": proposal_teams(d)}
                      for d in read["props"] if d["label"] == l]
         planned, queue, construction = [], [], []
         if pl:
@@ -182,7 +221,7 @@ def board_data(fleet, labels, read, now):
             for b in pl.bolts():
                 units = pl.units_of(b.name())
                 if not b.get("Team"):
-                    planned.append({"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"),
+                    planned.append({"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "teams": building(b.get("Repo")),
                                     "units": [{"unit": u.name(), "stage": st.of(u.name())["stage"]} for u in units]})
                     continue
                 t = fleet["teams"].get(b.get("Team"))
@@ -198,7 +237,7 @@ def board_data(fleet, labels, read, now):
                 state = st.bolt_state(b) if t else "unknown"
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
-                          "markers": markers(rows, cards, l, "land", b.name()), "units": [], "fixes": []}
+                          "markers": markers(rows, cards, l, "land", b.name()), "teams": [b.get("Team")], "units": [], "fixes": []}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "stage": s["stage"], "tasks": s["tasks"], "slot": slot("unit", u.name()),
@@ -209,11 +248,13 @@ def board_data(fleet, labels, read, now):
                 construction.append(ledger)
                 if state == "landed":
                     attention.append({"what": "landed", "name": b.name(), "why": "every unit has landed on main, and the bolt is still in the plan"})
-            queue = [{"unit": u.name(), "repo": u.get("Repo"), "sources": u.all("Source")} for u in pl.queue()]
-        operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"]))}
+            queue = [{"unit": u.name(), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))} for u in pl.queue()]
+        operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
+                      "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
-        parts.append({"label": l, "plan": tip, "hosts": hosts,
-                      "inception": {"signals": sorted(sigs, key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
+        parts.append({"label": l, "plan": tip, "hosts": hosts, "teams": teams,
+                      "inception": {"signals": sorted((dict(s, teams=captured(s)) for s in sigs),
+                                                      key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
                                     "explorations": explorations},
                       "bolt_plan": {"proposals": proposals, "planned": planned, "queue": queue},
                       "construction": construction, "operation": operation, "attention": attention})

@@ -183,15 +183,15 @@ ok "the board answers nothing: no approving or telling command in it, the flywhe
 
 expect_ok crew board --label wldn --json; json=$out
 eq "$(j 'keys | join(" ")')" "from partitions read_at unread"
-eq "$(j '.partitions[0] | keys | join(" ")')" "attention bolt_plan construction hosts inception label operation plan"
+eq "$(j '.partitions[0] | keys | join(" ")')" "attention bolt_plan construction hosts inception label operation plan teams"
 eq "$(j '.partitions[0].plan')" "$(tip)"
-eq "$(j '.partitions[0].inception.signals[0] | keys | join(" ")')" "at captured_by first home kind signal"
+eq "$(j '.partitions[0].inception.signals[0] | keys | join(" ")')" "at captured_by first home kind signal teams"
 eq "$(j '.partitions[0].inception.explorations[0] | "\(.kit) \(.name)"')" "switchboard-kit command-cost"
-eq "$(j '.partitions[0].bolt_plan.proposals[0] | keys | join(" ")')" "by case markers opened proposal waiting"
-eq "$(j '.partitions[0].bolt_plan.planned[0] | keys | join(" ")')" "bolt goal repo units"
-eq "$(j '.partitions[0].bolt_plan.queue[0] | keys | join(" ")')" "repo sources unit"
+eq "$(j '.partitions[0].bolt_plan.proposals[0] | keys | join(" ")')" "by case markers opened proposal teams waiting"
+eq "$(j '.partitions[0].bolt_plan.planned[0] | keys | join(" ")')" "bolt goal repo teams units"
+eq "$(j '.partitions[0].bolt_plan.queue[0] | keys | join(" ")')" "repo sources teams unit"
 te='.partitions[0].construction[] | select(.bolt == "tenant-environments")'
-eq "$(j "$te | keys | join(\" \")")" "bolt fixes goal host markers repo state team units url"
+eq "$(j "$te | keys | join(\" \")")" "bolt fixes goal host markers repo state team teams units url"
 eq "$(j "$te | .team")" "swb-1"
 eq "$(j "$te | .units[0] | keys | join(\" \")")" "markers slot stage tasks unit url worktree"
 eq "$(j "$te | .units[] | select(.unit == \"c\") | .markers[0] | \"\(.group) \(.key) \(.glyph) \(.card.by)\"")" "verify verify/c/$stamp ✎ swb-1-conductor"
@@ -201,6 +201,32 @@ eq "$(j '.partitions[0].operation[0] | "\(.bolt) \(.team) \(.units | join(","))"
 eq "$(j '.partitions[0].attention[0] | keys | join(" ")')" "name what why"
 eq "$(j '.partitions[0].hosts | to_entries | map("\(.key)=\(.value)") | join(" ")')" "$box=true mac-studio=true"
 ok "the board's JSON holds each lane's objects, the ledger's team, each marker's group, card key and card, the attention items and the hosts"
+
+# Whose each object is: a held bolt and a landing, its team; a planned bolt, a queued unit, an exploration and a
+# proposal for a new bolt, every team building its repository; the user's note and a planner's signals, none; a
+# signal a team's agent captured, its team; a proposal adding to a held bolt, the team holding it.
+eq "$(j '.partitions[0].teams | map("\(.team) \(.kit) \(.host)") | join("|")')" \
+  "swb-1 switchboard-kit $box|swb-2 switchboard-kit $box|brd-1 breadboard-kit $box|atl-1 atlas-kit mac-studio"
+eq "$(j "$te | .teams | join(\" \")")" "swb-1"
+eq "$(j '.partitions[0].construction[] | select(.bolt == "board-done") | .teams | join(" ")')" "brd-1"
+eq "$(j '.partitions[0].operation[0].teams | join(" ")')" "atl-1"
+eq "$(j '.partitions[0].bolt_plan.planned[] | select(.bolt == "apex-zones") | .teams | join(" ")')" "swb-1 swb-2"
+eq "$(j '.partitions[0].bolt_plan.queue[] | select(.unit == "zone-two") | .teams | join(" ")')" "swb-1 swb-2"
+eq "$(j '.partitions[0].inception.explorations[0].teams | join(" ")')" "swb-1 swb-2"
+eq "$(j ".partitions[0].inception.signals[] | select(.signal == \"$note\") | .teams | length")" "0"
+eq "$(j '[.partitions[0].inception.signals[] | select(.captured_by == "wldn-planner") | .teams | length] | map(tostring) | join(" ")')" "0"
+eq "$(j '.partitions[0].bolt_plan.proposals[0].teams | join(" ")')" "swb-1 swb-2"
+mkdir -p "$w/signals/2026-10-04-ledger"
+printf -- '---\ncapture: 2026-10-04-ledger\nsource: pane\ncaptured_by: swb-1-conductor\nat: 2026-10-04\nsignals: 1\n---\n' > "$w/signals/2026-10-04-ledger/capture.md"
+printf -- '---\nsignal: 2026-10-04-ledger/01-heads\nkind: ask\n---\n\nLedgers name their heads.\n' > "$w/signals/2026-10-04-ledger/01-heads.md"
+commit_all "$w" "signals: one swb-1's conductor captured"; git -C "$w" push -q origin main
+expect_ok crew plan propose "$(proposal 'Case: Tenants get a unit d.' 'Do: unit add d "Unit d." --bolt tenant-environments')"
+expect_ok crew board --label wldn --json; json=$out
+eq "$(j '.partitions[0].inception.signals[] | select(.signal == "2026-10-04-ledger/01-heads") | .teams | join(" ")')" "swb-1"
+eq "$(j '.partitions[0].bolt_plan.proposals[] | select(.proposal == 2) | .teams | join(" ")')" "swb-1"
+git -C "$w" rm -rq signals/2026-10-04-ledger; git -C "$w" commit -qm "signals: the ledger capture gone"; git -C "$w" push -q origin main
+expect_ok crew plan drop 2 "Not now."
+ok "the board's JSON lists the partition's teams with their kits and hosts, and gives each object the teams it belongs to"
 
 echo $box > "$T/down"
 expect_ok crew board --label wldn; b=$out

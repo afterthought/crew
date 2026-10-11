@@ -2,7 +2,7 @@
 
 ## 1. Whose each object is
 
-- [ ] 1.1 `crew board --json` lists each partition's teams and gives every object the teams it belongs to, by the table in the design, with the board's text and every existing check in `tests/t-board.sh` unchanged (design: *Whose each object is, decided in the board's read*; Task notes 1.1; `state.4`).
+- [x] 1.1 `crew board --json` lists each partition's teams and gives every object the teams it belongs to, by the table in the design, with the board's text and every existing check in `tests/t-board.sh` unchanged (design: *Whose each object is, decided in the board's read*; Task notes 1.1; `state.4`).
 
 ## 2. The board on the page
 
