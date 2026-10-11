@@ -29,7 +29,7 @@
 ## 5. Briefs and docs
 
 - [x] 5.1 `conductor.md`, `planner.md`, `construct.md`, `coder.md` and `verify.md` say what design.md Decision 9 says, `reviewer.md` exists, and `tests/t-briefs.sh` pins the new phrases. Verify `tests/suite t-briefs t-roles` ends with "0 failed".
-- [ ] 5.2 README, `plugin/skills/crew/SKILL.md` and the usage header of `plugin/bin/crew` name `crew review` and the settle stage, drop `crew unit approve`, and describe batches and the merge command (`docs.2`). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 5.2 README, `plugin/skills/crew/SKILL.md` and the usage header of `plugin/bin/crew` name `crew review` and the settle stage, drop `crew unit approve`, and describe batches and the merge command (`docs.2`). Verify `tests/suite t-docs` ends with "0 failed".
 - [ ] 5.3 The rules record 0014 amended read as built, and `_open.md` no longer lists them (design.md, Decision 11). Verify `tests/suite --affected` ends with "0 failed".
 
 ## 6. Proof on real work

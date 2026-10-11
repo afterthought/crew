@@ -24,16 +24,23 @@
 #                                      than at the read after its agent settles: end its agent, and remove the
 #                                      worktrees whose work is over; refused while its worktree has uncommitted
 #                                      changes
-#   crew unit run <unit> construct|code|verify|merge ["<words>"]
+#   crew unit run <unit> construct|code|verify|settle|merge ["<words>"]
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
-#                                      construct writes its OpenSpec change, code builds it once the user has
-#                                      approved it, verify checks it, merge merges it into the bolt. Construct
-#                                      run again on an approved unit marks it amended: code waits for the user
-#                                      to approve it again
+#                                      construct writes its OpenSpec change, once each unit it comes after has
+#                                      committed its own, its new place taking their work; code builds it as soon
+#                                      as it is committed, its prompt naming an overlap of Touches; verify checks
+#                                      it, naming the paths it changed and did not declare; settle takes what
+#                                      reached a verified unit; merge merges it into the bolt once each unit it
+#                                      comes after has merged, with wt merge, or wt submit where the kit opts into
+#                                      sluice. Construct run again on a planned unit marks it amended: code waits
+#                                      until that construct has committed
 #   crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]
-#                                      wait for the unit's stage to end at what it delivers (construct's change,
-#                                      code's ticked tasks, verify's report, merge's commit on the bolt), or at its
-#                                      agent saying what it needs; the stage's end is recorded. It returns sooner when
+#                                      first forecast conflicts with git merge-tree, telling each later unit once,
+#                                      rebase dependents whose unit merged, and count the partition's changes due for
+#                                      a batch; then wait for the unit's stage to end at what it delivers (construct's
+#                                      change, code's ticked tasks, verify's report, settle's commit, merge's commit
+#                                      on the bolt), or at its agent saying what it needs; the stage's end is
+#                                      recorded. It returns sooner when
 #                                      the agent has been quiet past --stuck (15 minutes) with nothing of its own
 #                                      running, or is gone, or the timeout (an hour) passes, and says which
 #   crew fix     <team> <name> "<what is wrong>"
@@ -62,7 +69,7 @@
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew plan  propose|proposed|agree|approve|drop ...
 #                                      the planner's proposals: a change to the plan, applied once the user approves it
-#   crew rail  [--label L]             what waits on the user: proposals, verify reports and bolts to land,
+#   crew rail  [--label L]             what waits on the user: proposals, review batches, verify reports and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
 #                                      You card; then any open card whose row is gone
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
@@ -70,11 +77,12 @@
 #                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and
 #                                      dev servers) and Operation (bolts landed this week); each rail row a marker on
 #                                      its object, what needs attention at the foot; it answers nothing
-#   crew card  session|wait|end <key> [--label L]
+#   crew card  session|wait|end <key> [<unit>] [--label L]
 #                                      the plannotator session on what a rail row's card asks the user to read:
 #                                      session starts it on this host with no browser and prints its link (the
-#                                      running one's when there is one); wait waits for the user's decision in it and
-#                                      prints it with their words; end ends it, as the card's close does
+#                                      running one's when there is one), a batch card's one per unit on that unit's
+#                                      team's host; wait waits for the user's decision in it and prints it with their
+#                                      words; end ends it, as the card's close does
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
@@ -87,6 +95,10 @@
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
 #                                      main level's session, and a dispatcher on each host the partition's teams run on;
 #                                      each agent up starts is greeted to read where the partition stands and carry on
+#   crew review   <label> [--wait [--timeout <ms>]]
+#                                      the partition's reviewer, started fresh for the batch of changes due, in a
+#                                      review tab beside the planner; --wait waits for its summary, records the batch
+#                                      and closes the tab
 #   crew operator up <label>           the operator agent in this host's operator session <label>, with a flow tab
 #                                      following the run record, a rail tab (crew rail above, a shell below) and a
 #                                      board tab drawn from the rail tab's read; the agent it starts is greeted the
