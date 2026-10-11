@@ -25,8 +25,9 @@ the row keys as its idempotencyKey. A card with any other key is on agent/<the a
 is text an agent wrote. Nothing written on the card is recorded: no title, summary, option, note or outcome.
 
 When a crew agent withdraws or closes a card with a row key, the hook then ends the plannotator session `crew card
-session` started for that key on this host, as `crew card end` does, so no card's session outlives its card; a batch
-card's sessions, one per unit on each unit's team's host, are ended by `crew card end <key>` started apart, since
+session` started for that key on this host, as `crew card end` does, so no card's session outlives its card. When
+plannotator's list of sessions can't be read, it ends nothing, keeps the session for a later rail read to end, and
+says so to the agent, in end_session's words, as the tool's additional context. A batch card's sessions, one per unit on each unit's team's host, are ended by `crew card end <key>` started apart, since
 reaching those hosts takes longer than a hook may.
 
 A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it, the record session-start keeps of
@@ -301,7 +302,11 @@ def main():
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     elif ACTS[tool] == "card.close" and keyed(key)[0]:
         import plan
-        plan.end_session(label, key)
+        said, _ = plan.end_session(label, key)
+        # A session end_session keeps is one whose plannotator list it could not read: the agent is told, in its
+        # words, that nothing was ended and a later rail read ends it (read.1).
+        if (plan.CARDS / label / key / "session.json").exists():
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": said}}))
 
 
 if __name__ == "__main__":

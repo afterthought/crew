@@ -5,7 +5,8 @@
 # its agent. An error, another server's tool and a session crew didn't start write nothing; a session herdr resumed is
 # known by what session-start recorded; and the hook never fails a tool call. A keyed card's withdrawal or close ends
 # the plannotator session crew started for its key; an unkeyed card's ends nothing, nor does a key's close end a
-# session crew did not start, and a card posted under a key that is no longer a row's closes under it. Run as
+# session crew did not start, and a card posted under a key that is no longer a row's closes under it. When
+# plannotator's list can't be read, a withdrawal ends nothing, keeps the key's session and tells the agent so. Run as
 # `cards --before`, before a card is posted or an area made, the hook refuses a crew agent's card under any key but a
 # rail row's of its own, the planner's open proposal or batch card or its conductor's bolt and units, and an area under
 # any key but create-area: and a kit of its own, naming the key to use; a team's ops and slots and the main level's
@@ -218,6 +219,24 @@ eq "$(pick card.close '[.Card, .Key] | join(" ")')" "req_ses-5 verify/z/20261007
 up "$s3" || fail "a session was ended while its key could not be forgotten"
 kill "$s3" "$mine"
 ok "a session the hook can't end is said, the close is still recorded, and the tool call goes on"
+
+call pendingyou post_request "$(post proposal/9)" '{"structuredContent": {"requestId": "req_ses-6"}}' | cards
+s4=$(session proposal/9)
+mkdir -p "$T/broken"; printf '#!/usr/bin/env bash\necho "plannotator: its registry is locked" >&2\nexit 1\n' > "$T/broken/plannotator"
+chmod +x "$T/broken/plannotator"
+said=$(call pendingyou cancel_request '{"name": "swb-1-conductor", "requestId": "req_ses-6", "reason": "replaced by proposal 10"}' \
+  '{"structuredContent": {"status": "cancelled"}}' | PATH="$T/broken:$PATH" cards)
+eq "$(jq -r '.hookSpecificOutput | [.hookEventName, .additionalContext] | join(": ")' <<<"$said")" \
+  "PostToolUse: crew can't read plannotator's sessions (plannotator sessions: plannotator: its registry is locked): it ended nothing, and keeps proposal/9 to end later"
+up "$s4" || fail "a session was ended while plannotator's list could not be read"
+[[ -e $cardsdir/proposal/9/session.json ]] || fail "the withdrawn card's session was forgotten while plannotator's list could not be read"
+eq "$(pick card.close '[.Card, .Key] | join(" ")')" "req_ses-6 proposal/9"
+call pendingyou post_request "$(post verify/w/20261007-1700)" '{"structuredContent": {"requestId": "req_ses-7"}}' | cards
+s5=$(session verify/w/20261007-1700)
+eq "$(call pendingyou ack_answer '{"requestId": "req_ses-7", "outcome": "done"}' '{"structuredContent": {"status": "resolved"}}' | cards)" ""
+gone "$s5"
+kill "$s4"
+ok "a withdrawal while plannotator's list can't be read ends nothing, keeps the key's session and tells the agent so; a close that ends its session says nothing"
 
 # Before a card is posted or an area made: a team holds a bolt with units, another team holds another, and the
 # partition has a proposal open and one closed.

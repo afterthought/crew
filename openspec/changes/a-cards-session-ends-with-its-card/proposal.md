@@ -35,10 +35,12 @@ None.
 ```
 plugin/lib/plan.py
 plugin/lib/board.py
+plugin/hooks/cards
 plugin/bin/crew
 README.md
 plugin/skills/crew/SKILL.md
 tests/t-card-sweep.sh
 tests/t-card-session.sh
+tests/t-cards.sh
 tests/moon.yml
 ```
