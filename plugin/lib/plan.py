@@ -59,8 +59,9 @@ a channel is in the partition's first blueprints repo. An id is looked up in tha
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, contextlib, datetime, fcntl, getpass, hashlib, json, os, pathlib, re, shlex, shutil, subprocess, sys, tempfile, time
-import urllib.parse
+import argparse, contextlib, datetime, fcntl, json, os, pathlib, re, shlex, subprocess, sys, time
+# getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
+# module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
 
 LIB = pathlib.Path(__file__).resolve().parent
@@ -117,7 +118,7 @@ MOVES = """\
 def need_recutils():
     """Every plan command checks for recutils before anything else."""
     for c in ("recsel", "recfix"):
-        if not __import__("shutil").which(c):
+        if not any(os.access(os.path.join(d, c), os.X_OK) for d in os.environ.get("PATH", "").split(os.pathsep) if d):
             sys.exit(f"crew's plan needs recutils, and {c} is not on PATH: install the recutils package "
                      "(crew's devenv.nix declares it; on a host, swancloud's packages)")
 
@@ -266,13 +267,11 @@ class Plan:
 
 
 def recfix(text, what):
-    """recfix --check on a plan or moves file; the message names what was checked."""
-    with tempfile.TemporaryDirectory() as d:
-        f = pathlib.Path(d) / pathlib.Path(what).name
-        f.write_text(text)
-        r = subprocess.run(["recfix", "--check", str(f)], capture_output=True, text=True)
-        if r.returncode:
-            fail(f"{what} fails recfix --check: " + (r.stderr or r.stdout).strip().replace(str(f), pathlib.Path(what).name))
+    """recfix --check on a plan or moves file, read from its standard input; the message names what was checked."""
+    r = subprocess.run(["recfix", "--check"], input=text, capture_output=True, text=True)
+    if r.returncode:
+        said = (r.stderr or r.stdout).strip()
+        fail(f"{what} fails recfix --check: " + re.sub(r"(?m)^stdin:", pathlib.Path(what).name + ":", said))
 
 
 def checked(files):
@@ -409,7 +408,7 @@ class Reading:
 
     @staticmethod
     def tip_name(repo, ref):
-        return "tip-" + hashlib.sha1(f"{repo} {ref}".encode()).hexdigest()
+        return "tip-" + re.sub(r"[^A-Za-z0-9.-]", lambda m: f"_{ord(m.group()):x}_", f"{repo} {ref}")
 
     def tip(self, repo, ref):
         return None if self.bypass else self.held(self.tip_name(repo, ref))
@@ -467,6 +466,7 @@ def show(repo, tip, path):
 def commit(repo, parent, files, message):
     """A commit of files' new text ({path: text}) on top of parent, made through a temporary index: no working tree
     is touched, and no other path changes."""
+    import tempfile
     with tempfile.TemporaryDirectory() as d:
         idx = {"GIT_INDEX_FILE": str(pathlib.Path(d) / "index")}
         git(repo, "read-tree", *([parent] if parent else ["--empty"]), env=idx)
@@ -503,6 +503,7 @@ def land(repo, ref, path, make):
 
 def agent():
     """Who is writing: the agent crew started (CREW_AGENT), else the user at this host."""
+    import getpass
     return os.environ.get("CREW_AGENT") or f"{getpass.getuser()}@{crew.this_host()}"
 
 
@@ -2333,6 +2334,7 @@ def dashed(s):
 
 
 def sha16(text):
+    import hashlib
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
@@ -2421,6 +2423,7 @@ def signal(fleet, a):
         h = sha16(excerpt)
         v = sid = when = None
         date, key = now.date().isoformat(), f"operator/{agent()}/{h}"
+        import getpass
         cap, who, position, kind = f"{date}-{dashed(getpass.getuser())}-{dashed(host)}-{h[:8]}", "user", now.strftime("%H:%M:%SZ"), a.kind or "ask"
     # An id is unique across both homes, so it is looked up in either without asking which.
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
@@ -4683,6 +4686,7 @@ def card_session(fleet, a):
             if decided:
                 (d / "result.json").rename(d / f"result.{re.sub(r'[-:]', '', s['started'])}.json")
             (d / "session.json").unlink()
+        import shutil
         shutil.which("plannotator") or fail("plannotator is not on this host's path, and a card's session is a plannotator session")
         if where == "page":
             _, n = doc
@@ -4714,6 +4718,7 @@ def card_session(fleet, a):
                 fail(f"plannotator did not list {name} within {CARD_START} seconds" + (f" ({why})" if why else "")
                      + ", so crew ended it")
             time.sleep(0.2)
+        import urllib.parse
         host = urllib.parse.urlsplit(got["url"]).hostname or ""
         if host in ("localhost", "::1") or host.startswith("127."):
             card_stop(proc)
@@ -4809,6 +4814,7 @@ def end_session(label, key, unit=None):
     except Refusal:
         s = None
     listed, why = plannotator_sessions() if s else (None, None)
+    import shutil
     shutil.rmtree(d)
     for p in d.parents:
         if p == CARDS / label or not p.is_dir() or any(p.iterdir()):

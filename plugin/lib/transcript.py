@@ -49,7 +49,7 @@ whose message.content is the text as sent, crew's mark included; a slash command
 works is recorded at once as {"type": "queue-operation", "operation": "enqueue", "content": "<text>"}, then as a user
 record when Claude submits it. When these stop holding, no prompt reads as received: crew sends each twice and reports
 its stage as never started, loudly, never as a stage that began."""
-import datetime, hashlib, json, pathlib, re, sys
+import datetime, json, pathlib, re, sys
 
 # A crew signal command line that carries an excerpt, the agent's own or an echo of it: from `crew signal` to the end of
 # its line, a backslash-newline running it on, when a word after it starts --excerpt.
@@ -131,6 +131,7 @@ class Verdict:
 
     def line_hash(self):
         """The source line's sha256, in hex: a record's name where it has no uuid."""
+        import hashlib
         return hashlib.sha256(self.raw).hexdigest()
 
 

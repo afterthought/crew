@@ -27,7 +27,9 @@ branch first, then whatever each host it can reach has not yet carried.
 An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>, agent/<name>,
 stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of the partition), and
 what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>."""
-import argparse, datetime, getpass, json, os, pathlib, queue, re, signal, subprocess, sys, tempfile, threading
+import argparse, datetime, json, os, pathlib, re, signal, subprocess, sys
+# getpass, queue, tempfile and threading are imported where they are used, so a command that writes one entry starts
+# without them.
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -65,6 +67,7 @@ _session = ...  # resolved once per process
 
 def who():
     """Who asked: the agent crew started, else the user at this host."""
+    import getpass
     return os.environ.get("CREW_AGENT") or f"{getpass.getuser()}@{crew.this_host()}"
 
 
@@ -145,6 +148,7 @@ def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None,
         if not path.exists():
             # The descriptor goes in by a link, so a second process can never append before it: link fails on a
             # file that is there, and the file only ever appears whole.
+            import tempfile
             fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".new-")
             try:
                 os.write(fd, DESCRIPTOR.encode())
@@ -410,6 +414,7 @@ def events(fleet, a):
 def follow(fleet, labels, about):
     """Each entry of the labels on every reachable host as it is appended, one tail per host, until interrupted. The
     files are named by the UTC date, so the tails start again when it changes."""
+    import queue, threading
     lines = queue.Queue()
     procs = []
 
