@@ -726,7 +726,10 @@ def env(t):
 def signal_how(cmd, label, state):
     return (f"`{cmd} signal <slug> \"<what it asserts, in a sentence>\" --excerpt \"<the exact words the user said or the tool "
             f"printed>\" --kind constraint|ask|question|commitment|reaction`. Copy the excerpt, never reword it: crew looks for it "
-            f"in your own session's transcript, and a refusal means the words were reworded. crew writes the signal under "
+            f"in your own session's transcript, and a refusal means the words were reworded. When the words point at something "
+            "made elsewhere, such as another conversation, a page or prototype, an artifact, files in another repo or a spike, "
+            "find it and name in the sentence where it lives, in a form another agent can open: `<owner>/<repo>:<path>`, a "
+            "branch, an artifact's link. A conversation's id alone is not enough: name what it made. crew writes the signal under "
             f"`signals/` on `{label}/main` of {state}.")
 
 
