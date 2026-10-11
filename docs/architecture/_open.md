@@ -22,7 +22,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - Record 0010's board view: the page draws the lanes in the mockup's forms, side by side or stacked, narrowed to a team, with every partition one step away (`the-page-shows-the-board`, after the text board and the page); `crew board` draws them as text.
 - `plan.8`, `teams.5` as restated 2026-10-10: the carrying fix judged by its commits, count, order, message and author, not by `git range-diff`'s pairing (`a-carrying-fix-is-judged-by-its-commits`); `plan _carry` judges by range-diff at creation factor 60 and misses a commit whose context main rewrote.
 - `plan.15`: an approved amendment runs construct again by its own act and a restarted conductor picks it up (`an-amendment-runs-construct-again-itself`); today the conductor runs it on a notice it can lose.
-- `briefs.14`, ADR 0004 as amended, ADR 0016: sources govern over an intent's mechanism, and a spike beside the design agent (`a-spike-runs-beside-the-design-agent`); no brief says which governs, and crew has no spike.
+- `briefs.14`, ADR 0004 as amended: sources govern over an intent's mechanism; no brief says which governs. ADR 0016, a spike beside the design agent, is back to proposed on 2026-10-11 and its bolt `a-spike-runs-beside-the-design-agent` held until the elaboration record is settled with the user.
 - ADR 0005 as amended 2026-10-10, the image clause: a screenshot on a card is an uploaded image artifact, never a path (`an-image-on-a-card-is-uploaded`); the card discipline says nothing of images.
 - ADR 0005 as amended 2026-10-10: a card's session ended by crew on every rail read once its card is closed or its row gone (`a-cards-session-ends-with-its-card`); today only the owner's hook ends it, and eleven idle servers ran on mac-studio.
 - `teams.15`: a stage's prompt taken or sent again, never left typed (`a-stages-prompt-is-taken-or-sent-again`); `run_stage` types and reads nothing back.
@@ -37,6 +37,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - ADR 0005 as amended 2026-10-09: a conductor whose session has lost the tools is started afresh on its word and posts its card (`a-card-reaches-the-user-when-the-tools-drop`); today such a row has no card and the user is told only by notification. The landing key carries the bolt's head (`a-landing-card-is-the-heads`); today `land/<bolt>` returns the failed landing's answered card.
 - `briefs.13` as amended 2026-10-11: a batch card with no words question, its notes the sessions' annotations and the card's own note (`a-batch-cards-notes-are-its-note-and-its-sessions`); the batch card crw-3's unit built asks one (`planner.md` *Batches*, step 2).
 - ADR 0005 as amended 2026-10-11, the sign-in clause: a row's card its owner can no longer reach is posted again with the older copy named dead (`a-card-lost-to-its-owner-is-posted-again`); the card discipline says nothing of a lost card today.
+- `briefs.15`: a record proposed on one card and accepted on the user's yes (`a-record-is-accepted-on-the-users-yes`); `design.md` has the design agent record and commit as settled.
 - `briefs.10`: the operator agent as the partition's front door, in every roster (`a-partitions-operator-agent-is-its-front-door`).
 
 ## Code against a rule

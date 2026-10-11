@@ -1,7 +1,7 @@
 ---
 number: 16
 title: A spike works beside the design agent, outside the bolt flow, and feeds it signals
-status: accepted
+status: proposed
 date: 2026-10-10
 decision-makers:
 - Chuck Swanberg
@@ -11,6 +11,8 @@ decision-makers:
 # A spike works beside the design agent, outside the bolt flow, and feeds it signals
 
 Deciders: the user (2026-10-10, through madswan-design, signals 2026-10-10-madswan-design-3d7ef799/02 "It's probably a good thing because I really didn't want to go through an OpenSpec process just to do a quick prototype page." and /03 "I also want to potentially be outputting from that spike things that come back as signals to you"); swancloud-design.
+
+Status: committed as accepted on 2026-10-10 without the user's approval, and put back to proposed on 2026-10-11 on the user's word ("I don't think the design agent really consulted me. I think it just added the ADR"); the user is questioning the spike as its own concept, and this record waits on the elaboration record that answers it.
 Sources: `openspec/explorations/` (the board and testing explorations, each a pane beside the design agent whose report became a record); `docs/architecture/signals.md` (an agent's signals land on the flywheel's branch through `crew signal`); `plan.md` plan.9 (crew removes only worktrees it made, never a dirty one); ADR 0001 (chores); ADR 0010 (an exploration's reading became the board's record).
 
 ## Context and problem statement
