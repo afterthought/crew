@@ -102,7 +102,7 @@ expect_ok crew plan proposed 1
 has "$out" "1. **Amend unit \`cfn-lint-treefmt\`** in bolt \`tenant-environments\` (swb-1), now in code"
 has "$out" "   Intent, as it stands: Unit cfn-lint-treefmt."
 has "$out" "   Intent, as proposed:  cfn-lint in treefmt fails the check on a warning as well as an error"
-has "$out" "   On approval: swb-1's conductor runs construct again, and once that has committed the unit goes on from its tasks with no approval asked, its revised change due for the next batch."
+has "$out" "   On approval: construct runs again at once in swb-1's slot, and once that has committed the unit goes on from its tasks with no approval asked, its revised change due for the next batch."
 has "$out" "2. **Amend unit \`in-verify\`** in bolt \`tenant-environments\` (swb-1), now in verify"
 has "$out" "- swb-1-conductor, to agree, or tell wldn-planner why not"
 eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(proposal 1): propose: amend cfn-lint-treefmt, amend in-verify (wldn-planner)"

@@ -4,7 +4,7 @@
 
 - [x] 1.1 Applying `unit amend` to a unit with a worktree in a held bolt, directly or in an approval, runs `crew unit run <unit> construct` on the team's host in the applier's name and tells the conductor that construct runs again or why it did not start (design.md, Decisions 1 and 4; Task notes 1.1). Verify `tests/suite t-amend-intent` ends with "0 failed".
 - [x] 1.2 `run_check` starts construct on a unit marked `proposal/<n>` or `intent` for any caller, sends the amendment's words read from the mark (the proposal's case included), and names the card of the row the unit held before its amendment (design.md, Decisions 2 to 4; Task notes 1.2). Verify `tests/suite t-amend t-amend-intent` ends with "0 failed".
-- [ ] 1.3 `crew plan proposed <n>` says of an amendment "On approval: construct runs again at once in <team>'s slot, and the unit returns to your review." (design.md, Decision 6). Verify `tests/suite t-amend-intent` ends with "0 failed".
+- [x] 1.3 `crew plan proposed <n>` says of an amendment "On approval: construct runs again at once in <team>'s slot, and the unit returns to your review." (design.md, Decision 6). Verify `tests/suite t-amend-intent` ends with "0 failed".
 
 ## 2. A conductor brought back starts amended units
 

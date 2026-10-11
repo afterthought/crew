@@ -2073,8 +2073,8 @@ def amendment(fleet, plan, a):
     now = ("" if st == "queued" else f", its stage unknown ({s.get('why')})" if st == "unknown" else
            f", now in {st}" if st in ("construct", "planned", "code", "verify") else f", now {st}")
     return [f"**Amend unit `{a.unit}`** in {where}{now}", f"Intent, as it stands: {u.get('Intent')}", f"Intent, as proposed:  {a.intent}",
-            f"On approval: {team}'s conductor runs construct again, and once that has committed the unit goes on from its "
-            "tasks with no approval asked, its revised change due for the next batch." if s["worktree"] and team else
+            f"On approval: construct runs again at once in {team}'s slot, and once that has committed the unit goes on from "
+            "its tasks with no approval asked, its revised change due for the next batch." if s["worktree"] and team else
             "On approval: its intent is replaced; it has no change written yet, so nothing else changes."]
 
 
