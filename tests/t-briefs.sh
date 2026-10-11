@@ -40,10 +40,12 @@ cards_say() {  # the card discipline the planner's and the conductor's briefs sh
     "never reworded" "No card carries a path" "an empty list as its files touched" \
     'one entry in its links, labelled "Read and annotate it in plannotator"' "The link is no artifact" \
     "update its summary, background and links together" \
-    "give it the form its row takes, as your brief says" "crew refuses a row's card in another form, and names the form to use"; do
+    "give it the form its row takes, as your brief says" "crew refuses a row's card in another form, and names the form to use" \
+    'kind `image` with `upload: true`' "with its content type" 'Never attach an image as kind `path`' \
+    'kind `code` with lang `markdown`' "never an uploaded file and never HTML" "reached through the card's plannotator link"; do
     has "$out" "$want"
   done
-  lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"
+  lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"; lacks "$out" "leave the card's artifacts empty"
 }
 cards_say
 for want in "its words each finding the report raised in a line, with what you would do about it" \
