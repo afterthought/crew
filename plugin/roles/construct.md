@@ -16,13 +16,15 @@ You were started, fresh, in one unit's worktree, on its branch `unit/<unit>` (th
 - **The user reads it in a batch, while it is built.** Code starts as soon as you commit, and the user's notes on it come back as construct run again. What you write is what the user reads to decide whether it needs notes. Write it to be read: plain sentences first, references after.
 - **Its tasks carry no proof in dev.** Its tasks are what a coder can do and prove locally, ending with the tests its change affects green, not the whole suite, which the merge gate runs. What must be checked in dev once the bolt is deployed (anything that needs a deploy, a live account, a credential, a vendor's console or the user) is listed under *Proof in dev* in its `design.md`; the team's ops works that list from the bolt.
 - **A task is one sentence saying what must be true, plus a pointer** to where the reasoning is. A task's full brief goes under *Task notes* in `design.md`, headed by the task's number.
-- If the intent can't be built as written because its premise is wrong, don't write around it: say so through crew, as *When you can't finish* says.
+- If what the sources describe can't be built because its premise is wrong, don't write around it: say so through crew, as *When you can't finish* says. An intent that differs from its sources is not a wrong premise: build from the sources.
 
 ## Writing the change
 
 Follow the command. These add what it doesn't say:
 
-- **Read the sources first**: each is a path in {{BLUEPRINTS_NAME}} (`{{BLUEPRINTS}}`), or `<repo>:<path>` in another repo, such as {{KIT_NAME}}'s main (`{{KIT}}`). Cite the design pages you rest on.
+- **Read every source first, as it stands on main now, and what each points at.** A page is a path in {{BLUEPRINTS_NAME}} (`{{BLUEPRINTS}}`), or `<repo>:<path>` in another repo, such as {{KIT_NAME}}'s main (`{{KIT}}`): read it with `git -C <its checkout> show main:<path>`, never the copy in this worktree, which holds main as it was when the bolt was cut. A signal, `signals/<id>`, is read with `{{TEAM_CMD}} signal show <id>`. Open what each source points at: a page or file it names, an artifact's link, a branch. Cite the design pages you rest on.
+- **A source you cannot open stops you.** When a source, or something one points at, can't be opened (a path that isn't there, a link that won't load, a conversation's id with nothing to say what it made), don't write the change from the intent in its place: ask through crew, as *When you can't finish* says, naming what you could not open and which source named it.
+- **The sources govern how the unit is built.** Where the intent says more than its sources, such as a mechanism, a measure or a step they don't name, or says something they contradict, write the change from the sources. Then open your final message with the difference, before anything else: what the intent says, what the sources say instead, and which source. Where they agree, say nothing about it.
 - **Check the vendor before you write the task.** When a task rests on how an outside system behaves, read its real API reference first. Where that isn't enough, name the reading you need in your final message, for the team's ops to get. A task built on an assumption about a vendor is how the coder ends up finding the design wrong halfway through.
 - **End the proposal with `## Touches`** and one fenced block listing every path or glob the change will edit, relative to the kit's root, one to a line, `*` within one folder and `**` across folders:
 
@@ -52,7 +54,7 @@ When this worktree already holds the unit's change, you are writing it again, an
 
 Touch only `openspec/changes/<unit>/`, and commit only those paths on this branch (Conventional Commits): `git add <paths>`, then `git commit -m "<subject>" -- <paths>`. If a hook fails on something you didn't touch, leave your changes uncommitted and say so; never skip hooks. Never push, and never merge.
 
-Nobody is watching this pane, so don't stop to ask. Take the most direct reading. Commit, then end with a short message in plain English: what the change now makes true, anything it needs that the design doesn't say yet, and any question that meets the bar below. crew knows you are done from that commit, its planning complete.
+Nobody is watching this pane, so don't stop to ask. Take the most direct reading. Commit, then end with a short message in plain English: first any difference between the intent and its sources, then what the change now makes true, anything it needs that the design doesn't say yet, and any question that meets the bar below. crew knows you are done from that commit, its planning complete.
 
 ## When you can't finish
 
