@@ -655,13 +655,18 @@ def slot_of(t, slot):
 def bolt_place(t):
     """The worktree of the bolt a team holds, from the plan, where its conductor and ops start; None when it holds
     none. A plan that can't be read is reported, and the role starts in the kit's main checkout."""
-    r = subprocess.run([sys.executable, str(LIB / "plan.py"), "_bolt-of", t["name"]], capture_output=True, text=True)
-    if r.returncode:
-        why = (r.stderr or r.stdout).strip()
+    import argparse, contextlib, io
+    import crew as this, plan  # read in this process, as plan.py _bolt-of reads it; plan imports this module by name
+    said = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(said):
+            plan.bolt_of_team(this.load(), argparse.Namespace(team=t["name"]))
+    except this.Refusal as e:
+        why = str(e).strip()
         if "holds no bolt" not in why:
             print(f"{t['name']}'s bolt could not be read ({why}); starting in {t['kit']['main']}", file=sys.stderr)
         return None
-    bolt = r.stdout.strip().partition("=")[2].strip("'\"")
+    bolt = said.getvalue().strip().partition("=")[2].strip("'\"")
     path = f"{t['kit']['dir']}/bolts/{bolt}"
     return path if bolt and pathlib.Path(path).is_dir() else None
 
