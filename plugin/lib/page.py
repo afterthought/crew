@@ -46,8 +46,10 @@ def data(entries, since=None):
     """The page's objects from the entries at or after since (an ISO stamp; all of them without it): nodes, every
     object of the five kinds an entry names in On or From; edges, for each entry the objects of those kinds it names
     joined in the flow's order, each to those of the next column it names, so no line skips a column the entry names,
-    a unit.move's From bolt left out, since that is where the unit was; histories, each node's entries as crew trace
-    walks them, by Id; and entries, one table by Id."""
+    a unit.move's From bolt left out, since that is where the unit was, and an entry on a proposal joining only the
+    proposal to what it names, since it names everything the proposal touches and which unit went to which bolt is
+    its changes' own entries; histories, each node's entries as crew trace walks them, by Id; and entries, one table
+    by Id."""
     entries = sorted((e for e in entries if not since or e["At"] >= since), key=lambda e: (e["At"], e["Id"]))
     nodes, edges = {}, {}
     for e in entries:
@@ -57,10 +59,12 @@ def data(entries, since=None):
             nodes.setdefault(o, {"id": o, "kind": kind, "name": name, "first": e["At"]})["last"] = e["At"]
         linked = [o for o in named if not (e.get("Act") == "unit.move" and o.startswith("bolt/") and o in e["From"] and o not in e["On"])]
         cols = sorted({column(o) for o in linked})
+        hub = next((o for o in e["On"] if o.startswith("proposal/")), None)
         for a, b in zip(cols, cols[1:]):
             for x in (o for o in linked if column(o) == a):
                 for y in (o for o in linked if column(o) == b):
-                    edges.setdefault((x, y), []).append(e["Id"])
+                    if hub in (None, x, y):
+                        edges.setdefault((x, y), []).append(e["Id"])
     index = record.named_by(entries)
     return {"nodes": sorted(nodes.values(), key=lambda n: (column(n["id"]), n["first"], n["id"])),
             "edges": [{"from": x, "to": y, "entries": ids} for (x, y), ids in edges.items()],

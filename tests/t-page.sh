@@ -1,8 +1,8 @@
 # crew page: a flywheel's lineage page, drawn from its run record alone. Its objects are the signals, agenda items,
-# proposals, units and bolts the entries name, each linked to what the same entry names in the next column; each
-# object's history is what crew trace prints for it. Labels and present status come from the flywheel's state at the
-# commit the entries were read at; one the state no longer holds is labelled from its entries, and a unit whose host
-# does not answer has no stage. The page also holds the partition's board, as crew board reads it at the same commit,
+# proposals, units and bolts the entries name, each linked to what the same entry names in the next column, an entry
+# on a proposal linking only the proposal to what it names; each object's history is what crew trace prints for it.
+# Labels and present status come from the flywheel's state at the commit the entries were read at; one the state no
+# longer holds is labelled from its entries, and a unit whose host does not answer has no stage. The page also holds the partition's board, as crew board reads it at the same commit,
 # with a host that does not answer in its attention, and opens on it: four lanes in the flywheel mockup's forms, for a
 # desktop and a phone, light and dark, with nothing loaded from outside the file; a header naming every partition, the
 # others linked to their pages beside it; and the partition's teams to narrow it to.
@@ -46,6 +46,16 @@ json=$(pagedata) || fail "crew page --json: $json"
 eq "$(j '[.edges[] | select(.from == "unit/v" or .to == "unit/v") | "\(.from)>\(.to)"] | join(" ")')" "unit/v>bolt/c"
 ok "a unit's move draws a line to the bolt it moved to, none from the bolt it left"
 
+for act in plan.propose plan.approve; do
+  emit --act "$act" --on proposal/4 --on unit/x --on bolt/e --on unit/y --on bolt/f --why "plan(proposal 4): ${act#plan.}"
+done
+emit --act unit.add --on unit/x --on bolt/e --from proposal/4 --why "plan(e): add x"
+emit --act unit.add --on unit/y --on bolt/f --from proposal/4 --why "plan(f): add y"
+json=$(pagedata) || fail "crew page --json: $json"
+eq "$(j '[.edges[] | select(.to | startswith("bolt/")) | select(.from == "unit/x" or .from == "unit/y") | "\(.from)>\(.to)"] | sort | join(" ")')" "unit/x>bolt/e unit/y>bolt/f"
+eq "$(j '[.edges[] | select(.from == "proposal/4") | "\(.to):\(.entries | length)"] | sort | join(" ")')" "unit/x:3 unit/y:3"
+ok "a proposal's entries join the proposal to each unit it names, and each unit only to the bolt its own entry puts it in"
+
 for n in $(j '.nodes[].id'); do
   expect_ok crew trace "$n"
   eq "$(j --arg n "$n" '.histories[$n][] as $i | .entries[$i] | "\(.At[5:10]) \(.At[11:19]) \(.Act)"')" "$(awk '{print $1, $2, $3}' <<<"$out")"
@@ -56,7 +66,7 @@ ok "for every node, the page's history is the entries crew trace prints for it, 
 json=$(pagedata --since "$(date -u -v+1d +%F 2>/dev/null || date -u -d tomorrow +%F)") || fail "crew page --json --since: $json"
 eq "$(j '.nodes | length') $(j '.entries | length') $(j '.edges | length')" "0 0 0"
 json=$(pagedata --since "$start") || fail "crew page --json --since $start: $json"
-eq "$(j '.nodes | length') $(j '.edges | length') $(j '[.entries[] | select(.Act != "state.init")] | length')" "8 5 8"
+eq "$(j '.nodes | length') $(j '.edges | length') $(j '[.entries[] | select(.Act != "state.init")] | length')" "13 9 12"
 ok "--since keeps the entries from then on, and the nodes, lines and histories they make"
 
 # The state: a bolt swb-1 holds with unit a in code, unit c from a routed signal, and unit d dropped; a proposal; and
