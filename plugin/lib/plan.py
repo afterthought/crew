@@ -4876,9 +4876,10 @@ def card_wait(fleet, a):
 def end_session(label, key, unit=None):
     """End the plannotator session crew started for a card key on this host, a batch card's for one of its units, and
     forget it: its folder goes first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only
-    while plannotator lists it as serving the recorded document (read.4). Returns what it did, in words, and whether it
-    sent SIGTERM. crew's card hook runs it when a crew agent closes or withdraws a keyed card, and crew card sweep for
-    each session the rail judges dead."""
+    while plannotator lists it as serving the recorded document (read.4). When plannotator's list can't be read, nothing
+    is ended and the session is kept as recorded, so a later rail read ends it (read.1). Returns what it did, in words,
+    and whether it sent SIGTERM. crew's card hook runs it when a crew agent closes or withdraws a keyed card, and crew
+    card sweep for each session the rail judges dead."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
     d = CARDS / label / key / unit if unit else CARDS / label / key
     key = f"{key} {unit}" if unit else key
@@ -4889,6 +4890,8 @@ def end_session(label, key, unit=None):
     except Refusal:
         s = None
     listed, why = plannotator_sessions() if s else (None, None)
+    if s and listed is None:
+        return f"crew can't read plannotator's sessions ({why}): it ended nothing, and keeps {key} to end later", False
     import shutil
     shutil.rmtree(d)
     for p in d.parents:
@@ -4897,8 +4900,6 @@ def end_session(label, key, unit=None):
         p.rmdir()
     if not s:
         return f"no session was recorded for {key}; its folder is removed", False
-    if listed is None:
-        return f"crew can't read plannotator's sessions ({why}): it ended nothing, and {key} is forgotten", False
     if not serving(listed, s):
         return f"plannotator lists no session of pid {s['pid']} on {s['document']}: crew ended nothing, and {key} is forgotten", False
     try:
