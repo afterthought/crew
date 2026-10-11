@@ -47,6 +47,9 @@ tests/t-unit-run.sh
 tests/t-greet.sh
 tests/t-fix.sh
 tests/t-stage-ends.sh
+tests/t-amend.sh
+tests/t-amend-intent.sh
+tests/t-reads-once.sh
 tests/moon.yml
 README.md
 plugin/skills/crew/SKILL.md

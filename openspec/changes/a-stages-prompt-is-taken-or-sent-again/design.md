@@ -169,9 +169,17 @@ Add to `tests/t-unit-run.sh`: a code stage whose prompt is left once starts, wit
 
 In `prove`, send with `py tell "$TEAM-ops" "…" --taken`.
 - On failure, record the proof's `stage.start` as refused with the tell's message, owe nothing, and exit 1, saying the proof never started.
-- A tell refused for a question in ops's pane already fails today; keep that refusal as it is.
+- A tell refused for a question in ops's pane fails down the same branch: it too records the proof's `stage.start` as refused and says the proof never started, as decision 7 has it for any request ops never took.
 
 Add to `tests/t-stage-ends.sh` (where `crew prove` is tested) one proof whose request is left twice.
+
+### 3.3 A merge crew cannot tell was taken
+
+`run_stage`'s branch for `stage-prompt`'s exit 1 is built, but no test runs it through `crew unit run`. In `tests/t-unit-run.sh`, with `CREW_TAKEN_WITHIN=1`, run `stub leave swb-1-unit-1 1 blocked` and then `crew unit run a merge`: the stub leaves the prompt typed and puts the agent on a question, so once the second passes crew reads it waiting on a question and cannot tell (decision 5). This reaches the same branch as an agent that went to work with no record, without the 60-second working grace, which `t-prompt-taken` already waits out once; add no knob for that grace. Check that the command fails with `crew could not tell whether swb-1-unit-1 took its merge prompt for a`, naming `crew unit run a merge`; that the run record's last start on `stage/a/merge` is refused with that line; that the stages file owes no merge; and that the herdr log shows the merge prompt once and no `ctrl+c`. Clear the stub agent's question afterwards if later cases need the slot.
+
+### 3.4 A fix whose agent is never ready
+
+In `tests/t-fix.sh`, start one fix with its agent named in `CREW_TEST_BLOCKED`, so the stub stops it on a question once it has its name. Check that `crew fix` fails with the line saying the agent never took its fix prompt for that fix "as it was waiting on a question in its pane", naming `crew fix <team> <name> …` to run it again; that the herdr log shows no prompt typed to it; that the run record holds a refused `fix.start`; and that the stages file owes nothing. The case waits out crew's 60-second ready wait; where the file allows, start it in the background beside its other cases, as `t-prompt-taken` does, rather than adding a knob for that wait.
 
 ### 4.1 The docs and the rule
 
