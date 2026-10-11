@@ -77,12 +77,14 @@ expect_ok crewpy brief wldn design
 for want in attach challenge new-territory answered drop "unit add" "tell wldn-planner" "tell <conductor>"; do has "$out" "$want"; done
 for want in "names, in the message that carries it, the documentation page or the reading it rests on" "Read the thing itself" \
   "not the sequence" "Answer linked questions together" "never the mechanism"; do has "$out" "$want"; done
+has "$out" "\`--source\` also names what the signal points at"
 expect_ok crewpy brief wldn planner
 for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "plan proposed <n>" "--replaces <n>" "--unblocks <bolt>" \
   "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none"; do
   has "$out" "$want"
 done
 for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it"; do lacks "$out" "$gone"; done
+has "$out" "and with \`--source\` what the signal points at"
 for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "why the unit changes rather than being replaced" \
   "A unit that has merged is not amended"; do has "$out" "$want"; done
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
@@ -112,6 +114,11 @@ for want in "Send linked questions together" "with the documentation or reading 
 expect_ok crewpy brief swb-1 construct
 for want in "## Writing a change again" "the unit's intent was amended" "stay ticked only where the work they describe" \
   "Commit the revision, however small"; do has "$out" "$want"; done
+for want in "as it stands on main now, and what each points at" "never the copy in this worktree" "signal show <id>" \
+  "A source you cannot open stops you" "don't write the change from the intent in its place" "The sources govern how the unit is built" \
+  "write the change from the sources" "open your final message with the difference" "first any difference between the intent and its sources" \
+  "An intent that differs from its sources is not a wrong premise"; do has "$out" "$want"; done
+lacks "$out" "If the intent can't be built as written"
 expect_ok crewpy brief wldn operator
 for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word" "never by its number alone" "recite no command" \
   "rail --label wldn" "the \`rail\` tab"; do
@@ -159,12 +166,14 @@ for brief in "swb-1 conductor" "swb-1 ops" "wldn main-ops" "wldn design" "wldn p
   expect_ok crewpy brief $brief
   has "$out" 'signal <slug> "<what it asserts, in a sentence>" --excerpt "<the exact words the user said or the tool printed>"'
   has "$out" "Copy the excerpt, never reword it"; has "$out" "a refusal means the words were reworded"
+  has "$out" "When the words point at something made elsewhere"; has "$out" "A conversation's id alone is not enough"
   has "$out" '`signals/` on `wldn/main` of WilldanGroup/crew-state'
   lacks "$out" "signal in WilldanGroup/willdan-blueprints"
 done
 expect_ok crewpy brief wldn design; lacks "$out" "crew writes signals straight to"; has "$out" "signal show <signal id>"
 expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
 ok "every brief says who speaks in its pane, and the six that record findings quote the words and say what a refusal means"
+ok "a signal names where what it points at lives, a unit carries it as a source, and the construct reads it, stops when it can't, and builds from its sources over its intent"
 
 # Every message an agent sends another goes through crew tell, marked: no brief prompts an agent through herdr.
 for role in conductor ops construct coder verify; do
