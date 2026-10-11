@@ -17,4 +17,4 @@
 
 ## 4. The docs and the rule
 
-- [ ] 4.1 README, the crew skill and `plugin/bin/crew`'s usage say a stage and a greeting are taken or sent again, `teams.15`'s details name what builds it, and `_open.md` no longer lists it (design.md, Task notes 4.1). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 4.1 README, the crew skill and `plugin/bin/crew`'s usage say a stage and a greeting are taken or sent again, `teams.15`'s details name what builds it, and `_open.md` no longer lists it (design.md, Task notes 4.1). Verify `tests/suite --affected` ends with "0 failed".

@@ -12,7 +12,8 @@
 #                                      changes or a remove hook
 #   crew up      <team>                open the team's workspace and start its conductor and ops; the conductor's
 #                                      greeting (also on rebuild, restart and revive) opens with the units of its bolt
-#                                      that wait amended, for it to start their construct
+#                                      that wait amended, for it to start their construct. A greeting is read back
+#                                      from the agent's transcript and sent once more when not taken
 #   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh,
 #                                      keeping only the slots of work still in flight on its bolt
 #   crew close   <team>                end everything the team has and close its panes; nothing is started
@@ -39,7 +40,9 @@
 #                                      sluice. Construct run again on a planned unit marks it amended: code waits
 #                                      until that construct has committed. An amendment to a unit's intent runs
 #                                      its construct itself, and anyone may start construct on a unit that waits
-#                                      amended. Refused while the team is down
+#                                      amended. Refused while the team is down. The stage begins only once its
+#                                      agent's transcript shows its prompt, sent once more when it does not; else
+#                                      it never started, with nothing left typed, and the command fails saying so
 #   crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]
 #                                      first forecast conflicts with git merge-tree, telling each later unit once,
 #                                      rebase dependents whose unit merged, and count the partition's changes due for
@@ -51,7 +54,8 @@
 #                                      running, or is gone, or the timeout (an hour) passes, and says which
 #   crew fix     <team> <name> "<what is wrong>"
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
-#                                      built by a fresh code agent; a name already in use on the bolt is refused
+#                                      built by a fresh code agent; a name already in use on the bolt is refused.
+#                                      Its prompt, and its merge's, is taken or sent again as a unit stage's is
 #   crew fix     <team> <name> --merge merge the fix into the bolt; or, when the fix carries the bolt onto main (the
 #                                      bolt's own commits replayed onto the kit's main, each with its message and
 #                                      author, and nothing else), end its agent, make its head the bolt's head, and
@@ -61,7 +65,8 @@
 #   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>]
 #                                      wait for the fix's stage to end: its commits, or its merge on the bolt
 #   crew prove   <team> ["<words>"]    ask the team's ops to deploy the bolt and work each unit's Proof in dev list;
-#                                      its proof file in the team's reports folder is the proof's end
+#                                      its proof file in the team's reports folder is the proof's end. The request is
+#                                      taken or sent again as a stage's prompt is; one not taken starts no proof
 #   crew prove   <team> --wait [--timeout <ms>] [--stuck <ms>]
 #                                      wait for ops's proof file
 #   crew needs   "<what you need>"     run by a stage's agent, or ops during a proof, that can't finish without

@@ -26,7 +26,6 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `briefs.14`, ADR 0004 as amended: sources govern over an intent's mechanism; no brief says which governs. ADR 0016, a spike beside the design agent, is back to proposed on 2026-10-11 and its bolt `a-spike-runs-beside-the-design-agent` held until the elaboration record is settled with the user.
 - ADR 0005 as amended 2026-10-10, the image clause: a screenshot on a card is an uploaded image artifact, never a path (`an-image-on-a-card-is-uploaded`); the card discipline says nothing of images.
 - ADR 0005 as amended 2026-10-10: a card's session ended by crew on every rail read once its card is closed or its row gone (`a-cards-session-ends-with-its-card`); today only the owner's hook ends it, and eleven idle servers ran on mac-studio.
-- `teams.15`: a stage's prompt taken or sent again, never left typed (`a-stages-prompt-is-taken-or-sent-again`); `run_stage` types and reads nothing back.
 - `tests.8`: tests wait on conditions with limits that hold under load (`tests-hold-under-a-loaded-host`); `t-stage-ends` and `t-amend` sleep and time out, and redden under a load of 247.
 - `tests.9`: a host's suites bounded by its cores across teams (`suites-on-one-host-share-its-cores`); today each team's moon runs every test at once and two teams loaded mac-studio to 247.
 - ADR 0017: `crew usage`, token spend by partition, team, role, agent and model from crew's sessions and the transcripts (`crew-usage-sums-tokens-by-team-role-and-agent`); nothing reports spend today.
