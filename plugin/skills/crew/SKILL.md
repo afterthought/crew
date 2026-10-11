@@ -41,6 +41,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | carry this host's run record to the partition's branch now | `crew events --push [--label L]` |
 | create a partition's flywheel branch, adopting its old plan | `crew state init <label>` |
 | answer what happened to a bolt, a unit or a signal, each stage's end with how it ended (`Ended`) and what it delivered (`Delivered`) | `crew trace <bolt|unit|signal>` |
+| see how work flowed, signals to agenda items to proposals to units to bolts, each object's history a click away, as a page that opens from disk | `crew page <label> [--out <file>] [--since <time>]` |
 | read a signal: its excerpt, how well crew could check it, and where it came from | `crew signal show <id>` |
 
 ## Keeping a team healthy
