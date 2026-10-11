@@ -11,4 +11,4 @@
 
 ## 2. The docs say so
 
-- [ ] 2.1 README, the crew skill and `crew`'s usage header say every rail read ends the sessions of closed cards and gone rows and says which, and `tests/suite --affected` ends with "0 failed" (Task notes 2.1; `docs.2`).
+- [x] 2.1 README, the crew skill and `crew`'s usage header say every rail read ends the sessions of closed cards and gone rows and says which, and `tests/suite --affected` ends with "0 failed" (Task notes 2.1; `docs.2`).
