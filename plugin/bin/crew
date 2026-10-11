@@ -39,7 +39,7 @@
 #                                      sluice. Construct run again on a planned unit marks it amended: code waits
 #                                      until that construct has committed. An amendment to a unit's intent runs
 #                                      its construct itself, and anyone may start construct on a unit that waits
-#                                      amended
+#                                      amended. Refused while the team is down
 #   crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]
 #                                      first forecast conflicts with git merge-tree, telling each later unit once,
 #                                      rebase dependents whose unit merged, and count the partition's changes due for
@@ -689,7 +689,14 @@ case $cmd in
     stage=${4:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
     case $stage in construct | code | verify | settle | merge) ;; *) echo "no stage '$stage'; stages: construct code verify settle merge" >&2; exit 2 ;; esac
     e=$(plan _team-of "$unit") || exit 1; eval "$e"
-    load_team "$TEAM"; forward; ensure_state; reap; free_elsewhere "$unit"
+    load_team "$TEAM"; forward; ensure_state
+    # A team taken down runs no stage until it is brought up, so an amended unit whose construct cannot start for it
+    # keeps its mark, and reads amended.
+    if [[ -e $STATE/down ]]; then
+      err="$TEAM is down; crew up $TEAM brings it back"
+      echo "$err" >&2; entry --label "$LABEL" --act stage.start --on "stage/$unit/$stage" --on "unit/$unit" --refused "$err"; exit 1
+    fi
+    reap; free_elsewhere "$unit"
     slot=$(slot_of "$unit"); taken=0
     if [[ -z $slot ]]; then
       slot=$(take_slot unit "$unit" "$KIT_DIR/places/$unit") || {

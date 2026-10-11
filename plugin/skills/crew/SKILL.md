@@ -30,7 +30,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | give the conductor or ops a fresh session, same pane | `crew restart <team> [conductor\|ops]` |
 | bring back the conductor or ops after it died, conversation intact; a conductor brought back is sent the units of its bolt that wait amended | `crew resume <team> [conductor\|ops]` |
 | clear the conductor or ops and restore its name | `crew clear <team> conductor\|ops` |
-| end a team's sessions | `crew down <team>` |
+| end a team's sessions; no stage starts on it until it is brought up | `crew down <team>` |
 | free a slot still holding a unit no longer in the team's bolt | `crew unit free <unit> [--team <team>]` |
 | bring up, check or end a partition's main level and dispatchers, each agent it starts greeted to read where the partition stands and carry on | `crew main up\|status\|down <label>` |
 | start the operator agent in this host's operator session, greeted once it is up | `crew operator up <label>` |

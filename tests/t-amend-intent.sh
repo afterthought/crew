@@ -144,3 +144,49 @@ trace=$(crew trace unit/cfn-lint-treefmt)
 eq "$(grep -v 'refused:' <<<"$trace" | grep -v ' unit/in-verify ← ' | awk '{print $3}' | tr '\n' ' ')" "unit.add plan.propose plan.agree plan.approve unit.amend stage.start "
 has "$(grep ' stage.start ' <<<"$trace")" "wldn-planner"
 ok "each fresh construct agent is given the new intent and the planner's case, the conductor is told to wait and to close the verify card the amendment ended, and the trace shows the way there"
+
+# The construct cannot start because its team's host does not answer. A host down from the start leaves the unit's
+# stage unread, so nothing is written (read.1). One that drops once the stage is read, before the amendment's run of
+# construct reaches it, leaves the amendment standing: in-verify's construct has committed again, so it goes on from
+# its tasks, all ticked: it is in verify.
+unset CREW_AGENT
+echo "Written again." >> "$kd/places/in-verify/openspec/changes/in-verify/design.md"
+commit_all "$kd/places/in-verify" "docs(in-verify): written again"
+eq "$(stage in-verify)" "verify"
+echo "$box" > "$T/down"; before=$(tip)
+expect_fail "cannot tell unit in-verify's stage: $box did not answer" crew unit amend in-verify "in-verify reads its intent from the plan, once."
+rm "$T/down"
+eq "$(tip)" "$before"
+mkdir -p "$T/drops"
+printf '#!/usr/bin/env bash\n[[ "$*" == *"/crew unit run "* ]] && { echo "ssh: connect to host %s port 22: Operation timed out" >&2; exit 255; }\nexec %q "$@"\n' \
+  "$box" "$TESTS/stubs/ssh" > "$T/drops/ssh"
+chmod +x "$T/drops/ssh"
+: > "$CREW_TEST_LOG"
+PATH="$T/drops:$PATH" expect_ok crew unit amend in-verify "in-verify reads its intent from the plan, once."
+has "$out" "construct did not start on unit in-verify: $box did not answer (ssh: connect to host $box port 22: Operation timed out)"
+eq "$(plan -t Unit -e "Unit = 'in-verify'" -P Intent,Amended)" $'in-verify reads its intent from the plan, once.\nintent'
+eq "$(stage in-verify)" "amended"
+grep -q "agent prompt $(pane swb-1-unit-3) " "$CREW_TEST_LOG" && fail "in-verify's slot was sent something"
+eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
+has "$(prompts swb-1)" "intent was amended by the user, and construct did not start: $box did not answer (ssh: connect to host $box port 22: Operation timed out). Run it once it can (crew unit run in-verify construct); once it has committed, the unit goes on from its tasks."
+has "$(prompts swb-1)" "Close your Pending You card for verify/in-verify, if one is open, with what was done.'"
+ok "an amendment whose team's host does not answer is refused unread, and one whose host drops before its construct runs stands: the unit reads amended, and its conductor is told why and the card it ended"
+
+# The construct cannot start because its team is down: cfn-lint-treefmt's construct has committed again, so it goes on
+# from its tasks, in code, and then the team is taken down, its conductor with it.
+echo "Written again." >> "$kd/places/cfn-lint-treefmt/openspec/changes/cfn-lint-treefmt/design.md"
+commit_all "$kd/places/cfn-lint-treefmt" "docs(cfn-lint-treefmt): written again"
+eq "$(stage cfn-lint-treefmt)" "code"
+expect_ok crew down swb-1 --force
+[[ -z $(herdr_state $box wldn-1 ".agents[\"$c\"] // empty") ]] || as $box herdr --session wldn-1 agent prompt "$c" /exit >/dev/null
+: > "$CREW_TEST_LOG"
+expect_ok crew unit amend cfn-lint-treefmt "cfn-lint in treefmt fails the check on any finding."
+has "$out" "construct did not start on unit cfn-lint-treefmt: swb-1 is down; crew up swb-1 brings it back"
+has "$out" "swb-1-conductor is not up: unit cfn-lint-treefmt waits, amended, for construct to be run again"
+eq "$(plan -t Unit -e "Unit = 'cfn-lint-treefmt'" -P Intent,Amended)" $'cfn-lint in treefmt fails the check on any finding.\nintent'
+eq "$(stage cfn-lint-treefmt)" "amended"
+eq "$(herdr_state $box wldn-1 '.agents | length')" "0"
+eq "$(prompts swb-1)" ""
+has "$(field $box stage.start Refused stage/cfn-lint-treefmt/construct)" "swb-1 is down"
+expect_fail "swb-1 is down; crew up swb-1 brings it back" crew unit run the-deploy-is-logged construct
+ok "an amendment whose team is down stands: no stage starts on a team taken down, the unit reads amended, and with its conductor down too crew says it is not up and what waits"

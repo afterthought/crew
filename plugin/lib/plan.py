@@ -1477,7 +1477,8 @@ def op_unit_amend(ctx, a):
                     f"(crew unit wait {a.unit}); once it has committed, the unit goes on from its tasks.")
             unsaid = f"construct runs again on unit {a.unit} in {slot}"
         else:
-            why = ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].rstrip(".")
+            why = (crew.unanswered(team["machine"], r)
+                   or ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].rstrip("."))
             print(f"construct did not start on unit {a.unit}: {why}")
             text = (f"Unit {a.unit}'s intent was amended by {by}, and construct did not start: {why}. Run it once it can "
                     f"(crew unit run {a.unit} construct); once it has committed, the unit goes on from its tasks."
