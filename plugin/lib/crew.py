@@ -16,7 +16,10 @@
   crew.py crew-at <host>              the crew command on a host
   crew.py tell <agent> "<text>"       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane
-  crew.py greet <team>                greet the team's conductor, marked [crew], once it is up and settled
+  crew.py notice <agent> "<text>"     prompt an agent wherever it runs, the text marked [crew], as crew's own notice
+  crew.py greet <team> [--first "<text>"]
+                                      greet the team's conductor, marked [crew], once it is up and settled; the text,
+                                      when given, opens the greeting
   crew.py greet-agent <agent> [--wait <seconds>]
                                       greet an agent crew starts outside a team, with its role's greeting, the same way
   crew.py here                        what runs on this host, one per line: team <name>, main <label>,
@@ -906,8 +909,10 @@ def main(a):
     elif a[:1] == ["tell"] and len(a) == 3:
         import record as rec  # record imports this module
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who()) else 1)
-    elif a[:1] == ["greet"] and len(a) == 2:
-        greet(fleet, a[1])
+    elif a[:1] == ["notice"] and len(a) == 3:
+        sys.exit(0 if tell(fleet, a[1], a[2]) else 1)
+    elif a[:1] == ["greet"] and (len(a) == 2 or (len(a) == 4 and a[2] == "--first")):
+        greet(fleet, a[1], first=f"{a[3]} " if len(a) == 4 else "")
     elif a[:1] == ["greet-agent"] and len(a) in (2, 4) and a[2:3] in ([], ["--wait"]):
         len(a) == 2 or a[3].isdigit() or fail(f"--wait takes a number of seconds, not {a[3]}")
         greet_standing(fleet, a[1], int(a[3]) if len(a) == 4 else 90)

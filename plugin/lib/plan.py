@@ -2843,6 +2843,40 @@ def stage_ended_row(fleet, a):
         crew.tell(fleet, conductor, f"{agent()} ran {a.stage} on unit {a.unit}. {close_card(a.row)}")
 
 
+def amended_units(fleet, a):
+    """The line a team's conductor is greeted with, or sent on crew resume, naming each unit of its bolt whose stage is
+    amended, which no construct has run on since: nothing when there is none. When the plan or the bolt's kit cannot
+    be read it says so, rather than name no unit (read.1), and still exits 0, so the greeting goes out."""
+    t = crew.team_of(fleet, a.team)
+    CONTEXT["label"] = t["label"]
+    errors, names, unread = {}, [], []
+    found = plans(fleet, [t["label"]], errors)
+    unread += [f"{k} could not be read: {v}" for k, v in errors.items()]
+    plan = found[0][3] if found else None
+    held = held_by(plan, t["name"]) if plan else []
+    if held:
+        st = stages_for(fleet, plan, held)  # one survey of the team's host (plan.12)
+        for b in held:
+            for u in plan.units_of(b.name()):
+                s = st.of(u.name())
+                if s["stage"] == "amended":
+                    names.append(u.name())
+                elif s["stage"] == "unknown" and s.get("why") and s["why"] not in unread:
+                    unread.append(s["why"])
+    said = []
+    if len(names) == 1:
+        said.append(f"Unit {names[0]} was amended and no construct runs on it: run construct on it now "
+                    f"(crew unit run {names[0]} construct).")
+    elif names:
+        said.append(f"Units {', '.join(names)} were amended and no construct runs on them: run construct on each now "
+                    "(crew unit run <unit> construct).")
+    if unread:
+        why = " ".join("; ".join(unread).split())  # one line, though git's own words may span several
+        said.append(f"crew could not read whether a unit of your bolt waits amended ({why}): read crew bolts.")
+    if said:
+        print(" ".join(said))
+
+
 def bolt_of_team(fleet, a):
     t = crew.team_of(fleet, a.team)
     repo, ref = state_of(fleet, t["label"])
@@ -4966,6 +5000,8 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("row")
     x = sub.add_parser("_bolt-of")
     x.add_argument("team")
+    x = sub.add_parser("_amended")
+    x.add_argument("team")
     x = sub.add_parser("_place")
     x.add_argument("team")
     x.add_argument("path")
@@ -5017,7 +5053,8 @@ COMMANDS = {
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
-    ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_place", None): place_cmd,
+    ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
+    ("_place", None): place_cmd,
     ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_merging", None): merging, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,

@@ -366,8 +366,10 @@ teardown() {  # end every session and give the panes back; the slots still say w
   : > "$panes"; : > "$layout"
 }
 
-greet_conductor() {  # a fresh conductor reads where its bolt stands and carries on, before anyone asks it anything
-  py greet "$TEAM" || true
+greet_conductor() {  # a fresh conductor reads where its bolt stands and carries on, before anyone asks it anything;
+  # the greeting opens with the units of its bolt that wait amended, for it to start their construct
+  local first; first=$(plan _amended "$TEAM" 2>/dev/null || true)
+  py greet "$TEAM" ${first:+--first "$first"} || true
 }
 greet_started() {  # greet_started [role...]: each agent outside a team that this command started or brought back is
   # greeted, each in the background, so one waiting on a question holds back nobody else; the command waits for them
@@ -647,7 +649,7 @@ case $cmd in
     for role in ${stopped[@]+"${stopped[@]}"}; do start "$role"; record_agents agent.restart "team($TEAM): restart $role" "$role"; done
     [[ $greet == 1 && " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
   resume)
-    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up; ensure_team
+    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up; ensure_team; back=0
     for role in "${picked[@]}"; do
       if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
       if start "$role" resume; then record_agents agent.resume "team($TEAM): resume $role" "$role"
@@ -655,7 +657,13 @@ case $cmd in
         echo "$(name_of "$role") did not come back with its conversation; starting it fresh"
         start "$role"; record_agents agent.start "team($TEAM): start $role" "$role"
       fi
-    done ;;
+      if [[ $role == conductor ]]; then back=1; fi
+    done
+    # resume greets nobody: a conductor it brought back is sent, as crew's notice, the units of its bolt that wait amended
+    if [[ $back == 1 ]]; then
+      line=$(plan _amended "$TEAM" 2>/dev/null || true)
+      if [[ -n $line ]]; then py notice "$TEAM-conductor" "$line" || true; fi
+    fi ;;
   clear)
     load_team "${2:-}"; forward; ensure_state; role=${3:?usage: crew clear <team> conductor|ops}; known_role "$role"
     pane=$(pane_of "$role"); st=$(agent_status "$pane")
