@@ -47,7 +47,7 @@ Joined with "; ", as today. A reworded or re-authored commit shows as both: the 
 
 ### range-diff is printed, never parsed
 
-Once it has judged (carry or not, with both sides having commits beyond main), `plan _carry` runs `git range-diff --no-color --no-patch main..<bolt> main..<fix>` and writes to standard error a line naming the two ranges and saying crew judges by the commits, then range-diff's lines as git printed them. When range-diff exits non-zero, it writes instead that range-diff could not be read, in git's words. Neither changes the judgment. `--merge` already passes the judgment's standard error on (`cat "$errs" >&2`), so the conductor sees the reading above crew's own line in both outcomes; `--move` prints no reading. `RANGE` and `pairing()` go: nothing in crew parses range-diff any more, so `read.2` no longer applies to it.
+Before the judgment, whenever the fix does not hold the bolt's head, `plan _carry` runs `git range-diff --no-color --no-patch main..<bolt> main..<fix>` and writes to standard error a line naming the two ranges and saying crew judges by the commits, then range-diff's lines as git printed them. When range-diff exits non-zero, it writes instead that range-diff could not be read, in git's words. Neither changes the judgment. `--merge` already passes the judgment's standard error on (`cat "$errs" >&2`), so the conductor sees the reading above crew's own line in both outcomes; `--move` prints no reading. `RANGE` and `pairing()` go: nothing in crew parses range-diff any more, so `read.2` no longer applies to it.
 
 ### Docs
 
