@@ -190,3 +190,11 @@ eq "$(prompts swb-1)" ""
 has "$(field $box stage.start Refused stage/cfn-lint-treefmt/construct)" "swb-1 is down"
 expect_fail "swb-1 is down; crew up swb-1 brings it back" crew unit run the-deploy-is-logged construct
 ok "an amendment whose team is down stands: no stage starts on a team taken down, the unit reads amended, and with its conductor down too crew says it is not up and what waits"
+
+# Every stage is refused on a team taken down, not construct alone, before anything is written.
+: > "$CREW_TEST_LOG"; before=$(tip)
+expect_fail "swb-1 is down; crew up swb-1 brings it back" crew unit run the-deploy-is-logged code
+eq "$(tip)" "$before"
+grep -q "agent prompt" "$CREW_TEST_LOG" && fail "a pane was sent something while swb-1 is down"
+has "$(field $box stage.start Refused stage/the-deploy-is-logged/code)" "swb-1 is down"
+ok "code on a team taken down is refused before anything is written: the plan's tip stays, no slot is prompted, and the refusal is recorded"
