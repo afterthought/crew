@@ -60,6 +60,21 @@ A proposal's card, keyed `proposal/<n>`, SHALL be posted as `crew plan card <n>`
 - **WHEN** the planner posts the card for proposal 5, which adds three units
 - **THEN** the card asks `plan` and `units-1`, the three units all ticked, and the user's yes with one cleared has the planner record both answers with `crew plan answer 5`
 
+### Requirement: A card's document is inline Markdown
+A document's substance shown on a card beyond its words SHALL be inline Markdown, an artifact of kind `code` with lang `markdown` and the text as its lines, never an uploaded file or HTML. The whole document SHALL be reached only through the card's plannotator link, but for a proposal's card, which holds its proposal whole. A card SHALL carry no artifact but such a picture or such Markdown, and a proposal's card its change as text: an artifact of kind `code` with lang `text`, its lines those `crew plan card <n>` prints, each at most forty characters, so it reads in monospace on a phone without wrapping.
+
+#### Scenario: A document's substance on a card
+- **WHEN** an agent shows part of a document on a card beside its words
+- **THEN** that part is an artifact of kind `code` with lang `markdown`, its lines the document's Markdown, and the whole document is reached through the card's plannotator link, never attached as a file
+
+#### Scenario: A card with nothing to show
+- **WHEN** a card needs no picture and shows no part of a document beyond its words
+- **THEN** its artifacts are empty, and its plannotator link is in its words and its links, never an artifact
+
+#### Scenario: A proposal's change as text
+- **WHEN** the planner posts the card for proposal 4, which drops a unit and adds two
+- **THEN** the card carries two artifacts, the uploaded picture and a `code` artifact of lang `text` holding the change as `crew plan card 4` prints it, and no Markdown artifact and no link
+
 ### Requirement: No row's card takes another kind
 No row's card SHALL be a step for the user to take (`action`), a notice (`fyi`), a text question (`text`) or a review (`review`), and no row's card but a proposal's SHALL be a grouped card of questions. No card SHALL hold a text question.
 
