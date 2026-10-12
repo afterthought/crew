@@ -1,7 +1,8 @@
 # A bolt carried onto main and landed, through the crew command on the stubs (tests.11, record 0022), a part of the units
 # journey (t-journey-units): when the landing's rebase onto main conflicts, a fix carries the bolt onto main, becomes its
-# head with no merge stage and the kit's post-merge hooks run on it; the bolt lands once every unit has, removing its
-# worktree, and its conductor is told which cards to close; and dropping a held bolt removes its worktree and places.
+# head with no merge stage and the kit's post-merge hooks run on it; the bolt lands once every unit has, recording the
+# commit main holds and removing its worktree, and its conductor is told which cards to close; and dropping a held bolt
+# removes its worktree and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -53,14 +54,15 @@ eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1"
 git -C "$k" merge -q --ff-only bolt/tenant-environments
 : > "$CREW_TEST_LOG"
 expect_ok crew bolt land tenant-environments
-has "$out" "tenant-environments has landed and swb-1 holds no bolt"
+has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
 has "$out" "$bolt and bolt/tenant-environments are removed; the branch was at"
 grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for verify/a or land/tenant-environments.'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, removing its worktree and what is over, and its conductor is told which cards to close"
+eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its worktree and what is over, and its conductor is told which cards to close"
 
 expect_ok crew bolt drop console-pages "the portal lists them"
 has "$out" "$kd/bolts/console-pages and bolt/console-pages are removed; the branch was at"

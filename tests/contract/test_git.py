@@ -308,9 +308,9 @@ def fresh(repo):
     return subprocess.run(["bash", "-c", plan.FRESH, "crew", str(repo.path)], capture_output=True, text=True)
 
 
-def behind(repo):
+def main_at(repo):
     import plan
-    return subprocess.run(["bash", "-c", plan.BEHIND, "crew", str(repo.path)], capture_output=True, text=True)
+    return subprocess.run(["bash", "-c", plan.MAIN, "crew", str(repo.path)], capture_output=True, text=True)
 
 
 def test_a_bolt_is_cut_from_githubs_main_and_a_clean_main_behind_it_fast_forwarded(repo, tmp_path):
@@ -341,9 +341,11 @@ def test_a_main_gone_its_own_way_is_refused_and_a_dirty_one_left_as_it_is(repo, 
                                                      "(another branch is checked out there, or it has uncommitted changes)")
 
 
-def test_a_landing_reads_how_far_main_is_from_githubs(repo, tmp_path):
-    """plan.bolt_land (plan.8): refused while the kit's main is behind GitHub's; a kit with no origin says nothing."""
-    assert behind(repo).stdout == ""
+def test_a_landing_reads_the_commit_main_holds_and_how_far_it_is_from_githubs(repo, tmp_path):
+    """plan.bolt_land (plan.8, plan.14): the commit the kit's main holds, which the landing records, and how far it is
+    from GitHub's, refused while it is behind; a kit with no origin says only its commit."""
+    head = repo.commit("main", {"README": "r\n"})
+    assert main_at(repo).stdout == f"{head}\n"
     pushed = kit_with_github(repo, tmp_path)
-    repo.commit("feat: local", {"local": "l\n"}); pushed("later")
-    assert behind(repo).stdout.strip() == "1 1"
+    head = repo.commit("feat: local", {"local": "l\n"}); pushed("later")
+    assert main_at(repo).stdout.strip() == f"{head} 1 1"

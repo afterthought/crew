@@ -115,6 +115,16 @@ class TestLand:
         assert self.land({"a-console-page": "unknown", "a-console-filter": "landed"}) == (
             "cannot tell whether unit a-console-page has landed: its host did not answer")
 
+    def test_the_landing_records_the_commit_main_holds_and_is_refused_on_a_main_behind_githubs(self):
+        sha = "c" * 40
+        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"{sha}\n") == (sha, None)
+        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"{sha} 2 0\n") == (sha, None)
+        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"{sha} 0 1\n") == (None, (
+            "switchboard-kit's main on chuck-herdr-alpha is 1 commit behind GitHub's (with 0 of its own): rebase it onto "
+            "origin/main, check it again, then land; never push it with force"))
+        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", "") == (
+            None, "crew can't read what switchboard-kit's main on chuck-herdr-alpha holds: nothing was said")
+
     def test_a_change_no_batch_has_held_refuses_it(self):
         assert self.land({"a-console-page": "landed", "a-console-filter": "landed"}, ["a-console-page", "a-console-filter"]) == (
             "bolt console-pages lands only once every unit's latest change has been in a batch, and a-console-page or "

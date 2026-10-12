@@ -30,8 +30,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              the bolt and its units out of the plan, or with --requeue its units
                                              queued, refused while one has a worktree; its worktrees then go from its
                                              team's host
-  crew bolt land <bolt>                      once every unit has landed on main; its worktree then goes from its
-                                             team's host, unless it has uncommitted changes
+  crew bolt land <bolt>                      once every unit has landed on main, recording the commit main then
+                                             holds; its worktree then goes from its team's host, unless it has
+                                             uncommitted changes
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]
@@ -646,12 +647,12 @@ def carried(label, repo, tip, files):
     return newest
 
 
-def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
+def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None):
     """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
     with crew's, commit every file it changed with the host's uncarried run record, each file checked first, and push,
     replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
-    the change added to them. Returns the commit."""
+    the change added to them, with the act's own fields. Returns the commit."""
     repo, ref = state_of(fleet, label)
     seen = {"eid": record.new_id()}
     CONTEXT.update(label=label, eid=seen["eid"])
@@ -672,7 +673,7 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=()):
     record.mark_carried(label, seen["newest"])
     print(f"{ref} {sha[:7]}: {seen['subject']}")
     if act:
-        record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]), eid=seen["eid"])
+        record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]), eid=seen["eid"], **(fields or {}))
     notify(fleet, seen, seen["subject"])
     return sha
 
@@ -1221,13 +1222,34 @@ def fresh_base(fleet, t):
 
 # How far a kit's main on its host is from GitHub's, after fetching: "<ahead> <behind>", or nothing for a kit with no
 # origin or a GitHub repo with no main yet.
-BEHIND = r"""main=$1
+# What a kit's main holds on its host, for a landing: its commit, then, when it has GitHub's main to compare with, how
+# many commits it has that GitHub's lacks and how many it lacks of GitHub's, fetched now.
+MAIN = r"""main=$1
 cd "$main" || exit 1
-git remote get-url origin >/dev/null 2>&1 || exit 0
-err=$(git fetch -q origin 2>&1) || { echo "cannot fetch $(basename "$(dirname "$main")") from GitHub, so cannot tell whether its main is behind GitHub's: $err" >&2; exit 1; }
-git rev-parse --verify -q origin/main >/dev/null || exit 0
-echo "$(git rev-list --count origin/main..main) $(git rev-list --count main..origin/main)"
+head=$(git rev-parse --verify -q refs/heads/main) || { echo "$main has no branch main" >&2; exit 1; }
+if git remote get-url origin >/dev/null 2>&1; then
+  err=$(git fetch -q origin 2>&1) || { echo "cannot fetch $(basename "$(dirname "$main")") from GitHub, so cannot tell whether its main is behind GitHub's: $err" >&2; exit 1; }
+  if git rev-parse --verify -q origin/main >/dev/null; then
+    echo "$head $(git rev-list --count origin/main..main) $(git rev-list --count main..origin/main)"
+    exit 0
+  fi
+fi
+echo "$head"
 """
+
+
+def main_held(kit, machine, said):
+    """The commit a kit's main holds on its host, as MAIN said it there: (sha, None), or (None, why a landing on it is
+    refused): it can't be read as a commit (read.2), or it is behind GitHub's main, since a bolt landed on a main that
+    lags GitHub's can't be pushed without force, and force would erase what it lacks (plan.8)."""
+    words = said.split()
+    if not words or not re.fullmatch(r"[0-9a-f]{40,64}", words[0]) or len(words) not in (1, 3) or not all(w.isdigit() for w in words[1:]):
+        return None, f"crew can't read what {kit}'s main on {machine} holds: {said.strip() or 'nothing was said'}"
+    if len(words) == 3 and int(words[2]):
+        commits = lambda k: f"{k} commit" + ("" if k == "1" else "s")
+        return None, (f"{kit}'s main on {machine} is {commits(words[2])} behind GitHub's (with {words[1]} of its own): "
+                      f"rebase it onto origin/main, check it again, then land; never push it with force")
+    return words[0], None
 
 
 def tidy_after(fleet, t, what):
@@ -1347,12 +1369,9 @@ def bolt_land(fleet, a):
     outside = [u for u, *_ in due_changes(plan, partition_entries(fleet, label)) if u in units] if landed else []
     why = land_refusal(a.bolt, units, st.of, outside, label)
     not why or fail(why)
-    # A bolt landed on a main that lags GitHub's can't be pushed without force, and force would erase what it lacks.
-    gap = host_run(fleet, t["machine"], BEHIND, t["kit"]["main"]).split()
-    if gap and int(gap[1]):
-        commits = lambda k: f"{k} commit" + ("" if k == "1" else "s")
-        fail(f"{t['kit']['name']}'s main on {t['machine']} is {commits(gap[1])} behind GitHub's (with {gap[0]} of its own): "
-             f"rebase it onto origin/main, check it again, then land; never push it with force")
+    # What main holds once the bolt has landed on it, which the landing records (plan.14).
+    head, why = main_held(t["kit"]["name"], t["machine"], host_run(fleet, t["machine"], MAIN, t["kit"]["main"]))
+    not why or fail(why)
 
     def change(w):
         w.bolt(a.bolt)
@@ -1363,8 +1382,9 @@ def bolt_land(fleet, a):
             w.on.append(f"{kind_of(u)}/{u.name()}")
         w.plan.remove(w.plan.bolt(a.bolt))
         return [a.bolt]
-    write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"])
-    print(f"{a.bolt} has landed and {t['name']} holds no bolt")
+    write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"],
+          fields=dict(Repo=t["kit"]["name"], Head=head))
+    print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]} and {t['name']} holds no bolt")
     tidy_after(fleet, t, f"bolt {a.bolt}")
 
 

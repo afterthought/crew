@@ -19,7 +19,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 
 - `tests.11`, `tests.12`, `code.7`: the three tiers are built test by test, slowest first by CPU, each measured before and after, by the recovery session (ADR 0022); until a test converts, its decisions are reached only end to end.
 - `plan.10`: a drop keeps a branch with unmerged patches, judged by `git cherry`; `tidy()` deletes with `git branch -D` and `gather.fix_merged` judges by ancestry (`a-drop-keeps-unmerged-work`, fix-places).
-- `plan.14`: a landing records the sha main holds afterwards; `crew bolt land` records no sha yet, and `construct.md` knows one proof list.
+- `plan.14`: `construct.md` knows one proof list.
 - `briefs.16`, ADR 0005 as amended 2026-10-12: a crew agent's cards go only through `crew card post|change|close|read`, through the fleet's `pendingyou mcp` under the host's sign-in (`a-card-reaches-the-user-when-the-tools-drop`, built on `recovery/pendingyou`); a row's card built from its row in place of the hook's checks, the briefs moved to the commands, and crew's hook refusing an agent's own post, change, close or area (`every-crew-card-goes-through-crew`, after the three test cards); today the briefs have agents call Pending You's tools and the hook checks and records them.
 - ADR 0006: a change archived at its merge (`a-merged-change-is-archived`); the coder brief has no archive step and ops reads the proof from the open change.
 - `plan.14`, `roles.2` as amended: the board's Operation lane rows per environment and the lineage page's deploys view (`the-page-shows-the-deploys`, record 0010); the deploys and the other operations, their approval, rows and cards, are built (`crew ops`, `a-deploy-is-approved-and-recorded-through-crew`).

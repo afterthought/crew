@@ -136,6 +136,8 @@ class TestTrace:
         assert record.line(E[8]).endswith(" → review at bbbbbbb")
         assert record.line(entry("x", "2026-10-05T10:00:00Z", "tell", ["agent/wldn-planner"], Chars="12")).endswith("(12 characters)")
         assert record.line(entry("x", "2026-10-05T10:00:00Z", "unit.drop", ["unit/a"], Refused="no unit a")).endswith("  refused: no unit a")
+        assert record.line(entry("x", "2026-10-05T10:00:00Z", "bolt.land", ["bolt/b", "unit/a"], Repo="switchboard-kit", Head="c" * 40)).endswith(
+            "bolt/b unit/a → switchboard-kit main at ccccccc")
 
 
 class TestEvents:
