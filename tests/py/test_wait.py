@@ -1,7 +1,7 @@
 """What a wait on a stage says, look by look, until the stage ends (teams.4): plan.look on one look's facts,
 plan.ended_words for a stage whose end something else recorded, Owed.phrase for how a stage is named, and
 plan.owed_of for the stage crew needs ends short. That a wait records the end it sees, and that a stop-short reaches
-the waiting wait or the conductor, are the journey's (t-journey-units)."""
+the waiting wait or the conductor, are the journey's (t-journey-units, t-journey-prompts)."""
 import pytest
 
 from facts import owed

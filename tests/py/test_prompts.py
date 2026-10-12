@@ -2,7 +2,7 @@
 facts, plan.again_words on an amended intent's mark, plan.ends_row for the rail row whose card its conductor closes,
 plan.merge_command for how a unit merges, plan.unit_team for the team that runs its stages, and the effort each stage
 starts at, from its role's definition. That a started stage is sent its prompt in a fresh agent is the journey's
-(t-journey-units)."""
+(t-journey-units and its parts)."""
 import pytest
 
 import crew

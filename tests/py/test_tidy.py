@@ -2,7 +2,7 @@
 plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
 plan.wt_left_branch for what the kit's wt remove said, and plan.unread_plans for a tidy that removes nothing. How
 worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
-settles, the journey's (t-journey-units)."""
+settles, the journey's (t-journey-merge, t-journey-fix)."""
 import pytest
 
 from facts import plan_of

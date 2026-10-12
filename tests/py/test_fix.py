@@ -3,7 +3,7 @@ plan.own_place for a fix refused its place, plan.bolt_held for the bolt a fix is
 that moves nothing, plan.checks_said for what a carry says of the bolt's checks, and crew.never_started for a fix's or
 unit's stage whose prompt was never taken. Whether a fix carries the bolt is test_carry's; how worktrunk's post-merge
 hook answers, a contract case (tests/contract/test_wt.py); the fix's place, stage and carry through the command, the
-journey's (t-journey-units)."""
+journey's (t-journey-fix, t-journey-land)."""
 import pytest
 
 from facts import plan_of

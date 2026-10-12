@@ -1,7 +1,7 @@
 """crew unit add|after|order|split|move|drop on the plan (bolt-plan spec): each command applied to a plan in memory,
 the stages it reads given, and every refusal it makes there, work a held bolt needs (--unblocks, plan.5) among them.
 Rebasing a moved unit's branch, removing a dropped unit's place and the commits the writes make are the journey's
-(t-journey-units)."""
+(t-journey-fix and t-journey-land)."""
 import pytest
 from facts import FactsWrite, apply, known, plan_text, units_of
 

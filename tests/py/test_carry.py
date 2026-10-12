@@ -1,5 +1,5 @@
 """Whether a fix carries its bolt onto main (plan.8, teams.5): plan.carry_refusal and plan.changed_by_resolution, on
-the commits each side holds beyond main. The move and its record are the journey's (t-journey-units)."""
+the commits each side holds beyond main. The move and its record are the journey's (t-journey-land)."""
 from facts import commit, replayed
 
 import plan

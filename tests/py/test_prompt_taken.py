@@ -2,7 +2,7 @@
 herdr, as the stub herdr does: a prompt that lands before the agent is ready, or whose Enter is lost, is left typed in
 its input and never reaches its transcript; ctrl+c clears the input. The clock is the pane's, so a case waits on
 nothing. That a stage's prompt goes through this exchange, and what crew says of one never taken, are the journey's
-(t-journey-units)."""
+(t-journey-slots)."""
 import json
 import types
 

@@ -1,7 +1,7 @@
 """crew bolt new|order|drop on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
 reads given; which bolt a give hands a team (plan.to_give, plan.holding), and when a bolt lands (plan.land_refusal).
 The branch and worktree give makes and land removes, and the commits every write makes, are the journey's
-(t-journey-units)."""
+(t-journey-units and t-journey-land)."""
 import pytest
 from facts import FactsWrite, apply, known, plan_text, units_of
 
