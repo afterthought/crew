@@ -3,9 +3,10 @@
 serving nothing.
 
 `plannotator annotate <file|folder...> --gate --json --result-file <f>` registers its session in
-$HOME/.stub-plannotator/<pid>.json: its pid, mode, target (the path as given, made absolute, a folder's without its
-last slash), url, port, project, label and startedAt, as `sessions --json` lists them, and, for the test alone, its
-argv and whether PLANNOTATOR_SKIP_BROWSER_OPEN=1 and PLANNOTATOR_REMOTE=1 were set. The url is
+$HOME/.stub-plannotator/<pid>.json: its pid, mode, target (each path as given, made absolute, a folder's without its
+last slash, several joined by ", "), url, port, project, label (annotate-<name>, or for several paths
+annotate-<count> files: their basenames joined by ", ") and startedAt, as `sessions --json` lists them, and, for the
+test alone, its argv and whether PLANNOTATOR_SKIP_BROWSER_OPEN=1 and PLANNOTATOR_REMOTE=1 were set. The url is
 http://<host>:<port>: the host PLANNOTATOR_URL_HOST names, `auto` as <host>.ts.swancloud.net, and localhost when it is
 unset; the port the first of PLANNOTATOR_PORT's range (19432-19451 when unset) no live session holds. It says it is
 ready on stderr, and, unless the browser was skipped, records `<host> plannotator opened a browser on <url>` in
@@ -85,14 +86,17 @@ port = next((p for p in range(int(lo), int(hi or lo) + 1) if p not in taken), No
 if port is None:
     print(f"No free port in PLANNOTATOR_PORT {os.environ.get('PLANNOTATOR_PORT')}", file=sys.stderr)
     sys.exit(1)
-target = os.path.abspath(paths[0]).rstrip("/") or "/"
+targets = [os.path.abspath(p).rstrip("/") or "/" for p in paths]
+target = ", ".join(targets)
+label = (f"annotate-{len(targets)} files: " + ", ".join(os.path.basename(t) for t in targets) if len(targets) > 1
+         else f"annotate-{os.path.basename(target)}")
 url = f"http://{url_host}:{port}"
 skipped = os.environ.get("PLANNOTATOR_SKIP_BROWSER_OPEN") == "1"
 reg.mkdir(parents=True, exist_ok=True)
 me = reg / f"{os.getpid()}.json"
 me.write_text(json.dumps({
     "mode": "annotate", "target": target, "url": url, "port": port, "pid": os.getpid(), "project": os.path.basename(os.getcwd()),
-    "label": f"annotate-{os.path.basename(target)}", "startedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "label": label, "startedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "argv": args, "skip_browser": skipped, "remote": os.environ.get("PLANNOTATOR_REMOTE") == "1"}))
 print(f"Plannotator session ready — open on your device\n  {url}", file=sys.stderr, flush=True)
 if not skipped and os.environ.get("CREW_TEST_LOG"):

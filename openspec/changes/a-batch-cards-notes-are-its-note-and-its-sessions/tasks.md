@@ -12,8 +12,8 @@
 
 ## 3. One reading session per batch
 
-- [ ] 3.1 `crew card session batch/<n>` writes the batch's folder on the main level's host, the summary and every unit's Markdown files at its commit, and starts one plannotator session on those files as one review; a unit with that key is refused; an old key's per-unit sessions open their change's files as one review, never its folder (design, *Task notes* 3.1).
-- [ ] 3.2 `crew card wait` and `end`, the hook's close and the sweep act on a `batch/<n>` card's one session (design, *Task notes* 3.2).
+- [x] 3.1 `crew card session batch/<n>` writes the batch's folder on the main level's host, the summary and every unit's Markdown files at its commit, and starts one plannotator session on those files as one review; a unit with that key is refused; an old key's per-unit sessions open their change's files as one review, never its folder (design, *Task notes* 3.1).
+- [x] 3.2 `crew card wait` and `end`, the hook's close and the sweep act on a `batch/<n>` card's one session (design, *Task notes* 3.2).
 - [ ] 3.3 `tests/t-batch-cards.sh` and `tests/t-card-sweep.sh` prove the batch's folder, its order, its one session and its refusals, and an old batch's per-unit sessions on their files (design, *Task notes* 3.3).
 
 ## 4. The briefs and the docs say so

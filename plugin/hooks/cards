@@ -39,9 +39,10 @@ title, summary, option, note or outcome.
 When a crew agent withdraws or closes a card with a row key, the hook then ends the plannotator session `crew card
 session` started for that key on this host, as `crew card end` does, so no card's session outlives its card. When
 plannotator's list of sessions can't be read, it ends nothing, keeps the session for a later rail read to end, and
-says so to the agent, in end_session's words, as the tool's additional context. A batch card's sessions, one per unit
-on each unit's team's host, are ended by `crew card end <key>` started apart, since reaching those hosts takes longer
-than a hook may. A record card is given no session, so its close ends none.
+says so to the agent, in end_session's words, as the tool's additional context. A batch card's one session, on the
+whole batch, is on the main level's host, where the planner closes it, and is ended so too. An old batch card's
+sessions, batch/<n>-<k>'s one per unit on each unit's team's host, are ended by `crew card end <key>` started apart,
+since reaching those hosts takes longer than a hook may. A record card is given no session, so its close ends none.
 
 A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it, the record session-start keeps of
 it. A session with a CREW_AGENT but no CREW_LABEL is a crew agent whose partition crew can't tell: its card or area is
@@ -490,7 +491,7 @@ def main():
     record.emit(label, ACTS[tool], [on or f"agent/{agent}"], Card=card, Key=key)
     # A key posted before its row's form changed (a bare land/<bolt>) is still closed under it, and has no session; nor
     # has a record card.
-    if ACTS[tool] == "card.close" and keyed(key)[0] and key.startswith("batch/"):
+    if ACTS[tool] == "card.close" and keyed(key)[0] and re.fullmatch(r"batch/\d+-\d+", key):
         import subprocess
         crew_bin = pathlib.Path(__file__).resolve().parent.parent / "bin" / "crew"
         subprocess.Popen(["bash", str(crew_bin), "card", "end", key, "--label", label], stdin=subprocess.DEVNULL,

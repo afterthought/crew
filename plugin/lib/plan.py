@@ -4852,10 +4852,10 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     run record holds (held, as rail_record reads it), and the kits as surveyed: each row's group, its partition, its
     card key, the time it began to wait (shown as a date alone when that is all that is known), what it is, its
     commands, and the document its card asks the user to read: ("page", label, n) for a proposal, ("batch", label, n)
-    for a batch card, whose units each have a session of their own, (host, path) for a verify report, None for a
-    landing. A batch is one row, keyed batch/<n>, holding every unit, until its card closes; a batch posted as cards
-    of five before a batch was one card is a row for each card posted, keyed batch/<n>-<k>, until it closes. A bolt
-    with every unit merged is a landing row, offered for landing only once every unit's latest change has been in a
+    for a batch card, whose units, their teams and the commits the batch read them at the row holds too, (host, path)
+    for a verify report, None for a landing. A batch is one row, keyed batch/<n>, holding every unit, until its card
+    closes; a batch posted as cards of five before a batch was one card is a row for each card posted, keyed
+    batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row, offered for landing only once every unit's latest change has been in a
     batch: until then the row names the units that have not, and offers nothing (briefs.12)."""
     rows, here, held = [], crew.this_host(), held or {}
     for d in props:
@@ -4880,6 +4880,7 @@ def rail_rows(fleet, found, sv, props, times, held=None):
                 card = f", card {k} of {-(-len(units) // 5)}" if k else ""
                 rows.append(dict(group="batches", label=l, key=key, at=utc(at), doc=("batch", l, n),
                                  units=[u for u, *_ in part], teams={u: team for u, team, _ in part},
+                                 commits={u: sha for u, _, sha in part},
                                  what=[f"batch {n} ({l}){card}: " + ", ".join(f"{u} ({team})" for u, team, _ in part)],
                                  cmds=([("open", opener(fleet, main, here, f))] if f else [])
                                  + [("answer", f'crew tell {l}-planner "On batch {n}: "')]))
@@ -5093,7 +5094,8 @@ def rail_view(fleet, a):
 # ------------------------------------------------------------------------------------------------ crew card
 
 # A card's plannotator session, by its card key, in ~/.local/state/crew/cards/<label>/<key>/ on the owner's host, the
-# key's slashes as folders: session.json (pid, document, url, started), and plannotator's result.json once the user
+# key's slashes as folders, an old batch card's per unit under <key>/<unit>/: session.json (pid, document, url,
+# started, its document the files plannotator was given joined by ", "), and plannotator's result.json once the user
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # The rail's card keys, as crew's card hook reads them.
@@ -5197,21 +5199,30 @@ def card_refusal(fleet, name, label, tool, key):
             "record, the design agent post cards. Tell the partition's operator agents what you wait on, as your brief says.")
 
 
+def old_batch(key):
+    """Whether a card key is a batch's posted as cards of five before a batch was one card, batch/<n>-<k>, whose
+    sessions are its units'."""
+    return bool(re.fullmatch(r"batch/\d+-\d+", key or ""))
+
+
 def card_of(fleet, a, unit_needed=True):
-    """The partition a card command runs as and the key's folder, a batch card's per unit: refused with no partition, a
-    key that is not one of the rail's, a batch card's key with no unit where one is needed, and a unit with any other
-    key."""
+    """The partition a card command runs as and the key's folder, an old batch card's per unit: refused with no
+    partition, a key that is not one of the rail's, a batch/<n> key with a unit, since a batch has one session on the
+    whole batch, a batch/<n>-<k> key with no unit where one is needed, and a unit with any other key."""
     label = default_label(fleet, a) or fail("crew card runs as the card's partition: run it as a crew agent, or add --label")
     any(re.fullmatch(k, a.key) for k in CARD_KEYS) or fail(
         f"{a.key} is not a card key: proposal/<n>, batch/<n>, verify/<unit>/<stamp> or land/<bolt>/<head>")
-    batch = a.key.startswith("batch/")
-    if batch:
-        a.unit or not unit_needed or fail(f"a batch card has a session for each of its units: crew card {a.sub} {a.key} <unit>")
+    old = old_batch(a.key)
+    if old:
+        a.unit or not unit_needed or fail(f"a batch card posted as cards of five has a session for each of its units: "
+                                          f"crew card {a.sub} {a.key} <unit>")
+    elif a.key.startswith("batch/"):
+        not a.unit or fail(f"a batch has one reading session, on the whole batch: crew card {a.sub} {a.key}")
     else:
-        not a.unit or fail(f"only a batch card's key takes a unit, and {a.key} is not one")
+        not a.unit or fail(f"only an old batch card's key, batch/<n>-<k>, takes a unit, and {a.key} is not one")
     if a.unit:
         crew.NAME.match(a.unit) or fail(f"a unit's name is lowercase words with dashes, not {a.unit}")
-    return label, CARDS / label / a.key / a.unit if batch and a.unit else CARDS / label / a.key
+    return label, CARDS / label / a.key / a.unit if old and a.unit else CARDS / label / a.key
 
 
 def plannotator_sessions():
@@ -5251,10 +5262,11 @@ def card_recorded(d):
 
 
 def serving(listed, s):
-    """Whether plannotator lists the recorded session's pid as serving its document: a folder's target is listed
-    without its last slash."""
+    """Whether plannotator lists the recorded session's pid as serving its document, path by path: a session of
+    several files is listed with their paths joined by ", ", as crew records its document, and a folder's target, as
+    a session started before crew gave plannotator files, without its last slash."""
     got = listed.get(s["pid"])
-    return bool(got) and os.path.realpath(got["target"]) == s["document"]
+    return bool(got) and [os.path.realpath(p) for p in got["target"].split(", ")] == s["document"].split(", ")
 
 
 def card_result(d):
@@ -5310,27 +5322,36 @@ def card_stop(proc):
 
 def card_session(fleet, a):
     """crew card session <key> [<unit>] [--label L]: a plannotator session on the document the rail row with that card
-    key asks the user to read, started on this host with an Approve button and no browser, and its link printed; for a
-    batch card, one session for each unit it holds, on that unit's whole change, started on the host the teams file
-    names for the unit's team (code.3) and refused for a unit the card does not hold. While the
-    session crew started for the key still runs, its link is printed again and nothing is started. One the user
-    approved or annotated before it ended is kept for crew card wait, its link printed again with a line saying so; one
-    that ended with no decision is forgotten, and one the user closed undecided is moved aside, so a new one starts.
-    Refused for a landing's key, a key with no row, a document on another host, and a link that would open only on this
-    host."""
+    key asks the user to read, started on this host with an Approve button and no browser, and its link printed. A
+    batch card's, batch/<n>, is one session on the whole batch, started on the partition's main level's host and
+    refused elsewhere, naming it: crew writes the batch's folder (batch_folder) and gives plannotator its files as one
+    review. An old batch card's, batch/<n>-<k>, is one session for each unit it holds, on that unit's whole change as
+    its Markdown files, started on the host the teams file names for the unit's team (code.3) and refused for a unit
+    the card does not hold. While the session crew started for the key still runs, its link is printed again and
+    nothing is started or written. One the user approved or annotated before it ended is kept for crew card wait, its
+    link printed again with a line saying so; one that ended with no decision is forgotten, and one the user closed
+    undecided is moved aside, so a new one starts. Refused for a landing's key, a key with no row, a document on another
+    host or that crew can't read whole, and a link that would open only on this host."""
     label, d = card_of(fleet, a)
     a.key.startswith("land/") and fail("a landing card has no document to read, so it has no session")
-    row, props = card_row(fleet, label, a.key)
     here = crew.this_host()
-    if row["doc"][0] == "batch":
+    main = fleet["partitions"][label]["machine"]
+    if a.key.startswith("batch/") and not old_batch(a.key):
+        main == here or fail(f"{a.key}'s reading session runs on {main}, where {label}'s main level writes the batch's "
+                             f"summary: run crew card session {a.key} there")
+    row, props = card_row(fleet, label, a.key)
+    row["doc"] or fail(f"{a.key}'s card has no document to read, so it has no session")
+    if old_batch(a.key):
         a.unit in row["units"] or fail(f"{a.key} holds {either(row['units'])}, not {a.unit}: its sessions are its units'")
         t = fleet["teams"].get(row["teams"][a.unit]) or fail(f"{a.unit}'s team {row['teams'][a.unit]} is not in the teams file")
         if t["machine"] != here:
             return forward_card(fleet, t, a, label)
-        where, doc, name = here, (change_folder(fleet, t, a.unit),), f"{a.key}'s session of {a.unit}"
+        where, doc, name = here, ("change", change_folder(fleet, t, a.unit)), f"{a.key}'s session of {a.unit}"
+    elif row["doc"][0] in ("page", "batch"):
+        where, doc, name = here, row["doc"], f"{a.key}'s session"
     else:
-        where, doc, name = row["doc"][0], row["doc"][1:], f"{a.key}'s session"
-    where in ("page", here) or fail(f"{a.key}'s document is on {where}, not {here}: its session starts there, from its owner")
+        where, doc, name = row["doc"][0], ("file", row["doc"][1]), f"{a.key}'s session"
+    where == here or fail(f"{a.key}'s document is on {where}, not {here}: its session starts there, from its owner")
     d.mkdir(parents=True, exist_ok=True)
     with open(d / ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -5352,21 +5373,27 @@ def card_session(fleet, a):
             (d / "session.json").unlink()
         import shutil
         shutil.which("plannotator") or fail("plannotator is not on this host's path, and a card's session is a plannotator session")
-        if where == "page":
-            _, n = doc
+        if doc[0] == "page":
+            _, _, n = doc
             p = next(x for x in props if x["proposal"] == n)
             f = d / f"proposal-{n}.md"
             f.write_text(page(p, label))
-            doc = str(f)
+            files = [str(f)]
+        elif doc[0] == "batch":
+            files = batch_folder_write(fleet, label, doc[2], row)
+        elif doc[0] == "change":
+            files = change_files(doc[1]) or fail(f"{a.unit}'s change {doc[1]} on {here} holds no Markdown file to read")
         else:
-            doc = doc[0]
-        doc = os.path.realpath(doc)
-        os.path.exists(doc) or fail(f"{a.key}'s document {doc} is not on {here}")
-        given = doc + "/" if os.path.isdir(doc) else doc  # a folder, as plannotator's usage gives it
+            files = [doc[1]]
+        files = [os.path.realpath(f) for f in files]
+        gone = [f for f in files if not os.path.isfile(f)]
+        not gone or fail(f"{a.key}'s document {gone[0]} is not on {here}")
+        doc = ", ".join(files)  # as plannotator lists a session of several files
         started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         env = dict(os.environ, PLANNOTATOR_SKIP_BROWSER_OPEN="1", PLANNOTATOR_REMOTE="1")
         with open(d / "out", "w") as out, open(d / "err", "w") as err:
-            proc = subprocess.Popen(["plannotator", "annotate", given, "--gate", "--json", "--result-file", str(d / "result.json")],
+            # Several files, each its own path, open as one review in that order with one decision (plannotator 0.28.6).
+            proc = subprocess.Popen(["plannotator", "annotate", *files, "--gate", "--json", "--result-file", str(d / "result.json")],
                                     stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, start_new_session=True)
         deadline = time.monotonic() + CARD_START
         while True:
@@ -5408,9 +5435,79 @@ def change_folder(fleet, t, unit):
     return next((w for w in where if os.path.isdir(w)), None) or fail(f"unit {unit}'s change is in no checkout of {t['kit']['name']} on {t['machine']}")
 
 
+def change_order(path):
+    """Where a file of a change, by its path under the change, comes in its reading: its proposal, design, specs in
+    path order, tasks, then any other Markdown in path order."""
+    return ({"proposal.md": 0, "design.md": 1, "tasks.md": 3}.get(path, 2 if path.startswith("specs/") else 4), path)
+
+
+def change_files(folder):
+    """A change's Markdown files in a folder on this host, each a path, in the order of its reading (change_order):
+    what plannotator is given, never the folder, whose listed files the user would have to open one by one."""
+    root = pathlib.Path(folder)
+    found = [p.relative_to(root).as_posix() for p in root.rglob("*.md") if p.is_file()]
+    return [str(root / p) for p in sorted(found, key=change_order)]
+
+
+def batch_folder(label, n):
+    """Batch n's own folder on the partition's main level's host, beside its summary: the files its one reading session
+    opens."""
+    return reviews(label) / f"batch-{label}-{n}"
+
+
+# A change's Markdown files at a commit in a kit, run on the team's host: each file's path under the change, then its
+# content as git holds it, each ended by NUL, which no Markdown file holds.
+CHANGE_AT = r"""set -eo pipefail
+main=$1 sha=$2 unit=$3
+cd "$main"
+git cat-file -e "$sha^{commit}" 2>/dev/null || { echo "$sha is not a commit of $main" >&2; exit 1; }
+git ls-tree -r -z --name-only "$sha" -- "openspec/changes/$unit/" | while IFS= read -r -d '' p; do
+  case $p in *.md) printf '%s\0' "${p#"openspec/changes/$unit/"}"; git cat-file blob "$sha:$p"; printf '\0' ;; esac
+done
+"""
+
+
+def change_at(fleet, t, unit, sha):
+    """A unit's change as read at a commit in its kit's main checkout on its team's host, over ssh when that host is
+    another (code.3), as the reviewer reads it (reading_command): its Markdown files, [(path under the change,
+    content)], in the order of its reading. Refused naming the unit, the host and what failed (read.1)."""
+    r = crew.on_machine(fleet, t["machine"], ["bash", "-c", CHANGE_AT, "crew", t["kit"]["main"], sha, unit])
+    said = ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]
+    r.returncode != 255 or fail(f"crew can't read {unit}'s change: {t['machine']}, {t['name']}'s host, did not answer ({said})")
+    r.returncode == 0 or fail(f"crew can't read {unit}'s change at {sha} in {t['kit']['main']} on {t['machine']}: {said}")
+    parts = r.stdout.split("\0")
+    files = sorted(zip(parts[0:-1:2], parts[1::2]), key=lambda f: change_order(f[0]))
+    return files or fail(f"{unit}'s change at {sha} in {t['kit']['main']} on {t['machine']} holds no Markdown file")
+
+
+def batch_folder_write(fleet, label, n, row):
+    """Write batch n's folder afresh, on the main level's host, from the batch the run record holds (row, its rail
+    row): 00-summary.md, the reviewer's summary as written, then for the k-th unit in the batch's order each Markdown
+    file of its change at the commit the batch read it at, named <kk>-<unit>-<its path under the change, / as ->, so
+    each file plannotator shows by its name alone names its unit. Every file is read before any is written: what crew
+    can't read refuses, naming it, and nothing is written (read.1). Returns the files' paths, in that order."""
+    f = batch_file(label, n)
+    try:
+        summary = f.read_text()
+    except OSError as e:
+        fail(f"crew can't read batch {n}'s summary {f}: {e.strerror or e}")
+    out = [("00-summary.md", summary)]
+    for k, u in enumerate(row["units"], 1):
+        t = fleet["teams"].get(row["teams"][u]) or fail(f"{u}'s team {row['teams'][u]} is not in the teams file")
+        out += [(f"{k:02d}-{u}-{p.replace('/', '-')}", text) for p, text in change_at(fleet, t, u, row["commits"][u])]
+    folder = batch_folder(label, n)
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.iterdir():
+        if old.is_file() and re.fullmatch(r"\d{2}-.+\.md", old.name):
+            old.unlink()
+    for name, text in out:
+        (folder / name).write_text(text)
+    return [str(folder / name) for name, _ in out]
+
+
 def forward_card(fleet, t, a, label):
-    """A batch card's command for one of its units, run on the host the teams file names for that unit's team (code.3),
-    as the one asking here; its output passed on, and its failure this command's."""
+    """An old batch card's command for one of its units, run on the host the teams file names for that unit's team
+    (code.3), as the one asking here; its output passed on, and its failure this command's."""
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "card", a.sub, a.key, a.unit, "--label", label))
     sys.stdout.write(r.stdout)
     sys.stderr.write(r.stderr)
@@ -5434,10 +5531,12 @@ def batch_team(fleet, label, key, unit):
 
 
 def card_wait(fleet, a):
-    """crew card wait <key> [--label L]: wait, with no timeout, until the user decides in the session crew started for
-    the key, or it ends without a decision, and print which: approved or annotated with the user's words after it as
-    they are, closed in plannotator with no decision, or ended with no decision; a decision made before the wait began
-    is printed at once. A session crew ended, its card closed, is said so. Refused for a key with no session started."""
+    """crew card wait <key> [<unit>] [--label L]: wait, with no timeout, until the user decides in the session crew
+    started for the key on this host, or it ends without a decision, and print which: approved or annotated with the
+    user's words after it as they are, closed in plannotator with no decision, or ended with no decision; a decision
+    made before the wait began is printed at once. A session crew ended, its card closed, is said so. A batch card's,
+    batch/<n>, is its one session, on the main level's host; an old batch card's, batch/<n>-<k>, takes a unit and is
+    waited on at that unit's team's host. Refused for a key with no session started."""
     label, d = card_of(fleet, a)
     if a.unit:
         t = batch_team(fleet, label, a.key, a.unit)
@@ -5465,8 +5564,8 @@ def card_wait(fleet, a):
 
 
 def end_session(label, key, unit=None):
-    """End the plannotator session crew started for a card key on this host, a batch card's for one of its units, and
-    forget it: its folder goes first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only
+    """End the plannotator session crew started for a card key on this host, an old batch card's (batch/<n>-<k>) for
+    one of its units, and forget it: its folder goes first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only
     while plannotator lists it as serving the recorded document (read.4). When plannotator's list can't be read, nothing
     is ended and the session is kept as recorded, so a later rail read ends it (read.1). The answers crew plan answer
     gathered for a proposal's card stay, and with them their folder: they go only with the approval or the decline.
@@ -5504,10 +5603,11 @@ def end_session(label, key, unit=None):
 
 
 def card_end(fleet, a):
-    """crew card end <key> [<unit>] [--label L]: end the session crew started for a card key, and forget the key; a batch
-    card's for one of its units on that unit's team's host, or with no unit for each of its units, as its close does."""
+    """crew card end <key> [<unit>] [--label L]: end the session crew started for a card key on this host, and forget
+    the key: a batch card's, batch/<n>, its one session; an old batch card's, batch/<n>-<k>, for one of its units on
+    that unit's team's host, or with no unit for each of its units, as its close does."""
     label, _ = card_of(fleet, a, unit_needed=False)
-    if not a.key.startswith("batch/"):
+    if not old_batch(a.key):
         print(end_session(label, a.key)[0])
         return
     names = [a.unit] if a.unit else card_units(fleet, label, a.key)
@@ -5520,13 +5620,14 @@ def card_end(fleet, a):
 
 
 def card_folder(rel):
-    """The card key and unit (None but for a batch card's) whose session a folder under ~/.local/state/crew/cards/<label>/
-    keeps, from its path there; None when the path is no key's folder."""
+    """The card key and unit (None but for an old batch card's, batch/<n>-<k>) whose session a folder under
+    ~/.local/state/crew/cards/<label>/ keeps, from its path there: batch/<n> is a key's own folder, as a proposal's;
+    None when the path is no key's folder."""
     path = "/".join(rel.parts)
     if any(re.fullmatch(k, path) for k in CARD_KEYS):
         return path, None
     key = "/".join(rel.parts[:2])
-    if len(rel.parts) == 3 and key.startswith("batch/") and any(re.fullmatch(k, key) for k in CARD_KEYS) and crew.NAME.match(rel.parts[2]):
+    if len(rel.parts) == 3 and old_batch(key) and crew.NAME.match(rel.parts[2]):
         return key, rel.parts[2]
     return None
 
