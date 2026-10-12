@@ -9,15 +9,16 @@
                                      marker on its object, and what needs attention at the foot
   crew _views <label>                the rail tab's refresh: one read, the rail printed as crew rail prints it, the
                                      card sessions of closed cards and gone rows ended as crew rail ends them, and
-                                     the board's data written for the board tab
+                                     the board's data written for the board tab, with each agent's view of it for
+                                     the band crew's mod draws above that agent's prompt
   crew _board <label> [--once]       the board tab: the latest board the rail tab's loop wrote, drawn at the pane's
                                      width whenever it or the pane changes
 
 Read from the plan, the proposals, the moves, the signals, the kits and the run record, in one read that also makes the
-rail (plan.rail_read); no state is written, only the frame the rail tab hands the board tab, in crew's cache, which is
-one redraw and not state (state.4). The rail tab's refresh, as it prints the rail, ends the card sessions whose card is
-closed or whose row is gone, as crew rail does; crew board ends nothing. The board answers nothing and prints no
-command: the rail and its shell are where things are answered."""
+rail (plan.rail_read); no state is written, only the frames the rail tab hands the board tab and the agents' mods, in
+crew's cache, each one redraw and not state (state.4). The rail tab's refresh, as it prints the rail, ends the card
+sessions whose card is closed or whose row is gone, as crew rail does; crew board ends nothing. The board answers
+nothing and prints no command: the rail and its shell are where things are answered."""
 import argparse, datetime, json, os, pathlib, re, shutil, subprocess, sys, tempfile, time
 
 LIB = pathlib.Path(__file__).resolve().parent
@@ -29,6 +30,12 @@ from crew import Refusal, fail  # noqa: E402
 # in the user's own words.
 GLYPH = {"proposals": "✓", "land": "✓", "verify": "✎"}
 ATTENTION = "!"
+# A unit's stage as one pip, filling as it goes: not begun, being designed, coded, every task ticked, merged; a stage
+# crew could not read is "?". A bolt is its units' pips in the plan's order.
+PIP = {"queued": "○", "waiting": "○", "ready": "○", "amended": "◔", "construct": "◔", "planned": "◔", "code": "◑", "verify": "◕",
+       "merged": "●", "landed": "●"}
+# How many explorations an agent's view names before it counts the rest.
+SHOWN = 6
 # The frame the rail tab's loop writes for the board tab, by label.
 FRAMES = pathlib.Path.home() / ".cache/crew/board"
 STALE = 90  # seconds: three of the rail tab's periods
@@ -285,6 +292,23 @@ def card_of(ms):
     return [("no card open" if not m["card"] else f"card open, asked by {m['card']['by']}", None) for m in ms]
 
 
+def row(segs, gutter=None, indent=0, ms=()):
+    """One line as segments: a header or heading at the left edge, or, with a gutter, an object, its marker in the
+    gutter and its card said at the line's end."""
+    segs = ([(gutter.ljust(2) + " " * indent, None)] if gutter is not None else []) + segs
+    for c in card_of(ms):
+        segs += [("  ", None), c]
+    return segs
+
+
+def gutter(ms, attention=False):
+    return ATTENTION if attention else (ms[0]["glyph"] if ms else " ")
+
+
+def stage_of(u):
+    return u["stage"] + (f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else "")
+
+
 def board_text(data, width=None, color=False, stale=None):
     """The board as text: for each partition a header, the four lanes in order, each a bold heading with its objects
     under it or none, then attention. A marker sits in a two-column gutter at the left of its object's line, its card
@@ -295,9 +319,7 @@ def board_text(data, width=None, color=False, stale=None):
 
     def line(segs, gutter=None, indent=0, ms=()):
         """One line: a header or heading at the left edge, or, with a gutter, an object, its marker in the gutter."""
-        segs = ([(gutter.ljust(2) + " " * indent, None)] if gutter is not None else []) + segs
-        for c in card_of(ms):
-            segs += [("  ", None), c]
+        segs = row(segs, gutter, indent, ms)
         text, n = "", 0
         for s, style in segs:
             if width is not None:
@@ -308,12 +330,6 @@ def board_text(data, width=None, color=False, stale=None):
 
     def heading(name):
         line([(name, "bold")])
-
-    def gutter(ms, attention=False):
-        return ATTENTION if attention else (ms[0]["glyph"] if ms else " ")
-
-    def stage(u):
-        return u["stage"] + (f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else "")
     for i, p in enumerate(data["partitions"]):
         if i:
             out.append("")
@@ -355,7 +371,7 @@ def board_text(data, width=None, color=False, stale=None):
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
                         "" if b["state"] == "active" else b["state"]), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
             for u in b["units"]:
-                line(fields(u["unit"], stage(u), u["slot"] or "", u["url"] or ""), gutter(u["markers"]), 2, u["markers"])
+                line(fields(u["unit"], stage_of(u), u["slot"] or "", u["url"] or ""), gutter(u["markers"]), 2, u["markers"])
             for f in b["fixes"]:
                 line(fields(f["fix"], "fix merged" if f["merged"] else "fix", f["slot"] or "", f["url"] or ""), " ", 2)
             if b["url"]:
@@ -372,12 +388,158 @@ def board_text(data, width=None, color=False, stale=None):
 
         heading("attention")
         for a in p["attention"]:
-            said = {"host": f"{a['name']} did not answer ({a['why']})", "plan": f"the plan, {a['name']}: {a['why']}",
-                    "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}"}[a["what"]]
-            line([(said, None)], ATTENTION)
+            line([(attention_text(a), None)], ATTENTION)
         if not p["attention"]:
             line([("none", None)], " ")
     return "\n".join(out)
+
+
+def attention_text(a):
+    """What needs attention, as the board says it."""
+    return {"host": f"{a['name']} did not answer ({a['why']})", "plan": f"the plan, {a['name']}: {a['why']}",
+            "signals": f"the signals on {a['name']}: {a['why']}", "landed": f"bolt {a['name']}: {a['why']}"}[a["what"]]
+
+
+# ------------------------------------------------------------------------------------------------- the agents' views
+
+def many(n, one, more):
+    return f"{n} {one if n == 1 else more}"
+
+
+def pips(units):
+    """Units' stages as pips, one to a unit in the plan's order."""
+    return "".join(PIP.get(u["stage"], "?") for u in units)
+
+
+def merged(b):
+    return f"{sum(u['stage'] in ('merged', 'landed') for u in b['units'])} of {len(b['units'])} merged"
+
+
+def held(p, team):
+    return [b for b in p["construction"] if b["team"] == team]
+
+
+def bolt_row(b, *before):
+    """A held bolt on one line: its pips, its name, its state unless active and how many of its units have merged, its
+    landing's marker in the gutter, or attention once every unit has landed."""
+    return row(fields(*before, pips(b["units"]), named(b["repo"], b["bolt"]), "" if b["state"] == "active" else b["state"], merged(b)),
+               gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+
+
+def ledger_rows(b):
+    """A held bolt as its conductor reads it: the bolt, then a unit to a line, its pip, stage and slot and its marker,
+    then each fix."""
+    return ([bolt_row(b)]
+            + [row(fields(PIP.get(u["stage"], "?"), u["unit"], stage_of(u), u["slot"] or ""), gutter(u["markers"]), 2, u["markers"]) for u in b["units"]]
+            + [row(fields(f["fix"], "fix merged" if f["merged"] else "fix", f["slot"] or ""), " ", 2) for f in b["fixes"]])
+
+
+def team_rows(p):
+    """Each team of the partition: the bolt it holds on one line, or that it holds none."""
+    return [r for t in p["teams"] for r in ([bolt_row(b, t["team"]) for b in held(p, t["team"])] or [row(fields(t["team"], ("holds no bolt", "dim")), " ")])]
+
+
+def proposal_row(d, team=None):
+    """An open proposal: who made it, its case, and the conductors it waits on, to a conductor whether it waits on
+    its own agreement; its marker in the gutter."""
+    if team:
+        waits = "waits on your agreement" if team in d["waiting"] else ""
+    else:
+        waits = "waiting on " + ", ".join(f"{t}-conductor" for t in d["waiting"]) if d["waiting"] else ""
+    return row(fields(f"proposal {d['proposal']} by {d['by']}", d["case"] or "", waits), gutter(d["markers"]), 0, d["markers"])
+
+
+def next_rows(p, team=None):
+    """What comes after the work in hand, for one team or the whole partition: for each repository its first planned
+    bolt, the rest counted, then the queued units counted by repository."""
+    bp = p["bolt_plan"]
+    planned = [b for b in bp["planned"] if team is None or team in b["teams"]]
+    queued = [u for u in bp["queue"] if team is None or team in u["teams"]]
+    out = []
+    for repo in dict.fromkeys(b["repo"] for b in planned):
+        mine = [b for b in planned if b["repo"] == repo]
+        out.append(row(fields(("next", "dim"), named(repo, mine[0]["bolt"]), f"and {len(mine) - 1} more planned" if len(mine) > 1 else ""), " "))
+    counts = {}
+    for u in queued:
+        counts[u["repo"] or "no repository"] = counts.get(u["repo"] or "no repository", 0) + 1
+    return out + ([row(fields(("queued", "dim"), ", ".join(f"{n} in {r}" for r, n in counts.items())), " ")] if counts else [])
+
+
+def attention_rows(p, keep=lambda a: True):
+    return [row([(attention_text(a), None)], ATTENTION) for a in p["attention"] if keep(a)]
+
+
+def conductor_view(p, team):
+    """A conductor's: the bolt its team holds as a ledger, or that it holds none; the open proposals that name its
+    team; what is planned and queued for it; and what needs attention there: its host not answering, a bolt of its
+    still in the plan once landed, or the plan not read."""
+    host = next(t["host"] for t in p["teams"] if t["team"] == team)
+    mine = held(p, team)
+    out = [r for b in mine for r in ledger_rows(b)] or [row(fields(f"{team} holds no bolt"), " ")]
+    out += [proposal_row(d, team) for d in p["bolt_plan"]["proposals"] if team in d["teams"] or team in d["waiting"]]
+    return out + next_rows(p, team) + attention_rows(p, lambda a: a["what"] in ("plan", "signals") or (a["what"] == "host" and a["name"] == host)
+                                                    or (a["what"] == "landed" and a["name"] in {b["bolt"] for b in mine}))
+
+
+def planner_view(p):
+    """The planner's: the plan in brief, each team's bolt, the open proposals, what is planned next and queued, and
+    what needs attention."""
+    bp = p["bolt_plan"]
+    head = row(fields((f"{p['label']} plan", "bold"), f"{len(p['construction'])} held", f"{len(bp['planned'])} planned",
+                      f"{len(bp['queue'])} queued", many(len(bp["proposals"]), "proposal open", "proposals open")))
+    return [head] + team_rows(p) + [proposal_row(d) for d in bp["proposals"]] + next_rows(p) + attention_rows(p)
+
+
+def design_view(p):
+    """The design agent's: the signals no move has taken, counted by who captured them, and the explorations on each
+    kit's main, the first few named and the rest counted; and what keeps the signals or the plan from being read."""
+    inc, groups = p["inception"], {}
+    for s in inc["signals"]:
+        groups.setdefault(s["captured_by"], []).append(s)
+    es = inc["explorations"]
+    head = row(fields((f"{p['label']} inception", "bold"), many(len(inc["signals"]), "signal not moved", "signals not moved"),
+                      many(len(es), "exploration", "explorations")))
+    return ([head]
+            + [row(fields(f"signals captured by {who or 'no one named'}", f"{len(mine)} not moved"), " ") for who, mine in groups.items()]
+            + [row(fields(named(e["kit"], e["name"]), e["first"] or ""), " ") for e in es[:SHOWN]]
+            + ([row(fields(("and " + many(len(es) - SHOWN, "more exploration", "more explorations"), "dim")), " ")] if len(es) > SHOWN else [])
+            + attention_rows(p, lambda a: a["what"] in ("plan", "signals")))
+
+
+def operator_view(p):
+    """An operator's: the partition's board in brief, a line to each lane with each team's bolt under Construction,
+    the rail's rows waiting on the user counted by kind, and what needs attention."""
+    inc, bp, ops = p["inception"], p["bolt_plan"], p["operation"]
+    approve = sum(len(d["markers"]) for d in bp["proposals"]) + sum(len(b["markers"]) for b in p["construction"])
+    answer = sum(len(u["markers"]) for b in p["construction"] for u in b["units"])
+    last = f"the last {ops[0]['bolt']}, {plan.utc(ops[0]['at']).astimezone():%a %H:%M}" if ops else ""
+    return ([row(fields((f"{p['label']} board", "bold"), f"read from {', '.join(h for h, v in p['hosts'].items() if v is True) or 'no host'}")),
+             row(fields(("Inception", "bold"), many(len(inc["signals"]), "signal not moved", "signals not moved"),
+                        many(len(inc["explorations"]), "exploration", "explorations"))),
+             row(fields(("Bolt plan", "bold"), many(len(bp["proposals"]), "proposal open", "proposals open"), f"{len(bp['planned'])} planned",
+                        f"{len(bp['queue'])} queued")),
+             row([("Construction", "bold")])]
+            + team_rows(p)
+            + [row(fields(("Operation", "bold"), f"{len(ops)} landed in seven days", last))]
+            + ([row(fields(("waits on the user", "bold"), f"✓ {approve} to approve" if approve else "", f"✎ {answer} to answer" if answer else ""))]
+               if approve or answer else [])
+            + attention_rows(p))
+
+
+def agent_views(data):
+    """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
+    prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's and each host's
+    operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
+    With them, the line the mod adds once the frame is stale_after_ms old: when it was read, and that the rail tab has
+    not refreshed it since."""
+    views = {}
+    for p in data["partitions"]:
+        views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
+        views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p)})
+        views.update({f"{p['label']}-operator-{h}": operator_view(p) for h in p["hosts"]})
+    return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
+            "stale": row([(f"read at {plan.utc(data['read_at']).astimezone():%H:%M}; the rail tab on {data['from']} has not refreshed it since", "dim")]),
+            "views": views}
 
 
 # ------------------------------------------------------------------------------------------------- the board tab
@@ -386,15 +548,20 @@ def frame_path(label):
     return FRAMES / f"{label}.json"
 
 
-def write_frame(label, data):
-    """The board's data for the board tab, written whole: a temporary file in the same folder, then moved over the
-    last one, so the tab never reads half of one."""
+def agents_path(label):
+    """The agents' views beside the board's frame, which crew's mod reads (plugin/hooks/status.js)."""
+    return FRAMES / f"{label}.agents.json"
+
+
+def write_frame(label, data, path=None):
+    """The board's data for the board tab, or the agents' views for their mods at path, written whole: a temporary
+    file in the same folder, then moved over the last one, so no reader ever reads half of one."""
     FRAMES.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=FRAMES, prefix=f".{label}.")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(json.dumps(data, indent=1) + "\n")
-        os.replace(tmp, frame_path(label))
+        os.replace(tmp, path or frame_path(label))
     except OSError:
         os.unlink(tmp)
         raise
@@ -478,6 +645,7 @@ def main(argv):
         print(plan.rail_text(fleet, labels, read, now))
         try:
             write_frame(labels[0], data)
+            write_frame(labels[0], agent_views(data), agents_path(labels[0]))
         except OSError as e:
             print(f"crew could not write the board's frame in {FRAMES}: {e.strerror or e}", file=sys.stderr)
     elif a.json:

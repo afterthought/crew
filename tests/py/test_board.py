@@ -219,3 +219,79 @@ class TestMore:
         assert board.read_frame("wldn") is None
         board.write_frame("wldn", dict(data(), read_at=board.iso(NOW)))
         assert board.read_frame("wldn")["partitions"][0]["label"] == "wldn" and sorted(p.name for p in tmp_path.iterdir()) == ["wldn.json"]
+
+
+def view(name, **kw):
+    """An agent's view of the fixture's board, a line to a string as its mod draws it, styles left out."""
+    return ["".join(s for s, _ in line) for line in board.agent_views(data(**kw))["views"][name]]
+
+
+WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-10-12", "case": "Tenants get d.", "waiting": ["swb-1"],
+          "changes": [{"do": 'unit add d "Unit d." --bolt tenant-environments', "bolts": ["tenant-environments"]}]}]
+
+
+class TestViews:
+    def test_a_conductor_reads_its_bolt_as_a_ledger_a_pip_to_each_unit_then_what_comes_next(self):
+        assert view("swb-1-conductor") == ["  ◑◔  switchboard-kit tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
+                                           "    fix/tenant-environments/edge  fix  unit-4", "  next  switchboard-kit apex-zones", "  queued  1 in switchboard-kit"]
+
+    def test_a_unit_waiting_on_the_users_answer_has_its_marker_and_its_card(self):
+        rows = [{"label": "wldn", "group": "verify", "key": "verify/a", "at": NOW}]
+        card = dict(label="wldn", card="req_2", key="verify/a", by="swb-1-conductor", host="mac-studio", at=NOW)
+        assert view("swb-1-conductor", rows=rows, cards=[card])[1] == "✎   ◑  a  code 1/2  unit-1  card open, asked by swb-1-conductor"
+
+    def test_a_team_holding_no_bolt_says_so_and_what_is_planned_for_its_kit(self):
+        assert view("swb-2-conductor") == ["  swb-2 holds no bolt", "  next  switchboard-kit apex-zones", "  queued  1 in switchboard-kit"]
+        assert view("atl-1-conductor") == ["  atl-1 holds no bolt"]
+
+    def test_a_proposal_waiting_on_a_conductors_agreement_is_in_its_view_alone(self):
+        assert "✓ proposal 2 by wldn-planner  Tenants get d.  waits on your agreement  no card open" in view("swb-1-conductor", props=WAITS)
+        assert not [l for l in view("brd-1-conductor", props=WAITS) if "proposal" in l]
+
+    def test_a_conductor_whose_host_does_not_answer_is_told_and_its_units_are_unknown(self):
+        mine = view("swb-1-conductor", sv=kits(ok=False))
+        assert mine[0] == "  ??  switchboard-kit tenant-environments  unknown  0 of 2 merged" and mine[1] == "    ?  a  unknown"
+        assert f"! {BOX} did not answer (its kits: ssh: timed out)" in mine
+        assert not [l for l in view("atl-1-conductor", sv=kits(ok=False)) if "did not answer" in l]
+
+    def test_a_bolt_landed_and_still_in_the_plan_is_named_for_attention_to_its_conductor(self):
+        assert view("brd-1-conductor") == ["! ●  breadboard-kit board-done  landed  1 of 1 merged", "    ●  done-one  landed",
+                                           "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
+
+    def test_the_planner_reads_the_plan_in_brief_each_teams_bolt_and_the_proposals_with_whom_they_wait_on(self):
+        assert view("wldn-planner", props=WAITS) == [
+            "wldn plan  2 held  1 planned  1 queued  1 proposal open", "  swb-1  ◑◔  switchboard-kit tenant-environments  0 of 2 merged",
+            "  swb-2  holds no bolt", "! brd-1  ●  breadboard-kit board-done  landed  1 of 1 merged", "  atl-1  holds no bolt",
+            "✓ proposal 2 by wldn-planner  Tenants get d.  waiting on swb-1-conductor  no card open", "  next  switchboard-kit apex-zones",
+            "  queued  1 in switchboard-kit", "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
+
+    def test_the_design_agent_reads_the_signals_by_who_captured_them_and_the_first_explorations(self, monkeypatch):
+        monkeypatch.setattr(board, "SHOWN", 0)
+        assert view("wldn-design", signals=SIGS) == ["wldn inception  3 signals not moved  1 exploration", "  signals captured by wldn-planner  2 not moved",
+                                                     "  signals captured by chuck@mac-studio  1 not moved", "  and 1 more exploration"]
+        monkeypatch.setattr(board, "SHOWN", 6)
+        assert view("wldn-design")[1:] == ["  switchboard-kit command-cost  Reading: what each crew command costs."]
+
+    def test_an_operator_reads_the_partitions_board_in_brief_and_what_waits_on_the_user(self):
+        mine = view(f"wldn-operator-{BOX}", props=WAITS, signals=SIGS)
+        assert mine[:4] == [f"wldn board  read from {BOX}, mac-studio", "Inception  3 signals not moved  1 exploration",
+                            "Bolt plan  1 proposal open  1 planned  1 queued", "Construction"]
+        assert "Operation  0 landed in seven days" in mine and "waits on the user  ✓ 1 to approve" in mine
+
+    def test_each_conductor_the_planner_the_design_agent_and_each_hosts_operator_has_a_view_and_no_other_agent(self):
+        v = board.agent_views(data())
+        assert sorted(v["views"]) == sorted(["swb-1-conductor", "swb-2-conductor", "brd-1-conductor", "atl-1-conductor", "wldn-planner", "wldn-design",
+                                             f"wldn-operator-{BOX}", "wldn-operator-mac-studio"])
+        assert v["read_at"] == data()["read_at"] and v["stale_after_ms"] == board.STALE * 1000
+        assert v["stale"][0][0].endswith("; the rail tab on mac-studio has not refreshed it since") and v["stale"][0][1] == "dim"
+
+    @pytest.mark.parametrize("stages, shown", [(["queued", "waiting", "ready"], "○○○"), (["amended", "construct", "planned"], "◔◔◔"),
+                                               (["code", "verify"], "◑◕"), (["merged", "landed"], "●●"), (["unknown"], "?")])
+    def test_a_units_pip_fills_as_its_stage_goes_and_one_crew_cannot_read_is_a_question(self, stages, shown):
+        assert board.pips([{"stage": s} for s in stages]) == shown
+
+    def test_the_rail_tabs_refresh_writes_the_views_whole_beside_the_frame(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(board, "FRAMES", tmp_path)
+        board.write_frame("wldn", board.agent_views(data()), board.agents_path("wldn"))
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["wldn.agents.json"]
+        assert board.read_frame("wldn") is None
