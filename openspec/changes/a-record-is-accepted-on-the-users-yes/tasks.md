@@ -20,4 +20,4 @@
 
 ## 5. The affected tests
 
-- [ ] 5.1 The moon tasks are in step with the tests and the affected tests pass. Verify `tests/moon-tasks` leaves `tests/moon.yml` unchanged, and `tests/suite --affected` ends with "0 failed".
+- [x] 5.1 The moon tasks are in step with the tests and the affected tests pass. Verify `tests/moon-tasks` leaves `tests/moon.yml` unchanged, and `tests/suite --affected` ends with "0 failed".
