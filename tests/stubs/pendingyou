@@ -10,7 +10,9 @@ isError whose text is the words. Every tools/call is logged as `<host> pendingyo
 sorted>` in $CREW_TEST_LOG.
 
 Its state is in $HOME/.stub-pendingyou/: cards.json (each card by its id: its key, the arguments it was posted with,
-its status, turn and version), areas.json (each area made, by its key and its remote). A test steers it there:
+its status, turn and version), areas.json (each area made, by its key and its remote), and counter, so a card's id is
+never given twice. A test signs the host in again by moving cards.json aside: every card posted before then reads
+"Not found", as it does to its owner under a new sign-in. A test steers it there:
   signed-out             every request is answered with the bridge's own error, -32001, and its words on stderr
   refuse                 lines `<tool> <words>`: that tool is refused with those words
   answered/<id>.json     the user's answer to that card, {"answer": {...}}, taken on the next get_request
@@ -82,7 +84,9 @@ def tool(name, args):
     if name == "post_request":
         known = next((i for i, c in cards.items() if c["key"] == args["idempotencyKey"]), None)
         if not known:
-            known = f"req_stub-{len(cards) + 1}"
+            n = load("counter").get("cards", 0) + 1
+            save("counter", {"cards": n})
+            known = f"req_stub-{n}"
             cards[known] = {"key": args["idempotencyKey"], "posted": args, "status": "pending", "turn": "you", "version": 1}
             save("cards.json", cards)
         c = cards[known]

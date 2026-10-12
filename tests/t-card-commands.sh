@@ -4,7 +4,7 @@
 # from Pending You's reply; posted again, the same card; a key not the conductor's refused by the card hook's check
 # with nothing sent; Pending You's refusal and a host with no sign-in refused in their words, the first recorded; a
 # change at the version Pending You reports; the user's answer read; a close by outcome and a withdrawal by reason,
-# each recorded. Which card a key names, what crew sets on a card, the area, and how a reply, a refusal and an answer
+# each recorded; and after the host signs in again, a card read as lost, and posted again under its key. Which card a key names, what crew sets on a card, the area, and how a reply, a refusal and an answer
 # read are logic cases (tests/py/test_card_commands.py); whose key and what form, test_cards.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -115,3 +115,13 @@ eq "$(card close $v2 --reason "Verify ran again." | head -1)" "card $v2: req_stu
 eq "$(py_calls | sed -n 2p)" 'cancel_request {"name": "swb-1-conductor", "reason": "Verify ran again.", "requestId": "req_stub-2"}'
 eq "$(entries card.close | jq -r .Card | tr '\n' ' ')" "req_stub-1 req_stub-2 "
 ok "crew card close --reason withdraws the card with why, and records it"
+
+# The host signs in to Pending You again: every card posted before reads "not found" to its owner.
+v3=verify/v1/20261012-1300
+card post $v3 <<<"$choice" >/dev/null
+mv "$stub/cards.json" "$stub/cards.before-sign-in.json"
+expect_fail "card req_stub-3 under $v3 is lost to its owner (Pending You: \"Not found: request:req_stub-3.\")" card read $v3
+has "$out" "post its card again with crew card post $v3, its summary saying an older copy is dead"
+eq "$(card post $v3 <<<"$choice")" "card $v3: req_stub-4 https://www.pendingyou.com/app/r/req_stub-4"
+eq "$(card read $v3 | head -1)" "card $v3: req_stub-4, pending, waiting on the user"
+ok "after the host signs in again a card reads as lost to its owner, saying to post the row's card again, and posted again under its key it is the key's card"

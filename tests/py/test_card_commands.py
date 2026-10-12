@@ -176,6 +176,19 @@ def test_a_reply_with_no_version_is_refused():
         cards.version_of({"status": "answered", "version": True}, "req_1")
 
 
+def test_not_found_is_a_lost_card():
+    assert cards.lost("Not found: request:req_5de3dad46fba41068fba.")
+    assert not cards.lost("Approve requests give their risk in approve.risk.")
+    assert not cards.lost(None)
+
+
+def test_a_lost_card_is_posted_again_under_its_key():
+    said = cards.lost_said("land/b1/abc1234", "req_old", "Not found: request:req_old.")
+    assert said.startswith("card req_old under land/b1/abc1234 is lost to its owner (Pending You: \"Not found: request:req_old.\")")
+    assert said.endswith("post its card again with crew card post land/b1/abc1234, its summary saying an older copy is "
+                         "dead and to dismiss it in the app")
+
+
 # ----------------------------------------------------------------------------------------- what read prints
 
 def test_a_card_waiting_on_the_user():

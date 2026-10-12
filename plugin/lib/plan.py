@@ -6751,7 +6751,7 @@ def card_change(fleet, a):
     card = card_held(label, who, a.key)
     why = cards.hook_refusal("update_request", dict(change, requestId=card))
     not why or fail(why)
-    with cards.Bridge(who, "Change it again later.") as py:
+    with cards.Bridge(who, "Change it again later.", (a.key, card)) as py:
         version = cards.version_of(py.call("get_request", {"requestId": card, "name": who}), card)
         got = py.call("update_request", dict(change, requestId=card, name=who, expectedVersion=version))
     record.emit(label, "card.update", [cards.object_of(a.key) or f"agent/{who}"], Card=card, Key=a.key)
@@ -6766,7 +6766,7 @@ def card_close(fleet, a):
     import cards
     label, who = card_asker(fleet, a)
     card = card_held(label, who, a.key)
-    with cards.Bridge(who, "Close it again later.") as py:
+    with cards.Bridge(who, "Close it again later.", (a.key, card)) as py:
         if a.outcome is not None:
             version = cards.version_of(py.call("get_request", {"requestId": card, "name": who}), card)
             py.call("ack_answer", {"requestId": card, "name": who, "expectedVersion": version, "outcome": a.outcome})
@@ -6788,7 +6788,7 @@ def card_read(fleet, a):
     import cards
     label, who = card_asker(fleet, a)
     card = card_held(label, who, a.key)
-    with cards.Bridge(who, "Read it again later.") as py:
+    with cards.Bridge(who, "Read it again later.", (a.key, card)) as py:
         got = py.call("get_request", {"requestId": card, "name": who})
     if a.json:
         print(json.dumps(got, indent=1, ensure_ascii=False))

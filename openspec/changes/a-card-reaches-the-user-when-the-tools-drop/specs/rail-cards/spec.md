@@ -46,6 +46,10 @@
 - **WHEN** swb-1-conductor runs `crew card close verify/v1/<stamp> --reason "Verify ran again"`
 - **THEN** Pending You withdraws the card with that reason, and a `card.close` entry names it
 
+#### Scenario: A card lost to its owner
+- **WHEN** the host has signed in to Pending You again, and swb-1-conductor runs `crew card read verify/v1/<stamp>` for a card it posted before
+- **THEN** the command refuses, saying the card is lost to its owner and to post the row's card again with `crew card post verify/v1/<stamp>`, its summary saying an older copy is dead; and once posted again, the new card is the one the key names
+
 #### Scenario: No card under the key
 - **WHEN** swb-1-conductor runs `crew card read verify/v1/<stamp>` and has posted no card under it
 - **THEN** the command refuses, saying swb-1-conductor holds no open card under that key

@@ -127,11 +127,25 @@ Areas touched:
 - It then prints each message after the newest the user wrote, and `--json` prints Pending You's object whole.
 - What `get_request` leaves out is left out (`read.2`).
 
+**The host is signed in again once, and the cards posted before it are lost to their owners.**
+- **What the move does.** On the user's word of 2026-10-12, mac-studio is signed in again with the fleet's `pendingyou-signin`. The user runs it and approves the code on their phone, at a quiet moment, as ADR 0005 has it. From then on:
+  - the headers helper gives a token again, so each session uses the host's connection when it next connects, in place of Claude Code's own sign-in;
+  - `crew card` posts on that same connection.
+- **What it orphans.** Every card open before the move was posted under Claude Code's own sign-in, a connection its owner's session no longer uses (ADR 0005 as amended 2026-10-11 and 2026-10-12).
+  - Each reads "not found" to its owner, and so does its key.
+  - The user still sees it, and an answer on it reaches nobody.
+- **What crew does.** The same as for any lost card (`a-card-lost-to-its-owner-is-posted-again`):
+  - `crew card change`, `close` and `read` meet Pending You's "Not found" on a card they hold. They refuse saying the card is lost to its owner, and to post the row's card again with `crew card post <key>`, its summary saying an older copy is dead and to dismiss it in the app (`cards.lost_said`). An agent still on Pending You's tools has the same in its card discipline (`crew.py` `lost_card_how`).
+  - The post again, on the host's connection, is a new card under the same key.
+  - The run record's newer post by the same owner under the key is the key's card for `crew card` (`card_under`) and for the rail (`record_reading`). So the dead copy is never shown as the row's open card, and no agent tries to close it.
+  - The dead copies are the user's to dismiss in the app: no agent can reach them, and crew moves no sign-in itself.
+- **It happens once.** After it, crew's commands and the agents' sessions share the host's sign-in, which `every-crew-card-goes-through-crew` needs. A later sign-in is the same lost-card case, handled the same way.
+
 ## Risks / Trade-offs
 
 - [The stub answers as the CLI's code and Pending You's docs say, not as the live endpoint was seen to] → the three test cards check it once the host is signed in, before `every-crew-card-goes-through-crew`; a difference changes the stub and the client together (`read.2`, `tests.4`).
 - [`pendingyou mcp` is in the CLI's usage, not on pendingyou.com/docs] → it is the CLI's own client, the one its permission cards use; the doctor's Pending You row is where a change in it would show.
-- [mac-studio has no host sign-in today, so the commands refuse there until the user signs it in] → said in the bridge's words: "Claude Code on this computer isn't signed in to Pending You". Nothing is posted twice.
+- [mac-studio has no host sign-in today, so the commands refuse there until the user signs it in] → said in the bridge's words, "Claude Code on this computer isn't signed in to Pending You", with the user's `pendingyou-signin` named. Nothing is posted twice. The sign-in's one move and what it orphans are in *Decisions*.
 - [A card posted by `crew card post` is on the host's connection, which an agent's session on Claude Code's own sign-in cannot see] → no agent is told to use the command until the test cards have read the wake with the host signed in (`every-crew-card-goes-through-crew`).
 
 ## Proof in dev
@@ -161,6 +175,7 @@ These take no process:
 - `area_of(matched)`, returning the area id or None for create;
 - `create_area_args(remote, label, matched)`;
 - `card_under(entries, key, by)`;
+- `lost(words)` and `lost_said(key, card, words)`;
 - `answer_lines(got)`.
 
 ### 2.1–2.4
@@ -190,3 +205,4 @@ In `plan.py`:
 - a change with the version read;
 - a read before and after an answer;
 - a close by outcome and by reason, its session ended.
+- after the host signs in again, a card read as lost and posted again under its key.

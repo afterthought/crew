@@ -167,6 +167,21 @@ def card_under(entries, key, by):
     return held
 
 
+def lost(words):
+    """Whether Pending You's refusal says it no longer finds the card: what a card posted under another sign-in reads
+    as to its owner once the host has signed in again (ADR 0005 as amended 2026-10-11)."""
+    return isinstance(words, str) and words.lower().startswith("not found")
+
+
+def lost_said(key, card, words):
+    """The refusal of a change, close or read of a lost card: the card is still the user's to see, but no longer its
+    owner's to reach, so the row's card is posted again under the key, the summary saying the older copy is dead."""
+    return (f"card {card} under {key} is lost to its owner (Pending You: \"{words}\"): it was posted under another "
+            "sign-in than this host's, and the user may still see it and answer it, to nobody. While the row still waits, "
+            f"post its card again with crew card post {key}, its summary saying an older copy is dead and to dismiss it in "
+            "the app")
+
+
 def version_of(got, card):
     """A card's version, as get_request gives it; refused when it gives none, since a change or an ack needs it."""
     v = got.get("version") if isinstance(got, dict) else None
@@ -258,10 +273,11 @@ def git_remote(cwd):
 class Bridge:
     """One session with Pending You through the fleet's `pendingyou mcp`, as the agent `name`: opened with initialize
     and whoami, each call waiting CALL seconds for its reply. Every failure is a Refusal that ends with `later`, what to
-    do about it."""
+    do about it; `held`, the (key, card) a change, close or read acts on, turns Pending You's "not found" into the lost
+    card's refusal."""
 
-    def __init__(self, name, later):
-        self.name, self.later, self.buf, self.next, self.proc = name, later, b"", 0, None
+    def __init__(self, name, later, held=None):
+        self.name, self.later, self.held, self.buf, self.next, self.proc = name, later, held, b"", 0, None
 
     def __enter__(self):
         try:
@@ -345,6 +361,8 @@ class Bridge:
         when it answers with no object."""
         result = self.request("tools/call", {"name": tool, "arguments": args}, tool)
         words = refused_by(result)
+        if words is not None and self.held and lost(words):
+            fail(lost_said(*self.held, words))
         if words is not None:
             fail(f"Pending You refused {tool}: {words}")
         got = reply_object(result)

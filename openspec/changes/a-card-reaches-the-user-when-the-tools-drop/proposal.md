@@ -18,6 +18,7 @@ The user ruled on 2026-10-12, on the reading `openspec/explorations/pending-you-
 - `crew card change <key>` changes the card the agent holds under the key, with the fields to change on standard input. crew reads the card's id from the run record and its version from Pending You, refuses a change that takes a row's card out of its form, and records `card.update`.
 - `crew card close <key> --outcome "<line>"` closes the agent's card once it has acted on the answer. `--reason "<line>"` withdraws it. Either records `card.close` and ends the card's plannotator session, as the hook does when an agent closes a card through Pending You's tools.
 - `crew card read <key>` prints where the agent's card stands: its status, whose turn it is, the user's answer and their words, and any messages. It records nothing.
+- **Lost cards.** A card Pending You no longer finds for its owner is refused as lost, with what to do: post the row's card again under the key, saying the older copy is dead. Every card open when mac-studio is signed in again will be lost this way, once (design: *Decisions*).
 - **Refusals.** What Pending You refuses is refused in its own words and recorded as the act refused. When the sign-in or the service cannot be reached, the command refuses saying so and to try again later. Nothing is posted twice: a retry under the same key gives Pending You's card back.
 - **Tests.** The tests run on a stub `pendingyou` that answers as the fleet's `pendingyou mcp` does. `tests/run` refuses to start when the stub would not shadow the real one.
 
