@@ -3315,7 +3315,7 @@ def signal_refusal(slug, asserts):
     and it says what it asserts."""
     if not crew.NAME.match(slug):
         return f"a signal's slug is lowercase words with dashes, not {slug}"
-    if slug in ("move", "show"):
+    if slug in ("move", "show", "land"):
         return f"a signal's slug can't be '{slug}'"
     if not asserts.strip():
         return "a signal says what it asserts, in a sentence"
@@ -3422,6 +3422,126 @@ def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan, by=N
                 if v.grade == "unverified" else f"One record of {name}'s session, captured with crew signal.")
     fields += [("event_date", date), ("imported", today), ("status", "read"), ("signals", "1")]
     return "---\n" + "".join(f"{k}: {x}\n" for k, x in fields if x not in (None, "")) + f"---\n\n# {title}\n\n{body}\n"
+
+
+SIGNAL_FILE = re.compile(r"^[0-9]{2}-[a-z0-9][a-z0-9-]*\.md$")
+SIGNAL_LIMIT = 8 * 1024  # a signal's file larger than this copies its source; a program cuts its excerpt to fit (signals.3)
+
+
+def raw_of(cap_text):
+    """Where a capture's raw record is, from its raw field, <host>:<path>: (host, path), or None when it names none."""
+    raw = field(cap_text, "raw")
+    return tuple(raw.split(":", 1)) if raw and ":" in raw else None
+
+
+def capture_refusal(cap, files, here, banked):
+    """Why a program's capture does not land on the flywheel's branch (signals.6), or None. cap is its folder's name,
+    files the folder's files ({name: text}, None for anything that is not a readable file), here this host and banked
+    whether the raw record its capture.md names is there on it. A capture is a name crew takes (code.4) holding
+    capture.md and its signals, NN-<slug>.md, and nothing else, since raw material stays on its host (signals.3);
+    capture.md names itself, the program as its source, who captured it, its event's date, its raw record banked on
+    this host, the host that ran the program, and is read, with as many signals as it holds, at least one; each signal
+    names itself in its capture, its kind and who asserted it, says what it asserts, quotes its excerpt and is no
+    larger than crew lands. The first refusal found is said, naming the file."""
+    if not crew.NAME.match(cap):
+        return f"{cap} is no capture's name crew takes: lowercase words, digits and dashes (code.4)"
+    if files.get("capture.md") is None:
+        return f"{cap} has no capture.md"
+    for n in sorted(files):
+        if n != "capture.md" and (not SIGNAL_FILE.match(n) or files[n] is None):
+            return f"{cap}/{n} is no signal's file, NN-<slug>.md: a capture's raw material stays on its host, outside git (signals.3)"
+    c = files["capture.md"]
+    sigs = sorted(n for n in files if n != "capture.md")
+    if field(c, "capture") != cap:
+        return f"{cap}/capture.md names the capture {field(c, 'capture')}, not {cap}"
+    for f, what in (("source", "the program that recorded it"), ("captured_by", "who recorded it"), ("event_date", "its event's date")):
+        if not field(c, f):
+            return f"{cap}/capture.md names no {f}, {what}"
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", field(c, "event_date")):
+        return f"{cap}/capture.md: event_date is a date, 2026-10-12, not {field(c, 'event_date')}"
+    raw = raw_of(c)
+    if not raw:
+        return f"{cap}/capture.md names no raw record, <host>:<path>, banked on the host that ran the program (signals.3)"
+    if raw[0] != here:
+        return f"{cap}/capture.md's raw record is on {raw[0]}, and a program's capture lands from the host that banked it, not {here}"
+    if not banked:
+        return f"{cap}/capture.md's raw record, {raw[1]}, is not on {here}"
+    if field(c, "status") != "read" or not sigs:
+        return f"{cap} lands read, with its signals: a program's capture is its own excerpt, and its one signal is made with it (signals.6)"
+    if field(c, "signals") != str(len(sigs)):
+        return f"{cap}/capture.md counts {field(c, 'signals')} signals, and {cap} holds {len(sigs)}"
+    for n in sigs:
+        t, what = files[n], f"{cap}/{n}"
+        if len(t.encode()) > SIGNAL_LIMIT:
+            return f"{what} is larger than {SIGNAL_LIMIT // 1024} KiB, so it copies its source: cut its excerpt and keep the whole in the raw record"
+        if field(t, "signal") != f"{cap}/{n[:-3]}":
+            return f"{what} names the signal {field(t, 'signal')}, not {cap}/{n[:-3]}"
+        if field(t, "kind") not in KINDS:
+            return f"{what}: kind is one of {', '.join(KINDS)}, not {field(t, 'kind')}"
+        if not field(t, "who"):
+            return f"{what} names no who, who asserted it"
+        body = [l for l in re.sub(r"^---\n.*?\n---\n", "", t, count=1, flags=re.S).splitlines() if l.strip()]
+        if not any(not l.startswith(">") for l in body):
+            return f"{what} says nothing it asserts"
+        if not any(l.startswith(">") for l in body):
+            return f"{what} quotes no excerpt"
+    return None
+
+
+def capture_landing(cap, files, have, label):
+    """What a capture's landing writes on the flywheel's branch, {path: text}, from the folder's files and what the
+    branch holds at each of their paths (have, {name: text or None}): each file the branch lacks; one it holds the same
+    is passed over; one it holds otherwise refuses the landing, since captures and signals are never changed (signals.4).
+    Already when there is nothing to write."""
+    out = {}
+    for n in sorted(files):
+        if have.get(n) is None:
+            out[f"signals/{cap}/{n}"] = files[n]
+        elif have[n] != files[n]:
+            fail(f"signals/{cap}/{n} on {label}/main is not the one landed now, and a capture or signal is never changed (signals.4)")
+    if not out:
+        raise Already(cap)
+    return out
+
+
+def signal_land(fleet, a):
+    """crew signal land <capture-dir>: a program's capture, a release adapter's or a deployer's, landed on the
+    flywheel's branch of the partition named, as recorded on this host and never forwarded (signals.2, signals.6): the
+    folder checked whole (capture_refusal), then its capture and signals written in one commit, the files the branch holds
+    already passed over, and nothing written when it holds them all. Its raw record stays where the program banked it."""
+    label = default_label(fleet, a) or fail("which partition's flywheel? add --label " + "|".join(fleet["partitions"]))
+    d = pathlib.Path(a.dir)
+    d.is_dir() or fail(f"{a.dir} is no capture's folder")
+    cap = d.resolve().name
+    files = {}
+    for f in sorted(d.iterdir()):
+        try:
+            files[f.name] = f.read_text() if f.is_file() and not f.is_symlink() else None
+        except (OSError, UnicodeDecodeError):
+            files[f.name] = None
+    raw = raw_of(files.get("capture.md"))
+    why = capture_refusal(cap, files, crew.this_host(), bool(raw) and pathlib.Path(raw[1]).expanduser().exists())
+    not why or fail(why)
+    srepo = crew.partition_of(fleet, label)["blueprints"][0]
+    btip = fetch(srepo, "main")
+    not (btip and git(srepo, "ls-tree", "--name-only", btip, f"signals/{cap}")) or fail(
+        f"{srepo} has signals/{cap} already, so a capture can't take that name (signals.1)")
+    seen = {}
+
+    def change(w):
+        out = capture_landing(cap, files, {n: w.text(f"signals/{cap}/{n}") for n in files}, label)
+        for path, text in out.items():
+            w.replace(path, text)
+        seen["ids"] = [p[8:-3] for p in out if not p.endswith("/capture.md")]
+        w.on += [f"signals/{i}" for i in seen["ids"]]
+        w.subject = f"signals({cap}): land " + (f"{len(seen['ids'])} signal" + ("" if len(seen["ids"]) == 1 else "s") if seen["ids"] else "the capture")
+        return []
+    try:
+        write(fleet, label, change, f"signals({cap}): land", act="capture")
+    except Already:
+        print(f"{cap} is already landed on {label}/main; nothing was written")
+        return
+    print(f"landed {cap} on {label}/main: " + (", ".join(seen["ids"]) or "its capture"))
 
 
 def signal_show(fleet, a):
@@ -7466,6 +7586,9 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("signal-show", prog="crew signal show")
     x.add_argument("signal", metavar="id")
     x.add_argument("--label")
+    x = sub.add_parser("signal-land", prog="crew signal land")
+    x.add_argument("dir", metavar="capture-dir")
+    x.add_argument("--label")
     x = sub.add_parser("signal")
     x.add_argument("slug")
     x.add_argument("asserts")
@@ -7546,7 +7669,7 @@ COMMANDS = {
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units, ("_review", None): review_start, ("_review-wait", None): review_wait,
     ("signal", None): signal, ("signal-move", None): signal_move,
-    ("signal-show", None): signal_show,
+    ("signal-show", None): signal_show, ("signal-land", None): signal_land,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
@@ -7561,7 +7684,7 @@ ACTS = {
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
     ("chore", "add"): "chore.add", ("chore", "order"): "chore.order", ("chore", "after"): "chore.after", ("chore", "move"): "chore.move",
     ("chore", "drop"): "chore.drop",
-    ("signal", None): "capture", ("signal-move", None): "signal.move",
+    ("signal", None): "capture", ("signal-move", None): "signal.move", ("signal-land", None): "capture",
     ("_needs", None): "stage.end",
     ("plan", "propose"): "plan.propose", ("plan", "agree"): "plan.agree", ("plan", "approve"): "plan.approve",
     ("plan", "drop"): "plan.drop",
@@ -7584,6 +7707,8 @@ def named(a):
         out.append(f"agent/{a.team}-{a.slot}")
     if a.cmd == "signal-move":
         out.append(f"signals/{a.signal}")
+    if a.cmd == "signal-land" and crew.NAME.match(pathlib.Path(a.dir).name):
+        out.append(f"signals/{pathlib.Path(a.dir).name}")
     if a.cmd == "state":
         out.append(f"plan/{a.label}")
     if a.cmd == "plan" and getattr(a, "n", None) is not None:
@@ -7605,7 +7730,7 @@ def refused(fleet, a, key, e):
 
 def main(argv):
     need_recutils()
-    if argv[:2] in (["signal", "move"], ["signal", "show"]):  # crew signal move|show <id>, beside crew signal <slug> "<asserts>"
+    if argv[:2] in (["signal", "move"], ["signal", "show"], ["signal", "land"]):  # beside crew signal <slug> "<asserts>"
         argv = [f"signal-{argv[1]}"] + argv[2:]
     ap = parser(only=argv[0]) if argv and not argv[0].startswith("-") else None
     args = (ap if ap is not None and argv[0] in ap.built else parser()).parse_args(argv)

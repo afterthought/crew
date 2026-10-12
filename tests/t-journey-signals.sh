@@ -5,10 +5,11 @@
 # entry; the session is herdr's for the agent; the user's note at a shell is its own excerpt; crew signal show answers
 # from a host with no team; curation's move and a route are written to moves.rec, the route in the unit's own commit;
 # a meeting's signal in the blueprints is moved and shown as it stands; a proposal shows a signal's excerpt and routes
-# it on approval; and crew trace of a signal begins with its capture. How an excerpt is graded and who asserted it, how
-# a capture is named and joined, its files, and what show and a proposal say are logic cases (tests/py/test_signals.py,
-# test_transcript.py, test_proposal_life.py); recfix's checks of a signal and a move, contract cases
-# (tests/contract/test_recfix.py); each step here checks a command's wiring once.
+# it on approval; crew trace of a signal begins with its capture; and a program's capture lands with crew signal land
+# from the host that banked its raw record, in one commit and once. How an excerpt is graded and who asserted it, how
+# a capture is named and joined, its files, what a program's capture must hold, and what show and a proposal say are
+# logic cases (tests/py/test_signals.py, test_transcript.py, test_proposal_life.py); recfix's checks of a signal and a
+# move, contract cases (tests/contract/test_recfix.py); each step here checks a command's wiring once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
@@ -123,3 +124,21 @@ expect_ok crew trace "signals/$id"
 first=$(head -1 <<<"$out")
 has "$first" "capture"; has "$first" "swb-2-conductor"; has "$first" "signals/$id"; has "$first" "zoe s-1 on $box"
 ok "crew trace of a signal begins with its capture, naming the capturing agent, its host and its session"
+
+# A program's capture, a deployer's failed deploy, landed from the host that ran it and banked its log there.
+dep=$day-deploy-mac-studio-abc1234-103000; d=$T/captures/$dep; log=$(home_of mac-studio)/.local/state/deployer/logs/x.log
+mkdir -p "$d" "$(dirname "$log")"; echo "error: the build failed" > "$log"
+printf -- '---\ncapture: %s\nsource: swancloud-deployer\nevent_date: %s\ncaptured_by: swancloud-deployer\nhost: mac-studio\nraw: mac-studio:~/.local/state/deployer/logs/x.log\nstatus: read\nsignals: 1\n---\n\n# mac-studio'"'"'s deploy\n' "$dep" "$day" > "$d/capture.md"
+printf -- '---\nsignal: %s/01-failed\nkind: constraint\nwho: swancloud-deployer\n---\n\nThe deploy failed at the machine.\n\n> error: the build failed\n' "$dep" > "$d/01-failed.md"
+expect_ok crew signal land --help; eq "$(head -1 <<<"$out" | cut -c1-23)" "usage: crew signal land"
+t0=$(tip)
+CREW_AGENT=swancloud-deployer expect_ok crew signal land "$d" --label wldn
+eq "$(tail -1 <<<"$out")" "landed $dep on wldn/main: $dep/01-failed"
+eq "$(git --git-dir "$ws" rev-list --count "$t0"..wldn/main) $(git --git-dir "$ws" log -1 --format=%s wldn/main)" "1 signals($dep): land 1 signal (swancloud-deployer)"
+eq "$(changed)" "signals/$dep/01-failed.md"$'\n'"signals/$dep/capture.md"
+eq "$(at "signals/$dep/01-failed.md")" "$(cat "$d/01-failed.md")"
+has "$(runs mac-studio)" "By: swancloud-deployer"$'\n'"Act: capture"$'\n'"On: signals/$dep/01-failed"
+CREW_AGENT=swancloud-deployer expect_ok crew signal land "$d" --label wldn
+eq "$out $(tip)" "$dep is already landed on wldn/main; nothing was written $(git --git-dir "$ws" rev-parse wldn/main)"
+HOST=$box expect_fail "$dep/capture.md's raw record is on mac-studio, and a program's capture lands from the host that banked it, not $box" crew signal land "$d" --label wldn
+ok "a program's capture lands from the host that banked its raw record, in one commit on the flywheel's branch, and once"

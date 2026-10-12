@@ -1,8 +1,10 @@
-"""A finding recorded through crew signal, its moves and its show (signals.1 to signals.5): the capture a signal goes
-in, named and quoted by its excerpt's verdict; the number it takes in its capture; its file; what crew says; where its
-agent was working; a curation move's record and refusals; a route's; and crew signal show's text. That a capture and
-its signal are one commit on the flywheel's branch, the raw record banked on the host, a route and its unit one
-commit, and any host answers show from the branches alone, is the signal journey's (t-journey-signals)."""
+"""A finding recorded through crew signal, its moves and its show (signals.1 to signals.5), and a program's capture
+landed through crew signal land (signals.6): the capture a signal goes in, named and quoted by its excerpt's verdict;
+the number it takes in its capture; its file; what crew says; where its agent was working; a curation move's record and
+refusals; a route's; crew signal show's text; and what a program's capture must hold to land and what its landing
+writes. That a capture and its signal are one commit on the flywheel's branch, the raw record banked on the host, a
+route and its unit one commit, any host answers show from the branches alone, and a program's capture lands in one
+commit and once, is the signal journey's (t-journey-signals)."""
 import datetime
 import re
 
@@ -95,6 +97,7 @@ class TestFiles:
 
     @pytest.mark.parametrize("slug, asserts, said", [("Bad_Slug", "x", "a signal's slug is lowercase words with dashes, not Bad_Slug"),
                                                      ("show", "x", "a signal's slug can't be 'show'"),
+                                                     ("land", "x", "a signal's slug can't be 'land'"),
                                                      ("says-nothing", " ", "a signal says what it asserts, in a sentence"),
                                                      ("fine", "It holds.", None)])
     def test_a_slug_that_is_no_name_or_a_subcommand_and_an_empty_assertion_are_refused(self, slug, asserts, said):
@@ -209,3 +212,89 @@ class TestRefused:
         with pytest.raises(SystemExit):
             plan.parser().parse_args(["signal-move", "x/01-y", "route"])
         assert "invalid choice: 'route'" in capsys.readouterr().err
+
+
+DEP = "2026-10-12-deploy-mac-studio-abc1234-103000"
+CAPTURE = f"""---
+capture: {DEP}
+source: swancloud-deployer
+key: deploy/mac-studio/abc1234def56/20261012T103000Z
+event_date: 2026-10-12
+captured_by: swancloud-deployer
+host: mac-studio
+at: 2026-10-12T10:31:00Z
+raw: mac-studio:~/.local/state/swancloud/deployer/logs/20261012T103000Z-mac-studio-abc1234def56-machine.log
+imported: 2026-10-12
+status: read
+signals: 1
+---
+
+# mac-studio's deploy of abc1234def56
+
+mac-studio's deploy of abc1234def56 failed at the machine, captured by the fleet's deployer on mac-studio.
+"""
+FAILED = f"""---
+signal: {DEP}/01-failed
+kind: constraint
+who: swancloud-deployer
+subject: [deploy, mac-studio]
+---
+
+mac-studio's deploy of abc1234def56 (feat: x) failed at the machine.
+
+> error: builder for '/nix/store/x.drv' failed
+>
+> last line
+
+— mac-studio:~/.local/state/swancloud/deployer/logs/x.log, 2026-10-12T10:31:00Z
+"""
+
+
+def folder(**changed):
+    """A deployer's failed deploy as its capture's folder holds it, with any file changed."""
+    return dict({"capture.md": CAPTURE, "01-failed.md": FAILED}, **changed)
+
+
+def refusal(files=None, cap=DEP, here="mac-studio", banked=True):
+    return plan.capture_refusal(cap, folder() if files is None else files, here, banked)
+
+
+class TestLand:
+    def test_a_deployers_capture_with_its_one_signal_and_its_raw_record_banked_here_lands(self):
+        assert refusal() is None
+
+    @pytest.mark.parametrize("files, cap, said", [
+        (None, "2026-10-02-release-mise-2026.10.0", "2026-10-02-release-mise-2026.10.0 is no capture's name crew takes: lowercase words, digits and dashes (code.4)"),
+        ({"01-failed.md": FAILED}, DEP, f"{DEP} has no capture.md"),
+        (folder(**{"machine.log": "x"}), DEP, f"{DEP}/machine.log is no signal's file, NN-<slug>.md: a capture's raw material stays on its host, outside git (signals.3)"),
+        (folder(**{"capture.md": CAPTURE.replace("source: swancloud-deployer\n", "")}), DEP, f"{DEP}/capture.md names no source, the program that recorded it"),
+        (folder(**{"capture.md": CAPTURE.replace("captured_by: swancloud-deployer\n", "")}), DEP, f"{DEP}/capture.md names no captured_by, who recorded it"),
+        ({"capture.md": CAPTURE.replace("status: read\nsignals: 1", "status: unread\nsignals: 0")}, DEP,
+         f"{DEP} lands read, with its signals: a program's capture is its own excerpt, and its one signal is made with it (signals.6)"),
+        (folder(**{"capture.md": CAPTURE.replace("signals: 1", "signals: 2")}), DEP, f"{DEP}/capture.md counts 2 signals, and {DEP} holds 1"),
+        (folder(**{"01-failed.md": FAILED.replace("kind: constraint", "kind: complaint")}), DEP,
+         f"{DEP}/01-failed.md: kind is one of constraint, ask, question, commitment, reaction, not complaint"),
+        (folder(**{"01-failed.md": FAILED.replace(f"signal: {DEP}/01-failed", f"signal: {DEP}/01-other")}), DEP,
+         f"{DEP}/01-failed.md names the signal {DEP}/01-other, not {DEP}/01-failed"),
+        (folder(**{"01-failed.md": FAILED.replace("> ", "").replace(">\n", "")}), DEP, f"{DEP}/01-failed.md quotes no excerpt"),
+        (folder(**{"01-failed.md": FAILED + "> " + "x" * 8192 + "\n"}), DEP,
+         f"{DEP}/01-failed.md is larger than 8 KiB, so it copies its source: cut its excerpt and keep the whole in the raw record")])
+    def test_a_capture_that_is_not_a_programs_whole_capture_is_refused_naming_the_file(self, files, cap, said):
+        assert refusal(files, cap) == said
+
+    def test_its_raw_record_is_banked_on_the_host_that_lands_it(self):
+        assert refusal(here="chuck-herdr-alpha") == (f"{DEP}/capture.md's raw record is on mac-studio, and a program's capture lands from the host "
+                                                     "that banked it, not chuck-herdr-alpha")
+        assert refusal(banked=False) == (f"{DEP}/capture.md's raw record, ~/.local/state/swancloud/deployer/logs/"
+                                         "20261012T103000Z-mac-studio-abc1234def56-machine.log, is not on mac-studio")
+        assert refusal(folder(**{"capture.md": CAPTURE.replace("raw: ", "rawest: ")})).startswith(f"{DEP}/capture.md names no raw record")
+
+    def test_its_landing_writes_what_the_branch_lacks_and_passes_over_what_it_holds_the_same(self):
+        assert plan.capture_landing(DEP, folder(), {}, "swancloud") == {f"signals/{DEP}/01-failed.md": FAILED, f"signals/{DEP}/capture.md": CAPTURE}
+        assert plan.capture_landing(DEP, folder(), {"capture.md": CAPTURE}, "swancloud") == {f"signals/{DEP}/01-failed.md": FAILED}
+
+    def test_the_same_capture_again_is_already_landed_and_a_changed_one_is_refused(self):
+        with pytest.raises(plan.Already):
+            plan.capture_landing(DEP, folder(), {"capture.md": CAPTURE, "01-failed.md": FAILED}, "swancloud")
+        with pytest.raises(Refusal, match=f"signals/{DEP}/01-failed.md on swancloud/main is not the one landed now, and a capture or signal is never changed"):
+            plan.capture_landing(DEP, folder(), {"capture.md": CAPTURE, "01-failed.md": FAILED.replace("machine", "suite")}, "swancloud")

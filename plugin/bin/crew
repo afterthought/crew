@@ -137,6 +137,9 @@
 #   crew signal show <id>              a signal, where its excerpt came from, and its move
 #   crew signal move <id> attach|challenge|new-territory|answered|drop ...
 #                                      curation's move for a signal
+#   crew signal land <capture-dir> --label L
+#                                      a program's capture, a deployer's or another adapter's, with its signals,
+#                                      landed on the flywheel's branch from the host that banked its raw record
 #   (crew bolt|unit|chore|plan|signal --help says more)
 #
 # Each partition's main level, and the operator agent in each operator session:

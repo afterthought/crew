@@ -9,6 +9,7 @@ See proposal.md for why. What exists:
 - **crew's path.** `plan.py`'s `land(repo, ref, path, make)` writes named paths to a branch through crew's bare cache: fetch over https, commit through a temporary index, push without force, apply again on a refused push. Before `checked-capture`, `crew signal` used it to write an agent's capture to the blueprints' main; that is the path this change reuses.
 - **Where signals live.** An agent's on the flywheel's branch of the state repository; a meeting's in the first blueprints repo's `signals/`. crew looks an id up in the state first.
 - **The run record.** `capture` is the act of recording a signal.
+- **`crew signal land`, built since for programs** (`machine-captures-land-on-the-flywheels-branch`, `signals.6`): it lands a program's read capture and its signals on the flywheel's branch, checked as below but read only, with at least one signal and its raw record on the landing host, and never replaces a file. This change adds the blueprints' main as the target for the daily pass's captures, unread stubs among them, and the replacement of an unread `capture.md` that the read phase completes.
 
 ## Goals / Non-Goals
 
