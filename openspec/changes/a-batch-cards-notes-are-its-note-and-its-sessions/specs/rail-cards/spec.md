@@ -43,7 +43,7 @@ When an agent crew started has Pending You's tools, it SHALL post one card for e
 ## ADDED Requirements
 
 ### Requirement: A batch's card is a notice naming every unit
-A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) that asks nothing: no options, no question, no approval, no steps and no attachment. Its summary SHALL say first what the card is: the partition's batch of the changes written or rewritten since the last batch, already being built, read for notes and approving nothing. Its words SHALL name every unit of the batch with its team and hold each unit's opening paragraph from the reviewer's summary as prose, with no code block, and it SHALL have one link, to the batch's reading session.
+A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) that asks nothing: no options, no question, no approval, no steps and no attachment. Its summary SHALL say first what the card is: the partition's batch of the changes constructed or amended since the last batch, already being built, read for notes and approving nothing. Its words SHALL name every unit of the batch with its team and hold each unit's opening paragraph from the reviewer's summary as prose, with no code block, and it SHALL have one link, to the batch's reading session.
 
 #### Scenario: A card of six units
 - **WHEN** the planner posts the card for batch 2 holding six units

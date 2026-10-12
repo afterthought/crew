@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: A session is started for a card's row by its key
-`crew card session <key> [<unit>]` SHALL start a plannotator review of the document the rail row with that card key asks the user to read: the proposal's page for `proposal/<n>`, the verify report for `verify/<unit>/<stamp>`, and, for `batch/<n>`, the batch's folder: the reviewer's summary whole and every unit's whole change as read at its commit. A batch card posted before one card per batch was built, keyed `batch/<n>-<k>`, SHALL keep one session for each unit it holds, on that unit's whole change, started with the unit named, on the host the teams file names for the unit's team. A `batch/<n>` card's session SHALL run on the partition's main level's host; every other session on the host the command runs on. The session SHALL offer an Approve button and SHALL NOT open a browser on the host, and the command SHALL print the session's link.
+`crew card session <key> [<unit>]` SHALL start a plannotator review of the document the rail row with that card key asks the user to read: the proposal's page for `proposal/<n>`, the verify report for `verify/<unit>/<stamp>`, and, for `batch/<n>`, the batch's folder: the reviewer's summary whole and every unit's whole change as read at its commit. A batch card posted before one card per batch was built, keyed `batch/<n>-<k>`, SHALL keep one session for each unit it holds, on that unit's whole change, its Markdown files given as one review and never its folder, started with the unit named, on the host the teams file names for the unit's team. A `batch/<n>` card's session SHALL run on the partition's main level's host; every other session on the host the command runs on. The session SHALL offer an Approve button and SHALL NOT open a browser on the host, and the command SHALL print the session's link.
 
 #### Scenario: A batch card's session
 - **WHEN** the planner runs `crew card session batch/3` on the main level's host, for a batch of `x` and `z` from two teams' hosts
@@ -15,7 +15,7 @@
 
 #### Scenario: A batch card posted under an old key
 - **WHEN** the planner runs `crew card session batch/2-2 x` for an open card of batch 2 posted under that key, and `x` is among its units
-- **THEN** a session on `x`'s change folder is running on `x`'s team's host and its link is printed, as before
+- **THEN** a session on `x`'s change is running on `x`'s team's host, given each of its Markdown files as its own path, proposal first, and not its folder, and its link is printed
 
 #### Scenario: A proposal card's session
 - **WHEN** the planner runs `crew card session proposal/4`

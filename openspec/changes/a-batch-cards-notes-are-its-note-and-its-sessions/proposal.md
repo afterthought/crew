@@ -16,7 +16,7 @@ The design agent ruled what a batch card is (`briefs.9`, `briefs.12` and `briefs
 - **Notes come from where the user writes them.** The annotations the user sends from the session go at once, word for word, to the team of each unit they speak of. The card's own note goes the same way when the user sends the card. Words that speak of no unit the planner can tell go to every unit's team, saying so, so no words the user wrote reach nobody. Approving the session with no annotations means every unit is fine as far as the session goes, and leaves the card open.
 - **The card's summary reads on the phone.** The card carries, for each unit, its name, its team and the short opening paragraph the reviewer writes for it, as prose that wraps, never a code block or an attachment. The reviewer writes the whole summary that way, with what a change touches named in words rather than as paths. The fuller summary is in the session.
 - **crew refuses a batch card in another form**, as it does for a proposal's, a verify report's and a landing's: a choice, a pick-several, an approval, a question in words, steps, an attachment, a code block in its words, more than one link, or a card that leaves out one of the batch's units is refused before it reaches Pending You, naming the form to use. **No card of crew's may ask a question in words**, whatever its row.
-- A batch card posted before this lands, under the old `batch/<n>-<k>` keys, keeps its one session per unit and is read and closed as it was.
+- A batch card posted before this lands, under the old `batch/<n>-<k>` keys, keeps its one session per unit and is read and closed as it was, except that each unit's session now opens that change's files as one review rather than its folder, so its files open too.
 
 ## Capabilities
 
@@ -37,7 +37,7 @@ None.
 - `plugin/roles/planner.md` *Batches* and *Cards*, `plugin/roles/reviewer.md` *The summary*, `plugin/lib/crew.py` `cards_how`, and, for `crew card`'s changed arguments, `README.md`, `plugin/skills/crew/SKILL.md` and the usage header of `plugin/bin/crew` together (`docs.2`).
 - `tests/t-batch-cards.sh`, `tests/t-batches.sh`, `tests/t-cards.sh`, `tests/t-card-sweep.sh`, `tests/t-briefs.sh`, and `tests/moon.yml` if a test's inputs change.
 - `openspec/changes/units-build-at-once-and-are-reviewed-in-batches/` has landed but is not archived, so `review-batches` and the batch parts of `rail-cards` and `card-sessions` are still deltas there; this change's deltas modify the requirements it adds and must be archived after it.
-- It takes in the work of `a-cards-reading-session-opens-its-files`, as record 0005 has it: the session gives plannotator the files themselves rather than a folder, and patches nothing of plannotator's.
+- It takes in the work of `a-cards-reading-session-opens-its-files`, as record 0005 has it: every session crew starts on a change gives plannotator the files themselves rather than a folder, the batch's one session and an old batch card's per-unit sessions alike, and patches nothing of plannotator's.
 - Rules relied on: `briefs.9`, `briefs.11`, `briefs.12`, `briefs.13`, `roles.3`, `read.1`, `code.3`. Clearing `briefs.13`'s not-built clause and the `_open.md` item is the design agent's after landing (`docs.7`).
 
 ## Touches
