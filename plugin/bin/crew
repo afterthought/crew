@@ -107,6 +107,15 @@
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use
+#   crew card  post|change <key> [--label L] < <JSON>
+#                                      post the card on standard input to the user as the asking assistant, through the
+#                                      fleet's pendingyou mcp under the host's sign-in, or change the one the asker
+#                                      holds under the key; refused as crew's card hook refuses it, crew setting the
+#                                      key, the session and the kit's area; recorded from Pending You's reply
+#   crew card  close <key> --outcome "<line>" | --reason "<line>" [--label L]
+#                                      close the asker's card once acted on, or withdraw it, and end its session
+#   crew card  read <key> [--label L] [--json]
+#                                      where the asker's card stands: its status, whose turn, the user's answer and words
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript

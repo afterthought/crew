@@ -14,7 +14,7 @@ The rules for how crew is tested and gated. `core.md` binds here too; the how-to
 
 ## Rules
 
-- **[tests.1]** End-to-end tests run only through `tests/run`, which refuses to start outside a devenv shell or unless stub herdr, ssh, hostname and claude shadow the real ones, gives each test its own scratch directory and home per simulated host and bare remotes, and exits non-zero on any failure; only "0 failed" passes.
+- **[tests.1]** End-to-end tests run only through `tests/run`, which refuses to start outside a devenv shell or unless stub herdr, ssh, hostname, claude, plannotator and pendingyou shadow the real ones, gives each test its own scratch directory and home per simulated host and bare remotes, and exits non-zero on any failure; only "0 failed" passes.
 - **[tests.2]** Every `tests/t-*.sh` opens with a comment saying what it proves and, as its first command, sources `lib.sh` through `${TESTS:?…}`, so it stops when run outside the runner; a test reaches a real service only under `CREW_TEST_LIVE=1`.
 - **[tests.3]** A test edits a fixture in place with `rewrite`, never `sed -i`, and runs crew only as a simulated host.
 - **[tests.4]** A fix to `plugin/` lands with a test that reproduces the case it fixes, at the lowest tier that can hold it: a decision's in the logic tier, a local tool's behaviour in a contract test; and when the fix depends on how a tool crew stubs behaves, the stub is changed to behave the same way.

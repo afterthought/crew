@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Stub pendingyou for crew's tests: `pendingyou mcp --app claude-code` alone, a stdio MCP server answering one JSON-RPC
+message a line as the fleet's pendingyou 0.28.0 bridge passes Pending You's answers on (its dist/bridge.js), with the
+tools crew's card commands call, answering as Pending You's guide (pendingyou.com/docs/skill) says they do. It reaches
+nothing.
+
+It answers initialize and tools/call, and says nothing to a notification. A tool's result is a text block holding the
+answer as JSON, the form Pending You's CLI reads when there is no structuredContent; a refusal is a result marked
+isError whose text is the words. Every tools/call is logged as `<host> pendingyou <tool> <arguments as JSON, keys
+sorted>` in $CREW_TEST_LOG.
+
+Its state is in $HOME/.stub-pendingyou/: cards.json (each card by its id: its key, the arguments it was posted with,
+its status, turn and version), areas.json (each area made, by its key and its remote). A test steers it there:
+  signed-out             every request is answered with the bridge's own error, -32001, and its words on stderr
+  refuse                 lines `<tool> <words>`: that tool is refused with those words
+  answered/<id>.json     the user's answer to that card, {"answer": {...}}, taken on the next get_request
+  messages/<id>.json     messages on that card, a list, given back by get_request
+Tools: whoami, match_area (use for a remote an area was made for, else create), create_area (one area a key),
+post_request (a key gives its card back), get_request, update_request and ack_answer (at the card's version),
+cancel_request. Any other is a JSON-RPC error."""
+import json, os, pathlib, sys
+
+if sys.argv[1:] != ["mcp", "--app", "claude-code"]:
+    sys.exit(f"stub pendingyou: only `pendingyou mcp --app claude-code`, not {' '.join(sys.argv[1:])}")
+home = pathlib.Path(os.environ["HOME"]) / ".stub-pendingyou"
+home.mkdir(exist_ok=True)
+host = os.environ.get("CREW_TEST_HOST", "stub-host")
+SIGNED_OUT = ("Claude Code on this computer isn’t signed in to Pending You (https://www.pendingyou.com). "
+              "Run: npx -y pendingyou@latest init")
+
+
+def load(name):
+    f = home / name
+    return json.loads(f.read_text()) if f.exists() else {}
+
+
+def save(name, value):
+    (home / name).write_text(json.dumps(value, indent=1))
+
+
+def log(tool, args):
+    with open(os.environ["CREW_TEST_LOG"], "a") as f:
+        f.write(f"{host} pendingyou {tool} {json.dumps(args, sort_keys=True)}\n")
+
+
+def said(answer):
+    return {"content": [{"type": "text", "text": json.dumps(answer)}]}
+
+
+def refused(words):
+    return {"content": [{"type": "text", "text": words}], "isError": True}
+
+
+def card_of(cards, args):
+    c = cards.get(args.get("requestId"))
+    return c if c else None
+
+
+def tool(name, args):
+    refuse = home / "refuse"
+    for line in refuse.read_text().splitlines() if refuse.exists() else []:
+        t, _, words = line.partition(" ")
+        if t == name:
+            return refused(words)
+    cards, areas = load("cards.json"), load("areas.json")
+    if name == "whoami":
+        return said({"agent": {"name": args.get("name")}, "server": "https://www.pendingyou.com", "muted": False})
+    if name == "match_area":
+        found = [a for a in areas.values() if a["remote"] == args.get("remote")]
+        if found:
+            return said({"decision": "use", "suggestions": [{"areaId": found[0]["areaId"], "name": found[0]["name"]}]})
+        repo = (args.get("remote") or "").rsplit("/", 1)[-1]
+        return said({"decision": "create", "suggestions": [], "proposedName": repo, "proposedTint": "sage"})
+    if name == "create_area":
+        key = args["idempotencyKey"]
+        if key not in areas:
+            areas[key] = {"areaId": f"prj_stub-{len(areas) + 1}", "name": args["name"],
+                          "remote": (args.get("repo") or {}).get("remote"), "group": args.get("group")}
+            save("areas.json", areas)
+            return said({"areaId": areas[key]["areaId"], "name": args["name"], "created": True})
+        return said({"areaId": areas[key]["areaId"], "name": areas[key]["name"], "created": False})
+    if name == "post_request":
+        known = next((i for i, c in cards.items() if c["key"] == args["idempotencyKey"]), None)
+        if not known:
+            known = f"req_stub-{len(cards) + 1}"
+            cards[known] = {"key": args["idempotencyKey"], "posted": args, "status": "pending", "turn": "you", "version": 1}
+            save("cards.json", cards)
+        c = cards[known]
+        return said({"requestId": known, "threadId": known, "status": c["status"], "version": c["version"],
+                     "pollAfterSeconds": 30, "url": f"https://www.pendingyou.com/app/r/{known}"})
+    c = card_of(cards, args)
+    if c is None:
+        return refused(f"Not found: request:{args.get('requestId')}.")
+    rid = args["requestId"]
+    if name == "get_request":
+        answered = home / "answered" / f"{rid}.json"
+        if answered.exists() and c["status"] == "pending":
+            c.update(status="answered", turn="agent", version=c["version"] + 1, answer=json.loads(answered.read_text())["answer"])
+            save("cards.json", cards)
+        messages = home / "messages" / f"{rid}.json"
+        got = {"requestId": rid, "status": c["status"], "turn": c["turn"], "version": c["version"],
+               "url": f"https://www.pendingyou.com/app/r/{rid}",
+               "messages": json.loads(messages.read_text()) if messages.exists() else []}
+        if "answer" in c:
+            got["answer"] = c["answer"]
+        return said(got)
+    if name in ("update_request", "ack_answer") and args.get("expectedVersion") != c["version"]:
+        return refused(f"This card is at version {c['version']}, not {args.get('expectedVersion')}: read it again.")
+    if name == "update_request":
+        if c["status"] not in ("pending", "snoozed", "delegated"):
+            return refused("Only a question still waiting on them can be changed: reply_in_thread instead.")
+        changed = sorted(k for k in args if k not in ("requestId", "name", "expectedVersion", "changeNote"))
+        c["posted"].update({k: args[k] for k in changed})
+        c["version"] += 1
+        save("cards.json", cards)
+        return said({"requestId": rid, "status": c["status"], "version": c["version"], "changed": changed})
+    if name == "ack_answer":
+        if c["status"] != "answered":
+            return refused("Nothing to pick up: this card has no answer yet. cancel_request withdraws it.")
+        c.update(status="resolved", version=c["version"] + 1)
+        save("cards.json", cards)
+        return said({"requestId": rid, "status": "resolved", "version": c["version"]})
+    if name == "cancel_request":
+        c.update(status="cancelled", version=c["version"] + 1)
+        save("cards.json", cards)
+        return said({"requestId": rid, "status": "cancelled", "version": c["version"]})
+    return None
+
+
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    m = json.loads(line)
+    if "id" not in m:
+        continue
+    if (home / "signed-out").exists():
+        print(f"pendingyou mcp: {SIGNED_OUT}", file=sys.stderr)
+        out = {"jsonrpc": "2.0", "id": m["id"], "error": {"code": -32001, "message": SIGNED_OUT}}
+    elif m.get("method") == "initialize":
+        out = {"jsonrpc": "2.0", "id": m["id"], "result": {"protocolVersion": m["params"]["protocolVersion"],
+                                                          "capabilities": {"tools": {}},
+                                                          "serverInfo": {"name": "pendingyou", "version": "stub"}}}
+    elif m.get("method") == "tools/call":
+        name, args = m["params"]["name"], m["params"].get("arguments") or {}
+        log(name, args)
+        result = tool(name, args)
+        out = ({"jsonrpc": "2.0", "id": m["id"], "result": result} if result is not None
+               else {"jsonrpc": "2.0", "id": m["id"], "error": {"code": -32602, "message": f"Unknown tool: {name}"}})
+    else:
+        out = {"jsonrpc": "2.0", "id": m["id"], "error": {"code": -32601, "message": f"Method not found: {m.get('method')}"}}
+    print(json.dumps(out), flush=True)
