@@ -19,7 +19,7 @@
 ## 4. The briefs and the docs say so
 
 - [x] 4.1 The planner's brief posts one card per batch that says what it is, asks nothing, says where notes go in plain words and links the batch's one session, and sends the session's annotations at once and the card's note to each unit they speak of (design, *Task notes* 4.1).
-- [ ] 4.2 The reviewer's brief opens each unit's section with the paragraph the card carries, and has the summary written as prose with no code block and Touches named in words (design, *Task notes* 4.2).
+- [x] 4.2 The reviewer's brief opens each unit's section with the paragraph the card carries, and has the summary written as prose with no code block and Touches named in words (design, *Task notes* 4.2).
 - [ ] 4.3 The card discipline says a batch card has one session on the batch, whose decision never answers the card (design, *Task notes* 4.3).
 - [ ] 4.4 README, the crew skill and `crew`'s usage say a batch is one card asking nothing, with one session on the batch (design, *Task notes* 4.4).
 - [ ] 4.5 `tests/t-briefs.sh` pins the briefs' new words and refuses the old ones; `tests/suite --affected` is green (design, *Task notes* 4.5).
