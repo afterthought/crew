@@ -59,7 +59,7 @@ Code
 
 **[state.5]** Rules out: `git push --force` anywhere in `plugin/` or a brief; a push to a blueprints repo or a kit's remote. Source: fix 04daa5d; `plan.py` 383, 569.
 
-**[roles.1]** Rules out: `crew unit add --bolt` from the design agent; `unit move` from a conductor; `bolt give` or `bolt land` inside a proposal. Source: `plan-proposals` spec; `plan.py` `may_write` 1068–1117, `OPS` 1122–1165; `tests/t-plan-roles.sh`.
+**[roles.1]** Rules out: `crew unit add --bolt` from the design agent; `unit move` from a conductor; `bolt give` or `bolt land` inside a proposal. Source: `plan-proposals` spec; `plan.py` `may_write` 1068–1117, `OPS` 1122–1165; `tests/py/test_plan_roles.py`.
 
 **[roles.2]** Rules out: a conductor approving a proposal on its own reading; an operator or main-ops deploying unasked; a `manual` environment moved by a timer. Not ruled out: `crew plan approve` open to any caller, by design; a batch's feedback, which is the user's word on a card and approves nothing (ADR 0014); a kit's deployer moving an `auto` environment. Source: plan-proposals design "Who may write what directly"; fixes a2ea85e, 63bab58, 04daa5d; ADR 0012 as amended 2026-10-08.
 
