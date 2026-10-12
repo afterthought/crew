@@ -1,13 +1,33 @@
-"""A team's slots, panes and status on its host (teams.1, teams.2, teams.9, read.1, read.2), as crew status reads them in
-one process: crew.reaped for what a team's read does with a slot, crew.held_object for how the run record names what
-a slot holds, crew.listed for reading herdr's listings, crew.context_of and crew.holds_said for what status shows, and
-what crew says of a working agent it will not end. Reading and freeing slots through the command are the units
-journey's (t-journey-units, t-journey-fix, t-journey-merge)."""
+"""A team's slots, panes and status on its host (teams.1, teams.2, teams.9, teams.15, read.1, read.2), as crew unit run,
+crew unit wait and crew status decide them in one process: crew.slot_for for the slot a unit runs in, crew.reaped for
+what a team's read does with a slot, crew.held_object for how the run record names what a slot holds,
+crew.slot_pane_at for where a slot's pane opens, crew.listed for reading herdr's listings, crew.context_of and
+crew.holds_said for what status shows, and the words crew says when a stage is refused. Taking a slot, starting its
+agent and sending its prompt through the command are the units journey's (t-journey-units, t-journey-slots)."""
 import json
 
 import pytest
 
 import crew
+
+SLOTS = ["unit-1", "unit-2", "unit-3", "unit-4"]
+
+
+class TestSlotFor:
+    def test_work_a_slot_holds_runs_there_and_takes_nothing(self):
+        held = [["unit-1", "unit", "a", "/p/a"], ["unit-2", "unit", "b", "/p/b"]]
+        assert crew.slot_for("swb-1", SLOTS, held, "b") == ("unit-2", False)
+
+    def test_new_work_takes_the_first_slot_that_holds_nothing(self):
+        held = [["unit-1", "unit", "a", "/p/a"], ["unit-3", "fix", "fix/te/tidy", "/p/fix-te--tidy"]]
+        assert crew.slot_for("swb-1", SLOTS, held, "c") == ("unit-2", True)
+
+    def test_with_every_slot_in_flight_new_work_is_refused_naming_what_each_holds(self):
+        held = [[s, "unit", u, f"/p/{u}"] for s, u in zip(SLOTS, "abcd")]
+        with pytest.raises(crew.Refusal) as e:
+            crew.slot_for("swb-1", SLOTS, held, "e")
+        assert str(e.value) == "all 4 of swb-1's slots are in flight: unit-1 holds a; unit-2 holds b; unit-3 holds c; unit-4 holds d"
+
 
 class TestReaped:
     @pytest.mark.parametrize("stage, said", [
@@ -41,6 +61,20 @@ class TestHeldObject:
 
     def test_a_fix_given_before_its_name_held_its_bolt_takes_the_bolt_its_branch_tracks(self):
         assert crew.held_object("fix", "fix/tidy", "bolt/tenant-environments") == "fix/tenant-environments/tidy"
+
+
+class TestSlotPaneAt:
+    def test_the_first_slot_in_flight_opens_the_units_workspace(self):
+        assert crew.slot_pane_at([("conductor", "w1:p1"), ("ops", "w1:p2")], lambda p: True) == (None, None)
+
+    def test_a_new_pane_halves_the_newest_slot_pane_right_when_an_odd_number_are_open_and_down_when_even(self):
+        panes = [("conductor", "w1:p1"), ("unit-1", "w2:p3"), ("ops", "w1:p2"), ("unit-3", "w2:p5")]
+        assert crew.slot_pane_at(panes[:2], lambda p: True) == ("w2:p3", "right")
+        assert crew.slot_pane_at(panes, lambda p: True) == ("w2:p5", "down")
+
+    def test_a_slot_pane_closed_is_not_counted(self):
+        panes = [("unit-1", "w2:p3"), ("unit-2", "w2:p4")]
+        assert crew.slot_pane_at(panes, lambda p: p != "w2:p4") == ("w2:p3", "right")
 
 
 # herdr 0.9.3's answers on mac-studio, 2026-10-12: `agent list` of a session, and of one whose server is not running.
@@ -103,5 +137,22 @@ class TestStatus:
 
 
 class TestRefused:
+    def test_a_team_taken_down_runs_no_stage_until_it_is_brought_up(self):
+        assert crew.down_said("swb-1") == "swb-1 is down; crew up swb-1 brings it back"
+
     def test_a_working_agent_is_ended_only_with_force(self):
         assert crew.working_said("swb-1-unit-4") == "swb-1-unit-4 is working; add --force to end it anyway."
+
+    @pytest.mark.parametrize("how, why, said", [
+        ("never", "sent twice", "swb-1-unit-4 never took its construct prompt for d, sent twice; the stage never started and nothing is "
+                                "left typed in its pane: run it again with crew unit run d construct"),
+        ("unread", "it is no longer up", "crew could not tell whether swb-1-unit-4 took its construct prompt for d: it is no longer up; "
+                                         "nothing more was sent, and the stage is taken as never started: run it again with crew unit run d construct"),
+    ])
+    def test_a_prompt_never_taken_or_not_read_as_taken_starts_no_stage_and_says_how_to_run_it_again(self, how, why, said):
+        assert crew.never_started("swb-1-unit-4", "construct", "d", "unit/d", "swb-1", how, why) == said
+
+    @pytest.mark.parametrize("stage, said", [(None, "swb-1-ops started in w1:p2"), ("resume", "swb-1-ops resumed in w1:p2"),
+                                             ("code", "swb-1-ops started code in w1:p2")])
+    def test_a_role_started_says_how(self, stage, said):
+        assert crew.started_said("swb-1-ops", "w1:p2", stage) == said

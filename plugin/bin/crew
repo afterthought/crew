@@ -201,7 +201,7 @@ case $cmd in
   bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell | ops) ;;
   status) ;;
   events | _rail) unset CREW_READ ;;
-  unit) case ${2:-} in run | free) reading ;; esac ;;
+  unit) case ${2:-} in free) reading ;; esac ;;
   *) reading ;;
 esac
 
@@ -539,13 +539,6 @@ unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit n
   echo "$(name_of "$slot") is free"
   plan _tidy "$TEAM" || true
 }
-free_elsewhere() {  # a unit moved from another team's bolt in this checkout leaves that team's slot
-  local f other
-  for f in "$HOME"/.local/state/*-team/slots; do
-    [[ -f $f ]] || continue; other=$(basename "$(dirname "$f")"); other=${other%-team}
-    [[ $other != "$TEAM" ]] && awk -v u="$1" '$3==u{found=1} END{exit !found}' "$f" && bash "$here/crew" _free "$other" "$1" || true
-  done
-}
 run_stage() {  # run_stage <slot> <stage> <prompt> <act> <held name> <object> <--on X...>: end the slot's agent, start
   # the stage fresh and send it its prompt, taken or sent again (teams.15). The start is recorded as <act>, and its end
   # is owed in the stages file. A prompt the agent never took, or one crew can't tell it took, starts no stage: the start
@@ -675,42 +668,7 @@ case $cmd in
     unit=${3:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
     stage=${4:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
     case $stage in construct | code | verify | settle | merge) ;; *) echo "no stage '$stage'; stages: construct code verify settle merge" >&2; exit 2 ;; esac
-    e=$(plan _team-of "$unit") || exit 1; eval "$e"
-    load_team "$TEAM"; forward; ensure_state
-    # A team taken down runs no stage until it is brought up, so an amended unit whose construct cannot start for it
-    # keeps its mark, and reads amended.
-    if [[ -e $STATE/down ]]; then
-      err="$TEAM is down; crew up $TEAM brings it back"
-      echo "$err" >&2; entry --label "$LABEL" --act stage.start --on "stage/$unit/$stage" --on "unit/$unit" --refused "$err"; exit 1
-    fi
-    reap; free_elsewhere "$unit"
-    slot=$(slot_of "$unit"); taken=0
-    if [[ -z $slot ]]; then
-      slot=$(take_slot unit "$unit" "$KIT_DIR/places/$unit") || {
-        entry --label "$LABEL" --act stage.start --on "stage/$unit/$stage" --on "unit/$unit" --refused "all $UNITS of $TEAM's slots are in flight"; exit 1; }
-      taken=1
-    fi
-    # A construct whose slot's agent is working is refused before plan _run can write the plan, so an amended unit
-    # whose construct cannot start keeps its mark, and reads amended.
-    if [[ $stage == construct && $force == 0 && $(agent_status "$(pane_of "$slot")") == working ]]; then
-      err="$(name_of "$slot") is working; add --force to end it anyway."
-      echo "$err" >&2; [[ $taken == 1 ]] && drop "$held" "$slot"
-      entry --label "$LABEL" --act stage.start --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")" --refused "$err"; exit 1
-    fi
-    if ! e=$(plan _run "$unit" "$stage" "${5:-}"); then [[ $taken == 1 ]] && drop "$held" "$slot"; exit 1; fi
-    eval "$e"
-    ensure_slot_pane "$slot" "$PLACE"
-    # A construct that marked the unit amended says so, and is the entry the plan's commit names.
-    amended=(); [[ -n $AMENDED ]] && amended=(--field Amended=yes --commit "$AMENDED" --id "$ENTRY")
-    # The forecasts its prompt carries, named on its start so none is carried twice.
-    [[ -n $FORECAST ]] && amended+=(--field "Forecast=$FORECAST")
-    # The heads of the units it comes after that a construct's new place took.
-    [[ -n $TOOK ]] && amended+=(--field "Took=$TOOK")
-    run_stage "$slot" "$stage" "$PROMPT" stage.start "$unit" "unit/$unit" --on "stage/$unit/$stage" --on "unit/$unit" --on "agent/$(name_of "$slot")" \
-      ${amended[@]+"${amended[@]}"}
-    echo "$(name_of "$slot") has $unit: $stage, in $PLACE"
-    # A stage that ended a rail row names its card only now that it has started.
-    [[ -z $ENDS ]] || plan _ended "$TEAM" "$unit" "$stage" "$ENDS" || true ;;
+    one _unit-run "$unit" "$stage" ${forced[@]+"${forced[@]}"} -- "${5:-}" ;;
   fix)
     load_team "${2:-}"; forward; ensure_state
     name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}

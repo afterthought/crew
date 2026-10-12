@@ -17,7 +17,7 @@ What is still open now that every page is written. A working file: an item leave
 
 Each is a queued or placed unit; the rule stands and the code catches up.
 
-- `tests.11`, `tests.12`, `code.7`: the three tiers are built test by test, slowest first by CPU, each measured before and after, by the recovery session (ADR 0022); until a test converts, its decisions are reached only end to end. The decisions `crew unit run` makes in `plugin/bin/crew`'s bash, a team taken down, every slot in flight, a working agent without `--force`, and what a prompt never taken or not read as taken says, are steps of `t-journey-slots.sh` until that command is one Python process.
+- `tests.11`, `tests.12`, `code.7`: the three tiers are built test by test, slowest first by CPU, each measured before and after, by the recovery session (ADR 0022); until a test converts, its decisions are reached only end to end.
 - `plan.10`: a drop keeps a branch with unmerged patches, judged by `git cherry`; `tidy()` deletes with `git branch -D` and `gather.fix_merged` judges by ancestry (`a-drop-keeps-unmerged-work`, fix-places).
 - `plan.11`: the chore kind (`chores-beside-units-and-fixes`, curation-and-holds).
 - `plan.14`: a landing records the sha main holds afterwards; `crew bolt land` records no sha yet, and `construct.md` knows one proof list.

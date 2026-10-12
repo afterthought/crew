@@ -65,7 +65,7 @@ a channel is in the partition's first blueprints repo. An id is looked up in tha
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, contextlib, datetime, fcntl, json, os, pathlib, re, shlex, subprocess, sys, time
+import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
 # getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
 # module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
@@ -3283,7 +3283,7 @@ def shown_signal(sig, where, repo, text, cap, moves):
     return "\n".join(out)
 
 
-# ------------------------------------------------------------------------------------- what bash crew asks
+# ------------------------------------------------------------------------------------- what a unit's stage asks
 
 def sh(**pairs):
     return "\n".join(f"{k}={__import__('shlex').quote(str(v))}" for k, v in pairs.items())
@@ -3293,11 +3293,6 @@ def team_of_unit(fleet, a):
     """The team whose bolt holds a unit, from its plan: crew unit run and wait go to that team's host."""
     label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
     return crew.team_of(fleet, unit_team(plan, a.unit))
-
-
-def team_of_unit_said(fleet, a):
-    """crew _team-of <unit>: the team whose bolt holds a unit, as a shell assignment for bash crew (teams.9)."""
-    print(sh(TEAM=team_of_unit(fleet, a)["name"]))
 
 
 def unit_team(plan, name):
@@ -3348,7 +3343,7 @@ done
 def mark_amended(fleet, label, unit, bolt, head):
     """The plan marks a unit amended at the head construct starts again from, so its code, verify and merge wait until
     what construct writes is committed (plan.6). Returns the write's commit. What the write says goes to standard
-    error: bash crew reads standard output as the stage's variables."""
+    error, as a write's does inside another command's work."""
     def change(w):
         u = w.unit(unit)
         u.get("Bolt") == bolt or fail(f"unit {unit} moved to {u.get('Bolt') or 'the queue'} meanwhile")
@@ -3484,7 +3479,8 @@ def merge_command(t, k, bolt):
 
 
 def run_check(fleet, a):
-    """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent. Construct
+    """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent, as facts for
+    the stage's start (run_unit_stage): PLACE, BOLT, PROMPT, AMENDED, ENDS, ENTRY, FORECAST and TOOK. Construct
     starts once each After unit has finished construct, never waiting on a merge (plan.13), and is run again at any
     stage before merge; on a unit whose change is committed, or one already amended, it first marks the unit amended in
     the plan at its head. Where that write is what marks the unit, only the conductor of the team holding its bolt, or
@@ -3533,12 +3529,12 @@ def run_check(fleet, a):
     # What reached the unit while no stage of it ran: forecasts, carried in this stage's prompt and named on its start.
     ids, said = carried_forecasts(fleet, t, plan, st_all, bolt, a.unit)
     prompt = stage_prompt(a.stage, a.unit, a.words, carried=said, **facts)
-    # Bash crew names the card of the row the stage ends once the stage has started (stage_ended_row), since starting
-    # it can still be refused.
+    # The card of the row the stage ends is named once the stage has started (stage_ended_row), since starting it can
+    # still be refused.
     ends = ends_row(a.unit, a.stage, st, mark, place_stage(s["place"]) if s.get("place") else None)
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
-    print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids),
-             TOOK=took if a.stage == "construct" else ""))
+    return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids),
+                TOOK=took if a.stage == "construct" else "")
 
 
 def again_words(mark, case=None):
@@ -4606,10 +4602,11 @@ def deliver(fleet, t, entries, unit, stage, words):
     if way == "told":
         return "told" if crew.tell(fleet, o.agent, words) else None
     if way == "settle":
-        r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "unit", "run", unit, "settle", words))
-        if r.returncode:
-            print(f"crew could not start {unit}'s settle stage: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1],
-                  file=sys.stderr)
+        try:  # in this process, on the team's host, as crew unit run starts it; what it says is not the wait's
+            with contextlib.redirect_stdout(io.StringIO()):
+                run_unit_stage(fleet, crew.Team(fleet, t), unit, "settle", words)
+        except (Refusal, Stopped) as e:
+            print(f"crew could not start {unit}'s settle stage" + (f": {e}" if isinstance(e, Refusal) else ""), file=sys.stderr)
             return None
         return "settle"
     return way
@@ -5204,6 +5201,13 @@ def on_team_host(fleet, t, force=False):
     return team
 
 
+def stopped(label, act, on, said):
+    """A team's command refused: said on standard error, recorded as the act refused (record.1), and stopped."""
+    print(said, file=sys.stderr)
+    record.emit(label, act, on, refused=said)
+    raise Stopped(1)
+
+
 def ending(fleet, t):
     """What ends a slot's stage, or ops's proof, still owed an end as its agent is ended: delivered when its
     deliverable is there, else stopped (stage_ends), what that says and any failure of it dropped."""
@@ -5236,6 +5240,97 @@ def reap(fleet, team):
         if said:
             print(said)
     rebase_and_tidy(fleet, t)
+
+
+def free_elsewhere(fleet, t, unit):
+    """A unit moved from another team's bolt leaves that team's slot (teams.1): each other team of this host whose slot
+    holds it frees that slot."""
+    for o in sorted(fleet["teams"].values(), key=lambda o: o["name"]):
+        if o["name"] == t["name"] or o["machine"] != crew.this_host():
+            continue
+        other = crew.Team(fleet, o)
+        slot = other.holding(unit)
+        if slot:
+            why = other.free(slot, ending(fleet, o))
+            print(why, file=sys.stderr) if why else print(f"{other.agent_of(slot)} is free")
+
+
+def run_stage(fleet, team, slot, stage, prompt, act, what, obj, on, **extra):
+    """A unit's or a fix's stage started fresh in its slot (teams.2, teams.15): the slot's agent ended, the stage's
+    agent started, and its prompt sent, taken or sent again. The start is recorded as act, with extra's fields, and its
+    end is owed in the stages file. A prompt the agent never took, or one crew can't tell it took, starts no stage: the
+    start is recorded refused, no end is owed, the slot and its idle agent stay, and the command stops saying how to
+    run the stage again."""
+    why = team.stop(slot, ending(fleet, team.t))
+    if why:
+        stopped(team.label, act, on, why)
+    if not team.start(slot, stage):
+        raise Stopped(1)
+    agent = team.agent_of(slot)
+    try:
+        how, why = crew.send_taken(fleet, agent, prompt)
+        said = None if how == "taken" else crew.never_started(agent, stage, what, obj, team.name, how, why)
+    except Refusal as e:
+        said = str(e)
+    if said:
+        stopped(team.label, act, on, said)
+    eid = record.emit(team.label, act, on, why=f"{obj.split('/')[0]}({what.rsplit('/', 1)[-1]}): start {stage}", **extra)
+    if eid:
+        with stages_file(team.t) as lines:
+            lines.append([slot, what, stage, eid, obj])
+
+
+def run_unit_stage(fleet, team, unit, stage, words=""):
+    """A unit's stage started in its slot on the team's host (teams.1, teams.2, plan.6): refused, and recorded so, while
+    the team is down, when every slot is in flight, and for a construct whose slot's agent works unless forced, each
+    before the plan can be written, so an amended unit whose construct can't start keeps its mark and reads amended.
+    The team's read frees first what is over, and a slot another team of this host holds the unit in. Whether the stage
+    may start, the unit's place and the stage's prompt are run_check's, its start run_stage's; a stage that ended a
+    rail row then names the row's card (stage_ended_row). It stops (Stopped), or is refused (Refusal), having said and
+    recorded why."""
+    t, label = team.t, team.label
+    on = [f"stage/{unit}/{stage}", f"unit/{unit}"]
+    if team.down():
+        stopped(label, "stage.start", on, crew.down_said(t["name"]))
+    reap(fleet, team)
+    free_elsewhere(fleet, t, unit)
+    try:
+        slot, taken = team.take("unit", unit, f"{t['kit']['dir']}/places/{unit}")
+    except Refusal as e:
+        print(e, file=sys.stderr)
+        record.emit(label, "stage.start", on, refused=f"all {t['units']} of {t['name']}'s slots are in flight")
+        raise Stopped(1)
+    agent = team.agent_of(slot)
+    if stage == "construct" and not team.force and team.status(slot) == "working":
+        if taken:
+            team.drop("slots", slot)
+        stopped(label, "stage.start", on + [f"agent/{agent}"], crew.working_said(agent))
+    try:
+        facts = run_check(fleet, argparse.Namespace(unit=unit, stage=stage, words=words, label=None))
+    except Refusal as e:
+        if taken:
+            team.drop("slots", slot)
+        record.emit(label, "stage.start", [f"unit/{unit}", f"stage/{unit}/{stage}"], refused=getattr(e, "recorded", None) or str(e))
+        raise
+    team.slot_pane(slot, facts["PLACE"])
+    # A construct that marked the unit amended says so, and is the entry the plan's commit names; the forecasts its
+    # prompt carries are named on its start, so none is carried twice; and the heads of the units it comes after that a
+    # construct's new place took.
+    extra = dict(Amended="yes", commit=[facts["AMENDED"]], eid=facts["ENTRY"]) if facts["AMENDED"] else {}
+    extra.update(Forecast=facts["FORECAST"], Took=facts["TOOK"])
+    run_stage(fleet, team, slot, stage, facts["PROMPT"], "stage.start", unit, f"unit/{unit}", on + [f"agent/{agent}"], **extra)
+    print(f"{agent} has {unit}: {stage}, in {facts['PLACE']}")
+    if facts["ENDS"]:
+        try:
+            stage_ended_row(fleet, argparse.Namespace(team=t["name"], unit=unit, stage=stage, row=facts["ENDS"]))
+        except Refusal as e:
+            print(e, file=sys.stderr)
+
+
+def unit_run(fleet, a):
+    """crew unit run <unit> construct|code|verify|settle|merge ["<words>"] [--force], on the host of the team whose bolt
+    holds the unit: its stage started there (run_unit_stage)."""
+    run_unit_stage(fleet, on_team_host(fleet, team_of_unit(fleet, a), a.force), a.unit, a.stage, a.words)
 
 
 def unit_wait(fleet, a):
@@ -6802,23 +6897,15 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("_status")
     x.add_argument("team")
     x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_unit-run")
+    x.add_argument("unit")
+    x.add_argument("stage", choices=("construct", "code", "verify", "settle", "merge"))
+    x.add_argument("words", nargs="?", default="")
+    x.add_argument("--force", action="store_true")
     x = sub.add_parser("_unit-wait")
     x.add_argument("unit")
     x.add_argument("--timeout", type=int, default=3600000)
     x.add_argument("--stuck", type=int, default=900000)
-    x = sub.add_parser("_team-of")
-    x.add_argument("unit")
-    x.add_argument("--label")
-    x = sub.add_parser("_run")
-    x.add_argument("unit")
-    x.add_argument("stage", choices=("construct", "code", "verify", "settle", "merge"))
-    x.add_argument("words", nargs="?", default="")
-    x.add_argument("--label")
-    x = sub.add_parser("_ended")
-    x.add_argument("team")
-    x.add_argument("unit")
-    x.add_argument("stage")
-    x.add_argument("row")
     x = sub.add_parser("_bolt-of")
     x.add_argument("team")
     x = sub.add_parser("_amended")
@@ -6883,8 +6970,8 @@ COMMANDS = {
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
-    ("_status", None): team_status, ("_unit-wait", None): unit_wait,
-    ("_team-of", None): team_of_unit_said, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
+    ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait,
+    ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
     ("_place", None): place_cmd, ("_fix", None): fix_cmd,
     ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
@@ -6893,7 +6980,7 @@ COMMANDS = {
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
 # A team's commands, each one process on the team's host.
-TEAM_COMMANDS = {("_status", None), ("_unit-wait", None)}
+TEAM_COMMANDS = {("_status", None), ("_unit-run", None), ("_unit-wait", None)}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
@@ -6901,7 +6988,7 @@ ACTS = {
     ("unit", "amend"): "unit.amend",
     ("unit", "order"): "unit.order", ("unit", "after"): "unit.after", ("unit", "move"): "unit.move", ("unit", "drop"): "unit.drop",
     ("signal", None): "capture", ("signal-move", None): "signal.move",
-    ("_run", None): "stage.start", ("_needs", None): "stage.end",
+    ("_needs", None): "stage.end",
     ("plan", "propose"): "plan.propose", ("plan", "agree"): "plan.agree", ("plan", "approve"): "plan.approve",
     ("plan", "drop"): "plan.drop",
 }

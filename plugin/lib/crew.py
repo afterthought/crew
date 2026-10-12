@@ -1290,6 +1290,24 @@ def working_said(agent):
     return f"{agent} is working; add --force to end it anyway."
 
 
+def down_said(team):
+    """What a stage refused on a team taken down says: it runs nothing until it is brought up."""
+    return f"{team} is down; crew up {team} brings it back"
+
+
+def slot_for(team, slots, held, name):
+    """The slot a unit or fix runs in (teams.1): the one holding it, else the first of the team's slots that holds
+    nothing, as (slot, whether it is newly taken); held is the slots file's lines, split. Refused, naming what each
+    holds, when every slot is in flight."""
+    for f in held:
+        if f[2:3] == [name]:
+            return f[0], False
+    holding = {f[0] for f in held if len(f) > 2}
+    free = [s for s in slots if s not in holding]
+    free or fail(f"all {len(slots)} of {team}'s slots are in flight: " + "; ".join(f"{f[0]} holds {' '.join(f[2:3])}" for f in held))
+    return free[0], True
+
+
 def reaped(agent, team, name, stage, status):
     """What a team's read does with a slot (teams.1): ("free", what it says) once its work has merged, landed, been
     dropped from the plan or left the team's bolt and its agent is not working; ("keep", what it says, or None) while
@@ -1312,6 +1330,20 @@ def held_object(kind, name, bolt=""):
     if name.startswith("fix/") and "/" in name[4:]:
         return name
     return f"fix/{bolt[5:] if bolt.startswith('bolt/') else bolt}/{name[4:] if name.startswith('fix/') else name}"
+
+
+def slot_pane_at(panes, live):
+    """Where a slot's new pane opens in "<team> units": halving the newest slot pane open, to its right when an odd
+    number are open and below it when an even number are, as (that pane, right or down); (None, None) when none is,
+    and the workspace opens anew. panes is the panes file's (role, pane) in the order they opened; live(pane) whether
+    a pane is there."""
+    open_ = [p for role, p in panes if role.startswith("unit-") and live(p)]
+    return (open_[-1], "right" if len(open_) % 2 else "down") if open_ else (None, None)
+
+
+def started_said(name, pane, stage=None):
+    """What crew says of a role it started, fresh at a stage or brought back with its conversation."""
+    return f"{name} resumed in {pane}" if stage == "resume" else f"{name} started {stage} in {pane}" if stage else f"{name} started in {pane}"
 
 
 TIMESTAMP = re.compile(r'"timestamp":"([^"]*)"')
@@ -1408,10 +1440,23 @@ class Team:
         """The slots file's line for a slot, split, or None."""
         return next((l for l in self.lines("slots") if l[0] == slot), None)
 
+    def down(self):
+        """Whether the team was taken down with crew down or close, and stays down until it is brought up."""
+        return (self.state / "down").exists()
+
     def owes(self):
         """Whether the team's stages file owes any stage an end."""
         p = self.state / "stages"
         return p.exists() and p.stat().st_size > 0
+
+    def answer(self, *args):
+        """herdr's result for an act that answers with what it made; refused in herdr's words when it fails."""
+        r = self.herdr.run(*args)
+        try:
+            return json.loads(r.stdout)["result"]
+        except (ValueError, KeyError, TypeError):
+            fail(f"herdr could not {args[1]} a {args[0]} in session {self.t['session']}: "
+                 + ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1])
 
     def stop(self, role, ending=None):
         """End a role's agent before anything else starts in its pane (teams.2): None once it is ended, or when none was
@@ -1435,6 +1480,74 @@ class Team:
         self.herdr.run("pane", "send-keys", pane, "ctrl+c", "ctrl+c")
         nap(2)
         return f"{self.agent_of(role)} did not exit (busy or waiting on the user); it was left running" if self.herdr.status(pane, fresh=True) else None
+
+    def start(self, role, stage=None):
+        """Start a role fresh in its pane, at a stage for a slot (teams.2, teams.6): never over an agent still running.
+        Its shell is cleared and moved to the folder the role runs in, which herdr keeps for the pane and Claude finds
+        its conversation from; crew-role starts it there, it is given its name, and Claude's folder-trust question alone
+        is answered for it, never the Bypass Permissions warning (teams.8). Returns whether it started, said on standard
+        error when not."""
+        pane, name = self.pane(role), self.agent_of(role)
+        if self.herdr.status(pane):
+            print(f"{name} is still running; not starting another over it", file=sys.stderr)
+            return False
+        try:
+            cwd = resolve(self.fleet, self.name, role, stage)[0]["cwd"]
+        except Refusal as e:
+            print(e, file=sys.stderr)
+            return False
+        # A Claude that died badly leaves the pane reporting mouse movement, which types escape codes into the shell
+        # and into whatever is run next. Clear the line and switch the reporting off first.
+        self.herdr.run("pane", "send-keys", pane, "ctrl+c")
+        self.herdr.run("pane", "run", pane, "printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?2004l'; clear")
+        nap(1)
+        self.herdr.run("pane", "run", pane, f"cd {shlex.quote(cwd)} && bash {shlex.quote(str(HOME / 'plugin/bin/crew-role'))} "
+                                            f"{self.name} {role}" + (f" {stage}" if stage else ""))
+        if not self.give_name(pane, name):
+            return False
+        for _ in range(15):
+            nap(2)
+            r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
+            if r.returncode == 0 and "Yes, I trust this folder" in r.stdout:
+                self.herdr.run("agent", "send-keys", pane, "down", "enter")
+                nap(3)
+                break
+            if self.herdr.status(pane, fresh=True) == "idle":
+                break
+        print(started_said(name, pane, stage))
+        return True
+
+    def give_name(self, pane, name):
+        """herdr drops an agent's name whenever its session changes: the agent is given it, once it is up, within a minute."""
+        for _ in range(60):
+            if self.herdr.run("agent", "rename", pane, name).returncode == 0:
+                return True
+            nap(1)
+        print(f"{name} did not come up in {pane}; look at that pane.", file=sys.stderr)
+        return False
+
+    def slot_pane(self, slot, path):
+        """The slot's pane, opened in "<team> units" when it is not there (slot_pane_at); the workspace exists only while
+        a slot is in flight."""
+        if self.herdr.live(self.pane(slot)):
+            return
+        newest, way = slot_pane_at([(l[0], l[1]) for l in self.lines("panes") if len(l) > 1], self.herdr.live)
+        if newest:
+            p = self.answer("pane", "split", newest, "--direction", way, "--cwd", path, "--no-focus")["pane"]["pane_id"]
+        else:
+            made = self.answer("workspace", "create", "--cwd", path, "--label", f"{self.name} units", "--no-focus")
+            self.put("layout", f"ws:{self.name}_units", made["workspace"]["workspace_id"])
+            self.herdr.run("tab", "rename", made["tab"]["tab_id"], "units")
+            p = made["root_pane"]["pane_id"]
+        self.put("panes", slot, p)
+
+    def take(self, kind, name, place):
+        """The slot a unit or fix runs in, taken when it holds none yet (slot_for): (slot, whether newly taken)."""
+        held = self.lines("slots")
+        slot, new = slot_for(self.name, self.slots, held, name)
+        if new:
+            self.write("slots", held + [[slot, kind, name, place]])
+        return slot, new
 
     def close_pane(self, role):
         pane = self.pane(role)
