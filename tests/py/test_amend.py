@@ -2,7 +2,7 @@
 given, who may write it (plan.may_write), plan.construct_again for the construct the amendment runs on its team's host,
 plan.amend_told for what its conductor is told, and plan.in_step for a plan whose descriptors predate the mark. That the
 amendment's construct starts in the applier's name and its wait clears the mark is the journey's (t-journey-units);
-an amendment through a proposal, t-amend-intent's."""
+an amendment through a proposal, the proposals journey's (t-journey-plan)."""
 import pytest
 
 from facts import FLEET, FactsWrite, apply, known, plan_text

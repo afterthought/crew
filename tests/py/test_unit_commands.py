@@ -1,6 +1,7 @@
 """crew unit add|after|order|split|move|drop on the plan (bolt-plan spec): each command applied to a plan in memory,
-the stages it reads given, and every refusal it makes there. Rebasing a moved unit's branch, removing a dropped
-unit's place and the commits the writes make are t-unit's."""
+the stages it reads given, and every refusal it makes there, work a held bolt needs (--unblocks, plan.5) among them.
+Rebasing a moved unit's branch, removing a dropped unit's place and the commits the writes make are the journey's
+(t-journey-units)."""
 import pytest
 from facts import FactsWrite, apply, known, plan_text, units_of
 
@@ -104,3 +105,19 @@ class TestDrop:
 
     def test_merged_work_is_not_dropped(self):
         assert "unit c has merged into its bolt, so it can't be dropped" in refusal(fresh(), 'unit drop c "not wanted"', stages={"c": "merged"})
+
+
+class TestUnblocks:
+    def test_work_a_held_bolt_needs_goes_ahead_of_its_first_open_unit(self):
+        w = run(fresh(), 'unit add zone-first "The zone exists." --bolt tenant-environments --unblocks tenant-environments',
+                stages={"a": "merged"})
+        assert units_of(w, TE) == ["a", "zone-first", "b", "c"]
+
+    @pytest.mark.parametrize("do, said", [
+        ('unit add zone-first "The zone exists." --repo switchboard-kit --unblocks tenant-environments',
+         "zone-first unblocks bolt tenant-environments, so it goes into that bolt, ahead of what waits on it, not into the queue"),
+        ('unit add zone-first "The zone exists." --bolt console-pages --unblocks tenant-environments', "not into bolt console-pages"),
+        ('unit add zone-first "The zone exists." --bolt apex-zones --unblocks apex-zones',
+         "zone-first unblocks bolt apex-zones, which no team holds, so nothing waits on it: --unblocks names a bolt in flight")])
+    def test_anywhere_else_or_for_a_bolt_no_team_holds_is_refused(self, do, said):
+        assert said in refusal(fresh(), do)

@@ -1898,10 +1898,16 @@ def apply_all(fleet, label, w, argvs, n):
             n_on, n_frm = len(w.on), len(w.frm)
             told += op.change(w) or []
         except Refusal as e:
-            refuse(f"`{a.do}`: {e}", f"`{do_named(a)}`: {getattr(e, 'recorded', None) or e}")
+            refuse(*command_refused(a, e))
         op.added_on, op.added_frm = w.on[n_on:], w.frm[n_frm:]
         ops.append(op)
     return ops, list(dict.fromkeys(told))
+
+
+def command_refused(a, e):
+    """A proposal's command refused, as said, its line as typed, and as recorded, its command and the names it acts on
+    with no intent or reason typed in it (record.3)."""
+    return f"`{a.do}`: {e}", f"`{do_named(a)}`: {getattr(e, 'recorded', None) or e}"
 
 
 def check_ops(fleet, label, w, argvs, n, seen=Proposed):
@@ -1914,7 +1920,7 @@ def check_ops(fleet, label, w, argvs, n, seen=Proposed):
         try:
             OPS[(a.cmd, a.sub)](seen(fleet, label, scratch, n), a).change(scratch)
         except Refusal as e:
-            refuse(f"`{a.do}`: {e}", f"`{do_named(a)}`: {getattr(e, 'recorded', None) or e}")
+            refuse(*command_refused(a, e))
     try:
         check(scratch.plan)
         checked({"plan.rec": scratch.plan.text(), **scratch.files})
@@ -1980,8 +1986,7 @@ def plan_propose(fleet, a):
     """crew plan propose <file> [--replaces <n>]: the planner's proposal, checked against the plan at the tip, written
     open with the next number; the conductor of each bolt in flight it touches is told."""
     kind, of = role(fleet, os.environ.get("CREW_AGENT"))
-    kind in ("planner", "user") or fail(f"{os.environ.get('CREW_AGENT')} does not write proposals: tell "
-                                        f"{planner_of(fleet, kind, of)}, who proposes changes to the plan")
+    kind in ("planner", "user") or fail(proposer_refusal(fleet, os.environ.get("CREW_AGENT"), kind, of))
     label = of if kind == "planner" else proposal_label(fleet, a)
     a.label in (None, label) or fail(f"{label}-planner proposes for {label}, not {a.label}")
     CONTEXT["label"] = label
@@ -1991,20 +1996,10 @@ def plan_propose(fleet, a):
 
     def change(w):
         pl = proposals(w)
-        n = 1 + max([int(p.get("Proposal")) for p in pl.recs("Proposal")] or [0])
+        n = next_proposal(pl)
         check_ops(fleet, label, w, argvs, n)
         per = touched_by(w.plan, argvs)
-        today = datetime.date.today().isoformat()
-        if a.replaces:
-            old = proposal(pl, a.replaces, label)
-            old.get("State") == "open" or fail(f"proposal {a.replaces} is {old.get('State')}, so nothing replaces it")
-            seen["old_by"] = old.get("By")
-            old.set("State", "dropped")
-            old.set("Closed", today, after="By")
-            old.set("Reason", f"replaced by proposal {n}", after="Closed")
-        pl.insert(Rec("Proposal", [("Proposal", str(n)), ("Case", case)] + [("Do", d) for d in dos]
-                      + [("State", "open"), ("Opened", today), ("By", agent())]
-                      + ([("Replaces", str(a.replaces))] if a.replaces else [])))
+        seen["old_by"] = open_proposal(pl, n, case, dos, agent(), datetime.date.today().isoformat(), a.replaces, label)
         w.replace("proposals.rec", pl.text())
         w.subject = f"plan(proposal {n}): propose: {summary(argvs)}"
         w.on += [f"proposal/{n}"] + objects(argvs) + ([f"proposal/{a.replaces}"] if a.replaces else [])
@@ -2033,6 +2028,77 @@ def plan_propose(fleet, a):
         tell_planner(fleet, label, f"Proposal {a.replaces} was replaced by proposal {n}, by {agent()}. {replaced}")
 
 
+def proposer_refusal(fleet, name, kind, of):
+    """Why an agent may not propose (roles.1): only the planner and the user write proposals."""
+    return f"{name} does not write proposals: tell {planner_of(fleet, kind, of)}, who proposes changes to the plan"
+
+
+def next_proposal(pl):
+    """The number a new proposal takes: one past the highest, never reused (plan.4)."""
+    return 1 + max([int(p.get("Proposal")) for p in pl.recs("Proposal")] or [0])
+
+
+def open_proposal(pl, n, case, dos, by, today, replaces=None, label=None):
+    """Proposal n written open in proposals.rec (pl), its case and commands as given (plan.4); one it replaces, which
+    must be open, is dropped with the reason that it was replaced, and agreements stay with it. Returns who wrote the
+    one replaced."""
+    old_by = None
+    if replaces:
+        old = proposal(pl, replaces, label)
+        old.get("State") == "open" or fail(f"proposal {replaces} is {old.get('State')}, so nothing replaces it")
+        old_by = old.get("By")
+        old.set("State", "dropped")
+        old.set("Closed", today, after="By")
+        old.set("Reason", f"replaced by proposal {n}", after="Closed")
+    pl.insert(Rec("Proposal", [("Proposal", str(n)), ("Case", case)] + [("Do", d) for d in dos]
+                  + [("State", "open"), ("Opened", today), ("By", by)] + ([("Replaces", str(replaces))] if replaces else [])))
+    return old_by
+
+
+def agreements_wanted(plan, argvs, p, n, kind, of, team=None, name=None):
+    """The teams whose agreement this caller records on proposal n, those it touches that have not agreed (plan.4): a
+    conductor's own team, which must hold a bolt the proposal touches; the user's, any team named, or every team the
+    proposal touches. Only a conductor or the user agrees."""
+    kind in ("conductor", "user") or fail(f"{name} does not agree to proposals: the conductor of a bolt a proposal touches agrees to it")
+    held = held_teams(plan, flat(touched_by(plan, argvs)))
+    if kind == "conductor":
+        of in held or fail(f"proposal {n} touches no bolt {of} holds" + (f": it touches the bolts of {', '.join(held)}" if held else ""))
+        want = [of]
+    else:
+        team is None or team in held or fail(f"proposal {n} touches no bolt {team} holds")
+        want = [team] if team else held
+    return [t for t in want if t not in p.all("Agreed")]
+
+
+def agreement_missing(plan, argvs, p, n):
+    """Why proposal n can't be approved yet, or None: the conductor of a bolt it touches, held now, has not agreed."""
+    missing = [t for t in held_teams(plan, flat(touched_by(plan, argvs))) if t not in p.all("Agreed")]
+    return (f"proposal {n} waits on the agreement of " + ", ".join(f"{t}-conductor" for t in missing) + f": crew plan agree {n}"
+            if missing else None)
+
+
+def closed_refusal(p, n):
+    """Why proposal n can't be approved because it is closed, said with its reason and recorded without it (record.3),
+    or None while it is open."""
+    if p.get("State") == "open":
+        return None
+    state = f"proposal {n} is {p.get('State')}"
+    return state + (f": {p.get('Reason')}" if p.get("Reason") else ""), state
+
+
+def close(p, state, today, reason=None, cleared=()):
+    """A proposal closed: approved, with each unit the user left out as Cleared, or dropped with its reason; one that
+    is not open is refused, saying what it is (plan.4)."""
+    p.get("State") == "open" or fail(f"proposal {p.get('Proposal')} is {p.get('State')}, so it can't be " + (
+        "dropped" if state == "dropped" else "approved"))
+    p.set("State", state)
+    p.set("Closed", today, after="By")
+    if reason:
+        p.set("Reason", reason, after="Closed")
+    for u in cleared:
+        p.add("Cleared", u, after="Closed")
+
+
 def plan_agree(fleet, a):
     """crew plan agree <n> [--team <team>]: the conductor's recorded agreement to a proposal that touches the bolt its
     team holds; the user may agree for any team the proposal touches."""
@@ -2040,21 +2106,10 @@ def plan_agree(fleet, a):
     CONTEXT["label"] = label
     name = os.environ.get("CREW_AGENT")
     kind, of = role(fleet, name)
-    kind in ("conductor", "user") or fail(f"{name} does not agree to proposals: the conductor of a bolt a proposal "
-                                          "touches agrees to it")
     w0, _, p0, argvs = at_tip(fleet, label, a.n)
     p0.get("State") == "open" or fail(f"proposal {a.n} is {p0.get('State')}, so there is nothing to agree to")
     carded = p0.get("By") == f"{label}-planner"
-
-    def wanted(w, p):
-        held = held_teams(w.plan, flat(touched_by(w.plan, argvs)))
-        if kind == "conductor":
-            of in held or fail(f"proposal {a.n} touches no bolt {of} holds" + (f": it touches the bolts of {', '.join(held)}" if held else ""))
-            want = [of]
-        else:
-            a.team is None or a.team in held or fail(f"proposal {a.n} touches no bolt {a.team} holds")
-            want = [a.team] if a.team else held
-        return [t for t in want if t not in p.all("Agreed")]
+    wanted = lambda w, p: agreements_wanted(w.plan, argvs, p, a.n, kind, of, a.team, name)
     if not wanted(w0, p0):
         print(f"proposal {a.n} already has the agreement" + (f" of {of}" if kind == "conductor" else " of every team it touches"))
         return
@@ -2091,13 +2146,12 @@ def plan_approve(fleet, a):
     cleared = list(dict.fromkeys(getattr(a, "clear", None) or []))
 
     def agreed(w, p):
-        missing = [t for t in held_teams(w.plan, flat(touched_by(w.plan, argvs))) if t not in p.all("Agreed")]
-        not missing or fail(f"proposal {a.n} waits on the agreement of " + ", ".join(f"{t}-conductor" for t in missing)
-                            + f": crew plan agree {a.n}")
+        why = agreement_missing(w.plan, argvs, p, a.n)
+        not why or fail(why)
 
     def opened(p):
-        state = f"proposal {a.n} is {p.get('State')}"
-        p.get("State") == "open" or refuse(state + (f": {p.get('Reason')}" if p.get("Reason") else ""), state)
+        why = closed_refusal(p, a.n)
+        not why or refuse(*why)
     opened(p0)
     agreed(w0, p0)
     applied = kept(argvs, cleared, a.n) if cleared else argvs
@@ -2115,12 +2169,9 @@ def plan_approve(fleet, a):
             opened(p)
             agreed(w, p)
             ops, told = apply_all(fleet, label, w, applied, a.n)
-            p.set("State", "approved")
-            p.set("Closed", datetime.date.today().isoformat(), after="By")
             if cleared:  # a branch's proposals.rec keeps the descriptor it was made with, from before Cleared
                 in_step(pl, PROPOSALS)
-            for u in cleared:
-                p.add("Cleared", u, after="Closed")
+            close(p, "approved", datetime.date.today().isoformat(), cleared=cleared)
             w.replace("proposals.rec", pl.text())
             w.subject = f"plan(proposal {a.n}): approve: {summary(applied) or 'nothing applied'}"
             w.on += [f"proposal/{a.n}"] + objects(argvs)
@@ -2152,12 +2203,9 @@ def plan_drop(fleet, a):
     def change(w):
         pl = proposals(w)
         p = proposal(pl, a.n, label)
-        p.get("State") == "open" or fail(f"proposal {a.n} is {p.get('State')}, so it can't be dropped")
         seen["by"] = p.get("By")
         argvs = [do_args(label, d) for d in p.all("Do")]
-        p.set("State", "dropped")
-        p.set("Closed", datetime.date.today().isoformat(), after="By")
-        p.set("Reason", a.reason, after="Closed")
+        close(p, "dropped", datetime.date.today().isoformat(), a.reason)
         w.replace("proposals.rec", pl.text())
         w.subject = f"plan(proposal {a.n}): drop"
         w.on += [f"proposal/{a.n}"] + objects(argvs)
@@ -2192,15 +2240,20 @@ def amendment(fleet, plan, a, alone=False):
     """A unit amend as the user reads it: the unit's bolt, team and stage, its intent as it stands and as it would be,
     and what approval sets in motion. The stage is read from the unit's kit; alone, nothing is read but the plan, and
     only its first line is said."""
+    return amendment_lines(plan, a, None if alone or plan.unit(a.unit) is None else unit_stage(fleet, plan, a.unit))
+
+
+def amendment_lines(plan, a, s):
+    """What a proposal's page says of a unit amend: the unit's bolt and team, and, given its stage (s, None when the page
+    is drawn alone), its intent as it stands and as proposed and what approval sets in motion."""
     u = plan.unit(a.unit)
     if u is None:
         return [f"**Amend unit `{a.unit}`**, new in this proposal", f"Intent, as proposed:  {a.intent}"]
     b = u.get("Bolt")
     team = plan.bolt(b).get("Team") if b else None
     where = (f"bolt `{b}`" + (f" ({team})" if team else "")) if b else f"the queue of {u.get('Repo')}"
-    if alone:
+    if s is None:
         return [f"**Amend unit `{a.unit}`** in {where}"]
-    s = unit_stage(fleet, plan, a.unit)
     st = s["stage"]
     now = ("" if st == "queued" else f", its stage unknown ({s.get('why')})" if st == "unknown" else
            f", now in {st}" if st in ("construct", "planned", "code", "verify") else f", now {st}")
@@ -2467,7 +2520,7 @@ def block(head, name, says):
     return [f"{head:<7}{names[0]}"] + ["       " + x for x in names[1:] + says]
 
 
-def card_model(fleet, label, w, p):
+def card_model(fleet, label, w, p, after=None):
     """Proposal p as its card shows it, from the plan at the branch's tip and the proposal alone, no kit read
     (plan.12): its commands applied in order to a copy of the plan, as check_ops applies them, and each bolt they touch
     and each kit's queue a unit goes to, before and after; the card's fields, its text, its picture's sections and
@@ -2477,7 +2530,7 @@ def card_model(fleet, label, w, p):
     p.get("State") == "open" or fail(f"proposal {n} is {p.get('State')}: it is closed, so it has no card")
     argvs = [do_args(label, d) for d in p.all("Do")]
     before = w.plan
-    after = check_ops(fleet, label, w, argvs, n, Drawn).plan
+    after = after or check_ops(fleet, label, w, argvs, n, Drawn).plan
     where = {u.name(): u.get("Bolt") for u in before.units()}
     repo = {u.name(): u.get("Repo") for u in before.units()}
     intent = {u.name(): u.get("Intent") for u in before.units()}
@@ -2733,33 +2786,12 @@ def plan_answer(fleet, a):
     w, _, p, _ = at_tip(fleet, label, a.n)
     m = card_model(fleet, label, w, p)
     asks = m["questions"]
-    a.question in asks or fail(f"proposal {a.n}'s card asks {either(list(asks))}, not {a.question}")
-    given = list(dict.fromkeys(a.answer))
-    held_units = asks[a.question]
-    if a.question == "plan":
-        len(given) == 1 and given[0] in ("approve", "decline") or fail("plan is answered approve or decline")
-        answer = given[0]
-    elif m["lone"]:
-        len(given) == 1 and given[0] in (held_units[0], "leave-out") or fail(
-            f"{a.question} is answered {held_units[0]} or leave-out")
-        answer = [x for x in given if x != "leave-out"]
-    else:
-        bad = [x for x in given if x not in held_units]
-        not bad or fail(f"{a.question} holds {either(held_units)}, not {either(bad)}")
-        answer = given
+    answer = card_answer(asks, m["lone"], a.n, a.question, a.answer)
     f = answers_file(label, a.n)
     f.parent.mkdir(parents=True, exist_ok=True)
     with open(f.parent / ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        held = held_answers(f)
-        if a.question in held:
-            was = held[a.question]
-            same = was == answer if a.question == "plan" else sorted(was) == sorted(answer)
-            words = was if isinstance(was, str) else " ".join(was) or "nothing ticked"
-            same or fail(f"crew already holds {a.question} {words} for proposal {a.n}: the user answered it once")
-        held.setdefault(a.question, answer)
-        if a.note and a.note.strip() and a.note.strip() not in held.get("note", ""):
-            held["note"] = (held.get("note", "") + "\n\n" + a.note.strip()).strip()
+        held = with_answer(held_answers(f), a.n, a.question, answer, a.note)
         tmp = f.parent / ".answers.json"
         tmp.write_text(json.dumps(held, indent=1) + "\n")
         tmp.replace(f)
@@ -2771,12 +2803,10 @@ def plan_answer(fleet, a):
                   f"write the proposal again with crew plan propose <file> --replaces {a.n}, or drop it with "
                   f"crew plan drop {a.n} \"<the user's reason>\".")
             return
-        waits = [q for q in asks if q not in held]
+        waits, cleared = answered(asks, held, m["new"])
         if waits:
             print(f"proposal {a.n} waits on {either(waits)}: nothing is applied")
             return
-        ticked = {u for q in asks if q != "plan" for u in held[q]}
-        cleared = [u for u in m["new"] if u not in ticked] if len(asks) > 1 else []
         approval = argparse.Namespace(cmd="plan", sub="approve", n=a.n, label=label, clear=cleared)
         try:
             plan_approve(fleet, approval)
@@ -2786,6 +2816,48 @@ def plan_answer(fleet, a):
         f.unlink()
     if note:
         print(f"The user's note beside the approval of proposal {a.n}: \"{note}\". Propose what it asks as a new proposal.")
+
+
+def card_answer(asks, lone, n, question, given):
+    """One question of proposal n's card answered, checked against the questions the card asks now (asks, each
+    question's units): plan, approve or decline; a lone unit's, the unit or leave-out; units-<k>, the units the user
+    left ticked of those it holds. Returns the answer as kept."""
+    question in asks or fail(f"proposal {n}'s card asks {either(list(asks))}, not {question}")
+    given, units = list(dict.fromkeys(given)), asks[question]
+    if question == "plan":
+        len(given) == 1 and given[0] in ("approve", "decline") or fail("plan is answered approve or decline")
+        return given[0]
+    if lone:
+        len(given) == 1 and given[0] in (units[0], "leave-out") or fail(f"{question} is answered {units[0]} or leave-out")
+        return [x for x in given if x != "leave-out"]
+    bad = [x for x in given if x not in units]
+    not bad or fail(f"{question} holds {either(units)}, not {either(bad)}")
+    return given
+
+
+def with_answer(held, n, question, answer, note=None):
+    """The answers held for proposal n's card with one more: the same answer again is fine, a different one refused,
+    and a note joins the notes held, once."""
+    if question in held:
+        was = held[question]
+        same = was == answer if question == "plan" else sorted(was) == sorted(answer)
+        words = was if isinstance(was, str) else " ".join(was) or "nothing ticked"
+        same or fail(f"crew already holds {question} {words} for proposal {n}: the user answered it once")
+    held = dict(held)
+    held.setdefault(question, answer)
+    if note and note.strip() and note.strip() not in held.get("note", ""):
+        held["note"] = (held.get("note", "") + "\n\n" + note.strip()).strip()
+    return held
+
+
+def answered(asks, held, new):
+    """What the answers held say once a card's questions are read: the questions still unanswered, and, once none is,
+    the units the user cleared, each new unit no unit question left ticked."""
+    waits = [q for q in asks if q not in held]
+    if waits:
+        return waits, []
+    ticked = {u for q in asks if q != "plan" for u in held[q]}
+    return [], [u for u in new if u not in ticked] if len(asks) > 1 else []
 
 
 # -------------------------------------------------------------------------------------------------- signals

@@ -1,7 +1,7 @@
 """A proposal's commands (plan.3, plan.4): how its Do lines parse (plan.do_args), which conductors must agree
 (plan.touched_by, plan.held_teams), the units the user may leave out and what is applied without them (plan.new_units,
 plan.kept), and the plan its commands leave, applied in order to the plan in memory. Writing, recording and telling
-the planner are t-proposals'."""
+the planner are the proposals journey's (t-journey-plan)."""
 import pytest
 from facts import FactsWrite, apply, plan_text, units_of
 
