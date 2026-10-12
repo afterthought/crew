@@ -4725,6 +4725,35 @@ def due_changes(plan, entries):
     return out
 
 
+def told_since_last_batch(entries):
+    """Whether the planner was told a batch is due since the last batch was delivered (a `batch.due` entry after it)."""
+    done = [e["At"] for e in entries if e.get("Act") == "review.batch"]
+    last = max(done) if done else None
+    return any(e.get("Act") == "batch.due" and (last is None or e["At"] > last) for e in entries)
+
+
+def batch_due(due, entries, setting, now, bolts):
+    """Why a batch of the due changes is due now (briefs.12): at the partition's setting, `every` changes due or `hours`
+    since the last batch, or since the first due change was constructed when there has been none, or at once for a bolt
+    with every unit merged whose units' latest changes are due. bolts are the team's held bolts as (name, every unit
+    merged, its units due). [] when none is, or when the planner was told of a batch since the last one was delivered."""
+    if not due or told_since_last_batch(entries):
+        return []
+    done = [e["At"] for e in entries if e.get("Act") == "review.batch"]
+    last = max(done) if done else None
+    clock = utc(last) if last else min(utc(at) for *_, at in due)
+    why = []
+    if len(due) >= setting["every"]:
+        why.append(f"{len(due)} changes are due, and a batch is every {setting['every']}")
+    if now - clock >= datetime.timedelta(hours=setting["hours"]):
+        why.append(f"{setting['hours']} hours have passed since " + ("the last batch" if last else "the first of them was constructed"))
+    for name, merged, waiting in bolts:
+        if merged and waiting:
+            why.append(f"bolt {name} has every unit merged, and lands only once {either(waiting)} "
+                       + ("has" if len(waiting) == 1 else "have") + " been in a batch")
+    return why
+
+
 def batch_check(fleet, t):
     """On each wait of a conductor of the partition: the changes due across the partition, counted from the run
     record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
@@ -4738,28 +4767,13 @@ def batch_check(fleet, t):
         return
     entries = partition_entries(fleet, label)
     due = due_changes(plan, entries)
-    if not due:
+    if not due or told_since_last_batch(entries):
         return
-    done = [e["At"] for e in entries if e.get("Act") == "review.batch"]
-    last = max(done) if done else None
-    if any(e.get("Act") == "batch.due" and (last is None or e["At"] > last) for e in entries):
-        return
-    now = datetime.datetime.now(datetime.timezone.utc)
-    clock = utc(last) if last else min(utc(at) for *_, at in due)
-    why = []
-    if len(due) >= setting["every"]:
-        why.append(f"{len(due)} changes are due, and a batch is every {setting['every']}")
-    if now - clock >= datetime.timedelta(hours=setting["hours"]):
-        why.append(f"{setting['hours']} hours have passed since " + ("the last batch" if last else "the first of them was constructed"))
     held = held_by(plan, t["name"])
-    if held:
-        st = stages_for(fleet, plan, held)
-        for b in held:
-            units = plan.units_of(b.name())
-            waiting = [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]
-            if units and waiting and all(st.of(u.name())["stage"] in ("merged", "landed") for u in units):
-                why.append(f"bolt {b.name()} has every unit merged, and lands only once {either(waiting)} "
-                           + ("has" if len(waiting) == 1 else "have") + " been in a batch")
+    st = stages_for(fleet, plan, held) if held else None
+    bolts = [(b.name(), bool(plan.units_of(b.name())) and all(st.of(u.name())["stage"] in ("merged", "landed") for u in plan.units_of(b.name())),
+              [u for u, *_ in due if plan.unit(u).get("Bolt") == b.name()]) for b in held]
+    why = batch_due(due, entries, setting, datetime.datetime.now(datetime.timezone.utc), bolts)
     if not why:
         return
     planner = f"{label}-planner"
