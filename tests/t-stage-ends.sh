@@ -1,8 +1,8 @@
-# A stage ends at its deliverable, never at a quiet pane (teams.4): what each stage delivers, read since the stage
-# began; the wait that returns with it and records its end; the stuck clock, which runs only while the agent waits on
-# nothing of its own and says when it could not read that; a stop-short through crew needs, carried to the waiting
-# wait or told to the conductor and never put in the run record; a wait that sees a tick made while it waits; a gone
-# agent; a fix's wait; and ops's proof, whose request is taken or sent again, and never started when it is not.
+# A stage ends at its deliverable, never at a quiet pane (teams.4), wired through the command: the wait that returns
+# with it and records its end; crew status recording an end late, once; a stop-short through crew needs, carried to
+# the waiting wait or told to the conductor and never put in the run record; a wait that sees a tick made while it
+# waits; a gone agent; a fix's wait; and ops's proof, whose request is taken or sent again, and never started when it
+# is not. What each stage delivers and when a quiet agent is stuck are logic cases (tests/py/test_stage_ends.py).
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
@@ -29,20 +29,8 @@ field() { local a=$1 f=$2; shift 2; last "$a" "$@" | jq -r --arg f "$f" 'if (.[$
 record_of() { as $box bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec'; }
 ends() { record_of | grep -c "^Ended: " || true; }
 short() { git -C "$k" rev-parse --short "$1"; }
-# earlier <place>: its head committed a minute ago, so what was committed before a stage is in an earlier second
-# however soon the stage starts, with no wait on the clock (tests.8)
-earlier() { (cd "$1" && GIT_COMMITTER_DATE="@$(( $(date +%s) - 60 )) +0000" git commit -q --amend --no-edit); }
-# session_transcript <session>: the transcript the stub herdr wrote the session's prompt to, as crew finds it
-session_transcript() { as $box bash -c 'ls "$HOME"/.claude*/projects/*/"$1".jsonl | sort | head -1' _ "$1"; }
 
 expect_ok crew unit run a construct
-rm "$(session_transcript "sid-$(pane swb-1-unit-1 | tr : -)")"  # a session whose transcript is gone
-expect_ok crew unit wait a --stuck 0 --timeout 0
-eq "$out" "swb-1-unit-1 is stuck in construct on a: quiet for 0 minutes, with nothing committed and nothing it needs said; crew could not read whether it waits on work of its own (no transcript for its session sid-$(pane swb-1-unit-1 | tr : -))"
-eq "$(ends)" "0"
-has "$(cat "$stages")" "unit-1 a construct "
-ok "a construct quiet past its limit with nothing committed is stuck, saying its session has no transcript to read; nothing is recorded"
-
 change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"
 status swb-1-unit-1 working
 expect_ok crew unit wait a --stuck 0 --timeout 0
@@ -61,8 +49,6 @@ ok "a committed change ends construct only once its agent stops working, and the
 
 expect_ok crew unit run a code
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
-expect_ok crew unit wait a --stuck 0 --timeout 0
-has "$out" "swb-1-unit-1 is stuck in code on a: quiet for 0 minutes, with 1 of 2 tasks ticked at its head and nothing it needs said"
 expect_ok crew status swb-1
 expect_ok crew status swb-1
 eq "$(ends)" "1"
@@ -76,38 +62,9 @@ eq "$(field stage.end Observed stage/a/code)" "late"
 eq "$(field stage.end Tasks stage/a/code)" "2/2"
 ok "code quiet with a task open has not ended, and no read records it; once every task is ticked its end is recorded late, once"
 
-earlier "$kd/places/a"
-expect_ok crew unit run a code "Fix these findings from the verify report: the footer."
-expect_ok crew unit wait a --timeout 0
-eq "$out" "code on a is still running after the wait's 0 ms: swb-1-unit-1 has been quiet for 0 minutes, under the limit of 15 minutes; nothing is recorded yet"
-expect_ok crew status swb-1
-eq "$(ends)" "2"
-echo fixed > "$kd/places/a/footer"; commit_all "$kd/places/a" "fix(a): the footer"
-expect_ok crew unit wait a
-eq "$out" "swb-1-unit-1 delivered code on a: every task is ticked (2/2) at $(short unit/a)"
-ok "code run again on a ticked change ends only at a commit made since it began"
-
 mkdir -p "$reports"; old=$reports/verify-a-20260101-0000.md
 echo "an old report" > "$old"; touch -t 202601010000 "$old"
 expect_ok crew unit run a verify
-sid=sid-$(pane swb-1-unit-1 | tr : -)
-tx=$(session_transcript "$sid")
-long=$(ago 30)
-cat > "$tx" <<EOF
-{"type":"assistant","timestamp":"$long","message":{"content":[{"type":"tool_use","name":"Bash"}]}}
-{"type":"user","timestamp":"$long","toolUseResult":{"stdout":"","backgroundTaskId":"b8y1gomwj"}}
-EOF
-expect_ok crew unit wait a --stuck 60000 --timeout 0
-eq "$out" "verify on a is still running after the wait's 0 ms: swb-1-unit-1 is waiting on 1 background task of its own; nothing is recorded yet"
-cat > "$tx" <<EOF
-{"type":"assistant","timestamp":"$long","message":{"content":[{"type":"tool_use","name":"Bash"}]}}
-{"type":"user","timestamp":"$long","toolUseResult":{"stdout":"","backgroundTaskId":"b8y1gomwj"}}
-{"type":"queue-operation","timestamp":"$long","operation":"enqueue","content":"<task-notification>\n<task-id>b8y1gomwj</task-id>\n<status>completed</status>\n</task-notification>"}
-EOF
-expect_ok crew unit wait a --stuck 60000 --timeout 0
-eq "$out" "swb-1-unit-1 is stuck in verify on a: quiet for 30 minutes, with no report saved and nothing it needs said"
-ok "a quiet verify waiting on suites it started is not stuck; once told they are over, its clock runs from its transcript's last record"
-
 report=$reports/verify-a-20261008-1412.md
 echo "the report" > "$report"
 expect_ok crew unit wait a

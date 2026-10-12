@@ -3835,50 +3835,81 @@ def bolt_of_unit(fleet, t, main, unit):
 
 def deliverable(fleet, t, o, place=None):
     """What an owed stage has delivered since it began, read on the team's host: (its object, what the wait says of
-    it), or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning
-    complete; code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since
-    the start; settle: a commit on the unit's branch since the start (teams.14); merge: the bolt holding the unit's
-    change, or the fix's commits; a fix: a commit on its branch since the start; the proof: a proof file for the bolt
-    saved since the start. A start crew can't read delivers nothing."""
-    main = t["kit"]["main"]
+    it), or (None, what is missing), as delivered judges the facts deliverable_facts reads."""
+    return delivered(o, deliverable_facts(fleet, t, o, place))
+
+
+def deliverable_facts(fleet, t, o, place=None):
+    """What delivered judges an owed stage by, read on the team's host, only what its stage asks: the newest proof or
+    report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it and its head; else the
+    branch's head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since
+    it began, whether its planning is complete."""
+    main, f = t["kit"]["main"], {}
+    if o.start is None:
+        return f
+    if o.proof or o.stage == "verify":
+        f["saved"] = newest_saved(t, gather.PROOF if o.proof else gather.REPORT, o.name, o.start)
+        return f
+    if o.stage == "merge":
+        f["bolt"] = o.obj.split("/")[1] if o.fix and o.obj.count("/") == 2 else None if o.fix else bolt_of_unit(fleet, t, main, o.name)
+        if f["bolt"]:
+            f["holds"] = gather.fix_merged(main, o.name, f["bolt"]) if o.fix else o.name in gather.changes(main, f"bolt/{f['bolt']}")
+            f["bolt_head"] = short_head(main, f"refs/heads/bolt/{f['bolt']}")
+        return f
+    f["head"], f["at"] = short_head(main, f"refs/heads/{o.branch()}"), committed_at(main, f"refs/heads/{o.branch()}")
+    if o.fix or o.stage == "settle":
+        return f
+    if o.stage == "code":
+        f["ticks"] = ticks(main, o.branch(), o.name)
+        return f
+    if f["head"] and f["at"] is not None and f["at"] >= o.start:
+        place = place or f"{t['kit']['dir']}/places/{o.name}"
+        planned = gather.planned(f"{place}/openspec/changes/{o.name}", place)
+        if planned is None:
+            status = gather.run(["openspec", "status", "--change", o.name, "--json"], place)
+            try:
+                planned = bool(json.loads(status).get("isPlanningComplete")) if status else False
+            except (ValueError, AttributeError):
+                planned = False
+        f["planned"] = planned
+    return f
+
+
+def delivered(o, f):
+    """What an owed stage has delivered, judged from deliverable_facts (teams.4): (its object, what the wait says of it),
+    or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning complete;
+    code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since the start;
+    settle: a commit on the unit's branch since the start (teams.14); merge: the bolt holding the unit's change, or the
+    fix's commits; a fix: a commit on its branch since the start; the proof: a proof file for the bolt saved since the
+    start. A start crew can't read delivers nothing."""
     if o.start is None:
         return None, f"no start crew can read in its entry {o.eid}"
     if o.proof:
-        f = newest_saved(t, gather.PROOF, o.name, o.start)
-        return (f"proof/{f.name}", str(f)) if f else (None, "no proof file saved")
+        saved = f.get("saved")
+        return (f"proof/{saved.name}", str(saved)) if saved else (None, "no proof file saved")
     if o.stage == "verify":
-        f = newest_saved(t, gather.REPORT, o.name, o.start)
-        return (f"report/{f.name}", f"the report is {f}") if f else (None, "no report saved")
+        saved = f.get("saved")
+        return (f"report/{saved.name}", f"the report is {saved}") if saved else (None, "no report saved")
     if o.stage == "merge":
-        bolt = o.obj.split("/")[1] if o.fix and o.obj.count("/") == 2 else None if o.fix else bolt_of_unit(fleet, t, main, o.name)
+        bolt, head = f.get("bolt"), f.get("bolt_head")
         if not bolt:
             return None, "no bolt crew can read for it"
-        holds = gather.fix_merged(main, o.name, bolt) if o.fix else o.name in gather.changes(main, f"bolt/{bolt}")
-        head = short_head(main, f"refs/heads/bolt/{bolt}")
-        return (f"bolt/{bolt}@{head}", f"bolt/{bolt} holds it at {head}") if holds and head else (None, f"bolt/{bolt} not yet holding it")
-    head, at = short_head(main, f"refs/heads/{o.branch()}"), committed_at(main, f"refs/heads/{o.branch()}")
+        return (f"bolt/{bolt}@{head}", f"bolt/{bolt} holds it at {head}") if f.get("holds") and head else (None, f"bolt/{bolt} not yet holding it")
+    head, at = f.get("head"), f.get("at")
     fresh = bool(head) and at is not None and at >= o.start
     if o.fix:
         return (f"{o.obj or o.name}@{head}", f"its branch is at {head}") if fresh else (None, "nothing committed since it began")
     if o.stage == "settle":
         return (f"unit/{o.name}@{head}", f"its branch is at {head}, ready to merge") if fresh else (None, "nothing committed since it began")
     if o.stage == "code":
-        done, total = ticks(main, o.branch(), o.name)
+        done, total = f.get("ticks") or (0, 0)
         if fresh and total and done == total:
             return f"unit/{o.name}@{head}", f"every task is ticked ({done}/{total}) at {head}"
         return None, (f"{done} of {total} tasks ticked at its head" if total and done < total else
                       "no commit since it began" if total else "no task list at its head")
     if not fresh:
         return None, "nothing committed"
-    place = place or f"{t['kit']['dir']}/places/{o.name}"
-    planned = gather.planned(f"{place}/openspec/changes/{o.name}", place)
-    if planned is None:
-        status = gather.run(["openspec", "status", "--change", o.name, "--json"], place)
-        try:
-            planned = bool(json.loads(status).get("isPlanningComplete")) if status else False
-        except (ValueError, AttributeError):
-            planned = False
-    return (f"unit/{o.name}@{head}", f"its change is committed at {head}") if planned else (None, "its planning not complete")
+    return (f"unit/{o.name}@{head}", f"its change is committed at {head}") if f.get("planned") else (None, "its planning not complete")
 
 
 @contextlib.contextmanager
@@ -4359,6 +4390,19 @@ def background(info):
     return pending, transcript.last_at(path), None
 
 
+def quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working):
+    """Whether a quiet agent is stuck (teams.4), and what it is doing as the wait says it: (True, "quiet for <n>
+    minutes") or (False, what it does). One waiting on background tasks of its own is never stuck. Else its clock
+    starts at its transcript's last record, or when the wait first saw it quiet when that can't be read (unread), and
+    never before the wait last saw it working; it is stuck once that clock reaches the limit."""
+    if pending:
+        return False, f"is waiting on {len(pending)} background task{'' if len(pending) == 1 else 's'} of its own"
+    quiet = now - max(x for x in ((seen_quiet if unread or not last else last), seen_working) if x)
+    if quiet >= stuck:
+        return True, f"quiet for {minutes(quiet)}"
+    return False, f"has been quiet for {minutes(quiet)}, under the limit of {minutes(stuck)}"
+
+
 def minutes(td):
     m = max(0, int(td.total_seconds() // 60))
     return f"{m} minute{'' if m == 1 else 's'}"
@@ -4456,17 +4500,11 @@ def stage_wait(fleet, a):
             else:
                 seen_quiet = seen_quiet or now
                 pending, last, unread = background(info)
-                if pending:
-                    doing = f"is waiting on {len(pending)} background task{'' if len(pending) == 1 else 's'} of its own"
-                else:
-                    # The clock starts at the transcript's last record, or when this wait first saw the agent quiet when
-                    # that can't be read, and never before this wait last saw it working.
-                    quiet = now - max(x for x in ((seen_quiet if unread or not last else last), seen_working) if x)
-                    if quiet >= stuck:
-                        print(f"{agent} is stuck in {o.phrase()}: quiet for {minutes(quiet)}, with {missing} and nothing it needs said"
-                              + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
-                        return
-                    doing = f"has been quiet for {minutes(quiet)}, under the limit of {minutes(stuck)}"
+                is_stuck, doing = quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working)
+                if is_stuck:
+                    print(f"{agent} is stuck in {o.phrase()}: {doing}, with {missing} and nothing it needs said"
+                          + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
+                    return
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 print(f"{o.phrase()} is still running after the wait's {a.timeout} ms: {agent} {doing}; nothing is recorded yet")
