@@ -13,7 +13,7 @@
 
 ## 3. The briefs say so
 
-- [x] 3.1 The planner's brief and the card discipline have the planner post what `crew plan card` prints, upload its picture, link no session but for more than fifteen new units, and answer through `crew plan answer` or `crew plan approve --clear` (design: *The briefs*; Task notes 3.1; `briefs.9`, `tests.6`).
+- [x] 3.1 The planner's brief and the card discipline have the planner post what `crew plan card` prints, upload its picture, carry no artifact but its picture and its text, link no session but for more than fifteen new units, and answer through `crew plan answer` or `crew plan approve --clear` (design: *The briefs*; Task notes 3.1; `briefs.9`, `tests.6`).
 
 ## 4. Tests
 

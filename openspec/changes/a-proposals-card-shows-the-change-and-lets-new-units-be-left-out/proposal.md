@@ -11,7 +11,7 @@ A proposal is where the user first meets a unit: the planner adds units inside i
 - **An approval can leave units out.** `crew plan approve <n> --clear <unit>...` applies the proposal without each cleared unit's commands (its `unit add` or `unit move`, and any command that names only cleared units) in one commit, and records the cleared units on the proposal. A command that stays and names a cleared unit (an order against it, an `After` on it) refuses the whole approval, with nothing changed, so the planner writes the proposal again without the unit. A cleared unit from the queue stays in the queue; a cleared new unit is never made.
 - **crew gathers a card's answers, split or not.** `crew plan answer <n> <question> <answer>` records one question's answer as the planner reads it, from the card or from a card the user split off it, and applies the approval only once it holds the approve question's answer and every unit question's. A note given beside an approval does not hold the approval: crew applies it, then prints the note to the planner as the user's word, to propose whatever it asks as a new proposal.
 - **crew checks the card's form.** crew's card hook takes a proposal's card as an approval, or as a grouped card whose first question approves and whose other questions are the proposal's new units, each exactly once, and refuses any other form, a words question among them.
-- **The briefs say so.** The planner's brief and the card discipline have the planner post what `crew plan card` prints, upload the picture, and answer through `crew plan answer`.
+- **The briefs say so.** The planner's brief and the card discipline have the planner post what `crew plan card` prints, upload the picture, and answer through `crew plan answer`. The card discipline's rule that a card carries an artifact only for a picture or a document's Markdown names the proposal's picture and its text, which stays plain monospace text so it reads on the phone without wrapping.
 - README, the crew skill and `crew`'s usage header say all of it (`docs.2`).
 
 ## Capabilities
@@ -23,12 +23,13 @@ None.
 ### Modified Capabilities
 
 - `plan-proposals`: approval with cleared units; new requirements for the card drawn from the plan and the proposal, for the answers gathered from a card and its splits, and for a note beside an approval.
-- `rail-cards`: a proposal's card becomes the drawn approval with a choice per new unit, links no session unless it holds more than fifteen new units, and crew refuses a proposal's card in any other form; the requirements on a card's link, its words and the kinds no row's card takes say the proposal's exception.
+- `rail-cards`: a proposal's card becomes the drawn approval with a choice per new unit, links no session unless it holds more than fifteen new units, and crew refuses a proposal's card in any other form; the requirements on a card's link, its words, its artifacts and the kinds no row's card takes say the proposal's exception.
 
 ## Impact
 
 - The planner's brief and the card discipline every owner carries, at each agent's next fresh start. Open proposal cards posted before this lands stay as they are; a new card is posted only for a proposal opened after.
 - `crew plan approve <n>` with no `--clear` behaves as today.
+- The `rail-cards` delta modifies the requirement on a card's artifacts that `an-image-on-a-card-is-uploaded` adds, so that change is archived before this one.
 - `crew plan answer` keeps a proposal's gathered answers on the planner's host under `~/.local/state/crew/cards/<label>/proposal/<n>/`, beside the card's session files, until the approval or the decline; nothing of it reaches the flywheel's branch but the approval itself (`state.2`, `state.4`).
 - The proposal record gains a `Cleared` field, one per cleared unit, written only by an approval.
 - Nothing is added to devenv and nothing outside the standard library is imported (`code.1`).
