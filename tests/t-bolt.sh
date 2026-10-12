@@ -1,5 +1,6 @@
-# crew bolt new|give|order|drop|land: give makes bolt/<bolt> from main and <kit>/bolts/<bolt> on the team's
-# host, and every refusal the bolt-plan spec names.
+# crew bolt new|give|order|drop|land wired through the command: give makes bolt/<bolt> from main and
+# <kit>/bolts/<bolt> on the team's host, land and drop remove them, and the commits the writes make. What new, order
+# and drop do to the plan, and their refusals there, are logic cases (tests/py/test_bolt_commands.py).
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -20,16 +21,7 @@ crew bolt new apex-zones "Each install's apex is its own zone." --repo switchboa
 crew bolt new board-builds "A board builds." --repo breadboard-kit >/dev/null
 eq "$(plan -t Bolt -P Bolt)" $'tenant-environments\napex-zones\nconsole-pages\nboard-builds'
 eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Source)" "books/switchboard-kit/src/account-onboarding.md"
-expect_fail "wldn/main already has bolt console-pages" crew bolt new console-pages "again" --repo switchboard-kit
-expect_fail "no team builds rocs-kit" crew bolt new rocs "x" --repo rocs-kit
 ok "bolt new adds bolts in order"
-
-expect_ok crew bolt order console-pages --first
-expect_ok crew bolt order tenant-environments --before apex-zones
-eq "$(plan -t Bolt -P Bolt)" $'console-pages\ntenant-environments\napex-zones\nboard-builds'
-crew bolt order console-pages --last >/dev/null
-eq "$(plan -t Bolt -P Bolt)" $'tenant-environments\napex-zones\nboard-builds\nconsole-pages'
-ok "bolt order moves a bolt"
 
 expect_fail "bolt board-builds is in breadboard-kit, and swb-1 builds switchboard-kit" crew bolt give swb-1 board-builds
 expect_ok crew bolt give swb-1
@@ -59,7 +51,7 @@ grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land t
 has "$out" "$kd/bolts/tenant-environments and bolt/tenant-environments are removed; the branch was at"
 [[ ! -d $kd/bolts/tenant-environments ]] || fail "the bolt's worktree is still there"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
-eq "$(plan -t Unit -c)" "0"; eq "$(plan -t Bolt -P Bolt)" $'apex-zones\nboard-builds\nconsole-pages'
+eq "$(plan -t Unit -c)" "0"; eq "$(plan -t Bolt -P Bolt)" $'apex-zones\nconsole-pages\nboard-builds'
 ok "land is refused until every unit has landed, then removes the bolt, its units and its worktree, and tells its conductor to close their cards"
 
 expect_ok crew bolt give swb-1
@@ -70,16 +62,10 @@ ok "after landing, the team is given its next planned bolt with no edit and no d
 crew bolt give brd-1 >/dev/null
 expect_ok crew bolt drop board-builds "the board ships as is"
 eq "$(git --git-dir "$ws" log -1 --format=%b wldn/main | head -1)" "the board ships as is"
-crew unit add a-console-page "A page lists them." --bolt console-pages >/dev/null
-crew unit add a-console-filter "It filters them." --bolt console-pages --after a-console-page >/dev/null
-expect_ok crew bolt drop console-pages "folded into the portal" --requeue
-eq "$(plan -t Unit -P Unit)" $'a-console-page\na-console-filter'
-eq "$(plan -t Unit -e "Bolt != ''" -c)" "0"; eq "$(plan -t Unit -e "After != ''" -c)" "0"
-eq "$(plan -t Bolt -P Bolt)" "apex-zones"
-ok "drop removes a bolt and its units, or with --requeue queues them"
+ok "drop removes a bolt, with its reason in the commit"
 
 # A dropped bolt's worktrees go from its team's host at once: the bolt's own, and its units' and fixes' places,
-# branches and slots. Requeuing is refused while a unit of the bolt has a worktree, since a queued unit has none.
+# branches and slots.
 clone WilldanGroup/willdan-blueprints "$(space chuck-herdr-alpha willdan)/willdan-blueprints/main"
 box=chuck-herdr-alpha
 crew bolt new one-cfn-lint-pass "One cfn-lint pass." --repo switchboard-kit >/dev/null
@@ -89,10 +75,6 @@ crew bolt give swb-2 one-cfn-lint-pass >/dev/null 2>&1
 crew unit run lint-once construct >/dev/null
 crew fix swb-2 lint-config "The lint config names no rules." >/dev/null
 fx=fix/one-cfn-lint-pass/lint-config
-tip=$(git --git-dir "$ws" rev-parse wldn/main)
-expect_fail "unit lint-once has a worktree at $kd/places/lint-once, and a queued unit has none" crew bolt drop one-cfn-lint-pass "x" --requeue
-eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$tip"
-ok "--requeue is refused while a unit of the bolt has a worktree, and the plan is unchanged"
 
 expect_ok crew bolt drop one-cfn-lint-pass "the deploy lints once already"
 has "$out" "swb-2-unit-1 is free: lint-once was dropped from the plan"
@@ -110,10 +92,6 @@ crew bolt new lint-twice "Lint twice." --repo switchboard-kit >/dev/null
 crew unit add lint-again "Lint again." --bolt lint-twice >/dev/null
 crew bolt give swb-2 lint-twice >/dev/null 2>&1
 echo $box > "$T/down"
-tip=$(git --git-dir "$ws" rev-parse wldn/main)
-expect_fail "cannot tell unit lint-again's stage: " crew bolt drop lint-twice "x" --requeue
-eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$tip"
-ok "--requeue is refused while the stage of a unit of the bolt can't be told, and the plan is unchanged"
 
 expect_ok crew bolt drop lint-twice "linting once is enough"
 has "$out" "swb-2's host did not answer, so its worktrees for bolt lint-twice are not removed yet: the team's next read removes them"

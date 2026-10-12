@@ -72,6 +72,9 @@ FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "revi
          "hosts": {}}
 
 
+KITS = ("switchboard-kit", "breadboard-kit")
+
+
 def plan_text(bolts=(), units=()):
     """plan.rec text with its descriptors: bolts as (name, repo, team or None), units as (name, repo, bolt or None,
     [after...]), in order."""
@@ -111,7 +114,8 @@ def known(w, stages=None, taken=(), n=None):
 
         def of(self, name):
             st = (stages or {}).get(name, "ready")
-            return {"stage": st, "worktree": st not in ("ready", "waiting"), "open": [], "head": None}
+            return {"stage": st, "worktree": f"/kit/places/{name}" if st not in ("ready", "waiting", "unknown") else None,
+                    "open": [], "head": None, "why": "its host did not answer" if st == "unknown" else None}
 
         def stages(self, p, bolts):
             return self
@@ -128,6 +132,7 @@ def known(w, stages=None, taken=(), n=None):
             return next((u.name() for u in p.units_of(bolt) if self.of(u.name())["stage"] not in ("merged", "landed")), None)
 
         def kit(self, kit):
+            kit in KITS or plan.fail(f"no team of {self.label} builds {kit}, so no plan holds its work")
             return self.label
     return Known(FLEET, "wldn", w, n)
 
