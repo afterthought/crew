@@ -7,7 +7,7 @@
 #
 #   tests/suite                 every task
 #   tests/suite logic           the logic tier alone, as a coder runs it while iterating (tests.12)
-#   tests/suite fix docs        those tasks (fix, t-fix and t-fix.sh all name tests:t-fix)
+#   tests/suite slot docs       those tasks (slot, t-slot and t-slot.sh all name tests:t-slot)
 #   tests/suite --affected      the tasks whose inputs differ from the merge-base with main, uncommitted edits
 #                               included; the rest are not run
 #   tests/suite --force         every selected task run, none replayed

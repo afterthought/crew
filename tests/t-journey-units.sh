@@ -304,6 +304,13 @@ expect_ok crew fix swb-1 tidy "The banner flickers ZQXS."
 has "$out" "swb-1-unit-1 has $fb: code, in $fp"
 eq "$(prompt_to swb-1-unit-1)" "'Fix: The banner flickers ZQXS.'"
 eq "$(field $box fix.start On)" "$fb bolt/tenant-environments agent/swb-1-unit-1"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$fb")" "bolt/tenant-environments"
+eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $fp"
+plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
+expect_ok crew fix swb-1 tidy "It flickers still."
+has "$out" "swb-1-unit-1 has $fb: code, in $fp"
+has "$(cat "$slots")" "unit-1 fix $fb $fp"
+eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$plan_tip"
 echo steady > "$fp/banner"; commit_all "$fp" "fix: the banner holds still"
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered fix $fb: its branch is at $(short $fb)"
@@ -314,7 +321,7 @@ eq "$(prompt_to swb-1-unit-1)" "'Merge $fb into bolt/tenant-environments: wt mer
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered merge of $fb: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 [[ $(record_of $box) != *ZQXS* ]] || fail "a fix's words are in the run record"
-ok "a fix takes a slot in its own place, ends at its commit, merges as a stage does and ends once the bolt holds it"
+ok "a fix takes a slot in its own place from the bolt and writes no plan, starts again there, ends at its commit, merges as a stage does and ends once the bolt holds it"
 
 expect_ok crew prove swb-1
 has "$out" "swb-1-ops is asked to prove bolt/tenant-environments"
@@ -366,12 +373,41 @@ eq "$(awk '{print $1, $3}' "$slots")" "unit-2 b"
 rm "$fp/note"
 ok "a moved unit's branch is rebased onto its new bolt; the team's reads free the slot it left and a merged fix's, keeping a merged place holding a stray file, and crew unit free a dropped unit's once its agent settles"
 
+# The landing's rebase onto main conflicts on README.md, and a fix carries the bolt onto main: the bolt's commits
+# replayed there with the conflict resolved. crew moves the bolt's branch to the fix's head and runs the kit's
+# post-merge hooks on it, approved on the box.
+echo "# switchboard-kit, the bolt's" > "$bolt/README.md"; commit_all "$bolt" "docs: the bolt's title"
+mkdir -p "$k/.config"; printf '[post-merge]\nmark = "echo {{ target }} $(git rev-parse HEAD) > %s/hook-ran"\n' "$T" > "$k/.config/wt.toml"
+echo "# switchboard-kit, main's" > "$k/README.md"; commit_all "$k" "docs: main's title, and a post-merge hook"
+as $box bash -c 'cd "$1" && wt config approvals add --yes >/dev/null 2>&1' _ "$k" || fail "wt config approvals add failed"
+n=$(git -C "$k" rev-list --count main..bolt/tenant-environments)
+cm=fix/tenant-environments/carry-main cmp=$kd/places/fix-tenant-environments--carry-main
+export CREW_AGENT=swb-1-conductor
+expect_ok crew fix swb-1 carry-main "Carry the bolt onto main: the landing stopped on README.md."
+has "$out" "$fp and $fb are removed; the branch was at"
+git -C "$cmp" rebase main >/dev/null 2>&1 && fail "the replay did not stop on the title"
+echo "# switchboard-kit, main's and the bolt's" > "$cmp/README.md"; git -C "$cmp" add README.md
+GIT_EDITOR=true GIT_COMMITTER_DATE=$(ago -1) git -C "$cmp" rebase --continue >/dev/null 2>&1 || fail "the replay did not finish"
+old=$(git -C "$k" rev-parse bolt/tenant-environments) new=$(git -C "$k" rev-parse "$cm")
+: > "$CREW_TEST_LOG"
+expect_ok crew fix swb-1 carry-main --merge
+has "$out" "bolt/tenant-environments moved from ${old:0:7} to ${new:0:7}: $cm carries the bolt's $n commits onto main (1 changed by the resolution)"
+has "$out" "the bolt's checks are running on ${new:0:7}; prove the bolt again before it lands"
+eq "$(git -C "$bolt" rev-parse HEAD)" "$new"
+until_ok test -s "$T/hook-ran" || fail "the post-merge hook never ran"
+eq "$(cat "$T/hook-ran")" "bolt/tenant-environments $new"
+has "$(field $box fix.carry From "$cm")" "agent/swb-1-unit-"
+grep -q "agent prompt .* 'Merge $cm" "$CREW_TEST_LOG" && fail "a carrying fix was sent a merge prompt"
+has "$out" "is free: $cm has merged into its bolt"
+has "$out" "$cmp and $cm are removed; the branch was at"
+ok "a fix that carries the bolt onto main becomes its head, with no merge stage, and the kit's post-merge hooks run on it; the read after frees it, and removes a merged place once its stray file goes"
+
 # The bolt lands once its units have: b and e are dropped, a's change reaches main, and a batch has held it.
 unset CREW_AGENT
 expect_fail "unit a has not landed on main: it is merged" crew bolt land tenant-environments
 by_hand 'p.remove(p.unit("e"))'
 expect_ok crew unit drop b "folded into a"
-has "$out" "$fp and $fb are removed; the branch was at"
+has "$out" "swb-1-unit-2 is free: b was dropped from the plan"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1"
 git -C "$k" merge -q --ff-only bolt/tenant-environments
 as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act review.batch --field Batch=1 \
@@ -384,7 +420,7 @@ grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land t
   "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
-ok "a drop frees the last slot and closes the units workspace, and the next read removes a place once its stray file goes; the bolt lands once every unit has, removing its worktree and what is over, and its conductor is told which cards to close"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, removing its worktree and what is over, and its conductor is told which cards to close"
 
 expect_ok crew bolt drop console-pages "the portal lists them"
 has "$out" "$kd/bolts/console-pages and bolt/console-pages are removed; the branch was at"
