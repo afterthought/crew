@@ -1,5 +1,6 @@
 # A unit's stages from the bolt's give, through the crew command on the stubs (tests.11, record 0022): give makes the
-# bolt's worktree; each stage of a unit takes a slot, starts a fresh agent in the unit's place and sends its prompt;
+# bolt's worktree, ready through the kit's declaration as every worktree crew makes is (plan.17), a setup that fails
+# refusing the stage until a second run sets the place up; each stage of a unit takes a slot, starts a fresh agent in the unit's place and sends its prompt;
 # the waits end each stage at its deliverable and record it; the team's read records an end nobody waited on, fetching
 # and gathering once; verify's report ends it; and code's prompt names an unmerged unit's overlapping Touches. The
 # units journey's other parts: t-journey-slots, t-journey-merge, t-journey-prompts, t-journey-fix, t-journey-land.
@@ -26,9 +27,9 @@ expect_ok crew bolt give swb-1
 has "$out" "swb-1 holds tenant-environments: bolt/tenant-environments at $bolt on $box"
 eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team)" "swb-1"
 eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
-eq "$(cat "$bolt/.prepared")" "$k"
+eq "$(ready "$bolt")" 1
 eq "$(field mac-studio bolt.give On) $(field mac-studio bolt.give Commit)" "bolt/tenant-environments team/swb-1 WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
-ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give makes the bolt's branch from main and its prepared worktree on the team's host"
+ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give makes the bolt's branch from main and its worktree on the team's host, its toolchain printed and moon set up inside it"
 
 # The conductor runs the stages on the team's host.
 export CREW_AGENT=swb-1-conductor
@@ -36,14 +37,14 @@ expect_ok crew unit run a construct
 has "$out" "swb-1-unit-1 has a: construct, in $kd/places/a"
 eq "$(cat "$slots")" "unit-1 unit a $kd/places/a"
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "bolt/tenant-environments"
-eq "$(cat "$kd/places/a/.prepared")" "$k"
+eq "$(ready "$kd/places/a")" 1
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort high | swb-1-unit-1 | $kd/places/a"
 eq "$(prompt_to swb-1-unit-1)" "'/opsx:propose a Unit a. Sources: books/x.md; switchboard-kit:docs/y.md.'"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1,swb-1 units"
 eq "$(field $box stage.start On stage/a/construct)" "stage/a/construct unit/a agent/swb-1-unit-1"
 eq "$(field $box stage.start By stage/a/construct)" "swb-1-conductor"
 has "$(cat "$stages")" "unit-1 a construct "
-ok "construct takes a free slot, makes the unit's prepared place from the bolt, starts a fresh agent sent its prompt in the units workspace, and records the start it owes an end"
+ok "construct takes a free slot, makes the unit's place from the bolt ready through the kit's declaration, starts a fresh agent sent its prompt in the units workspace, and records the start it owes an end"
 
 expect_fail "unit b is waiting: it comes after a, whose change is not committed yet" crew unit run b construct
 eq "$(wc -l < "$slots" | tr -d ' ')" "1"
@@ -66,7 +67,15 @@ eq "$(cat "$stages")" ""
 ok "a wait reads the stage still running while its agent works, then records its end with what it delivered"
 
 echo a > "$kd/places/a/a-work"; commit_all "$kd/places/a" "feat(a): its own work"; tick a 1.1
+touch "$T/moon-fails"
+expect_fail "$kd/places/b is made but not ready: moon setup exited 1" crew unit run b construct
+has "$out" "stand-in moon: setup failed"; has "$out" "Running the command again sets it up."
+eq "$(wc -l < "$slots" | tr -d ' ')" "1"
+rm "$T/moon-fails"
+ok "a setup that fails refuses the stage in the tool's words, with the place made and no slot taken"
+
 expect_ok crew unit run b construct
+eq "$(ready "$kd/places/b")" 2
 has "$out" "swb-1-unit-2 has b: construct, in $kd/places/b"
 git -C "$k" merge-base --is-ancestor unit/a unit/b || fail "b's place does not hold a's work"
 eq "$(field $box stage.start Took stage/b/construct)" "a@$(git -C "$k" rev-parse --short=7 unit/a)"

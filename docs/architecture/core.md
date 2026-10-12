@@ -4,7 +4,7 @@ The rules every change to crew holds to, wherever it is made. A rule that binds 
 
 | Page | Loads for |
 |---|---|
-| `plan.md` | `plugin/lib/plan.py`, `plugin/lib/gather.py`: the plan, proposals, stages and every write to a flywheel's branch |
+| `plan.md` | `plugin/lib/plan.py`, `plugin/lib/gather.py`, `plugin/lib/kit.py`: the plan, proposals, stages, worktrees and every write to a flywheel's branch |
 | `teams.md` | `plugin/bin/crew`, `plugin/bin/crew-role`, `plugin/lib/crew.py`: teams, slots, stages, panes, tells |
 | `record.md` | `plugin/lib/record.py`: the run record |
 | `signals.md` | `plugin/lib/transcript.py` and the signal commands in `plan.py` |

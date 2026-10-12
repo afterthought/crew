@@ -32,10 +32,12 @@
 #   crew unit run <unit> construct|code|verify|settle|merge ["<words>"]
 #                                      start the unit's stage in its slot, a fresh agent at that stage's effort:
 #                                      construct writes its OpenSpec change, once each unit it comes after has
-#                                      committed its own, its new place taking their work; code builds it as soon
-#                                      as it is committed, its prompt naming an overlap of Touches; verify checks
-#                                      it, naming the paths it changed and did not declare; settle takes what
-#                                      reached a verified unit; merge merges it into the bolt once each unit it
+#                                      committed its own, its new place taking their work, made ready through the
+#                                      kit's .config/sluice.toml (its toolchain, then its runner's setup); code
+#                                      builds it as soon as it is committed, its prompt naming an overlap of
+#                                      Touches; verify checks it, naming the paths it changed and did not declare;
+#                                      settle takes what reached a verified unit; merge merges it into the bolt
+#                                      once each unit it
 #                                      comes after has merged, with wt merge, or wt submit where the kit opts into
 #                                      sluice. Construct run again on a planned unit marks it amended: code waits
 #                                      until that construct has committed. An amendment to a unit's intent runs

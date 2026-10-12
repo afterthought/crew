@@ -81,6 +81,7 @@ LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
 import crew  # noqa: E402
 import gather  # noqa: E402
+import kit  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
@@ -1165,23 +1166,42 @@ def host_run(fleet, host, script, *args):
 
 
 PLACE = r"""set -e
-main=$1 path=$2 branch=$3 base=$4 track=$5
+main=$1 path=$2 branch=$3 base=$4 track=$5 file=$6
 cd "$main"
-[ -d "$path" ] && exit 0
-if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then git worktree add -q "$path" "$branch"
-elif [ "$track" = track ]; then git worktree add -q --track -b "$branch" "$path" "$base"
-else git worktree add -q -b "$branch" "$path" "$base"; fi
-# A kit that needs a new worktree prepared (its dependencies installed) gives its devenv a crew-prepare script,
-# run from the main checkout's profile, since a worktree has no devenv of its own.
-p="$main/.devenv/profile/bin"
-if [ -x "$p/crew-prepare" ]; then cd "$path" && KIT="$main" PATH="$p:$PATH" crew-prepare >/dev/null; fi
+if [ ! -d "$path" ]; then
+  if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then git worktree add -q "$path" "$branch"
+  elif [ "$track" = track ]; then git worktree add -q --track -b "$branch" "$path" "$base"
+  else git worktree add -q -b "$branch" "$path" "$base"; fi
+fi
+# Where the worktree keeps what crew runs for it, and what its kit declares of its toolchain and tests (kit.py).
+echo "GITDIR=$(git -C "$path" rev-parse --absolute-git-dir)"
+if [ -f "$path/$file" ]; then echo "DECLARATION=$(base64 < "$path/$file" | tr -d '\n')"; else echo "DECLARATION=-"; fi
+"""
+
+# A step of a worktree's readying, run in it with only the variables kit.KEEP names and every LC_* the host has, and
+# stdin closed; with an output file, its stdout kept there.
+IN_PLACE = r"""path=$1 out=$2 keep=$3; shift 3
+cd "$path" || exit 2
+env=()
+for v in $keep $(compgen -e | grep '^LC_'); do if val=$(printenv "$v"); then env+=("$v=$val"); fi; done
+if [ -n "$out" ]; then mkdir -p "$(dirname "$out")" || exit 2; exec env -i "${env[@]}" "$@" </dev/null >"$out"; fi
+exec env -i "${env[@]}" "$@" </dev/null
 """
 
 
 def make_place(fleet, t, path, branch, base, track=False):
-    """A worktree at a fixed path, made with git itself on the team's host and prepared as the kit says. The command's
-    next step reads the kit again."""
-    host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "")
+    """A worktree at a fixed path, made with git itself on the team's host, then made ready through its kit's
+    declaration (plan.17), whether it is new or was already there: the declared toolchain, its output kept in the
+    worktree's git directory, and the runner's setup inside it. A step that fails refuses the command with the
+    worktree made. The command's next step reads the kit again."""
+    said = host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "", kit.DECLARATION)
+    gitdir, text = kit.place_said(said)
+    for what, argv, out in kit.readying(kit.declared(text, f"{path}/{kit.DECLARATION}"), f"{gitdir}/crew/toolchain.sh"):
+        r = crew.on_machine(fleet, t["machine"], ["bash", "-c", IN_PLACE, "crew", path, out or "", " ".join(kit.KEEP), *argv])
+        r.returncode == 0 or fail(kit.step_failed(path, what, r.returncode, r.stderr + r.stdout))
+        if what == "moon --version":
+            why = kit.moon_floor(r.stdout)
+            not why or fail(f"{path} is made but not ready: {why}")
     READ.drop_kit(t["machine"], t["kit"]["main"])
 
 
