@@ -12,4 +12,4 @@
 
 ## 3. The docs say so
 
-- [ ] 3.1 README and the crew skill say the rail's card line names the open card's id, and what happens to a lost card, and `tests/suite --affected` ends with "0 failed" (Task notes 3.1; `docs.2`).
+- [x] 3.1 README and the crew skill say the rail's card line names the open card's id, and what happens to a lost card, and `tests/suite --affected` ends with "0 failed" (Task notes 3.1; `docs.2`).
