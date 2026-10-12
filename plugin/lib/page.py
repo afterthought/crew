@@ -96,12 +96,19 @@ def describe(fleet, label, repo, tip, d, pl=None, sv=None):
     proposals, items, moves = recs("proposals.rec", "Proposal", "Proposal"), recs("agenda.rec", "Item", "Item"), recs("moves.rec", "Move", "Signal")
     if sv is None:
         sv = plan.survey(fleet, [(b.get("Team"), b.name()) for b in pl.bolts() if b.get("Team")])
-    st = plan.Stages(fleet, pl, sv)
+    labelled(d, pl, plan.Stages(fleet, pl, sv), proposals, items, moves, lambda name: plan.signal_text(fleet, label, name)[0])
+    return {h: f"its kits: {v['error']}" for h, v in sv.items() if not v["ok"]}
+
+
+def labelled(d, pl, st, proposals, items, moves, assertion_of):
+    """Each node of the page's data labelled from the state read: the plan (pl), each unit's and bolt's stage (st), the
+    proposals, agenda items and moves by their keys, and a signal's assertion (assertion_of(id), None for one no home
+    holds); a node the state no longer holds is labelled from its entries (from_entries)."""
     entries = list(d["entries"].values())
     for n in d["nodes"]:
         kind, name, n["facts"] = n["kind"], n["name"], []
         if kind == "signals":
-            assertion = plan.signal_text(fleet, label, name)[0]
+            assertion = assertion_of(name)
             if assertion is None:
                 from_entries(n, entries)
                 continue
@@ -125,7 +132,6 @@ def describe(fleet, label, repo, tip, d, pl=None, sv=None):
             n.update(label=b.get("Goal"), status=BOLT.get(state), team=b.get("Team"), facts=[x for x in (b.get("Team"), state) if x])
         else:
             from_entries(n, entries)
-    return {h: f"its kits: {v['error']}" for h, v in sv.items() if not v["ok"]}
 
 
 # ------------------------------------------------------------------------------------------------- the file

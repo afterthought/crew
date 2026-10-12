@@ -5015,7 +5015,21 @@ def bolts_view(fleet, a):
     errors = {}
     found = plans(fleet, labels, errors)
     held = [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team") and a.bolt in (None, b.name())]
-    sv = survey(fleet, held)
+    data = bolts_data(fleet, labels, found, survey(fleet, held), errors, a.bolt)
+    if a.bolt and not any(b for p in data["partitions"] for pl in p["plans"] for b in pl["bolts"]):
+        fail(f"no bolt {a.bolt} in the plans of " + ", ".join(labels))
+    if a.json:
+        print(json.dumps(data, indent=1))
+        sys.exit(1 if errors else 0)
+    print(bolts_text(data))
+    if errors:
+        sys.exit("\n".join(errors.values()))
+
+
+def bolts_data(fleet, labels, found, sv, errors, bolt=None):
+    """What crew bolts shows, from the plans read (found) and the survey of the hosts holding their bolts (sv): each
+    partition's plans, each bolt with its team, host, state, units with their stages read from the kits, and fixes,
+    and the queue; the hosts that did not answer and the plans that could not be read. With bolt, that bolt alone."""
     data = {"partitions": [], "unreachable": {h: v["error"] for h, v in sv.items() if not v["ok"]}, "unread": errors}
     for l in labels:
         part = {"label": l, "plans": []}
@@ -5028,7 +5042,7 @@ def bolts_view(fleet, a):
             st = Stages(fleet, plan, sv)
             bolts = []
             for b in plan.bolts():
-                if a.bolt not in (None, b.name()):
+                if bolt not in (None, b.name()):
                     continue
                 t = fleet["teams"].get(b.get("Team"))
                 k, _ = st.kit(b) if t else (None, None)
@@ -5037,14 +5051,15 @@ def bolts_view(fleet, a):
                 fixes = [dict(fix=f["fix"], worktree=f["path"], merged=f["merged"]) for f in (k["fixes"] if k else []) if f["bolt"] == b.name()]
                 bolts.append(dict(bolt=b.name(), repo=b.get("Repo"), goal=b.get("Goal"), sources=b.all("Source"), team=b.get("Team"),
                                   host=t["machine"] if t else None, state=st.bolt_state(b), units=units, fixes=fixes))
-            queue = [] if a.bolt else [dict(unit=u.name(), repo=u.get("Repo"), stage="queued", sources=u.all("Source")) for u in plan.queue()]
+            queue = [] if bolt else [dict(unit=u.name(), repo=u.get("Repo"), stage="queued", sources=u.all("Source")) for u in plan.queue()]
             part["plans"].append({"repo": repo, "plan": tip, "bolts": bolts, "queue": queue})
         data["partitions"].append(part)
-    if a.bolt and not any(b for p in data["partitions"] for pl in p["plans"] for b in pl["bolts"]):
-        fail(f"no bolt {a.bolt} in the plans of " + ", ".join(labels))
-    if a.json:
-        print(json.dumps(data, indent=1))
-        sys.exit(1 if errors else 0)
+    return data
+
+
+def bolts_text(data):
+    """crew bolts as text: each plan's branch and tip, each bolt with its repo, team and state and each unit with its
+    stage, tasks and place, each fix, the queue by repo with each unit's sources, and each host that did not answer."""
     lines = []
     for p in data["partitions"]:
         for pl in p["plans"]:
@@ -5068,9 +5083,7 @@ def bolts_view(fleet, a):
                     lines.append(f"  {u['unit']:<40} {'queued':<12} {', '.join(u['sources'])}".rstrip())
     for h, why in data["unreachable"].items():
         lines.append(f"{h} did not answer ({why}): the stages of its bolts are unknown")
-    print("\n".join(lines))
-    if errors:
-        sys.exit("\n".join(errors.values()))
+    return "\n".join(lines)
 
 
 # ------------------------------------------------------------------------------------------------- batches

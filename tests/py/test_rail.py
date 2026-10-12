@@ -206,3 +206,29 @@ class TestSweep:
     def test_what_the_rail_cannot_judge_is_blind_and_nothing_is_taken_for_closed(self):
         assert plan.sweep_judgment("wldn", {"batch/1"}, [], {"mac-studio": "x"}, {"closed": {"batch/1"}}, ["v3"]) == (
             {"live": ["batch/1"], "blind": ["batch/", "verify/v3/"]})
+
+
+class TestBolts:
+    def data(self, sv=None, bolt=None):
+        return plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", "abcdef1" + "0" * 33, the_plan())], sv or survey(), {}, bolt)
+
+    def test_each_units_stage_is_read_from_its_kit_and_a_planned_bolt_from_the_plan_alone(self):
+        b = {x["bolt"]: x for x in self.data()["partitions"][0]["plans"][0]["bolts"]}
+        assert {u["unit"]: u["stage"] for u in b["tenant-environments"]["units"]} == {"early": "planned", "checked": "verify", "stale": "verify"}
+        assert (b["tenant-environments"]["team"], b["tenant-environments"]["host"], b["tenant-environments"]["state"]) == ("swb-1", BOX, "active")
+        assert b["apex-zones"]["state"] == "active" and b["apex-zones"]["units"] == [dict(unit="zone-one", after=[], sources=[], stage="merged", tasks=None, worktree=None)]
+
+    def test_the_text_names_the_branch_each_bolt_and_each_units_stage_and_place(self):
+        out = plan.bolts_text(self.data())
+        assert out.splitlines()[0] == "wldn/main abcdef1  WilldanGroup/crew-state"
+        assert f"tenant-environments  switchboard-kit  swb-1 @ {BOX}  active" in out
+        assert "  checked                                  verify 2/2   places/checked" in out
+
+    def test_an_unreachable_hosts_bolts_read_unknown_and_the_host_is_named(self):
+        d = self.data(sv=survey(ok=False))
+        assert {u["stage"] for b in d["partitions"][0]["plans"][0]["bolts"] for u in b["units"]} == {"unknown"}
+        assert plan.bolts_text(d).splitlines()[-1] == f"{BOX} did not answer (ssh: connect to host timed out): the stages of its bolts are unknown"
+
+    def test_a_plan_not_started_says_how_to_start_it(self):
+        d = plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", None, None)], {}, {})
+        assert plan.bolts_text(d) == "wldn/main  WilldanGroup/crew-state  not started: crew state init wldn"
