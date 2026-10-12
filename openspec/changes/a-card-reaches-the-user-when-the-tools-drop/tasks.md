@@ -20,4 +20,4 @@
 ## 4. The command's documentation
 
 - [x] 4.1 `plugin/bin/crew`'s usage, README and `plugin/skills/crew/SKILL.md` name the four commands together, and `tests/suite t-docs` ends with "0 failed" (`docs.2`).
-- [ ] 4.2 `tests/suite --affected` ends with "0 failed" (`tests.1`).
+- [x] 4.2 `tests/suite --affected` ends with "0 failed" (`tests.1`).
