@@ -415,44 +415,17 @@ def git(repo, *args, input=None, env=None, check=True):
 class Reading:
     """What one command has read on this host, kept for its later steps, so the command fetches each branch and reads
     each kit once however many steps it has (plan.12): the tip of each branch it fetched or pushed, and each kit's
-    answer by host. It lives in the folder CREW_READ names when that folder's host file names this host (bash crew
-    makes one for a command of several steps, shares it with the steps it starts on this host, and removes it when
-    the command ends), else in this process's memory. Inside fresh() nothing is served from it, so a wait looks again
-    each time; what is read there is still kept. A reading is never a service or state: it is gone with its command
-    (state.4)."""
+    answer by host, in this process's memory, every crew command being one process. Inside fresh() nothing is served
+    from it, so a wait looks again each time; what is read there is still kept. A reading is never a service or state:
+    it is gone with its command (state.4)."""
 
     def __init__(self):
-        self.memory, self.bypass, self.dir = {}, 0, False
-
-    def folder(self):
-        if self.dir is False:
-            d = os.environ.get("CREW_READ")
-            try:
-                mine = bool(d) and pathlib.Path(d, "host").read_text().strip() == crew.this_host()
-            except OSError:
-                mine = False
-            self.dir = pathlib.Path(d) if mine else None
-        return self.dir
+        self.memory, self.bypass = {}, 0
 
     def held(self, name):
-        d = self.folder()
-        if d is None:
-            return self.memory.get(name)
-        try:
-            return json.loads((d / name).read_text())
-        except (OSError, ValueError):
-            return None
+        return self.memory.get(name)
 
     def keep(self, name, value):
-        d = self.folder()
-        if d is not None:
-            try:  # a whole file or none: a step started meanwhile never reads half of one
-                tmp = d / f".{name}.{os.getpid()}"
-                tmp.write_text(json.dumps(value))
-                os.replace(tmp, d / name)
-                return
-            except OSError:
-                self.dir = None
         self.memory[name] = value
 
     @staticmethod
@@ -480,8 +453,8 @@ class Reading:
 
     @staticmethod
     def sweep():
-        """A reading a killed command left goes once it is a day old, as bash crew's own reading sweeps them: a command
-        that keeps its reading in memory sweeps them in its stead."""
+        """A reading folder that a killed command of an older crew left, when its steps were processes of their own,
+        goes once it is a day old."""
         root = pathlib.Path.home() / ".cache/crew/reads"
         try:
             old = [d for d in root.iterdir() if re.fullmatch(r".{8}", d.name) and d.is_dir() and time.time() - d.stat().st_mtime >= 86400]

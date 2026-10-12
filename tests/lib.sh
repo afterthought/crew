@@ -260,8 +260,8 @@ refs=$(cat)
 if [ -f "$CREW_TEST_ROOT/race.ref" ] && ! grep -q " $(cat "$CREW_TEST_ROOT/race.ref")\$" <<<"$refs"; then exit 0; fi
 if [ -f "$CREW_TEST_ROOT/race" ]; then
   cmd=$(cat "$CREW_TEST_ROOT/race"); rm "$CREW_TEST_ROOT/race"
-  # Another agent's command: it shares no reading with the command whose push it races.
-  (unset CREW_READ $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); cd /; eval "$cmd") >> "$CREW_TEST_ROOT/race.log" 2>&1
+  # Another agent's command, in a process of its own.
+  (unset $(env | sed -n 's/^\(GIT_[A-Z_]*\)=.*/\1/p'); cd /; eval "$cmd") >> "$CREW_TEST_ROOT/race.log" 2>&1
 fi
 exit 0
 HOOK
