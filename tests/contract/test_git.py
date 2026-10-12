@@ -34,3 +34,45 @@ def test_merge_tree_names_the_conflicting_paths_and_writes_no_ref(repo):
     assert lines[1] == "a"
     assert repo.git("for-each-ref") == refs
 
+
+def here():
+    import crew
+    return {}, {"machine": crew.this_host()}
+
+
+def test_commits_beyond_reads_each_commits_message_and_author_whole(repo):
+    """plan.commits_beyond, which carry_refusal judges by (plan.8): oldest first, a message of several lines whole."""
+    import plan
+    base = repo.commit("main", {"a": "1\n"})
+    repo.commit("feat: one\n\nWhy, over\ntwo lines.", {"a": "2\n"})
+    repo.commit("feat: two", {"b": "1\n"})
+    fleet, t = here()
+    got = plan.commits_beyond(fleet, t, str(repo.path), base, "HEAD")
+    assert [c["subject"] for c in got] == ["feat: one", "feat: two"]
+    assert got[0]["who"] == ("Crew Test", "test@crew.invalid", "feat: one\n\nWhy, over\ntwo lines.\n")
+    assert got[0]["short"] == got[0]["sha"][:7]
+
+
+def test_a_patch_id_holds_for_a_replay_and_changes_with_its_context(repo):
+    """plan.patch_ids, which changed_by_resolution counts by: a commit replayed onto the same lines keeps its patch id;
+    one replayed where main rewrote the lines around it gets another; an empty commit has none."""
+    import plan
+    twenty = "".join(f"{i}\n" for i in range(1, 21))
+    base = repo.commit("main", {"twenty": twenty})
+    repo.git("checkout", "-q", "-b", "bolt")
+    ten = repo.commit("feat: ten", {"twenty": twenty.replace("\n10\n", "\nten\n")})
+    empty = repo.commit("chore: empty")
+    repo.git("checkout", "-q", "-b", "same", base)
+    repo.git("cherry-pick", "--allow-empty", ten, empty)
+    same_ten, same_empty = repo.git("rev-parse", "HEAD~1"), repo.git("rev-parse", "HEAD")
+    repo.git("checkout", "-q", "-b", "moved", base)
+    around = "".join(f"main {i}\n" if i in (7, 8, 9, 11, 12, 13) else f"{i}\n" for i in range(1, 21))
+    repo.commit("docs: main's lines around ten", {"twenty": around})
+    moved_base = repo.git("rev-parse", "HEAD")
+    moved_ten = repo.commit("feat: ten", {"twenty": around.replace("\n10\n", "\nten\n")})
+    fleet, t = here()
+    ids = plan.patch_ids(fleet, t, str(repo.path), base, "bolt", "same")
+    assert ids[ten] == ids[same_ten]
+    assert empty not in ids and same_empty not in ids
+    moved = plan.patch_ids(fleet, t, str(repo.path), moved_base, "moved")
+    assert moved[moved_ten] != ids[ten]

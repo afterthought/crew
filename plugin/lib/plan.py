@@ -3528,23 +3528,36 @@ def carry_cmd(fleet, a):
     missing = [ref for ref, sha in heads.items() if not sha]
     not missing or fail(f"can't tell whether {a.fix} carries bolt/{a.bolt} onto main: {main} has no " + " and no ".join(missing))
     old, new, base = heads[f"bolt/{a.bolt}"], heads[a.fix], heads["main"]
-    no = lambda why: print(sh(CARRIES="no", WHY=why))
     rc, _ = kit_git(fleet, t, main, "merge-base", "--is-ancestor", old, new, ok=(0, 1))
-    if rc == 0:
-        return no("it holds the bolt's head")
-    range_reading(fleet, t, main, base, old, new, a.bolt, a.fix)
-    bolt = commits_beyond(fleet, t, main, base, old)
-    if not bolt:
-        return no(f"bolt/{a.bolt} has no commits beyond main")
-    fix = commits_beyond(fleet, t, main, base, new)
-    if not fix:
-        return no("it has no commits beyond main")
-    why = not_the_bolts(bolt, fix)
+    holds, bolt, fix = rc == 0, [], []
+    if not holds:
+        range_reading(fleet, t, main, base, old, new, a.bolt, a.fix)
+        bolt = commits_beyond(fleet, t, main, base, old)
+        fix = commits_beyond(fleet, t, main, base, new) if bolt else []
+    why = carry_refusal(a.bolt, holds, bolt, fix)
     if why:
-        return no(why)
+        return print(sh(CARRIES="no", WHY=why))
     ids = patch_ids(fleet, t, main, base, old, new)
-    changed = sum(ids.get(b["sha"]) != ids.get(f["sha"]) for b, f in zip(bolt, fix))
-    print(sh(CARRIES="yes", OLD=old, NEW=new, COMMITS=len(bolt), CHANGED=changed))
+    print(sh(CARRIES="yes", OLD=old, NEW=new, COMMITS=len(bolt), CHANGED=changed_by_resolution(bolt, fix, ids)))
+
+
+def carry_refusal(bolt_name, holds_head, bolt, fix):
+    """Why a fix does not carry its bolt onto main, or None when it does (plan.8): it holds the bolt's head, either side
+    has no commits beyond main, or the fix's commits are not the bolt's replayed in order (not_the_bolts). bolt and fix
+    are each side's commits beyond main, oldest first, as commits_beyond reads them."""
+    if holds_head:
+        return "it holds the bolt's head"
+    if not bolt:
+        return f"bolt/{bolt_name} has no commits beyond main"
+    if not fix:
+        return "it has no commits beyond main"
+    return not_the_bolts(bolt, fix)
+
+
+def changed_by_resolution(bolt, fix, ids):
+    """How many of the bolt's commits a carrying fix replayed with a different patch, by patch id (patch_ids): a commit
+    whose patch is empty on both sides has none, and is the same."""
+    return sum(ids.get(b["sha"]) != ids.get(f["sha"]) for b, f in zip(bolt, fix))
 
 
 def plan_of(fleet, label):
