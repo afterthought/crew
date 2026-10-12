@@ -151,3 +151,67 @@ def test_a_move_whose_rebase_conflicts_leaves_the_branch_and_place_as_they_were(
     assert r.returncode == 3
     assert repo.git("rev-parse", "unit/d") == tip
     assert subprocess.run(["git", "-C", str(tmp_path / "place"), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
+
+
+def kit_with_github(repo, tmp_path):
+    """A kit's main checkout whose origin is a bare GitHub stand-in, and another clone that pushes to it."""
+    repo.commit("chore: start", {"README.md": "r\n"})
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin)); repo.git("fetch", "-q", "origin")
+    subprocess.run(["git", "clone", "-q", str(origin), str(tmp_path / "other")], check=True)
+
+    def pushed(name):
+        o = tmp_path / "other"
+        subprocess.run(["git", "-C", str(o), "pull", "-q", "--rebase", "origin", "main"], check=True)
+        (o / name).write_text(name)
+        subprocess.run(["git", "-C", str(o), "add", name], check=True)
+        subprocess.run(["git", "-C", str(o), "commit", "-qm", f"feat: {name}"], check=True)
+        subprocess.run(["git", "-C", str(o), "push", "-q", "origin", "main"], check=True)
+    return pushed
+
+
+def fresh(repo):
+    import plan
+    return subprocess.run(["bash", "-c", plan.FRESH, "crew", str(repo.path)], capture_output=True, text=True)
+
+
+def behind(repo):
+    import plan
+    return subprocess.run(["bash", "-c", plan.BEHIND, "crew", str(repo.path)], capture_output=True, text=True)
+
+
+def test_a_bolt_is_cut_from_githubs_main_and_a_clean_main_behind_it_fast_forwarded(repo, tmp_path):
+    """plan.fresh_base (plan.8): a host's kit main lags GitHub's; the bolt is cut from origin/main, fetched first."""
+    kit_with_github(repo, tmp_path)("from-a-mac")
+    r = fresh(repo)
+    assert (r.returncode, r.stdout.strip(), r.stderr.strip()) == (0, "origin/main", "main fast-forwarded 1 commit to GitHub's")
+    assert repo.git("rev-parse", "main") == repo.git("rev-parse", "origin/main")
+
+
+def test_a_main_holding_all_of_githubs_and_more_cuts_the_bolt_from_itself(repo, tmp_path):
+    kit_with_github(repo, tmp_path)
+    repo.commit("feat: local", {"local": "l\n"})
+    r = fresh(repo)
+    assert (r.stdout.strip(), r.stderr.strip()) == ("main", "main holds 1 commit GitHub's main does not yet have; the bolt is cut from them")
+
+
+def test_a_main_gone_its_own_way_is_refused_and_a_dirty_one_left_as_it_is(repo, tmp_path):
+    pushed = kit_with_github(repo, tmp_path)
+    repo.commit("feat: local", {"local": "l\n"}); pushed("another")
+    r = fresh(repo)
+    assert r.returncode == 1 and r.stderr.strip() == (
+        "main on this host has 1 commit of its own and lacks 1 commit of GitHub's: rebase it onto origin/main first, and never push it with force")
+    repo.git("rebase", "-q", "origin/main"); repo.git("push", "-q", "origin", "main")
+    (repo.path / "README.md").write_text("wip\n"); pushed("yet-another")
+    r = fresh(repo)
+    assert (r.stdout.strip(), r.stderr.strip()) == ("origin/main", "main is 1 commit behind GitHub's and was left as it is "
+                                                     "(another branch is checked out there, or it has uncommitted changes)")
+
+
+def test_a_landing_reads_how_far_main_is_from_githubs(repo, tmp_path):
+    """plan.bolt_land (plan.8): refused while the kit's main is behind GitHub's; a kit with no origin says nothing."""
+    assert behind(repo).stdout == ""
+    pushed = kit_with_github(repo, tmp_path)
+    repo.commit("feat: local", {"local": "l\n"}); pushed("later")
+    assert behind(repo).stdout.strip() == "1 1"

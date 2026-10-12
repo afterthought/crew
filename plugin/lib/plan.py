@@ -3555,6 +3555,14 @@ def amended_units(fleet, a):
                     names.append(u.name())
                 elif s["stage"] == "unknown" and s.get("why") and s["why"] not in unread:
                     unread.append(s["why"])
+    said = amended_said(names, unread)
+    if said:
+        print(said)
+
+
+def amended_said(names, unread):
+    """What a conductor brought back is told of its bolt's units that wait amended with no construct running (plan.15):
+    each named, or that crew could not read whether any does, on one line; "" for none."""
     said = []
     if len(names) == 1:
         said.append(f"Unit {names[0]} was amended and no construct runs on it: run construct on it now "
@@ -3565,8 +3573,7 @@ def amended_units(fleet, a):
     if unread:
         why = " ".join("; ".join(unread).split())  # one line, though git's own words may span several
         said.append(f"crew could not read whether a unit of your bolt waits amended ({why}): read crew bolts.")
-    if said:
-        print(" ".join(said))
+    return " ".join(said)
 
 
 def bolt_of_team(fleet, a):

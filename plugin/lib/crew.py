@@ -205,7 +205,6 @@ def partition_of(fleet, label):
 
 
 @functools.lru_cache(maxsize=None)
-@functools.lru_cache(maxsize=None)
 def this_host():
     """The host crew runs on, as `hostname -s` names it: the same name the hosts file and the teams file use. Read once
     a process."""
@@ -275,10 +274,8 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     mark = f"[crew tell from {sender}]" if sender else "[crew]"
     if taken:
         how, why = send_taken(fleet, name, f"{mark} {text}")
-        if how == "never":
-            print(f"{name} did not take {what}, {why}; nothing is left typed" + (f"; {again}" if again else ""), file=sys.stderr)
-        elif how == "unread":
-            print(f"crew could not tell whether {name} took {what}: {why}; nothing more was sent", file=sys.stderr)
+        if how != "taken":
+            print(untaken_said(name, what, how, why, again), file=sys.stderr)
         sent = how == "taken"
     else:
         r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, f"{mark} {text}"])
@@ -299,6 +296,14 @@ def tell_refusal(name, host, status, asking, unread):
     if status is None:
         return f"could not tell {name} on {host}: it is not up"
     return waiting_said(name) if asking else None
+
+
+def untaken_said(name, what, how, why, again=""):
+    """What a tell sent to be taken or sent again says when it was not (teams.15): never taken, with how to send it once
+    the agent is ready, or not told whether it was, so nothing more was sent."""
+    if how == "never":
+        return f"{name} did not take {what}, {why}; nothing is left typed" + (f"; {again}" if again else "")
+    return f"crew could not tell whether {name} took {what}: {why}; nothing more was sent"
 
 
 def typed_refusal(name, host, stderr):
@@ -585,15 +590,15 @@ def greet_agent(fleet, name, text, on, label, why, hint, wait=90):
     deadline, asked = time.monotonic() + wait, False
     while True:
         s, asking, _ = waits_on_question(fleet, name)
-        if s in ("idle", "done") and not asking:
+        how, said = greet_waits(name, s, asking, asked, time.monotonic() >= deadline, hint, text)
+        if said:
+            print(said, file=sys.stderr)
+        if how == "greet":
             break  # what crew could not read, tell says
-        if asking and not asked:
-            print(f"{name} is waiting on a question in its pane; answer it there and it will be greeted", file=sys.stderr)
-            asked, deadline = True, time.monotonic() + 300
-        if time.monotonic() >= deadline:
-            print(f"{name} is not up: {hint}" if s is None
-                  else f"{name} was not ready to greet; once it is: crew tell {name} {shlex.quote(text)}", file=sys.stderr)
+        if how == "gave up":
             return False
+        if how == "asking":
+            asked, deadline = True, time.monotonic() + 300
         time.sleep(2)
     if not tell(fleet, name, text, record=False, taken=True, what="its greeting",
                 again=f"once it is ready: crew tell {name} {shlex.quote(text)}"):
@@ -602,6 +607,21 @@ def greet_agent(fleet, name, text, on, label, why, hint, wait=90):
     rec.emit(label, "greet", on=on, why=why)
     print(f"{name} greeted")
     return True
+
+
+def greet_waits(name, status, asking, asked, out_of_time, hint, text):
+    """One look of a greeting's wait for its agent (teams.7, teams.11): greet it once it is idle or done with no question
+    open ("greet"); say once that it waits on a question, which then gives it five minutes ("asking"); give up when the
+    time passes, saying it is not up with the hint, or the crew tell that would greet it ("gave up"); else look again
+    (None). Returns (what to do, what to say or None)."""
+    if status in ("idle", "done") and not asking:
+        return "greet", None
+    if asking and not asked:
+        return "asking", f"{name} is waiting on a question in its pane; answer it there and it will be greeted"
+    if out_of_time:
+        return "gave up", (f"{name} is not up: {hint}" if status is None
+                           else f"{name} was not ready to greet; once it is: crew tell {name} {shlex.quote(text)}")
+    return None, None
 
 
 def greet(fleet, team, first="", wait=90):
@@ -616,6 +636,14 @@ def greet_standing(fleet, name, wait=90):
     """Get an agent crew starts outside a team going (a main level's design agent, planner or ops, a dispatcher, an
     operator agent): tell it to read where its partition stands and carry on with what is its role's. A team's agent,
     or a name crew starts no agent by, is refused."""
+    label, text, why, hint = standing_greeting(fleet, name)
+    return greet_agent(fleet, name, text, [f"agent/{name}"], label, why, hint, wait)
+
+
+def standing_greeting(fleet, name):
+    """The greeting of an agent crew starts outside a team, by its role, read from its name alone: its partition, the
+    text, the greet entry's why, and how it is started when it is not up. A team's agent, the reviewer, sent its batch
+    as its prompt, and a name crew starts no agent by are refused."""
     t = team_of_agent(fleet, name)
     t is None or fail(f"{name} is one of team {t['name']}'s agents, not one crew starts outside a team; "
                       f"crew up {t['name']} greets its conductor")
@@ -624,12 +652,8 @@ def greet_standing(fleet, name, wait=90):
     role = name[len(label) + 1:]  # design, planner, ops, reviewer, dispatch-<host> or operator-<host>
     role != "reviewer" or fail(f"{name} is sent its batch as its prompt by crew review, and is not greeted")
     role = role if role in GREETINGS else role.split("-")[0]
-    text = GREETINGS[role].format(label=label, host=host)
-    if role == "operator":
-        why, hint = f"operator({label}): greet {name}", f"crew operator up {label} starts and greets it"
-    else:
-        why, hint = f"main({label}): greet {name}", f"crew main up {label} starts and greets it"
-    return greet_agent(fleet, name, text, [f"agent/{name}"], label, why, hint, wait)
+    kind, up = ("operator", f"crew operator up {label}") if role == "operator" else ("main", f"crew main up {label}")
+    return label, GREETINGS[role].format(label=label, host=host), f"{kind}({label}): greet {name}", f"{up} starts and greets it"
 
 
 def kept_on(fleet, host, repo):
