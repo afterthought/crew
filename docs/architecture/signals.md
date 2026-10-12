@@ -22,13 +22,13 @@ The rules for captures, signals and moves. `core.md` binds here too; the how-to 
 
 **[signals.1]** Rules out: an agent's signal committed in a blueprints repo; a capture name the blueprints already has. Source: checked-capture; `plan.py` 52–53, 2068–2085, 2247–2251.
 
-**[signals.2]** Rules out: a reworded excerpt accepted; a capture blocked by an unreadable transcript; forwarding `crew signal`. Source: fix e1ed1df; checked-capture design "The check, and how it degrades"; `plan.py` 2292–2323.
+**[signals.2]** Rules out: a reworded excerpt accepted; a capture blocked by an unreadable transcript; forwarding `crew signal`. Source: fix e1ed1df; checked-capture design "The check, and how it degrades"; `plan.py` `signal`, `capture_named`; `tests/py/test_signals.py`, `tests/py/test_transcript.py`, `tests/t-journey-signals.sh`.
 
 **[signals.3]** Rules out: a transcript line in a commit. Source: checked-capture design "The raw record".
 
-**[signals.4]** Rules out: a second move; a hand edit of `moves.rec`; a route without a unit. Source: `main-level` spec; `plan.py` 95–107, 2108–2145; fix 2d95e12.
+**[signals.4]** Rules out: a second move; a hand edit of `moves.rec`; a route without a unit. Source: `main-level` spec; `plan.py` `move`, `curation_move`, `route_move`; fix 2d95e12; `tests/py/test_signals.py`, `tests/contract/test_recfix.py`, `tests/t-journey-signals.sh`.
 
-**[signals.5]** Rules out: a conductor's `Fix:` words graded as the user's. Source: checked-capture design; `transcript.py` 122–144; `roles.4`.
+**[signals.5]** Rules out: a conductor's `Fix:` words graded as the user's. Source: checked-capture design; `transcript.py` `asserter`; `roles.4`; `tests/py/test_transcript.py`.
 
 **[signals.6]** Rules out: a release or a deploy failure captured into a blueprints repo; a program summarising a release before curation; a machine capture with no raw record. Source: swancloud ADR 0019, 0020; the blueprints' `signals/README.md` (two homes); Flywheel Next on enumerators, per the exploration of 2026-10-08. Not built: `_open.md`.
 
