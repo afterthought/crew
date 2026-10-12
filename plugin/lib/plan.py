@@ -5762,9 +5762,26 @@ def card_units(fleet, label, key):
 
 # ----------------------------------------------------------------------------------------------------- the CLI
 
-def parser(cls=argparse.ArgumentParser):
+class _Unbuilt:
+    """A command's parser this run does not need: it takes every definition parser() gives it and keeps none."""
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self
+
+
+def parser(cls=argparse.ArgumentParser, only=None):
+    """crew's command line. With only, the one command a run names is built and the rest are not, since building
+    every command's parser is a third of what starting plan.py costs; the names built are in parser.built."""
     ap = cls(prog="crew", add_help=False)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    ap.built = []
+    if only:
+        add = sub.add_parser
+
+        def one(name, **kwargs):
+            ap.built.append(name)
+            return add(name, **kwargs) if name == only else _Unbuilt()
+        sub.add_parser = one
     st = sub.add_parser("state").add_subparsers(dest="sub", required=True)
     i = st.add_parser("init")
     i.add_argument("label")
@@ -6032,7 +6049,8 @@ def main(argv):
     need_recutils()
     if argv[:2] in (["signal", "move"], ["signal", "show"]):  # crew signal move|show <id>, beside crew signal <slug> "<asserts>"
         argv = [f"signal-{argv[1]}"] + argv[2:]
-    args = parser().parse_args(argv)
+    ap = parser(only=argv[0]) if argv and not argv[0].startswith("-") else None
+    args = (ap if ap is not None and argv[0] in ap.built else parser()).parse_args(argv)
     fleet = crew.load()
     key = (args.cmd, getattr(args, "sub", None))
     try:
