@@ -357,3 +357,27 @@ for want in "plugin/bin/crew rail --label wldn\` carries its answer" \
   has "$out" "$want"
 done
 ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"
+
+# A decision record is accepted only on the user's yes (briefs.15): the design agent commits every record and amendment
+# as proposed, puts it to the user on its one card, under the record key, in the record's words, records their yes,
+# note or no, and queues nothing from it before the yes; the planner and the conductors post no record card.
+expect_ok crewpy brief wldn design
+for want in "Every decision record you write, and every amendment you make to one, is committed as proposed" \
+  "put to the user on one Pending You card in the record's own words" "It is accepted only on the user's yes, and the record says so" \
+  "Your own reading never accepts a record" "\`status: proposed\`" "accepted only on their yes.)" \
+  "Queue no unit from a proposed record or amendment" "Only then queue the units it calls for" \
+  "the record's deciders line quotes those words as the user's decision" "Your own words, recorded as your decision:" \
+  "post a new card for the new version, under the new commit's key" \
+  "set \`status: rejected\` with the user's words, and take out each rule drawn from it" \
+  "The record's card is the one card you post" "\`record/<kit>/<number>/<commit>\`" "one of atlas-kit, breadboard-kit, switchboard-kit" \
+  "the kit's main commit that proposed the record or the amendment" \
+  '"risk": "low", "reversible": true}`, no options, no steps and `blocking` false' \
+  "Accept decision record <number> in <kit>: <the record's title>?" "kind \`code\` with lang \`markdown\`" \
+  "No card carries a path" "links no plannotator session" \
+  "Post a card for each proposed record or amendment of your kits that has none open" "create-area:<owner>/<kit>" \
+  "Never run \`npx pendingyou\` or \`pendingyou hold\`" "leave every other card alone" \
+  "A record you write or amend is proposed until the user accepts it" "quotes the user's words as their decision"; do
+  has "$out" "$want"
+done
+for brief in "wldn planner" "swb-1 conductor"; do expect_ok crewpy brief $brief; lacks "$out" "record/<kit>"; done
+ok "the design agent proposes every record on one card under its record key, accepts it only on the user's yes, and queues nothing before; no other brief posts a record card"

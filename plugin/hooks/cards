@@ -1,38 +1,41 @@
 #!/usr/bin/env python3
 """crew's card hook, in two halves. Before a crew agent posts a Pending You card, changes one or makes an area, crew
-refuses a card or an area under a key that is not the agent's own, and a row's card in another form than its row's.
-After it posts, updates, withdraws or closes a card, the card is an entry in its partition's run record, so the rail
-knows which of its rows has a card open, and whose.
+refuses a card or an area under a key that is not the agent's own, and a card in another form than its key's. After it
+posts, updates, withdraws or closes a card, the card is an entry in its partition's run record, so the rail knows which
+of its rows, and which decision records, have a card open, and whose.
 
 The PreToolUse half is the hook run as `cards --before`, before Pending You's post_request, create_area or
 update_request in a session crew started. Before a card is posted or an area made, it asks plan.card_refusal whether the
 agent may use the call's idempotencyKey: a card's must be a rail row's key the agent owns, which only the planner and
-the conductors have, and an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key is
+the conductors have, or, for the design agent, a decision record's, record/<kit>/<number>/<commit> for a kit of its
+partition (briefs.15); an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key is
 refused in words naming the key to use, and so is a call crew could not check, in words saying to post it again later,
-since a card crew let through can't be taken back (read.1). A card posted under a row's key the agent owns is then
-checked against its row's form (FORMS), but a batch's, which has no form there yet, and a proposal's, which is checked
-against the proposal itself: in the form `crew plan card <n>` prints, its unit questions holding the units the
-proposal makes new to a bolt, each once, and no question asking for words (briefs.13); a proposal crew can't read
-refuses the card, saying to post it again later, and one that no longer applies refuses it, saying to write the
-proposal again. A change is checked when this host's card.post entry for the card names a row
-key, for what the change gives it: a landing card's high stakes cleared, options on an approval, steps on any card but
-a landing's, or a landing step that lands the bolt. A card in another form is refused with the form to use. A refused
-call never reaches Pending You. What the half cannot otherwise check, its own input that is not a JSON object and the
-run record among it, is refused with what failed. A change to a card under any other key, or to a card this host has
-no post of, passes unchecked.
+since a card crew let through can't be taken back (read.1). A card posted under a row's key the agent owns, or a
+record key, is then checked against its key's form (FORMS), but a batch's, which has no form there yet, and a
+proposal's, which is checked against the proposal itself: in the form `crew plan card <n>` prints, its unit questions
+holding the units the proposal makes new to a bolt, each once, and no question asking for words (briefs.13); a
+proposal crew can't read refuses the card, saying to post it again later, and one that no longer applies refuses it,
+saying to write the proposal again. A change is checked when this host's card.post entry for the card names one of
+those keys, for what the change gives it: a landing card's high stakes cleared, options on an approval, steps on any
+card but a landing's, a landing step that lands the bolt, or a record card's approval of a risk other than low, or not
+reversible. A card in another form is refused with the form to use. A refused call never reaches Pending You. What the
+half cannot otherwise check, its own input that is not a JSON object and the run record among it, is refused with what
+failed. A change to a card under any other key, or to a card this host has no post of, passes unchecked.
 
 The PostToolUse half is the hook run with no argument, after a Pending You tool that posts (post_request), updates
 (update_request), withdraws (cancel_request) or closes (ack_answer) a card, in a session crew started, and writes one
 entry: card.post, card.update or card.close. The entry names the rail row's object in On (proposal/<n>, unit/<unit> or
-bolt/<bolt>, from the card's key), the card's id in Card, and the row's key in Key when the card was posted with one of
-the row keys as its idempotencyKey. A card with any other key is on agent/<the agent>, with no Key, since its key
-is text an agent wrote. Nothing written on the card is recorded: no title, summary, option, note or outcome.
+bolt/<bolt>, from the card's key), or a decision record's, record/<kit>/<number>, the card's id in Card, and the key in
+Key when the card was posted with a row key or a record key as its idempotencyKey. A card with any other key is on
+agent/<the agent>, with no Key, since its key is text an agent wrote. Nothing written on the card is recorded: no
+title, summary, option, note or outcome.
 
 When a crew agent withdraws or closes a card with a row key, the hook then ends the plannotator session `crew card
 session` started for that key on this host, as `crew card end` does, so no card's session outlives its card. When
 plannotator's list of sessions can't be read, it ends nothing, keeps the session for a later rail read to end, and
-says so to the agent, in end_session's words, as the tool's additional context. A batch card's sessions, one per unit on each unit's team's host, are ended by `crew card end <key>` started apart, since
-reaching those hosts takes longer than a hook may.
+says so to the agent, in end_session's words, as the tool's additional context. A batch card's sessions, one per unit
+on each unit's team's host, are ended by `crew card end <key>` started apart, since reaching those hosts takes longer
+than a hook may. A record card is given no session, so its close ends none.
 
 A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it, the record session-start keeps of
 it. A session with a CREW_AGENT but no CREW_LABEL is a crew agent whose partition crew can't tell: its card or area is
@@ -53,14 +56,16 @@ KEYED = ("post_request", "create_area")
 FORMED = ("post_request", "update_request")
 ACTS = {"post_request": "card.post", "update_request": "card.update", "cancel_request": "card.close", "ack_answer": "card.close"}
 REQUEST_ID = re.compile(r"^req_[A-Za-z0-9-]{1,40}$")
-# The rail's row keys, and the object of each.
+# The rail's row keys and a decision record's key, and the object of each.
 KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
         (re.compile(r"^batch/(\d+)-\d+$"), "batch/{}"),
         (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
-        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "bolt/{}"))
-# The form each row's card takes, in Pending You's kinds of card, by the row's shape: the kinds it may be, whether it is
-# marked high stakes, whether it must carry options (True) or may carry none (False), whether it may carry steps, and
-# the form in the briefs' words. A landing card's steps are those a proof leaves the user, never the landing itself.
+        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "bolt/{}"),
+        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})/[0-9a-f]{7}$"), "record/{}/{}"))
+# The form each row's card takes, and a decision record's, in Pending You's kinds of card, by the key's shape: the kinds
+# it may be, whether it is marked high stakes, whether it must carry options (True) or may carry none (False), whether it
+# may carry steps, for a record's the risk its approval names, and the form in the briefs' words. A landing card's steps
+# are those a proof leaves the user, never the landing itself.
 FORMS = {
     "proposal": dict(kinds=("approve",), high=False, options=False, steps=False,
                      says="a proposal's card is posted as `crew plan card <n>` prints it, and a change to it changes "
@@ -72,6 +77,9 @@ FORMS = {
                  says="a landing's card is an approval, kind \"approve\", marked high stakes with highStakes true, "
                       "whose yes has you tell main-level ops to land; it has no options, and no step or command for "
                       "the user to land it"),
+    "record": dict(kinds=("approve",), high=False, options=False, steps=False, risk="low",
+                   says="a decision record's card is an approval, kind \"approve\", whose approve block has risk "
+                        "\"low\" and reversible true, with no options or steps"),
 }
 # A batch's card has no form here yet: the planner's brief asks a grouped card, with a words question for the notes,
 # until the card that briefs.13 gives a batch is built (_open.md), so a batch card is checked for its key alone.
@@ -144,17 +152,25 @@ def identity(sid):
 
 
 def keyed(key):
-    """A row key and its object, or (None, None) for any other key."""
+    """A row key or a record key and its object, or (None, None) for any other key."""
     for pattern, obj in KEYS:
         m = pattern.match(key) if isinstance(key, str) else None
         if m:
-            return key, obj.format(m.group(1))
+            return key, obj.format(*m.groups())
     return None, None
 
 
+def approval(given):
+    """The card's approve block, or the one question's when the card is grouped; None when it gives none."""
+    questions = given.get("questions")
+    if "approve" not in given and isinstance(questions, list) and len(questions) == 1 and isinstance(questions[0], dict):
+        return questions[0].get("approve")
+    return given.get("approve")
+
+
 def form_refusal(key, given, update=False):
-    """None for a card in its row's form, else the words that refuse it: the form its row's card takes, and each thing
-    wrong with this one. An update is checked only for what it changes: its kind was checked when it was posted."""
+    """None for a card in its key's form, else the words that refuse it: the form a card under the key takes, and each
+    thing wrong with this one. An update is checked only for what it changes: its kind was checked when it was posted."""
     form = FORMS[key.split("/")[0]]
     kind, options, action = given.get("kind"), given.get("options"), given.get("action")
     steps = action.get("steps") if isinstance(action, dict) else None
@@ -179,6 +195,17 @@ def form_refusal(key, given, update=False):
         wrong.append("has no options")
     if steps and not form["steps"]:
         wrong.append("gives it steps for the user to take" if update else "has steps for the user to take")
+    if form.get("risk") and (not update or "approve" in given):
+        approve = approval(given)
+        if not isinstance(approve, dict):
+            wrong.append("gives it no approve block" if update else "has no approve block")
+        else:
+            if approve.get("risk") != form["risk"]:
+                risk = approve.get("risk")
+                said = f"risk \"{risk}\"" if isinstance(risk, str) else "no risk"
+                wrong.append(f"gives it {said}" if update else f"has {said}")
+            if approve.get("reversible") is not True:
+                wrong.append("makes it not reversible" if update else "is not reversible")
     for s in steps if form["steps"] else []:
         said = " ".join(v for v in (s.get("text"), s.get("command")) if isinstance(v, str))
         if any(act in said for act in LANDS):
@@ -384,13 +411,14 @@ def main():
         key, on = posted(record, label, card) if isinstance(card, str) and REQUEST_ID.match(card) else (None, None)
     card = card if isinstance(card, str) and REQUEST_ID.match(card) else None
     record.emit(label, ACTS[tool], [on or f"agent/{agent}"], Card=card, Key=key)
-    # A key posted before its row's form changed (a bare land/<bolt>) is still closed under it, and has no session.
+    # A key posted before its row's form changed (a bare land/<bolt>) is still closed under it, and has no session; nor
+    # has a record card.
     if ACTS[tool] == "card.close" and keyed(key)[0] and key.startswith("batch/"):
         import subprocess
         crew_bin = pathlib.Path(__file__).resolve().parent.parent / "bin" / "crew"
         subprocess.Popen(["bash", str(crew_bin), "card", "end", key, "--label", label], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    elif ACTS[tool] == "card.close" and keyed(key)[0]:
+    elif ACTS[tool] == "card.close" and keyed(key)[0] and not key.startswith("record/"):
         import plan
         said, _ = plan.end_session(label, key)
         # A session end_session keeps is one whose plannotator list it could not read: the agent is told, in its

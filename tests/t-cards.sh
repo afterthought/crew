@@ -1,26 +1,29 @@
-# crew records its agents' Pending You cards: the run record takes a card's id (Card) and its rail row's key (Key),
-# in a day's file begun before those fields were allowed as well as after, and carries both to the branch. crew's
-# PostToolUse hook writes an entry for each card a crew agent posts, updates, withdraws or closes, naming its row, its
-# card and its key and nothing written on the card, from each shape of a tool's result; a card with no row key is on
-# its agent. An error, another server's tool and a session crew didn't start write nothing; a session herdr resumed is
-# known by what session-start recorded; and the hook never fails a tool call. A keyed card's withdrawal or close ends
-# the plannotator session crew started for its key; an unkeyed card's ends nothing, nor does a key's close end a
-# session crew did not start, and a card posted under a key that is no longer a row's closes under it. When
-# plannotator's list can't be read, a withdrawal ends nothing, keeps the key's session and tells the agent so. Run as
-# `cards --before`, before a card is posted or an area made, the hook refuses a crew agent's card under any key but a
-# rail row's of its own, the planner's open proposal or batch card or its conductor's bolt and units, and an area under
+# crew records its agents' Pending You cards: the run record takes a card's id (Card) and its rail row's key (Key), in a
+# day's file begun before those fields were allowed as well as after, and carries both to the branch. crew's PostToolUse
+# hook writes an entry for each card a crew agent posts, updates, withdraws or closes, naming its row, its card and its
+# key and nothing written on the card, from each shape of a tool's result; a card with no row key is on its agent, and a
+# decision record's card on its record. An error, another server's tool and a session crew didn't start write nothing; a
+# session herdr resumed is known by what session-start recorded; and the hook never fails a tool call. A keyed card's
+# withdrawal or close ends the plannotator session crew started for its key; an unkeyed card's ends nothing, nor does a
+# record card's, which has none, nor does a key's close end a session crew did not start, and a card posted under a key
+# that is no longer a row's closes under it. When plannotator's list can't be read, a withdrawal ends nothing, keeps the
+# key's session and tells the agent so. Run as `cards --before`, before a card is posted or an area made, the hook
+# refuses a crew agent's card under any key but a rail row's of its own, the planner's open proposal or batch card or
+# its conductor's bolt and units, or the design agent's decision record of a kit its partition builds, and an area under
 # any key but create-area: and a kit of its own, naming the key to use; a team's ops and slots and the main level's
 # other agents own no card key; a call crew can't check is refused naming what it could not read; and a session crew
 # didn't start, another server's tool and the other card tools are not checked for their key. Each refusal scenario of
-# the rail-cards spec. A row's card of the agent's own, posted or changed, the hook then refuses in another form than
-# its row's, naming the form: a landing card that is a step, not high stakes, or has options or a step that lands it; a
-# verify card with no options; a proposal card not as `crew plan card` prints it, checked against the proposal: one
-# that makes no unit new to a bolt is an approval with no options, steps or questions, and one with new units asks
-# `plan` and its new units each once, a lone one as a choice, never a text question, so a card missing a unit, asking
-# for words, or posted as a plain approval is refused, and so is one for a proposal crew can't draw; and a change that
-# clears a landing's high stakes or gives a card options or steps its row's has not; a batch card's form is not checked. A card under no row's key is refused for its key, not its form; a change to a card posted on no row's
-# key here, a session crew didn't start and another server's tool pass unchecked; what it can't check, its own input
-# among it, is refused, while the record half never fails.
+# the rail-cards spec. A row's card of the agent's own, or a record's, posted or changed, the hook then refuses in
+# another form than its key's, naming the form: a landing card that is a step, not high stakes, or has options or a step
+# that lands it; a verify card with no options; a proposal card not as `crew plan card` prints it, checked against the
+# proposal: one that makes no unit new to a bolt is an approval with no options, steps or questions, and one with new
+# units asks `plan` and its new units each once, a lone one as a choice, never a text question, so a card missing a
+# unit, asking for words, or posted as a plain approval is refused, and so is one for a proposal crew can't draw; a
+# record card that is no approval, has options or steps, or whose approval is not of low risk and reversible; and a
+# change that clears a landing's high stakes, gives a card options or steps its key's has not, or gives a record card a
+# risk other than low; a batch card's form is not checked. A card under no row's key is refused for its key, not its
+# form; a change to a card posted on no row's key here, a session crew didn't start and another server's tool pass
+# unchecked; what it can't check, its own input among it, is refused, while the record half never fails.
 # Reads: plugin/hooks/ plugin/lib/picture.py plugin/lib/font.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -123,6 +126,14 @@ expect_ok cards <<<"$(call pendingyou ack_answer '{"requestId": "req_old-1", "ou
 lacks "$out" "crew cards:"
 eq "$(pick card.close '[(.On | join(" ")), .Card, .Key] | join(" ")')" "bolt/tenant-environments req_old-1 land/tenant-environments"
 ok "a card posted under a key that is no longer a row's is closed under the key and row of its post, with no session to end"
+
+# A decision record's card, the design agent's: on its record, and closed with no session to end.
+CREW_AGENT=wldn-design cards <<<"$(call pendingyou post_request "$(post record/atlas-kit/0021/abc1234)" '{"structuredContent": {"requestId": "req_rec-1"}}')"
+eq "$(pick card.post '[.By, (.On | join(" ")), .Card, .Key] | join(" ")')" "wldn-design record/atlas-kit/0021 req_rec-1 record/atlas-kit/0021/abc1234"
+CREW_AGENT=wldn-design expect_ok cards <<<"$(call pendingyou ack_answer '{"requestId": "req_rec-1", "outcome": "accepted"}' '{"structuredContent": {"status": "resolved"}}')"
+eq "$out" ""
+eq "$(pick card.close '[.By, (.On | join(" ")), .Card, .Key] | join(" ")')" "wldn-design record/atlas-kit/0021 req_rec-1 record/atlas-kit/0021/abc1234"
+ok "a record card's post and close are on record/<kit>/<number> with its key, and its close ends no session and says nothing"
 
 n=$(entries | wc -l)
 call pendingyou post_request "$(post verify/x/20261007-1400)" '{"isError": true, "content": [{"type": "text", "text": "refused"}]}' | cards
@@ -309,9 +320,25 @@ eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only 
 eq "$(gate wldn-planner post_request batch/1-1 '{"questions": [{"id": "which", "kind": "multi", "title": "Which need notes?"}, {"id": "notes", "kind": "text", "title": "The notes"}]}')" ""
 has "$(denied wldn-planner post_request batch/1-2)" "proposal/1 or batch/1-1"
 has "$(denied swb-1-conductor post_request batch/1-1)" "swb-1-conductor posts a card only under a rail row's key of its own"
-has "$(denied wldn-design post_request proposal/1)" "wldn-design owns no card key, since only the planner, the conductors and main-level ops post cards"
 has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "operations"
+has "$(denied wldn-ops post_request record/atlas-kit/0021/abc1234)" "operations"
 ok "the planner is refused a closed proposal's or batch card's key, naming the open ones, and passes under an open batch card's, whose form is not checked; a conductor is refused a batch's key, and the main level's other agents own no key"
+
+accept='{"kind": "approve", "approve": {"action": "Accept record 0021: Cards for records", "risk": "low", "reversible": true}}'
+eq "$(gate wldn-design post_request record/atlas-kit/0021/abc1234 "$accept")" ""
+eq "$(gate wldn-design post_request record/switchboard-kit/0003/0123abc "$accept")" ""
+record="wldn-design posts a card only for a decision record, under record/<kit>/<number>/<commit> for a kit of wldn's, atlas-kit, breadboard-kit or switchboard-kit, the commit the one that proposed the record or its amendment."
+eq "$(denied wldn-design post_request record/flywheel-next/0003/abc1234)" "crew refuses a card under record/flywheel-next/0003/abc1234: $record"
+eq "$(denied wldn-design post_request proposal/1)" "crew refuses a card under proposal/1: $record"
+for k in record/atlas-kit/21/abc1234 record/atlas-kit/0021/abc123 record/atlas-kit/0021/ABC1234 record/atlas-kit/0021 record/Atlas-kit/0021/abc1234; do
+  has "$(denied wldn-design post_request "$k")" "$record"
+done
+has "$(denied wldn-design post_request 'design question ZQXKEY')" "$record"
+has "$(CREW_LABEL=madswan denied madswan-design post_request record/atlas-kit/0021/abc1234)" "for a kit of madswan's, flywheel-next, the commit"
+eq "$(CREW_LABEL=madswan gate madswan-design post_request record/flywheel-next/0003/abc1234 "$accept")" ""
+has "$(denied wldn-planner post_request record/atlas-kit/0021/abc1234)" "wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now"
+has "$(denied swb-1-conductor post_request record/atlas-kit/0021/abc1234)" "swb-1-conductor posts a card only under a rail row's key of its own: $rows"
+ok "the design agent passes under a record key of a kit its partition builds, and is refused under another partition's kit, a malformed record key and any other key, naming the record key's form; the planner and a conductor are refused a record key, naming their own"
 
 why=$(denied swb-1-conductor create_area area:swb-1-conductor)
 eq "$why" "crew refuses an area under area:swb-1-conductor: swb-1-conductor makes a kit's area only under create-area:WilldanGroup/switchboard-kit."
@@ -430,12 +457,29 @@ refused post_request "$(card agent-note-1 '{"kind": "action", "action": {"steps"
 refused post_request "$(card land/y '{"kind": "action"}')" "crew refuses a card under land/y: swb-1-conductor posts a card only under"
 ok "a verify card is a choice with options; a proposal card is as crew plan card prints it, an approval, or the approval and each new unit once, never words, and none once its proposal no longer applies; a card under no row's key is refused for its key, not its form"
 
+accepting='{"kind": "approve", "approve": {"action": "Accept record 0021: Cards for records", "risk": "low", "reversible": true}}'
+recorded="A decision record's card is an approval, kind \"approve\", whose approve block has risk \"low\" and reversible true, with no options or steps"
+export CREW_AGENT=wldn-design
+passes post_request "$(card record/atlas-kit/0021/abc1234 "$accepting")"
+refused post_request "$(card record/atlas-kit/0021/abc1234 "$(jq -c '{kind: "choice"} + .' <<<"$two")")" \
+  "crew refuses card record/atlas-kit/0021/abc1234." "$recorded" 'This card is a "choice", has options, and has no approve block.'
+refused post_request "$(card record/atlas-kit/0021/abc1234 "$(jq -c '.approve.risk = "high"' <<<"$accepting")")" "$recorded" 'This card has risk "high".'
+refused post_request "$(card record/atlas-kit/0021/abc1234 "$(jq -c '.approve.reversible = false' <<<"$accepting")")" "This card is not reversible."
+refused post_request "$(card record/atlas-kit/0021/abc1234 "$(jq -c ". + $two" <<<"$accepting")")" "This card has options."
+refused post_request "$(card record/atlas-kit/0021/abc1234 "$(jq -c '. + {action: {steps: [{text: "Read the record"}]}}' <<<"$accepting")")" \
+  "This card has steps for the user to take."
+refused post_request "$(card record/atlas-kit/0021/abc1234 '{"kind": "approve"}')" "This card has no approve block."
+refused post_request "$(card proposal/1 "$accepting")" "crew refuses a card under proposal/1: wldn-design posts a card only for a decision record"
+export CREW_AGENT=swb-1-conductor
+ok "a record card is a low-risk, reversible approval with no options or steps, and is refused in any other form, naming it"
+
 eq "$(entries | wc -l)" "$n"
 ok "a check writes nothing to the run record"
 
 call pendingyou post_request "$(card land/tenant-environments/abc1234 "$landing")" '{"structuredContent": {"requestId": "req_land-1"}}' | cards
 CREW_AGENT=wldn-planner call pendingyou post_request "$(card proposal/1 '{"kind": "approve"}')" '{"structuredContent": {"requestId": "req_rev-1"}}' | CREW_AGENT=wldn-planner cards
 call pendingyou post_request "$(card agent-note-2 '{"kind": "fyi"}')" '{"structuredContent": {"requestId": "req_own-1"}}' | cards
+call pendingyou post_request "$(card record/atlas-kit/0021/abc1234 "$accepting")" '{"structuredContent": {"requestId": "req_rec-2"}}' | CREW_AGENT=wldn-design cards
 change() { jq -nc --arg r "$1" --argjson f "$2" '{name: "swb-1-conductor", requestId: $r, expectedVersion: 1, changeNote: "ZQXNOTE"} + $f'; }
 refused update_request "$(change req_land-1 '{"highStakes": false}')" \
   "crew refuses this change to card land/tenant-environments/abc1234." "A landing's card is an approval" "This change clears its high stakes."
@@ -446,9 +490,15 @@ passes update_request "$(change req_land-1 '{"title": "Land bolt y ZQXTITLE"}')"
 passes update_request "$(change req_land-1 '{"highStakes": true}')"
 refused update_request "$(change req_rev-1 "$two")" "crew refuses this change to card proposal/1." "This change gives it options."
 refused update_request "$(change req_rev-1 '{"action": {"steps": [{"text": "Read it"}]}}')" "This change gives it steps for the user to take."
+CREW_AGENT=wldn-design refused update_request "$(change req_rec-2 "$two")" \
+  "crew refuses this change to card record/atlas-kit/0021/abc1234." "$recorded" "This change gives it options."
+CREW_AGENT=wldn-design refused update_request "$(change req_rec-2 '{"approve": {"action": "Accept record 0021", "risk": "medium", "reversible": true}}')" \
+  'This change gives it risk "medium".'
+CREW_AGENT=wldn-design passes update_request "$(change req_rec-2 '{"title": "Accept decision record 0021 in atlas-kit: ZQXTITLE?"}')"
+CREW_AGENT=wldn-design passes update_request "$(change req_rec-2 "$(jq -c '{approve}' <<<"$accepting")")"
 passes update_request "$(change req_own-1 "$two")"
 passes update_request "$(change req_nowhere-1 '{"highStakes": false}')"
-ok "a change that clears a landing's high stakes, gives an approval options or steps, or lands the bolt is refused; a card with no post here, or under no row's key, is not checked"
+ok "a change that clears a landing's high stakes, gives an approval options or steps, gives a record card a risk other than low, or lands the bolt is refused; a card with no post here, or under no row's key, is not checked"
 
 CREW_AGENT= CREW_LABEL= passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" pendingyou sid-none
 passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" github
