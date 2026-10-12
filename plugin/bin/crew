@@ -199,9 +199,8 @@ reading() {
 }
 case $cmd in
   bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell | ops) ;;
-  status | fix) ;;
+  status | unit | fix | _tidy) ;;
   events | _rail) unset CREW_READ ;;
-  unit) case ${2:-} in free) reading ;; esac ;;
   *) reading ;;
 esac
 
@@ -438,70 +437,10 @@ start_standing() {  # start each standing role that is not up; each one started 
 
 # ----------------------------------------------------------------------------------------------- unit slots
 
-slot_of() { awk -v u="$1" '$3==u{print $1}' "$held"; }
-held_obj() {  # held_obj <unit|fix> <name>: what a slot holds, as an object; a fix started as fix/<name> takes its
-  # bolt from its branch's upstream
-  local b
-  if [[ $1 == fix && $2 == fix/*/* ]]; then echo "$2"
-  elif [[ $1 == fix ]]; then
-    b=${BOLT:-$(git -C "$KIT" for-each-ref --format='%(upstream:short)' "refs/heads/$2" 2>/dev/null || true)}
-    echo "fix/${b#bolt/}/${2#fix/}"
-  else echo "unit/$2"; fi
-}
-free() {  # end a slot's agent, close its pane and give the slot back; the units workspace goes with the last one
-  local slot=$1 s w kind name; stop "$slot" || return 1
-  read -r kind name < <(awk -v s="$slot" '$1==s{print $2, $3}' "$held") || true
-  drop "$held" "$slot"
-  [[ -n ${name:-} ]] && entry --label "$LABEL" --act slot.free --on "agent/$(name_of "$slot")" --on "$(held_obj "$kind" "$name")" \
-    --why "team($TEAM): free $(name_of "$slot")"
-  if [[ -n $(awk 'NF' "$held") ]]; then close_pane "$slot"; return 0; fi
-  w=$(get "$layout" "$(ws_key "$TEAM units")"); [[ -n $w ]] && { h workspace close "$w" >/dev/null 2>&1 || true; }
-  drop "$layout" "$(ws_key "$TEAM units")"; for s in "${slots[@]}"; do drop "$panes" "$s"; done
-}
-reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
-  # bolt, been dropped from the plan or left the team's bolt, once its agent is not working; rebase each dependent
-  # whose After unit has merged, once its agent is not working; then remove the worktrees whose work is over. Two
-  # processes: the ends and the slots in one, the rebase and the tidy in the other.
-  local slot kind name stage rest
-  while read -r slot kind name stage rest; do
-    case $stage in merged | landed | dropped | left) ;; *) continue ;; esac
-    if [[ $(agent_status "$(pane_of "$slot")") == working ]]; then
-      case $stage in
-        dropped) echo "$(name_of "$slot") still holds $name, dropped from the plan: its agent is working; it is freed once that settles" ;;
-        left) echo "$(name_of "$slot") still holds $name, which has left $TEAM's bolt: its agent is working; it is freed once that settles" ;;
-      esac
-      continue
-    fi
-    free "$slot" || continue
-    case $stage in
-      dropped) echo "$(name_of "$slot") is free: $name was dropped from the plan" ;;
-      left) echo "$(name_of "$slot") is free: $name has left $TEAM's bolt" ;;
-      *) echo "$(name_of "$slot") is free: $name has merged into its bolt" ;;
-    esac
-  done < <(plan _slots "$TEAM" --ends 2>/dev/null || true)
-  plan _rebase "$TEAM" --tidy || true
-}
-unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit no longer in the team's bolt
-  local unit=${1:?usage: crew unit free <unit> [--team <team>]} team= t slot path out rc=0
-  [[ ${2:-} == --team ]] && team=${3:?usage: crew unit free <unit> [--team <team>]}
-  if [[ -z $team ]]; then  # the team of this host whose slot holds it
-    for t in $(py here | awk '$1 == "team" {print $2}'); do
-      awk -v u="$unit" '$3 == u {f = 1} END {exit !f}' "$HOME/.local/state/$t-team/slots" 2>/dev/null && { team=$t; break; }
-    done
-    [[ -n $team ]] || { echo "no team on this host holds $unit in a slot; name its team: crew unit free $unit --team <team>" >&2; exit 1; }
-  fi
-  load_team "$team"; forward; ensure_state
-  slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
-  out=$(plan _in-bolt "$unit" "$TEAM" 2>&1) || rc=$?
-  [[ $rc == 0 ]] && { echo "$out: drop it with crew unit drop, which frees its slot" >&2; exit 1; }
-  [[ $rc == 3 ]] || { echo "$out" >&2; exit 1; }
-  path=$(awk -v s="$slot" '$1 == s {print $4}' "$held")
-  if [[ -d $path && -n $(git -C "$path" status --porcelain 2>/dev/null) ]]; then
-    echo "$path has uncommitted changes: they are the user's to keep or discard before the slot is freed" >&2; exit 1
-  fi
-  free "$slot" || exit 1
-  echo "$(name_of "$slot") is free"
-  plan _tidy "$TEAM" || true
+reap() {  # the team's read (plan.py reap): the stages that ended with nobody waiting recorded; every slot freed whose
+  # unit or fix has merged into its bolt, been dropped from the plan or left the team's bolt, once its agent is not
+  # working; each dependent rebased whose After unit has merged; then the worktrees removed whose work is over
+  plan _tidy "$TEAM" ${forced[@]+"${forced[@]}"} || true
 }
 limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, as plan _wait takes them, in `limit`
   limit=()
@@ -607,16 +546,20 @@ case $cmd in
     for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down
     record_agents team.down "team($TEAM): down" ${ended[@]+"${ended[@]}"}; echo "$TEAM is down; its panes are still there." ;;
   unit)
-    [[ ${2:-} == free ]] && { unit_free "${@:3}"; exit 0; }
-    if [[ ${2:-} == wait ]]; then
-      unit=${3:?usage: crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]}; limits "${@:4}"
-      one _unit-wait "$unit" ${limit[@]+"${limit[@]}"}; exit $?
-    fi
-    [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
-    unit=${3:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
-    stage=${4:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
-    case $stage in construct | code | verify | settle | merge) ;; *) echo "no stage '$stage'; stages: construct code verify settle merge" >&2; exit 2 ;; esac
-    one _unit-run "$unit" "$stage" ${forced[@]+"${forced[@]}"} -- "${5:-}" ;;
+    case ${2:-} in
+      free)
+        [[ -n ${3:-} && ( $# == 3 || ( $# == 5 && $4 == --team ) ) ]] || { echo "usage: crew unit free <unit> [--team <team>]" >&2; exit 2; }
+        one _unit-free "$3" ${5:+--team "$5"} ${forced[@]+"${forced[@]}"} ;;
+      wait)
+        unit=${3:?usage: crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]}; limits "${@:4}"
+        one _unit-wait "$unit" ${limit[@]+"${limit[@]}"} ;;
+      run)
+        unit=${3:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
+        stage=${4:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
+        case $stage in construct | code | verify | settle | merge) ;; *) echo "no stage '$stage'; stages: construct code verify settle merge" >&2; exit 2 ;; esac
+        one _unit-run "$unit" "$stage" ${forced[@]+"${forced[@]}"} -- "${5:-}" ;;
+      *) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+    esac ;;
   fix)
     need_team "${2:-}"
     name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}
@@ -638,12 +581,9 @@ case $cmd in
   prove)
     load_team "${2:-}"; forward; ensure_state
     if [[ ${3:-} == --wait ]]; then stage_wait ops "${@:4}"; else prove "${3:-}"; fi ;;
-  _free)  # crew _free <team> <unit|fix/name>: free the slot holding it (a unit moved to another team's bolt leaves it)
-    load_team "${2:-}"; forward; ensure_state; slot=$(slot_of "${3:?}")
-    if [[ -n $slot ]]; then free "$slot" || exit 1; echo "$(name_of "$slot") is free"; fi ;;
   _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
     # is over (a plan write that ends work asks for it on the team's host)
-    load_team "${2:-}"; forward; ensure_state; reap ;;
+    need_team "${2:-}"; one _tidy "$2" ${forced[@]+"${forced[@]}"} ;;
   main)
     sub=${2:-}; load_main "${3:-}"; forward; ensure_state
     case $sub in

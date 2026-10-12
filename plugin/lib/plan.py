@@ -3302,20 +3302,18 @@ def unit_team(plan, name):
     return plan.bolt(u.get("Bolt")).get("Team") or fail(f"bolt {u.get('Bolt')} is held by no team yet: crew bolt give <team> {u.get('Bolt')}")
 
 
-def in_bolt(fleet, a):
-    """Whether a unit is in a bolt the team holds: said and exit 0 when it is, exit 3 when it is not, and refused when
-    the team's plan could not be read, since then nobody can tell."""
-    t = crew.team_of(fleet, a.team)
+def in_bolt(fleet, t, unit):
+    """Whether a unit is in a bolt the team holds: what says so when it is, None when it is not, and refused when the
+    team's plan could not be read, since then nobody can tell."""
     errors = {}
     found = plans(fleet, [t["label"]], errors)
-    not errors or fail(f"can't tell whether unit {a.unit} is still in {t['name']}'s bolt: "
+    not errors or fail(f"can't tell whether unit {unit} is still in {t['name']}'s bolt: "
                        + "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()))
     plan = found[0][3]
-    u = plan.unit(a.unit) if plan else None
+    u = plan.unit(unit) if plan else None
     if u and u.get("Bolt") in {b.name() for b in held_by(plan, t["name"])}:
-        print(f"unit {a.unit} is in bolt {u.get('Bolt')}, which {t['name']} holds")
-        return
-    sys.exit(3)
+        return f"unit {unit} is in bolt {u.get('Bolt')}, which {t['name']} holds"
+    return None
 
 
 HEAD = r"""cd "$1" && git rev-parse HEAD"""
@@ -4059,19 +4057,6 @@ def silenced():
             os.close(fd)
 
 
-def slots_cmd(fleet, a):
-    """Each slot of the team on this host: what it holds and that work's stage, read from the kit and the plan's marks.
-    With --ends, the ends the team's stages file owes are recorded first, as `_ends <team>` records them, its output and
-    any failure dropped: one process for a team's read where there were two."""
-    t = crew.team_of(fleet, a.team)
-    if a.ends and (team_state(t) / "stages").exists() and (team_state(t) / "stages").stat().st_size:
-        with silenced():
-            stage_ends(fleet, argparse.Namespace(team=a.team, slot=None, ending=False))
-    for s in slot_stages(fleet, t):
-        tasks = s["counts"] if s["counts"] and s["stage"] in ("code", "verify") else "-"
-        print(s["slot"], s["kind"], s["name"], s["stage"], tasks, s["place"])
-
-
 def tidy(fleet, a):
     """Each worktree crew made in the team's kit checkout, on this host, whose work is over and that no slot holds:
     removed with its branch, saying the commit the branch was at; or kept and named, with its branch, while it is
@@ -4707,26 +4692,6 @@ def rebase_waits(unit, bolt, due, status, is_clean, path):
     if not is_clean():
         return f"{unit} waits to be rebased onto bolt/{bolt}, now that {', '.join(due)} merged: {path} has uncommitted changes or work in progress"
     return None
-
-
-def rebase_cmd(fleet, a):
-    """crew _rebase <team> [--tidy]: the team's read rebases each dependent whose After unit has merged
-    (rebase_dependents); a conflict waits for the conductor's next wait, which tells the dependent. With --tidy, the
-    team's tidy runs after it, as `_tidy <team>` would, whether or not the rebase was refused: one process where there
-    were two."""
-    t = crew.team_of(fleet, a.team)
-    try:
-        plan = plan_of(fleet, t["label"])
-        if plan:
-            rebase_dependents(fleet, t, plan, stages_for(fleet, plan, held_by(plan, t["name"])), print)
-    except Refusal as e:
-        if not a.tidy:
-            raise
-        sys.stdout.flush()
-        print(e, file=sys.stderr)
-    if a.tidy:
-        sys.stdout.flush(), sys.stderr.flush()
-        tidy(fleet, a)
 
 
 def rebase_and_tidy(fleet, t):
@@ -5404,6 +5369,39 @@ def team_status(fleet, a):
         holds = crew.holds_said(held.get(slot), team.held(slot))
         print(crew.status_row(team.agent_of(slot), team.pane(slot) or "-", (team.status(slot) or "not up") if holds else "free",
                               "-", "-", "-", "-", holds))
+
+
+def team_tidy(fleet, a):
+    """crew _tidy <team>, on the team's host: the team's read (reap), which a plan write that ends work asks for there,
+    and crew rebuild runs once its agents are ended."""
+    reap(fleet, on_team_host(fleet, crew.team_of(fleet, a.team), a.force))
+
+
+def unit_free(fleet, a):
+    """crew unit free <unit> [--team <team>]: a slot still holding a unit no longer in its team's bolt freed now (teams.1),
+    rather than at the read after its agent settles, its agent ended and the worktrees whose work is over removed; with
+    no team named, the team of this host whose slot holds it. Refused while the unit is in the team's bolt, which a drop
+    frees, or while its place has uncommitted changes, which are the user's."""
+    if a.team:
+        t = crew.team_of(fleet, a.team)
+    else:
+        mine = [o for n, o in sorted(fleet["teams"].items()) if o["machine"] == crew.this_host()]
+        t = next((o for o in mine if crew.Team(fleet, o).holding(a.unit)), None) or fail(
+            f"no team on this host holds {a.unit} in a slot; name its team: crew unit free {a.unit} --team <team>")
+    team = on_team_host(fleet, t, a.force)
+    slot = team.holding(a.unit) or fail(f"no slot of {t['name']} holds {a.unit}")
+    said = in_bolt(fleet, t, a.unit)
+    not said or fail(f"{said}: drop it with crew unit drop, which frees its slot")
+    path = (team.held(slot) + [""] * 4)[3]
+    if os.path.isdir(path) and subprocess.run(["git", "-C", path, "status", "--porcelain"], capture_output=True, text=True, env=gitenv()).stdout.strip():
+        fail(f"{path} has uncommitted changes: they are the user's to keep or discard before the slot is freed")
+    why = team.free(slot, ending(fleet, t))
+    not why or fail(why)
+    print(f"{team.agent_of(slot)} is free")
+    try:
+        tidy(fleet, argparse.Namespace(team=t["name"]))
+    except Refusal as e:
+        print(e, file=sys.stderr)
 
 
 # ----------------------------------------------------------------------------------------------- crew bolts
@@ -6945,26 +6943,22 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--timeout", type=int, default=3600000)
     x.add_argument("--stuck", type=int, default=900000)
     x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_tidy")
+    x.add_argument("team")
+    x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_unit-free")
+    x.add_argument("unit")
+    x.add_argument("--team")
+    x.add_argument("--force", action="store_true")
     x = sub.add_parser("_bolt-of")
     x.add_argument("team")
     x = sub.add_parser("_amended")
     x.add_argument("team")
-    x = sub.add_parser("_slots")
-    x.add_argument("team")
-    x.add_argument("--ends", action="store_true")
-    x = sub.add_parser("_tidy")
-    x.add_argument("team")
-    x = sub.add_parser("_rebase")
-    x.add_argument("team")
-    x.add_argument("--tidy", action="store_true")
     x = sub.add_parser("_review")
     x.add_argument("label")
     x = sub.add_parser("_review-wait")
     x.add_argument("label")
     x.add_argument("--timeout", type=int, default=3600000)
-    x = sub.add_parser("_in-bolt")
-    x.add_argument("unit")
-    x.add_argument("team")
     x = sub.add_parser("_ends")
     x.add_argument("team")
     x.add_argument("--slot")
@@ -6990,15 +6984,16 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
-    ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
-    ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
+    ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units, ("_review", None): review_start, ("_review-wait", None): review_wait,
+    ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
 # A team's commands, each one process on the team's host.
-TEAM_COMMANDS = {("_status", None), ("_unit-run", None), ("_unit-wait", None), ("_fix-run", None)}
+TEAM_COMMANDS = {("_status", None), ("_unit-run", None), ("_unit-wait", None), ("_fix-run", None), ("_tidy", None), ("_unit-free", None)}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
