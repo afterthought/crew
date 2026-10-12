@@ -53,6 +53,34 @@ class TestVerify:
         assert plan.delivered(owed("verify"), {"saved": None}) == (None, "no report saved")
 
 
+def test_a_commit_between_the_reads_never_pairs_its_ticks_or_time_with_the_earlier_head(monkeypatch):
+    # Under load the unit's agent commits its last tick between crew's reads (t-journey-units, 2026-10-12: "every task
+    # is ticked (2/2) at 3138801" while the branch was at 7402611). The head is read once; its time and ticks are read
+    # at that commit, so the branch moving after the first read changes nothing deliverable_facts returns.
+    t = {"name": "swb-1", "kit": {"main": "/kit/main", "dir": "/kit"}}
+    moved = []
+    tasks = {"abc1234": "- [x] 1.1\n- [ ] 1.2\n", "def5678": "- [x] 1.1\n- [x] 1.2\n"}
+    times = {"abc1234": "2026-10-12T10:01:00+00:00", "def5678": "2026-10-12T10:02:00+00:00"}
+
+    def run(argv, cwd):
+        tip = "def5678" if moved else "abc1234"
+        if argv[:2] == ["git", "rev-parse"]:
+            moved.append(True)  # the agent's next tick lands just after crew read the head
+            return tip + "\n"
+        ref = argv[-1].split(":")[0]
+        rev = tip if ref.startswith("refs/heads/") or ref.startswith("unit/") else ref
+        if argv[:3] == ["git", "log", "-1"]:
+            return times[rev] + "\n"
+        if argv[:2] == ["git", "show"]:
+            return tasks[rev]
+        raise AssertionError(f"an unexpected read: {argv}")
+    monkeypatch.setattr(plan.gather, "run", run)
+    o = owed("code")
+    f = plan.deliverable_facts({}, t, o)
+    assert f == {"head": "abc1234", "at": AFTER, "ticks": (1, 2)}
+    assert plan.delivered(o, f) == (None, "1 of 2 tasks ticked at its head")
+
+
 class TestSettle:
     def test_a_commit_since_it_began_is_ready_to_merge(self):
         assert plan.delivered(owed("settle"), {"head": "abc1234", "at": AFTER}) == (

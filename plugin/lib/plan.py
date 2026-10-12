@@ -4757,10 +4757,10 @@ def committed_at(main, ref):
         return None
 
 
-def ticks(main, branch, unit):
-    """A unit's tasks at its branch's head, done and total, read from the commit and not the working tree, by the
-    reading every other reader of a unit's tasks uses (gather.tasks_of)."""
-    tasks = gather.tasks_of(gather.run(["git", "show", f"{branch}:openspec/changes/{unit}/tasks.md"], main) or "")
+def ticks(main, rev, unit):
+    """A unit's tasks at a commit, done and total, read from the commit and not the working tree, by the reading every
+    other reader of a unit's tasks uses (gather.tasks_of)."""
+    tasks = gather.tasks_of(gather.run(["git", "show", f"{rev}:openspec/changes/{unit}/tasks.md"], main) or "")
     return sum(done for done, _ in tasks), len(tasks)
 
 
@@ -4801,7 +4801,8 @@ def deliverable_facts(fleet, t, o, place=None):
     report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it and its head; for a
     chore's code, its own newest commit and when it was committed; else the branch's head and when it was committed, a
     code stage's ticks at that head, and, for a construct with a commit since it began, whether its planning is
-    complete."""
+    complete. The head is read once and the rest read at that commit, never at the branch again: an agent that commits
+    between the reads would pair one commit's time or ticks with another's sha."""
     main, f = t["kit"]["main"], {}
     if o.start is None:
         return f
@@ -4824,11 +4825,13 @@ def deliverable_facts(fleet, t, o, place=None):
         except ValueError:
             f["head"], f["at"] = head, None
         return f
-    f["head"], f["at"] = short_head(main, f"refs/heads/{o.branch()}"), committed_at(main, f"refs/heads/{o.branch()}")
+    f["head"] = short_head(main, f"refs/heads/{o.branch()}")
+    at = f["head"] or f"refs/heads/{o.branch()}"
+    f["at"] = committed_at(main, at)
     if o.fix or o.stage == "settle":
         return f
     if o.stage == "code":
-        f["ticks"] = ticks(main, o.branch(), o.name)
+        f["ticks"] = ticks(main, at, o.name)
         return f
     if f["head"] and f["at"] is not None and f["at"] >= o.start:
         place = place or f"{t['kit']['dir']}/places/{o.name}"
