@@ -165,7 +165,7 @@ class TestRebase:
         assert plan.rebase_waits("c", "t", ["a"], None, lambda: True, "/p/c") is None
 
     def test_a_dependent_holding_the_head_its_place_took_of_a_merged_unit_leaves_that_work_out(self):
-        assert plan.rebase_leaves_out(["a"], {"a": "1111111"}, lambda head: head == "1111111") == ["1111111"]
+        assert plan.rebase_leaves_out(["a"], {"a": "1111111"}, lambda head: head == "1111111") == ["a@1111111"]
 
     def test_one_with_no_took_is_rebased_onto_the_bolt_alone_as_before(self):
         assert plan.rebase_leaves_out(["a"], {}, lambda head: pytest.fail("nothing taken is read")) == []
@@ -175,12 +175,24 @@ class TestRebase:
 
     def test_each_merged_unit_whose_taken_head_it_holds_is_left_out_and_no_unmerged_one(self):
         took = {"a": "1111111", "c": "3333333", "d": "4444444"}
-        assert plan.rebase_leaves_out(["a", "c"], took, lambda head: True) == ["1111111", "3333333"]
-        assert plan.rebase_leaves_out(["a", "c"], took, lambda head: head != "1111111") == ["3333333"]
+        assert plan.rebase_leaves_out(["a", "c"], took, lambda head: True) == ["a@1111111", "c@3333333"]
+        assert plan.rebase_leaves_out(["a", "c"], took, lambda head: head != "1111111") == ["c@3333333"]
 
 
 class TestWords:
     T = {"kit": {"main": "/kit/main", "dir": "/kit"}}
+
+    def test_a_unit_in_conflict_with_the_bolt_is_told_to_rebase_onto_it(self):
+        assert plan.rebase_words("t") == "Rebase your place onto the bolt (git rebase bolt/t)"
+
+    def test_a_dependent_whose_rebase_left_out_its_after_units_work_is_told_the_upstream_crew_used(self):
+        assert plan.rebase_words("t", ["a@1111111"]) == (
+            "Rebase your place onto the bolt, leaving out a's work as your place took it, which the bolt holds as merged "
+            "(git rebase --onto bolt/t $(git commit-tree -p bolt/t -p 1111111 -m upstream 'bolt/t^{tree}'))")
+        assert plan.rebase_words("t", ["a@1111111", "c@3333333", "d@4444444"]) == (
+            "Rebase your place onto the bolt, leaving out the work of a, c and d as your place took it, which the bolt holds "
+            "as merged (git rebase --onto bolt/t $(git commit-tree -p bolt/t -p 1111111 -p 3333333 -p 4444444 -m upstream "
+            "'bolt/t^{tree}'))")
 
     def place(self, tmp_path, unit):
         d = tmp_path / unit / "openspec" / "changes" / unit

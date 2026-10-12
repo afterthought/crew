@@ -49,12 +49,13 @@ DESCRIPTOR = """\
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
 # it delivered, as an object) and Observed, a tell's Chars, the Amended of a construct's start that marked its unit
-# amended, the After units' heads a construct's place Took, a forecast's Heads (the later unit's and the other's, <name>@<sha>), its conflicting Paths and how it Reached
-# the later unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), a review
-# batch's Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's
-# Count, a card act's Card (the Pending You card's id) and Key (the rail row's card key), and an operation's (ops.py): a
-# deploy's commit as Head and the one it comes from as Base, its Phase (start, step or end), a step's Step and Outcome, its
-# Log and the suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
+# amended, the After units' heads a construct's place Took and a dependent's rebase left out (a forecast's Took), a
+# forecast's Heads (the later unit's and the other's, <name>@<sha>), its conflicting Paths and how it Reached the later
+# unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
+# Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's Count, a
+# card act's Card (the Pending You card's id) and Key (the rail row's card key), and an operation's (ops.py): a deploy's
+# commit as Head and the one it comes from as Base, its Phase (start, step or end), a step's Step and Outcome, its Log
+# and the suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
          "Forecast", "Batch", "Units", "Count", "Card", "Key", "Base", "Phase", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
          "When", "Text", "Changes", "Note")

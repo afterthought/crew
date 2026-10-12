@@ -2,7 +2,8 @@
 # journey (t-journey-units): a forecast against the bolt starts a verified unit's settle stage; a dependent holding
 # that unit's work as its place took it is not forecast against the unit for the settle's revision of it; the unit
 # merges through worktrunk; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it,
-# and undoes a rebase that conflicts; and the next read frees the merged unit's slot and removes its place.
+# and undoes a rebase that conflicts; the next read frees the merged unit's slot and removes its place; and the
+# dependent whose rebase conflicted is told how to make that rebase's upstream again.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -55,6 +56,9 @@ has "$out" "b is rebased onto bolt/tenant-environments, now that a merged"
 eq "$(git -C "$k" log --format=%s bolt/tenant-environments..unit/b)" "docs(b): the change"
 eq "$(git -C "$k" rev-parse unit/c)" "$c_before"
 eq "$(field $box unit.rebase From unit/b)" "unit/a"
+# c's own line meets a's settled one: its rebase, which left out a's work as c's place took it, conflicts there.
+c_took=$(field $box stage.start Took stage/c/construct); c_took=${c_took#a@}
+eq "$(field $box forecast Took unit/c bolt/tenant-environments)" "a@$c_took"
 ok "a forecast against the bolt starts a verified unit's settle stage, a dependent is forecast nothing for the unit's own work its place took, and the unit merges, each a fresh agent ended at its deliverable; the merge names the verify row's card, and its wait rebases a dependent onto the bolt, leaving out the unit's work as it took it, and undoes a rebase that conflicts"
 
 expect_ok crew status swb-1
@@ -62,3 +66,8 @@ has "$out" "swb-1-unit-1 is free: a has merged into its bolt"
 has "$out" "$kd/places/a and unit/a are removed; the branch was at"
 [[ ! -d $kd/places/a ]] || fail "a's place is still there"
 ok "the next read frees a merged unit's slot and removes its place"
+
+# c's next prompt carries its rebase's conflict, naming the upstream that rebase used, made again by the command given.
+expect_ok crew unit run c code
+has "$(prompt_to swb-1-unit-3)" "work as your place took it, which the bolt holds as merged (git rebase --onto bolt/tenant-environments \$(git commit-tree -p bolt/tenant-environments -p $c_took -m upstream"
+ok "a dependent whose rebase conflicts is told the upstream crew's rebase used, as a command that makes it again"

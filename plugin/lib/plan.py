@@ -4530,21 +4530,35 @@ def change_words(main, kdir, k, bolt, unit):
             + (" What it changes: " + " ".join(items) if items else ""))
 
 
-def forecast_words(t, k, bolt, unit, other, paths):
+def forecast_words(t, k, bolt, unit, other, paths, left_out=()):
     """What a forecast says to the later unit: the conflicting paths, how to resolve them keeping both intents, and the
-    other unit's change, or, for a conflict with the bolt, the change of each unit merged since the unit's place was
-    made (teams.13)."""
+    other unit's change, or, for a conflict with the bolt, how to rebase (rebase_words, left_out the After units' work
+    a dependent's rebase left out) and the change of each unit merged since the unit's place was made (teams.13)."""
     main, kdir, on = t["kit"]["main"], t["kit"]["dir"], ", ".join(paths)
     if other == f"bolt/{bolt}":
         base = gather.run(["git", "merge-base", f"bolt/{bolt}", f"unit/{unit}"], main)
         since = [c for c in gather.changes(main, f"bolt/{bolt}") if c not in (gather.changes(main, base.strip()) if base else [])]
-        return (f"Your branch is forecast to conflict with bolt/{bolt} on {on}. Rebase your place onto the bolt "
-                f"(git rebase bolt/{bolt}), resolve each conflict keeping both changes' intents, run the tests those paths "
-                "affect, and commit." + "".join(" Merged since your place was made: " + change_words(main, kdir, k, bolt, c)
-                                                  for c in since))
+        return (f"Your branch is forecast to conflict with bolt/{bolt} on {on}. {rebase_words(bolt, left_out)}, resolve "
+                "each conflict keeping both changes' intents, run the tests those paths affect, and commit."
+                + "".join(" Merged since your place was made: " + change_words(main, kdir, k, bolt, c) for c in since))
     return (f"Your merge after {other}, ahead of you in the bolt and not merged, is forecast to conflict on {on}. You merge "
             f"after it: take its work into your place (git merge unit/{other}), resolve each conflict keeping both changes' "
             f"intents, run the tests those paths affect, and commit. " + change_words(main, kdir, k, bolt, other))
+
+
+def rebase_words(bolt, left_out=()):
+    """How a unit is told to rebase its place onto its bolt: onto the bolt alone; or, for a dependent whose rebase at
+    its After units' merge left their work out as its place took it (left_out, <unit>@<head> words), from the upstream
+    crew's own rebase used, a commit whose parents are the bolt and those heads (ONTO), so it meets no conflict on their
+    files. That commit has no ref, and nothing keeps it: the words give the command that makes it again, from the bolt
+    as it then stands and heads the place holds (plan.13)."""
+    if not left_out:
+        return f"Rebase your place onto the bolt (git rebase bolt/{bolt})"
+    names, heads = zip(*(w.split("@", 1) for w in left_out))
+    work = f"{names[0]}'s work" if len(names) == 1 else f"the work of {', '.join(names[:-1])} and {names[-1]}"
+    parents = " ".join(f"-p {h}" for h in (f"bolt/{bolt}",) + heads)
+    return (f"Rebase your place onto the bolt, leaving out {work} as your place took it, which the bolt holds as merged "
+            f"(git rebase --onto bolt/{bolt} $(git commit-tree {parents} -m upstream 'bolt/{bolt}^{{tree}}'))")
 
 
 def amendment_words(t, k, bolt, after):
@@ -4635,7 +4649,8 @@ def rebase_dependents(fleet, t, plan, st, say):
     met the bolt, is rebased onto the bolt, only while its agent is not working and its place is clean (teams.2, plan.9):
     the bolt's commits drop out of it, and so does each merged After unit's work as its place took it (rebase_leaves_out,
     from the run record's Took). A rebase that conflicts is aborted, the place as it was, and returned to reach the
-    dependent as a conflict does: [(bolt, unit, paths)]. say(text) reports what was done or left."""
+    dependent as a conflict does, with what it left out: [(bolt, unit, paths, <after unit>@<head> words)]. say(text)
+    reports what was done or left."""
     main, out, entries = t["kit"]["main"], [], None
     owed = owed_by_unit(t)
     for b in held_by(plan, t["name"]):
@@ -4661,11 +4676,11 @@ def rebase_dependents(fleet, t, plan, st, say):
             holds = lambda head: subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", head, branch], env=gitenv(),
                                                 stderr=subprocess.DEVNULL).returncode == 0
             left_out = rebase_leaves_out(due, took_heads(u.name(), entries), holds)
-            r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name(), *left_out], capture_output=True, text=True,
-                               env=gitenv())
+            r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name(), *(w.split("@", 1)[1] for w in left_out)],
+                               capture_output=True, text=True, env=gitenv())
             READ.drop_kit(t["machine"], main)
             if r.returncode == 3:
-                out.append((b.name(), u.name(), r.stdout.strip().split()[1:], due))
+                out.append((b.name(), u.name(), r.stdout.strip().split()[1:], left_out))
                 say(f"rebasing {u.name()} onto bolt/{b.name()} conflicts: its place is as it was, and it is told")
             elif r.returncode:
                 say(f"{u.name()} was not rebased onto bolt/{b.name()}: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
@@ -4677,11 +4692,11 @@ def rebase_dependents(fleet, t, plan, st, say):
 
 
 def rebase_leaves_out(due, took, holds):
-    """The heads of a dependent's merged After units (due) that its place took (took, {after unit: head}) and still
-    holds (holds(head)), in due's order: its rebase onto the bolt leaves their work out as it took it, since the bolt
-    holds that work as it merged, rewritten since by a rebase or a settle (plan.13). [] when it took none or holds none
-    of them, and it is rebased onto the bolt alone."""
-    return [took[a] for a in due if took.get(a) and holds(took[a])]
+    """Each of a dependent's merged After units (due) whose head its place took (took, {after unit: head}) and still
+    holds (holds(head)), as <unit>@<head>, in due's order: its rebase onto the bolt leaves their work out as it took it,
+    since the bolt holds that work as it merged, rewritten since by a rebase or a settle (plan.13). [] when it took none
+    or holds none of them, and it is rebased onto the bolt alone."""
+    return [f"{a}@{took[a]}" for a in due if took.get(a) and holds(took[a])]
 
 
 def rebase_waits(unit, bolt, due, status, is_clean, path):
@@ -4779,17 +4794,18 @@ def reach(fleet, t):
             st = stages_for(fleet, plan, bolts)
     entries = local_entries(label)
     done = {e.get("Heads") for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Heads")}
-    for bolt, name, paths, due in met:
+    for bolt, name, paths, left_out in met:
         k, _ = st.kit(plan.bolt(bolt))
         pl = (k or {"places": {}})["places"].get(name)
         bhead = (k or {"bolts": {}})["bolts"].get(bolt, {}).get("head")
         heads = f"{name}@{(pl or {}).get('head', '')[:7]} bolt/{bolt}@{(bhead or '')[:7]}"
         if not pl or not bhead or heads in done:
             continue
-        way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, bolt, name, f"bolt/{bolt}", paths))
+        way = deliver(fleet, t, entries, name, st.of(name)["stage"],
+                      forecast_words(t, k, bolt, name, f"bolt/{bolt}", paths, left_out))
         if way:
             record.emit(label, "forecast", [f"unit/{name}", f"bolt/{bolt}"], why=f"unit({name}): rebase onto bolt/{bolt} conflicts",
-                        Heads=heads, Paths=" ".join(paths), Reached=way)
+                        Heads=heads, Paths=" ".join(paths), Reached=way, Took=" ".join(left_out))
             done.add(heads)
     for bolt, name, a, ahead in amendments(t, plan, st, entries):
         heads = f"{name} {a}@{ahead}"
@@ -4874,7 +4890,8 @@ def carried_forecasts(fleet, t, plan, st_all, bolt, unit):
     k, _ = st_all.kit(plan.bolt(bolt))
     other = lambda e: e["On"][1][5:] if e["On"][1].startswith("unit/") else e["On"][1]
     return [e["Id"] for e in waiting], [amendment_words(t, k, bolt, other(e)) if e["Act"] == "amendment" else
-                                        forecast_words(t, k, bolt, unit, other(e), (e.get("Paths") or "").split()) for e in waiting]
+                                        forecast_words(t, k, bolt, unit, other(e), (e.get("Paths") or "").split(),
+                                                       (e.get("Took") or "").split()) for e in waiting]
 
 
 def waiting_for(unit, entries):

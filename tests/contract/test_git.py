@@ -199,9 +199,10 @@ def onto(place, bolt, *heads):
     return subprocess.run(["bash", "-c", plan.ONTO, "crew", str(place), bolt, *heads], capture_output=True, text=True)
 
 
-def settled_and_merged(repo, tmp_path, moved=False):
+def settled_and_merged(repo, tmp_path, moved=False, own=None):
     """unit/a's change, and unit/b's place, which took a's head as crew's take does, by a merge, a fast-forward unless
-    the bolt moved after a's place was made (moved), and added a commit of its own; then the bolt changes a's line,
+    the bolt moved after a's place was made (moved), and added a commit of its own (own, else a file of b's own); then
+    the bolt changes a's line,
     and a's settle rebases a onto it, resolving the line and revising a's design in the same commit, and a merges.
     Returns b's place and the head it took, which crew records as the construct's Took."""
     repo.commit("main", {"shared.txt": "one\ntwo\nthree\n", "f": "f\n"})
@@ -215,8 +216,9 @@ def settled_and_merged(repo, tmp_path, moved=False):
     repo.git("worktree", "add", "-q", "-b", "unit/b", str(place), "bolt/t")
     in_place = lambda *a: subprocess.run(["git", "-C", str(place), *a], check=True, capture_output=True)
     in_place("merge", "-q", "--no-edit", "-m", "chore(b): build on a as it stands", "unit/a")
-    (place / "b.md").write_text("b\n")
-    in_place("add", "b.md")
+    for name, text in (own or {"b.md": "b\n"}).items():
+        (place / name).write_text(text)
+        in_place("add", name)
     in_place("commit", "-qm", "feat(b): its own")
     repo.git("checkout", "-q", "bolt/t")
     repo.commit("feat: the bolt's line",
@@ -254,14 +256,33 @@ def test_a_dependents_rebase_leaves_out_the_bolts_commits_with_the_head_it_took(
     place, took = settled_and_merged(repo, tmp_path, moved=True)
     r = subprocess.run(["git", "-C", str(place), "rebase", "-q", "--onto", "bolt/t", took], capture_output=True, text=True)
     assert r.returncode != 0
-    unmerged = subprocess.run(["git", "-C", str(place), "diff", "--name-only", "--diff-filter=U"], capture_output=True, text=True)
-    assert unmerged.stdout.split() == ["f"]
+    assert unmerged(place) == ["f"]
     subprocess.run(["git", "-C", str(place), "rebase", "--abort"], check=True)
     r = onto(place, "t", took[:7])
     assert (r.returncode, r.stdout.strip()) == (0, "rebased")
     assert repo.git("log", "--format=%s", "--no-merges", "bolt/t..unit/b") == "feat(b): its own"
     assert repo.git("for-each-ref", "--format=%(refname)", "refs/heads").split() == [
         "refs/heads/bolt/t", "refs/heads/main", "refs/heads/unit/a", "refs/heads/unit/b"]
+
+
+def unmerged(place):
+    return subprocess.run(["git", "-C", str(place), "diff", "--name-only", "--diff-filter=U"], capture_output=True,
+                          text=True).stdout.split()
+
+
+def test_the_rebase_a_dependent_is_told_makes_crews_upstream_again_and_meets_only_its_own_overlap(repo, tmp_path):
+    """plan.rebase_words (plan.13): crew's rebase of a dependent whose own commit changed the line its dependency's
+    settle rewrote conflicts there; the command the dependent is told makes again the upstream that rebase used, which
+    has no ref, and run in its place by bash meets the same conflict and none on the dependency's own files."""
+    import plan
+    place, took = settled_and_merged(repo, tmp_path, moved=True, own={"shared.txt": "one\ntwo, as b has it\nthree\n"})
+    r = onto(place, "t", took[:7])
+    assert r.returncode == 3 and r.stdout.split()[1:] == ["shared.txt"]
+    words = plan.rebase_words("t", [f"a@{took[:7]}"])
+    command = words[words.index("(git rebase ") + 1:-1]
+    assert subprocess.run(["bash", "-c", command], cwd=place, capture_output=True, text=True).returncode != 0
+    assert unmerged(place) == ["shared.txt"]
+    subprocess.run(["git", "-C", str(place), "rebase", "--abort"], check=True)
 
 
 def kit_with_github(repo, tmp_path):

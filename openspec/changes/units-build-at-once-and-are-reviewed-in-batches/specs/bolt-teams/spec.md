@@ -28,6 +28,10 @@ When a unit's place is made, crew SHALL bring into `unit/<unit>` the head of eac
 - **WHEN** A's settle rewrote A's change, which B's place holds as it took it, and A merges into the bolt while B's agent is idle
 - **THEN** B's place is rebased onto the bolt with only B's own commits replayed, and nothing conflicts on A's files
 
+#### Scenario: The dependent's own line meets the dependency's settled one
+- **WHEN** B's own commit changed the line A's settle rewrote, and A merges into the bolt while B's agent is idle
+- **THEN** B's rebase conflicts on that line and is undone, and B is told the conflicting paths with a command that rebases it the way crew's rebase did, leaving out A's work as B's place took it
+
 #### Scenario: The dependent is working
 - **WHEN** A merges into the bolt while B's agent is working
 - **THEN** B's place is not touched until the agent is idle
