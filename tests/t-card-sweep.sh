@@ -1,7 +1,7 @@
 # Every rail read ends the card sessions crew started whose card is closed or whose row is gone, on every host of the
 # partition, through crew card sweep on each: a proposal approved with its card still open, a card closed while its
-# row stays, a dropped unit's verify report, and a batch card closed on the main host, whose units' sessions are on
-# their teams' hosts. It ends no session with a card still to come, none crew did not start, and none started under two
+# row stays, a dropped unit's verify report, and a batch card closed, whose one session is on the main level's host.
+# It ends no session with a card still to come, none crew did not start, and none started under two
 # minutes before, which a later read ends. The rail lists each session it ended with its host and why, names each host
 # it could not check, and says nothing about sessions when it ended nothing. A team's host that does not answer is
 # named, and nothing there is ended, nor any verify session of its units; while a host of the run record does not
@@ -83,20 +83,19 @@ while not os.path.exists(f):
 # swept <rail>: the rail's lines about card sessions
 swept() { sed -n '/^card sessions /,/^$/p' <<<"$1" | sed '/^$/d'; }
 
-# The sessions: on the box, proposal 1's and v1's to v3's reports', and x1's of the batch card; z1's on mac-studio.
+# The sessions, on the box: proposal 1's, v1's to v3's reports' and the batch card's one, on the whole batch.
 HOST=$box crew card session proposal/1 >/dev/null; pp1=$(rec $box proposal/1 .pid)
 for u in v1 v2 v3; do HOST=$box crew card session verify/$u/$s >/dev/null; done
 pv1=$(rec $box verify/v1/$s .pid); pv2=$(rec $box verify/v2/$s .pid); pv3=$(rec $box verify/v3/$s .pid)
-HOST=$box crew card session batch/1-1 x1 >/dev/null; px1=$(rec $box batch/1-1/x1 .pid)
-HOST=$box crew card session batch/1-1 z1 >/dev/null; pz1=$(rec mac-studio batch/1-1/z1 .pid)
-for f in proposal/1 verify/v1/$s verify/v2/$s verify/v3/$s batch/1-1/x1; do aged $box $f; done; aged mac-studio batch/1-1/z1
+HOST=$box crew card session batch/1 >/dev/null; pb1=$(rec $box batch/1 .pid)
+for f in proposal/1 verify/v1/$s verify/v2/$s verify/v3/$s batch/1; do aged $box $f; done
 mine=$(by_hand $box "$(rec $box proposal/1 .document)")
 emit $box wldn-planner card.post proposal/1 req_p-1 proposal/1
 emit $box swb-1-conductor card.post unit/v2 req_v-2 verify/v2/$s
-emit $box wldn-planner card.post batch/1 req_b-1 batch/1-1
+emit $box wldn-planner card.post batch/1 req_b-1 batch/1
 
 # The planner closes the batch card and the conductor v2's, and the user approves proposal 1, whose card stays open.
-emit $box wldn-planner card.close batch/1 req_b-1 batch/1-1
+emit $box wldn-planner card.close batch/1 req_b-1 batch/1
 emit $box swb-1-conductor card.close unit/v2 req_v-2 verify/v2/$s
 crew plan approve 1 >/dev/null
 
@@ -107,7 +106,7 @@ eq "$(swept "$out")" "card sessions ended:
 card sessions not checked:
   mac-studio (wldn): did not answer (ssh: connect to host mac-studio port 22: Operation timed out)"
 gone "$pp1"
-for p in $pv1 $pv2 $pv3 $px1 $pz1 $mine; do up $p || fail "pid $p was ended while a host of the run record did not answer"; done
+for p in $pv1 $pv2 $pv3 $pb1 $mine; do up $p || fail "pid $p was ended while a host of the run record did not answer"; done
 [[ -e $(home_of $box)/$cards/verify/v2/$s/session.json ]] || fail "v2's closed card's session was forgotten"
 ok "while a host of the run record does not answer, a closed card's session and a batch card's are kept, a row gone still ends its session, and the host is named"
 up "$mine" || fail "a plannotator crew did not start was ended"
@@ -119,14 +118,13 @@ HOST=$box crew card session proposal/2 >/dev/null; pp2=$(rec $box proposal/2 .pi
 crew plan drop 2 "Replaced." >/dev/null
 expect_ok crew rail --label wldn
 eq "$(swept "$out")" "card sessions ended:
-  batch/1-1 x1 (wldn) on $box: its row is gone; ended batch/1-1 x1's session, plannotator pid $px1
+  batch/1 (wldn) on $box: its row is gone; ended batch/1's session, plannotator pid $pb1
   verify/v1/$s (wldn) on $box: its row is gone; ended verify/v1/$s's session, plannotator pid $pv1
-  verify/v2/$s (wldn) on $box: its card is closed; ended verify/v2/$s's session, plannotator pid $pv2
-  batch/1-1 z1 (wldn) on mac-studio: its row is gone; ended batch/1-1 z1's session, plannotator pid $pz1"
-for p in $px1 $pv1 $pv2 $pz1; do gone $p; done
+  verify/v2/$s (wldn) on $box: its card is closed; ended verify/v2/$s's session, plannotator pid $pv2"
+for p in $pb1 $pv1 $pv2; do gone $p; done
 [[ ! -e $(home_of $box)/$cards/verify/v1 && ! -e $(home_of $box)/$cards/batch && ! -e $(home_of mac-studio)/$cards/batch ]] ||
   fail "an ended session's key was not forgotten"
-ok "run on mac-studio, the rail ends a dropped unit's verify session and a closed card's with its row still there, and a batch card closed on the main host ends its units' sessions on each team's host, listing each with its host and why"
+ok "run on mac-studio, the rail ends a dropped unit's verify session and a closed card's with its row still there, and a batch card closed ends its one session on the main level's host, listing each with its host and why"
 up "$pv3" || fail "a session whose card is still to come was ended"
 ok "a session whose row is open and whose card is still to come is left running"
 up "$pp2" || fail "a session started under two minutes before the read was ended"

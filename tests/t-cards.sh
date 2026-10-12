@@ -8,7 +8,7 @@
 # session crew did not start, and a card posted under a key that is no longer a row's closes under it. When
 # plannotator's list can't be read, a withdrawal ends nothing, keeps the key's session and tells the agent so. Run as
 # `cards --before`, before a card is posted or an area made, the hook refuses a crew agent's card under any key but a
-# rail row's of its own, the planner's open proposal or batch card or its conductor's bolt and units, and an area under
+# rail row's of its own, the planner's open proposal or batch or its conductor's bolt and units, and an area under
 # any key but create-area: and a kit of its own, naming the key to use; a team's ops and slots and the main level's
 # other agents own no card key; a call crew can't check is refused naming what it could not read; and a session crew
 # didn't start, another server's tool and the other card tools are not checked for their key. Each refusal scenario of
@@ -16,11 +16,16 @@
 # its row's, naming the form: a landing card that is a step, not high stakes, or has options or a step that lands it; a
 # verify card with no options; a proposal card not as `crew plan card` prints it, checked against the proposal: one
 # that makes no unit new to a bolt is an approval with no options, steps or questions, and one with new units asks
-# `plan` and its new units each once, a lone one as a choice, never a text question, so a card missing a unit, asking
-# for words, or posted as a plain approval is refused, and so is one for a proposal crew can't draw; and a change that
-# clears a landing's high stakes or gives a card options or steps its row's has not; a batch card's form is not checked. A card under no row's key is refused for its key, not its form; a change to a card posted on no row's
-# key here, a session crew didn't start and another server's tool pass unchecked; what it can't check, its own input
-# among it, is refused, while the record half never fails.
+# `plan` and its new units each once, a lone one as a choice, so a card missing a unit or posted as a plain approval
+# is refused, and so is one for a proposal crew can't draw; a batch's card, keyed batch/<n>, as one notice naming every
+# unit of the batch with nothing to answer and one link, so a choice, an approval, a grouped card, an attachment, a code
+# block in its words, a link per unit or a background that leaves out a unit is refused, while a card of a batch posted
+# under batch/<n>-<k> before a batch was one card is not checked; no row's card asking a question in words; and a
+# change that clears a landing's high stakes or gives a card options, steps, an attachment, a code block or a second
+# link its row's has not. A card under no row's
+# key is refused for its key, not its form; a change to a card posted on no row's key here, a session crew didn't start
+# and another server's tool pass unchecked; what it can't check, its own input among it, is refused, while the record
+# half never fails.
 # Reads: plugin/hooks/ plugin/lib/picture.py plugin/lib/font.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -84,13 +89,15 @@ call plugin_pendingyou_pendingyou post_request "$(post land/tenant-environments/
 call pendingyou post_request "$(post proposal/4)" '{"structuredContent": {"requestId": "req_abc-4"}}' | cards
 eq "$(entries card.post | jq -r '"\(.On[0]) \(.Card) \(.Key)"' | tail -2 | tr '\n' ' ')" \
   "bolt/tenant-environments req_abc-3 land/tenant-environments/abc1234 proposal/4 req_abc-4 proposal/4 "
+call pendingyou post_request "$(post batch/3)" '{"structuredContent": {"requestId": "req_abc-13"}}' | cards
+eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "batch/3 req_abc-13 batch/3"
 call pendingyou post_request "$(post batch/3-2)" '{"structuredContent": {"requestId": "req_abc-12"}}' | cards
 eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "batch/3 req_abc-12 batch/3-2"
 # As Claude Code 2.1.292 gives Pending You's result: the text alone, a string of JSON.
 call pendingyou post_request "$(post verify/y/20261007-1500)" \
   '"{\"requestId\":\"req_5de3dad46fba41068fba\",\"threadId\":\"req_5de3dad46fba41068fba\",\"status\":\"pending\",\"version\":1}"' | cards
 eq "$(pick card.post '[(.On | join(" ")), .Card, .Key] | join(" ")')" "unit/y req_5de3dad46fba41068fba verify/y/20261007-1500"
-ok "a post's entry names its row, its card and its key, a batch card's its batch, from structuredContent, a text block of JSON, a plain string of JSON, or a plugin's server"
+ok "a post's entry names its row, its card and its key, a batch card's its batch, under batch/<n> or a batch/<n>-<k> from before, from structuredContent, a text block of JSON, a plain string of JSON, or a plugin's server"
 
 call pendingyou update_request '{"name": "swb-1-conductor", "requestId": "req_abc-1", "title": "ZQXTITLE again"}' \
   '{"structuredContent": {"requestId": "req_abc-1", "status": "pending", "version": 2}}' | cards
@@ -255,10 +262,13 @@ printf '%s\n' 'Case: The queue gets a unit.' 'Do: unit add queued "Queued." --re
 printf '%s\n' 'Case: The queue gets another.' 'Do: unit add later "Later." --repo switchboard-kit' > "$T/p2.rec"
 crew plan propose "$T/p1.rec" >/dev/null 2>&1; crew plan propose "$T/p2.rec" >/dev/null 2>&1
 crew plan drop 2 "not now" >/dev/null
-# A batch of seven, as the run record holds one: two cards, the second closed.
+# A batch of seven posted as two cards before a batch was one card, the second closed; and a batch of three since.
 units7=$(for u in a b c d e f g; do printf '%s:swb-1@abc1234 ' "u$u"; done)
 CREW_AGENT=wldn-reviewer emit --act review.batch --on batch/1 --field Batch=1 --field "Units=$units7" >/dev/null
-CREW_AGENT=wldn-planner emit --act card.close --on batch/1 --field Card=req_b-1 --field Key=batch/1-2 >/dev/null
+CREW_AGENT=wldn-planner emit --act card.post --on batch/1 --field Card=req_b-1 --field Key=batch/1-1 >/dev/null
+CREW_AGENT=wldn-planner emit --act card.post --on batch/1 --field Card=req_b-2 --field Key=batch/1-2 >/dev/null
+CREW_AGENT=wldn-planner emit --act card.close --on batch/1 --field Card=req_b-2 --field Key=batch/1-2 >/dev/null
+CREW_AGENT=wldn-reviewer emit --act review.batch --on batch/2 --field Batch=2 --field "Units=x1:swb-1@abc1234 x2:swb-1@abc1234 z1:swb-2@abc1234" >/dev/null
 # The hook, run as the plugin runs it before a Pending You tool.
 check() { as mac-studio python3 "$CREW/plugin/hooks/cards" --before; }
 # pre <server> <tool> <input> [session]: the hook's input before one tool call, as Claude Code gives it
@@ -305,13 +315,14 @@ has "$(denied brd-1-conductor post_request land/tenant-environments/abc1234)" "b
 ok "a conductor's key of its own making, a review's key, which is no row's, a bolt's bare land/<bolt>, and another team's row, are refused naming the keys that are its own"
 
 why=$(denied wldn-planner post_request proposal/2)
-eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, or batch/<n>-<k> for a card of one of its batches open now, proposal/1 or batch/1-1, from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`."
+eq "$why" "crew refuses a card under proposal/2: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, or batch/<n> for one of its batches open now, proposal/1, batch/1-1 or batch/2, from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`."
 eq "$(gate wldn-planner post_request batch/1-1 '{"questions": [{"id": "which", "kind": "multi", "title": "Which need notes?"}, {"id": "notes", "kind": "text", "title": "The notes"}]}')" ""
-has "$(denied wldn-planner post_request batch/1-2)" "proposal/1 or batch/1-1"
-has "$(denied swb-1-conductor post_request batch/1-1)" "swb-1-conductor posts a card only under a rail row's key of its own"
+has "$(denied wldn-planner post_request batch/1-2)" "proposal/1, batch/1-1 or batch/2"
+has "$(denied wldn-planner post_request batch/1)" "proposal/1, batch/1-1 or batch/2"
+has "$(denied swb-1-conductor post_request batch/2)" "swb-1-conductor posts a card only under a rail row's key of its own"
 has "$(denied wldn-design post_request proposal/1)" "wldn-design owns no card key, since only the planner, the conductors and main-level ops post cards"
 has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "operations"
-ok "the planner is refused a closed proposal's or batch card's key, naming the open ones, and passes under an open batch card's, whose form is not checked; a conductor is refused a batch's key, and the main level's other agents own no key"
+ok "the planner is refused a closed proposal's or batch card's key, and batch/<n> for a batch posted as cards before, naming the open ones, and passes under an open card of such a batch, whose form is not checked; a conductor is refused a batch's key, and the main level's other agents own no key"
 
 why=$(denied swb-1-conductor create_area area:swb-1-conductor)
 eq "$why" "crew refuses an area under area:swb-1-conductor: swb-1-conductor makes a kit's area only under create-area:WilldanGroup/switchboard-kit."
@@ -411,7 +422,7 @@ CREW_AGENT=wldn-planner passes post_request "$(card proposal/4 "$card4")"
 CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '.questions[1].options |= map(select(.id != "pc"))' <<<"$card4")")" \
   "crew refuses card proposal/4. $grouped" "This card does not ask about pc, new to a bolt in proposal 4."
 CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '.questions += [{id: "notes", kind: "text", title: "Anything to add?"}]' <<<"$card4")")" \
-  "the note is the place for words" 'This card asks for words in notes, of kind "text".'
+  "the note is the place for words" "This card asks a question in words, which Pending You makes required. The card's note is where the user's words go."
 CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 '{"kind": "approve"}')" "$grouped" "This card asks no questions, as a plain approval."
 CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '.questions[1].options += [{id: "zz", label: "zz"}]' <<<"$card4")")" \
   "This card asks about zz, which proposal 4 does not make new to a bolt."
@@ -429,6 +440,40 @@ refused post_request "$(card agent-note-1 '{"kind": "action", "action": {"steps"
   "crew refuses a card under agent-note-1: swb-1-conductor posts a card only under a rail row's key of its own"
 refused post_request "$(card land/y '{"kind": "action"}')" "crew refuses a card under land/y: swb-1-conductor posts a card only under"
 ok "a verify card is a choice with options; a proposal card is as crew plan card prints it, an approval, or the approval and each new unit once, never words, and none once its proposal no longer applies; a card under no row's key is refused for its key, not its form"
+
+# Batch 2's card, the planner's: one notice naming x1, x2 and z1, each with its summary as prose, and one link.
+bg=$'Read and annotate the whole batch, its summary and every change: http://mac-studio.ts.swancloud.net:19432\n\nx1 (swb-1)\nWhat x1 does, in a few sentences that wrap.\n\nx2 (swb-1)\nWhat x2 does.\n\nz1 (swb-2)\nWhat z1 does.'
+batch=$(jq -nc --arg b "$bg" '{kind: "fyi", intent: "heads_up", summary: "This is batch 2 of wldn. Nothing to answer and nothing to approve.",
+  context: {background: $b, links: [{label: "Read and annotate batch 2", url: "http://mac-studio.ts.swancloud.net:19432"}]}}')
+fenced=$(printf '```\n%s\n```' "$bg")
+notice="A batch's card is one notice for the whole batch, kind \"fyi\""
+CREW_AGENT=wldn-planner passes post_request "$(card batch/2 "$batch")"
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '.kind = "multi" | . + {options: [{id: "x1", label: "x1"}, {id: "z1", label: "z1"}]}' <<<"$batch")")" \
+  "crew refuses card batch/2. $notice, saying what it is, naming every unit, with each unit's summary as prose in its background, one link to the batch's reading session and nothing to answer: no options, no question, no approval, no steps and no attachment" \
+  'This card is a "multi", and has options. Post it again in that form.'
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '.kind = "approve" | . + {approve: {action: "Approve batch 2"}}' <<<"$batch")")" \
+  'This card is an "approve", and approves something.'
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '.kind = "text"' <<<"$batch")")" \
+  "This card asks a question in words, which Pending You makes required. The card's note is where the user's words go."
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c 'del(.kind) | . + {questions: [{id: "which", kind: "multi", title: "Which need notes?"}]}' <<<"$batch")")" \
+  "This card is a grouped card of questions, and names no kind."
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '. + {artifacts: [{kind: "code", lang: "markdown", lines: ["# Batch 2"]}]}' <<<"$batch")")" \
+  "This card attaches its summary."
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c --arg b "$fenced" '.context.background = $b' <<<"$batch")")" \
+  "This card puts its summary in a code block, which scrolls sideways on the phone."
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c --arg b "${bg%%$'\n\nz1'*}" '.context.background = $b' <<<"$batch")")" \
+  "This card leaves out z1."
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c 'del(.context)' <<<"$batch")")" "This card leaves out x1, x2 and z1."
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '.context.links = [{label: "Read and annotate x1", url: "http://box:1"}, {label: "Read and annotate x2", url: "http://box:2"}, {label: "Read and annotate z1", url: "http://mac-studio:3"}]' <<<"$batch")")" \
+  "This card links more than one session; a batch has one reading session."
+ok "a batch's card is one notice naming every unit of the batch with nothing to answer and one link: a choice, an approval, a question in words, a grouped card, an attachment, a code block in its words, a link per unit and a background that leaves out a unit are refused, naming the form"
+
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "text"}')" \
+  "crew refuses card proposal/1." "This card asks a question in words, which Pending You makes required"
+refused post_request "$(card verify/checked/20261007-1412 "$(jq -c '{kind: "choice", text: {placeholder: "Anything else?"}} + .' <<<"$two")")" \
+  "crew refuses card verify/checked/20261007-1412." "This card asks a question in words, which Pending You makes required. The card's note is where the user's words go."
+refused post_request "$(card land/tenant-environments/abc1234 '{"kind": "text", "highStakes": true}')" "This card asks a question in words"
+ok "no row's card asks a question in words, which Pending You makes required: a text card, a text field or a text question is refused, saying the note is where the user's words go"
 
 eq "$(entries | wc -l)" "$n"
 ok "a check writes nothing to the run record"
@@ -449,6 +494,21 @@ refused update_request "$(change req_rev-1 '{"action": {"steps": [{"text": "Read
 passes update_request "$(change req_own-1 "$two")"
 passes update_request "$(change req_nowhere-1 '{"highStakes": false}')"
 ok "a change that clears a landing's high stakes, gives an approval options or steps, or lands the bolt is refused; a card with no post here, or under no row's key, is not checked"
+
+CREW_AGENT=wldn-planner call pendingyou post_request "$(card batch/2 "$batch")" '{"structuredContent": {"requestId": "req_bat-1"}}' | CREW_AGENT=wldn-planner cards
+CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 "$two")" "crew refuses this change to card batch/2. $notice" "This change gives it options."
+CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 '{"artifacts": [{"kind": "code", "lang": "markdown", "lines": ["# Batch 2"]}]}')" \
+  "This change attaches its summary."
+CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 "$(jq -nc --arg b "$fenced" '{context: {background: $b}}')")" \
+  "This change puts its summary in a code block, which scrolls sideways on the phone."
+CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 "$(jq -nc --arg b "${bg%%$'\n\nz1'*}" '{context: {background: $b}}')")" \
+  "This change leaves out z1."
+CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 '{"text": {"placeholder": "Notes?"}}')" "This change asks a question in words"
+CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 "$(jq -c '{context: {links: (.context.links + [{label: "Read and annotate z1", url: "http://mac-studio:3"}])}}' <<<"$batch")")" \
+  "This change links more than one session; a batch has one reading session."
+CREW_AGENT=wldn-planner passes update_request "$(change req_bat-1 '{"title": "Batch 2 of wldn: 3 changes to read ZQXTITLE", "artifacts": []}')"
+CREW_AGENT=wldn-planner passes update_request "$(change req_bat-1 "$(jq -c '{context: .context}' <<<"$batch")")"
+ok "a change that gives a batch's card options, an attachment, a code block, a question in words, a second link or a background that leaves out a unit is refused; one to its words passes"
 
 CREW_AGENT= CREW_LABEL= passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" pendingyou sid-none
 passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" github
