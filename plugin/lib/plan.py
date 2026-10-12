@@ -3690,14 +3690,12 @@ def bolt_held(plan, team):
     return held[0].name() if held else fail(f"{team} holds no bolt: crew bolt give {team}")
 
 
-def place_cmd(fleet, a):
-    """crew _place <team> <path> <branch> <base> [--own]: the place made, tracking its base; with --own, refused unless
-    it is on its own branch made from that base, as a fix's must be (teams.3)."""
-    t = crew.team_of(fleet, a.team)
-    make_place(fleet, t, a.path, a.branch, a.base, track=True)
-    if a.own:
-        why = own_place(a.path, *place_branch(fleet, t, a.path), a.branch, a.base)
-        not why or fail(why)
+def fix_place(fleet, t, place, fix, bolt):
+    """A fix's place made from the team's bolt, tracking it, and refused unless it is on the fix's own branch made
+    from that bolt (teams.3)."""
+    make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True)
+    why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
+    not why or fail(why)
 
 
 def fix_in_slot(held, bolt, name, kdir):
@@ -3746,10 +3744,10 @@ def place_branch(fleet, t, place):
 
 
 def fix_cmd(fleet, a):
-    """crew _fix <team> <name> --start|--merge|--wait: what crew fix decides before its stage, as shell assignments
-    for bash crew (teams.9): the bolt the team holds (BOLT), the fix (FIX), its place (PLACE) and the slot holding it,
-    if any (SLOT); with --merge, whether the fix carries the bolt onto main (CARRIES=yes, OLD, NEW, COMMITS, CHANGED) or
-    how it merges as a fix (CARRIES=no, MERGE), git range-diff printed on standard error as the reading. A name crew
+    """What crew fix decides before its stage, a.mode start, merge or wait: the bolt the team holds (BOLT), the fix
+    (FIX), its place (PLACE) and the slot holding it, if any (SLOT); for a merge, whether the fix carries the bolt onto
+    main (CARRIES=yes, OLD, NEW, COMMITS, CHANGED) or how it merges as a fix (CARRIES=no, MERGE), git range-diff printed
+    on standard error as the reading. A name crew
     does not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
     already there (fix.start), a merge from a place not the fix's own (fix.merge), and a carry crew cannot judge
     (fix.carry) are refused and recorded (teams.3, teams.5, plan.8)."""
@@ -3786,7 +3784,7 @@ def fix_cmd(fleet, a):
         if act:
             record.emit(t["label"], act, [f"fix/{bolt}/{a.name}", f"bolt/{bolt}"], refused=str(e))
         raise
-    print(sh(**said))
+    return said
 
 
 def not_the_bolts(bolt, fix):
@@ -3912,20 +3910,6 @@ def move_refusal(team, fix, bolt, wt, old, new, there, busy=None, on="", status=
         if (now or {}).get(ref) != was:
             return f"bolt/{bolt} is not moved: {ref} moved from {was[:7]} to {((now or {}).get(ref) or 'nothing')[:7]} since crew read it; {again}"
     return None
-
-
-def carry_cmd(fleet, a):
-    """Whether a fix carries its bolt onto main, as shell assignments for bash crew (teams.9): CARRIES=yes with the
-    bolt's head (OLD), the fix's (NEW), how many of the bolt's commits it carries (COMMITS) and how many the
-    resolution changed (CHANGED); or CARRIES=no and why not (WHY). It carries when the bolt's head is not in the fix,
-    and the fix holds as many commits beyond the kit's main as the bolt, in order each the bolt's commit in the same
-    place replayed: the same message and author, its patch the same or changed, by patch id (plan.8). Whenever the fix
-    does not hold the bolt's head, git range-diff of the two is printed on standard error as the reading, before and
-    whatever the judgment, deciding nothing. With --move, the bolt's branch is moved to the fix's head."""
-    t = crew.team_of(fleet, a.team)
-    if a.move:
-        return carry(fleet, t, a.fix, a.bolt, *a.move, a.by, a.commits, a.changed)
-    print(sh(**carry_judgment(fleet, t, a.fix, a.bolt)))
 
 
 def carry_judgment(fleet, t, fix, bolt_name):
@@ -5340,6 +5324,53 @@ def unit_wait(fleet, a):
     team = on_team_host(fleet, t)
     slot = team.holding(a.unit) or fail(f"no slot of {t['name']} holds {a.unit}")
     stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=a.timeout, stuck=a.stuck))
+
+
+def fix_run(fleet, a):
+    """crew fix <team> <name> "<what is wrong>" | --merge | --wait, on the team's host (teams.3, teams.5, plan.8): the
+    team's read first, but for a wait; then what fix_cmd decides. A new fix takes a slot, is refused and recorded when
+    every slot is in flight or its place is not its own, and starts as a code stage; a merge ends the slot's agent and,
+    when the fix carries the bolt onto main, makes the fix's head the bolt's (carry) and reads the team again, else
+    starts as a merge stage; a wait waits on the stage the fix's slot owes (stage_wait)."""
+    t = crew.team_of(fleet, a.team)
+    team = on_team_host(fleet, t, a.force)
+    if a.mode != "wait":
+        reap(fleet, team)
+    said = fix_cmd(fleet, argparse.Namespace(team=t["name"], name=a.name, mode=a.mode))
+    slot, fix, place, bolt = said["SLOT"], said["FIX"], said["PLACE"], said["BOLT"]
+    obj = f"fix/{bolt}/{a.name}"
+    on = [obj, f"bolt/{bolt}"]
+    if a.mode == "wait":
+        return stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=a.timeout, stuck=a.stuck))
+    if a.mode == "merge" and said["CARRIES"] == "yes":
+        why = team.stop(slot, ending(fleet, t))
+        if why:
+            stopped(team.label, "fix.carry", on, why)
+        carry(fleet, t, fix, bolt, said["OLD"], said["NEW"], f"agent/{team.agent_of(slot)}", said["COMMITS"], said["CHANGED"])
+        return reap(fleet, team)
+    if a.mode == "start":
+        taken = False
+        if not slot:  # a new fix never takes over a branch or place that is already there (fix_cmd)
+            try:
+                slot, taken = team.take("fix", fix, place)
+            except Refusal as e:
+                print(e, file=sys.stderr)
+                record.emit(team.label, "fix.start", on, refused=f"all {t['units']} of {t['name']}'s slots are in flight")
+                raise Stopped(1)
+        try:
+            fix_place(fleet, t, place, fix, bolt)
+        except Refusal as e:
+            if taken:
+                team.drop("slots", slot)
+            stopped(team.label, "fix.start", on, str(e))
+    team.slot_pane(slot, place)
+    agent = team.agent_of(slot)
+    if a.mode == "merge":
+        run_stage(fleet, team, slot, "merge", f"Merge {fix} into bolt/{bolt}: {said['MERGE']}", "fix.merge", fix, obj, on + [f"agent/{agent}"])
+        print(f"{agent} has {fix}: merge, in {place}")
+    else:
+        run_stage(fleet, team, slot, "fix", f"Fix: {a.words}", "fix.start", fix, obj, on + [f"agent/{agent}"])
+        print(f"{agent} has {fix}: code, in {place}")
 
 
 def team_status(fleet, a):
@@ -6906,30 +6937,18 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("unit")
     x.add_argument("--timeout", type=int, default=3600000)
     x.add_argument("--stuck", type=int, default=900000)
+    x = sub.add_parser("_fix-run")
+    x.add_argument("team")
+    x.add_argument("name")
+    x.add_argument("mode", choices=("start", "merge", "wait"))
+    x.add_argument("words", nargs="?", default="")
+    x.add_argument("--timeout", type=int, default=3600000)
+    x.add_argument("--stuck", type=int, default=900000)
+    x.add_argument("--force", action="store_true")
     x = sub.add_parser("_bolt-of")
     x.add_argument("team")
     x = sub.add_parser("_amended")
     x.add_argument("team")
-    x = sub.add_parser("_place")
-    x.add_argument("team")
-    x.add_argument("path")
-    x.add_argument("branch")
-    x.add_argument("base")
-    x.add_argument("--own", action="store_true")
-    x = sub.add_parser("_fix")
-    x.add_argument("team")
-    x.add_argument("name")
-    m = x.add_mutually_exclusive_group(required=True)
-    for mode in ("start", "merge", "wait"):
-        m.add_argument(f"--{mode}", dest="mode", action="store_const", const=mode)
-    x = sub.add_parser("_carry")
-    x.add_argument("team")
-    x.add_argument("fix")
-    x.add_argument("bolt")
-    x.add_argument("--move", nargs=2, metavar=("OLD", "NEW"))
-    x.add_argument("--by", default="")
-    x.add_argument("--commits", default="")
-    x.add_argument("--changed", default="")
     x = sub.add_parser("_slots")
     x.add_argument("team")
     x.add_argument("--ends", action="store_true")
@@ -6970,17 +6989,16 @@ COMMANDS = {
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
-    ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait,
+    ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
     ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
-    ("_place", None): place_cmd, ("_fix", None): fix_cmd,
-    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
 # A team's commands, each one process on the team's host.
-TEAM_COMMANDS = {("_status", None), ("_unit-run", None), ("_unit-wait", None)}
+TEAM_COMMANDS = {("_status", None), ("_unit-run", None), ("_unit-wait", None), ("_fix-run", None)}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",

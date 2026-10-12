@@ -199,7 +199,7 @@ reading() {
 }
 case $cmd in
   bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell | ops) ;;
-  status) ;;
+  status | fix) ;;
   events | _rail) unset CREW_READ ;;
   unit) case ${2:-} in free) reading ;; esac ;;
   *) reading ;;
@@ -258,6 +258,7 @@ one() {  # one <plan.py entry> <args...>: a team's command, one Python process o
   [[ -n $to ]] || exit $rc
   eval "$to"; forward
 }
+need_team() { [[ -n ${1:-} ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }; }
 
 name_of() {
   case $KIND in
@@ -359,22 +360,6 @@ ensure_team() {  # "<team>": a conductor tab with the conductor and ops, and on 
   pane_live "$b" || { b=$(split "$g" right "$BLUEPRINTS"); put "$panes" git-blueprints "$b"; h pane run "$b" gitgui >/dev/null; }
 }
 
-ensure_slot_pane() {  # "<team> units" exists only while a slot is in flight, its panes laid out as tiles
-  local slot=$1 path=$2 p q r newest= open=0
-  p=$(pane_of "$slot"); pane_live "$p" && return 0
-  # The panes file lists roles in the order their panes opened, so the last live slot pane in it is the newest.
-  # A new pane halves the newest: to its right when an odd number are open, below it when an even number are.
-  for r in $(awk '{print $1}' "$panes"); do
-    q=$(pane_of "$r"); if is_slot "$r" && pane_live "$q"; then newest=$q; open=$((open + 1)); fi
-  done
-  if [[ -n $newest ]]; then
-    if (( open % 2 )); then p=$(split "$newest" right "$path"); else p=$(split "$newest" down "$path"); fi
-  else
-    r=$(workspace "$TEAM units" "$path"); h tab rename "${r% *}" units >/dev/null; p=${r#* }
-  fi
-  put "$panes" "$slot" "$p"
-}
-
 ensure_main() {  # "<label>": design, planner and ops tabs, one agent each
   local r p; p=$(pane_of design); pane_live "$p" || first_tab "$LABEL" design "$CWD" design
   for r in planner ops; do p=$(pane_of "$r"); pane_live "$p" || tab "$LABEL" "$r" "$CWD" "$r"; done
@@ -454,15 +439,6 @@ start_standing() {  # start each standing role that is not up; each one started 
 # ----------------------------------------------------------------------------------------------- unit slots
 
 slot_of() { awk -v u="$1" '$3==u{print $1}' "$held"; }
-holds() { awk -v s="$1" '$1==s{print $3}' "$held"; }
-take_slot() {  # take_slot <kind> <name> <place>: the slot holding it, or a free one; refused when all are in flight
-  local s; s=$(slot_of "$2"); [[ -n $s ]] && { echo "$s"; return 0; }
-  for s in "${slots[@]}"; do
-    [[ -z $(holds "$s") ]] && { echo "$s $1 $2 $3" >> "$held"; echo "$s"; return 0; }
-  done
-  echo "all $UNITS of $TEAM's slots are in flight: $(awk '{printf "%s%s holds %s", sep, $1, $3; sep="; "}' "$held")" >&2
-  return 1
-}
 held_obj() {  # held_obj <unit|fix> <name>: what a slot holds, as an object; a fix started as fix/<name> takes its
   # bolt from its branch's upstream
   local b
@@ -481,18 +457,6 @@ free() {  # end a slot's agent, close its pane and give the slot back; the units
   if [[ -n $(awk 'NF' "$held") ]]; then close_pane "$slot"; return 0; fi
   w=$(get "$layout" "$(ws_key "$TEAM units")"); [[ -n $w ]] && { h workspace close "$w" >/dev/null 2>&1 || true; }
   drop "$layout" "$(ws_key "$TEAM units")"; for s in "${slots[@]}"; do drop "$panes" "$s"; done
-}
-fix_refused() {  # fix_refused <act> <why>: a fix's start or merge refused, said and recorded
-  echo "$2" >&2
-  entry --label "$LABEL" --act "$1" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "$2"; exit 1
-}
-carry() {  # carry <slot>: the fix carries the bolt onto main (plan _fix said so, with OLD, NEW, COMMITS and CHANGED).
-  # Its agent is ended as a merge stage would end it, and plan _carry moves the bolt's branch to the fix's head in the
-  # bolt's worktree, runs the kit's post-merge hooks there on the new head, never with --yes, and records the carry.
-  local slot=$1 err
-  err=$(stop "$slot" 2>&1) || fix_refused fix.carry "$err"
-  plan _carry "$TEAM" "$FIX" "$BOLT" --move "$OLD" "$NEW" --by "agent/$(name_of "$slot")" --commits "$COMMITS" --changed "$CHANGED" || exit 1
-  reap
 }
 reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
   # bolt, been dropped from the plan or left the team's bolt, once its agent is not working; rebase each dependent
@@ -538,22 +502,6 @@ unit_free() {  # unit_free <unit> [--team <team>]: a slot still holding a unit n
   free "$slot" || exit 1
   echo "$(name_of "$slot") is free"
   plan _tidy "$TEAM" || true
-}
-run_stage() {  # run_stage <slot> <stage> <prompt> <act> <held name> <object> <--on X...>: end the slot's agent, start
-  # the stage fresh and send it its prompt, taken or sent again (teams.15). The start is recorded as <act>, and its end
-  # is owed in the stages file. A prompt the agent never took, or one crew can't tell it took, starts no stage: the start
-  # is recorded refused, no end is owed, the slot and its idle agent stay, and the command fails saying how to run the
-  # stage again.
-  local slot=$1 stage=$2 prompt=$3 act=$4 what=$5 obj=$6 err id agent; shift 6
-  if ! err=$(stop "$slot" 2>&1); then echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1; fi
-  start "$slot" "$stage" || exit 1
-  agent=$(name_of "$slot")
-  if ! err=$(py stage-prompt "$agent" "$prompt" "$stage" "$what" "$obj" "$TEAM" 2>&1 >/dev/null); then
-    echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1
-  fi
-  id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act "$act" "$@" --why "${obj%%/*}(${what##*/}): start $stage" || true)
-  [[ -n $id ]] && echo "$slot $what $stage $id $obj" >> "$STATE/stages"
-  return 0
 }
 limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, as plan _wait takes them, in `limit`
   limit=()
@@ -670,36 +618,13 @@ case $cmd in
     case $stage in construct | code | verify | settle | merge) ;; *) echo "no stage '$stage'; stages: construct code verify settle merge" >&2; exit 2 ;; esac
     one _unit-run "$unit" "$stage" ${forced[@]+"${forced[@]}"} -- "${5:-}" ;;
   fix)
-    load_team "${2:-}"; forward; ensure_state
+    need_team "${2:-}"
     name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}
-    case $words in --wait) mode=wait; limits "${@:5}" ;; --merge) mode=merge; reap ;; *) mode=start; reap ;; esac
-    # What the fix is, its place and slot, and for a merge whether it carries the bolt or merges as a fix, decided in
-    # one process (teams.3, teams.5); only its standard output is evaled (teams.9), and it records what it refuses.
-    e=$(plan _fix "$TEAM" "$name" "--$mode") || exit 1
-    eval "$e"
-    if [[ $mode == wait ]]; then
-      stage_wait "$SLOT" "${@:5}"
-    elif [[ $mode == merge ]]; then
-      [[ $CARRIES == yes ]] && { carry "$SLOT"; exit 0; }
-      ensure_slot_pane "$SLOT" "$PLACE"
-      run_stage "$SLOT" merge "Merge $FIX into bolt/$BOLT: $MERGE" fix.merge "$FIX" "fix/$BOLT/$name" \
-        --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$SLOT")"
-      echo "$(name_of "$SLOT") has $FIX: merge, in $PLACE"
-    else
-      taken=0
-      if [[ -z $SLOT ]]; then  # a new fix never takes over a branch or place that is already there (plan _fix)
-        SLOT=$(take_slot fix "$FIX" "$PLACE") || {
-          entry --label "$LABEL" --act fix.start --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "all $UNITS of $TEAM's slots are in flight"; exit 1; }
-        taken=1
-      fi
-      if ! err=$(plan _place "$TEAM" "$PLACE" "$FIX" "bolt/$BOLT" --own 2>&1); then
-        [[ $taken == 1 ]] && drop "$held" "$SLOT"
-        fix_refused fix.start "$err"
-      fi
-      ensure_slot_pane "$SLOT" "$PLACE"
-      run_stage "$SLOT" fix "Fix: $words" fix.start "$FIX" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$SLOT")"
-      echo "$(name_of "$SLOT") has $FIX: code, in $PLACE"
-    fi ;;
+    case $words in
+      --wait) limits "${@:5}"; one _fix-run "$2" "$name" wait ${limit[@]+"${limit[@]}"} ;;
+      --merge) one _fix-run "$2" "$name" merge ${forced[@]+"${forced[@]}"} ;;
+      *) one _fix-run "$2" "$name" start ${forced[@]+"${forced[@]}"} -- "$words" ;;
+    esac ;;
   needs)  # run by a stage's agent, or ops during a proof: the team and slot are its own name's
     words=${2:-}; who=${CREW_AGENT:-$(id -un)@$(this_host)}; team= slot=
     [[ -n ${words//[[:space:]]/} ]] || { echo "usage: crew needs \"<what you tried and what you need>\"" >&2; exit 2; }

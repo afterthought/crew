@@ -1,6 +1,6 @@
 """A team's slots, panes and status on its host (teams.1, teams.2, teams.9, teams.15, read.1, read.2), as crew unit run,
-crew unit wait and crew status decide them in one process: crew.slot_for for the slot a unit runs in, crew.reaped for
-what a team's read does with a slot, crew.held_object for how the run record names what a slot holds,
+crew unit wait, crew fix and crew status decide them in one process: crew.slot_for for the slot a unit or fix runs in,
+crew.reaped for what a team's read does with a slot, crew.held_object for how the run record names what a slot holds,
 crew.slot_pane_at for where a slot's pane opens, crew.listed for reading herdr's listings, crew.context_of and
 crew.holds_said for what status shows, and the words crew says when a stage is refused. Taking a slot, starting its
 agent and sending its prompt through the command are the units journey's (t-journey-units, t-journey-slots)."""
@@ -151,6 +151,10 @@ class TestRefused:
     ])
     def test_a_prompt_never_taken_or_not_read_as_taken_starts_no_stage_and_says_how_to_run_it_again(self, how, why, said):
         assert crew.never_started("swb-1-unit-4", "construct", "d", "unit/d", "swb-1", how, why) == said
+
+    def test_a_fixs_stage_is_run_again_by_the_fixs_own_command(self):
+        assert crew.never_started("swb-1-unit-1", "merge", "fix/te/tidy", "fix/te/tidy", "swb-1", "never", "sent twice").endswith(
+            "run it again with crew fix swb-1 tidy --merge")
 
     @pytest.mark.parametrize("stage, said", [(None, "swb-1-ops started in w1:p2"), ("resume", "swb-1-ops resumed in w1:p2"),
                                              ("code", "swb-1-ops started code in w1:p2")])

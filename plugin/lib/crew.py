@@ -18,11 +18,6 @@
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
                                       --taken, read back from its transcript and sent once more when not taken
-  crew.py stage-prompt <agent> "<prompt>" [<stage> <what> <object> <team>]
-                                      send a stage's agent its prompt, unmarked, once it is ready for input, read back
-                                      from its transcript and sent once more when not taken: exits 0 when it is taken,
-                                      3 when the stage never started, and 1 when crew could not tell, saying why; with
-                                      the stage named, saying so of the stage and how to run it again
   crew.py notice <agent> "<text>"     prompt an agent wherever it runs, the text marked [crew], as crew's own notice
   crew.py greet <team> [--first "<text>"]
                                       greet the team's conductor, marked [crew], once it is up and settled; the text,
@@ -1617,10 +1612,6 @@ def main(a):
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
         import record as rec  # record imports this module
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)
-    elif a[:1] == ["stage-prompt"] and len(a) in (3, 7):
-        how, why = send_taken(fleet, a[1], a[2])
-        how == "taken" or print(why if len(a) == 3 else never_started(a[1], *a[3:], how, why), file=sys.stderr)
-        sys.exit({"taken": 0, "never": 3}.get(how, 1))
     elif a[:1] == ["notice"] and len(a) == 3:
         sys.exit(0 if tell(fleet, a[1], a[2]) else 1)
     elif a[:1] == ["greet"] and (len(a) == 2 or (len(a) == 4 and a[2] == "--first")):
