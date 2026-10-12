@@ -18,10 +18,11 @@
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
                                       --taken, read back from its transcript and sent once more when not taken
-  crew.py stage-prompt <agent> "<prompt>"
+  crew.py stage-prompt <agent> "<prompt>" [<stage> <what> <object> <team>]
                                       send a stage's agent its prompt, unmarked, once it is ready for input, read back
                                       from its transcript and sent once more when not taken: exits 0 when it is taken,
-                                      3 when the stage never started, and 1 when crew could not tell, saying why
+                                      3 when the stage never started, and 1 when crew could not tell, saying why; with
+                                      the stage named, saying so of the stage and how to run it again
   crew.py notice <agent> "<text>"     prompt an agent wherever it runs, the text marked [crew], as crew's own notice
   crew.py greet <team> [--first "<text>"]
                                       greet the team's conductor, marked [crew], once it is up and settled; the text,
@@ -409,6 +410,19 @@ def taken_within():
         return 15
     v.isdigit() and int(v) > 0 or fail(f"CREW_TAKEN_WITHIN is a whole number of seconds above 0, not {json.dumps(v)}")
     return int(v)
+
+
+def never_started(agent, stage, what, obj, team, how, why):
+    """What crew says of a stage whose prompt its agent never took, sent twice or never ready (how "never"), or of one
+    crew could not tell it took (teams.15, read.1): the stage never started, nothing is left typed, and how to run it
+    again, by the unit's or the fix's own command."""
+    name = obj.rsplit("/", 1)[-1]
+    again = (f"crew unit run {what} {stage}" if obj.startswith("unit/") else f"crew fix {team} {name} --merge" if stage == "merge"
+             else f'crew fix {team} {name} "<what is wrong>"')
+    if how == "never":
+        return f"{agent} never took its {stage} prompt for {what}, {why}; the stage never started and nothing is left typed in its pane: run it again with {again}"
+    return (f"crew could not tell whether {agent} took its {stage} prompt for {what}: {why}; nothing more was sent, and the stage is "
+            f"taken as never started: run it again with {again}")
 
 
 class Pane:
@@ -1147,9 +1161,9 @@ def main(a):
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
         import record as rec  # record imports this module
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)
-    elif a[:1] == ["stage-prompt"] and len(a) == 3:
+    elif a[:1] == ["stage-prompt"] and len(a) in (3, 7):
         how, why = send_taken(fleet, a[1], a[2])
-        how == "taken" or print(why, file=sys.stderr)
+        how == "taken" or print(why if len(a) == 3 else never_started(a[1], *a[3:], how, why), file=sys.stderr)
         sys.exit({"taken": 0, "never": 3}.get(how, 1))
     elif a[:1] == ["notice"] and len(a) == 3:
         sys.exit(0 if tell(fleet, a[1], a[2]) else 1)

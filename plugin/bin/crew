@@ -477,38 +477,12 @@ fix_refused() {  # fix_refused <act> <why>: a fix's start or merge refused, said
   echo "$2" >&2
   entry --label "$LABEL" --act "$1" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "$2"; exit 1
 }
-own_place() {  # own_place <place> <branch>: the fix's place is on its own branch, made from the team's bolt. A merge
-  # stopped partway through its rebase is on no branch, and is taken as on the branch it is rebasing.
-  local on up= d
-  on=$(git -C "$1" branch --show-current 2>/dev/null || true)
-  for d in rebase-merge rebase-apply; do
-    [[ -z $on ]] && on=$(cat "$(git -C "$1" rev-parse --path-format=absolute --git-path "$d/head-name" 2>/dev/null)" 2>/dev/null || true)
-  done
-  on=${on#refs/heads/}
-  [[ -n $on ]] && up=$(git -C "$1" for-each-ref --format='%(upstream:short)' "refs/heads/$on" 2>/dev/null || true)
-  [[ $on == "$2" && $up == "bolt/$BOLT" ]] && return 0
-  echo "$1 is on ${on:-no branch}, made from ${up:-no bolt}, not $2 from bolt/$BOLT: crew starts a fix only in its own place"
-  return 1
-}
-carry() {  # carry <slot>: the fix carries the bolt onto main (plan _carry said so, with OLD, NEW, COMMITS and CHANGED).
-  # Its agent is ended as a merge stage would end it, crew moves the bolt's branch to the fix's head in the bolt's
-  # worktree, and the kit's post-merge hooks run there on the new head, as after a merge into the bolt; never --yes.
-  local slot=$1 err out checks
+carry() {  # carry <slot>: the fix carries the bolt onto main (plan _fix said so, with OLD, NEW, COMMITS and CHANGED).
+  # Its agent is ended as a merge stage would end it, and plan _carry moves the bolt's branch to the fix's head in the
+  # bolt's worktree, runs the kit's post-merge hooks there on the new head, never with --yes, and records the carry.
+  local slot=$1 err
   err=$(stop "$slot" 2>&1) || fix_refused fix.carry "$err"
-  err=$(plan _carry "$TEAM" "$fix" "$BOLT" --move "$OLD" "$NEW" 2>&1) || fix_refused fix.carry "$err"
-  if ! out=$(wt -C "$KIT_DIR/bolts/$BOLT" hook post-merge --target="bolt/$BOLT" </dev/null 2>&1); then
-    # worktrunk's own words: its error lines (worktrunk 0.80 marks them ✗), else its last line
-    err=$(awk 'sub(/^✗ */, "") {printf "%s%s", s, $0; s = "; "}' <<<"$out"); [[ -n $err ]] || err=$(awk 'NF {l = $0} END {print l}' <<<"$out")
-    checks="the bolt's checks did not start: ${err:-wt exited non-zero}; ask ops to run the bolt's verification again, then prove the bolt again before it lands"
-  elif [[ $out == *"No post-merge hooks configured"* ]]; then
-    checks="the kit has no post-merge hooks, so no checks run on ${NEW:0:7}; prove the bolt again before it lands"
-  else
-    checks="the bolt's checks are running on ${NEW:0:7}; prove the bolt again before it lands"
-  fi
-  entry --label "$LABEL" --act fix.carry --on "fix/$BOLT/$name" --on "bolt/$BOLT" --from "agent/$(name_of "$slot")" \
-    --why "fix($name): moved bolt/$BOLT from ${OLD:0:7} to ${NEW:0:7}"
-  echo "bolt/$BOLT moved from ${OLD:0:7} to ${NEW:0:7}: $fix carries the bolt's $COMMITS commits onto main ($CHANGED changed by the resolution)"
-  echo "$checks"
+  plan _carry "$TEAM" "$FIX" "$BOLT" --move "$OLD" "$NEW" --by "agent/$(name_of "$slot")" --commits "$COMMITS" --changed "$CHANGED" || exit 1
   reap
 }
 reap() {  # record the stages that ended with nobody waiting; free every slot whose unit or fix has merged into its
@@ -568,21 +542,11 @@ run_stage() {  # run_stage <slot> <stage> <prompt> <act> <held name> <object> <-
   # is owed in the stages file. A prompt the agent never took, or one crew can't tell it took, starts no stage: the start
   # is recorded refused, no end is owed, the slot and its idle agent stay, and the command fails saying how to run the
   # stage again.
-  local slot=$1 stage=$2 prompt=$3 act=$4 what=$5 obj=$6 err id rc=0 agent again; shift 6
+  local slot=$1 stage=$2 prompt=$3 act=$4 what=$5 obj=$6 err id agent; shift 6
   if ! err=$(stop "$slot" 2>&1); then echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1; fi
   start "$slot" "$stage" || exit 1
   agent=$(name_of "$slot")
-  err=$(py stage-prompt "$agent" "$prompt" 2>&1 >/dev/null) || rc=$?
-  if (( rc )); then
-    case $obj in
-      unit/*) again="crew unit run $what $stage" ;;
-      *) if [[ $stage == merge ]]; then again="crew fix $TEAM ${obj##*/} --merge"; else again="crew fix $TEAM ${obj##*/} \"<what is wrong>\""; fi ;;
-    esac
-    if (( rc == 3 )); then
-      err="$agent never took its $stage prompt for $what, $err; the stage never started and nothing is left typed in its pane: run it again with $again"
-    else
-      err="crew could not tell whether $agent took its $stage prompt for $what: $err; nothing more was sent, and the stage is taken as never started: run it again with $again"
-    fi
+  if ! err=$(py stage-prompt "$agent" "$prompt" "$stage" "$what" "$obj" "$TEAM" 2>&1 >/dev/null); then
     echo "$err" >&2; entry --label "$LABEL" --act "$act" "$@" --refused "$err"; exit 1
   fi
   id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act "$act" "$@" --why "${obj%%/*}(${what##*/}): start $stage" || true)
@@ -779,54 +743,33 @@ case $cmd in
   fix)
     load_team "${2:-}"; forward; ensure_state
     name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --wait}
-    [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "a fix is named with lowercase words and dashes" >&2; exit 2; }
-    [[ $words == --wait ]] && limits "${@:5}"
-    [[ $words == --wait ]] || reap
-    e=$(plan _bolt-of "$TEAM") || exit 1; eval "$e"
-    # A fix is named within its bolt. One a slot holds, under that name or as the fix/<name> it was given before a
-    # fix's name held its bolt, keeps the branch and place its slot recorded.
-    fix=fix/$BOLT/$name; path=$KIT_DIR/places/fix-$BOLT--$name
-    slot=$(slot_of "$fix"); [[ -n $slot ]] || slot=$(slot_of "fix/$name")
-    [[ -n $slot ]] && read -r fix path < <(awk -v s="$slot" '$1==s{print $3, $4}' "$held")
-    if [[ $words == --wait ]]; then
-      [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
-      stage_wait "$slot" "${@:5}"
-    elif [[ $words == --merge ]]; then
-      [[ -n $slot ]] || { echo "$TEAM has no fix $name in flight" >&2; exit 1; }
-      err=$(own_place "$path" "$fix") || fix_refused fix.merge "$err"
-      # Only the judgment's standard output is evaled (teams.9); its standard error is the refusal, kept apart to be
-      # recorded, and is passed on when it judged.
-      errs=$(mktemp) || fix_refused fix.carry "crew could not make a file to hold plan _carry's refusal"
-      if e=$(plan _carry "$TEAM" "$fix" "$BOLT" 2>"$errs"); then cat "$errs" >&2; rm -f "$errs"
-      else err=$(<"$errs"); rm -f "$errs"; fix_refused fix.carry "$err"; fi
-      eval "$e"
-      [[ $CARRIES == yes ]] && { carry "$slot"; exit 0; }
-      echo "$fix does not carry the bolt onto main ($WHY): merging it as a fix" >&2
-      # wt merge, or wt submit where the kit opts into sluice (teams.5)
-      err=$(plan _merging "$TEAM" "$BOLT" 2>&1) || fix_refused fix.merge "$err"
-      eval "$err"
-      ensure_slot_pane "$slot" "$path"
-      run_stage "$slot" merge "Merge $fix into bolt/$BOLT: $MERGE" fix.merge "$fix" "fix/$BOLT/$name" \
-        --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
-      echo "$(name_of "$slot") has $fix: merge, in $path"
+    case $words in --wait) mode=wait; limits "${@:5}" ;; --merge) mode=merge; reap ;; *) mode=start; reap ;; esac
+    # What the fix is, its place and slot, and for a merge whether it carries the bolt or merges as a fix, decided in
+    # one process (teams.3, teams.5); only its standard output is evaled (teams.9), and it records what it refuses.
+    e=$(plan _fix "$TEAM" "$name" "--$mode") || exit 1
+    eval "$e"
+    if [[ $mode == wait ]]; then
+      stage_wait "$SLOT" "${@:5}"
+    elif [[ $mode == merge ]]; then
+      [[ $CARRIES == yes ]] && { carry "$SLOT"; exit 0; }
+      ensure_slot_pane "$SLOT" "$PLACE"
+      run_stage "$SLOT" merge "Merge $FIX into bolt/$BOLT: $MERGE" fix.merge "$FIX" "fix/$BOLT/$name" \
+        --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$SLOT")"
+      echo "$(name_of "$SLOT") has $FIX: merge, in $PLACE"
     else
       taken=0
-      if [[ -z $slot ]]; then  # a new fix never takes over a branch or place that is already there
-        if [[ -e $path ]]; then fix_refused fix.start "$fix already has a place at $path that no slot of $TEAM holds: name this fix differently"
-        elif git -C "$KIT" rev-parse --verify -q "refs/heads/$fix" >/dev/null; then
-          fix_refused fix.start "$fix already has a branch that no slot of $TEAM holds, though no place at $path: name this fix differently"
-        fi
-        slot=$(take_slot fix "$fix" "$path") || {
+      if [[ -z $SLOT ]]; then  # a new fix never takes over a branch or place that is already there (plan _fix)
+        SLOT=$(take_slot fix "$FIX" "$PLACE") || {
           entry --label "$LABEL" --act fix.start --on "fix/$BOLT/$name" --on "bolt/$BOLT" --refused "all $UNITS of $TEAM's slots are in flight"; exit 1; }
         taken=1
       fi
-      if ! err=$(plan _place "$TEAM" "$path" "$fix" "bolt/$BOLT" 2>&1) || ! err=$(own_place "$path" "$fix"); then
-        [[ $taken == 1 ]] && drop "$held" "$slot"
+      if ! err=$(plan _place "$TEAM" "$PLACE" "$FIX" "bolt/$BOLT" --own 2>&1); then
+        [[ $taken == 1 ]] && drop "$held" "$SLOT"
         fix_refused fix.start "$err"
       fi
-      ensure_slot_pane "$slot" "$path"
-      run_stage "$slot" fix "Fix: $words" fix.start "$fix" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$slot")"
-      echo "$(name_of "$slot") has $fix: code, in $path"
+      ensure_slot_pane "$SLOT" "$PLACE"
+      run_stage "$SLOT" fix "Fix: $words" fix.start "$FIX" "fix/$BOLT/$name" --on "fix/$BOLT/$name" --on "bolt/$BOLT" --on "agent/$(name_of "$SLOT")"
+      echo "$(name_of "$SLOT") has $FIX: code, in $PLACE"
     fi ;;
   needs)  # run by a stage's agent, or ops during a proof: the team and slot are its own name's
     words=${2:-}; who=${CREW_AGENT:-$(id -un)@$(this_host)}; team= slot=

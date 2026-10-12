@@ -3286,15 +3286,6 @@ def merge_command(t, k, bolt):
     return f"wt submit bolt/{bolt}" if k["sluice"] else f"wt merge bolt/{bolt} --no-squash --no-remove"
 
 
-def merging(fleet, a):
-    """crew _merging <team> <bolt>: the command a fix of the team merges into its bolt with, as a shell assignment
-    (MERGE) for bash crew."""
-    t = crew.team_of(fleet, a.team)
-    k = survey(fleet, [(t["name"], a.bolt)]).get(t["machine"], {})
-    kit = k.get("kits", {}).get(t["kit"]["main"]) if k.get("ok") else None
-    print(sh(MERGE=merge_command(t, kit if kit and kit.get("ok") else None, a.bolt)))
-
-
 def run_check(fleet, a):
     """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent. Construct
     starts once each After unit has finished construct, never waiting on a merge (plan.13), and is run again at any
@@ -3490,13 +3481,112 @@ def bolt_of_team(fleet, a):
     t = crew.team_of(fleet, a.team)
     repo, ref = state_of(fleet, t["label"])
     tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
-    held = held_by(read(repo, ref, tip), t["name"])
-    held or fail(f"{t['name']} holds no bolt: crew bolt give {t['name']}")
-    print(sh(BOLT=held[0].name()))
+    print(sh(BOLT=bolt_held(read(repo, ref, tip), t["name"])))
+
+
+def bolt_held(plan, team):
+    """The bolt a team holds, which its fixes and its proof are of; refused when it holds none."""
+    held = held_by(plan, team)
+    return held[0].name() if held else fail(f"{team} holds no bolt: crew bolt give {team}")
 
 
 def place_cmd(fleet, a):
-    make_place(fleet, crew.team_of(fleet, a.team), a.path, a.branch, a.base, track=True)
+    """crew _place <team> <path> <branch> <base> [--own]: the place made, tracking its base; with --own, refused unless
+    it is on its own branch made from that base, as a fix's must be (teams.3)."""
+    t = crew.team_of(fleet, a.team)
+    make_place(fleet, t, a.path, a.branch, a.base, track=True)
+    if a.own:
+        why = own_place(a.path, *place_branch(fleet, t, a.path), a.branch, a.base)
+        not why or fail(why)
+
+
+def fix_in_slot(held, bolt, name, kdir):
+    """What crew fix <name> acts on, from the team's slots file's lines (held): the slot holding fix/<bolt>/<name>, or
+    the fix/<name> it was given before a fix's name held its bolt, with the branch and place that slot recorded; else
+    no slot, and the branch and place a new fix of the bolt gets (teams.3)."""
+    for want in (f"fix/{bolt}/{name}", f"fix/{name}"):
+        for f in held:
+            if len(f) >= 4 and f[2] == want:
+                return f[0], f[2], f[3]
+    return None, f"fix/{bolt}/{name}", f"{kdir}/places/fix-{bolt}--{name}"
+
+
+def leftover(fix, place, team, place_there, branch_there):
+    """Why a new fix is refused, or None (read.4): its place or its branch is already there, and no slot of the team
+    holds it, so crew would be taking over what it did not make for this fix."""
+    if place_there:
+        return f"{fix} already has a place at {place} that no slot of {team} holds: name this fix differently"
+    if branch_there:
+        return f"{fix} already has a branch that no slot of {team} holds, though no place at {place}: name this fix differently"
+    return None
+
+
+def own_place(place, on, up, branch, base):
+    """Why a fix's place is not its own, or None (teams.3): it must be on the fix's branch (on: the one it is on, or is
+    rebasing when a merge stopped partway through its rebase) made from the team's bolt (up: that branch's upstream)."""
+    if on == branch and up == base:
+        return None
+    return f"{place} is on {on or 'no branch'}, made from {up or 'no bolt'}, not {branch} from {base}: crew starts a fix only in its own place"
+
+
+def place_branch(fleet, t, place):
+    """What a place is on, read on the team's host: its branch, or the one it is rebasing when a merge stopped partway
+    through its rebase, and that branch's upstream."""
+    _, on = kit_git(fleet, t, place, "branch", "--show-current", ok=(0, 128))
+    for d in ("rebase-merge", "rebase-apply"):
+        if not on:
+            _, at = kit_git(fleet, t, place, "rev-parse", "--path-format=absolute", "--git-path", f"{d}/head-name", ok=(0, 128))
+            try:
+                on = pathlib.Path(at).read_text().strip() if at else ""
+            except OSError:
+                on = ""
+    on = on[len("refs/heads/"):] if on.startswith("refs/heads/") else on
+    _, up = kit_git(fleet, t, place, "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{on}", ok=(0, 128)) if on else (0, "")
+    return on, up
+
+
+def fix_cmd(fleet, a):
+    """crew _fix <team> <name> --start|--merge|--wait: what crew fix decides before its stage, as shell assignments
+    for bash crew (teams.9): the bolt the team holds (BOLT), the fix (FIX), its place (PLACE) and the slot holding it,
+    if any (SLOT); with --merge, whether the fix carries the bolt onto main (CARRIES=yes, OLD, NEW, COMMITS, CHANGED) or
+    how it merges as a fix (CARRIES=no, MERGE), git range-diff printed on standard error as the reading. A name crew
+    does not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
+    already there (fix.start), a merge from a place not the fix's own (fix.merge), and a carry crew cannot judge
+    (fix.carry) are refused and recorded (teams.3, teams.5, plan.8)."""
+    t = crew.team_of(fleet, a.team)
+    crew.NAME.match(a.name) or fail("a fix is named with lowercase words and dashes")
+    CONTEXT["label"] = t["label"]
+    repo, ref = state_of(fleet, t["label"])
+    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
+    bolt = bolt_held(read(repo, ref, tip), t["name"])
+    f = team_state(t) / "slots"
+    slot, fix, place = fix_in_slot([l.split() for l in (f.read_text().splitlines() if f.exists() else []) if l.strip()],
+                                   bolt, a.name, t["kit"]["dir"])
+    a.mode == "start" or slot or fail(f"{t['name']} has no fix {a.name} in flight")
+    said = dict(BOLT=bolt, FIX=fix, PLACE=place, SLOT=slot or "")
+    act = {"start": "fix.start", "merge": "fix.merge"}.get(a.mode)
+    try:
+        if a.mode == "start" and not slot:
+            why = leftover(fix, place, t["name"], os.path.exists(place),
+                           kit_git(fleet, t, t["kit"]["main"], "rev-parse", "--verify", "-q", f"refs/heads/{fix}", ok=(0, 1))[0] == 0)
+            not why or fail(why)
+        elif a.mode == "merge":
+            why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
+            not why or fail(why)
+            act = "fix.carry"
+            judged = carry_judgment(fleet, t, fix, bolt)
+            if judged["CARRIES"] == "no":
+                print(f"{fix} does not carry the bolt onto main ({judged['WHY']}): merging it as a fix", file=sys.stderr)
+                act = "fix.merge"
+                k = survey(fleet, [(t["name"], bolt)]).get(t["machine"], {})
+                kit = k.get("kits", {}).get(t["kit"]["main"]) if k.get("ok") else None
+                judged = dict(CARRIES="no", MERGE=merge_command(t, kit if kit and kit.get("ok") else None, bolt))
+            said.update(judged)
+    except Refusal as e:
+        if act:
+            record.emit(t["label"], act, [f"fix/{bolt}/{a.name}", f"bolt/{bolt}"], refused=str(e))
+        raise
+    print(sh(**said))
 
 
 def not_the_bolts(bolt, fix):
@@ -3588,26 +3678,40 @@ def carry_move(fleet, t, fix, bolt, old, new):
     """The bolt's branch moved to the fix's head, in the bolt's worktree, by git reset --keep, which discards nothing
     (code.6): only while that worktree is on bolt/<bolt> with nothing uncommitted and nothing in progress, and both
     heads are still where the judgment read them."""
-    wt, main, name = f"{t['kit']['dir']}/bolts/{bolt}", t["kit"]["main"], fix.rsplit("/", 1)[-1]
-    again = f"then run crew fix {t['name']} {name} --merge again"
+    wt, main = f"{t['kit']['dir']}/bolts/{bolt}", t["kit"]["main"]
     rc, _ = kit_git(fleet, t, wt, "rev-parse", "--git-dir", ok=(0, 128))
-    rc == 0 or fail(f"bolt/{bolt} is not moved: its worktree {wt} is not there")
-    for path, what in IN_PROGRESS:
-        _, at = kit_git(fleet, t, wt, "rev-parse", "--path-format=absolute", "--git-path", path)
-        crew.on_machine(fleet, t["machine"], ["test", "-e", at]).returncode != 0 or fail(
-            f"bolt/{bolt} is not moved: its worktree {wt} has {what} in progress; finish or abort it, {again}")
-    _, on = kit_git(fleet, t, wt, "branch", "--show-current")
-    on == f"bolt/{bolt}" or fail(f"bolt/{bolt} is not moved: its worktree {wt} is on {on or 'no branch'}, not bolt/{bolt}")
-    _, status = kit_git(fleet, t, wt, "status", "--porcelain")
-    if status:
-        paths = [l.split(None, 1)[-1] for l in status.splitlines()]
-        fail(f"bolt/{bolt} is not moved: its worktree {wt} has uncommitted changes (" + ", ".join(paths[:5])
-             + (f" and {len(paths) - 5} more" if len(paths) > 5 else "") + f"); commit or remove them, {again}")
-    for ref, was in ((f"bolt/{bolt}", old), (fix, new)):
-        now = head_of(fleet, t, main, ref)
-        now == was or fail(f"bolt/{bolt} is not moved: {ref} moved from {was[:7]} to {(now or 'nothing')[:7]} since crew read it; {again}")
+    facts = dict(there=rc == 0)
+    if rc == 0:
+        facts["busy"] = next((what for path, what in IN_PROGRESS if crew.on_machine(fleet, t["machine"], ["test", "-e", kit_git(
+            fleet, t, wt, "rev-parse", "--path-format=absolute", "--git-path", path)[1]]).returncode == 0), None)
+        facts["on"] = kit_git(fleet, t, wt, "branch", "--show-current")[1]
+        facts["status"] = kit_git(fleet, t, wt, "status", "--porcelain")[1]
+        facts["now"] = {ref: head_of(fleet, t, main, ref) for ref in (f"bolt/{bolt}", fix)}
+    why = move_refusal(t["name"], fix, bolt, wt, old, new, **facts)
+    not why or fail(why)
     kit_git(fleet, t, wt, "reset", "-q", "--keep", new)
     READ.drop_kit(t["machine"], main)
+
+
+def move_refusal(team, fix, bolt, wt, old, new, there, busy=None, on="", status="", now=None):
+    """Why the bolt's branch is not moved to a carrying fix's head, or None (code.6): its worktree is not there, has a
+    rebase, merge or other operation in progress (busy), is on another branch, has uncommitted changes (git status's
+    lines), or either head moved since crew judged the carry (now, each ref's head)."""
+    again = f"then run crew fix {team} {fix.rsplit('/', 1)[-1]} --merge again"
+    if not there:
+        return f"bolt/{bolt} is not moved: its worktree {wt} is not there"
+    if busy:
+        return f"bolt/{bolt} is not moved: its worktree {wt} has {busy} in progress; finish or abort it, {again}"
+    if on != f"bolt/{bolt}":
+        return f"bolt/{bolt} is not moved: its worktree {wt} is on {on or 'no branch'}, not bolt/{bolt}"
+    if status:
+        paths = [l.split(None, 1)[-1] for l in status.splitlines()]
+        return (f"bolt/{bolt} is not moved: its worktree {wt} has uncommitted changes (" + ", ".join(paths[:5])
+                + (f" and {len(paths) - 5} more" if len(paths) > 5 else "") + f"); commit or remove them, {again}")
+    for ref, was in ((f"bolt/{bolt}", old), (fix, new)):
+        if (now or {}).get(ref) != was:
+            return f"bolt/{bolt} is not moved: {ref} moved from {was[:7]} to {((now or {}).get(ref) or 'nothing')[:7]} since crew read it; {again}"
+    return None
 
 
 def carry_cmd(fleet, a):
@@ -3619,24 +3723,65 @@ def carry_cmd(fleet, a):
     does not hold the bolt's head, git range-diff of the two is printed on standard error as the reading, before and
     whatever the judgment, deciding nothing. With --move, the bolt's branch is moved to the fix's head."""
     t = crew.team_of(fleet, a.team)
-    main = t["kit"]["main"]
     if a.move:
-        return carry_move(fleet, t, a.fix, a.bolt, *a.move)
-    heads = {ref: head_of(fleet, t, main, ref) for ref in (f"bolt/{a.bolt}", a.fix, "main")}
+        return carry(fleet, t, a.fix, a.bolt, *a.move, a.by, a.commits, a.changed)
+    print(sh(**carry_judgment(fleet, t, a.fix, a.bolt)))
+
+
+def carry_judgment(fleet, t, fix, bolt_name):
+    """Whether a fix carries its bolt onto main, read on the team's host (plan.8): CARRIES yes with the bolt's head
+    (OLD), the fix's (NEW), how many of the bolt's commits it carries (COMMITS) and how many the resolution changed
+    (CHANGED), or CARRIES no and why not (WHY)."""
+    main = t["kit"]["main"]
+    heads = {ref: head_of(fleet, t, main, ref) for ref in (f"bolt/{bolt_name}", fix, "main")}
     missing = [ref for ref, sha in heads.items() if not sha]
-    not missing or fail(f"can't tell whether {a.fix} carries bolt/{a.bolt} onto main: {main} has no " + " and no ".join(missing))
-    old, new, base = heads[f"bolt/{a.bolt}"], heads[a.fix], heads["main"]
+    not missing or fail(f"can't tell whether {fix} carries bolt/{bolt_name} onto main: {main} has no " + " and no ".join(missing))
+    old, new, base = heads[f"bolt/{bolt_name}"], heads[fix], heads["main"]
     rc, _ = kit_git(fleet, t, main, "merge-base", "--is-ancestor", old, new, ok=(0, 1))
-    holds, bolt, fix = rc == 0, [], []
+    holds, bolt, mine = rc == 0, [], []
     if not holds:
-        range_reading(fleet, t, main, base, old, new, a.bolt, a.fix)
+        range_reading(fleet, t, main, base, old, new, bolt_name, fix)
         bolt = commits_beyond(fleet, t, main, base, old)
-        fix = commits_beyond(fleet, t, main, base, new) if bolt else []
-    why = carry_refusal(a.bolt, holds, bolt, fix)
+        mine = commits_beyond(fleet, t, main, base, new) if bolt else []
+    why = carry_refusal(bolt_name, holds, bolt, mine)
     if why:
-        return print(sh(CARRIES="no", WHY=why))
+        return dict(CARRIES="no", WHY=why)
     ids = patch_ids(fleet, t, main, base, old, new)
-    print(sh(CARRIES="yes", OLD=old, NEW=new, COMMITS=len(bolt), CHANGED=changed_by_resolution(bolt, fix, ids)))
+    return dict(CARRIES="yes", OLD=old, NEW=new, COMMITS=len(bolt), CHANGED=changed_by_resolution(bolt, mine, ids))
+
+
+def carry(fleet, t, fix, bolt, old, new, by, commits, changed):
+    """A fix that carries the bolt onto main becomes its head (carry_move); the kit's post-merge hooks then run in the
+    bolt's worktree on the new head, as after a merge into the bolt, never with --yes; the carry is recorded as the
+    fix's, from the slot's agent, and said with what its checks do. Refused and recorded when the bolt's branch can't
+    be moved."""
+    name = fix.rsplit("/", 1)[-1]
+    try:
+        carry_move(fleet, t, fix, bolt, old, new)
+    except Refusal as e:
+        record.emit(t["label"], "fix.carry", [f"fix/{bolt}/{name}", f"bolt/{bolt}"], refused=str(e))
+        raise
+    try:
+        r = subprocess.run(["wt", "-C", f"{t['kit']['dir']}/bolts/{bolt}", "hook", "post-merge", f"--target=bolt/{bolt}"],
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL, env={k: v for k, v in gitenv().items() if not k.startswith("WORKTRUNK_")})
+    except FileNotFoundError:
+        r = subprocess.CompletedProcess([], 127, "", f"wt, the kit's worktree tool, is not on {crew.this_host()}'s path")
+    record.emit(t["label"], "fix.carry", [f"fix/{bolt}/{name}", f"bolt/{bolt}"], frm=[by] if by else [],
+                why=f"fix({name}): moved bolt/{bolt} from {old[:7]} to {new[:7]}")
+    print(f"bolt/{bolt} moved from {old[:7]} to {new[:7]}: {fix} carries the bolt's {commits} commits onto main ({changed} changed by the resolution)")
+    print(checks_said(r.returncode, r.stdout + r.stderr, new))
+
+
+def checks_said(code, out, new):
+    """What a carry says of the bolt's checks, from the kit's wt hook post-merge on its new head: worktrunk's error
+    lines (it marks them ✗), else its last line, when they did not start; that the kit has none; or that they run."""
+    if code:
+        err = "; ".join(l[1:].strip() for l in out.splitlines() if l.startswith("✗")) or next((l for l in reversed(out.splitlines()) if l.strip()), "")
+        return (f"the bolt's checks did not start: {err or 'wt exited non-zero'}; ask ops to run the bolt's verification again, "
+                "then prove the bolt again before it lands")
+    if "No post-merge hooks configured" in out:
+        return f"the kit has no post-merge hooks, so no checks run on {new[:7]}; prove the bolt again before it lands"
+    return f"the bolt's checks are running on {new[:7]}; prove the bolt again before it lands"
 
 
 def carry_refusal(bolt_name, holds_head, bolt, fix):
@@ -6164,11 +6309,21 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("path")
     x.add_argument("branch")
     x.add_argument("base")
+    x.add_argument("--own", action="store_true")
+    x = sub.add_parser("_fix")
+    x.add_argument("team")
+    x.add_argument("name")
+    m = x.add_mutually_exclusive_group(required=True)
+    for mode in ("start", "merge", "wait"):
+        m.add_argument(f"--{mode}", dest="mode", action="store_const", const=mode)
     x = sub.add_parser("_carry")
     x.add_argument("team")
     x.add_argument("fix")
     x.add_argument("bolt")
     x.add_argument("--move", nargs=2, metavar=("OLD", "NEW"))
+    x.add_argument("--by", default="")
+    x.add_argument("--commits", default="")
+    x.add_argument("--changed", default="")
     x = sub.add_parser("_slots")
     x.add_argument("team")
     x.add_argument("--ends", action="store_true")
@@ -6177,9 +6332,6 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("_rebase")
     x.add_argument("team")
     x.add_argument("--tidy", action="store_true")
-    x = sub.add_parser("_merging")
-    x.add_argument("team")
-    x.add_argument("bolt")
     x = sub.add_parser("_review")
     x.add_argument("label")
     x = sub.add_parser("_review-wait")
@@ -6213,8 +6365,8 @@ COMMANDS = {
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
-    ("_place", None): place_cmd,
-    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_merging", None): merging, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
+    ("_place", None): place_cmd, ("_fix", None): fix_cmd,
+    ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
