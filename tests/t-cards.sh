@@ -19,14 +19,14 @@
 # proposal: one that makes no unit new to a bolt is an approval with no options, steps or questions, and one with new
 # units asks `plan` and its new units each once, a lone one as a choice, so a card missing a unit or posted as a plain
 # approval is refused, and so is one for a proposal crew can't draw; a batch's card, keyed batch/<n>, as one notice
-# naming every unit of the batch with nothing to answer, so a choice, an approval, a grouped card, an attachment, a code
-# block in its words or a background that leaves out a unit is refused, while a card of a batch posted under
-# batch/<n>-<k> before a batch was one card is not checked; a record card that is no approval, has options or steps, or
-# whose approval is not of low risk and reversible; no row's card asking a question in words; and a change that clears
-# a landing's high stakes, gives a card options, steps, an attachment or a code block its key's has not, or gives a
-# record card a risk other than low. A card under no row's key is refused for its key, not its form; a change to a card
-# posted on no row's key here, a session crew didn't start and another server's tool pass unchecked; what it can't
-# check, its own input among it, is refused, while the record half never fails.
+# naming every unit of the batch with nothing to answer and one link, so a choice, an approval, a grouped card, an
+# attachment, a code block in its words, a link per unit or a background that leaves out a unit is refused, while a card
+# of a batch posted under batch/<n>-<k> before a batch was one card is not checked; a record card that is no approval,
+# has options or steps, or whose approval is not of low risk and reversible; no row's card asking a question in words;
+# and a change that clears a landing's high stakes, gives a card options, steps, an attachment, a code block or a second
+# link its key's has not, or gives a record card a risk other than low. A card under no row's key is refused for its
+# key, not its form; a change to a card posted on no row's key here, a session crew didn't start and another server's
+# tool pass unchecked; what it can't check, its own input among it, is refused, while the record half never fails.
 # Reads: plugin/hooks/ plugin/lib/picture.py plugin/lib/font.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -490,7 +490,7 @@ fenced=$(printf '```\n%s\n```' "$bg")
 notice="A batch's card is one notice for the whole batch, kind \"fyi\""
 CREW_AGENT=wldn-planner passes post_request "$(card batch/2 "$batch")"
 CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '.kind = "multi" | . + {options: [{id: "x1", label: "x1"}, {id: "z1", label: "z1"}]}' <<<"$batch")")" \
-  "crew refuses card batch/2. $notice" "nothing to answer: no options, no question, no approval, no steps and no attachment" \
+  "crew refuses card batch/2. $notice, saying what it is, naming every unit, with each unit's summary as prose in its background, one link to the batch's reading session and nothing to answer: no options, no question, no approval, no steps and no attachment" \
   'This card is a "multi", and has options. Post it again in that form.'
 CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '.kind = "approve" | . + {approve: {action: "Approve batch 2"}}' <<<"$batch")")" \
   'This card is an "approve", and approves something.'
@@ -505,7 +505,9 @@ CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c --arg b "$
 CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c --arg b "${bg%%$'\n\nz1'*}" '.context.background = $b' <<<"$batch")")" \
   "This card leaves out z1."
 CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c 'del(.context)' <<<"$batch")")" "This card leaves out x1, x2 and z1."
-ok "a batch's card is one notice naming every unit of the batch with nothing to answer: a choice, an approval, a question in words, a grouped card, an attachment, a code block in its words and a background that leaves out a unit are refused, naming the form"
+CREW_AGENT=wldn-planner refused post_request "$(card batch/2 "$(jq -c '.context.links = [{label: "Read and annotate x1", url: "http://box:1"}, {label: "Read and annotate x2", url: "http://box:2"}, {label: "Read and annotate z1", url: "http://mac-studio:3"}]' <<<"$batch")")" \
+  "This card links more than one session; a batch has one reading session."
+ok "a batch's card is one notice naming every unit of the batch with nothing to answer and one link: a choice, an approval, a question in words, a grouped card, an attachment, a code block in its words, a link per unit and a background that leaves out a unit are refused, naming the form"
 
 CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "text"}')" \
   "crew refuses card proposal/1." "This card asks a question in words, which Pending You makes required"
@@ -550,9 +552,11 @@ CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 "$(jq -nc --a
 CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 "$(jq -nc --arg b "${bg%%$'\n\nz1'*}" '{context: {background: $b}}')")" \
   "This change leaves out z1."
 CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 '{"text": {"placeholder": "Notes?"}}')" "This change asks a question in words"
+CREW_AGENT=wldn-planner refused update_request "$(change req_bat-1 "$(jq -c '{context: {links: (.context.links + [{label: "Read and annotate z1", url: "http://mac-studio:3"}])}}' <<<"$batch")")" \
+  "This change links more than one session; a batch has one reading session."
 CREW_AGENT=wldn-planner passes update_request "$(change req_bat-1 '{"title": "Batch 2 of wldn: 3 changes to read ZQXTITLE", "artifacts": []}')"
 CREW_AGENT=wldn-planner passes update_request "$(change req_bat-1 "$(jq -c '{context: .context}' <<<"$batch")")"
-ok "a change that gives a batch's card options, an attachment, a code block, a question in words or a background that leaves out a unit is refused; one to its words passes"
+ok "a change that gives a batch's card options, an attachment, a code block, a question in words, a second link or a background that leaves out a unit is refused; one to its words passes"
 
 CREW_AGENT= CREW_LABEL= passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" pendingyou sid-none
 passes post_request "$(card land/tenant-environments/abc1234 '{"kind": "action"}')" github
