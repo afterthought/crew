@@ -4724,11 +4724,11 @@ def amended_afters(bolts, plan, stage_of, entries, holds):
         for u in plan.units_of(b.name()):
             if stage_of(u.name()) in ("merged", "landed", "unknown") or not u.all("After"):
                 continue
-            starts = [e for e in entries if e.get("Act") == "stage.start" and f"stage/{u.name()}/construct" in e["On"] and not e.get("Refused")]
+            starts = construct_starts(u.name(), entries)
             if not starts:
                 continue
             since = (starts[0]["At"], starts[0]["Id"])
-            took = dict(w.split("@", 1) for e in starts for w in (e.get("Took") or "").split() if "@" in w)
+            took = took_heads(u.name(), entries)
             for a in u.all("After"):
                 ends = [e for e in entries if e.get("Act") == "stage.end" and f"stage/{a}/construct" in e["On"]
                         and e.get("Ended") == "delivered" and (e["At"], e["Id"]) > since]
@@ -4737,6 +4737,18 @@ def amended_afters(bolts, plan, stage_of, entries, holds):
                 if head and head != held and not (held and holds(held, head)):
                     out.append((b.name(), u.name(), a, head))
     return out
+
+
+def construct_starts(unit, entries):
+    """A unit's construct starts that were not refused, from the run record's entries, in their order."""
+    return [e for e in entries if e.get("Act") == "stage.start" and f"stage/{unit}/construct" in e["On"] and not e.get("Refused")]
+
+
+def took_heads(unit, entries):
+    """The head of each unit it comes after that a unit's construct took into its place, from its construct starts'
+    Took (<unit>@<sha7> words), the latest taking of each: {after unit: head}. A start recorded before Took existed,
+    or one whose place already held work of its own, took none."""
+    return dict(w.split("@", 1) for e in construct_starts(unit, entries) for w in (e.get("Took") or "").split() if "@" in w)
 
 
 def reach(fleet, t):
