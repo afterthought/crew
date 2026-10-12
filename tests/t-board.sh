@@ -15,7 +15,7 @@ export CREW_LABEL=wldn
 box=chuck-herdr-alpha
 tip() { git --git-dir "$ws" rev-parse wldn/main; }
 proposal() { printf '%s\n' "$@" > "$T/proposal.rec"; echo "$T/proposal.rec"; }
-# Times are set, as in t-rail: at <minutes ago> as git takes it, shown <minutes ago> <format>, commit_at <minutes ago>
+# Times are set: at <minutes ago> as git takes it, shown <minutes ago> <format>, commit_at <minutes ago>
 # <dir> <message>.
 now=$(date +%s)
 at() { echo "@$((now - $1 * 60)) +0000"; }

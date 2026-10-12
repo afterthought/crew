@@ -55,7 +55,7 @@ Code
 
 **[state.3]** Rules out: a unit, chore or archive committed straight to main by an agent; a landing with `--no-hooks`. Not ruled out: a fix on main after a landing broke it, which main-level ops lands on the user's word through the hooks and never writes: the planner proposes it as a bolt of its own, first among the planned, for the team the user and the planner choose (the `main-level` spec; `main-ops.md`, "never edit the code yourself"; swancloud-ops, 2026-10-11, on the landing-card check); the user's own commits, among them the archive sweep of 2026-10-10 (crew a3caf5b to 94e31e3, swancloud 4fee795 to 54f849f, run on the user's word, nothing pushed), which `roles.1` already allows; the design agent's records, as its brief says. Source: `bolt-teams` spec "A bolt lands on main on the user's word"; `main-level` spec; ADR 0006 drivers; `main-ops.md`.
 
-**[state.4]** Rules out: a daemon; a view that commits or appends on refresh. Source: `openspec/config.yaml`; `flywheel-state` spec "plain files"; ADR 0002; `tests/t-rail.sh`.
+**[state.4]** Rules out: a daemon; a view that commits or appends on refresh. Source: `openspec/config.yaml`; `flywheel-state` spec "plain files"; ADR 0002; `tests/py/test_rail.py`, `tests/t-journey-review.sh`.
 
 **[state.5]** Rules out: `git push --force` anywhere in `plugin/` or a brief; a push to a blueprints repo or a kit's remote. Source: fix 04daa5d; `plan.py` 383, 569.
 
