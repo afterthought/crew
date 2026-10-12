@@ -76,3 +76,42 @@ def test_a_patch_id_holds_for_a_replay_and_changes_with_its_context(repo):
     assert empty not in ids and same_empty not in ids
     moved = plan.patch_ids(fleet, t, str(repo.path), moved_base, "moved")
     assert moved[moved_ten] != ids[ten]
+
+
+def bolt_and_fix(repo):
+    """main, a bolt of two commits beyond it, and a fix holding them replayed onto main moved on, plus one of its own."""
+    base = repo.commit("main", {"a": "1\n"})
+    repo.git("checkout", "-q", "-b", "bolt")
+    repo.commit("feat: one", {"one": "1\n"})
+    repo.commit("feat: two", {"two": "2\n"})
+    repo.git("checkout", "-q", "main")
+    main = repo.commit("docs: main moves", {"m": "m\n"})
+    repo.git("checkout", "-q", "-b", "fix", "bolt")
+    repo.git("rebase", "-q", "main")
+    repo.commit("fix: one of its own", {"own": "o\n"})
+    return base, main
+
+
+def test_range_diff_is_printed_as_the_reading(repo, capsys):
+    """plan.range_reading (plan.8): git range-diff of the two sides beyond main, printed whole on standard error under
+    a line saying it judges nothing; a commit only the fix has shows as added."""
+    import plan
+    _, main = bolt_and_fix(repo)
+    fleet, t = here()
+    plan.range_reading(fleet, t, str(repo.path), main, repo.git("rev-parse", "bolt"), repo.git("rev-parse", "fix"), "b", "fix/b/f")
+    err = capsys.readouterr().err
+    assert err.startswith("git range-diff main..bolt/b main..fix/b/f, the reading, which judges nothing")
+    own = repo.git("rev-parse", "--short=7", "fix")
+    assert f"-:  ------- > 3:  {own} fix: one of its own" in err
+
+
+def test_a_range_diff_that_fails_is_named_in_gits_words_without_its_usage(repo, capsys):
+    """plan.range_reading: git range-diff refuses a range that is not one (here an unknown commit), and crew names it
+    in git's first paragraph, never the usage git prints after it, and judges as before."""
+    import plan
+    _, main = bolt_and_fix(repo)
+    fleet, t = here()
+    plan.range_reading(fleet, t, str(repo.path), main, "0" * 40, repo.git("rev-parse", "fix"), "b", "fix/b/f")
+    err = capsys.readouterr().err
+    assert err.startswith("git range-diff main..bolt/b main..fix/b/f could not be read: ")
+    assert "usage:" not in err
