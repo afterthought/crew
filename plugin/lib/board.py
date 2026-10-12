@@ -5,8 +5,10 @@
                                      Inception (the signals no move has taken, by who captured them, and the
                                      explorations on each kit's main), Bolt plan (the open proposals, the planned
                                      bolts and the queue), Construction (each held bolt as a ledger of its units and
-                                     fixes) and Operation (the bolts landed in the last seven days); every rail row a
-                                     marker on its object, and what needs attention at the foot
+                                     fixes) and Operation (the bolts landed in the last seven days, then each
+                                     environment's deploys of that week and those still open, and the operations
+                                     waiting on it); every rail row a marker on its object, and what needs attention
+                                     at the foot
   crew _views <label>                the rail tab's refresh: one read, the rail printed as crew rail prints it, the
                                      card sessions of closed cards and gone rows ended as crew rail ends them, and
                                      the board's data written for the board tab, with each agent's view of it for
@@ -23,12 +25,12 @@ import argparse, datetime, json, os, pathlib, re, shutil, subprocess, sys, tempf
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import crew, plan, record, sites  # noqa: E402
+import crew, ops, plan, record, sites  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 # Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button, or an answer
-# in the user's own words.
-GLYPH = {"proposals": "✓", "land": "✓", "verify": "✎"}
+# in the user's own words. An operation's card, a deploy's word or a step marked done or declined, is held too.
+GLYPH = {"proposals": "✓", "land": "✓", "verify": "✎", "operations": "✓"}
 ATTENTION = "!"
 # A unit's stage as one pip, filling as it goes: not begun, being designed, coded, every task ticked, merged; a stage
 # crew could not read is "?". A bolt is its units' pips in the plan's order.
@@ -137,17 +139,32 @@ def flow_read(fleet, labels, sweep=False):
 
 # ------------------------------------------------------------------------------------------------- the data
 
+def marker(r, cards, label):
+    """A rail row as a marker: its group, its card key, its glyph, when it began to wait, and its card, open or None."""
+    card = [c for c in cards if (c["label"], c["key"]) == (label, r["key"])]
+    return {"group": r["group"], "key": r["key"], "glyph": GLYPH[r["group"]], "at": r.get("date") or iso(r["at"]),
+            "card": {"by": card[-1]["by"], "host": card[-1]["host"], "at": iso(card[-1]["at"])} if card else None}
+
+
 def markers(rows, cards, label, group, obj):
-    """The rail's rows for an object, as markers: each with its group, its card key, its glyph, when its row began to
-    wait, and its card, open or None."""
-    out = []
-    for r in rows:
-        if r["label"] != label or r["group"] != group or r["key"].split("/")[1] != obj:
-            continue
-        card = [c for c in cards if (c["label"], c["key"]) == (label, r["key"])]
-        out.append({"group": group, "key": r["key"], "glyph": GLYPH[group], "at": r.get("date") or iso(r["at"]),
-                    "card": {"by": card[-1]["by"], "host": card[-1]["host"], "at": iso(card[-1]["at"])} if card else None})
-    return out
+    """The rail's rows for an object, as markers."""
+    return [marker(r, cards, label) for r in rows if r["label"] == label and r["group"] == group and r["key"].split("/")[1] == obj]
+
+
+def keyed(rows, cards, label, key):
+    """The rail's row with that card key, as a marker, when there is one: an operation's, whose key names the deploy or
+    the step itself."""
+    return [marker(r, cards, label) for r in rows if key and r["label"] == label and r["key"] == key]
+
+
+def environments(fleet, label, teams, entries, rows, cards, since):
+    """The partition's environments for the Operation lane: each one's deploys that moved since since or are still open,
+    and the operations waiting on it, as ops.environments reads them from the run record (plan.14, state.4), each
+    deploy and operation with its rail row's marker; and the teams on that host, which is what the page narrows by."""
+    return [{"env": env, "teams": [t["team"] for t in teams if t["host"] == env],
+             "deploys": [dict(d, markers=keyed(rows, cards, label, d["row"])) for d in v["deploys"]],
+             "waiting": [dict(w, markers=keyed(rows, cards, label, w["row"])) for w in v["waiting"]]}
+            for env, v in ops.environments(entries, iso(since)).items()]
 
 
 def board_data(fleet, labels, read, now):
@@ -264,12 +281,13 @@ def board_data(fleet, labels, read, now):
         operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
                       "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
+        envs = environments(fleet, l, teams, read.get("ops", {}).get(l, []), rows, cards, since)
         parts.append({"label": l, "plan": tip, "hosts": hosts, "teams": teams,
                       "inception": {"signals": sorted((dict(s, teams=captured(s)) for s in sigs),
                                                       key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
                                     "explorations": explorations},
                       "bolt_plan": {"proposals": proposals, "planned": planned, "queue": queue},
-                      "construction": construction, "operation": operation, "attention": attention})
+                      "construction": construction, "operation": operation, "environments": envs, "attention": attention})
     return {"read_at": iso(now), "from": here, "partitions": parts, "unread": read["errors"]}
 
 
@@ -311,6 +329,41 @@ def stage_of(u):
     """A unit's stage with its tasks, a chore's with `chore` before it (plan.11), in the board and each agent's view."""
     return (("chore " if u.get("kind") == "chore" else "") + u["stage"]
             + (f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else ""))
+
+
+def local(at):
+    return f"{plan.utc(at).astimezone():%Y-%m-%d %H:%M}"
+
+
+def deploy_state(d):
+    """Where a deploy stands, as the board says it: waiting on the user's word, replaced unanswered, its outcome and
+    when it ended, at the step that failed, deploying, or approved and not yet deployed."""
+    if d["answer"] == "waiting":
+        return "waits on the user's word"
+    if d["answer"] == "replaced":
+        return "replaced by a newer offer, unanswered"
+    if d["ended"]:
+        failed = next((x["step"] for x in d["steps"] if x["outcome"] == "failed"), None)
+        return f"{d['outcome'] or 'ended'} {local(d['ended'])}" + (f" at the {failed}" if failed else "")
+    if d["started"]:
+        return f"deploying since {local(d['started'])}"
+    return "approved, not yet deployed"
+
+
+def deploy_fields(env, d):
+    """A deploy on one line: its environment, the commit and the one it comes from, where it stands, whose word it was
+    deployed on, and the bolts it carries, or why the record can't tell."""
+    frm = "from nothing deployed" if d["from"] in (None, "", "none") else f"from {d['from'][:7]}"
+    carries = (f"carrying {', '.join(d['bolts'])}" if d["bolts"] else "carrying no landing") if d["bolts"] is not None else f"carrying what can't be read: {d['bolts_why']}"
+    return fields(env, f"deploy {d['to'][:7]} {frm}", deploy_state(d), f"approved by {d['word']['by']}" if d["word"] and d["word"]["by"] else "",
+                  (carries, "dim"))
+
+
+def waiting_fields(env, w):
+    """An operation waiting on an environment: its key, who has it, and its first line or note."""
+    said = {"handed": f"handed to {w['agent'] or w['doer']}", "failed": "failed"}.get(w["state"]) or (
+        "waits on the user" if w["doer"] == "user" else f"waits for {w['agent'] or w['doer'] or 'its doer'}")
+    return fields(env, w["key"], said, w["text"] or w["note"] or "")
 
 
 def board_text(data, width=None, color=False, stale=None):
@@ -385,9 +438,15 @@ def board_text(data, width=None, color=False, stale=None):
 
         heading("Operation")
         for o in p["operation"]:
-            line(gutter=" ", segs=fields(o["bolt"], f"landed {plan.utc(o['at']).astimezone():%Y-%m-%d %H:%M}" + (f" by {o['by']}" if o["by"] else ""),
+            line(gutter=" ", segs=fields(o["bolt"], f"landed {local(o['at'])}" + (f" by {o['by']}" if o["by"] else ""),
                                o["team"] or "", ", ".join(o["units"])))
-        if not p["operation"]:
+        envs = p.get("environments", [])
+        for e in envs:
+            for d in e["deploys"]:
+                line(deploy_fields(e["env"], d), gutter(d["markers"]), 0, d["markers"])
+            for w in e["waiting"]:
+                line(waiting_fields(e["env"], w), gutter(w["markers"]), 0, w["markers"])
+        if not p["operation"] and not any(e["deploys"] or e["waiting"] for e in envs):
             line([("none", None)], " ")
 
         heading("attention")
@@ -515,13 +574,24 @@ def design_view(p):
             + attention_rows(p, lambda a: a["what"] in ("plan", "signals")))
 
 
+def environment_row(e):
+    """An environment in brief: its latest deploy, where it stands, and how many operations wait on it; the marker of a
+    deploy or an operation of it waiting on the user in the gutter."""
+    ms = [m for d in e["deploys"] for m in d["markers"]] + [m for w in e["waiting"] for m in w["markers"]]
+    d = e["deploys"][0] if e["deploys"] else None
+    return row(fields(e["env"], f"deploy {d['to'][:7]}  {deploy_state(d)}" if d else "",
+                      many(len(e["waiting"]), "operation waiting", "operations waiting") if e["waiting"] else ""), gutter(ms))
+
+
 def operator_view(p):
-    """An operator's: the partition's board in brief, a line to each lane with each team's bolt under Construction,
-    the rail's rows waiting on the user counted by kind, and what needs attention."""
-    inc, bp, ops = p["inception"], p["bolt_plan"], p["operation"]
-    approve = sum(len(d["markers"]) for d in bp["proposals"]) + sum(len(b["markers"]) for b in p["construction"])
+    """An operator's: the partition's board in brief, a line to each lane with each team's bolt under Construction and
+    each environment with a deploy or an operation waiting under Operation, the rail's rows waiting on the user counted
+    by kind, and what needs attention."""
+    inc, bp, lands, envs = p["inception"], p["bolt_plan"], p["operation"], [e for e in p.get("environments", []) if e["deploys"] or e["waiting"]]
+    approve = (sum(len(d["markers"]) for d in bp["proposals"]) + sum(len(b["markers"]) for b in p["construction"])
+               + sum(len(x["markers"]) for e in envs for x in e["deploys"] + e["waiting"]))
     answer = sum(len(u["markers"]) for b in p["construction"] for u in b["units"])
-    last = f"the last {ops[0]['bolt']}, {plan.utc(ops[0]['at']).astimezone():%a %H:%M}" if ops else ""
+    last = f"the last {lands[0]['bolt']}, {plan.utc(lands[0]['at']).astimezone():%a %H:%M}" if lands else ""
     return ([row(fields((f"{p['label']} board", "bold"), f"read from {', '.join(h for h, v in p['hosts'].items() if v is True) or 'no host'}")),
              row(fields(("Inception", "bold"), many(len(inc["signals"]), "signal not moved", "signals not moved"),
                         many(len(inc["explorations"]), "exploration", "explorations"))),
@@ -529,7 +599,8 @@ def operator_view(p):
                         f"{len(bp['queue'])} queued")),
              row([("Construction", "bold")])]
             + team_rows(p)
-            + [row(fields(("Operation", "bold"), f"{len(ops)} landed in seven days", last))]
+            + [row(fields(("Operation", "bold"), f"{len(lands)} landed in seven days", last))]
+            + [environment_row(e) for e in envs]
             + ([row(fields(("waits on the user", "bold"), f"✓ {approve} to approve" if approve else "", f"✎ {answer} to answer" if answer else ""))]
                if approve or answer else [])
             + attention_rows(p))

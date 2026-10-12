@@ -1,10 +1,11 @@
 # The flow as the user reads it, through the crew command on the stubs (tests.11, record 0022): crew bolts lists every
 # bolt and unit with each unit's stage read from its kit, one ssh per host holding a bolt and none for planned work;
-# crew sites gives each dev server's URL as it opens from where it is asked; crew board draws the four lanes and the
-# attention line from one read, writes nothing and ends no card session; the rail tab's refresh, in one fetch and one
-# read of each host's kits, prints the rail, sweeps a dead card session and writes the board's frame, which the board
-# tab draws; crew page writes the page whole and nothing when the branch can't be read; every view names a host that
-# does not answer and shows the rest; and a plan a hand edit broke is refused, named by its commit. What each lane,
+# crew sites gives each dev server's URL as it opens from where it is asked; crew board draws the four lanes, an
+# environment's deploy among the Operation lane's, and the attention line from one read, writes nothing and ends no
+# card session; the rail tab's refresh, in one fetch and one read of each host's kits, prints the rail, sweeps a dead
+# card session and writes the board's frame, which the board tab draws; crew page writes the page whole, with the
+# deploys, and nothing when the branch can't be read; every view names a host that does not answer and shows the
+# rest; and a plan a hand edit broke is refused, named by its commit. What each lane,
 # line, URL and node says are logic cases (tests/py/test_board.py, test_page.py, test_rail.py), and what the kit
 # reader takes from git, contract cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
 # Reads: tests/stubs-sites/ plugin/lib/board.py plugin/lib/sites.py plugin/lib/page.py plugin/lib/page.html
@@ -83,8 +84,11 @@ expect_ok crew sites wldn; has "$out" "places/b"; has "$out" "no server running"
 HOST=$box expect_ok crew sites wldn; has "$out" "unit-map-one--atlas-kit--studio.dev.swancloud.net  (open from a Mac)"
 ok "crew sites gives each running dev server's URL as it opens from where it is asked, and none where none runs"
 
+s1=$(printf 'a%.0s' $(seq 40))
+expect_ok crew ops offer mac-studio --label wldn --from none --to "$s1"
 before=$(tip); n=$(records)
 expect_ok crew board --label wldn; b=$out
+eq "$(line_of "$(lane "$b" Operation)" "deploy ${s1:0:7}")" "✓ mac-studio  deploy ${s1:0:7} from nothing deployed  waits on the user's word  carrying what can't be read: ${s1:0:7} is no landing's commit in the record  no card open"
 eq "$(grep -E '^[A-Za-z]' <<<"$b" | tail -n +2 | tr '\n' '|')" "Inception|Bolt plan|Construction|Operation|attention|"
 has "$(lane "$b" Inception)" "Every apex should be a zone of its own."
 has "$(lane "$b" Inception)" "exploration  switchboard-kit command-cost"
@@ -157,10 +161,11 @@ eq "$(sed -n 1p <<<"$out")" "$mine/page.html"
 [[ $(sed -n 2p <<<"$out") =~ ^as\ of\ [0-9-]{10}\ [0-9:]{5}Z\ ·\ wldn/main\ $(git --git-dir "$ws" rev-parse --short=7 wldn/main)$ ]] || fail "the header line: $out"
 json=$(block "$mine/page.html")
 eq "$(j .made.commit) $(j '[.board.construction[].bolt] | join(" ")')" "$(tip) tenant-environments atlas-maps"
+eq "$(j '.deploys[] | select(.env == "mac-studio") | .deploys[0] | "\(.to[:7]) \(.answer)"') $(j '.board.environments[0].deploys[0].row')" "${s1:0:7} waiting deploy/mac-studio/${s1:0:7}"
 eq "$(records)" "$n"
 expect_ok crew trace unit/a
 eq "$(j '.histories["unit/a"][] as $i | .entries[$i] | "\(.At[5:10]) \(.At[11:19]) \(.Act)"')" "$(awk '{print $1, $2, $3}' <<<"$out")"
-ok "crew page writes the page whole, with the board as crew board reads it, prints its path and as of which commit, and appends nothing"
+ok "crew page writes the page whole, with the board as crew board reads it and the deploys, prints its path and as of which commit, and appends nothing"
 
 # The box asleep: every view names it and shows the rest.
 echo $box > "$T/down"

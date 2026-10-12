@@ -109,8 +109,9 @@
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
 #                                      no move has taken, explorations), Bolt plan (proposals, planned bolts, the
 #                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and
-#                                      dev servers) and Operation (bolts landed this week); each rail row a marker on
-#                                      its object, what needs attention at the foot; it answers nothing
+#                                      dev servers) and Operation (bolts landed this week, each environment's deploys
+#                                      and the operations waiting); each rail row a marker on its object, what needs
+#                                      attention at the foot; it answers nothing
 #   crew card  session|wait|end <key> [<unit>] [--label L]
 #                                      the plannotator session on what a rail row's card asks the user to read:
 #                                      session starts it on this host with no browser and prints its link (the
@@ -182,7 +183,9 @@
 #                                      when chosen, kept across reloads, and its header linking each other partition's
 #                                      page beside it (../<label>/page.html); one switch away, the lineage: signals,
 #                                      agenda items, proposals, units and bolts as columns, a line from each to what
-#                                      it led to, and each one's history as crew trace prints it; written whole to
+#                                      it led to, and each one's history as crew trace prints it; and the deploys,
+#                                      each environment's as a timeline, with the word, steps, checks and outcome of
+#                                      each, and the bolts it carried with their proposals; written whole to
 #                                      ~/.local/state/crew/<label>/page.html on this host, or --out, and its path
 #                                      printed with as of when and which commit it was drawn from
 #

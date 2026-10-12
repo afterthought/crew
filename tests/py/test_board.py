@@ -13,6 +13,7 @@ from facts import plan_text
 
 import board
 import crew
+import ops
 import plan
 
 BOX = "chuck-herdr-alpha"
@@ -60,13 +61,16 @@ def kits(ok=True):
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
 
-def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, cards=(), errors=None, unread=None, pl=True):
+def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, cards=(), errors=None, unread=None, pl=True, entries=()):
+    """The read the board is made from; entries are the partition's run record entries the operations are read from,
+    whose rail rows join the plan's, as plan.rail_record makes them."""
     p = the_plan() if pl else None
     found = [("wldn", "WilldanGroup/crew-state", "tip0" if pl else None, p)]
     sv = sv or kits()
+    ops_rows = [dict(r, at=plan.utc(r["at"]), doc=None) for r in ops.rows(FLEET, "wldn", list(entries))]
     return dict(found=found, sv=sv, props=list(props), cards=list(cards), unread=unread or {}, errors=errors or {},
-                landings=list(landings), gives=gives or {}, signals={"wldn": (signals or [], {})},
-                rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None) if p else []))
+                landings=list(landings), gives=gives or {}, signals={"wldn": (signals or [], {})}, ops={"wldn": list(entries)},
+                rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None) if p else []) + ops_rows)
 
 
 def data(**kw):
@@ -83,6 +87,27 @@ def lane(text, name):
         elif on:
             out.append(l)
     return out
+
+
+S1, S2 = "a" * 40, "b" * 40
+N = iter(range(1, 1000))
+
+
+def entry(act, minutes, env="mac-studio", **f):
+    """A run-record entry on the partition's main level's host, minutes before the board was read."""
+    on = [f"bolt/{f.pop('bolt')}"] if act == "bolt.land" else [f"env/{env}"]
+    return dict(Id=f"{ago(minutes)}-mac-studio-1-{next(N)}", At=ago(minutes), Host="mac-studio", Act=act, On=on, From=[], Commit=[], **f)
+
+
+# A deploy of atlas-kit to mac-studio approved and done, a newer one offered, an operation handed to the dispatcher
+# and one waiting on the user.
+OPS = [entry("bolt.land", 95, bolt="atlas-maps", Repo="atlas-kit", Head=S1), entry("ops.offer", 90, Head=S1, Base="none"),
+       entry("ops.approve", 70, Head=S1, By="wldn-ops"), entry("ops.deploy", 60, Head=S1, Base="none", Phase="start"),
+       entry("ops.deploy", 50, Head=S1, Phase="end", Outcome="done"), entry("bolt.land", 45, bolt="atlas-zones", Repo="atlas-kit", Head=S2),
+       entry("ops.offer", 40, Head=S2, Base=S1),
+       entry("ops.step", 30, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher", Agent="wldn-dispatch-mac-studio"),
+       entry("ops.step", 20, Key="rotate-key", State="waiting", Doer="user", Text="Rotate the key.")]
+DEPLOY_CARD = dict(label="wldn", card="req_9", key=f"deploy/mac-studio/{S2[:7]}", by="wldn-ops", host="mac-studio", at=NOW)
 
 
 SIGS = [{"signal": "2026-10-01-planning/01-zones", "home": "blueprints", "captured_by": "wldn-planner", "at": "2026-10-01", "kind": "ask",
@@ -136,6 +161,22 @@ class TestText:
                     dict(label="wldn", bolt="old-maps", units=["old"], at=NOW - datetime.timedelta(days=8), by="wldn-ops", host="mac-studio")]
         op = lane(board.board_text(data(landings=landings, gives={("wldn", "atlas-maps"): "atl-1"})), "Operation")
         assert len(op) == 1 and op[0].startswith("  atlas-maps  landed ") and op[0].endswith(" by chuck@mac-studio  atl-1  map-one")
+
+    def test_operation_shows_each_environments_deploys_and_the_operations_waiting_with_their_markers(self):
+        op = lane(board.board_text(data(entries=OPS, cards=[DEPLOY_CARD])), "Operation")
+        assert op == [f"✓ mac-studio  deploy {S2[:7]} from {S1[:7]}  waits on the user's word  carrying atlas-zones  card open, asked by wldn-ops",
+                      f"  mac-studio  deploy {S1[:7]} from nothing deployed  done {board.local(ago(50))}  approved by wldn-ops  carrying atlas-maps",
+                      "  mac-studio  restart-teams/1  handed to wldn-dispatch-mac-studio",
+                      "✓ mac-studio  rotate-key  waits on the user  Rotate the key.  no card open"]
+        env, = data(entries=OPS)["partitions"][0]["environments"]
+        assert (env["env"], env["teams"], [d["row"] for d in env["deploys"]], [w["row"] for w in env["waiting"]]) == (
+            "mac-studio", ["atl-1"], [f"deploy/mac-studio/{S2[:7]}", None], [None, "op/mac-studio/2"])
+
+    def test_a_deploy_that_failed_says_at_which_step_and_one_whose_commit_no_landing_holds_says_so(self):
+        es = [entry("ops.deploy", 30, Head=S2, Base=S1, Phase="start"), entry("ops.deploy", 20, Head=S2, Phase="step", Step="machine", Outcome="failed"),
+              entry("ops.deploy", 10, Head=S2, Phase="end", Outcome="failed")]
+        assert lane(board.board_text(data(entries=es)), "Operation") == [
+            f"  mac-studio  deploy {S2[:7]} from {S1[:7]}  failed {board.local(ago(10))} at the machine  carrying what can't be read: {S2[:7]} is no landing's commit in the record"]
 
     def test_a_host_that_does_not_answer_is_named_and_its_ledgers_units_are_unknown(self):
         out = board.board_text(data(sv=kits(ok=False)))
@@ -207,7 +248,7 @@ class TestMore:
         d = data(signals=SIGS)
         p = d["partitions"][0]
         assert sorted(d) == ["from", "partitions", "read_at", "unread"]
-        assert sorted(p) == ["attention", "bolt_plan", "construction", "hosts", "inception", "label", "operation", "plan", "teams"]
+        assert sorted(p) == ["attention", "bolt_plan", "construction", "environments", "hosts", "inception", "label", "operation", "plan", "teams"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
         assert sorted(te) == ["bolt", "fixes", "goal", "host", "markers", "repo", "state", "team", "teams", "units", "url"]
         assert sorted(te["units"][0]) == ["kind", "markers", "slot", "stage", "tasks", "unit", "url", "worktree"]
@@ -292,6 +333,12 @@ class TestViews:
         assert mine[4:8] == ["  atlas-kit  atl-1  holds no bolt", "! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged",
                              "  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged", "  switchboard-kit  swb-2  holds no bolt"]
         assert "Operation  0 landed in seven days" in mine and "waits on the user  ✓ 1 to approve" in mine
+
+    def test_an_operator_reads_each_environment_with_a_deploy_or_an_operation_waiting_and_counts_their_cards(self):
+        mine = view(f"wldn-operator-{BOX}", entries=OPS)
+        at = mine.index("Operation  0 landed in seven days")
+        assert mine[at + 1] == f"✓ mac-studio  deploy {S2[:7]}  waits on the user's word  2 operations waiting"
+        assert "waits on the user  ✓ 2 to approve" in mine
 
     def test_each_conductor_the_planner_the_design_agent_and_each_hosts_operator_has_a_view_and_no_other_agent(self):
         v = board.agent_views(data())

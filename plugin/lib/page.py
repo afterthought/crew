@@ -1,24 +1,28 @@
 #!/usr/bin/env python3
-"""page.py: a flywheel's page, one HTML file: its board, and its lineage drawn from its run record.
+"""page.py: a flywheel's page, one HTML file: its board, its lineage and its deploys, drawn from its run record.
 
   crew page <label> [--out <file>] [--since <time>]
-                                     the partition's board, as crew board reads it, which the page opens on; and the
+                                     the partition's board, as crew board reads it, which the page opens on; the
                                      flywheel's signals, agenda items, proposals, units and bolts as columns, a line for
                                      each link between two of them, a timeline of the entries beneath, and each
-                                     object's history; written whole to ~/.local/state/crew/<label>/page.html on this
-                                     host, or to --out, and its path printed with what it was made from
+                                     object's history; and its deploys, a timeline by environment, each deploy with
+                                     the commit it moved from and to, the user's word on it, its steps, checks and
+                                     outcome, and the bolts it carried with their changes' proposals as its release
+                                     notes; written whole to ~/.local/state/crew/<label>/page.html on this host, or to
+                                     --out, and its path printed with what it was made from
 
 The board is the one read crew board makes (board.flow_read), of the one partition. Which objects the lineage holds,
 how they are linked and each one's history are read from the run record's entries alone, by the walk crew trace makes
 (record.lineage), so the page and the trace cannot disagree. Labels and present status are read from the plan and kits
 the board read, at the commit the entries were read at, which a command fetches once (plan.12); no entry holds them
-(record.3). The file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and
+(record.3). The deploys are the ops entries of the main level's host and the landings, as ops.environments reads them
+(plan.14), a deploy's release notes the proposals the lineage joins to each bolt it carried. The file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and
 making it appends no entry (state.4, record.1)."""
 import argparse, datetime, html, json, os, pathlib, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
-import board, crew, plan, record  # noqa: E402
+import board, crew, ops, plan, record  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
 TEMPLATE = LIB / "page.html"
@@ -134,6 +138,33 @@ def labelled(d, pl, st, proposals, items, moves, assertion_of):
             from_entries(n, entries)
 
 
+def release_notes(d, bolt):
+    """A carried bolt's release notes: the proposals the lineage joins to it, through its units or straight, each with
+    its number and its label, the first line of its case, in their order."""
+    into = {}
+    for e in d["edges"]:
+        into.setdefault(e["to"], []).append(e["from"])
+    seen, todo = set(), [f"bolt/{bolt}"]
+    while todo:
+        for x in into.get(todo.pop(), []):
+            if x not in seen:
+                seen.add(x)
+                todo.append(x)
+    by = {n["id"]: n for n in d["nodes"]}
+    props = sorted((x for x in seen if x.startswith("proposal/")), key=lambda x: (not x[9:].isdigit(), int(x[9:]) if x[9:].isdigit() else 0, x))
+    return [{"proposal": by[x]["name"], "label": by[x].get("label")} for x in props if x in by]
+
+
+def deploys(d, entries, machine, since=None):
+    """The deploys view: each environment's deploys that moved since since or are still open, and the operations waiting
+    on it, from the ops entries the partition's main level's host wrote and the landings (ops.environments), each
+    carried bolt with its release notes from the page's lineage: [{env, deploys, waiting}], by environment."""
+    mine = [e for e in entries if ((e.get("Act") or "").startswith("ops.") and e.get("Host") == machine) or e.get("Act") == "bolt.land"]
+    return [{"env": env, "waiting": v["waiting"],
+             "deploys": [dict(x, notes=[{"bolt": b, "proposals": release_notes(d, b)} for b in x["bolts"] or []]) for x in v["deploys"]]}
+            for env, v in ops.environments(sorted(mine, key=lambda e: (e["At"], e["Id"])), since).items()]
+
+
 # ------------------------------------------------------------------------------------------------- the file
 
 def header(made):
@@ -203,6 +234,7 @@ def page(fleet, a):
     d["made"] = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "label": label, "repo": repo, "commit": tip, "plan": part["plan"], "since": stamp,
                  "unreachable": missing}
     d["board"] = dict(part, read_at=bd["read_at"], unread=bd["unread"])
+    d["deploys"] = deploys(d, entries, fleet["partitions"][label]["machine"], stamp)
     d["partitions"], d["label"] = list(fleet["partitions"]), label
     if a.json:
         print(json.dumps(d, indent=1))

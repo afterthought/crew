@@ -130,6 +130,109 @@ def rows(fleet, label, es):
     return out
 
 
+WAITING = ("waiting", "handed", "failed")  # a step in one of these states is an operation still waiting
+
+
+def landings(es):
+    """The partition's landings, from its bolt.land entries not refused, oldest first: each {bolt, units, at, by, repo,
+    head}, the kit it landed on and the commit that kit's main held afterwards, None where the entry has none."""
+    out = []
+    for e in es:
+        bolt = next((o[5:] for o in e["On"] if o.startswith("bolt/")), None) if e.get("Act") == "bolt.land" and not e.get("Refused") else None
+        if bolt:
+            out.append(dict(bolt=bolt, units=[o[5:] for o in e["On"] if o.startswith("unit/")], at=e["At"], by=e.get("By"),
+                            repo=e.get("Repo"), head=e.get("Head")))
+    return out
+
+
+def carried(to, frm, lands):
+    """The bolts a deploy from frm to to carried, from the landings (oldest first): the landings on the kit whose main
+    one of them left at to, after the one that left it at frm, up to that one; every one up to it when frm is none,
+    nothing having been deployed. ([bolts], None), or (None, why) when the record holds no landing at to or at frm, so
+    which landings the deploy carried can't be read from it (read.1)."""
+    at = next((i for i, l in enumerate(lands) if l["head"] and l["head"] == to), None)
+    if at is None:
+        return None, f"{to[:7]} is no landing's commit in the record"
+    mine = [l for l in lands[:at + 1] if l["repo"] == lands[at]["repo"]]
+    if frm in (None, "", "none"):
+        return [l["bolt"] for l in mine], None
+    start = next((i for i, l in enumerate(mine) if l["head"] == frm), None)
+    if start is None:
+        return None, f"{frm[:7]} is no landing's commit in the record"
+    return [l["bolt"] for l in mine[start + 1:]], None
+
+
+def environments(es, since=None):
+    """Each environment's deploys and the operations waiting on it, from the partition's entries (es, oldest first),
+    as the board's Operation lane and the page's deploys view show them (plan.14, state.4): {env: {"deploys": [...],
+    "waiting": [...]}}, by environment.
+
+    A deploy is one commit offered or deployed until its deploy ends: its to and from, when it was offered, the user's
+    word (who held its card, and when), its answer (approved; waiting on the word; replaced, an unanswered offer a newer
+    one replaced; or unasked, a deploy started with no offer in the record, an auto environment's), when it started
+    and ended and its outcome, each of its steps with its outcome, the suite's checks (the rows of its last step that
+    has them), the bolts it carried or why the record can't tell, every after-deploy step recorded against its commit
+    with its doer and latest state, its rail row while it waits on the word, and when it last moved; newest first,
+    those that last moved before since left out unless still open. Waiting are the operations whose latest state is
+    waiting, handed or failed, each with its rail row when it is the user's to do and waits."""
+    lands = landings(es)
+    _, _, steps = state(es)
+    envs = {}
+    for e in es:
+        env, act, to = env_of(e), e.get("Act") or "", e.get("Head")
+        if not env or not act.startswith("ops.") or act == "ops.step" or not to:
+            continue
+        E = envs.setdefault(env, {"deploys": [], "open": {}})
+
+        def new(frm, offered, answer):
+            d = {"to": to, "from": frm, "offered": offered, "word": None, "answer": answer, "started": None, "ended": None, "outcome": None,
+                 "steps": [], "checks": None, "at": e["At"]}
+            E["deploys"].append(d)
+            E["open"][to] = d
+            return d
+        d = E["open"].get(to)
+        if act == "ops.offer":
+            for o in [o for o in E["open"].values() if o["to"] != to and o["answer"] == "waiting" and not o["started"]]:
+                o.update(answer="replaced", at=e["At"])
+                del E["open"][o["to"]]
+            d or new(e.get("Base"), e["At"], "waiting")
+        elif act == "ops.approve" and d and not e.get("Refused"):
+            d.update(word={"at": e["At"], "by": e.get("By")}, answer="approved", at=e["At"])
+        elif act == "ops.deploy":
+            phase = e.get("Phase")
+            if phase == "start":
+                d = d or new(e.get("Base"), None, "unasked")
+                d.update({"started": e["At"], "from": e.get("Base") or d["from"], "at": e["At"]})
+            elif d and phase == "step":
+                d["steps"].append({"step": e.get("Step"), "outcome": e.get("Outcome"), "at": e["At"]})
+                try:
+                    d["checks"] = json.loads(e["Rows"]) if e.get("Rows") else d["checks"]
+                except ValueError:
+                    pass
+                d["at"] = e["At"]
+            elif d and phase == "end":
+                d.update(ended=e["At"], outcome=e.get("Outcome"), at=e["At"])
+                del E["open"][to]
+    out = {}
+    for env in sorted(set(envs) | {k[0] for k in steps}):
+        E = envs.get(env, {"deploys": [], "open": {}})
+        deploys = []
+        for d in reversed(E["deploys"]):
+            if since and d["at"] < since and not any(d is o for o in E["open"].values()):
+                continue
+            bolts, why = carried(d["to"], d["from"], lands)
+            after = [{"key": key, "state": x.get("State"), "doer": x.get("Doer"), "agent": x.get("Agent"), "at": x["At"], "note": x.get("Note")}
+                     for (en, t, key), x in steps.items() if en == env and t == d["to"]]
+            row = f"deploy/{env}/{d['to'][:7]}" if d["answer"] == "waiting" else None
+            deploys.append(dict(d, bolts=bolts, bolts_why=why, after=after, row=row))
+        waiting = [{"key": key, "to": t or None, "state": x.get("State"), "doer": x.get("Doer"), "agent": x.get("Agent"), "at": x["At"],
+                    "text": next((l.strip() for l in (x.get("Text") or "").splitlines() if l.strip()), None), "note": x.get("Note"),
+                    "row": f"op/{env}/{n}" if x.get("Doer") == "user" and x.get("State") == "waiting" else None}
+                   for n, (en, t, key), x in numbered(steps) if en == env and x.get("State") in WAITING]
+        out[env] = {"deploys": deploys, "waiting": waiting}
+    return out
+
+
 def open_keys(label):
     """The card keys of the partition's operations rows open now, on this host."""
     return [r["key"] for r in rows(None, label, entries(label))]

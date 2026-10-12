@@ -77,6 +77,82 @@ class TestRows:
         assert [r["key"] for r in ops.rows(None, "swancloud", done)] == ["op/mac-studio/2"]
 
 
+S3 = "c" * 40
+
+
+def landed(bolt, head, repo="swancloud", minutes=0, units=()):
+    """A landing as crew bolt land records it: the bolt and its units, the kit and the commit its main holds after."""
+    return dict(Id=f"20261012T10{minutes:02d}00Z-mac-studio-1-{next(N)}", At=f"2026-10-12T10:{minutes:02d}:00Z", Act="bolt.land",
+                On=[f"bolt/{bolt}"] + [f"unit/{u}" for u in units], From=[], Commit=[], Repo=repo, Head=head)
+
+
+class TestEnvironments:
+    def test_a_deploy_offered_approved_and_run_shows_its_word_steps_checks_outcome_and_the_bolts_it_carried(self):
+        es = [landed("crew-thing", "d" * 40, repo="crew", minutes=0), landed("apex-zones", S1, minutes=0, units=["zone-one"]),
+              landed("tenant-envs", S2, minutes=1), OFFER | {"Base": "none"}, e("ops.approve", minutes=2, Head=S1, By="swancloud-ops"),
+              e("ops.deploy", minutes=3, Head=S1, Base="none", Phase="start"),
+              e("ops.deploy", minutes=4, Head=S1, Phase="step", Step="machine", Outcome="ok"),
+              e("ops.deploy", minutes=5, Head=S1, Phase="step", Step="suite", Outcome="ok",
+                Rows='[{"name":"deployer","state":"ok","detail":"","before":"warn","verdict":"better"}]'),
+              e("ops.deploy", minutes=6, Head=S1, Phase="end", Outcome="done"),
+              e("ops.step", minutes=7, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher", Agent="swancloud-dispatch-mac-studio")]
+        d, = ops.environments(es)["mac-studio"]["deploys"]
+        assert (d["to"], d["from"], d["answer"], d["word"], d["outcome"], d["row"]) == (S1, "none", "approved",
+                                                                                      {"at": "2026-10-12T10:02:00Z", "by": "swancloud-ops"}, "done", None)
+        assert [(x["step"], x["outcome"]) for x in d["steps"]] == [("machine", "ok"), ("suite", "ok")]
+        assert d["checks"] == [{"name": "deployer", "state": "ok", "detail": "", "before": "warn", "verdict": "better"}]
+        assert (d["bolts"], d["bolts_why"]) == (["apex-zones"], None)
+        assert [(a["key"], a["state"], a["doer"]) for a in d["after"]] == [("restart-teams/1", "handed", "dispatcher")]
+
+    def test_an_offer_waits_on_the_word_with_its_row_and_a_newer_one_replaces_it_unanswered(self):
+        newer = e("ops.offer", minutes=3, Head=S2, Base=S1)
+        deploys = ops.environments([OFFER, newer])["mac-studio"]["deploys"]
+        assert [(d["to"], d["answer"], d["row"]) for d in deploys] == [(S2, "waiting", "deploy/mac-studio/bbbbbbb"), (S1, "replaced", None)]
+
+    def test_a_newer_offer_waits_beside_an_approved_one_and_a_deploy_with_no_offer_is_unasked(self):
+        es = [OFFER, e("ops.approve", minutes=2, Head=S1), e("ops.offer", minutes=3, Head=S2, Base="none"),
+              e("ops.deploy", env="swancloud-srv", minutes=4, Head=S3, Base=S1, Phase="start")]
+        envs = ops.environments(es)
+        assert [(d["to"], d["answer"]) for d in envs["mac-studio"]["deploys"]] == [(S2, "waiting"), (S1, "approved")]
+        d, = envs["swancloud-srv"]["deploys"]
+        assert (d["answer"], d["from"], d["started"], d["ended"]) == ("unasked", S1, "2026-10-12T10:04:00Z", None)
+
+    def test_the_same_commit_offered_again_after_its_deploy_failed_is_a_new_deploy(self):
+        es = [OFFER, e("ops.approve", minutes=2, Head=S1), e("ops.deploy", minutes=3, Head=S1, Phase="start"),
+              e("ops.deploy", minutes=4, Head=S1, Phase="end", Outcome="failed"), e("ops.offer", minutes=5, Head=S1, Base="none")]
+        assert [(d["answer"], d["outcome"]) for d in ops.environments(es)["mac-studio"]["deploys"]] == [("waiting", None), ("approved", "failed")]
+
+    def test_since_leaves_out_a_deploy_that_last_moved_before_it_unless_still_open(self):
+        es = [OFFER, e("ops.approve", minutes=2, Head=S1), e("ops.deploy", minutes=3, Head=S1, Phase="end", Outcome="done"),
+              e("ops.offer", env="swancloud-srv", minutes=4, Head=S2, Base="none")]
+        envs = ops.environments(es, since="2026-10-12T10:30:00Z")
+        assert envs["mac-studio"]["deploys"] == [] and [d["to"] for d in envs["swancloud-srv"]["deploys"]] == [S2]
+
+    def test_the_operations_waiting_are_those_waiting_handed_or_failed_the_users_with_its_row(self):
+        es = [e("ops.step", minutes=1, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher"),
+              e("ops.step", minutes=2, Key="rotate-tailnet-key", State="waiting", Doer="user", Text="Rotate the key.\nBefore Friday."),
+              e("ops.step", minutes=3, Key="check-backups", State="done", Doer="main-ops"),
+              e("ops.step", minutes=4, Key="restart-herdr", State="failed", Doer="dispatcher", Note="herdr would not stop")]
+        waiting = ops.environments(es)["mac-studio"]["waiting"]
+        assert [(w["key"], w["state"], w["row"], w["text"]) for w in waiting] == [
+            ("restart-teams/1", "handed", None, None), ("rotate-tailnet-key", "waiting", "op/mac-studio/2", "Rotate the key."),
+            ("restart-herdr", "failed", None, None)]
+        assert ops.environments(es)["mac-studio"]["deploys"] == []
+
+
+class TestCarried:
+    LANDS = [dict(bolt="one", repo="swancloud", head=S1), dict(bolt="crew-one", repo="crew", head="d" * 40),
+             dict(bolt="two", repo="swancloud", head=S2), dict(bolt="three", repo="swancloud", head=S3)]
+
+    def test_a_deploy_carries_its_kits_landings_after_its_from_up_to_its_to(self):
+        assert ops.carried(S3, S1, self.LANDS) == (["two", "three"], None)
+        assert ops.carried(S2, "none", self.LANDS) == (["one", "two"], None)
+
+    def test_a_commit_no_landing_left_main_at_is_said_rather_than_guessed(self):
+        assert ops.carried("e" * 40, S1, self.LANDS) == (None, "eeeeeee is no landing's commit in the record")
+        assert ops.carried(S3, "f" * 40, self.LANDS) == (None, "fffffff is no landing's commit in the record")
+
+
 class TestRefusals:
     def test_an_approval_answers_only_the_offer_open_now(self):
         offers = {"mac-studio": OFFER}

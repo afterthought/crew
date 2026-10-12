@@ -53,6 +53,33 @@ class TestData:
         assert [n["id"] for n in d["nodes"]] == ["signals/z", "unit/u", "bolt/b"] and len(d["entries"]) == 3
 
 
+class TestDeploys:
+    S1, S2 = "a" * 40, "b" * 40
+
+    def es(self):
+        S1, S2 = self.S1, self.S2
+        return FLOW[:4] + [entry("bolt.land", ["bolt/b", "unit/u"], minutes=5, Host="box", Repo="switchboard-kit", Head=S1),
+                           entry("ops.offer", ["env/mac-studio"], minutes=6, Host="mac-studio", Head=S1, Base="none"),
+                           entry("ops.approve", ["env/mac-studio"], minutes=7, Host="mac-studio", Head=S1, By="wldn-ops"),
+                           entry("ops.deploy", ["env/mac-studio"], minutes=8, Host="mac-studio", Head=S1, Base="none", Phase="start"),
+                           entry("ops.deploy", ["env/mac-studio"], minutes=9, Host="mac-studio", Head=S1, Phase="end", Outcome="done"),
+                           entry("ops.offer", ["env/mac-studio"], minutes=10, Host="box", Head=S2, Base=S1)]
+
+    def test_each_environments_deploys_carry_their_bolts_with_their_changes_proposals_as_release_notes(self):
+        d = page.data(self.es())
+        page.labelled(d, plan.Plan(""), None, {"3": {"Case": "Zones get a bolt.\nWhy: x"}}, {}, {}, lambda name: None)
+        env, = page.deploys(d, self.es(), "mac-studio")
+        dep, = env["deploys"]
+        assert (env["env"], dep["to"], dep["answer"], dep["word"]["by"], dep["outcome"]) == ("mac-studio", self.S1, "approved", "wldn-ops", "done")
+        assert dep["notes"] == [{"bolt": "b", "proposals": [{"proposal": "3", "label": "Zones get a bolt."}]}]
+
+    def test_an_ops_entry_only_the_main_levels_host_wrote_is_a_deploy_and_since_keeps_what_moved_from_then_on(self):
+        d = page.data(self.es())
+        assert [x["to"] for e in page.deploys(d, self.es(), "mac-studio") for x in e["deploys"]] == [self.S1]
+        assert [x["to"] for e in page.deploys(d, self.es(), "box") for x in e["deploys"]] == [self.S2]
+        assert page.deploys(d, self.es(), "mac-studio", "2026-10-12T10:30:00Z") == [{"env": "mac-studio", "deploys": [], "waiting": []}]
+
+
 class TestLabels:
     def test_each_node_is_labelled_from_the_state_and_one_the_state_no_longer_holds_from_its_entries(self):
         d = page.data(FLOW + [entry("unit.drop", ["unit/d", "bolt/tenant-environments"], why="plan(tenant-environments): drop d")])
@@ -144,6 +171,8 @@ class TestMore:
             assert has in rest
         for form in (".quote", ".sheet", ".slip", ".ledger", ".record", ".mark.attention", ".lg-unit.building"):
             assert form in rest
+        for deploys in ('aria-label="Deploys"', 'data-view="deploys"', "D.deploys", "B.environments", ".dp-line", "release notes"):
+            assert deploys in rest
         for sample in ("atlas", "plan-decisions", "books", "Manrope", "JetBrains Mono"):
             assert sample not in rest
 

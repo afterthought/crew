@@ -1,7 +1,7 @@
 <!doctype html>
 <!-- crew's page: page.py puts the partitions' links and the flywheel's data in the two placeholders below and writes
-     the file whole. It opens on the partition's board, narrowed to the team last chosen, and its lineage is the flow
-     view, one switch away. Everything it draws is in this file: no font, script or style is loaded from anywhere, and
+     the file whole. It opens on the partition's board, narrowed to the team last chosen; its lineage is the flow
+     view, and its deploys, by environment, the deploys view, each one switch away. Everything it draws is in this file: no font, script or style is loaded from anywhere, and
      the only links are to the other partitions' pages beside it. Every label is set as text, never as markup. -->
 <html lang="en">
 <head>
@@ -56,7 +56,7 @@ h1,h2,h3,h4{margin:0;font-weight:700;text-wrap:balance}
 .parts .part[aria-current]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--accent);border-radius:4px 4px 0 0}
 .team{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3)}
 .team select{padding:3px 6px;font-size:12px;max-width:100%}
-body[data-view="flow"] .team{display:none}
+body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 
 /* ---------- the board view ---------- */
 #view-board{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
@@ -141,6 +141,8 @@ body[data-view="flow"] .team{display:none}
 .record .rc-at{margin-left:auto;font:11px var(--mono);color:var(--ink3);white-space:nowrap}
 .record .rc-stamp{display:inline-block;margin:6px 0 2px;border:1.5px solid var(--ink3);border-radius:3px;padding:1px 7px;font:700 10.5px var(--mono);letter-spacing:.06em;color:var(--ink3);transform:rotate(-2deg);opacity:.85;text-transform:uppercase}
 .record .rc-env{font:11px var(--mono);color:var(--ink3);margin-top:3px}
+.rc-stamp.ok{color:var(--ok);border-color:var(--ok)} .rc-stamp.failed{color:var(--crit);border-color:var(--crit)}
+.rc-stamp.wait{color:var(--accent);border-color:var(--accent)}
 /* a marker: every decision sits on its object */
 .marks{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .mark{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 6px;background:var(--surface2)}
@@ -164,7 +166,32 @@ body[data-view="flow"] .team{display:none}
   .ledger .lg-foot .ep{white-space:normal;overflow-wrap:anywhere}
   .record .rc-head{flex-wrap:wrap}
   #view-flow{overflow:visible}
+  #view-deploys{overflow:visible}
+  .dp-envs{grid-template-columns:1fr}
 }
+
+/* ---------- the deploys view: each environment's deploys as a timeline, oldest at the top ---------- */
+#view-deploys{flex:1 1 auto;min-height:0;overflow:auto;padding:14px}
+.dp-envs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;align-items:start}
+.dp-env h2{font-size:14px;font-weight:800;margin:0 0 10px;font-family:var(--mono)}
+.dp-line{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line)}
+.dp{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:8px 10px;margin:0 0 12px;font-size:12.5px;overflow-wrap:anywhere}
+.dp::before{content:"";position:absolute;left:-20px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--ink3);border:2px solid var(--bg)}
+.dp.ok::before{background:var(--ok)} .dp.failed::before{background:var(--crit)} .dp.wait::before{background:var(--accent)} .dp.replaced{opacity:.7}
+.dp-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;font:600 12px var(--mono)}
+.dp-head .dp-at{margin-left:auto;font-weight:400;color:var(--ink3)}
+.dp-head .rc-stamp{border:1.5px solid var(--ink3);border-radius:3px;padding:0 6px;font:700 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.dp-word{margin-top:4px;color:var(--ink2)}
+.dp-word.wait{color:var(--accent);font-weight:600}
+.dp-k{display:block;margin-top:8px;font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.dp-steps{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.dp-step{font:11px var(--mono);border:1px solid var(--line);border-radius:3px;padding:0 5px;color:var(--ink2)}
+.dp-step.failed{color:var(--crit);border-color:var(--crit)} .dp-step.ok{color:var(--ok);border-color:var(--ok)}
+.dp ul{margin:4px 0 0;padding-left:16px}
+.dp li{margin:2px 0}
+.dp .dp-n{font:11px var(--mono);color:var(--ink3)}
+.dp-why{color:var(--ink3);font-style:italic}
+.dp-empty{color:var(--ink3)}
 
 /* ---------- the flow view: the lineage, with its own colours ---------- */
 #view-flow {
@@ -237,7 +264,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
 <header class="top">
   <nav class="parts" aria-label="Partitions"><!--{{PARTITIONS}}--></nav>
   <div class="seg" role="group" aria-label="View">
-    <button type="button" data-view="board" aria-pressed="true">board</button><button type="button" data-view="flow" aria-pressed="false">flow</button>
+    <button type="button" data-view="board" aria-pressed="true">board</button><button type="button" data-view="flow" aria-pressed="false">flow</button><button type="button" data-view="deploys" aria-pressed="false">deploys</button>
   </div>
   <label class="team">team <select id="team"></select></label>
   <span class="meta mono" id="made"></span>
@@ -250,6 +277,10 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     <section class="lane construction" id="lane-construction" aria-label="Construction"></section>
     <section class="lane operation" id="lane-operation" aria-label="Operation"></section>
   </div>
+</main>
+<main id="view-deploys" aria-label="Deploys" hidden>
+<p class="dp-empty" id="dp-empty" hidden>No deploy and no operation has been recorded.</p>
+<div class="dp-envs" id="dp-envs"></div>
 </main>
 <main id="view-flow" aria-label="Flow" hidden>
 <ul id="unreachable"></ul>
@@ -502,8 +533,26 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     con.sec.append(obj(ledgers, x, b.teams));
   });
 
-  // Operation, observed: each bolt landed in the last seven days a record, newest first.
-  var op = lane("lane-operation", "Operation", "landed in the last 7 days", "ro");
+  // Where a deploy stands, in a word for its stamp and a class for its colour.
+  function deployStamp(d) {
+    if (d.answer === "waiting") return ["waits on your word", "wait"];
+    if (d.answer === "replaced") return ["replaced, unanswered", ""];
+    if (d.ended) return [d.outcome || "ended", d.outcome === "failed" ? "failed" : "ok"];
+    if (d.started) return ["deploying", "wait"];
+    return ["approved", "wait"];
+  }
+  function from(d) { return !d.from || d.from === "none" ? "from nothing deployed" : "from " + d.from.slice(0, 7); }
+  function carries(d) {
+    return d.bolts == null ? "carrying what can't be read: " + d.bolts_why : d.bolts.length ? "carrying " + d.bolts.join(", ") : "carrying no landing";
+  }
+  function waitSaid(w) {
+    return w.state === "handed" ? "handed to " + (w.agent || w.doer) : w.state === "failed" ? "failed"
+      : w.doer === "user" ? "waits on you" : "waits for " + (w.agent || w.doer || "its doer");
+  }
+
+  // Operation, observed: each bolt landed in the last seven days a record, newest first; then each environment's
+  // deploys of that week and those still open, newest first, and the operations waiting on it.
+  var op = lane("lane-operation", "Operation", "landed and deployed in the last 7 days", "ro");
   var records = section(op, null);
   B.operation.forEach(function (o) {
     var x = el("div", "record"), h = el("div", "rc-head");
@@ -513,7 +562,102 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     if (env) x.append(el("div", "rc-env", env));
     op.sec.append(obj(records, x, o.teams));
   });
+  (B.environments || []).forEach(function (e) {
+    if (!e.deploys.length && !e.waiting.length) return;
+    var envs = section(op, e.env);
+    e.deploys.forEach(function (d) {
+      var x = el("div", "record"), h = el("div", "rc-head"), st = deployStamp(d);
+      h.append(el("span", "rc-name", "deploy " + d.to.slice(0, 7)), el("span", "rc-at", local(d.ended || d.started || d.offered || d.at)));
+      x.append(h, el("span", "rc-stamp " + st[1], st[0] + (d.word && d.word.by && d.answer === "approved" ? " · " + d.word.by : "")));
+      x.append(el("div", "rc-env", from(d) + " · " + carries(d)));
+      marks(x, d.markers);
+      op.sec.append(obj(envs, x, e.teams));
+    });
+    e.waiting.forEach(function (w) {
+      var x = el("div", "record"), h = el("div", "rc-head");
+      h.append(el("span", "rc-name", w.key), el("span", "rc-at", local(w.at)));
+      x.append(h, el("div", "rc-env", [waitSaid(w), w.text || w.note].filter(Boolean).join(" · ")));
+      marks(x, w.markers);
+      op.sec.append(obj(envs, x, e.teams));
+    });
+  });
   LANES.forEach(function (L) { L.sec.append(L.empty); });
+
+  // ------------------------------------------------------------------------------------------------ the deploys view
+  // Each environment a column, its deploys a timeline from the oldest at the top: the commit it moved to and from, the
+  // user's word on it as its card's answer recorded it, its steps, the suite's checks and its outcome, the bolts it
+  // carried with their changes' proposals as its release notes, and the after-deploy steps of its commit; then the
+  // operations waiting on the environment.
+  (function () {
+    var at = $("dp-envs"), DP = D.deploys || [];
+    $("dp-empty").hidden = DP.some(function (e) { return e.deploys.length || e.waiting.length; });
+    function word(d) {
+      if (d.answer === "waiting") return ["waits on your word: hold its card to deploy", "wait"];
+      if (d.answer === "replaced") return ["not answered, and replaced by a newer offer", ""];
+      if (d.answer === "unasked") return ["deployed with no word asked in the record (an auto environment's, or offered before its window)", ""];
+      return ["approved by " + (d.word.by || "no one named") + ", " + local(d.word.at), ""];
+    }
+    DP.forEach(function (e) {
+      var col = el("section", "dp-env"), line = el("ol", "dp-line");
+      col.append(el("h2", null, e.env));
+      e.deploys.slice().reverse().forEach(function (d) {
+        var st = deployStamp(d), x = el("li", "dp " + (d.answer === "replaced" ? "replaced" : st[1])), h = el("div", "dp-head"), w = word(d);
+        h.append(el("span", null, d.to.slice(0, 7) + " " + from(d)), el("span", "rc-stamp " + st[1], st[0]),
+                 el("span", "dp-at", local(d.ended || d.started || d.offered || d.at)));
+        x.append(h, el("div", "dp-word " + w[1], w[0]));
+        if (d.steps.length) {
+          var steps = el("div", "dp-steps");
+          d.steps.forEach(function (s) { steps.append(el("span", "dp-step " + (s.outcome || ""), s.step + " " + (s.outcome || ""))); });
+          x.append(steps);
+        }
+        if (d.checks && d.checks.length) {
+          x.append(el("span", "dp-k", "checks"));
+          var cl = el("ul");
+          d.checks.forEach(function (c) {
+            cl.append(el("li", null, [c.name, c.state, c.verdict ? "(" + c.verdict + " than before)" : "", c.detail].filter(Boolean).join(" ")));
+          });
+          x.append(cl);
+        }
+        x.append(el("span", "dp-k", "carried"));
+        if (d.bolts == null) {
+          x.append(el("div", "dp-why", "can't be read: " + d.bolts_why));
+        } else if (!d.bolts.length) {
+          x.append(el("div", "dp-why", "no landing"));
+        } else {
+          var bl = el("ul");
+          d.notes.forEach(function (n) {
+            var li = el("li", null, n.bolt);
+            if (n.proposals.length) {
+              var pl = el("ul");
+              n.proposals.forEach(function (p) {
+                var pi = el("li");
+                pi.append(el("span", "dp-n", "proposal " + p.proposal + " "), document.createTextNode(p.label || ""));
+                pl.append(pi);
+              });
+              li.append(pl);
+            }
+            bl.append(li);
+          });
+          x.append(bl);
+        }
+        if (d.after.length) {
+          x.append(el("span", "dp-k", "after the deploy"));
+          var al = el("ul");
+          d.after.forEach(function (a) { al.append(el("li", null, [a.key, a.doer, a.state, a.note].filter(Boolean).join(" · "))); });
+          x.append(al);
+        }
+        line.append(x);
+      });
+      col.append(line);
+      if (e.waiting.length) {
+        col.append(el("span", "dp-k", "operations waiting"));
+        var wl = el("ul");
+        e.waiting.forEach(function (w) { wl.append(el("li", null, [w.key, waitSaid(w), w.text || w.note].filter(Boolean).join(" · "))); });
+        col.append(wl);
+      }
+      at.append(col);
+    });
+  })();
 
   // Each lane shows the objects of the team chosen, or all of them; a section with none left loses its head, and a
   // lane with none says so. Units and fixes go with their ledger.
@@ -801,7 +945,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   }
   pick.addEventListener("change", function () { team(pick.value); keep("team", pick.value); });
 
-  var VIEWS = { board: $("view-board"), flow: $("view-flow") };
+  var VIEWS = { board: $("view-board"), flow: $("view-flow"), deploys: $("view-deploys") };
   function view(v) {
     v = VIEWS[v] ? v : "board";
     Object.keys(VIEWS).forEach(function (k) { VIEWS[k].hidden = k !== v; });
@@ -811,7 +955,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     if (v === "flow") flowShown();
   }
   document.querySelectorAll(".seg button").forEach(function (b) {
-    b.addEventListener("click", function () { view(b.dataset.view); keep("view", b.dataset.view === "flow" ? "flow" : ""); });
+    b.addEventListener("click", function () { view(b.dataset.view); keep("view", b.dataset.view === "board" ? "" : b.dataset.view); });
   });
 
   function open() {

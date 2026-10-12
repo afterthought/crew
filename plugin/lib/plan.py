@@ -6139,10 +6139,12 @@ def rail_record(fleet, found, props):
     back, so a second card under it from its owner means the first was lost to it, and the newer is the row's; the hosts
     whose record did not answer, {label: {host: why}}; the landings, each {label, bolt, units, at, by, host}, from each
     bolt.land entry not refused, oldest first; the team each bolt was given to, {(label, bolt): team}, from the newest
-    bolt.give entry naming it that was not refused; and what the batches hold, {label: {"batches": [(n, at, units)],
+    bolt.give entry naming it that was not refused; what the batches hold, {label: {"batches": [(n, at, units)],
     "closed": card keys closed, "posts": batch card keys posted, "due": units whose latest change no batch has held}},
-    the last None for a partition whose record did not all answer, since then it can't be told."""
-    times, cards, unread, landings, gives, held, deploys = {}, [], {}, [], {}, {}, []
+    the last None for a partition whose record did not all answer, since then it can't be told; the rail's rows for the
+    operations; and the entries the operations are read from, {label: entries}, the ops entries of the main level's host
+    and the landings, oldest first, which the board's Operation lane reads (ops.environments)."""
+    times, cards, unread, landings, gives, held, deploys, opses = {}, [], {}, [], {}, {}, [], {}
     today = datetime.datetime.now(datetime.timezone.utc).date()
     fresh = utc(f"{today - datetime.timedelta(days=CARD_DAYS)}T00:00:00Z")
     for l, _, _, plan in [f for f in found if f[3]]:
@@ -6159,9 +6161,10 @@ def rail_record(fleet, found, props):
         gives.update(r["gives"])
         held[l] = r["held"]
         import ops  # ops.py imports nothing of this module
-        deploys += [dict(r, at=utc(r["at"]), doc=None) for r in ops.rows(fleet, l, [e for e in entries if (e.get("Act") or "").startswith("ops.")
-                                                                                    and e.get("Host") == fleet["partitions"][l]["machine"]])]
-    return times, cards, unread, landings, gives, held, deploys
+        mine = [e for e in entries if (e.get("Act") or "").startswith("ops.") and e.get("Host") == fleet["partitions"][l]["machine"]]
+        deploys += [dict(r, at=utc(r["at"]), doc=None) for r in ops.rows(fleet, l, mine)]
+        opses[l] = sorted(mine + [e for e in entries if e.get("Act") == "bolt.land"], key=lambda e: (e["At"], e["Id"]))
+    return times, cards, unread, landings, gives, held, deploys, opses
 
 
 def record_reading(l, entries, plan, fresh, missing=None):
@@ -6371,11 +6374,11 @@ def sweep_judgment(label, rowed, cards, unread, batched, unread_units):
 def rail_read(fleet, labels, board=False, sweep=False):
     """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
     found and the errors of those that could not be read, the survey, the open proposals, the cards, the hosts whose
-    record did not answer, the landings and gives, and the rows. The survey is of each host holding a bolt; with board,
-    of every team of the labels, with the bolt it holds or none, and its dev servers, slots and explorations too, for
-    the board (board.py), from which the rail's text is made as well. With sweep, once the rows are made, the card
-    sessions whose card is closed or whose row is gone are ended on every host of the labels read, and what was ended
-    and which hosts were not checked are in the read (sweep_sessions). No state is written."""
+    record did not answer, the landings and gives, the operations' entries, and the rows. The survey is of each host
+    holding a bolt; with board, of every team of the labels, with the bolt it holds or none, and its dev servers, slots
+    and explorations too, for the board (board.py), from which the rail's text is made as well. With sweep, once the
+    rows are made, the card sessions whose card is closed or whose row is gone are ended on every host of the labels
+    read, and what was ended and which hosts were not checked are in the read (sweep_sessions). No state is written."""
     errors = {}
     found = plans(fleet, labels, errors)
     held = [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")]
@@ -6383,9 +6386,9 @@ def rail_read(fleet, labels, board=False, sweep=False):
         held += [(t, None) for l in labels for t in crew.partition_of(fleet, l)["teams"]]
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
-    times, cards, unread, landings, gives, batched, deploys = rail_record(fleet, found, props)
+    times, cards, unread, landings, gives, batched, deploys, opses = rail_record(fleet, found, props)
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
-                gives=gives, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
+                gives=gives, ops=opses, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
     if sweep:
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], cards, unread, batched)
     return read
@@ -6708,7 +6711,7 @@ def card_row(fleet, label, key):
     props = open_proposals(fleet, [label], found) if kind == "proposal" and plan else []
     batched = {}
     if kind == "batch" and plan:
-        _, _, unread, _, _, batched, _ = rail_record(fleet, found, [])
+        _, _, unread, _, _, batched, _, _ = rail_record(fleet, found, [])
         not unread.get(label) or fail(f"crew can't tell whether {key}'s card is still open: "
                                       + "; ".join(f"{h} did not answer" for h in sorted(unread[label])))
     row = next((r for r in rail_rows(fleet, found, sv, props, {}, batched) if r["key"] == key), None)
