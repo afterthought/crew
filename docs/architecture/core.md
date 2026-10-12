@@ -55,7 +55,7 @@ Code
 
 **[state.3]** Rules out: a unit, chore or archive committed straight to main by an agent; a landing with `--no-hooks`. Not ruled out: a fix on main after a landing broke it, which main-level ops lands on the user's word through the hooks and never writes: the planner proposes it as a bolt of its own, first among the planned, for the team the user and the planner choose (the `main-level` spec; `main-ops.md`, "never edit the code yourself"; swancloud-ops, 2026-10-11, on the landing-card check); the user's own commits, among them the archive sweep of 2026-10-10 (crew a3caf5b to 94e31e3, swancloud 4fee795 to 54f849f, run on the user's word, nothing pushed), which `roles.1` already allows; the design agent's records, as its brief says. Source: `bolt-teams` spec "A bolt lands on main on the user's word"; `main-level` spec; ADR 0006 drivers; `main-ops.md`.
 
-**[state.4]** Rules out: a daemon; a view that commits or appends on refresh. Source: `openspec/config.yaml`; `flywheel-state` spec "plain files"; ADR 0002; `tests/py/test_rail.py`, `tests/t-journey-review.sh`.
+**[state.4]** Rules out: a daemon; a view that commits or appends on refresh. Source: `openspec/config.yaml`; `flywheel-state` spec "plain files"; ADR 0002; `tests/py/test_rail.py`, `tests/py/test_board.py`, `tests/t-journey-review.sh`, `tests/t-journey-board.sh`.
 
 **[state.5]** Rules out: `git push --force` anywhere in `plugin/` or a brief; a push to a blueprints repo or a kit's remote. Source: fix 04daa5d; `plan.py` 383, 569.
 
@@ -71,7 +71,7 @@ Code
 
 **[read.2]** Rules out: a field read from a transcript without a probe; a "null" path printed from a missing value. Source: fixes 0aa835d, e1ed1df, 5a481ae; checked-capture design.
 
-**[read.3]** Rules out: a listing that stops at the first dead host. Source: `bolt-plan` spec "What is in flight can be read from anywhere"; `crew-sites` spec; `run-record` spec.
+**[read.3]** Rules out: a listing that stops at the first dead host. Source: `bolt-plan` spec "What is in flight can be read from anywhere"; `crew-sites` spec; `run-record` spec; `tests/t-journey-board.sh`, where crew bolts, board, sites and page each name a host that does not answer.
 
 **[read.4]** Rules out: starting a role over a running agent; a fix adopting an existing place; tidying a hand-made worktree. Source: fixes 499cd3b, 5e11de2, f6d7b11; worktrees-go-with-their-work.
 

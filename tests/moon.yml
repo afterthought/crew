@@ -15,16 +15,6 @@ tasks:
     inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.lock', '/tests/py/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
-  t-board:
-    command: 'tests/run t-board'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-board.sh', '/tests/stubs-sites/**/*', '/plugin/lib/board.py', '/plugin/lib/sites.py']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-bolts:
-    command: 'tests/run t-bolts'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-bolts.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
   t-briefs:
     command: 'tests/run t-briefs'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-briefs.sh', '/plugin/roles/**/*']
@@ -48,6 +38,11 @@ tasks:
   t-events:
     command: 'tests/run t-events'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-events.sh']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
+  t-journey-board:
+    command: 'tests/run t-journey-board'
+    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-journey-board.sh', '/tests/stubs-sites/**/*', '/plugin/lib/board.py', '/plugin/lib/sites.py', '/plugin/lib/page.py', '/plugin/lib/page.html']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-journey-plan:
@@ -78,11 +73,6 @@ tasks:
   t-ops:
     command: 'tests/run t-ops'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-ops.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-page:
-    command: 'tests/run t-page'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-page.sh', '/plugin/lib/board.py', '/plugin/lib/page.py', '/plugin/lib/page.html', '/plugin/lib/sites.py']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-record:
@@ -118,11 +108,6 @@ tasks:
   t-signal-show:
     command: 'tests/run t-signal-show'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-signal-show.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-sites:
-    command: 'tests/run t-sites'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-sites.sh', '/tests/stubs-sites/**/*', '/plugin/lib/sites.py']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-slot:
