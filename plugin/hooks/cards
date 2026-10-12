@@ -14,12 +14,13 @@ checked against its row's form (FORMS), but a proposal's, which is checked again
 `crew plan card <n>` prints, its unit questions holding the units the proposal makes new to a bolt, each once
 (briefs.13); a proposal crew can't read refuses the card, saying to post it again later, and one that no longer
 applies refuses it, saying to write the proposal again. A batch's card is one notice naming every unit of the batch,
-read from the run record, with nothing to answer, no attachment and no code block in its words; a batch's card posted
-under batch/<n>-<k>, before a batch was one card, is read as it was posted and not checked. No row's card asks a
-question in words, which Pending You makes required. A change is checked when this host's card.post entry for the
-card names a row key, for what the change gives it: a landing card's high stakes cleared, options on an approval or a
-notice, steps on any card but a landing's, a landing step that lands the bolt, a question in words, or a batch card's
-approval, attachment, code block or background that leaves out a unit. What the half cannot read of a batch's units
+read from the run record, with nothing to answer, no attachment, no code block in its words and one link, to the
+batch's reading session; a batch's card posted under batch/<n>-<k>, before a batch was one card, is read as it was
+posted and not checked. No row's card asks a question in words, which Pending You makes required. A change is checked
+when this host's card.post entry for the card names a row key, for what the change gives it: a landing card's high
+stakes cleared, options on an approval or a notice, steps on any card but a landing's, a landing step that lands the
+bolt, a question in words, or a batch card's approval, attachment, code block, second link or background that leaves
+out a unit. What the half cannot read of a batch's units
 refuses the card, saying to post it again later. A card in another form is refused with the form to use. A refused
 call never reaches Pending You. What the half cannot otherwise check, its own input that is not a JSON object and the
 run record among it, is refused with what failed. A change to a card under any other key, or to a card this host has
@@ -77,9 +78,9 @@ FORMS = {
                       "whose yes has you tell main-level ops to land; it has no options, and no step or command for "
                       "the user to land it"),
     "batch": dict(kinds=("fyi",), high=False, options=False, steps=False,
-                  says="a batch's card is one notice for the whole batch, kind \"fyi\", naming every unit, with each "
-                       "unit's summary as prose in its background and nothing to answer: no options, no question, no "
-                       "approval, no steps and no attachment"),
+                  says="a batch's card is one notice for the whole batch, kind \"fyi\", saying what it is, naming "
+                       "every unit, with each unit's summary as prose in its background, one link to the batch's reading "
+                       "session and nothing to answer: no options, no question, no approval, no steps and no attachment"),
 }
 # A card that asks a question in words, on any row: Pending You makes every question required (briefs.13).
 WORDS = "asks a question in words, which Pending You makes required"
@@ -177,6 +178,12 @@ def background(given):
     return context.get("background") if isinstance(context, dict) else None
 
 
+def links(given):
+    """A card's links, as Pending You takes them in its context, or None when the card gives none."""
+    context = given.get("context")
+    return context.get("links") if isinstance(context, dict) else None
+
+
 def listing(things):
     return things[0] if len(things) == 1 else ", ".join(things[:-1]) + " and " + things[-1]
 
@@ -223,6 +230,8 @@ def form_refusal(key, given, update=False, units=None):
             wrong.append("attaches its summary")
         if any(isinstance(t, str) and FENCE.search(t) for t in (given.get("summary"), background(given))):
             wrong.append("puts its summary in a code block, which scrolls sideways on the phone")
+        if isinstance(links(given), list) and len(links(given)) > 1:
+            wrong.append("links more than one session; a batch has one reading session")
     if units is not None:
         said = background(given) if isinstance(background(given), str) else ""
         missing = [u for u in units if not re.search(rf"(?<![A-Za-z0-9-]){re.escape(u)}(?![A-Za-z0-9-])", said)]
