@@ -765,6 +765,22 @@ def needs_how(cmd, work):
             f"fine: crew knows your {work} is over only when what it delivers is there.")
 
 
+# What an agent does with a row's card Pending You no longer finds for it, the same in every brief that cards a row: the
+# card discipline below, and main-level ops's for its operations rows.
+def lost_card_how(cmd, label):
+    return ("A card of yours is lost when it reads \"not found\" to you in Pending You: the host signed in to Pending You "
+            "again, and the card stayed with the old sign-in, where the user may still see it and answer it, to nobody. "
+            "At your start, and whenever Pending You has you call `whoami` again, ask Pending You with `get_request` for "
+            f"each card the `card:` line of `{cmd} rail --label {label}` shows open under a row of yours, by the id it "
+            "names; and any Pending You tool that answers \"not found\" for a card of yours has found a lost one. While its "
+            "row still waits, post the row's card again under the row's key, in its row's form and with the words it "
+            "always carries, and put in its summary, right after the link and the bolt where it has them, these words: "
+            "\"An older copy of this card is dead: it can no longer be answered, so dismiss it in the app. Answer this "
+            f"one.\" A card that links a plannotator session keeps the row's: `{cmd} card session <key> --label {label}` "
+            "gives back the running link. This is the one time you post again under a key you have posted under before. "
+            "A lost card whose row is gone is posted again by nobody, and there is nothing more to do with it.")
+
+
 # How an agent keeps one Pending You card for each rail row it owns, the same in the planner's brief and the conductor's.
 def cards_how(cmd, label, kits):
     return ("When your session has Pending You's tools, every decision of yours the rail lists gets one card, and only those. "
@@ -775,6 +791,7 @@ def cards_how(cmd, label, kits):
             "a verify report written again, or a bolt a fix moved. Then close the card you hold under the old key with what changed, "
             "unless it is already closed on its answer, and post a new card under the new key when the row asks again. Never "
             "post again under a key whose card was answered: Pending You gives that card back, and the user is not asked. "
+            "The one exception is a lost card, which Pending You no longer finds, as the next paragraph says. "
             "At your start, call `whoami` with your crew name "
             "and one line on your role. Then call `list_pending` with that name, and act on any card the user has answered. "
             "Post a card for any row of yours that has none open. Ask every card in your crew name, with this host as the "
@@ -783,12 +800,13 @@ def cards_how(cmd, label, kits):
             f"`{label}`, with the key `create-area:<owner>/<kit>`. Never make a group: if `{label}` isn't one of the user's "
             "groups, the area is left ungrouped, and you say so once. Title it with what you ask and its bolt, give it the "
             "form its row takes, as your brief says, with `blocking` false: crew refuses a row's card in another form, and "
-            "names the form to use. Its words are as the next paragraph says. You hear an answer "
+            "names the form to use. Its words are as the paragraph after next says. You hear an answer "
             "by being woken in your pane. Never run `npx pendingyou` or `pendingyou hold`: the `pendingyou` on the path is the "
             "fleet's, and the wake needs neither. Act on the user's answer as if they had said it in your pane, then close the "
             "card with `ack_answer` and a one-line outcome. When crew tells you, or prints, to close the card for a row, close "
             "it with `cancel_request` and the reason, or with `ack_answer` when you acted on its answer. Only your own cards "
             f"are yours: leave every other card alone. The kits: {kits}.\n\n"
+            f"{lost_card_how(cmd, label)}\n\n"
             "A card says what the user decides from, so they decide without opening anything. When it asks them to read "
             "something, it says it in the document's own words, cut by whole sentences and whole items, never reworded into "
             "a summary of yours. Its summary, the part Pending You shows first, begins with the link to the card's "
@@ -910,7 +928,7 @@ def main_tokens(fleet, p, role, self_name):
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
         "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
         "CARDS": cards_how(cmd, label, kits_named({t["kit"]["repo"]: t["kit"] for t in teams}.values())), "RESULTS": RESULTS,
-        "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
+        "LOST_CARD": lost_card_how(cmd, label), "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "REVIEWER": f"{label}-reviewer", "REVIEWS": f"~/.local/state/crew/{label}-main/reports",
         "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",

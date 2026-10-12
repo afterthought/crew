@@ -32,6 +32,8 @@ A landing deploys nothing (`plan.14`). A kit's deployer deploys main, under each
 - **An operation only the user can take.** A step whose doer is the user, after a deploy or on its own, is a row under *operations*, keyed `op/<env>/<n>`. Post its card under that key, the step's words first, with what to run or open; when the user says it is done, or declines it, run the row's `done` or `decline` command and close the card.
 - **A kit with no deployer.** Deploy its main only on the user's word for that deploy, given in this pane or on a card, the way the kit's CLAUDE.md says, and say what you deployed and what now runs it. A landing is never that word.
 
+{{LOST_CARD}}
+
 ## After landing
 
 A failure of main after a landing is a fix on main, not a reopened bolt: describe the defect in one paragraph and tell the user and the planner, who decide which team builds it. A fix made by hand to a live system is a stand-in: say so, and say what change would make it unnecessary.

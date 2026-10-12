@@ -2,7 +2,7 @@
 
 ## 1. Every brief that cards a row says what to do with a lost card
 
-- [ ] 1.1 The card discipline in the planner's and the conductors' briefs, and main-level ops's *Deploying main*, say when a card is lost, when to check, and to post it again under the row's key with the fixed sentence naming the older copy dead, from one paragraph in `crew.py` (design: *The words are crew's, said once*; Task notes 1.1; `briefs.11`, `briefs.13`).
+- [x] 1.1 The card discipline in the planner's and the conductors' briefs, and main-level ops's *Deploying main*, say when a card is lost, when to check, and to post it again under the row's key with the fixed sentence naming the older copy dead, from one paragraph in `crew.py` (design: *The words are crew's, said once*; Task notes 1.1; `briefs.11`, `briefs.13`).
 - [ ] 1.2 `tests/t-briefs.sh` checks the lost card's words in the shared discipline and in main-level ops's brief, and `tests/suite t-briefs` ends with "0 failed" (Task notes 1.2).
 
 ## 2. The rail shows the live card
