@@ -10,7 +10,7 @@
 
 ## 3. A chore is built by code, verify and merge
 
-- [x] 3.1 `plan _run --chore` decides by `chore_refusal`, makes the place at its first code, refuses a merge while a commit lacks the trailer, prints the stage's prompt, and refuses a stage of the other kind; `crew chore run|wait|free` in bash take the chore's slot and run its stages; `Owed`, the deliverables, the slots, the tidy and `transcript.STAGE` know a chore; logic cases prove each decision, and `tests/t-journey-chores.sh` proves the wiring from `chore add` through code, a unit built on the chore's code, verify and merge to the dependent's rebase and the slot's freeing (design: *Running a chore's stages*, *A stage ends at its deliverable*, *Slots and places*; `teams.1`, `teams.2`, `teams.4`, `teams.5`, `teams.15`, `plan.9`, `tests.12`).
+- [x] 3.1 `chore_check` decides by `chore_refusal`, makes the place at its first code, refuses a merge while a commit lacks the trailer, gives the stage's prompt, and `run_check` refuses a stage of the other kind; `crew chore run|wait|free` take the chore's slot and run its stages through `run_unit_stage`, `plan _unit-wait` and `plan _unit-free`; `Owed`, the deliverables, the slots, the tidy and `transcript.STAGE` know a chore; logic cases prove each decision, and `tests/t-journey-chores.sh` proves the wiring from `chore add` through code, a unit built on the chore's code, verify and merge to the dependent's rebase and the slot's freeing (design: *Running a chore's stages*, *A stage ends at its deliverable*, *Slots and places*; `teams.1`, `teams.2`, `teams.4`, `teams.5`, `teams.15`, `plan.9`, `tests.12`).
 
 ## 4. Chores everywhere work is counted
 

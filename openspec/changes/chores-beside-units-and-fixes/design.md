@@ -4,7 +4,7 @@
 
 Record 0001 decided the chore on 2026-10-05, before most of what a unit now is: stages ending at their deliverables (record 0007), `After` as code one unit builds on (0011), units built at once and read in batches (0014), Touches and forecasts, amendments that run construct again, the proposal's card with a choice per new unit (0018). `plan.11` holds the decision as a rule, `signals.7` the batch of chores taken row by row, and `_open.md` lists both as not built.
 
-A unit today is a `Unit` record of `plan.rec` on the flywheel's branch; `plan.py` writes it through `Op`s that a direct run and a proposal share (`plan.3`), reads its stage from gather.py's survey of its kit (`Stages`, `state.2`, `plan.12`), and runs its stages through bash `crew unit run`, which takes a slot, asks `plan _run` whether the stage may start and what its prompt is, and starts a fresh agent sent that prompt (`teams.2`, `teams.15`); a wait ends the stage at its deliverable (`teams.4`). A fix is the template for work with no change: its own branch and place from the bolt, a code stage told `Fix: …` whose deliverable is a commit on its branch, and a merge through the kit's hooks.
+A unit today is a `Unit` record of `plan.rec` on the flywheel's branch; `plan.py` writes it through `Op`s that a direct run and a proposal share (`plan.3`), reads its stage from gather.py's survey of its kit (`Stages`, `state.2`, `plan.12`), and runs its stages through `crew unit run`, one Python process on the team's host (`plan _unit-run`, `run_unit_stage`), which takes a slot, asks `run_check` whether the stage may start and what its prompt is, and starts a fresh agent sent that prompt (`teams.2`, `teams.15`); a wait ends the stage at its deliverable (`teams.4`). A fix is the template for work with no change: its own branch and place from the bolt, a code stage told `Fix: …` whose deliverable is a commit on its branch, and a merge through the kit's hooks.
 
 The rules this rests on: `state.1`, `state.2`, `state.3`, `state.4`, `roles.1`, `roles.3`, `roles.4`, `read.1`, `read.4`, `code.1`, `code.2`, `code.4`, `code.6`, `code.7`; `plan.1`, `plan.3`, `plan.5`, `plan.7`, `plan.9`, `plan.10`, `plan.11`, `plan.12`, `plan.13`; `teams.1`, `teams.2`, `teams.4`, `teams.5`, `teams.9`, `teams.15`; `record.1`, `record.3`; `signals.4`, `signals.7`; `briefs.2`, `briefs.11`, `briefs.12`, `briefs.13`; `tests.4`, `tests.6`, `tests.11`, `tests.12`; `docs.2`, `docs.4`, `docs.5`. Pages whose area this touches: `plan.md`, `teams.md`, `record.md`, `signals.md`, `briefs.md`, `tests.md`, `docs.md`.
 
@@ -60,9 +60,9 @@ Record 0001 read code and verify from "the stage its slot last ran", the team's 
 
 ### Running a chore's stages
 
-Bash `crew chore run <chore> code|verify|merge ["<words>"]` is `crew unit run`'s path with the kind given: `plan _team-of` finds its team, the command forwards to the team's host (`code.3`), refuses while the team is down, reaps, takes the chore's slot or a free one as `<slot> chore <name> <kit>/places/chore-<name>`, asks `plan _run <chore> <stage> [words] --chore`, opens the slot's pane and runs the stage through `run_stage` (`teams.2`, `teams.15`), recording `stage.start` on `stage/<chore>/<stage>`, `chore/<name>` and `agent/<slot>`. Construct and settle are no chore's stages, and bash refuses them with the three a chore has.
+`crew chore run <chore> code|verify|merge ["<words>"]` is `crew unit run`'s path with the kind given, `plan _unit-run --chore`: `team_of_unit` finds its team, the command runs on the team's host (`code.3`), and `run_unit_stage` refuses while the team is down, reaps, takes the chore's slot or a free one as `<slot> chore <name> <kit>/places/chore-<name>`, asks `run_check`, which hands a chore to `chore_check`, opens the slot's pane and runs the stage through `run_stage` (`teams.2`, `teams.15`), recording `stage.start` on `stage/<chore>/<stage>`, `chore/<name>` and `agent/<slot>`, with `Took`. Construct and settle are no chore's stages, and bash refuses them with the three a chore has; `crew chore wait` and `crew chore free` are `plan _unit-wait` and `plan _unit-free`, which find the chore's slot by its name.
 
-`plan _run --chore` (`chore_check`) reads the chore's stage and decides by `chore_refusal`, a function of facts (`code.7`):
+`chore_check` reads the chore's stage and decides by `chore_refusal`, a function of facts (`code.7`):
 
 - any stage of a queued chore, or of one whose bolt no team holds, is refused as a unit's is;
 - any stage of a merged or landed chore: "a defect in it is a fix, and new maintenance a new chore";
@@ -71,7 +71,7 @@ Bash `crew chore run <chore> code|verify|merge ["<words>"]` is `crew unit run`'s
 - verify once its place holds a commit of its own beyond the bolt;
 - merge once it is in verify and has delivered a verify since its last code began (`verified`, the same reading a unit's settle uses), once every commit of its own carries `Chore: <name>`, read with `CHORE_LOG` on the team's host and refused naming each commit that lacks it, since a commit without the trailer would leave the chore never reading merged and crew checks what the brief asks rather than trusting it (`roles.3`), and once each `After` has merged (`teams.5`).
 
-`plan _run` without `--chore` on a chore, and `--chore` on a unit, is refused naming its kind and the command that takes it; the refusal is recorded on the chore's objects, read into `CONTEXT` once the record is found. The prompts are:
+`run_check` without `--chore` on a chore, and with it on a unit, is refused naming its kind and the command that takes it (`run_kind_refusal`); the refusal is recorded on the chore's objects, read into `CONTEXT` once the record is found. The prompts are:
 
 - code: `Chore <name>: <its words>`, then the conductor's or the user's words;
 - verify: `Verify chore <name>: <its words>`, then theirs;

@@ -275,6 +275,10 @@ class TestEnds:
 
 
 class TestSlotsAndPlaces:
+    def test_a_slot_holding_a_chore_is_freed_on_its_object(self):
+        import crew
+        assert crew.held_object("chore", "bump") == "chore/bump" and crew.held_object("unit", "a") == "unit/a"
+
     def plan(self):
         return plan.Plan(plan_text(bolts=BOLTS, units=[("bump", KIT, TE, [], "chore"), ("gone", KIT, "console-pages", [], "chore")]))
 
