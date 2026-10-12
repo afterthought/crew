@@ -7,7 +7,7 @@
 
 - [x] 2.1 The card hook refuses a `batch/<n>` card that is not an `fyi` with nothing to answer and its summary as prose, and any row's card that asks a question in words, on post and on update (design, *Task notes* 2.1).
 - [x] 2.2 The card hook refuses a batch card that leaves out one of the batch's units (design, *Task notes* 2.2).
-- [ ] 2.3 `tests/t-cards.sh` proves each refused form and the allowed form of a batch card, and the words question refused on every row (design, *Task notes* 2.3).
+- [x] 2.3 `tests/t-cards.sh` proves each refused form and the allowed form of a batch card, and the words question refused on every row (design, *Task notes* 2.3).
 - [ ] 2.4 The card hook refuses a batch card with more than one link, and its form's words say the card says what it is and links the batch's one session (design, *Task notes* 2.4).
 
 ## 3. One reading session per batch
