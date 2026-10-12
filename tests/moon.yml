@@ -47,7 +47,7 @@ tasks:
     options: { runFromWorkspaceRoot: true }
   t-journey-chores:
     command: 'tests/run t-journey-chores'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-journey-chores.sh', '/plugin/hooks/**/*', '/tests/units.sh']
+    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-journey-chores.sh', '/plugin/hooks/**/*', '/tests/units.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-journey-fix:
