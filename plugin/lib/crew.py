@@ -1098,8 +1098,8 @@ def team_tokens(fleet, t, role, self_name):
     tok["ROSTER"] = (
         f"The team: `{n}-conductor` keeps the bolt's units moving through their stages and tells the user where the bolt stands; "
         f"`{n}-ops` does everything that touches a live system, the bolt's deploys and tests among it; and the unit slots "
-        f"({', '.join(slots)}), each holding one unit or fix in flight, where every stage of it (construct, code, verify, settle, merge) "
-        f"is a fresh agent in that unit's own worktree. Above the team, at {label}'s main level: `{label}-design`, the design agent, "
+        f"({', '.join(slots)}), each holding one unit, chore or fix in flight, where every stage of it (construct, code, verify, settle, merge) "
+        f"is a fresh agent in its own worktree, a chore's being code, verify and merge. Above the team, at {label}'s main level: `{label}-design`, the design agent, "
         f"answers design questions; `{label}-planner` plans the partition's bolts; `{label}-dispatch-{t['machine']}` gives this "
         f"host's teams their bolts; and `{label}-ops` lands a proven bolt on main. Agents outside the team are reached with "
         f"`{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run. {SENDERS}")

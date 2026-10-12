@@ -410,3 +410,27 @@ for want in "Every decision record you write, and every amendment you make to on
 done
 for brief in "wldn planner" "swb-1 conductor"; do expect_ok crewpy brief $brief; lacks "$out" "record/<kit>"; done
 ok "the design agent proposes every record on one card under its record key, accepts it only on the user's yes, and queues nothing before; no other brief posts a record card"
+
+# A chore (plan.11): planned maintenance with no change, no construct and no review, its every commit carrying its trailer.
+expect_ok crewpy brief swb-1 coder
+for want in "## A chore" "Your worktree is on \`chore/<name>\`, and the prompt starts \`Chore <name>:\`" "Do exactly what they say" \
+  '--trailer "Chore: <name>"' "crew refuses its merge while a commit beyond the bolt lacks it" \
+  "Touch nothing under \`openspec/\` but the archive of a change whose every task is ticked" "\`openspec archive <change> --yes\`" \
+  "A chore never grows" "the change it would archive has a task open"; do has "$out" "$want"; done
+expect_ok crewpy brief swb-1 verify
+for want in "## A chore" "\`Verify chore <name>: <its words>\`" "\`git log @{upstream}..HEAD\`" "carries the trailer \`Chore: <name>\`" \
+  "nothing under \`openspec/\` changed but the archive" "You change nothing here either" "\`verify-<chore>-<YYYYMMDD-HHMM>.md\`"; do has "$out" "$want"; done
+expect_ok crewpy brief swb-1 conductor
+for want in "A bolt may also hold **chores**" "with no construct, no change and no review" "chore run <chore> code" "chore run <chore> verify" \
+  "chore run <chore> merge" "chore wait <chore>" "chore order" "chore after" "A chore takes its turn in the plan's order with the units" \
+  "has no construct and no batch" "until verify has run since its last code and every commit carries its trailer" \
+  "A unit that comes after a chore is constructed once that chore has merged" "each holding one unit, chore or fix in flight"; do
+  has "$out" "$want"
+done
+expect_ok crewpy brief wldn planner
+for want in "**Unit, fix or chore.**" "chore add <chore> \"<what is done>\" --bolt <bolt>" "A chore is never split or amended" \
+  "its words change by a proposal that drops it and adds it again" "A batch of chores" "chore by chore on the card" \
+  "for each five units or chores the proposal makes new to a bolt" "\`unit add\` or \`chore add\`"; do has "$out" "$want"; done
+expect_ok crewpy brief wldn design
+has "$out" "is queued the same way as a chore: \`$CREW/plugin/bin/crew chore add <chore> \"<what is done>\" --repo <kit>\`"
+ok "the coder, verifier, conductor, planner and design agent each carry what a chore is to them"

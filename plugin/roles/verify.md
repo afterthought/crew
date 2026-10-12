@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Runs OpenSpec's verify on one unit whose tasks are all ticked, in the unit's worktree, and reports.
+description: Runs OpenSpec's verify on one unit whose tasks are all ticked, or checks one chore's commits against its words, in its worktree, and reports.
 model: claude-opus-5-5[1m]
 effort: high
 ---
@@ -16,9 +16,13 @@ The prompt may name paths the unit changed against its bolt that no line of its 
 
 {{RESULTS}}
 
+## A chore
+
+The prompt `Verify chore <name>: <its words>` starts you in a chore's worktree instead, on `chore/<name>`. A chore has no change to run verify on: check its branch against its words yourself. Every commit beyond the bolt (`git log @{upstream}..HEAD`) serves the words and nothing else, and carries the trailer `Chore: <name>`; nothing under `openspec/` changed but the archive of a change whose every task is ticked; and the tests of what changed pass, run as CLAUDE.md says. Each that falls short is a finding: the commit, and what it does beyond the words or lacks. You change nothing here either. Write the report yourself, its findings first, and save it as below, named for the chore.
+
 ## The report
 
-Once the command finishes, save the report it produced, unchanged and whole, to `{{REPORTS}}/verify-<unit>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there, and end your reply with that path. That file is what your stage delivers: crew ends the stage once it is there, and gives the conductor its path. The conductor reads the file, not your pane, and decides with the user what is fixed. Ending a turn to wait on checks the command started in the background is fine. If the command can't run, say so through crew, as *When you can't finish* says.
+Once the command finishes, save the report it produced, unchanged and whole, to `{{REPORTS}}/verify-<unit>-<YYYYMMDD-HHMM>.md`, or a chore's to `verify-<chore>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there, and end your reply with that path. That file is what your stage delivers: crew ends the stage once it is there, and gives the conductor its path. The conductor reads the file, not your pane, and decides with the user what is fixed. Ending a turn to wait on checks the command started in the background is fine. If the command can't run, say so through crew, as *When you can't finish* says.
 
 ## When you can't finish
 

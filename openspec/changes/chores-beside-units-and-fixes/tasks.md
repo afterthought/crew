@@ -19,4 +19,4 @@
 
 ## 5. The briefs and docs say so
 
-- [ ] 5.1 The coder's, verifier's, conductor's, planner's and design agent's briefs say what a chore is to each, pinned by phrases in `tests/t-briefs.sh`; README, the crew skill and the usage headers say the commands; `plan.9`, `plan.11`, `plan.13`, `teams.1`, `teams.5` and `signals.7` are amended and `_open.md` no longer lists the chore kind; `tests/moon.yml` is in step; and `tests/suite --affected` ends with "0 failed" (design: *Briefs and docs*; `tests.6`, `docs.2`, `docs.5`).
+- [x] 5.1 The coder's, verifier's, conductor's, planner's and design agent's briefs say what a chore is to each, pinned by phrases in `tests/t-briefs.sh`; README, the crew skill and the usage headers say the commands; `plan.9`, `plan.11`, `plan.13`, `teams.1`, `teams.5` and `signals.7` are amended and `_open.md` no longer lists the chore kind; `tests/moon.yml` is in step; and `tests/suite --affected` ends with "0 failed" (design: *Briefs and docs*; `tests.6`, `docs.2`, `docs.5`).
