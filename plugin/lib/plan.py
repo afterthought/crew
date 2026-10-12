@@ -436,6 +436,20 @@ class Reading:
             del kits[main]
             self.keep(f"kits-{host}.json", kits)
 
+    @staticmethod
+    def sweep():
+        """A reading a killed command left goes once it is a day old, as bash crew's own reading sweeps them: a command
+        that keeps its reading in memory sweeps them in its stead."""
+        root = pathlib.Path.home() / ".cache/crew/reads"
+        try:
+            old = [d for d in root.iterdir() if re.fullmatch(r".{8}", d.name) and d.is_dir() and time.time() - d.stat().st_mtime >= 86400]
+        except OSError:
+            return
+        if old:
+            import shutil
+            for d in old:
+                shutil.rmtree(d, ignore_errors=True)
+
     @contextlib.contextmanager
     def fresh(self):
         self.bypass += 1
@@ -4729,6 +4743,22 @@ def rebase_cmd(fleet, a):
         tidy(fleet, a)
 
 
+def rebase_and_tidy(fleet, t):
+    """The end of a team's read: each dependent whose After unit has merged is rebased (rebase_dependents), a conflict
+    waiting for the conductor's next wait, which tells the dependent; then the team's tidy runs, whether or not the
+    rebase was refused. What either refuses is said on standard error."""
+    try:
+        plan = plan_of(fleet, t["label"])
+        if plan:
+            rebase_dependents(fleet, t, plan, stages_for(fleet, plan, held_by(plan, t["name"])), print)
+    except Refusal as e:
+        print(e, file=sys.stderr)
+    try:
+        tidy(fleet, argparse.Namespace(team=t["name"]))
+    except Refusal as e:
+        print(e, file=sys.stderr)
+
+
 def amendments(t, plan, st, entries):
     """For each dependent with a place, each After unit constructed again since the dependent's construct took its
     head (amended_afters), git telling whether the head the dependent took already holds the new one."""
@@ -5131,6 +5161,109 @@ def stage_needs(fleet, a):
                 return
         time.sleep(1)
     print(f"{o.phrase()} is ended, stopped short: {conductor}'s wait has what you need")
+
+
+# ------------------------------------------------------------------------------ a team's commands, one process each
+
+class Stopped(Exception):
+    """A team's command that has said, and recorded, why it stops: it ends with code and says nothing more."""
+
+    def __init__(self, code=1):
+        super().__init__(code)
+        self.code = code
+
+
+def forwarded(fleet, t):
+    """A team's command runs on the team's host (code.3). On another host this process says on descriptor 3 where the
+    team runs and how crew is run there, as shell assignments (teams.9), for bash crew to run the same command there as
+    the one asking, and stops, having touched nothing."""
+    if t["machine"] == crew.this_host():
+        return
+    said = sh(MACHINE=t["machine"], SSH_TARGET=t["ssh"], **crew.reach(fleet, t["machine"]))
+    try:
+        os.write(3, (said + "\n").encode())
+    except OSError:
+        fail(f"team {t['name']} runs on {t['machine']}: run this command there with crew")
+    raise Stopped(0)
+
+
+def on_team_host(fleet, t, force=False):
+    """A team's command where it runs: forwarded to the team's host when this is not it (forwarded); what killed
+    commands left of their readings swept; the asker's Claude session read while herdr's listing of the team's session
+    is the one the command starts with (record.session); and the team's state folder there."""
+    forwarded(fleet, t)
+    READ.sweep()
+    record.session()
+    team = crew.Team(fleet, t, force)
+    team.ensure()
+    return team
+
+
+def ending(fleet, t):
+    """What ends a slot's stage, or ops's proof, still owed an end as its agent is ended: delivered when its
+    deliverable is there, else stopped (stage_ends), what that says and any failure of it dropped."""
+    def end(role):
+        with silenced():
+            stage_ends(fleet, argparse.Namespace(team=t["name"], slot=role, ending=True))
+    return end
+
+
+def reap(fleet, team):
+    """A team's read on its host (teams.1, record.5): the end of each stage that delivered with nobody waiting recorded,
+    late; each slot freed whose unit or fix has merged into its bolt, been dropped from the plan or left the team's
+    bolt, once its agent is not working (crew.reaped); then each dependent whose After unit has merged rebased, and the
+    worktrees whose work is over removed (rebase_and_tidy)."""
+    t = team.t
+    if team.owes():
+        with silenced():
+            stage_ends(fleet, argparse.Namespace(team=t["name"], slot=None, ending=False))
+    try:
+        held = slot_stages(fleet, t)
+    except Refusal:
+        held = []
+    for s in held:
+        how, said = crew.reaped(team.agent_of(s["slot"]), t["name"], s["name"], s["stage"], team.status(s["slot"]))
+        if how == "free":
+            why = team.free(s["slot"], ending(fleet, t))
+            if why:
+                print(why, file=sys.stderr)
+                continue
+        if said:
+            print(said)
+    rebase_and_tidy(fleet, t)
+
+
+def team_status(fleet, a):
+    """crew status <team>, on the team's host: the team's read (reap); then its conductor and ops, each with its pane,
+    its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of); and
+    each slot with its pane, its agent's state and what it holds (crew.holds_said)."""
+    t = crew.team_of(fleet, a.team)
+    team = on_team_host(fleet, t, a.force)
+    reap(fleet, team)
+    print(crew.status_row(f"{t['name']}@{t['machine']}", "pane", "state", "context", "pct", "compacts", "started", "holds"))
+    window = int(os.environ.get("WINDOW") or 1000000)
+    for role in ("conductor", "ops"):
+        pane = team.pane(role)
+        st, cells = team.status(role), ("-",) * 4
+        if st:
+            sess = (team.herdr.agent(pane) or {}).get("agent_session")
+            sid = sess.get("value") if isinstance(sess, dict) else None
+            found = sorted(pathlib.Path.home().glob(f".claude*/projects/*/{sid}.jsonl")) if isinstance(sid, str) and sid else []
+            try:
+                if found:
+                    with open(found[0], encoding="utf-8", errors="replace") as f:
+                        cells = crew.context_of(f, window)
+            except OSError:
+                pass
+        print(crew.status_row(team.agent_of(role), pane or "-", st or "not up", *cells, ""))
+    try:
+        held = {s["slot"]: s for s in slot_stages(fleet, t)}
+    except Refusal:
+        held = {}
+    for slot in team.slots:
+        holds = crew.holds_said(held.get(slot), team.held(slot))
+        print(crew.status_row(team.agent_of(slot), team.pane(slot) or "-", (team.status(slot) or "not up") if holds else "free",
+                              "-", "-", "-", "-", holds))
 
 
 # ----------------------------------------------------------------------------------------------- crew bolts
@@ -6650,7 +6783,11 @@ def parser(cls=argparse.ArgumentParser, only=None):
     g.add_argument("--excerpt-file", help="a file holding them, for words the shell would mangle")
     x.add_argument("--label")
 
-    # What bash crew asks, on the host it has forwarded to.
+    # A team's commands, each one process on the team's host (bash crew runs them, and forwards them when one names
+    # another host); and what bash crew asks there for the rest.
+    x = sub.add_parser("_status")
+    x.add_argument("team")
+    x.add_argument("--force", action="store_true")
     x = sub.add_parser("_team-of")
     x.add_argument("unit")
     x.add_argument("--label")
@@ -6728,6 +6865,7 @@ COMMANDS = {
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
+    ("_status", None): team_status,
     ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
     ("_place", None): place_cmd, ("_fix", None): fix_cmd,
     ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
@@ -6736,6 +6874,8 @@ COMMANDS = {
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
+# A team's commands, each one process on the team's host.
+TEAM_COMMANDS = {("_status", None)}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
@@ -6786,6 +6926,8 @@ def main(argv):
     args = (ap if ap is not None and argv[0] in ap.built else parser()).parse_args(argv)
     fleet = crew.load()
     key = (args.cmd, getattr(args, "sub", None))
+    if key in TEAM_COMMANDS:  # one process says what each of its steps did, in the order they did it
+        sys.stdout.reconfigure(line_buffering=True)
     try:
         may_write(fleet, key, args)
         COMMANDS[key](fleet, args)
@@ -6800,3 +6942,5 @@ if __name__ == "__main__":
         main(sys.argv[1:])
     except Refusal as e:
         sys.exit(str(e))
+    except Stopped as e:
+        sys.exit(e.code)

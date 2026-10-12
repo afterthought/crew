@@ -35,7 +35,7 @@
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import functools, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+import collections, functools, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -1276,6 +1276,194 @@ def here(fleet):
 def shell(**pairs):
     """Shell assignments; STATE is left for the shell to expand, on the host it runs on."""
     return "\n".join(f'{k}="{v}"' if k == "STATE" else f"{k}={shlex.quote(v)}" for k, v in pairs.items())
+
+
+# ------------------------------------------------------------------------------------------ a team's slots and panes
+
+def nap(seconds):
+    """A pause between looks at a pane: the host's sleep, which crew's tests stub to return at once."""
+    subprocess.run(["sleep", str(seconds)])
+
+
+def working_said(agent):
+    """What crew says of an agent it will not end because it works (teams.2)."""
+    return f"{agent} is working; add --force to end it anyway."
+
+
+def reaped(agent, team, name, stage, status):
+    """What a team's read does with a slot (teams.1): ("free", what it says) once its work has merged, landed, been
+    dropped from the plan or left the team's bolt and its agent is not working; ("keep", what it says, or None) while
+    that agent works; (None, None) while its work goes on."""
+    if stage not in ("merged", "landed", "dropped", "left"):
+        return None, None
+    if status == "working":
+        return "keep", {"dropped": f"{agent} still holds {name}, dropped from the plan: its agent is working; it is freed once that settles",
+                        "left": f"{agent} still holds {name}, which has left {team}'s bolt: its agent is working; it is freed once that "
+                                "settles"}.get(stage)
+    return "free", {"dropped": f"{agent} is free: {name} was dropped from the plan",
+                    "left": f"{agent} is free: {name} has left {team}'s bolt"}.get(stage, f"{agent} is free: {name} has merged into its bolt")
+
+
+def held_object(kind, name, bolt=""):
+    """What a slot holds, as the run record names it (record.6): unit/<unit>, or a fix's fix/<bolt>/<name>, one given
+    as fix/<name> before a fix's name held its bolt taking the bolt its branch tracks (bolt)."""
+    if kind != "fix":
+        return f"unit/{name}"
+    if name.startswith("fix/") and "/" in name[4:]:
+        return name
+    return f"fix/{bolt[5:] if bolt.startswith('bolt/') else bolt}/{name[4:] if name.startswith('fix/') else name}"
+
+
+TIMESTAMP = re.compile(r'"timestamp":"([^"]*)"')
+
+
+def context_of(lines, window):
+    """What crew status shows of a standing agent's session, from its transcript's lines: the context its last turn
+    used, in thousands of tokens and as a share of the window; the compactions it has had; and when it began, its
+    month, day and minute. The last turn is the last of the session's own records, not a subagent's, among the last 40
+    that carry a usage."""
+    usage, compactions, began = collections.deque(maxlen=40), 0, ""
+    for line in lines:
+        if '"usage"' in line:
+            usage.append(line)
+        compactions += '"isCompactSummary":true' in line
+        if not began:
+            m = TIMESTAMP.search(line)
+            began = m.group(1)[5:16] if m else ""
+    used = 0
+    for line in usage:
+        try:
+            v = json.loads(line)
+        except ValueError:
+            continue
+        u = v.get("message", {}).get("usage") if isinstance(v, dict) and not v.get("isSidechain") and isinstance(v.get("message"), dict) else None
+        if isinstance(u, dict):
+            used = sum(u.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+    return f"{used // 1000}k", f"{used * 100 // window}%", str(compactions), began
+
+
+def holds_said(s, line):
+    """What crew status says a slot holds: from slot_stages' answer for it (s), its unit or fix and that work's stage,
+    with its tasks done and total in code or verify; from the slots file's line alone, its work and that its stage is
+    unknown; "" for a free slot."""
+    if s:
+        return f"{s['name']}  {s['stage']}" + (f" {s['counts']}" if s.get("counts") and s["stage"] in ("code", "verify") else "")
+    return f"{line[2]}  unknown" if line and len(line) > 2 else ""
+
+
+def status_row(*cells):
+    return "%-26s %-8s %-9s %8s %5s %8s  %-12s %s" % cells
+
+
+class Team:
+    """A team's slots, panes and agents on its host, as one crew command acts on them there (code.3): the panes, layout
+    and slots files of its state folder, each changed only by writing a new file over the old (teams.9), and its herdr
+    session through the command's Herdr. A working agent is ended only when force is given (teams.2)."""
+
+    def __init__(self, fleet, t, force=False):
+        self.fleet, self.t, self.force = fleet, t, force
+        self.name, self.label = t["name"], t["label"]
+        self.state = pathlib.Path.home() / f".local/state/{t['name']}-team"
+        self.herdr = herdr_in(t["session"])
+        self.slots = [f"unit-{n}" for n in range(1, t["units"] + 1)]
+
+    def ensure(self):
+        self.state.mkdir(parents=True, exist_ok=True)
+        for f in ("panes", "layout", "slots"):
+            (self.state / f).touch()
+
+    def lines(self, f):
+        p = self.state / f
+        return [l.split() for l in (p.read_text().splitlines() if p.exists() else []) if l.strip()]
+
+    def write(self, f, lines):
+        p = self.state / f
+        new = p.with_name(f"{f}.new")
+        new.write_text("".join(" ".join(l) + "\n" for l in lines))
+        os.replace(new, p)
+
+    def get(self, f, key):
+        return next((l[1] for l in self.lines(f) if l[0] == key and len(l) > 1), "")
+
+    def put(self, f, key, value):
+        self.write(f, [l for l in self.lines(f) if l[0] != key] + [[key, value]])
+
+    def drop(self, f, key):
+        self.write(f, [l for l in self.lines(f) if l[0] != key])
+
+    def agent_of(self, role):
+        return f"{self.name}-{role}"
+
+    def pane(self, role):
+        return self.get("panes", role)
+
+    def status(self, role, fresh=False):
+        return self.herdr.status(self.pane(role), fresh)
+
+    def held(self, slot):
+        """The slots file's line for a slot, split, or None."""
+        return next((l for l in self.lines("slots") if l[0] == slot), None)
+
+    def owes(self):
+        """Whether the team's stages file owes any stage an end."""
+        p = self.state / "stages"
+        return p.exists() and p.stat().st_size > 0
+
+    def stop(self, role, ending=None):
+        """End a role's agent before anything else starts in its pane (teams.2): None once it is ended, or when none was
+        up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. A slot's
+        stage, or ops's proof, still owed an end ends with it first, by ending(role)."""
+        pane = self.pane(role)
+        st = self.herdr.status(pane)
+        if st == "working" and not self.force:
+            return working_said(self.agent_of(role))
+        if ending and (role.startswith("unit-") or role == "ops") and self.owes():
+            ending(role)
+        if not st:
+            return None
+        if self.herdr.run("agent", "prompt", pane, "/exit").returncode:
+            self.herdr.run("pane", "send-keys", pane, "ctrl+c", "ctrl+c")
+        for _ in range(30):
+            if not self.herdr.status(pane, fresh=True):
+                return None
+            nap(1)
+        # Still running means anything started next would be typed into it as a message. Say so and leave it be.
+        self.herdr.run("pane", "send-keys", pane, "ctrl+c", "ctrl+c")
+        nap(2)
+        return f"{self.agent_of(role)} did not exit (busy or waiting on the user); it was left running" if self.herdr.status(pane, fresh=True) else None
+
+    def close_pane(self, role):
+        pane = self.pane(role)
+        if self.herdr.live(pane):
+            self.herdr.run("pane", "close", pane)
+        self.drop("panes", role)
+
+    def free(self, slot, ending=None, bolt=""):
+        """End a slot's agent, close its pane and give the slot back, recorded (teams.1); the units workspace goes with
+        the last slot. None once it is free, else what crew says of the agent it could not end (stop). bolt is the bolt
+        a fix given as fix/<name> is of, read from its branch when not given."""
+        why = self.stop(slot, ending)
+        if why:
+            return why
+        line = self.held(slot)
+        self.drop("slots", slot)
+        if line and len(line) > 2:
+            if line[1] == "fix" and not bolt and not (line[2].startswith("fix/") and "/" in line[2][4:]):
+                bolt = subprocess.run(["git", "-C", self.t["kit"]["main"], "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{line[2]}"],
+                                      capture_output=True, text=True).stdout.strip()
+            import record as rec  # record imports this module
+            rec.emit(self.label, "slot.free", [f"agent/{self.agent_of(slot)}", held_object(line[1], line[2], bolt)],
+                     why=f"team({self.name}): free {self.agent_of(slot)}")
+        if self.lines("slots"):
+            self.close_pane(slot)
+            return None
+        w = self.get("layout", f"ws:{self.name}_units")
+        if w:
+            self.herdr.run("workspace", "close", w)
+        self.drop("layout", f"ws:{self.name}_units")
+        for s in self.slots:
+            self.drop("panes", s)
+        return None
 
 
 def main(a):

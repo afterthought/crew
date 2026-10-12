@@ -177,16 +177,16 @@ teams() { py teams || exit 1; }
 this_host() { hostname -s; }
 usage() { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
-orig=("$@"); force=0; greet=1; args=(); started=(); ended=()
-for a in "$@"; do case $a in --force) force=1 ;; --no-greet) greet=0 ;; *) args+=("$a") ;; esac; done
+orig=("$@"); force=0; forced=(); greet=1; args=(); started=(); ended=()
+for a in "$@"; do case $a in --force) force=1; forced=(--force) ;; --no-greet) greet=0 ;; *) args+=("$a") ;; esac; done
 set -- ${args[@]+"${args[@]}"}
 cmd=${1:-}
 
 # The command's reading (plan.12): a folder holding what its steps on this host have read of the plan and the kits, so
 # the command fetches the state branch and reads each kit once however many steps it has. The steps it starts on this
 # host share it through CREW_READ; a step on another host makes its own. It goes when the command ends, refused or
-# not, and one a killed command left goes once it is a day old. A command run as one process (exec'd below) keeps its
-# reading in memory; the rail tab's loop and crew events make none, so each refresh reads afresh.
+# not, and one a killed command left goes once it is a day old. A command run as one process (exec'd below, or run by
+# one) keeps its reading in memory; the rail tab's loop and crew events make none, so each refresh reads afresh.
 reads=$HOME/.cache/crew/reads
 unread() { case ${CREW_READ:-} in "$reads"/????????) rm -rf -- "$CREW_READ" ;; esac; }
 reading() {
@@ -199,6 +199,7 @@ reading() {
 }
 case $cmd in
   bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell | ops) ;;
+  status) ;;
   events | _rail) unset CREW_READ ;;
   unit) case ${2:-} in run | free | wait) reading ;; esac ;;
   *) reading ;;
@@ -248,6 +249,14 @@ forward() {  # what is acted on lives on its host: run this same command there, 
   [[ -z ${REMOTE_CREW_REFUSED:-} ]] || { echo "$REMOTE_CREW_REFUSED" >&2; exit 1; }
   local remote=${REMOTE_CREW:-}; [[ -n $remote ]] || remote=$(py crew-at "$MACHINE") || exit 1
   there "$SSH_TARGET" "$remote" "${orig[@]}"; exit $?
+}
+one() {  # one <plan.py entry> <args...>: a team's command, one Python process on the team's host (code.7). Run on
+  # another host, the process does nothing there but say on its descriptor 3 where the team runs and how crew runs
+  # there, and the command is forwarded (code.3).
+  local to rc=0
+  { to=$(python3 "$here/../lib/plan.py" "$@" 3>&1 >&4 4>&-) || rc=$?; } 4>&1
+  [[ -n $to ]] || exit $rc
+  eval "$to"; forward
 }
 
 name_of() {
@@ -597,39 +606,6 @@ prove() {  # prove "<words>": ask ops to prove the team's bolt, and owe the proo
   echo "$TEAM-ops is asked to prove bolt/$bolt: crew prove $TEAM --wait waits for its proof file"
 }
 
-status() {
-  printf '%-26s %-8s %-9s %8s %5s %8s  %-12s %s\n' "$TEAM@$MACHINE" pane state context pct compacts started holds
-  local role
-  for role in "${standing[@]}"; do
-    local pane st sid f tok=- pct=- comp=- born=-
-    pane=$(pane_of "$role"); st=$(agent_status "$pane")
-    if [[ -n $st ]]; then
-      sid=$(h agent get "$pane" | jq -r '.result.agent.agent_session.value // empty' || true)
-      f=$(ls "$HOME"/.claude*/projects/*/"$sid".jsonl 2>/dev/null | head -1 || true)
-      if [[ -n $f ]]; then
-        tok=$(command grep '"usage"' "$f" | tail -40 | jq -rs '[.[] | select(.isSidechain|not) | .message.usage | select(.) | (.input_tokens + (.cache_read_input_tokens//0) + (.cache_creation_input_tokens//0))] | last // 0' 2>/dev/null || true); tok=${tok:-0}
-        pct=$(( tok * 100 / ${WINDOW:-1000000} ))%; tok=$(( tok / 1000 ))k
-        comp=$(command grep -c '"isCompactSummary":true' "$f" || true)
-        born=$(command grep -m1 -o '"timestamp":"[^"]*"' "$f" | cut -d'"' -f4 | cut -c6-16 || true)
-      fi
-    fi
-    printf '%-26s %-8s %-9s %8s %5s %8s  %-12s %s\n' "$(name_of "$role")" "${pane:--}" "${st:-not up}" "$tok" "$pct" "$comp" "$born" ""
-  done
-  local stages slot line
-  stages=$(plan _slots "$TEAM" 2>/dev/null || true)
-  for slot in "${slots[@]}"; do
-    local pane st= holds=
-    pane=$(pane_of "$slot"); line=$(awk -v s="$slot" '$1==s' <<<"$stages")
-    if [[ -n $line ]]; then
-      st=$(agent_status "$pane"); st=${st:-not up}
-      holds=$(awk '{print $3 "  " $4 ($5 == "-" ? "" : " " $5)}' <<<"$line")
-    elif [[ -n $(holds "$slot") ]]; then
-      st=$(agent_status "$pane"); st=${st:-not up}; holds="$(holds "$slot")  unknown"
-    fi
-    printf '%-26s %-8s %-9s %8s %5s %8s  %-12s %s\n' "$(name_of "$slot")" "${pane:--}" "${st:-free}" - - - - "$holds"
-  done
-}
-
 pick_roles() {  # with no role named, the standing roles
   shift 2 || true; picked=(${@+"$@"})
   [[ ${#picked[@]} -eq 0 ]] && picked=("${standing[@]}")
@@ -648,7 +624,7 @@ case $cmd in
   board | _views | _board) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
   status)
-    if [[ -n ${2:-} ]]; then load_team "$2"; forward; ensure_state; reap; status
+    if [[ -n ${2:-} ]]; then one _status "$2" ${forced[@]+"${forced[@]}"}
     else first=1; for t in $(teams); do [[ $first == 1 ]] || echo; first=0; bash "$0" status "$t" || true; done; fi ;;
   up)
     load_team "${2:-}"; forward; ensure_state

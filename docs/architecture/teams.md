@@ -30,7 +30,7 @@ The rules for teams, slots, stages, panes and tells: the bash command, the role 
 
 ## Details
 
-**[teams.1]** Rules out: a slot kept for a requeued unit; a fifth unit on a four-slot team. Not ruled out: the partition's reviewer, a main-level role that takes no slot (ADR 0014). Source: fixes e413c48, f6988a2; `bolt-teams` spec "Units run in slots"; worktrees-go-with-their-work.
+**[teams.1]** Rules out: a slot kept for a requeued unit; a fifth unit on a four-slot team. Not ruled out: the partition's reviewer, a main-level role that takes no slot (ADR 0014). Source: fixes e413c48, f6988a2; `bolt-teams` spec "Units run in slots"; worktrees-go-with-their-work; `crew.py` `slot_for`, `reaped`; `plan.py` `reap`; `tests/py/test_slots.py`.
 
 **[teams.2]** Rules out: a launch typed into a running Claude; `stop` reporting success on a live agent. Source: fixes 499cd3b, f6988a2; `plugin/bin/crew` 164–181, 411–420.
 
@@ -57,6 +57,6 @@ The rules for teams, slots, stages, panes and tells: the bash command, the role 
 
 **[teams.8]** Rules out: crew pressing through the Bypass warning. Source: `plugin/bin/crew` 192–202.
 
-**[teams.9]** Rules out: an in-place edit of `slots`; a diagnostic on stdout from `env-main`. Source: `plugin/bin/crew` 145–147; `crew.py` 409–415, 578–579; `plan.py` 2612–2638.
+**[teams.9]** Rules out: an in-place edit of `slots`; a diagnostic on stdout from `env-main`. Source: `plugin/bin/crew` `put` and `drop`; `crew.py` `Team.write`, `shell`; `plan.py` `stages_file`, `sh`, `forwarded`.
 
 **[teams.10]** Rules out: `{{OPERATORS}}` rendering empty. Source: `crew.py` 21–23, 427–514; fixes 21d82af, e3d75cb.
