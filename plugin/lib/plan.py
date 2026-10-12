@@ -44,7 +44,13 @@ five times. A write that changes several files is one commit, and it carries the
   crew plan proposed [<n>] [--json] [--open] the open proposals, or one as the user reads it; --open writes that to a
                                              file on this host and opens it in plannotator
   crew plan agree <n> [--team <team>]        a conductor's agreement to a proposal that touches its bolt
-  crew plan approve <n>                      the proposal applied, exactly as read, in one commit
+  crew plan card <n>                         the proposal's Pending You card as JSON, from the branch alone, and its
+                                             picture, a PNG crew draws, written on this host
+  crew plan approve <n> [--clear <unit>...]  the proposal applied as read, in one commit, but for the new units the
+                                             user left out
+  crew plan answer <n> <question> <answer>... [--note "<text>"]
+                                             one answer of the proposal's card, kept on this host; the approval is
+                                             applied once every question is answered
   crew plan drop <n> "<reason>"              the proposal closed unapplied
   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>"|--excerpt-file <path> [--kind K] [--subject a,b]
                                              a finding, as a capture and its signal on the flywheel's branch: an
@@ -71,6 +77,7 @@ import gather  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
+from picture import cut, wrap  # noqa: E402
 
 REPLAYS = 5
 # What a command found out before it wrote or was refused: the partition whose run record its entry goes in.
@@ -292,10 +299,10 @@ def declares(p):
     return None if isinstance(p, Rec) else next((l[5:].split()[0] for l in p if l.startswith("%rec:")), None)
 
 
-def in_step(plan):
-    """Bring each record descriptor of a plan in step with crew's own (HEADER), so a branch started before a field was
-    allowed takes it on its next write. Returns whether any changed."""
-    want = {declares(p): p for p in Plan(HEADER).paras if declares(p)}
+def in_step(plan, header=HEADER):
+    """Bring each record descriptor of a plan, or of another of crew's files with its header, in step with crew's own
+    (HEADER), so a branch started before a field was allowed takes it on its next write. Returns whether any changed."""
+    want = {declares(p): p for p in Plan(header).paras if declares(p)}
     changed = False
     for i, p in enumerate(plan.paras):
         k = declares(p)
@@ -1273,7 +1280,25 @@ class Op:
         self.added_on, self.added_frm = [], []
 
 
-class Direct:
+class Reads:
+    """How a plan command reads the kits: its units' stages, whether a change's name is free on a kit's main, and the
+    first unit of a held bolt not yet merged. A command run directly or inside a proposal reads them; a proposal's
+    card reads none (Drawn)."""
+
+    def stages(self, plan, bolts):
+        return stages_for(self.fleet, plan, bolts)
+
+    def stage(self, plan, name):
+        return unit_stage(self.fleet, plan, name)
+
+    def free(self, label, kit, names):
+        name_free(self.fleet, label, kit, names)
+
+    def first_open(self, plan, bolt):
+        return first_open(self.fleet, plan, bolt)
+
+
+class Direct(Reads):
     """What a command run directly sees: the plans of every partition, or of --label (or the agent's own)."""
     direct = True
 
@@ -1288,7 +1313,7 @@ class Direct:
         return plan_for(self.fleet, kit, self.label)[0]
 
 
-class Proposed:
+class Proposed(Reads):
     """What a command inside a proposal sees: the proposal's partition and number, in the plan as the commands before
     it in the proposal have left it."""
     direct = False
@@ -1302,6 +1327,30 @@ class Proposed:
 
     def kit(self, kit):
         return plan_for(self.fleet, kit, self.label)[0]
+
+
+class Drawn(Proposed):
+    """What a command inside a proposal sees when the proposal's card is drawn: the plan as the commands before it have
+    left it, and no kit (plan.12). No stage is known, so nothing is refused for one; a change's name is checked only
+    for its form; and work a held bolt needs goes ahead of the bolt's first unit, merged or not. The approval reads the
+    kits and checks them all."""
+    UNREAD = {"stage": "unread", "worktree": None}
+
+    def stages(self, plan, bolts):
+        return self
+
+    def of(self, name):
+        return dict(self.UNREAD)
+
+    def stage(self, plan, name):
+        return dict(self.UNREAD)
+
+    def free(self, label, kit, names):
+        for n in names:
+            crew.NAME.match(n) or fail(f"a unit's name is lowercase words with dashes, not {n}")
+
+    def first_open(self, plan, bolt):
+        return next((u.name() for u in plan.units_of(bolt)), None)
 
 
 def first_open(fleet, plan, bolt):
@@ -1319,7 +1368,7 @@ def unblocking(ctx, plan, label, a, into):
                                f"not into {f'bolt {into}' if into else 'the queue'}")
     plan.bolt(a.unblocks).get("Team") or fail(f"{a.unit} unblocks bolt {a.unblocks}, which no team holds, so nothing waits on "
                                               "it: --unblocks names a bolt in flight")
-    return first_open(ctx.fleet, plan, a.unblocks)
+    return ctx.first_open(plan, a.unblocks)
 
 
 def op_bolt_new(ctx, a):
@@ -1356,7 +1405,7 @@ def op_bolt_drop(ctx, a):
     label, plan = ctx.locate("Bolt", a.bolt)
     team = ctx.fleet["teams"].get(plan.bolt(a.bolt).get("Team"))
     if a.requeue and team:  # a queued unit has no worktree
-        st = stages_for(ctx.fleet, plan, [plan.bolt(a.bolt)])
+        st = ctx.stages(plan, [plan.bolt(a.bolt)])
         for u in plan.units_of(a.bolt):
             s = st.of(u.name())
             s["stage"] != "unknown" or fail(f"cannot tell unit {u.name()}'s stage: {s.get('why')}")
@@ -1392,7 +1441,7 @@ def op_unit_add(ctx, a):
         a.repo or fail("a unit goes in a bolt (--bolt) or in a repo's queue (--repo)")
         label, kit, plan = ctx.kit(a.repo), a.repo, None
     ahead = unblocking(ctx, plan, label, a, a.bolt) if getattr(a, "unblocks", None) else None
-    name_free(ctx.fleet, label, kit, [a.unit])
+    ctx.free(label, kit, [a.unit])
     sources = list(a.source)
     if a.signal:
         sources.insert(0, f"signals/{a.signal}")
@@ -1438,10 +1487,10 @@ def conductor_scope(ctx, plan, a):
 def op_unit_split(ctx, a):
     label, plan = ctx.locate("Unit", a.unit)
     conductor_scope(ctx, plan, a)
-    s = unit_stage(ctx.fleet, plan, a.unit)
+    s = ctx.stage(plan, a.unit)
     s["stage"] not in LATER or fail(f"unit {a.unit} is in {s['stage']}, so it is no longer split; add the remainder as a new unit instead (crew unit add)")
     s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
-    name_free(ctx.fleet, label, plan.unit(a.unit).get("Repo"), [n for n, _ in a.into])
+    ctx.free(label, plan.unit(a.unit).get("Repo"), [n for n, _ in a.into])
     bolt = plan.unit(a.unit).get("Bolt")
 
     def change(w):
@@ -1465,7 +1514,7 @@ def op_unit_amend(ctx, a):
     amendment runs its construct again on its team's host, in the name of whoever applied it, and tells its conductor
     what started or why nothing did (plan.15). Merged work is not amended."""
     label, plan = ctx.locate("Unit", a.unit)
-    s = unit_stage(ctx.fleet, plan, a.unit)
+    s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(
         f"unit {a.unit} has " + ("merged into its bolt" if s["stage"] == "merged" else "landed on main")
         + ", so it is not amended: a defect in it is a fix, and new work is a new unit")
@@ -1566,7 +1615,7 @@ def op_unit_move(ctx, a):
         tb = plan.bolt(to) or fail(f"no bolt {to} in {label}/main of {state_of(ctx.fleet, label)[0]}")
         tb.get("Repo") == u.get("Repo") or fail(f"bolt {to} is in {tb.get('Repo')}; a unit moves only between bolts of its own repo, {u.get('Repo')}")
     ahead = unblocking(ctx, plan, label, a, to) if getattr(a, "unblocks", None) else None
-    s = unit_stage(ctx.fleet, plan, a.unit)
+    s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"unit {a.unit} has merged into {src}, so it can't move")
     s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
     prepare = None
@@ -1611,7 +1660,7 @@ def op_unit_move(ctx, a):
 
 def op_unit_drop(ctx, a):
     label, plan = ctx.locate("Unit", a.unit)
-    s = unit_stage(ctx.fleet, plan, a.unit)
+    s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"unit {a.unit} has merged into its bolt, so it can't be dropped")
     s["stage"] != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
     u0 = plan.unit(a.unit)
@@ -1672,7 +1721,7 @@ PROPOSALS = """\
 %type: State enum open approved dropped
 %type: Opened,Closed date
 %mandatory: Proposal Case Do State Opened By
-%allowed: Proposal Case Do Agreed State Opened By Closed Reason Replaces
+%allowed: Proposal Case Do Agreed State Opened By Closed Reason Replaces Cleared
 """
 # The commands a proposal may hold.
 PROPOSABLE = tuple(OPS)
@@ -1811,14 +1860,15 @@ def apply_all(fleet, label, w, argvs, n):
     return ops, list(dict.fromkeys(told))
 
 
-def check_ops(fleet, label, w, argvs, n):
-    """Proposal n's commands applied in order to a copy of the plan and of the files they change, then thrown away:
-    every refusal and rule each has when run directly, the schema's and crew's own rules included."""
+def check_ops(fleet, label, w, argvs, n, seen=Proposed):
+    """Proposal n's commands applied in order to a copy of the plan and of the files they change: every refusal and
+    rule each has when run directly, the schema's and crew's own rules included. Returns the copy, which a proposal's
+    card draws (seen=Drawn, which reads no kit) and nothing writes."""
     scratch = Write(w.repo, label, w.tip, Plan(w.plan.text()))
     scratch.files = dict(w.files)
     for a in argvs:
         try:
-            OPS[(a.cmd, a.sub)](Proposed(fleet, label, scratch, n), a).change(scratch)
+            OPS[(a.cmd, a.sub)](seen(fleet, label, scratch, n), a).change(scratch)
         except Refusal as e:
             refuse(f"`{a.do}`: {e}", f"`{do_named(a)}`: {getattr(e, 'recorded', None) or e}")
     try:
@@ -1826,6 +1876,7 @@ def check_ops(fleet, label, w, argvs, n):
         checked({"plan.rec": scratch.plan.text(), **scratch.files})
     except Refusal as e:
         fail(f"the proposal as a whole: {e}")
+    return scratch
 
 
 def read_proposal_file(path):
@@ -1984,13 +2035,16 @@ def plan_agree(fleet, a):
 
 
 def plan_approve(fleet, a):
-    """crew plan approve <n>: the proposal's commands applied in order to the plan at the tip, and the proposal closed
-    as approved, in one commit; refused, with nothing changed, when a command no longer applies or a conductor whose
-    bolt it touches has not agreed. A rebase it prepares is undone if the approval is refused."""
+    """crew plan approve <n> [--clear <unit>...]: the proposal's commands applied in order to the plan at the tip, and
+    the proposal closed as approved, in one commit; refused, with nothing changed, when a command no longer applies or
+    a conductor whose bolt it touches has not agreed. A rebase it prepares is undone if the approval is refused. With
+    --clear, the commands that concern only the units the user left out are not applied, a command left in that names
+    one refuses the whole, and the proposal records each as Cleared (plan.3)."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
     w0, _, p0, argvs = at_tip(fleet, label, a.n)
     repo = w0.repo
+    cleared = list(dict.fromkeys(getattr(a, "clear", None) or []))
 
     def agreed(w, p):
         missing = [t for t in held_teams(w.plan, flat(touched_by(w.plan, argvs))) if t not in p.all("Agreed")]
@@ -2002,8 +2056,9 @@ def plan_approve(fleet, a):
         p.get("State") == "open" or refuse(state + (f": {p.get('Reason')}" if p.get("Reason") else ""), state)
     opened(p0)
     agreed(w0, p0)
+    applied = kept(argvs, cleared, a.n) if cleared else argvs
     carded = p0.get("By") == f"{label}-planner"
-    ops0 = apply_all(fleet, label, w0, argvs, a.n)[0]  # checked at the tip, to know what to prepare
+    ops0 = apply_all(fleet, label, w0, applied, a.n)[0]  # checked at the tip, to know what to prepare
     undos, seen = [], {}
     try:
         for op in ops0:
@@ -2015,15 +2070,19 @@ def plan_approve(fleet, a):
             p = proposal(pl, a.n, label)
             opened(p)
             agreed(w, p)
-            ops, told = apply_all(fleet, label, w, argvs, a.n)
+            ops, told = apply_all(fleet, label, w, applied, a.n)
             p.set("State", "approved")
             p.set("Closed", datetime.date.today().isoformat(), after="By")
+            if cleared:  # a branch's proposals.rec keeps the descriptor it was made with, from before Cleared
+                in_step(pl, PROPOSALS)
+            for u in cleared:
+                p.add("Cleared", u, after="Closed")
             w.replace("proposals.rec", pl.text())
-            w.subject = f"plan(proposal {a.n}): approve: {summary(argvs)}"
+            w.subject = f"plan(proposal {a.n}): approve: {summary(applied) or 'nothing applied'}"
             w.on += [f"proposal/{a.n}"] + objects(argvs)
             seen["ops"] = ops
             return told
-        sha = write(fleet, label, change, "plan: approve", act="plan.approve")
+        sha = write(fleet, label, change, "plan: approve", f"Left out: {', '.join(cleared)}" if cleared else "", act="plan.approve")
     except Refusal:
         for undo in reversed([u for u in undos if u]):
             undo()
@@ -2033,7 +2092,7 @@ def plan_approve(fleet, a):
                     record.subject(op.subject))
         if op.after:
             op.after(repo, sha)
-    print(f"proposal {a.n} is approved and applied")
+    print(f"proposal {a.n} is approved and applied" + (f", without {joined(cleared)}" if cleared else ""))
     if carded and agent() == f"{label}-planner":
         print(close_card(f"proposal/{a.n}"))
     elif carded:
@@ -2085,15 +2144,19 @@ def signal_text(fleet, label, sig):
     return assertion, excerpt, field(show(repo, tip, capture_of(sig)) or "", "excerpt")
 
 
-def amendment(fleet, plan, a):
+def amendment(fleet, plan, a, alone=False):
     """A unit amend as the user reads it: the unit's bolt, team and stage, its intent as it stands and as it would be,
-    and what approval sets in motion. The stage is read from the unit's kit."""
+    and what approval sets in motion. The stage is read from the unit's kit; alone, nothing is read but the plan, and
+    only its first line is said."""
     u = plan.unit(a.unit)
     if u is None:
         return [f"**Amend unit `{a.unit}`**, new in this proposal", f"Intent, as proposed:  {a.intent}"]
-    s, b = unit_stage(fleet, plan, a.unit), u.get("Bolt")
+    b = u.get("Bolt")
     team = plan.bolt(b).get("Team") if b else None
     where = (f"bolt `{b}`" + (f" ({team})" if team else "")) if b else f"the queue of {u.get('Repo')}"
+    if alone:
+        return [f"**Amend unit `{a.unit}`** in {where}"]
+    s = unit_stage(fleet, plan, a.unit)
     st = s["stage"]
     now = ("" if st == "queued" else f", its stage unknown ({s.get('why')})" if st == "unknown" else
            f", now in {st}" if st in ("construct", "planned", "code", "verify") else f", now {st}")
@@ -2103,10 +2166,11 @@ def amendment(fleet, plan, a):
             "On approval: its intent is replaced; it has no change written yet, so nothing else changes."]
 
 
-def describe(fleet, label, plan, p):
+def describe(fleet, label, plan, p, alone=False):
     """A proposal as the user reads it: each change in plain words, with what the user is comparing beside it (a unit's
     intent and sources, the goal and team of the bolt it would join, an amended unit's intent before and after), and
-    who has yet to agree."""
+    who has yet to agree. alone, it reads nothing but the plan and the proposal: no kit for an amended unit's stage and
+    no signal, as a proposal's card is drawn (plan.12)."""
     argvs = [do_args(label, d) for d in p.all("Do")]
     per = touched_by(plan, argvs)
     new_bolts, changes = {}, []
@@ -2141,7 +2205,7 @@ def describe(fleet, label, plan, p):
                 lines.append(f"Bolt's goal: {goal_of(a.bolt)}")
             if getattr(a, "unblocks", None):
                 lines.append(f"Unblocks: bolt `{a.unblocks}`, which can't be proven or land without it")
-            if a.signal:
+            if a.signal and not alone:
                 assertion, excerpt, grade = signal_text(fleet, label, a.signal)
                 lines.append(f"From: signals/{a.signal}" + (f": \"{assertion}\"" if assertion else ""))
                 if excerpt:
@@ -2159,7 +2223,7 @@ def describe(fleet, label, plan, p):
         elif key == ("unit", "split"):
             lines = [f"**Split unit `{a.unit}`**", f"Narrowed intent: {a.intent}"] + [f"New unit `{n}`: {i}" for n, i in a.into]
         elif key == ("unit", "amend"):
-            lines = amendment(fleet, plan, a)
+            lines = amendment(fleet, plan, a, alone)
         elif key == ("unit", "order"):
             where = "first" if a.first else "last" if a.last else f"before `{a.before}`"
             lines = [f"**Order unit `{a.unit}`** {where}", f"Intent: {intent_of(a.unit)}"]
@@ -2263,6 +2327,420 @@ def plan_proposed(fleet, a):
     for r in rows:
         print(f"{r['label']} {r['proposal']:<3} {r['by']:<24} {r['opened']}  {r['case'].splitlines()[0][:70]}  waiting on "
               + ", then ".join(r["waits"]))
+
+
+# ------------------------------------------------------------------------------------------- a proposal's card
+
+CARD_NEW = 15  # the most units new to a bolt a proposal's card asks about: three questions of five, beside its approval
+SESSION_ROOM = 100  # what the card of more than fifteen new units leaves in its summary for the link to its session
+TEXT, SAYS = 40, 33  # the card's text, monospace lines of at most forty characters; what a block says, indented seven
+COUNTS = (("dropped", "dropped"), ("amended", "amended"), ("new", "new"), ("moved", "moved"), ("split", "amended"))
+CAPTION = "Struck and dashed: dropped, with its reason. Gold: amended, old intent struck above the new. Mint: new."
+
+
+def plural(k, word):
+    return f"{k} {word}" + ("" if k == 1 else "s")
+
+
+def joined(xs):
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+
+
+def by_words(text, width):
+    """text cut by whole words to at most width characters, ending with … when it was cut."""
+    text = " ".join(text.split())
+    if len(text) <= width:
+        return text
+    head = text[:width - 1]
+    return (head.rsplit(" ", 1)[0] if " " in head else head).rstrip(" ,;:") + "…"
+
+
+def plain_words(line):
+    """A change as `crew plan proposed` heads it, without its markdown."""
+    return line.replace("**", "").replace("`", "")
+
+
+def new_units(argvs):
+    """The units a proposal makes new to a bolt, in its order and once each: every unit a `unit add` names, to a bolt
+    or to the queue, which is the first the user hears of it, and every unit a `unit move` puts into a bolt."""
+    return list(dict.fromkeys(a.unit for a in argvs if (a.cmd, a.sub) == ("unit", "add")
+                              or ((a.cmd, a.sub) == ("unit", "move") and a.bolt != "queue")))
+
+
+def concerns(a):
+    """The unit a proposal's command concerns, its subject, or None for a bolt's command."""
+    return None if a.cmd == "bolt" else a.unit
+
+
+def names_units(a):
+    """Every unit a proposal's command names: its subject and each unit it refers to."""
+    if a.cmd == "bolt":
+        return []
+    out = [a.unit] + list(getattr(a, "after", None) or []) + ([a.before] if getattr(a, "before", None) else [])
+    out += [n for n, _ in getattr(a, "into", None) or []] + list(getattr(a, "deps", None) or [])
+    return list(dict.fromkeys(out))
+
+
+def kept(argvs, cleared, n):
+    """Proposal n's commands the user kept, the cleared units left out (plan.3): each cleared unit must be one the
+    proposal makes new to a bolt; every command that concerns only a cleared unit is left out; a command left in that
+    names one refuses the whole, so the planner writes the proposal again without it."""
+    new = new_units(argvs)
+    wrong = [u for u in cleared if u not in new]
+    not wrong or fail(f"proposal {n} neither adds nor moves into a bolt {either(wrong)}, so the user can't leave "
+                      + ("it" if len(wrong) == 1 else "them") + " out: "
+                      + (f"the units it may leave out are {either(new)}" if new else "it makes no unit new to a bolt"))
+    out = []
+    for a in argvs:
+        if concerns(a) in cleared:
+            continue
+        hit = [u for u in names_units(a) if u in cleared]
+        if hit:
+            refuse(f"`{a.do}` names {either(hit)}, which the user left out: write the proposal again without "
+                   + ("it" if len(hit) == 1 else "them"), f"`{do_named(a)}` names {either(hit)}, which the user left out")
+        out.append(a)
+    return out
+
+
+def put_back(now, was):
+    """The units a group holds once approved, each it held before and no longer does put back where it stood: after
+    the unit it followed, or first."""
+    out = list(now)
+    for i, u in enumerate(was):
+        if u not in out:
+            prev = next((was[j] for j in range(i - 1, -1, -1) if was[j] in out), None)
+            out.insert(out.index(prev) + 1 if prev else 0, u)
+    return out
+
+
+def block(head, name, says):
+    """One change in the card's text: its heading padded to seven and the unit or bolt, a heading longer than six on
+    its own line with the name under it, then what it says, indented seven."""
+    names = wrap(name, SAYS)
+    if len(head) > 6:
+        return [head] + ["       " + x for x in names] + ["       " + x for x in says]
+    return [f"{head:<7}{names[0]}"] + ["       " + x for x in names[1:] + says]
+
+
+def card_model(fleet, label, w, p):
+    """Proposal p as its card shows it, from the plan at the branch's tip and the proposal alone, no kit read
+    (plan.12): its commands applied in order to a copy of the plan, as check_ops applies them, and each bolt they touch
+    and each kit's queue a unit goes to, before and after; the card's fields, its text, its picture's sections and
+    the questions it asks. Refused for a closed proposal, and for one that no longer applies, naming the command, as
+    its approval would be."""
+    n = int(p.get("Proposal"))
+    p.get("State") == "open" or fail(f"proposal {n} is {p.get('State')}: it is closed, so it has no card")
+    argvs = [do_args(label, d) for d in p.all("Do")]
+    before = w.plan
+    after = check_ops(fleet, label, w, argvs, n, Drawn).plan
+    where = {u.name(): u.get("Bolt") for u in before.units()}
+    repo = {u.name(): u.get("Repo") for u in before.units()}
+    intent = {u.name(): u.get("Intent") for u in before.units()}
+    kits = {b.name(): b.get("Repo") for b in before.bolts()}
+    goals = {b.name(): b.get("Goal") for b in before.bolts()}
+    dropped, out, came_from, amended, split, parts, ordered, queued = {}, {}, {}, {}, {}, {}, set(), set()
+    counts, bolt_moves, touched, order, blocks = dict.fromkeys(dict(COUNTS), 0), {}, set(), [], []
+
+    def group(u):
+        return ("bolt", where[u]) if where.get(u) else ("queue", repo[u])
+    for a in argvs:
+        key = (a.cmd, a.sub)
+        if a.cmd == "unit":
+            touched.add(a.unit)
+        if key == ("bolt", "new"):
+            kits[a.bolt], goals[a.bolt] = a.repo, a.goal
+            secs, b = [("bolt", a.bolt)], block("NEW BOLT", a.bolt, wrap(a.goal, SAYS, 3))
+        elif key == ("bolt", "order"):
+            counts["moved"] += 1
+            bolt_moves[a.bolt] = bolt_moves.get(a.bolt, 0) + 1
+            secs, b = [("bolt", a.bolt)], block("ORDER BOLT", a.bolt, wrap(f"before {a.before}" if a.before else "first" if a.first else "last", SAYS))
+        elif key == ("bolt", "drop"):
+            units = [u for u, x in where.items() if x == a.bolt]
+            secs = [("bolt", a.bolt)] + ([("queue", kits[a.bolt])] if a.requeue and units else [])
+            for u in units:
+                touched.add(u)
+                if a.requeue:
+                    out[u], where[u] = "to the queue", None
+                    queued.add(u)
+                    counts["moved"] += 1
+                else:
+                    dropped[u] = a.reason
+                    counts["dropped"] += 1
+            b = block("DROP BOLT", a.bolt, wrap(a.reason, SAYS, 3) + (["its units to the queue"] if a.requeue else []))
+        elif key == ("unit", "add"):
+            where[a.unit], repo[a.unit], intent[a.unit] = a.bolt, a.repo or kits.get(a.bolt), a.intent
+            counts["new"] += 1
+            secs, b = [group(a.unit)], block("ADD", a.unit, wrap(a.intent, SAYS, 2))
+        elif key == ("unit", "move"):
+            src, to = where.get(a.unit), None if a.bolt == "queue" else a.bolt
+            secs = ([("bolt", src)] if src else []) + [("bolt", to) if to else ("queue", repo[a.unit])]
+            if src:
+                out[a.unit] = f"to {to}" if to else "to the queue"
+                counts["moved"] += 1
+            if to:
+                came_from.setdefault(a.unit, src)
+                counts["new"] += 1
+            else:
+                queued.add(a.unit)
+            where[a.unit] = to
+            b = block("MOVE", a.unit, wrap(f"from {src or 'the queue'} to {to or 'the queue'}", SAYS))
+        elif key == ("unit", "split"):
+            counts["split"] += 1
+            split.setdefault(a.unit, intent[a.unit])
+            intent[a.unit] = a.intent
+            for m, i in a.into:
+                parts[m], where[m], repo[m], intent[m] = a.unit, where[a.unit], repo[a.unit], i
+                touched.add(m)
+            secs, b = [group(a.unit)], block("SPLIT", a.unit, wrap(a.intent, SAYS, 2) + flat(wrap(f"into {m}", SAYS) for m, _ in a.into))
+        elif key == ("unit", "amend"):
+            counts["amended"] += 1
+            amended.setdefault(a.unit, intent[a.unit])
+            intent[a.unit] = a.intent
+            secs, b = [group(a.unit)], block("AMEND", a.unit, wrap(a.intent, SAYS, 3))
+        elif key in (("unit", "order"), ("unit", "after")):
+            counts["moved"] += 1
+            ordered.add(a.unit)
+            said = (("after " + ", ".join(a.deps) if a.deps else "after nothing") if a.sub == "after" else
+                    f"before {a.before}" if a.before else "first" if a.first else "last")
+            secs, b = [group(a.unit)], block(a.sub.upper(), a.unit, wrap(said, SAYS))
+        else:  # unit drop
+            counts["dropped"] += 1
+            dropped[a.unit] = a.reason
+            secs, b = [group(a.unit)], block("DROP", a.unit, wrap(a.reason, SAYS, 3))
+        order += [s for s in secs if s not in order]
+        blocks.append((secs[0], b))
+
+    sections, lines = [], []
+    for kind, name in order:
+        if kind == "bolt":
+            was = [u.name() for u in before.units_of(name)] if before.bolt(name) else []
+            now = numbered = [u.name() for u in after.units_of(name)] if after.bolt(name) else []
+            heading = name
+            said = (f"a new bolt → {len(now)}" if not before.bolt(name) else f"{plural(len(was), 'unit')} → "
+                    + (str(len(now)) if after.bolt(name) else "dropped"))
+            line = (f"A new bolt; {plural(len(now), 'unit')} once approved" if not before.bolt(name) else
+                    f"{plural(len(was), 'unit')} now; " + (f"{len(now)} once approved" if after.bolt(name) else "dropped once approved"))
+        else:
+            was_all, numbered = [u.name() for u in before.queue(name)], [u.name() for u in after.queue(name)]
+            was, now = [u for u in was_all if u in touched], [u for u in numbered if u in touched]
+            heading, said = f"the {name} queue", f"{len(was_all)} queued → {len(numbered)}"
+            line = f"{len(was_all)} queued now; {len(numbered)} once approved"
+        rows = []
+        for u in put_back(now, was):
+            r = {"n": str(numbered.index(u) + 1) if u in now else "–", "name": u, "tag": None, "intent": intent.get(u)}
+            if u not in now and u in dropped:
+                r.update(tag="drop", under=f"Why: {dropped[u]}", struck=True, outline="dashed", colour="dropped")
+            elif u not in now:
+                r.update(tag="out", under=out.get(u, ""), struck=True, outline="dashed", colour="moved")
+            elif u not in was and u in parts:
+                r.update(tag="split", colour="amended", mark="+")
+            elif u not in was and kind == "queue" and u in queued:
+                r.update(tag="moved", colour="moved", mark="↕")
+            elif u not in was:
+                r.update(tag="new", outline="solid", colour="new", mark="+")
+            elif u in amended or u in split:
+                r.update(tag="amend" if u in amended else "split", old=amended.get(u, split.get(u)), colour="amended", mark="~")
+            elif u in ordered:
+                r.update(tag="moved", colour="moved", mark="↕")
+            rows.append(r)
+        tags = [r["tag"] for r in rows]
+        mine = {"dropped": tags.count("drop"), "amended": tags.count("amend"), "new": tags.count("new"),
+                "moved": tags.count("moved") + tags.count("out") + bolt_moves.get(name, 0) * (kind == "bolt"),
+                "split": sum(1 for r in rows if r["tag"] == "split" and r["name"] not in parts)}
+        sections.append({"kind": kind, "name": name, "heading": heading, "said": said, "line": line, "rows": rows,
+                         "counts": [(f"{mine[c]} {c}", colour) for c, colour in COUNTS if mine[c]]})
+        lines += ([""] if lines else []) + wrap(heading, TEXT) + [said, ""]
+        for sec, b in blocks:
+            if sec == (kind, name):
+                lines += b + [""]
+        lines.append("ONCE APPROVED")
+        for r in rows:
+            if r["n"] != "–":
+                first, *rest = wrap(r["name"], TEXT - 5)
+                lines += [f"{r['n']:>2} {r.get('mark', ' ')} {first}"] + ["     " + x for x in rest]
+        if kind == "bolt" and not after.bolt(name):
+            lines.append("   the bolt is dropped")
+
+    new = new_units(argvs)
+    plain = not new or len(new) > CARD_NEW
+    all_counts = ", ".join(f"{counts[c]} {c}" for c, _ in COUNTS if counts[c])
+    headings = [s["heading"] for s in sections]
+    first = sections[0]
+    if len(headings) == 1:
+        to = headings[0]
+        title = f"Approve the change to {to}" + (f": {all_counts}?" if all_counts else "?")
+    else:
+        room = 140 - len(f"Approve proposal {n} to : {all_counts}?")
+        to = next(said for k in range(len(headings), 0, -1)
+                  for said in [joined(headings[:k] + ([f"{len(headings) - k} more"] if k < len(headings) else []))]
+                  if len(said) <= room or k == 1)
+        title = f"Approve proposal {n} to {to}" + (f": {all_counts}?" if all_counts else "?")
+    replaces = f", replacing proposal {p.get('Replaces')}" if p.get("Replaces") else ""
+    mine = ", ".join(w for w, _ in first["counts"])
+    head = [f"Proposal {n}, by {p.get('By')}{replaces}", first["said"][0].upper() + first["said"][1:] + " once approved"
+            + (f": {mine}." if mine else ".")]
+    goal = next((goals.get(s["name"]) for s in sections if s["kind"] == "bolt" and goals.get(s["name"])), None)
+    room = 400 - (SESSION_ROOM if len(new) > CARD_NEW else 0) - len("\n".join(head)) - 1
+    summary = "\n".join(head + ([by_words(f"Goal: {goal}", room)] if goal and room > 10 else []))
+    d = describe(fleet, label, before, p, alone=True)
+    background = (p.get("Case").strip() + "\n\nChanges:\n" + "\n".join(plain_words(c["lines"][0]) for c in d["changes"])
+                  + (f"\n\nWaiting on {joined([f'{t}-conductor' for t in d['waiting']])} to agree." if d["waiting"] else ""))
+    card = {"title": cut(title, 140), "summary": summary,
+            "context": {"background": background, "trace": [], "filesTouched": [], "tried": [], "links": []},
+            "artifacts": [{"kind": "image", "title": "The change, once approved", "ref": f"proposal-{n}.png", "upload": True,
+                           "caption": CAPTION},
+                          {"kind": "code", "lang": "text", "title": "The change, in text", "ref": f"proposal-{n}.txt", "lines": lines}],
+            "intent": "approve"}
+    questions = {"plan": None}
+    if plain:
+        card.update(kind="approve", approve={"action": f"Apply proposal {n}", "risk": "low", "reversible": True},
+                    recommendedIds=["approve"])
+    else:
+        g = -(-len(new) // CARD_UNITS)
+        sizes = [len(new) // g + (1 if k < len(new) % g else 0) for k in range(g)]
+        groups = [new[sum(sizes[:k]):sum(sizes[:k + 1])] for k in range(g)]
+        bullets, detail = [x for x in re.split(r"(?<=[.!?])\s+", " ".join(p.get("Case").split())) if x], ""
+        for x in bullets:
+            more = (detail + "\n" if detail else "") + f"• {x}"
+            if len(more) > 200:
+                break
+            detail = more
+        detail = detail or by_words(f"• {bullets[0]}", 200)
+        # A note beside an approval never holds back a drop or an amendment (record 0018), so the way to object is not
+        # to approve, naming only what the proposal does.
+        objected = [w.format("s" if counts[k] > 1 else "") for w, k in
+                    (("keep the dropped unit{}", "dropped"), ("change the amendment{}", "amended")) if counts[k]]
+        aside = "A note beside an approval changes nothing applied."
+        asked = [{"id": "plan", "kind": "approve", "title": cut(f"Approve the change to {to}?", 140), "detail": detail,
+                  "rationale": (f"To {' or '.join(objected)}, don't approve: say why in a note from ⋯, and the planner "
+                                f"writes the proposal again. {aside}" if objected
+                                else f"To change it, don't approve: say how in a note from ⋯. {aside}"),
+                  "approve": {"action": f"Apply proposal {n}, with the new units you keep", "risk": "low", "reversible": True},
+                  "recommendedIds": ["approve"]}]
+
+        def consequence(u):
+            return (f"Cleared: stays in {'the queue' if came_from[u] is None else 'bolt ' + came_from[u]}; the rest still "
+                    "applies" if u in came_from else "Cleared: not added; the rest still applies")
+        if len(new) == 1:
+            u = new[0]
+            asked.append({"id": "units-1", "kind": "choice", "title": cut(f"Does {u} go in?", 140),
+                          "options": [{"id": u, "label": "Move it in" if u in came_from else "Add it", "detail": by_words(intent[u], 200)},
+                                      {"id": "leave-out", "label": "Leave it out", "consequence": consequence(u)}],
+                          "recommendedIds": [u]})
+        for k, units in enumerate(groups if len(new) > 1 else [], 1):
+            asked.append({"id": f"units-{k}", "kind": "multi",
+                          "title": "Which new units go in? Clear one to leave it out." + (f" ({k} of {g})" if g > 1 else ""),
+                          "rationale": "A cleared unit is not added; the rest of the proposal still applies.",
+                          "options": [{"id": u, "label": cut(u, 80), "detail": by_words(intent[u], 200), "consequence": consequence(u)}
+                                      for u in units],
+                          "multi": {"min": 0, "max": len(units)}, "recommendedIds": list(units)})
+        questions.update({f"units-{k}": units for k, units in enumerate(groups, 1)})
+        card.update(about={"kind": "other", "title": cut(f"Proposal {n}: {to}", 120)}, questions=asked)
+    return {"n": n, "card": card, "session": len(new) > CARD_NEW, "new": new, "questions": questions, "lone": len(new) == 1,
+            "sections": sections}
+
+
+def plan_card(fleet, a):
+    """crew plan card <n> [--label L]: proposal n's card, as Pending You's post_request takes it, from the flywheel's
+    branch alone (plan.12): its title, summary, background, questions and artifacts, printed as JSON beside where its
+    picture is and whether it links a session, which only a card of more than fifteen new units does (briefs.9). Its
+    picture, a PNG 780 pixels wide, is drawn by crew itself and written to
+    ~/.local/state/crew/cards/<label>/proposal/<n>/ on this host. Writes nothing to the branch or the run record."""
+    label = proposal_label(fleet, a, a.n)
+    w, _, p, _ = at_tip(fleet, label, a.n)
+    m = card_model(fleet, label, w, p)
+    d = CARDS / label / "proposal" / str(a.n)
+    d.mkdir(parents=True, exist_ok=True)
+    f, tmp = d / f"proposal-{a.n}.png", d / f".proposal-{a.n}.png"
+    import picture  # only a card's picture needs it, so no other command starts it
+    tmp.write_bytes(picture.draw(m["sections"]))
+    tmp.replace(f)
+    print(json.dumps({"card": m["card"], "picture": str(f), "session": m["session"]}, indent=1, ensure_ascii=False))
+
+
+def answers_file(label, n):
+    return CARDS / label / "proposal" / str(n) / "answers.json"
+
+
+def held_answers(f):
+    """The answers gathered for a proposal's card, {} when none; refused when crew can't read them (read.1)."""
+    try:
+        held = json.loads(f.read_text())
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        fail(f"crew can't read the answers it gathered, {f}: {e}")
+    return held if isinstance(held, dict) else fail(f"{f} holds no answers crew gathered")
+
+
+def plan_answer(fleet, a):
+    """crew plan answer <n> <question> <answer>... [--note "<text>"] [--label L]: one question of proposal n's card
+    answered, as the planner reads it from the card or from a card the user split off it: plan approve or decline, or
+    units-<k> and the units the user left ticked (none when every one is cleared; a lone unit's, the unit or
+    leave-out). It is checked against the card `crew plan card <n>` prints now, and kept on this host, the planner's,
+    beside the card's session files: a card's working state, never the plan's (state.2). Once it holds the approval
+    and every unit question's answer, the approval is applied with each unticked unit cleared, as crew plan approve
+    --clear applies it, and the answers go; a note beside it is then printed as the user's word for the planner's
+    next proposal. A decline applies nothing, and its answers go. Refused for a question the card does not ask, a unit
+    its question does not hold, an answer that differs from the one held, and a closed proposal, recording nothing."""
+    label = proposal_label(fleet, a, a.n)
+    CONTEXT["label"] = label
+    w, _, p, _ = at_tip(fleet, label, a.n)
+    m = card_model(fleet, label, w, p)
+    asks = m["questions"]
+    a.question in asks or fail(f"proposal {a.n}'s card asks {either(list(asks))}, not {a.question}")
+    given = list(dict.fromkeys(a.answer))
+    held_units = asks[a.question]
+    if a.question == "plan":
+        len(given) == 1 and given[0] in ("approve", "decline") or fail("plan is answered approve or decline")
+        answer = given[0]
+    elif m["lone"]:
+        len(given) == 1 and given[0] in (held_units[0], "leave-out") or fail(
+            f"{a.question} is answered {held_units[0]} or leave-out")
+        answer = [x for x in given if x != "leave-out"]
+    else:
+        bad = [x for x in given if x not in held_units]
+        not bad or fail(f"{a.question} holds {either(held_units)}, not {either(bad)}")
+        answer = given
+    f = answers_file(label, a.n)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with open(f.parent / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        held = held_answers(f)
+        if a.question in held:
+            was = held[a.question]
+            same = was == answer if a.question == "plan" else sorted(was) == sorted(answer)
+            words = was if isinstance(was, str) else " ".join(was) or "nothing ticked"
+            same or fail(f"crew already holds {a.question} {words} for proposal {a.n}: the user answered it once")
+        held.setdefault(a.question, answer)
+        if a.note and a.note.strip() and a.note.strip() not in held.get("note", ""):
+            held["note"] = (held.get("note", "") + "\n\n" + a.note.strip()).strip()
+        tmp = f.parent / ".answers.json"
+        tmp.write_text(json.dumps(held, indent=1) + "\n")
+        tmp.replace(f)
+        note = held.get("note")
+        if held.get("plan") == "decline":
+            f.unlink()
+            print(f"proposal {a.n} is declined: nothing is applied, and the answers crew gathered are gone. The decline"
+                  + (f", and the user's note beside it, \"{note}\"," if note else "") + " is the user's word for you to act on: "
+                  f"write the proposal again with crew plan propose <file> --replaces {a.n}, or drop it with "
+                  f"crew plan drop {a.n} \"<the user's reason>\".")
+            return
+        waits = [q for q in asks if q not in held]
+        if waits:
+            print(f"proposal {a.n} waits on {either(waits)}: nothing is applied")
+            return
+        ticked = {u for q in asks if q != "plan" for u in held[q]}
+        cleared = [u for u in m["new"] if u not in ticked] if len(asks) > 1 else []
+        approval = argparse.Namespace(cmd="plan", sub="approve", n=a.n, label=label, clear=cleared)
+        try:
+            plan_approve(fleet, approval)
+        except Refusal as e:
+            refused(fleet, approval, ("plan", "approve"), e)
+            raise
+        f.unlink()
+    if note:
+        print(f"The user's note beside the approval of proposal {a.n}: \"{note}\". Propose what it asks as a new proposal.")
 
 
 # -------------------------------------------------------------------------------------------------- signals
@@ -4965,9 +5443,10 @@ def end_session(label, key, unit=None):
     """End the plannotator session crew started for a card key on this host, a batch card's for one of its units, and
     forget it: its folder goes first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only
     while plannotator lists it as serving the recorded document (read.4). When plannotator's list can't be read, nothing
-    is ended and the session is kept as recorded, so a later rail read ends it (read.1). Returns what it did, in words,
-    and whether it sent SIGTERM. crew's card hook runs it when a crew agent closes or withdraws a keyed card, and crew
-    card sweep for each session the rail judges dead."""
+    is ended and the session is kept as recorded, so a later rail read ends it (read.1). The answers crew plan answer
+    gathered for a proposal's card stay, and with them their folder: they go only with the approval or the decline.
+    Returns what it did, in words, and whether it sent SIGTERM. crew's card hook runs it when a crew agent closes or
+    withdraws a keyed card, and crew card sweep for each session the rail judges dead."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
     d = CARDS / label / key / unit if unit else CARDS / label / key
     key = f"{key} {unit}" if unit else key
@@ -4978,11 +5457,13 @@ def end_session(label, key, unit=None):
     except Refusal:
         s = None
     listed, why = plannotator_sessions() if s else (None, None)
+    import shutil
     if s and listed is None:
         return f"crew can't read plannotator's sessions ({why}): it ended nothing, and keeps {key} to end later", False
-    import shutil
-    shutil.rmtree(d)
-    for p in d.parents:
+    for f in d.iterdir():
+        if f.name != "answers.json":
+            shutil.rmtree(f) if f.is_dir() and not f.is_symlink() else f.unlink()
+    for p in [d, *d.parents]:
         if p == CARDS / label or not p.is_dir() or any(p.iterdir()):
             break
         p.rmdir()
@@ -5201,6 +5682,16 @@ def parser(cls=argparse.ArgumentParser):
     x.add_argument("--label")
     x = pp.add_parser("approve")
     x.add_argument("n", type=int)
+    x.add_argument("--clear", nargs="+", action="extend", default=[], metavar="UNIT")
+    x.add_argument("--label")
+    x = pp.add_parser("card")
+    x.add_argument("n", type=int)
+    x.add_argument("--label")
+    x = pp.add_parser("answer")
+    x.add_argument("n", type=int)
+    x.add_argument("question")
+    x.add_argument("answer", nargs="*")
+    x.add_argument("--note")
     x.add_argument("--label")
     x = pp.add_parser("drop")
     x.add_argument("n", type=int)
@@ -5303,7 +5794,7 @@ COMMANDS = {
     ("signal-show", None): signal_show,
     ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
-    ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop,
+    ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {

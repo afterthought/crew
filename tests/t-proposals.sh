@@ -1,7 +1,11 @@
 # crew plan propose|proposed|agree|approve|drop: every change the planner makes to the plan is a proposal the user
 # approves, with the agreement of the conductor of any bolt in flight it touches; what was approved is exactly what
 # is applied, in one commit. Each scenario of the plan-proposals spec. The planner is told to post a card for each
-# proposal it opens, and to close or update it when the proposal is approved, dropped, replaced or agreed to.
+# proposal it opens, and to close or update it when the proposal is approved, dropped, replaced or agreed to. An
+# approval leaves out the new units the user cleared, refusing when a kept command names one or a cleared unit is not
+# new, and records them; crew plan answer gathers a card's answers, split or not, waits for every question, applies
+# the approval with each unticked unit cleared, discards them on a decline, refuses an answer that differs, and prints
+# the note beside them after.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -236,3 +240,81 @@ for typed in ZQXA ZQXB ZQXC ZQXD ZQXE ZQXF; do
   [[ $new != *"$typed"* ]] || fail "a refused proposal's entry holds typed text ($typed):"$'\n'"$new"
 done
 ok "a refused proposal's entry names its command and objects, and holds no intent or reason typed in it"
+
+# The user leaves new units out: the approval applies what they kept, in one commit, and records what they cleared.
+CREW_AGENT= crew bolt new clears "Units can be left out." --repo switchboard-kit >/dev/null
+CREW_AGENT= crew unit add a-drop "Dropped." --bolt clears >/dev/null
+CREW_AGENT= crew unit add q-queued "Queued, and moved in." --repo switchboard-kit >/dev/null
+last() { props -t Proposal -P Proposal | tail -1; }
+crew plan propose "$(proposal 'Case: Two units replace one.' 'Do: unit drop a-drop "Replaced."' \
+  'Do: unit add b-keep "Kept." --bolt clears' 'Do: unit add c-clear "Cleared." --bolt clears' 'Do: unit order c-clear --first')" >/dev/null
+n=$(last); before=$(tip)
+expect_ok crew plan approve "$n" --clear c-clear
+has "$out" "proposal $n is approved and applied, without c-clear"
+eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
+eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit)" "b-keep"
+eq "$(plan -t Unit -e "Unit = 'c-clear'" -P Unit)" ""
+eq "$(props -t Proposal -e "Proposal = $n" -P State,Cleared)" $'approved\nc-clear'
+recfix --check "$T/p.rec" || fail "proposals.rec with Cleared fails recfix --check"
+eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(proposal $n): approve: drop a-drop, add b-keep to clears (wldn-planner)"
+has "$(git --git-dir "$ws" log -1 --format=%b wldn/main)" "Left out: c-clear"
+has "$(crew trace unit/c-clear)" "plan.approve"
+ok "a new unit left out: one commit drops, adds what was kept, makes no cleared unit and runs no order of it, and records it as cleared"
+
+crew plan propose "$(proposal 'Case: The queued unit joins, with another.' 'Do: unit move q-queued clears' 'Do: unit add d-keep "Kept too." --bolt clears')" >/dev/null
+n=$(last)
+expect_ok crew plan approve "$n" --clear q-queued
+eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit)" $'b-keep\nd-keep'
+eq "$(plan -t Unit -e "Unit = 'q-queued'" -P Bolt,Repo)" "switchboard-kit"
+ok "a unit moved in from the queue and left out stays in the queue as it was"
+
+crew plan propose "$(proposal 'Case: Two units, one after the other.' 'Do: unit add e-b "First." --bolt clears' \
+  'Do: unit add e-c "Second." --bolt clears --after e-b' 'Do: unit amend d-keep "Kept, amended."')" >/dev/null
+n=$(last); before=$(tip)
+expect_fail "\`unit add e-c \"Second.\" --bolt clears --after e-b\` names e-b, which the user left out: write the proposal again without it" \
+  crew plan approve "$n" --clear e-b
+has "$(field plan.approve Refused proposal/$n)" '`unit add e-c` names e-b, which the user left out'
+expect_fail "proposal $n neither adds nor moves into a bolt d-keep, so the user can't leave it out: the units it may leave out are e-b or e-c" \
+  crew plan approve "$n" --clear d-keep
+eq "$(tip)" "$before"; eq "$(props -t Proposal -e "Proposal = $n" -P State)" "open"
+expect_ok crew plan approve "$n" --clear e-c
+eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit)" $'b-keep\nd-keep\ne-b'
+ok "a kept command naming a cleared unit, and a cleared unit the proposal does not make new, refuse the approval with nothing changed; clearing the dependent applies"
+
+# The card's answers, gathered on the planner's host, split or not, before the approval.
+answers=$(home_of mac-studio)/.local/state/crew/cards/wldn/proposal
+crew plan propose "$(proposal 'Case: Two more units.' 'Do: unit add f-1 "One." --bolt clears' 'Do: unit add f-2 "Two." --bolt clears')" >/dev/null
+n=$(last); before=$(tip)
+expect_ok crew plan answer "$n" plan approve
+eq "$out" "proposal $n waits on units-1: nothing is applied"
+eq "$(tip)" "$before"; eq "$(jq -c . "$answers/$n/answers.json")" '{"plan":"approve"}'
+expect_ok crew plan answer "$n" plan approve
+expect_fail "proposal $n's card asks plan or units-1, not units-2" crew plan answer "$n" units-2 f-1
+expect_fail "units-1 holds f-1 or f-2, not zz" crew plan answer "$n" units-1 zz
+expect_fail "plan is answered approve or decline" crew plan answer "$n" plan maybe
+eq "$(tip)" "$before"
+eq "$(field plan.approve Refused proposal/$n)" ""
+expect_ok crew plan answer "$n" units-1 f-1 --note "split f-1 in two later"
+has "$out" "proposal $n is approved and applied, without f-2"
+eq "$(tail -1 <<<"$out")" "The user's note beside the approval of proposal $n: \"split f-1 in two later\". Propose what it asks as a new proposal."
+eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit | tail -1)" "f-1"
+eq "$(props -t Proposal -e "Proposal = $n" -P Cleared)" "f-2"
+[[ ! -e $answers/$n/answers.json ]] || fail "the answers stayed after the approval"
+lacks "$(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec')" "split f-1 in two later"
+ok "a card's answers wait for every question, then apply the approval with each unticked unit cleared, and the note follows it"
+
+crew plan propose "$(proposal 'Case: Two others.' 'Do: unit add g-1 "One." --bolt clears' 'Do: unit add g-2 "Two." --bolt clears')" >/dev/null
+n=$(last)
+expect_ok crew plan answer "$n" units-1 g-1 g-2
+expect_ok crew plan answer "$n" units-1 g-2 g-1
+expect_fail "crew already holds units-1 g-1 g-2 for proposal $n: the user answered it once" crew plan answer "$n" units-1 g-1
+before=$(tip)
+expect_ok crew plan answer "$n" plan decline --note "not these"
+has "$out" "proposal $n is declined: nothing is applied"
+has "$out" "the user's note beside it, \"not these\""
+has "$out" "crew plan propose <file> --replaces $n"; has "$out" "crew plan drop $n"
+eq "$(tip)" "$before"; eq "$(props -t Proposal -e "Proposal = $n" -P State)" "open"
+[[ ! -e $answers/$n/answers.json ]] || fail "the answers stayed after the decline"
+CREW_AGENT= crew plan drop "$n" "declined" >/dev/null
+expect_fail "proposal $n is dropped: it is closed, so it has no card" crew plan answer "$n" plan approve
+ok "the same answer twice is fine, a different one is refused, a decline applies nothing and discards the answers, and a closed proposal takes none"
