@@ -210,7 +210,7 @@ class TestMore:
         assert sorted(p) == ["attention", "bolt_plan", "construction", "hosts", "inception", "label", "operation", "plan", "teams"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
         assert sorted(te) == ["bolt", "fixes", "goal", "host", "markers", "repo", "state", "team", "teams", "units", "url"]
-        assert sorted(te["units"][0]) == ["markers", "slot", "stage", "tasks", "unit", "url", "worktree"]
+        assert sorted(te["units"][0]) == ["kind", "markers", "slot", "stage", "tasks", "unit", "url", "worktree"]
         assert sorted(te["fixes"][0]) == ["fix", "merged", "slot", "url", "worktree"]
 
     def test_half_a_frame_or_one_with_no_time_reads_as_none(self, tmp_path, monkeypatch):
@@ -325,3 +325,26 @@ class TestViews:
         lines = [v["stale"]] + [l for lines in v["views"].values() for l in lines]
         assert all(isinstance(l, list) and all(isinstance(t, str) and len(seg) == 2 and style in (None, "bold", "dim") for seg in l for t, style in [seg])
                    for l in lines)
+
+
+def test_a_chore_is_marked_in_a_ledger_a_planned_bolt_and_the_queue(monkeypatch):
+    """A chore stands among the units in build order, its kind in the JSON and `chore` before its stage in the text
+    (plan.11); its place is read from the kit's chore places."""
+    import sys
+    text = plan_text(bolts=[("apex-zones", "switchboard-kit", None), ("tenant-environments", "switchboard-kit", "swb-1")],
+                     units=[("pin", "switchboard-kit", "apex-zones", [], "chore"), ("a", "switchboard-kit", "tenant-environments", []),
+                            ("bump", "switchboard-kit", "tenant-environments", [], "chore"), ("tidy", "switchboard-kit", None, [], "chore")])
+    monkeypatch.setattr(sys.modules[__name__], "the_plan", lambda: plan.Plan(text))
+    sv = kits()
+    sv[BOX]["kits"]["/kit/main"].update(chores=[], chore_places={"bump": {"path": "/kit/places/chore-bump", "head": "c" * 40, "head_at": ago(5),
+                                                                         "ahead": 1, "bolt": "tenant-environments"}})
+    sv[BOX]["kits"]["/kit/main"]["slots"]["swb-1"].append({"slot": "unit-2", "kind": "chore", "name": "bump"})
+    d = data(sv=sv)
+    ledger = next(b for b in d["partitions"][0]["construction"] if b["bolt"] == "tenant-environments")
+    assert [(u["unit"], u["kind"], u["stage"], u["slot"]) for u in ledger["units"]] == [("a", "unit", "code", "unit-1"), ("bump", "chore", "verify", "unit-2")]
+    out = board.board_text(d)
+    assert "    bump  chore verify  unit-2" in lane(out, "Construction")
+    assert lane(out, "Bolt plan") == ["  switchboard-kit apex-zones  Goal of apex-zones.", "    pin  chore ready", "  switchboard-kit tidy  chore queued"]
+    # Its conductor's view, the mod's band, draws the chore in its ledger as the board does (code.8).
+    mine = view("swb-1-conductor", sv=sv)
+    assert mine[:3] == ["  switchboard-kit  ◑◕  tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◕  bump  chore verify  unit-2"]

@@ -53,5 +53,5 @@ def test_a_conductor_writes_only_units_of_its_own_bolt(monkeypatch):
                              units=[("a", KIT, "tenant-environments", []), ("b", KIT, "tenant-environments", []), ("c", KIT, "console-pages", [])]))
     apply(w, "unit order b --first", "unit after a b", ctx=known(w))
     assert [u.name() for u in w.plan.units_of("tenant-environments")] == ["b", "a"]
-    with pytest.raises(plan.Refusal, match="swb-1-conductor writes only units of the bolt swb-1 holds, and c is in bolt console-pages: tell wldn-planner"):
+    with pytest.raises(plan.Refusal, match="swb-1-conductor writes only units and chores of the bolt swb-1 holds, and c is in bolt console-pages: tell wldn-planner"):
         apply(w, "unit order c --first", ctx=known(w))

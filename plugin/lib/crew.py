@@ -542,9 +542,10 @@ def taken_within():
 def never_started(agent, stage, what, obj, team, how, why):
     """What crew says of a stage whose prompt its agent never took, sent twice or never ready (how "never"), or of one
     crew could not tell it took (teams.15, read.1): the stage never started, nothing is left typed, and how to run it
-    again, by the unit's or the fix's own command."""
+    again, by the unit's, the chore's or the fix's own command."""
     name = obj.rsplit("/", 1)[-1]
-    again = (f"crew unit run {what} {stage}" if obj.startswith("unit/") else f"crew fix {team} {name} --merge" if stage == "merge"
+    again = (f"crew unit run {what} {stage}" if obj.startswith("unit/") else f"crew chore run {what} {stage}" if obj.startswith("chore/")
+             else f"crew fix {team} {name} --merge" if stage == "merge"
              else f'crew fix {team} {name} "<what is wrong>"')
     if how == "never":
         return f"{agent} never took its {stage} prompt for {what}, {why}; the stage never started and nothing is left typed in its pane: run it again with {again}"
@@ -1318,8 +1319,11 @@ def reaped(agent, team, name, stage, status):
 
 
 def held_object(kind, name, bolt=""):
-    """What a slot holds, as the run record names it (record.6): unit/<unit>, or a fix's fix/<bolt>/<name>, one given
-    as fix/<name> before a fix's name held its bolt taking the bolt its branch tracks (bolt)."""
+    """What a slot holds, as the run record names it (record.6): unit/<unit>, chore/<chore>, or a fix's
+    fix/<bolt>/<name>, one given as fix/<name> before a fix's name held its bolt taking the bolt its branch tracks
+    (bolt)."""
+    if kind == "chore":
+        return f"chore/{name}"
     if kind != "fix":
         return f"unit/{name}"
     if name.startswith("fix/") and "/" in name[4:]:

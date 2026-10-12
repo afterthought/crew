@@ -89,5 +89,5 @@ def test_a_plan_from_before_the_mark_is_brought_in_step_once():
     old = plan.HEADER.replace(" Amended", "")
     p = plan.Plan(old + "\n%rec: Bolt\n\n")
     assert plan.in_step(p) is True
-    assert "%allowed: Unit Repo Bolt Intent After Source Amended" in p.text()
+    assert "%allowed: Unit Repo Bolt Kind Intent After Source Amended" in p.text()
     assert plan.in_step(p) is False

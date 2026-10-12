@@ -19,7 +19,6 @@ The rules this rests on: `state.1`, `state.2`, `state.3`, `state.4`, `roles.1`, 
 - Curation on a cadence, the other half of `signals.7`: `curation-runs-on-a-cadence` builds it, after `curate-into-agenda`.
 - Chores outside a bolt, merged straight onto main (record 0001, option 4): main changes only when a bolt lands (`state.3`).
 - Running any of the chores waiting for the kind: chores run through a team.
-- `board.agent_views` and `plugin/hooks/status.js` (`code.8`), which are not on main.
 
 ## Decisions
 
@@ -98,7 +97,7 @@ The five chore commands are proposable (`PROPOSABLE` is every `Op`). `objects` n
 
 ### Views
 
-`crew bolts` lists a bolt's chores among its units in build order, its stage shown as `chore <stage>`, and queued chores the same way; its JSON gives each unit and queued entry `kind`. The board's ledger rows, planned bolts and queue carry `kind`, and its text marks a chore; the page's lineage reads `chore/<name>` with its words. `crew sites` lists a chore's place as a unit's.
+`crew bolts` lists a bolt's chores among its units in build order, its stage shown as `chore <stage>`, and queued chores the same way; its JSON gives each unit and queued entry `kind`. The board's ledger rows, planned bolts and queue carry `kind`, and its text marks a chore by `stage_of`, which each agent's view draws its ledger with too (`board.agent_views`, `code.8`), so the mod shows a chore with no change of its own: `plugin/hooks/status.js` draws the view's lines and reads no unit's fields; the page's lineage reads `chore/<name>` with its words. `crew sites` lists a chore's place as a unit's.
 
 ### The run record
 

@@ -77,12 +77,13 @@ KITS = ("switchboard-kit", "breadboard-kit")
 
 def plan_text(bolts=(), units=()):
     """plan.rec text with its descriptors: bolts as (name, repo, team or None), units as (name, repo, bolt or None,
-    [after...]), in order."""
+    [after...]), in order, a fifth "chore" making it a chore, whose words are "Chore <name>."."""
     text = "%rec: Bolt\n%key: Bolt\n\n" + "".join(
         f"Bolt: {b}\nRepo: {r}\nGoal: Goal of {b}.\n" + (f"Team: {t}\n" if t else "") + "\n" for b, r, t in bolts)
     text += "%rec: Unit\n%key: Unit\n\n" + "".join(
-        f"Unit: {u}\nRepo: {r}\n" + (f"Bolt: {b}\n" if b else "") + f"Intent: Unit {u}.\n" + "".join(f"After: {x}\n" for x in after) + "\n"
-        for u, r, b, after in units)
+        f"Unit: {u}\nRepo: {r}\n" + (f"Bolt: {b}\n" if b else "") + ("Kind: chore\n" if kind else "")
+        + (f"Intent: Chore {u}.\n" if kind else f"Intent: Unit {u}.\n") + "".join(f"After: {x}\n" for x in after) + "\n"
+        for u, r, b, after, *kind in units)
     return text
 
 
@@ -97,16 +98,17 @@ class FactsWrite:
             def text(self, path):
                 return self.files.get(path)
 
-            def gone(self, kind, name):
-                plan.fail(f"no {kind.lower()} {name} in {self.label}/main")
+            def gone(self, kind, name, word=None):
+                plan.fail(f"no {word or kind.lower()} {name} in {self.label}/main")
         w = W(None, "wldn", None, plan.Plan(text))
         w.files = dict(files or {})
         return w
 
 
-def known(w, stages=None, taken=(), n=None):
-    """A plan command's reads as a logic case gives them (plan.Reads): each unit's stage as given, else ready; a
-    change's name free unless taken on the kit's main; work a held bolt needs ahead of its first unit not merged."""
+def known(w, stages=None, taken=(), n=None, chores_taken=()):
+    """A plan command's reads as a logic case gives them (plan.Reads): each unit's or chore's stage as given, else ready;
+    a name free unless the kit's main holds a change (taken) or a chore (chores_taken) by it; work a held bolt needs
+    ahead of its first unit or chore not merged."""
     import plan
 
     class Known(plan.Proposed):
@@ -124,12 +126,12 @@ def known(w, stages=None, taken=(), n=None):
             return self.of(name)
 
         def free(self, label, kit, names):
-            for x in names:
-                plan.crew.NAME.match(x) or plan.fail(f"a unit's name is lowercase words with dashes, not {x}")
-                x not in taken or plan.fail(f"{kit}'s main already has a change named {x}, open or archived; pick another name")
+            for x in names:  # by the decision name_free makes, on the changes and chores the kit's main is given to hold
+                why = plan.name_taken(kit, x, taken, chores_taken)
+                not why or plan.fail(why)
 
         def first_open(self, p, bolt):
-            return next((u.name() for u in p.units_of(bolt) if self.of(u.name())["stage"] not in ("merged", "landed")), None)
+            return next((u.name() for u in p.work_of(bolt) if self.of(u.name())["stage"] not in ("merged", "landed")), None)
 
         def kit(self, kit):
             kit in KITS or plan.fail(f"no team of {self.label} builds {kit}, so no plan holds its work")
@@ -149,5 +151,5 @@ def apply(w, *dos, ctx=None):
 
 
 def units_of(w, bolt=None, repo=None):
-    """The plan's units in a bolt, or in a repo's queue, in order."""
-    return [u.name() for u in w.plan.units() if (u.get("Bolt") == bolt if bolt else not u.get("Bolt") and u.get("Repo") == repo)]
+    """The plan's units and chores in a bolt, or in a repo's queue, in order."""
+    return [u.name() for u in w.plan.work() if (u.get("Bolt") == bolt if bolt else not u.get("Bolt") and u.get("Repo") == repo)]

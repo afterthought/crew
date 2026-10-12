@@ -7,10 +7,12 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 "reports": [<a team's verify reports folder, ~ allowed>, ...], "slots": {<team>: <its slots file, ~ allowed>}}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
 "board": <true to also read each team's slots file and the explorations on the kit's main>}.
-The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived), and
-for each local bolt/* branch, and each bolt asked for, whether bolt/<bolt> exists, the changes it holds, its worktree,
-its head and the head's time; each place under <dir>/places with its branch, its head and the head's time, its change's
-tasks, whether its planning is complete and the paths its proposal declares it touches; each fix branched from a bolt;
+The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
+chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
+whether bolt/<bolt> exists, the changes and chores it holds, its worktree, its head and the head's time; each place under
+<dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
+paths its proposal declares it touches; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
+head, head's time and how many commits it holds beyond the bolt; each fix branched from a bolt;
 each unit's newest verify report in the reports folders, with its path and time; and whether the kit merges through
 sluice, by the flag in its main checkout's .config/crew.toml. With sites, each worktree's devurl names and the host's
 portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
@@ -44,6 +46,25 @@ def changes(main, ref):
     return sorted(names)
 
 
+# A chore's name, as a commit's `Chore:` trailer gives it (plan.11).
+CHORE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def chores(main, ref):
+    """The chores a branch's history holds: the name each commit's `Chore:` trailer gives, as git parses trailers, of
+    the commits whose message has a line starting `Chore: `. [] for a branch that is not there."""
+    out = run(["git", "log", "--grep=^Chore: ", "--format=%(trailers:key=Chore,valueonly,separator=%x0a)", ref, "--"], main) or ""
+    return sorted({l.strip() for l in out.splitlines() if CHORE.match(l.strip())})
+
+
+def chore_place(path, bolt):
+    """A chore's place: its head and the head's time, and how many commits it holds beyond its bolt (ahead), None when
+    it tracks no bolt or git can't count them."""
+    ahead = (run(["git", "rev-list", "--count", f"refs/heads/bolt/{bolt}..HEAD"], path) or "").strip() if bolt else ""
+    return {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None, "head_at": head_at(path, "HEAD"),
+            "ahead": int(ahead) if ahead.isdigit() else None}
+
+
 def worktrees(main):
     """The checkout's worktrees: each one's path, its branch when it is on one, and whether it is locked."""
     out, cur = [], {}
@@ -63,7 +84,8 @@ def worktrees(main):
 
 def upstreams(main):
     out = {}
-    for line in (run(["git", "for-each-ref", "--format=%(refname:short) %(upstream:short)", "refs/heads/unit/", "refs/heads/fix/"], main) or "").splitlines():
+    for line in (run(["git", "for-each-ref", "--format=%(refname:short) %(upstream:short)", "refs/heads/unit/", "refs/heads/fix/",
+                      "refs/heads/chore/"], main) or "").splitlines():
         b, _, up = line.partition(" ")
         out[b] = up
     return out
@@ -363,7 +385,8 @@ def kit(req, sites=False, running=None, board=False):
     trees = worktrees(main)
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
-    out = {"ok": True, "main": changes(main, "main"), "bolts": {}, "places": {}, "fixes": [], "reports": reports(req.get("reports", []))}
+    out = {"ok": True, "main": changes(main, "main"), "chores": chores(main, "refs/heads/main"), "bolts": {}, "places": {},
+           "chore_places": {}, "fixes": [], "reports": reports(req.get("reports", []))}
     out["sluice"], out["sluice_error"] = sluice(main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
     # asked for, or tracked by a place, that has no branch is marked missing.
@@ -373,6 +396,7 @@ def kit(req, sites=False, running=None, board=False):
         exists = b in have
         wt = os.path.join(kdir, "bolts", b)
         out["bolts"][b] = {"exists": exists, "changes": changes(main, f"bolt/{b}") if exists else [],
+                           "chores": chores(main, f"refs/heads/bolt/{b}") if exists else [],
                            "worktree": wt if at.get(wt) == f"bolt/{b}" else None,
                            "head": (run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}^{{commit}}"], main) or "").strip() or None if exists else None,
                            "head_at": head_at(main, f"refs/heads/bolt/{b}") if exists else None}
@@ -384,6 +408,9 @@ def kit(req, sites=False, running=None, board=False):
             unit = branch[5:]
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
             out["places"][unit] = dict(place(path, unit), branch=branch, bolt=bolt)
+        elif branch.startswith("chore/") and os.path.basename(path) == f"chore-{branch[6:]}":
+            bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
+            out["chore_places"][branch[6:]] = dict(chore_place(path, bolt), branch=branch, bolt=bolt)
         elif branch.startswith("fix/"):
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
             out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt)})

@@ -157,3 +157,22 @@ class TestMore:
         assert record.when("2026-10-06T14:00:00Z") == ("2026-10-06", "2026-10-06T14:00:00Z")
         with pytest.raises(Refusal, match="--since takes a date"):
             record.when("yesterday-ish")
+
+
+def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labelled_by_its_words():
+    """page.data and page.labelled: a chore is work like a unit, so it is in the units' column, where it moved from is not
+    what it came from, and its label and stage are read from the plan and its kit (plan.11)."""
+    d = page.data([entry("chore.add", ["chore/bump", "queue/switchboard-kit"]), entry("chore.move", ["chore/bump", "bolt/c"], ["bolt/b"])])
+    assert page.column("chore/bump") == page.column("unit/u")
+    assert [f"{e['from']}>{e['to']}" for e in d["edges"]] == ["chore/bump>bolt/c"]
+    pl = plan.Plan(plan_text(bolts=[("c", "switchboard-kit", "swb-1")], units=[("bump", "switchboard-kit", "c", [], "chore")]))
+
+    class St:
+        def of(self, name):
+            return {"stage": "verify"}
+
+        def bolt_state(self, b):
+            return "active"
+    page.labelled(d, pl, St(), {}, {}, {}, lambda name: None)
+    by = {n["id"]: n for n in d["nodes"]}
+    assert [by["chore/bump"][k] for k in ("label", "status", "stage")] == ["Chore bump.", "flight", "verify"]

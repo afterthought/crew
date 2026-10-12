@@ -36,3 +36,15 @@ def test_a_plan_with_a_duplicated_key_is_refused_by_name():
     text = "%rec: Unit\n%key: Unit\n\nUnit: a\nRepo: switchboard-kit\nIntent: once\n\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n"
     with pytest.raises(Refusal, match="^plan.rec fails recfix --check: .*duplicated key"):
         plan.recfix(text, "plan.rec")
+
+
+def test_the_plan_takes_a_chore_among_its_units_and_refuses_any_other_kind():
+    """op_unit_add's chore and plan.checked: a Unit record marked Kind: chore sits among the units, between two of them,
+    and passes the plan's schema; a Kind the schema's enum does not hold is refused (plan.1, plan.11)."""
+    unit = lambda name, kind=None: f"Unit: {name}\nRepo: crew\nBolt: b\n" + (f"Kind: {kind}\n" if kind else "") + f"Intent: {name} is done.\n\n"
+    bolt = "Bolt: b\nRepo: crew\nGoal: Upkeep.\n\n"
+    text = plan.HEADER.replace("%rec: Unit", bolt + "%rec: Unit") + "\n" + unit("a") + unit("bump", "chore") + unit("c")
+    plan.recfix(text, "plan.rec")
+    assert [u.name() for u in plan.Plan(text).chores()] == ["bump"]
+    with pytest.raises(Refusal, match="^plan.rec fails recfix --check"):
+        plan.recfix(text.replace("Kind: chore", "Kind: spike"), "plan.rec")

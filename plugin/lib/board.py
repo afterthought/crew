@@ -155,7 +155,7 @@ def board_data(fleet, labels, read, now):
     and each object of its lanes says the teams it belongs to, which is what the page narrows by: a held bolt and a
     landing, its team; a signal, the team whose agent captured it; a proposal, the teams holding the bolts it names
     and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
-    every team building its repository. A ledger's units and fixes are its own."""
+    every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind."""
     here = crew.this_host()
     rows, cards, sv = read["rows"], read["cards"], read["sv"]
     since = plan.utc(record.when(None)[1])
@@ -199,11 +199,11 @@ def board_data(fleet, labels, read, now):
             repository; and, where a change makes a bolt or names the queue, those building that bolt's repository or
             the unit's. A change that names no repository adds none."""
             bolts = {b.name(): (b.get("Team"), b.get("Repo")) for b in pl.bolts()}
-            units = {u.name(): u.get("Repo") for u in pl.units()}
+            units = {u.name(): u.get("Repo") for u in pl.work()}
             out = []
             for c in d["changes"]:
                 a = plan.do_args(l, c["do"])
-                key = (a.cmd, a.sub)
+                key = ("unit" if a.cmd == "chore" else a.cmd, a.sub)  # a chore's command reaches teams as the unit's
                 if key == ("bolt", "new"):
                     bolts.setdefault(a.bolt, (None, a.repo))
                 elif key == ("unit", "add"):
@@ -229,10 +229,10 @@ def board_data(fleet, labels, read, now):
         if pl:
             st = plan.Stages(fleet, pl, sv)
             for b in pl.bolts():
-                units = pl.units_of(b.name())
+                units = pl.work_of(b.name())
                 if not b.get("Team"):
                     planned.append({"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "teams": building(b.get("Repo")),
-                                    "units": [{"unit": u.name(), "stage": st.of(u.name())["stage"]} for u in units]})
+                                    "units": [{"unit": u.name(), "kind": plan.kind_of(u), "stage": st.of(u.name())["stage"]} for u in units]})
                     continue
                 t = fleet["teams"].get(b.get("Team"))
                 k, _ = st.kit(b) if t else (None, None)
@@ -250,7 +250,8 @@ def board_data(fleet, labels, read, now):
                           "markers": markers(rows, cards, l, "land", b.name()), "teams": [b.get("Team")], "units": [], "fixes": []}
                 for u in units:
                     s = st.of(u.name())
-                    ledger["units"].append({"unit": u.name(), "stage": s["stage"], "tasks": s["tasks"], "slot": slot("unit", u.name()),
+                    ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
+                                            "slot": slot(plan.kind_of(u), u.name()),
                                             "worktree": s["worktree"], "url": url(s["worktree"]),
                                             "markers": markers(rows, cards, l, "verify", u.name())})
                 ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "worktree": f["path"], "url": url(f["path"])}
@@ -258,7 +259,8 @@ def board_data(fleet, labels, read, now):
                 construction.append(ledger)
                 if state == "landed":
                     attention.append({"what": "landed", "name": b.name(), "why": "every unit has landed on main, and the bolt is still in the plan"})
-            queue = [{"unit": u.name(), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))} for u in pl.queue()]
+            queue = [{"unit": u.name(), "kind": plan.kind_of(u), "repo": u.get("Repo"), "sources": u.all("Source"), "teams": building(u.get("Repo"))}
+                     for u in pl.queue()]
         operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
                       "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
@@ -306,7 +308,9 @@ def gutter(ms, attention=False):
 
 
 def stage_of(u):
-    return u["stage"] + (f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else "")
+    """A unit's stage with its tasks, a chore's with `chore` before it (plan.11), in the board and each agent's view."""
+    return (("chore " if u.get("kind") == "chore" else "") + u["stage"]
+            + (f" {u['tasks'][0]}/{u['tasks'][1]}" if u["stage"] in ("code", "verify") and u["tasks"] else ""))
 
 
 def board_text(data, width=None, color=False, stale=None):
@@ -360,9 +364,9 @@ def board_text(data, width=None, color=False, stale=None):
         for b in bp["planned"]:
             line(fields(named(b["repo"], b["bolt"]), b["goal"] or ""), " ")
             for u in b["units"]:
-                line(fields(u["unit"], u["stage"]), " ", 2)
+                line(fields(u["unit"], stage_of(u)), " ", 2)
         for u in sorted(bp["queue"], key=lambda u: u["repo"] or ""):
-            line(fields(named(u["repo"], u["unit"]), "queued", ", ".join(u["sources"])), " ")
+            line(fields(named(u["repo"], u["unit"]), "chore queued" if u.get("kind") == "chore" else "queued", ", ".join(u["sources"])), " ")
         if not (bp["proposals"] or bp["planned"] or bp["queue"]):
             line([("none", None)], " ")
 

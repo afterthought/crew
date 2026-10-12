@@ -117,10 +117,17 @@ class TestTrace:
         assert acts("signals/s/01-c") == ["capture", "unit.add", "signal.move", "unit.move", "stage.start", "stage.end"]
         assert record.lineage(E, "unit/u") == record.lineage(E, "signals/s/01-c")
 
-    def test_a_bare_name_is_tried_as_a_unit_then_a_bolt_then_a_signal(self):
-        assert record.trace_start(E, "u") == ("unit/u", ["unit/u", "bolt/u", "signals/u"])
+    def test_a_bare_name_is_tried_as_a_unit_then_a_chore_then_a_bolt_then_a_signal(self):
+        assert record.trace_start(E, "u") == ("unit/u", ["unit/u", "chore/u", "bolt/u", "signals/u"])
         assert record.trace_start(E, "b1")[0] == "bolt/b1"
         assert record.trace_start(E, "agenda/8") == (None, ["agenda/8"])
+        chore = [entry("20261005T120000Z-mac-5-1", "2026-10-05T12:00:00Z", "chore.add", ["chore/bump", "bolt/b1"])]
+        assert record.trace_start(E + chore, "bump")[0] == "chore/bump"
+
+    def test_where_a_chore_moved_from_is_not_what_it_came_from(self):
+        moved = [entry("20261005T120000Z-mac-5-1", "2026-10-05T12:00:00Z", "chore.add", ["chore/bump", "queue/switchboard-kit"]),
+                 entry("20261005T120100Z-mac-5-2", "2026-10-05T12:01:00Z", "chore.move", ["chore/bump", "bolt/b1"], ["queue/switchboard-kit"])]
+        assert [e["Act"] for e in record.lineage(E + moved, "chore/bump")] == ["chore.add", "chore.move"]
 
     def test_a_line_names_its_time_act_who_host_commit_objects_and_session_to_open(self):
         assert record.line(E[0], zoe=True) == ("10-05 10:00:00  capture       swb-2-conductor      chuck-herdr-alpha  aaaaaaa  signals/s/01-c"

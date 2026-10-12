@@ -22,10 +22,11 @@ branch first, then whatever each host it can reach has not yet carried.
   record.py events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
                                           the entries of the partition's branch and of every host it runs on, in time order
   record.py events --push [--label L]     carry this host's entries to the branch now, in a commit of their own
-  record.py trace <object> [--label L]    one bolt's, unit's or signal's history, read from the entries alone
+  record.py trace <object> [--label L]    one bolt's, unit's, chore's or signal's history, read from the entries alone
 
-An object is a typed name: unit/<unit>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>, agent/<name>,
-stage/<unit>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of the partition), and
+An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>,
+agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of
+the partition), and
 what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>."""
 import argparse, datetime, json, os, pathlib, re, signal, subprocess, sys
 # getpass, queue, tempfile and threading are imported where they are used, so a command that writes one entry starts
@@ -62,8 +63,8 @@ EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
-KINDS = ("unit/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/", "proof/",
-         "batch/", "env/")
+KINDS = ("unit/", "chore/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/",
+         "proof/", "batch/", "env/")
 
 _count = 0
 _session = ...  # resolved once per process
@@ -506,8 +507,8 @@ def lineage(entries, start, index=None):
             for e in index.get(o, ()):
                 chosen[e["Id"]] = e
         for e in list(chosen.values()):
-            # What it came from. Where a unit moved from says where it was, not what it came from.
-            objs.update(f for f in e["From"] if followed(f) and not (e.get("Act") == "unit.move" and f.startswith("bolt/")))
+            # What it came from. Where a unit or chore moved from says where it was, not what it came from.
+            objs.update(f for f in e["From"] if followed(f) and not (e.get("Act") in ("unit.move", "chore.move") and f.startswith("bolt/")))
             # What came from it. A proposal reached from one of its changes is that change's origin: the rest of what
             # it applied is its siblings' history, so a proposal is followed forward only when the trace starts there.
             if any(f in objs and (not f.startswith("proposal/") or f == start) for f in e["From"]):
@@ -518,7 +519,8 @@ def lineage(entries, start, index=None):
 
 
 def trace(fleet, a):
-    """One object's history, as lineage() walks it. A bare name is tried as a unit, then a bolt, then a signal."""
+    """One object's history, as lineage() walks it. A bare name is tried as a unit, then a chore, then a bolt, then a
+    signal."""
     found, missing = gather(fleet, labels_for(fleet, a.label), "0000-00-00")
     start, candidates = trace_start(found, a.object)
     if start is None:
@@ -533,8 +535,8 @@ def trace(fleet, a):
 
 def trace_start(found, obj):
     """The object a trace starts from, or None, and the names it was looked for by: a typed one as it is, a bare name
-    as a unit, then a bolt, then a signal, the first that an entry names."""
-    candidates = [obj] if obj.startswith(KINDS) else [f"{k}{obj}" for k in ("unit/", "bolt/", "signals/")]
+    as a unit, then a chore, then a bolt, then a signal, the first that an entry names."""
+    candidates = [obj] if obj.startswith(KINDS) else [f"{k}{obj}" for k in ("unit/", "chore/", "bolt/", "signals/")]
     return next((c for c in candidates if any(names(e, c) for e in found)), None), candidates
 
 

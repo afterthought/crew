@@ -101,3 +101,48 @@ def test_a_worktree_outside_places_or_off_a_unit_or_fix_branch_is_no_place(repo,
     repo.git("worktree", "add", "-q", "-b", "scratch", str(k.dir / "places" / "scratch"), "bolt/te")
     got = k.read()
     assert got["places"] == {} and got["fixes"] == []
+
+
+def test_a_chore_is_read_from_the_trailer_of_its_commits_on_main_and_each_bolt(repo, tmp_path):
+    """Stages, slot_stage and tidy: a chore has merged once its bolt's history holds a commit whose `Chore:` trailer names
+    it, and landed once main's does, as git parses trailers; the words in a body that is not the last paragraph are no
+    trailer (plan.11, state.2)."""
+    k = Kit(repo, tmp_path)
+    p = k.place("bump", prefix="chore")
+    (p / "pin").write_text("1\n")
+    repo.git("-C", str(p), "add", "-A")
+    repo.git("-C", str(p), "commit", "-q", "-m", "chore: pin the shell", "--trailer", "Chore: bump")
+    repo.git("-C", str(k.dir / "bolts" / "te"), "merge", "-q", "--ff-only", "chore/bump")
+    repo.commit("docs: Chore: in a subject is no trailer\n\nChore: not-this-one\n\nA last paragraph of prose.")
+    got = k.read()
+    assert (got["chores"], got["bolts"]["te"]["chores"]) == ([], ["bump"])
+    assert gather.chores(str(repo.path), "refs/heads/missing") == []
+
+
+def test_a_chores_place_is_read_with_how_far_it_is_beyond_its_bolt(repo, tmp_path):
+    """Stages: a chore with a place reads code until its place holds a commit beyond the bolt, and verify after; its place
+    is directly in places/ as chore-<name> on chore/<name>, tracking its bolt (plan.11)."""
+    k = Kit(repo, tmp_path)
+    p = k.dir / "places" / "chore-bump"
+    repo.git("worktree", "add", "-q", "--track", "-b", "chore/bump", str(p), "bolt/te")
+    got = k.read()["chore_places"]["bump"]
+    assert (got["ahead"], got["bolt"], got["branch"]) == (0, "te", "chore/bump")
+    (p / "pin").write_text("1\n")
+    k.commit(p, "chore: one")
+    assert k.read()["chore_places"]["bump"]["ahead"] == 1
+    assert "bump" not in k.read()["places"]
+
+
+def test_a_chores_commits_and_their_trailers_are_read_as_its_merge_checks_them(repo, tmp_path):
+    """chore_check: a chore's merge is refused for each commit beyond its bolt whose trailers do not name it, read by
+    plan.CHORE_LOG and parsed by plan.chore_log (plan.11, roles.3)."""
+    import plan
+    k = Kit(repo, tmp_path)
+    p = k.place("bump", prefix="chore")
+    for i, trailer in enumerate((["--trailer", "Chore: bump"], [], ["--trailer", "Chore: other", "--trailer", "Chore: bump"])):
+        (p / f"f{i}").write_text(f"{i}\n")
+        repo.git("-C", str(p), "add", "-A")
+        repo.git("-C", str(p), "commit", "-q", "-m", f"chore: step {i}", *trailer)
+    got = plan.chore_log(repo.git(*plan.CHORE_LOG, "refs/heads/bolt/te..refs/heads/chore/bump"))
+    assert [(s, names) for _, s, names in got] == [("chore: step 0", ["bump"]), ("chore: step 1", []), ("chore: step 2", ["other", "bump"])]
+    assert [s for _, s in plan.untrailed(got, "bump")] == ["chore: step 1"]

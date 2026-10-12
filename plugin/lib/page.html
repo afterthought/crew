@@ -373,7 +373,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       if (i) c.append(el("span", "lg-arrow", "→"));
       var kind = queued ? "queued" : MERGED.indexOf(u.stage) >= 0 ? "merged" : BUILDING.indexOf(u.stage) >= 0 ? "building" : "queued";
       var link = el("div", "lg-unit " + kind);
-      link.append(el("span", "lg-un", u.unit));
+      link.append(el("span", "lg-un", (u.kind === "chore" ? "chore " : "") + u.unit));
       if (kind === "merged") link.title = u.stage;
       if (kind === "queued") link.append(el("span", "lg-ut", u.stage || "unknown"));
       if (kind === "building") {
@@ -471,7 +471,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   B.bolt_plan.queue.slice().sort(function (a, b) { return (a.repo || "") < (b.repo || "") ? -1 : (a.repo || "") > (b.repo || "") ? 1 : 0; })
     .forEach(function (u) {
       var x = el("div", "slip");
-      x.append(el("span", "sl-k", "queued"));
+      x.append(el("span", "sl-k", u.kind === "chore" ? "chore queued" : "queued"));
       if (u.repo) x.append(el("span", "sl-repo", u.repo));
       x.append(el("span", "sl-n", u.unit));
       if (u.sources.length) x.append(el("span", "sl-to", u.sources.join(", ")));
@@ -538,7 +538,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   // ------------------------------------------------------------------------------------------------ the flow view
   var flowShown = (function () {
     var COLS = [["signals", "Signals"], ["agenda", "Agenda"], ["proposal", "Proposals"], ["unit", "Units"], ["bolt", "Bolts"]];
-    var KIND = { signals: "signal", agenda: "agenda item", proposal: "proposal", unit: "unit", bolt: "bolt" };
+    var KIND = { signals: "signal", agenda: "agenda item", proposal: "proposal", unit: "unit", chore: "chore", bolt: "bolt" };
     var byId = new Map(), out = new Map(), into = new Map(), nodeEl = new Map(), cols = [], lineEls = [], selected = null;
     var board = $("board"), svg = $("lines"), NS = svg.namespaceURI, hide = $("hide"), find = $("find");
 
@@ -548,6 +548,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       if (n.kind === "signals") return n.name.split("/").pop();
       if (n.kind === "agenda") return "item " + n.name;
       if (n.kind === "proposal") return "proposal " + n.name;
+      if (n.kind === "chore") return "chore " + n.name;
       return n.name;
     }
 
@@ -568,7 +569,8 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       var col = el("section", "col"), h = el("h2"), count = el("span", "count"), list = el("div", "list"), none = el("p", "none", "none");
       h.append(el("span", null, c[1]), count);
       col.append(h, list);
-      var mine = D.nodes.filter(function (n) { return n.kind === c[0]; });
+      // A chore stands in the units' column.
+      var mine = D.nodes.filter(function (n) { return n.kind === c[0] || (c[0] === "unit" && n.kind === "chore"); });
       mine.sort(function (a, b) { return a.first < b.first ? 1 : a.first > b.first ? -1 : a.id < b.id ? -1 : 1; });
       mine.forEach(function (n) { var x = box(n); list.append(x); nodeEl.set(n.id, x); });
       list.append(none);

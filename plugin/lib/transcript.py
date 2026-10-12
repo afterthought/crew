@@ -10,9 +10,10 @@ assistant a record the agent wrote itself. When either stops holding, a grade fa
 is refused, and no capture is stopped.
 
 Who asserted the words is read from the mark crew puts on what it sends, and a stage's own prompt, which crew cannot
-mark, from its form: `Fix: …`, the merge line, and the /opsx: commands, which Claude Code records as a string holding
-<command-name>/opsx:apply</command-name> and <command-args>…</command-args>, the skill's text following in the next
-record received, ending ARGUMENTS: and the same words. When these stop holding, a stage's words are read as the user's.
+mark, from its form: `Fix: …`, a chore's `Chore <name>: …` and `Verify chore <name>: …`, the merge line, and the /opsx:
+commands, which Claude Code records as a string holding <command-name>/opsx:apply</command-name> and
+<command-args>…</command-args>, the skill's text following in the next record received, ending ARGUMENTS: and the same
+words. When these stop holding, a stage's words are read as the user's.
 
 Claude Code writes a tool call's record only once the tool returns, so the running crew signal is never in the
 transcript it reads. What shows crew it is reading the live session is the record before it, the user's message or
@@ -55,8 +56,9 @@ import datetime, json, pathlib, re, sys
 # its line, a backslash-newline running it on, when a word after it starts --excerpt.
 COMMAND = re.compile(r"crew signal(?:\\\n|.)*?(?<!\S)--excerpt(?:\\\n|.)*")
 TELL = re.compile(r"^\[crew tell from ([^\]\s]+)\]")
-# A stage's own prompt, as crew's run_stage sends it: a fix, a merge, or construct, code and verify as slash commands.
-STAGE = re.compile(r"^(Fix: |Merge \S+ into bolt/\S+: wt merge bolt/\S+ --no-squash --no-remove)")
+# A stage's own prompt, as crew's run_stage sends it: a fix, a chore's code or verify, a merge, or construct, code and
+# verify as slash commands.
+STAGE = re.compile(r"^(Fix: |Chore \S+: |Verify chore \S+: |Merge \S+ into bolt/\S+: wt merge bolt/\S+ --no-squash --no-remove)")
 SLASH = re.compile(r"<command-name>/opsx:(propose|apply|verify)</command-name>")
 ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 FRESH = datetime.timedelta(minutes=15)

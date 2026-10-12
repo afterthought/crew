@@ -24,8 +24,8 @@ from crew import Refusal, fail  # noqa: E402
 TEMPLATE = LIB / "page.html"
 DATA = "/*{{DATA}}*/"
 PARTITIONS = "<!--{{PARTITIONS}}-->"
-# The page's columns, in the flow's order.
-COLUMNS = ("signals/", "agenda/", "proposal/", "unit/", "bolt/")
+# The page's columns, in the flow's order; a chore stands in the units' column (plan.11).
+COLUMNS = ("signals/", "agenda/", "proposal/", ("unit/", "chore/"), "bolt/")
 # Present status, as the page colours it: open, in flight, done or dropped; None when it can't be told.
 UNIT = {"queued": "open", "waiting": "open", "ready": "open", "construct": "flight", "amended": "flight", "planned": "flight",
         "code": "flight", "verify": "flight", "merged": "done", "landed": "done"}
@@ -33,7 +33,7 @@ BOLT = {"planned": "open", "active": "flight", "landed": "done"}
 PROPOSAL = {"open": "open", "approved": "done", "dropped": "dropped"}
 ITEM = {"open": "open", "planned": "done", "decided": "done", "dropped": "dropped"}
 # What a unit or bolt the plan no longer holds became, from the act that took it out.
-GONE = {"unit.drop": "dropped", "bolt.drop": "dropped", "bolt.land": "done"}
+GONE = {"unit.drop": "dropped", "chore.drop": "dropped", "bolt.drop": "dropped", "bolt.land": "done"}
 
 
 def column(obj):
@@ -57,7 +57,7 @@ def data(entries, since=None):
         for o in named:
             kind, name = o.split("/", 1)
             nodes.setdefault(o, {"id": o, "kind": kind, "name": name, "first": e["At"]})["last"] = e["At"]
-        linked = [o for o in named if not (e.get("Act") == "unit.move" and o.startswith("bolt/") and o in e["From"] and o not in e["On"])]
+        linked = [o for o in named if not (e.get("Act") in ("unit.move", "chore.move") and o.startswith("bolt/") and o in e["From"] and o not in e["On"])]
         cols = sorted({column(o) for o in linked})
         hub = next((o for o in e["On"] if o.startswith("proposal/")), None)
         for a, b in zip(cols, cols[1:]):
@@ -121,10 +121,10 @@ def labelled(d, pl, st, proposals, items, moves, assertion_of):
         elif kind == "proposal" and name in proposals:
             p = proposals[name]
             n.update(label=((p.get("Case") or "").strip().splitlines() or [None])[0], status=PROPOSAL.get(p.get("State")), facts=[p.get("State")])
-        elif kind == "unit" and pl.unit(name):
+        elif kind == "unit" and pl.unit(name) or kind == "chore" and pl.chore(name):
             stage = st.of(name)["stage"]
             stage = None if stage == "unknown" else stage
-            n.update(label=pl.unit(name).get("Intent"), status=UNIT.get(stage), stage=stage, facts=[stage] if stage else [])
+            n.update(label=pl.item(name).get("Intent"), status=UNIT.get(stage), stage=stage, facts=[stage] if stage else [])
         elif kind == "bolt" and pl.bolt(name):
             b = pl.bolt(name)
             state = st.bolt_state(b)

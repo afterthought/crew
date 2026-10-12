@@ -43,6 +43,14 @@
 #                                      amended. Refused while the team is down. The stage begins only once its
 #                                      agent's transcript shows its prompt, sent once more when it does not; else
 #                                      it never started, with nothing left typed, and the command fails saying so
+#   crew chore run <chore> code|verify|merge ["<words>"]
+#                                      start a chore's stage in its slot, a fresh agent at that stage's effort, in
+#                                      places/chore-<chore> on chore/<chore> from the bolt: code does the chore's words,
+#                                      each commit carrying its Chore: trailer; verify checks the commits against them;
+#                                      merge merges it into the bolt as a unit's merge does. Every stage waits for what it
+#                                      comes after to merge; verify needs a commit; merge needs verify run since its code
+#                                      and the trailer on every commit. A chore has no construct and no review
+#   crew chore wait|free <chore> ...   as a unit's wait and free
 #   crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]
 #                                      first forecast conflicts with git merge-tree, telling each later unit once,
 #                                      rebase dependents whose unit merged, and count the partition's changes due for
@@ -77,9 +85,12 @@
 # repository; a meeting's signals stay in the partition's first blueprints repo:
 #   crew state init <label>            create the flywheel's branch, adopting plan/<label> and the moves it had
 #   crew bolts [<bolt>] [--label L] [--json]
-#                                      every bolt and unit of the plans, each unit's stage read from its kit
+#                                      every bolt, unit and chore of the plans, each one's stage read from its kit
 #   crew bolt  new|give|order|drop|land ...
 #   crew unit  add|split|amend|order|after|move|drop ...
+#   crew chore add|order|after|move|drop ...
+#                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
+#                                      same hands, and built in its bolt by code, verify and merge
 #   crew plan  propose|proposed|agree|card|approve|answer|drop ...
 #                                      the planner's proposals: a change to the plan, applied once the user approves it;
 #                                      card prints a proposal's Pending You card and draws its picture, which link no
@@ -122,7 +133,7 @@
 #   crew signal show <id>              a signal, where its excerpt came from, and its move
 #   crew signal move <id> attach|challenge|new-territory|answered|drop ...
 #                                      curation's move for a signal
-#   (crew bolt|unit|plan|signal --help says more)
+#   (crew bolt|unit|chore|plan|signal --help says more)
 #
 # Each partition's main level, and the operator agent in each operator session:
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
@@ -208,7 +219,7 @@ reading() {
 }
 case $cmd in
   bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell | ops) ;;
-  status | unit | fix | _tidy) ;;
+  status | unit | chore | fix | _tidy) ;;
   events | _rail) unset CREW_READ ;;
   *) reading ;;
 esac
@@ -554,19 +565,21 @@ case $cmd in
     load_team "${2:-}"; forward; ensure_state
     for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down
     record_agents team.down "team($TEAM): down" ${ended[@]+"${ended[@]}"}; echo "$TEAM is down; its panes are still there." ;;
-  unit)
+  unit | chore)  # a chore's stages are code, verify and merge, with no construct (plan.11)
+    kind=$cmd
+    if [[ $kind == chore ]]; then stages="code verify merge"; as=(--chore); else stages="construct code verify settle merge"; as=(); fi
     case ${2:-} in
       free)
-        [[ -n ${3:-} && ( $# == 3 || ( $# == 5 && $4 == --team ) ) ]] || { echo "usage: crew unit free <unit> [--team <team>]" >&2; exit 2; }
+        [[ -n ${3:-} && ( $# == 3 || ( $# == 5 && $4 == --team ) ) ]] || { echo "usage: crew $kind free <$kind> [--team <team>]" >&2; exit 2; }
         one _unit-free "$3" ${5:+--team "$5"} ${forced[@]+"${forced[@]}"} ;;
       wait)
-        unit=${3:?usage: crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]}; limits "${@:4}"
+        unit=${3:?usage: crew $kind wait <$kind> [--timeout <ms>] [--stuck <ms>]}; limits "${@:4}"
         one _unit-wait "$unit" ${limit[@]+"${limit[@]}"} ;;
       run)
-        unit=${3:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
-        stage=${4:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
-        case $stage in construct | code | verify | settle | merge) ;; *) echo "no stage '$stage'; stages: construct code verify settle merge" >&2; exit 2 ;; esac
-        one _unit-run "$unit" "$stage" ${forced[@]+"${forced[@]}"} -- "${5:-}" ;;
+        unit=${3:?usage: crew $kind run <$kind> ${stages// /|} [\"<words>\"]}
+        stage=${4:?usage: crew $kind run <$kind> ${stages// /|} [\"<words>\"]}
+        [[ " $stages " == *" $stage "* ]] || { echo "no stage '$stage' for a $kind; stages: $stages" >&2; exit 2; }
+        one _unit-run "$unit" "$stage" ${as[@]+"${as[@]}"} ${forced[@]+"${forced[@]}"} -- "${5:-}" ;;
       *) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
     esac ;;
   fix)

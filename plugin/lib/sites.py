@@ -67,8 +67,8 @@ def sites(fleet, labels):
                 bw = k["bolts"].get(b.name(), {}).get("worktree")
                 if bw:
                     entry.update(site(bw))
-                for u in p.units_of(b.name()):
-                    pl_ = k["places"].get(u.name())
+                for u in p.work_of(b.name()):  # a chore's place is listed as a unit's (plan.11)
+                    pl_ = (k.get("chore_places", {}) if plan.is_chore(u) else k["places"]).get(u.name())
                     if pl_:
                         entry["units"].append(dict(site(pl_["path"]), unit=u.name()))
                 for f in k["fixes"]:
