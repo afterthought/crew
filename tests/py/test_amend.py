@@ -50,6 +50,10 @@ class TestWho:
         with pytest.raises(plan.Refusal, match=said):
             plan.may_write(FLEET, ("unit", "amend"), None)
 
+    def test_the_user_does(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "chuck@mac-studio")
+        assert plan.may_write(FLEET, ("unit", "amend"), None) is None
+
 
 class TestConstructAgain:
     @pytest.mark.parametrize("stage", ["planned", "code", "verify"])

@@ -1279,9 +1279,9 @@ def may_write(fleet, key, a):
     gives bolts; the main level's ops lands them. Any other plan write by an agent crew started is refused, naming
     the planner."""
     name = os.environ.get("CREW_AGENT")
-    if key not in PLAN_WRITES or not name:
-        return
     kind, of = role(fleet, name)
+    if key not in PLAN_WRITES or kind == "user":
+        return
     cmd = " ".join(key)
     if kind == "planner":
         fail(f"the planner changes the plan through a proposal: crew plan propose, not crew {cmd}")
