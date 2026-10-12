@@ -10,7 +10,11 @@ agent may use the call's idempotencyKey: a card's must be a rail row's key the a
 the conductors have, and an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key is
 refused in words naming the key to use, and so is a call crew could not check, in words saying to post it again later,
 since a card crew let through can't be taken back (read.1). A card posted under a row's key the agent owns is then
-checked against its row's form (FORMS), but a batch's, which has no form there yet; a change is checked when this host's card.post entry for the card names a row
+checked against its row's form (FORMS), but a batch's, which has no form there yet, and a proposal's, which is checked
+against the proposal itself: in the form `crew plan card <n>` prints, its unit questions holding the units the
+proposal makes new to a bolt, each once, and no question asking for words (briefs.13); a proposal crew can't read
+refuses the card, saying to post it again later, and one that no longer applies refuses it, saying to write the
+proposal again. A change is checked when this host's card.post entry for the card names a row
 key, for what the change gives it: a landing card's high stakes cleared, options on an approval, steps on any card but
 a landing's, or a landing step that lands the bolt. A card in another form is refused with the form to use. A refused
 call never reaches Pending You. What the half cannot otherwise check, its own input that is not a JSON object and the
@@ -59,8 +63,8 @@ KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
 # the form in the briefs' words. A landing card's steps are those a proof leaves the user, never the landing itself.
 FORMS = {
     "proposal": dict(kinds=("approve",), high=False, options=False, steps=False,
-                     says="a proposal's card is an approval, kind \"approve\", with a note for changes or for dropping "
-                          "it, and no options or steps"),
+                     says="a proposal's card is posted as `crew plan card <n>` prints it, and a change to it changes "
+                          "only its words: no questions, options or steps"),
     "verify": dict(kinds=("choice", "multi"), high=False, options=True, steps=False,
                    says="a verify report's card is a choice, kind \"choice\", or \"multi\" when the user may pick "
                         "several findings, whose options are what you would do about them, and no steps"),
@@ -188,6 +192,90 @@ def form_refusal(key, given, update=False):
     return f"crew refuses card {key}. {says}. This card {listed}. Post it again in that form."
 
 
+def proposal_refusal(label, key, given):
+    """None for a proposal's card in the form `crew plan card <n>` prints it, else the words that refuse it: the form
+    the card takes, and each thing wrong with this one. A proposal that makes no unit new to a bolt, or more than
+    fifteen, has a plain approval; one of one to fifteen asks `plan`, an approval, and units-<k> questions holding its
+    new units each once, a lone one as a choice. No question asks for words (briefs.13). The card's questions are
+    computed as crew plan card computes them, from the branch, fetched once (plan.12); a proposal crew can't read
+    refuses the card (read.1), saying to post it again later; one that no longer applies to the plan refuses it saying
+    to write the proposal again, and a closed one saying only that it has no card, since posting again helps neither."""
+    sys.path.insert(0, str(LIB))
+    import plan
+    n = int(key.split("/")[1])
+    later = f"crew could not check card {key} against proposal {n}: {{}}. Post it again later."
+    try:
+        fleet = plan.crew.load()
+        w, _, p, _ = plan.at_tip(fleet, label, n)
+    except Exception as e:  # a card crew can't check is refused: one let through can't be taken back
+        return later.format(str(e).rstrip("."))
+    try:
+        m = plan.card_model(fleet, label, w, p)
+    except plan.crew.Refusal as e:  # the card is drawn from the branch alone, so this is the proposal, not a read
+        again = (f" Proposal {n} no longer applies to the plan as it stands: write the proposal again with "
+                 f"`crew plan propose <file> --replaces {n}`, and post the card crew plan card prints for it."
+                 if p.get("State") == "open" else "")
+        return f"crew refuses card {key}: {str(e).rstrip('.')}.{again}"
+    except Exception as e:
+        return later.format(str(e).rstrip("."))
+    shown = f"`{plan.crew.HOME}/plugin/bin/crew plan card {n} --label {label}`"
+    new, lone, asks = m["new"], m["lone"], m["questions"]
+    kind, options, questions, action = given.get("kind"), given.get("options"), given.get("questions"), given.get("action")
+    steps = action.get("steps") if isinstance(action, dict) else None
+    wrong = []
+    if len(asks) == 1:
+        says = (f"Proposal {n} makes " + ("no unit" if not new else "more than fifteen units") + " new to a bolt, so its "
+                "card is an approval, kind \"approve\", with a note for changes or for dropping it, and no options, steps "
+                f"or questions, as {shown} prints it")
+        if questions is not None:
+            wrong.append("is a grouped card of questions")
+        elif not isinstance(kind, str):
+            wrong.append("names no kind")
+        elif kind != "approve":
+            wrong.append(f"is {'an' if kind[:1] in 'aeiou' else 'a'} \"{kind}\"")
+        if isinstance(options, list) and options:
+            wrong.append("has options")
+    else:
+        want = "choice" if lone else "multi"
+        says = (f"Proposal {n} makes {len(new)} unit{'' if lone else 's'} new to a bolt, so its card asks `plan`, an "
+                f"approval, and a question of its new units, of kind \"{want}\", as {shown} prints it, and no question of "
+                "kind \"text\": the note is the place for words")
+        asked = [q for q in questions if isinstance(q, dict)] if isinstance(questions, list) else []
+        if not asked:
+            wrong.append("asks no questions" + (", as a plain approval" if kind == "approve" else ""))
+        else:
+            texts = [str(q.get("id")) for q in asked if q.get("kind") == "text"]
+            if texts:
+                wrong.append(f"asks for words in {', '.join(texts)}, of kind \"text\"")
+            if asked[0].get("id") != "plan" or asked[0].get("kind") != "approve":
+                wrong.append("does not ask `plan`, of kind \"approve\", first")
+            for q in asked[1:]:
+                if q.get("kind") != "text" and (q.get("id") not in asks or q.get("id") == "plan" or q.get("kind") != want):
+                    wrong.append(f"asks {q.get('id')}, which is no question of its new units of kind \"{want}\"")
+            held = {q["id"]: [o.get("id") for o in q.get("options") or [] if isinstance(o, dict) and o.get("id") != "leave-out"]
+                    for q in asked[1:] if q.get("id") in asks and q.get("id") != "plan"}
+            units = [u for us in held.values() for u in us]
+            missing = [u for u in new if u not in units]
+            extra = [u for u in dict.fromkeys(units) if u not in new]
+            twice = [u for u in dict.fromkeys(units) if units.count(u) > 1]
+            if missing:
+                wrong.append(f"does not ask about {', '.join(missing)}, new to a bolt in proposal {n}")
+            if extra:
+                wrong.append(f"asks about {', '.join(map(str, extra))}, which proposal {n} does not make new to a bolt")
+            if twice:
+                wrong.append(f"asks about {', '.join(twice)} more than once")
+            if not (missing or extra or twice):
+                for q, us in asks.items():
+                    if q != "plan" and sorted(held.get(q, [])) != sorted(us):
+                        wrong.append(f"does not hold {', '.join(us)} in {q}")
+    if isinstance(steps, list) and any(isinstance(x, dict) for x in steps):
+        wrong.append("has steps for the user to take")
+    if not wrong:
+        return None
+    listed = wrong[0] if len(wrong) == 1 else "; ".join(wrong[:-1]) + "; and " + wrong[-1]
+    return f"crew refuses card {key}. {says}. This card {listed}. Post it again in that form."
+
+
 def posted(record, label, card):
     """The Key and On of this host's card.post entry for a card, from the label's run record of the last 30 days."""
     d = record.ROOT / label / "runs" / record.crew.this_host()
@@ -233,6 +321,8 @@ def form_check(hook, tool):
         raise ValueError("its input is not an object")
     if tool == "post_request":
         key = keyed(given.get("idempotencyKey"))[0]
+        if key and key.startswith("proposal/"):
+            return proposal_refusal(label, key, given)
         return form_refusal(key, given) if key and key.split("/")[0] in FORMS else None
     card = given.get("requestId")
     if not (isinstance(card, str) and REQUEST_ID.match(card)):

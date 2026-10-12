@@ -14,12 +14,14 @@
 # didn't start, another server's tool and the other card tools are not checked for their key. Each refusal scenario of
 # the rail-cards spec. A row's card of the agent's own, posted or changed, the hook then refuses in another form than
 # its row's, naming the form: a landing card that is a step, not high stakes, or has options or a step that lands it; a
-# verify card with no options; a proposal card that is no approval, or one with options or steps; a grouped card; and
-# a change that clears a landing's high stakes or gives a card options or steps its row's has not; a batch card's form
-# is not checked. A card under no row's key is refused for its key, not its form; a change to a card posted on no row's
+# verify card with no options; a proposal card not as `crew plan card` prints it, checked against the proposal: one
+# that makes no unit new to a bolt is an approval with no options, steps or questions, and one with new units asks
+# `plan` and its new units each once, a lone one as a choice, never a text question, so a card missing a unit, asking
+# for words, or posted as a plain approval is refused, and so is one for a proposal crew can't draw; and a change that
+# clears a landing's high stakes or gives a card options or steps its row's has not; a batch card's form is not checked. A card under no row's key is refused for its key, not its form; a change to a card posted on no row's
 # key here, a session crew didn't start and another server's tool pass unchecked; what it can't check, its own input
 # among it, is refused, while the record half never fails.
-# Reads: plugin/hooks/
+# Reads: plugin/hooks/ plugin/lib/picture.py plugin/lib/font.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -287,7 +289,8 @@ ok "a team's ops and its unit slots are refused a card under any key: a team's c
 
 eq "$(gate swb-1-conductor post_request land/tenant-environments/abc1234 '{"kind": "approve", "highStakes": true}')" ""
 eq "$(gate swb-1-conductor post_request verify/checked/20261007-1412 '{"kind": "choice", "options": [{"id": "fix", "label": "Fix it"}]}')" ""
-eq "$(gate wldn-planner post_request proposal/1 '{"kind": "approve"}')" ""
+card1=$(crew plan card 1 | jq -c .card)
+eq "$(gate wldn-planner post_request proposal/1 "$card1")" ""
 ok "a conductor's own landing and verify keys, and the planner's open proposal, go through"
 
 rows="land/tenant-environments/<head> or verify/<unit>/<stamp> for unit x or checked, the head or stamp from the \`card:\` line under its row in \`$CREW/plugin/bin/crew rail --label wldn\`"
@@ -385,21 +388,47 @@ refused post_request "$(card verify/checked/20261007-1412 '{"kind": "approve"}')
 refused post_request "$(card verify/checked/20261007-1412 '{"kind": "choice"}')" "This card has no options."
 passes post_request "$(card verify/checked/20261007-1412 "$(jq -c '{kind: "choice"} + .' <<<"$two")")"
 passes post_request "$(card verify/checked/20261007-1412 "$(jq -c '{kind: "multi"} + .' <<<"$two")")"
-approval="A proposal's card is an approval, kind \"approve\", with a note for changes or for dropping it"
-CREW_AGENT=wldn-planner passes post_request "$(card proposal/1 '{"kind": "approve"}')"
-CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "review"}')" "$approval" 'This card is a "review".'
-CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "fyi"}')" "$approval" 'This card is a "fyi".'
-CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 "$(jq -c '{kind: "approve"} + .' <<<"$two")")" "$approval" "This card has options."
-CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "approve", "action": {"steps": [{"text": "Read the change"}]}}')" \
+# Proposal 3 makes no unit new to a bolt; 4 adds two to the queue, 1 one, and 5 one the plan has had since.
+printf '%s\n' 'Case: Unit x changes.' 'Do: unit amend x "Unit x, again."' > "$T/p3.rec"
+printf '%s\n' 'Case: Two units for the queue.' 'Do: unit add pb "B." --repo switchboard-kit' 'Do: unit add pc "C." --repo switchboard-kit' > "$T/p4.rec"
+printf '%s\n' 'Case: One unit for the queue.' 'Do: unit add later5 "Later." --repo switchboard-kit' > "$T/p5.rec"
+for f in p3 p4 p5; do CREW_AGENT= crew plan propose "$T/$f.rec" >/dev/null 2>&1; done
+CREW_AGENT= crew unit add later5 "Added directly." --repo switchboard-kit >/dev/null
+approval="Proposal 3 makes no unit new to a bolt, so its card is an approval, kind \"approve\", with a note for changes or for dropping it"
+CREW_AGENT=wldn-planner passes post_request "$(card proposal/3 '{"kind": "approve"}')"
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/3 '{"kind": "review"}')" "$approval" 'This card is a "review".'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/3 '{"kind": "fyi"}')" "$approval" 'This card is a "fyi".'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/3 "$(jq -c '{kind: "approve"} + .' <<<"$two")")" "$approval" "This card has options."
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/3 '{"kind": "approve", "action": {"steps": [{"text": "Read the change"}]}}')" \
   "This card has steps for the user to take."
-CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"kind": "action", "action": {"steps": [{"text": "Approve it", "command": "crew plan approve 1"}]}}')" \
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/3 '{"kind": "action", "action": {"steps": [{"text": "Approve it", "command": "crew plan approve 3"}]}}')" \
   "$approval" 'This card is an "action"'
-CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 '{"questions": [{"id": "go", "kind": "approve", "title": "Approve proposal 1?"}]}')" \
-  "This card is a grouped card of questions, and names no kind."
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/3 '{"questions": [{"id": "go", "kind": "approve", "title": "Approve proposal 3?"}]}')" \
+  "This card is a grouped card of questions."
+grouped="Proposal 4 makes 2 units new to a bolt, so its card asks \`plan\`, an approval, and a question of its new units, of kind \"multi\", as \`$CREW/plugin/bin/crew plan card 4 --label wldn\` prints it"
+card4=$(CREW_AGENT= crew plan card 4 | jq -c .card)
+CREW_AGENT=wldn-planner passes post_request "$(card proposal/4 "$card4")"
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '.questions[1].options |= map(select(.id != "pc"))' <<<"$card4")")" \
+  "crew refuses card proposal/4. $grouped" "This card does not ask about pc, new to a bolt in proposal 4."
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '.questions += [{id: "notes", kind: "text", title: "Anything to add?"}]' <<<"$card4")")" \
+  "the note is the place for words" 'This card asks for words in notes, of kind "text".'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 '{"kind": "approve"}')" "$grouped" "This card asks no questions, as a plain approval."
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '.questions[1].options += [{id: "zz", label: "zz"}]' <<<"$card4")")" \
+  "This card asks about zz, which proposal 4 does not make new to a bolt."
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '.questions[0].kind = "choice"' <<<"$card4")")" \
+  'This card does not ask `plan`, of kind "approve", first.'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/4 "$(jq -c '. + {action: {steps: [{text: "Read it"}]}}' <<<"$card4")")" \
+  "This card has steps for the user to take."
+CREW_AGENT=wldn-planner passes post_request "$(card proposal/1 "$card1")"
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/1 "$(jq -c '.questions[1].kind = "multi"' <<<"$card1")")" \
+  'This card asks units-1, which is no question of its new units of kind "choice".'
+CREW_AGENT=wldn-planner refused post_request "$(card proposal/5 '{"kind": "approve"}')" "crew refuses card proposal/5: " \
+  "wldn/main already has unit later5. Proposal 5 no longer applies to the plan as it stands: write the proposal again with \`crew plan propose <file> --replaces 5\`"
+lacks "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$out")" "again later"
 refused post_request "$(card agent-note-1 '{"kind": "action", "action": {"steps": [{"text": "Land it", "command": "crew bolt land tenant-environments"}]}}')" \
   "crew refuses a card under agent-note-1: swb-1-conductor posts a card only under a rail row's key of its own"
 refused post_request "$(card land/y '{"kind": "action"}')" "crew refuses a card under land/y: swb-1-conductor posts a card only under"
-ok "a verify card is a choice with options, a proposal card an approval with a note; a card under no row's key is refused for its key, not its form"
+ok "a verify card is a choice with options; a proposal card is as crew plan card prints it, an approval, or the approval and each new unit once, never words, and none once its proposal no longer applies; a card under no row's key is refused for its key, not its form"
 
 eq "$(entries | wc -l)" "$n"
 ok "a check writes nothing to the run record"
