@@ -44,7 +44,7 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Base Step Outcome Log Rows State Doer Agent When Text Changes Note
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
@@ -52,17 +52,17 @@ DESCRIPTOR = """\
 # amended, the After units' heads a construct's place Took, a forecast's Heads (the later unit's and the other's, <name>@<sha>), its conflicting Paths and how it Reached
 # the later unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), a review
 # batch's Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's
-# Count, a card act's Card (the Pending You card's id) and Key (the rail row's card key), and a deploy's (deploy.py): the
-# commit it goes to as Head and from as Base, a step's Step and Outcome, its Log and the suite's Rows, and an after-deploy
-# step's Key, State, Doer, Agent, When, Text, Changes and Note.
+# Count, a card act's Card (the Pending You card's id) and Key (the rail row's card key), and an operation's (ops.py): a
+# deploy's commit as Head and the one it comes from as Base, its Phase (start, step or end), a step's Step and Outcome, its
+# Log and the suite's Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
-         "Forecast", "Batch", "Units", "Count", "Card", "Key", "Base", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
+         "Forecast", "Batch", "Units", "Count", "Card", "Key", "Base", "Phase", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
          "When", "Text", "Changes", "Note")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
 KINDS = ("unit/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/", "proof/",
-         "batch/", "deploy/")
+         "batch/", "env/")
 
 _count = 0
 _session = ...  # resolved once per process

@@ -288,7 +288,7 @@ eq "$(gate wldn-planner post_request batch/1-1 '{"questions": [{"id": "which", "
 has "$(denied wldn-planner post_request batch/1-2)" "proposal/1 or batch/1-1"
 has "$(denied swb-1-conductor post_request batch/1-1)" "swb-1-conductor posts a card only under a rail row's key of its own"
 has "$(denied wldn-design post_request proposal/1)" "wldn-design owns no card key, since only the planner, the conductors and main-level ops post cards"
-has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "deploys"
+has "$(denied wldn-ops post_request land/tenant-environments/abc1234)" "operations"
 ok "the planner is refused a closed proposal's or batch card's key, naming the open ones, and passes under an open batch card's, whose form is not checked; a conductor is refused a batch's key, and the main level's other agents own no key"
 
 why=$(denied swb-1-conductor create_area area:swb-1-conductor)

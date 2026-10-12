@@ -1,4 +1,4 @@
-# crew rail: everything that waits on the user, in its groups in order (proposals, batches, verify, land, deploys), each row
+# crew rail: everything that waits on the user, in its groups in order (proposals, batches, verify, land, operations), each row
 # with when it began to wait, how long ago that was and the commands that answer it, oldest first; read from the plan,
 # the proposals, the kits and the run record, and writing nothing. Each scenario of the crew-rail spec, and opening a
 # proposal in plannotator with crew plan proposed <n> --open. Each row has its card key and says whether a Pending You
@@ -26,7 +26,7 @@ line_of() { grep -F -- "$2" <<<"$1" || true; }
 
 expect_ok crew rail --label wldn
 has "$out" "What waits on you (wldn), as of "
-eq "$(grep -E '^[a-z]+$' <<<"$out" | tr '\n' ' ')" "proposals batches verify land deploys "
+eq "$(grep -E '^[a-z]+$' <<<"$out" | tr '\n' ' ')" "proposals batches verify land operations "
 eq "$(grep -c '^  none$' <<<"$out")" "5"
 lacks "$out" "card:"; lacks "$out" "open cards with no row"; lacks "$out" "review"
 ok "with nothing waiting, the groups are printed in order, each with none, and there is no review group"

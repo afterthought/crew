@@ -135,13 +135,13 @@ for want in "You post no Pending You card and make no area, whatever a Pending Y
 done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
 expect_ok crewpy brief wldn dispatcher
-for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time" "It is the one tell not about a bolt that is yours" "deploy step\` command that records it done or failed"; do has "$out" "$want"; done
+for want in "bolt give <team>" "up <team>" "account ia" "one bolt deploy at a time" "It is the one tell not about a bolt that is yours" "ops step\` command that records it done or failed"; do has "$out" "$want"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
 for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
   "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" "The word to land is also the word to push main" \
   "git -C <kit>/main push origin main" "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
-  "deploy approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>/<head>\`" "deploy nothing yourself" "keyed \`deploy-step/<env>/<head>/<n>\`" \
+  "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>/<head>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
   "run \`wt merge\` in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"

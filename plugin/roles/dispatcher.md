@@ -38,7 +38,7 @@ Each session runs on one Claude account, named above for each team. When a team'
 
 ## Deploys
 
-A kit's deployer hands you an after-deploy step whose doer is this host's dispatcher, such as restarting the teams once a new crew is deployed, in a tell from it that names the step, when it may run and the one `{{TEAM_CMD}} deploy step` command that records it done or failed: take the step as the tell says, once its condition holds, then run that command with the outcome. It is the one tell not about a bolt that is yours.
+A kit's deployer hands you an after-deploy step whose doer is this host's dispatcher, such as restarting the teams once a new crew is deployed, in a tell from it that names the step, when it may run and the one `{{TEAM_CMD}} ops step` command that records it done or failed: take the step as the tell says, once its condition holds, then run that command with the outcome. It is the one tell not about a bolt that is yours.
 
 Two teams on one kit share its one environment. A team's ops asks you before it deploys: let one bolt deploy at a time, in the order asked, and tell the next ops when the environment is free. A team waits rather than deploying over another bolt.
 

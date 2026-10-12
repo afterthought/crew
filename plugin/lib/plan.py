@@ -4260,7 +4260,7 @@ def review_wait(fleet, a):
 
 # ------------------------------------------------------------------------------------------------ crew rail
 
-RAIL = ("proposals", "batches", "verify", "land", "deploys")
+RAIL = ("proposals", "batches", "verify", "land", "operations")
 
 
 def utc(iso):
@@ -4342,9 +4342,9 @@ def rail_record(fleet, found, props):
                     gives[(l, bolt)] = team
         cards += posted.values()
         held[l] = dict(batches=batches(entries), closed=closed, due=None if missing else {u for u, *_ in due_changes(plan, entries)})
-        import deploy  # deploy.py imports nothing of this module
-        deploys += [dict(r, at=utc(r["at"]), doc=None) for r in deploy.rows(fleet, l, [e for e in entries if (e.get("Act") or "").startswith("deploy.")
-                                                                                       and e.get("Host") == fleet["partitions"][l]["machine"]])]
+        import ops  # ops.py imports nothing of this module
+        deploys += [dict(r, at=utc(r["at"]), doc=None) for r in ops.rows(fleet, l, [e for e in entries if (e.get("Act") or "").startswith("ops.")
+                                                                                    and e.get("Host") == fleet["partitions"][l]["machine"]])]
     return times, cards, unread, landings, gives, held, deploys
 
 
@@ -4522,7 +4522,7 @@ def rail_view(fleet, a):
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # The rail's card keys, as crew's card hook reads them.
 CARD_KEYS = (r"proposal/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}",
-             r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"deploy-step/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}/\d+")
+             r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
 
@@ -4588,14 +4588,14 @@ def card_refusal(fleet, name, label, tool, key):
         return (f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, "
                 f"the head{' or stamp' if units else ''} {rail}.")
     if kind == "main-ops":
-        import deploy  # the partition's deploy rows, read where its main level runs
+        import ops  # the partition's operations rows, read where its main level runs
         p = crew.partition_of(fleet, label)
         if p["machine"] != crew.this_host():
-            return f"{said}: {name} posts its deploys' cards on {p['machine']}, where {label}'s deploys are kept."
-        mine = deploy.open_keys(label)
+            return f"{said}: {name} posts its operations' cards on {p['machine']}, where {label}'s operations are kept."
+        mine = ops.open_keys(label)
         if key in mine:
             return None
-        return (f"{said}: {name} posts a card only under a deploy row's key of {label} open now, "
+        return (f"{said}: {name} posts a card only under an operations row's key of {label} open now, "
                 + (f"{either(mine)}, {rail}." if mine else "and none is open."))
     if kind == "team":
         left = ("Write what a proof leaves that only the user can do or check in your proof file, under Left for the user: "

@@ -6,7 +6,7 @@ posts the deploys' cards), `state.4` (no service: every view reads the run recor
 the host its state lives on). Touches `plan.md`, `briefs.md` and `teams.md`'s area (`plugin/bin/crew`).
 
 **Where the deploys live.** The deployer and main-level ops run where the partition's main level runs, so a deploy's
-entries are that host's run record, and every `crew deploy` command runs there: run anywhere else, it forwards, as the
+entries are that host's run record, and every `crew ops` command runs there: run anywhere else, it forwards, as the
 one asking (`code.3`). A deploy is never read over ssh from another host: the deployer's `word` reads one host.
 
 **Offer, word and end.** An environment has at most one offer open: the latest offer, until it is approved or a deploy
@@ -16,7 +16,7 @@ the open offer's is refused and recorded.
 
 **The card.** The row's card is main-level ops's (`briefs.11`); crew carries no Pending You client of its own (ADR
 0005), so the deployer posts nothing. Holding the card reaches ops's session, which records the word with
-`crew deploy approve`.
+`crew ops approve`.
 
 **Quiet.** No stage agent of a team on the environment's host working, read from herdr there, and no test holding one
 of that host's test slots (`tests.9`).

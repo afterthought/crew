@@ -10,12 +10,14 @@ after-deploy step is in the run record.
 
 ## What Changes
 
-- `crew deploy offer|approve|word|record|step|steps|quiet`, the spelling swancloud's adapter (`crew.sh`) already calls,
-  run where the partition's main level runs, as the one asking, on that host's run record (`deploy.*` entries).
-- An offer is a rail row under a new group, *deploys*, keyed `deploy/<env>/<sha>`, whose card main-level ops posts;
-  holding it is the user's word, recorded with `crew deploy approve`; `crew deploy word` gives it to the deployer for
+- `crew ops offer|approve|word|record|step|steps|quiet`, the operations on an environment, a deploy being one kind (the
+  user, 2026-10-11: a command after a deploy is an operation, not a deployment), which swancloud's adapter (`crew.sh`) calls,
+  run where the partition's main level runs, as the one asking, on that host's run record (`ops.*` entries).
+- An offer is a rail row under a new group, *operations*, keyed `deploy/<env>/<sha>`, whose card main-level ops posts;
+  holding it is the user's word, recorded with `crew ops approve`; `crew ops word` gives it to the deployer for
   one deploy.
-- A user's after-deploy step that waits is a rail row of its own, `deploy-step/<env>/<sha>/<n>`.
+- Every other operation is a step, after the deploy it names or on its own; one the user is to take that waits is a
+  rail row of its own, `op/<env>/<n>`.
 - crew's card hook lets main-level ops post under an open deploy row's key, and no other.
 - main-ops's brief posts the deploy cards and records the word; the dispatcher's takes after-deploy steps the deployer
   hands it.
@@ -23,7 +25,7 @@ after-deploy step is in the run record.
 ## Touches
 
 ```
-plugin/lib/deploy.py
+plugin/lib/ops.py
 plugin/lib/plan.py
 plugin/lib/record.py
 plugin/bin/crew
@@ -36,7 +38,7 @@ docs/architecture/briefs.md
 docs/architecture/_open.md
 openspec/specs/main-level/spec.md
 openspec/specs/crew-rail/spec.md
-tests/t-deploy.sh
+tests/t-ops.sh
 tests/t-rail.sh
 tests/t-batches.sh
 tests/t-cards.sh

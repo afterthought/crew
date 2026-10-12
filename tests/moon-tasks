@@ -26,7 +26,7 @@ ROOT = os.path.dirname(TESTS)
 MOON_YML = os.path.join(TESTS, "moon.yml")
 # The command core: what every crew command runs, whichever test runs it.
 CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plugin/lib/record.py", "/plugin/lib/gather.py",
-        "/plugin/lib/transcript.py", "/plugin/lib/questions.py", "/plugin/lib/deploy.py"]
+        "/plugin/lib/transcript.py", "/plugin/lib/questions.py", "/plugin/lib/ops.py"]
 COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*", "/devenv.nix", "/devenv.lock"]
 HEADER = """\
 # Written by tests/moon-tasks from tests/t-*.sh; never edited by hand. After adding or removing a test, or changing

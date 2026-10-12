@@ -75,7 +75,7 @@ CREW_AGENT=wldn-planner expect_fail "no change of wldn is due for a batch" crew 
 ok "the summary file ends the batch: the run record names its units at their commits, the reviewer is ended and its tab closed"
 
 expect_ok crew rail --label wldn; r=$out
-eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches verify land deploys "
+eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches verify land operations "
 has "$r" "batch 1 (wldn), card 1 of 1: x1 (swb-1), x2 (swb-1), x3 (swb-1), y1 (swb-2), y2 (swb-2)"
 has "$r" "    card:   batch/1-1, none open"
 has "$r" "    answer: crew tell wldn-planner \"On batch 1, these need notes: \""
