@@ -2,9 +2,10 @@
 # with when it began to wait, how long ago that was and the commands that answer it, oldest first; read from the plan,
 # the proposals, the kits and the run record, and writing nothing. Each scenario of the crew-rail spec, and opening a
 # proposal in plannotator with crew plan proposed <n> --open. Each row has its card key and says whether a Pending You
-# card is open for it and whose, an open card for a decision record is listed under a heading of its own with who asked
-# it and when, and an open card whose row is gone is listed with the tell that asks its owner to close it, read from the
-# card entries crew's hook writes in the run record.
+# card is open for it, whose and its id, a newer card its owner posts under the key being the row's and the older lost,
+# an open card for a decision record is listed under a heading of its own with who asked it and when, and an open card
+# whose row is gone is listed with the tell that asks its owner to close it, read from the card entries crew's hook
+# writes in the run record.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -125,10 +126,10 @@ card $box swb-1-conductor card.post unit/checked req_ver-2 "verify/checked/$hc"
 card mac-studio wldn-planner card.post proposal/1 req_prop-1 proposal/1
 expect_ok crew rail --label wldn; r=$out
 has "$(group "$r" verify)" "    card:   verify/checked/$hc, open, asked by swb-1-conductor"
-has "$(group "$r" proposals)" "    card:   proposal/1, open, asked by wldn-planner"
+has "$(group "$r" proposals)" "    card:   proposal/1, open, asked by wldn-planner (req_prop-1)"
 has "$(group "$r" proposals)" "    card:   proposal/2, none open"
 lacks "$r" "open cards with no row"
-ok "a row's card is open from its post until its close, and names who asked it"
+ok "a row's card is open from its post until its close, and names who asked it and its id"
 
 card $box swb-1-conductor card.post unit/checked req_old-1 verify/checked/20260101-0000
 expect_ok crew rail --label wldn; r=$out
@@ -150,7 +151,7 @@ grep -qE "^  $(date +%Y-%m-%d) [0-9]{2}:[0-9]{2}  (<1m|[0-9]m) +land/apex-zones/
 has "$stray" '    answer: crew tell swb-2-conductor "Close your Pending You card land/apex-zones/0000000: its row is gone."'
 card $box swb-2-conductor card.post bolt/apex-zones req_land-2 "land/apex-zones/$hb"
 expect_ok crew rail --label wldn
-eq "$(grep -A2 -F "bolt apex-zones (wldn)" <<<"$out" | tail -1)" "    card:   land/apex-zones/$hb, open, asked by swb-2-conductor"
+eq "$(grep -A2 -F "bolt apex-zones (wldn)" <<<"$out" | tail -1)" "    card:   land/apex-zones/$hb, open, asked by swb-2-conductor (req_land-2)"
 ok "a landing card keyed for an older head of its bolt has no row and is listed with the tell to close it; one under the bolt's head is the row's"
 
 echo again >> "$pc/again"; commit_at 0 "$pc" "fix(checked): a finding"
@@ -194,3 +195,26 @@ has "$out" "$box did not answer"; has "$out" "its units and bolts may also wait 
 eq "$(grep -c '^  none$' <<<"$out")" "4"
 rm "$T/down"
 ok "a host that does not answer is named, the proposals and their cards are still listed, a stray card of its teams is not, and the exit is zero"
+
+# A card lost to its owner (the host signed in to Pending You again) is posted again under its row's key: the newer is
+# the row's card, and the older, which its owner can no longer reach, is on no line, not even among the cards with no row.
+stray() { awk '$0 == "open cards with no row:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$1"; }
+card mac-studio wldn-planner card.post proposal/1 req_prop-2 proposal/1
+expect_ok crew rail --label wldn; r=$out
+eq "$(grep -A5 -F "proposal 1 (wldn)" <<<"$r" | grep -F 'card:')" "    card:   proposal/1, open, asked by wldn-planner (req_prop-2)"
+lacks "$r" "req_prop-1"; lacks "$(stray "$r")" "proposal/1"
+ok "a card its owner posts again under a row's key is the row's, and the older, lost to it, is on no line and among no cards with no row"
+
+card mac-studio wldn-design card.post proposal/1 req_prop-9 proposal/1
+expect_ok crew rail --label wldn
+eq "$(grep -A6 -F "proposal 1 (wldn)" <<<"$out" | grep -F 'card:' | sort)" \
+  "    card:   proposal/1, open, asked by wldn-design (req_prop-9)"$'\n'"    card:   proposal/1, open, asked by wldn-planner (req_prop-2)"
+card mac-studio wldn-design card.close proposal/1 req_prop-9 proposal/1
+ok "another agent's card under a row's key replaces none of its owner's"
+
+expect_ok crew plan approve 1 --label wldn
+expect_ok crew rail --label wldn
+lacks "$out" "proposal 1 (wldn)"
+eq "$(grep -cF 'proposal/1 (wldn), asked by wldn-planner on mac-studio' <<<"$(stray "$out")")" "1"
+lacks "$(stray "$out")" "req_prop-1"
+ok "once its row is gone, only the card its owner posted again is listed with no row"
