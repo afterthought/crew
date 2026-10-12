@@ -87,9 +87,11 @@
 #                                      records the card's answers and applies the approval once it holds them all
 #   crew rail  [--label L]             what waits on the user: proposals, review batches, verify reports and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
-#                                      You card; then any open card whose row is gone. It ends, on every host of the
-#                                      partition, each card session crew started whose card is closed or whose row is
-#                                      gone, and says which, with its host and why, and each host it could not check
+#                                      You card; then the decision records waiting on you, each the design agent's
+#                                      open card for one; then any open card whose row is gone. It ends, on every
+#                                      host of the partition, each card session crew started whose card is closed or
+#                                      whose row is gone, and says which, with its host and why, and each host it
+#                                      could not check
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
 #                                      no move has taken, explorations), Bolt plan (proposals, planned bolts, the
 #                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and

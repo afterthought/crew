@@ -4925,13 +4925,25 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     return rows
 
 
+def record_cards(sv, cards, unread):
+    """The open cards under a decision record's key, oldest first: no row's, so never among the cards with no row. A
+    card is left out when its own host's record did not answer, as stray_cards leaves one out, since its close may not
+    have been read."""
+    out = []
+    for c in cards:
+        down = {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
+        if re.fullmatch(RECORD_KEY, c["key"] or "") and c["host"] not in down:
+            out.append(c)
+    return sorted(out, key=lambda c: (c["at"], c["card"]))
+
+
 def stray_cards(fleet, found, sv, rows, cards, unread):
-    """The open cards that match no row, oldest first. A card is left out when whether it has a row can't be known: its
-    own host's record did not answer, so its close may not have been read, or it is a verify or land card of a unit or
-    bolt whose team's host did not answer."""
+    """The open cards that match no row, oldest first, but a decision record's (record_cards). A card is left out when
+    whether it has a row can't be known: its own host's record did not answer, so its close may not have been read, or
+    it is a verify or land card of a unit or bolt whose team's host did not answer."""
     plans_, rowed, out = {l: p for l, _, _, p in found if p}, {(r["label"], r["key"]) for r in rows}, []
     for c in cards:
-        if (c["label"], c["key"]) in rowed:
+        if (c["label"], c["key"]) in rowed or re.fullmatch(RECORD_KEY, c["key"] or ""):
             continue
         down = {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
         if c["host"] in down:
@@ -5019,10 +5031,11 @@ def rail_read(fleet, labels, board=False, sweep=False):
 def rail_text(fleet, labels, read, now):
     """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
     wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it and
-    whose, oldest first; then any open card whose row is gone, with the tell that asks its owner to close it; then, from
-    a read that swept, each card session ended, with its host and why, and each host whose sessions were not checked. A
-    host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more (the
-    board's) gives the same text."""
+    whose, oldest first; then the decision records waiting on the user, each the design agent's open card for one, with
+    when it was asked and by whom, and no command, since the card is where it is answered; then any open card whose row
+    is gone, with the tell that asks its owner to close it; then, from a read that swept, each card session ended, with
+    its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds
+    a bolt of the plans read, so a read that surveyed more (the board's) gives the same text."""
     found, rows, cards = read["found"], read["rows"], read["cards"]
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
@@ -5040,6 +5053,12 @@ def rail_text(fleet, labels, read, now):
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
             lines += [f"    {'card:':<8}{r['key']}, open, asked by {c['by']}" for c in cards
                       if (c["label"], c["key"]) == (r["label"], r["key"])] or [f"    {'card:':<8}{r['key']}, none open"]
+    records = record_cards(sv, cards, read["unread"])
+    if records:
+        lines += ["", "decision records waiting on you:"]
+    for c in records:
+        lines.append(f"  {c['at'].astimezone():%Y-%m-%d %H:%M}  {age(c['at'], now):<7}  {c['key']} ({c['label']}), "
+                     f"asked by {c['by']} on {c['host']}")
     stray = stray_cards(fleet, found, sv, rows, cards, read["unread"])
     if stray:
         lines += ["", "open cards with no row:"]
@@ -5082,6 +5101,9 @@ CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # The rail's card keys, as crew's card hook reads them.
 CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}",
              r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
+# A decision record's card key, the design agent's: the kit, the record's number and the commit that proposed the record
+# or its amendment (briefs.15). It is no rail row's: the rail lists its open cards apart.
+RECORD_KEY = r"record/([a-z0-9][a-z0-9-]*)/(\d{4})/([0-9a-f]{7})"
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
 CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
@@ -5105,10 +5127,11 @@ def card_refusal(fleet, name, label, tool, key):
     key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
     from proposals.rec, or batch/<n> for one of its batches whose row is open, read from the run record; a
     conductor's land/<bolt>/<head> for the bolt its team holds, or verify/<unit>/<stamp> for a unit of it, read from the
-    plan. Every other agent owns no key. An area's key is create-area:<owner>/<kit> for a kit the agent's team builds
-    or, for the main level, a kit of any team of its partition, read from the teams file. The state branch is fetched
-    once (plan.12), and only for the planner's or a conductor's card; what can't be read is a Refusal naming it
-    (read.1). The user's own name is never checked."""
+    plan. The design agent's is a decision record's, record/<kit>/<number>/<commit> for a kit of any team of its
+    partition, read from the teams file (briefs.15). Every other agent owns no key. An area's key is
+    create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
+    partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
+    conductor's card; what can't be read is a Refusal naming it (read.1). The user's own name is never checked."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
@@ -5164,8 +5187,16 @@ def card_refusal(fleet, name, label, tool, key):
                 "the conductor asks it on the bolt's landing card." if name == f"{of}-ops"
                 else f"Say what you need with `{cmd} needs`, and the conductor gets it.")
         return f"{said}: {name} owns no card key, since a team's cards are its conductor's. {left}"
-    return (f"{said}: {name} owns no card key, since only the planner, the conductors and main-level ops post cards. Tell the partition's "
-            "operator agents what you wait on, as your brief says.")
+    if kind == "design":
+        kits = sorted({fleet["teams"][t]["kit"]["name"] for t in crew.partition_of(fleet, of)["teams"]})
+        m = re.fullmatch(RECORD_KEY, key)
+        if m and m.group(1) in kits:
+            return None
+        return (f"{said}: {name} posts a card only for a decision record, under record/<kit>/<number>/<commit> "
+                + (f"for a kit of {of}'s, {either(kits)}, " if kits else f"for a kit of {of}'s, and no team of {of} builds one, ")
+                + "the commit the one that proposed the record or its amendment.")
+    return (f"{said}: {name} owns no card key, since only the planner, the conductors, main-level ops and, for a decision "
+            "record, the design agent post cards. Tell the partition's operator agents what you wait on, as your brief says.")
 
 
 def old_batch(key):

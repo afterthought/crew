@@ -2,8 +2,9 @@
 # with when it began to wait, how long ago that was and the commands that answer it, oldest first; read from the plan,
 # the proposals, the kits and the run record, and writing nothing. Each scenario of the crew-rail spec, and opening a
 # proposal in plannotator with crew plan proposed <n> --open. Each row has its card key and says whether a Pending You
-# card is open for it and whose, and an open card whose row is gone is listed with the tell that asks its owner to
-# close it, read from the card entries crew's hook writes in the run record.
+# card is open for it and whose, an open card for a decision record is listed under a heading of its own with who asked
+# it and when, and an open card whose row is gone is listed with the tell that asks its owner to close it, read from the
+# card entries crew's hook writes in the run record.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
@@ -159,6 +160,19 @@ stray=$(awk '$0 == "open cards with no row:" {on = 1; next} /^[^ ]/ {on = 0} on'
 eq "$(grep -oE '  verify/[a-z]+/[0-9-]+ ' <<<"$stray" | tr -d ' ' | tr '\n' ' ')" "verify/checked/$hc verify/checked/20260101-0000 "
 has "$stray" "    answer: crew tell swb-1-conductor \"Close your Pending You card verify/checked/$hc: its row is gone.\""
 ok "a unit coded again after its report leaves the list at the next read, and a card its conductor left open is listed as one with no row"
+
+card mac-studio wldn-design card.post record/atlas-kit/0021 req_rec-1 record/atlas-kit/0021/abc1234
+expect_ok crew rail --label wldn
+eq "$(grep -E '^[a-z]' <<<"$out" | tr '\n' '|')" "proposals|batches|verify|land|operations|decision records waiting on you:|open cards with no row:|"
+records=$(awk '$0 == "decision records waiting on you:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$out")
+eq "$(wc -l <<<"$records" | tr -d ' ')" "1"
+grep -qE "^  $(date +%Y-%m-%d) [0-9]{2}:[0-9]{2}  (<1m|[0-9]m) +record/atlas-kit/0021/abc1234 \(wldn\), asked by wldn-design on mac-studio$" <<<"$records" \
+  || fail "the open record card is not listed under its heading:"$'\n'"$out"
+lacks "$(awk '$0 == "open cards with no row:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$out")" "record/"
+card mac-studio wldn-design card.close record/atlas-kit/0021 req_rec-1 record/atlas-kit/0021/abc1234
+expect_ok crew rail --label wldn
+lacks "$out" "record/atlas-kit"; lacks "$out" "decision records waiting on you"
+ok "an open record card is listed under the decision records after the groups, with who asked it and when and no command, never as a card with no row; once closed it is listed nowhere"
 
 records() { cat "$(home_of mac-studio)"/.local/state/crew/wldn/runs/*/*.rec "$(home_of $box)"/.local/state/crew/wldn/runs/*/*.rec 2>/dev/null | wc -l || true; }
 before=$(tip); n=$(records)
