@@ -185,6 +185,14 @@ class TestRecord:
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]
 
+    def test_a_post_refused_by_crew_card_or_pending_you_is_no_card(self):
+        """crew card post records a refused post as card.post with Refused and no Card or Key: the rail, and so the
+        board's markers and the agents' views (code.8), see no card for it."""
+        refused = {"Act": "card.post", "On": ["unit/v1"], "By": "swb-1-conductor", "Host": BOX, "At": "2026-10-12T10:00:00Z",
+                   "Refused": "Pending You refused post_request: Approve requests give their risk in approve.risk."}
+        r = self.read([refused, post("req_1", "batch/1", minutes=1), dict(refused, On=["batch/2"])])
+        assert ([c["card"] for c in r["cards"]], r["held"]["posts"]) == (["req_1"], {"batch/1"})
+
     def test_a_proposal_is_timed_by_its_first_entry_and_a_bolt_by_its_last_give(self):
         r = self.read([{"Act": "plan.propose", "On": ["proposal/1"], "At": "2026-10-12T10:00:00Z"},
                        {"Act": "plan.propose", "On": ["proposal/1"], "At": "2026-10-12T11:00:00Z"},
