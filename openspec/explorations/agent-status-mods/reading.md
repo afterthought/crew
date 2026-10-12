@@ -116,10 +116,10 @@ About 500 lines in six parts, built on `recovery/mods`:
 | logic cases in `tests/py/test_board.py` (14, one pinning every key the mod reads) | ~110 |
 | the journey's check that the refresh writes the views (`t-journey-board`) | 3 |
 | the mod, `plugin/hooks/status.js`, and `"modules"` in `hooks.json`, `plugin/tsconfig.json` | 95 |
-| the mod's cases, `plugin/tests/status.test.ts` (6, `claude plugin test`) | 73 |
+| the mod's cases, `plugin/tests/status.test.ts` (3, `claude plugin test`), and the suite's task `mod` that runs them (`tests/mod`, `tests/moon-tasks`) | ~80 |
 | README | 1 paragraph |
 
-`claude plugin validate plugin` passes (hooks `session.start`, `ui.render{component=AbovePrompt}`; calls `$.clock`, `$.env.get`, `$.fs.read`, `$.fs.stat`, `$.session.id`, `$.ui.invalidate`, `$.ui.resolve`; reads `CREW_AGENT`, `CREW_LABEL`, `HOME`). The mod's six cases pass and three of them fail when it looks up the wrong view. The logic tier is 682 passed, and `tests/suite --affected` 19 passed, 0 failed.
+`claude plugin validate plugin` passes (hooks `session.start`, `ui.render{component=AbovePrompt}`; calls `$.clock`, `$.env.get`, `$.fs.read`, `$.fs.stat`, `$.session.id`, `$.ui.invalidate`, `$.ui.resolve`; reads `CREW_AGENT`, `CREW_LABEL`, `HOME`). The mod's three cases pass, each failing when the mod draws the wrong view, and run in crew's suite as the task `mod` (`tests.11`'s details: the host's `claude` as a test runner only). The logic tier is 682 passed, and `tests/suite --affected` 20 passed, 0 failed.
 
 The user saw it on a real screen on 2026-10-12 ("That looks great") and asked that each bolt be told apart by its product and team, which every bolt's line now leads with.
 
@@ -127,6 +127,5 @@ The user saw it on a real screen on 2026-10-12 ("That looks great") and asked th
 
 1. Land it as a bolt? It changes the plugin every session on mac-studio loads, so it reaches every running agent the moment it lands, and each landing that touches `plugin/` afterwards puts one dim reload line in each session's transcript. Recommendation: yes, as a small bolt of its own for a crew team, these two commits as its one unit.
 2. After it lands, bring each partition's operator workspace up again (`crew operator up swancloud`, `crew operator up madswan`, and wldn's on the box), so the rail tab runs the loop that writes the frames: today none does. Recommendation: yes, by main-level ops on the landing.
-3. Should the mod's own cases join crew's suite? They need the real `claude` binary (no session, model or network), which tests.11 leaves no tier for. Recommendation: keep them outside the suite, run by hand when the mod changes, unless you want a contract case for it.
-4. Is the pip form right? ○ ◔ ◑ ◕ ● read as a stage at a glance, but they are not ASCII. Recommendation: keep them; the board's own markers are ✓ ✎ already.
-5. Anything for unit agents or ops? Recommendation: not yet; add a `/board` pane only if the band proves too small.
+3. Is the pip form right? ○ ◔ ◑ ◕ ● read as a stage at a glance, but they are not ASCII. Recommendation: keep them; the board's own markers are ✓ ✎ already.
+4. Anything for unit agents or ops? Recommendation: not yet; add a `/board` pane only if the band proves too small.

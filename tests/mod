@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# crew's mod's own cases, plugin/tests/*.test.ts, under Claude Code's test kit: `claude plugin test plugin`, the host's
+# claude run as a test runner only, with no session, model, sign-in or network, and no agent (tests.11). The cases
+# draw the band the mod puts above a crew agent's prompt from views they hand it; what each view says is the logic
+# tier's (code.8). tests/suite runs this as the task mod (tests/moon-tasks).
+#
+# claude plugin test refuses any option before `plugin`, so a claude on PATH that wraps the program with session
+# options of its own (swancloud's account wrapper puts --settings and --plugin-dir first) cannot run it: this runs the
+# program such a wrapper execs, read from its last exec line and checked to answer --version as Claude Code.
+# CREW_TEST_CLAUDE names another program to run.
+set -uo pipefail
+cd "$(dirname "$0")/.." || exit 2
+claude=${CREW_TEST_CLAUDE:-}
+if [[ -z $claude ]]; then
+  claude=$(command -v claude) || { echo "tests/mod: no claude on PATH to run crew's mod's cases with" >&2; exit 2; }
+  if [[ $(head -c 2 "$claude") == '#!' ]]; then
+    claude=$(sed -n 's|^[[:space:]]*exec \(/[^ ]*/bin/claude\) .*|\1|p' "$claude" | tail -1)
+  fi
+fi
+if [[ -z $claude ]] || ! "$claude" --version 2>/dev/null | grep -q '(Claude Code)$'; then
+  echo "tests/mod: cannot find the Claude Code that runs crew's mod's cases: ${claude:-the last exec of $(command -v claude)} does not answer --version as Claude Code; name one with CREW_TEST_CLAUDE" >&2
+  exit 2
+fi
+exec "$claude" plugin test plugin

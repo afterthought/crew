@@ -1,6 +1,7 @@
-// crew's mod (hooks/status.js) on the views the rail tab writes (board.py agent_views): what each session draws above
-// its prompt. What each view says is crew's logic tier (tests/py/test_board.py); this checks only that the mod finds
-// its agent's view and draws it. Run by hand: claude plugin test plugin
+// crew's mod (hooks/status.js) on the views the rail tab writes (board.py agent_views): that a crew agent's session
+// finds its own view, by its environment or its session record, and draws it above its prompt, with the stale line once
+// the views are old. Each case fails when the mod draws the wrong view. What each view says is crew's logic tier
+// (tests/py/test_board.py, code.8). tests/suite runs these as the task mod, through tests/mod.
 import { expect, mock, test } from 'claude-code/testing'
 
 const READ_AT = Date.parse('2026-10-12T14:00:00Z')
@@ -53,21 +54,4 @@ test('views older than the rail tab refreshes them say when they were read', asy
 test('a session herdr resumed bare finds its agent in its session record', async ($, on) => {
   const ui = await band($, on, { record: 'CREW_AGENT=crw-1-conductor\nCREW_LABEL=swancloud\nCREW_CWD=/work\n' })
   expect(await ui.find({ type: 'Text', text: /curation-and-holds/ })).toBeDefined()
-})
-
-test('with no views written on the host, one line says what writes them', async ($, on) => {
-  const ui = await band($, on, { env: { CREW_AGENT: 'crw-1-conductor', CREW_LABEL: 'swancloud' }, views: null })
-  expect(await ui.find({ type: 'Text', text: /no board for swancloud on this host yet.*crew operator up swancloud/ })).toBeDefined()
-})
-
-test('an agent crew gives no view draws nothing of crew\'s', async ($, on) => {
-  const unit = await band($, on, { env: { CREW_AGENT: 'crw-1-unit-1', CREW_LABEL: 'swancloud' } })
-  expect(await unit.find({ type: 'Text', text: /curation-and-holds/ })).toBeUndefined()
-  expect(await unit.find({ type: 'Text', text: 'drawn by Claude Code' })).toBeDefined()
-})
-
-test('a session that is no crew agent draws nothing of crew\'s', async ($, on) => {
-  const ui = await band($, on)
-  expect(await ui.find({ type: 'Text', text: /crew/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: 'drawn by Claude Code' })).toBeDefined()
 })

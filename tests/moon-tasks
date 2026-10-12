@@ -2,7 +2,9 @@
 """Generate crew's moon tasks: tests/moon-tasks [--check].
 
 A task for each of the logic and contract tiers (tests/py and tests/contract, record 0022), run by pytest, its
-inputs plugin/lib, plugin/roles (whose definitions name each stage's effort), the tier's folder and crew's devenv files; and one task per end-to-end test, tests/t-*.sh, written
+inputs plugin/lib, plugin/roles (whose definitions name each stage's effort), the tier's folder and crew's devenv files,
+and for the logic tier the mod it reads keys from (code.8); a task, mod, for crew's mod's own cases, run by tests/mod
+under Claude Code's test kit, its inputs the mod, the files that load it, its cases and the runner; and one task per end-to-end test, tests/t-*.sh, written
 into tests/moon.yml, the live tests (t-*-live.sh) left out. Each end-to-end task runs its one test through tests/run,
 tagged suite, and its inputs are everything the test's outcome depends on in crew's tree
 (tests.10): the command core every crew command crosses (CORE: plugin/bin/, the modules plan.py and crew.py import),
@@ -36,6 +38,10 @@ COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/
 TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js"]))
          if os.path.isdir(os.path.join(ROOT, f))]
 TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*", "/devenv.nix", "/devenv.lock"]
+# crew's mod's own cases under Claude Code's test kit (tests/mod, tests.11): its inputs the mod, the plugin's manifest and
+# hooks file that load it, its cases and the runner, in a checkout that has the runner.
+MOD = (["/plugin/hooks/status.js", "/plugin/hooks/hooks.json", "/plugin/.claude-plugin/plugin.json", "/plugin/tsconfig.json",
+        "/plugin/tests/**/*", "/tests/mod", "/devenv.nix", "/devenv.lock"] if os.path.isfile(os.path.join(TESTS, "mod")) else None)
 HEADER = """\
 # Written by tests/moon-tasks from tests/t-*.sh and the pytest tiers; never edited by hand. After adding or removing a test, or changing
 # what one reads (its `# Reads:` line), run tests/moon-tasks and commit this file: tests/suite refuses to run while
@@ -132,6 +138,12 @@ def tasks():
                         f"    inputs: [{', '.join(repr(i) for i in inputs)}]\n"
                         f"    tags: [suite]\n"
                         f"    options: {{ runFromWorkspaceRoot: true }}\n")
+    if MOD:
+        blocks["mod"] = (f"  mod:\n"
+                         f"    command: 'tests/mod'\n"
+                         f"    inputs: [{', '.join(repr(i) for i in MOD)}]\n"
+                         f"    tags: [suite]\n"
+                         f"    options: {{ runFromWorkspaceRoot: true }}\n")
     for name, path in tests():
         with open(path) as f:
             text = f.read()
@@ -178,7 +190,7 @@ def committed():
 def check():
     want, problems = tasks()
     have = committed()
-    names = {n for n, _ in tests()} | {n for n, _, _ in TIERS}
+    names = {n for n, _ in tests()} | {n for n, _, _ in TIERS} | ({"mod"} if MOD else set())
     if have is None:
         stale = ["tests/moon.yml is missing or not what tests/moon-tasks writes"]
     else:
