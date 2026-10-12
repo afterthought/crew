@@ -1,6 +1,7 @@
 """crew bolt new|order|drop on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
-reads given. give and land, which make and remove a bolt's branch and worktree, and the commits every write makes,
-are t-bolt's."""
+reads given; which bolt a give hands a team (plan.to_give, plan.holding), and when a bolt lands (plan.land_refusal).
+The branch and worktree give makes and land removes, and the commits every write makes, are the journey's
+(t-journey-units)."""
 import pytest
 from facts import FactsWrite, apply, known, plan_text, units_of
 
@@ -71,3 +72,50 @@ class TestDrop:
     def test_requeue_is_refused_while_a_units_stage_cannot_be_told(self):
         assert refusal(fresh(), 'bolt drop tenant-environments "x" --requeue', stages={"lint-once": "unknown"}) == (
             "cannot tell unit lint-once's stage: its host did not answer")
+
+
+class TestGive:
+    def test_the_team_gets_its_kits_first_bolt_no_team_holds_or_the_one_named(self):
+        p = fresh().plan
+        assert plan.to_give(p, None, "swb-2", KIT, "wldn").name() == "console-pages"
+        assert plan.to_give(p, p.bolt("board-builds"), "brd-1", BOARD, "wldn").name() == "board-builds"
+
+    @pytest.mark.parametrize("bolt, team, said", [
+        ("board-builds", "swb-2", "bolt board-builds is in breadboard-kit, and swb-2 builds switchboard-kit"),
+        ("tenant-environments", "swb-2", "bolt tenant-environments is held by swb-1")])
+    def test_a_bolt_of_another_kit_or_held_is_refused(self, bolt, team, said):
+        p = fresh().plan
+        with pytest.raises(plan.Refusal, match=said):
+            plan.to_give(p, p.bolt(bolt), team, KIT, "wldn")
+
+    def test_with_none_free_it_says_so(self):
+        with pytest.raises(plan.Refusal, match="wldn/main has no planned bolt in rocs-kit for rcs-1"):
+            plan.to_give(fresh().plan, None, "rcs-1", "rocs-kit", "wldn")
+
+    def test_a_team_holding_a_bolt_is_given_none_until_it_lands(self):
+        p = fresh().plan
+        held = p.bolt("tenant-environments")
+        assert plan.holding("swb-1", held, p, lambda u: "ready") == (
+            "swb-1 holds bolt tenant-environments, whose unit lint-once has not landed (ready)")
+        assert plan.holding("swb-1", held, p, lambda u: "landed") == (
+            "swb-1 holds bolt tenant-environments, landed but still in the plan: crew bolt land tenant-environments")
+        assert plan.holding("swb-1", p.bolt("board-builds"), p, lambda u: "ready") == "swb-1 holds bolt board-builds, which has no units yet"
+
+
+class TestLand:
+    def land(self, stages, outside=()):
+        return plan.land_refusal("console-pages", ["a-console-page", "a-console-filter"],
+                                 lambda u: {"stage": stages[u], "why": "its host did not answer"}, list(outside), "wldn")
+
+    def test_lands_once_every_unit_has_landed_and_been_in_a_batch(self):
+        assert self.land({"a-console-page": "landed", "a-console-filter": "landed"}) is None
+
+    def test_a_unit_not_landed_on_main_refuses_it(self):
+        assert self.land({"a-console-page": "landed", "a-console-filter": "merged"}) == "unit a-console-filter has not landed on main: it is merged"
+        assert self.land({"a-console-page": "unknown", "a-console-filter": "landed"}) == (
+            "cannot tell whether unit a-console-page has landed: its host did not answer")
+
+    def test_a_change_no_batch_has_held_refuses_it(self):
+        assert self.land({"a-console-page": "landed", "a-console-filter": "landed"}, ["a-console-page", "a-console-filter"]) == (
+            "bolt console-pages lands only once every unit's latest change has been in a batch, and a-console-page or "
+            "a-console-filter have not: a batch is due for them (crew review wldn)")

@@ -115,3 +115,39 @@ def test_a_range_diff_that_fails_is_named_in_gits_words_without_its_usage(repo, 
     err = capsys.readouterr().err
     assert err.startswith("git range-diff main..bolt/b main..fix/b/f could not be read: ")
     assert "usage:" not in err
+
+
+def rebase(repo, tmp_path, unit, src, to):
+    """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit>."""
+    import plan
+    return subprocess.run(["bash", "-c", plan.REBASE, "crew", str(tmp_path / "place"), src, to, unit], capture_output=True, text=True)
+
+
+def test_a_move_rebases_the_units_own_commits_onto_the_new_bolt_and_tracks_it(repo, tmp_path):
+    """plan.op_unit_move: the unit's commits beyond its old bolt go onto the new bolt, which its branch then tracks,
+    the old bolt's commits dropping out; the head it was at is printed for the undo."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/te"); repo.git("branch", "bolt/cp")
+    repo.git("checkout", "-q", "bolt/te"); repo.commit("feat: te's own", {"te": "1\n"})
+    repo.git("worktree", "add", "-q", "--track", "-b", "unit/c", str(tmp_path / "place"), "bolt/te")
+    subprocess.run(["git", "-C", str(tmp_path / "place"), "commit", "-q", "--allow-empty", "-m", "feat(c): its own"], check=True)
+    orig = repo.git("rev-parse", "unit/c")
+    r = rebase(repo, tmp_path, "c", "te", "cp")
+    assert r.returncode == 0 and r.stdout.strip() == orig
+    assert repo.git("log", "--format=%s", "bolt/cp..unit/c") == "feat(c): its own"
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/c") == "bolt/cp"
+
+
+def test_a_move_whose_rebase_conflicts_leaves_the_branch_and_place_as_they_were(repo, tmp_path):
+    """plan.op_unit_move: a rebase that conflicts is aborted, exit 3, so the move is abandoned and the plan unchanged."""
+    repo.commit("main", {"same": "1\n"})
+    repo.git("branch", "bolt/te"); repo.git("branch", "bolt/cp")
+    repo.git("checkout", "-q", "bolt/cp"); repo.commit("feat: cp's way", {"same": "cp\n"})
+    repo.git("worktree", "add", "-q", "--track", "-b", "unit/d", str(tmp_path / "place"), "bolt/te")
+    (tmp_path / "place" / "same").write_text("d\n")
+    subprocess.run(["git", "-C", str(tmp_path / "place"), "commit", "-qam", "feat(d): d's way"], check=True)
+    tip = repo.git("rev-parse", "unit/d")
+    r = rebase(repo, tmp_path, "d", "te", "cp")
+    assert r.returncode == 3
+    assert repo.git("rev-parse", "unit/d") == tip
+    assert subprocess.run(["git", "-C", str(tmp_path / "place"), "status", "--porcelain"], capture_output=True, text=True).stdout == ""

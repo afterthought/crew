@@ -2,7 +2,7 @@
 """Generate crew's moon tasks: tests/moon-tasks [--check].
 
 A task for each of the logic and contract tiers (tests/py and tests/contract, record 0022), run by pytest, its
-inputs plugin/lib, the tier's folder and crew's devenv files; and one task per end-to-end test, tests/t-*.sh, written
+inputs plugin/lib, plugin/roles (whose definitions name each stage's effort), the tier's folder and crew's devenv files; and one task per end-to-end test, tests/t-*.sh, written
 into tests/moon.yml, the live tests (t-*-live.sh) left out. Each end-to-end task runs its one test through tests/run,
 tagged suite, and its inputs are everything the test's outcome depends on in crew's tree
 (tests.10): the command core every crew command crosses (CORE: plugin/bin/, the modules plan.py and crew.py import),
@@ -33,7 +33,7 @@ COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/
 # The two pytest tiers: name, folder. Each is one task over its whole folder (tests.5, tests.11), in a checkout that
 # has the folder.
 TIERS = [(n, f) for n, f in (("contract", "tests/contract"), ("logic", "tests/py")) if os.path.isdir(os.path.join(ROOT, f))]
-TIER_INPUTS = ["/plugin/lib/**/*", "/devenv.nix", "/devenv.lock"]
+TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*", "/devenv.nix", "/devenv.lock"]
 HEADER = """\
 # Written by tests/moon-tasks from tests/t-*.sh and the pytest tiers; never edited by hand. After adding or removing a test, or changing
 # what one reads (its `# Reads:` line), run tests/moon-tasks and commit this file: tests/suite refuses to run while

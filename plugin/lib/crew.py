@@ -411,7 +411,41 @@ def taken_within():
     return int(v)
 
 
-def send_taken(fleet, name, text, ready_wait=READY_WAIT):
+class Pane:
+    """An agent's pane as the taken-or-sent-again exchange reads it and types into it (teams.15): herdr on the agent's
+    host, and its session's transcript there, read by transcript.py piped to the host; the clock it waits by. A logic
+    test hands send_taken a pane of its own."""
+
+    def __init__(self, fleet, name):
+        self.fleet, self.name = fleet, name
+        self.host, self.session = place_of_agent(fleet, name)
+
+    def reading(self):
+        return agent_reading(self.fleet, self.name)
+
+    def agent(self):
+        return read_agent(self.fleet, self.name)
+
+    def end(self, sid):
+        return piped(self.fleet, self.host, TRANSCRIPT, "transcript", "end", sid)
+
+    def received(self, sid, size, text):
+        return piped(self.fleet, self.host, TRANSCRIPT, "transcript", "received", sid, str(size), text)
+
+    def herdr(self, *args):
+        return on_machine(self.fleet, self.host, ["herdr", "--session", self.session, "agent", *args])
+
+    def unanswered(self, r):
+        return unanswered(self.host, r)
+
+    def now(self):
+        return time.monotonic()
+
+    def sleep(self, seconds):
+        time.sleep(seconds)
+
+
+def send_taken(fleet, name, text, ready_wait=READY_WAIT, pane=None):
     """Send an agent a prompt so that it is taken or sent again (teams.15). crew waits until the agent is ready for
     input (ready_for), notes where its session's transcript ends, sends the text, and reads the transcript for it
     (read_back). Not taken while the agent sits idle or done, its input is cleared with one ctrl+c, which Claude Code
@@ -420,75 +454,74 @@ def send_taken(fleet, name, text, ready_wait=READY_WAIT):
     took it, or was never ready and nothing was typed, or ("unread", what) when crew could not tell whether it took
     it: then nothing more is sent and nothing is pressed (read.1). herdr's own --wait gate is not used: it reads
     whether the agent got busy, not whether the prompt landed, and herdr warns against sending again on it."""
-    host, session = place_of_agent(fleet, name)
+    pane = pane or Pane(fleet, name)
     taken_within()  # a limit crew can't read refuses before anything is typed
-    herdr = ["herdr", "--session", session, "agent"]
     for sending in (1, 2):
-        sid, not_ready = ready_for(fleet, name, ready_wait)
+        sid, not_ready = ready_for(pane, ready_wait)
         if not_ready:
             return not_ready
-        end = piped(fleet, host, TRANSCRIPT, "transcript", "end", sid)
+        end = pane.end(sid)
         if isinstance(end, str):
             return "unread", end
         if not isinstance(end.get("size"), int):
-            return "unread", f"crew's reading of its transcript on {host} gave no answer crew reads"
-        r = on_machine(fleet, host, herdr + ["prompt", name, text])
+            return "unread", f"crew's reading of its transcript on {pane.host} gave no answer crew reads"
+        r = pane.herdr("prompt", name, text)
         if r.returncode:
             # herdr's own check, at the moment of typing, refuses a question opened since crew read the agent, typing nothing.
             if herdr_error(r.stderr) == "agent_blocked":
                 return "never", "as it was waiting on a question in its pane"
-            return "unread", unanswered(host, r) or f"herdr on {host} did not send it ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})"
-        how, why = read_back(fleet, name, host, sid, end["size"], text)
+            return "unread", pane.unanswered(r) or f"herdr on {pane.host} did not send it ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})"
+        how, why = read_back(pane, sid, end["size"], text)
         if how != "not taken":
             return (how, sending) if how == "taken" else (how, why)
-        r = on_machine(fleet, host, herdr + ["send-keys", name, "ctrl+c"])
+        r = pane.herdr("send-keys", name, "ctrl+c")
         if r.returncode:
-            return "unread", unanswered(host, r) or f"crew could not clear its input on {host}, so it may still hold the prompt"
+            return "unread", pane.unanswered(r) or f"crew could not clear its input on {pane.host}, so it may still hold the prompt"
         if sending == 1:
-            time.sleep(CLEARED)
+            pane.sleep(CLEARED)
     return "never", "sent twice"
 
 
-def ready_for(fleet, name, wait):
-    """Wait, up to wait seconds, until the agent is ready for input: herdr reports it idle or done, it waits on no
+def ready_for(pane, wait):
+    """Wait, up to wait seconds, until the pane's agent is ready for input: herdr reports it idle or done, it waits on no
     question in its pane, and herdr names its session. Returns (its session id, None), or (None, ("never", why)) when
     it is not ready in time, or (None, ("unread", what))."""
-    deadline = time.monotonic() + wait
+    deadline = pane.now() + wait
     while True:
-        status, asking, sid, unread = agent_reading(fleet, name)
+        status, asking, sid, unread = pane.reading()
         if unread:
             return None, ("unread", unread)
         if status in ("idle", "done") and not asking and sid:
             return sid, None
-        if time.monotonic() >= deadline:
+        if pane.now() >= deadline:
             return None, ("never", "as it was not up" if status is None else "as it was waiting on a question in its pane"
                           if asking else "as herdr named no session for it" if not sid else f"as herdr still reported it {status}")
-        time.sleep(1)
+        pane.sleep(1)
 
 
-def read_back(fleet, name, host, sid, size, text):
+def read_back(pane, sid, size, text):
     """Read, about once a second for up to taken_within() seconds, whether the agent's session received the text past
     size bytes into its transcript, or from the start of the transcript of another session, when herdr names another
     now. Returns ("taken", None) when it did; ("not taken", None) when the time passes with the agent idle or done;
     ("unread", what) when crew cannot tell: the agent is blocked, gone, or still working WORKING_GRACE seconds on with
     no record of the prompt, which it may have taken with the record still to come, or a reading failed."""
-    deadline, working = time.monotonic() + taken_within(), False
+    deadline, working = pane.now() + taken_within(), False
     while True:
-        a, unread = read_agent(fleet, name)
+        a, unread = pane.agent()
         sess = (a or {}).get("agent_session")
         now = sess.get("value") if isinstance(sess, dict) and isinstance(sess.get("value"), str) and sess["value"] else sid
-        got = unread or piped(fleet, host, TRANSCRIPT, "transcript", "received", now, str(size if now == sid else 0), text)
+        got = unread or pane.received(now, size if now == sid else 0, text)
         if isinstance(got, str):
             return "unread", got
         if got.get("received") is True:
             return "taken", None
         if got.get("received") is not False:
-            return "unread", f"crew's reading of its transcript on {host} gave no answer crew reads"
-        if time.monotonic() >= deadline:
+            return "unread", f"crew's reading of its transcript on {pane.host} gave no answer crew reads"
+        if pane.now() >= deadline:
             if working:
                 return "unread", (f"it went to work, and its transcript showed no prompt received {WORKING_GRACE} seconds "
                                   "on, so it may have taken it")
-            status, asking, _, unread = agent_reading(fleet, name)
+            status, asking, _, unread = pane.reading()
             if unread:
                 return "unread", unread
             if status in ("idle", "done") and not asking:
@@ -496,8 +529,8 @@ def read_back(fleet, name, host, sid, size, text):
             if status != "working":
                 return "unread", ("it is no longer up" if status is None else "it is waiting on a question in its pane"
                                   if asking else f"herdr reports it {status}")
-            working, deadline = True, time.monotonic() + WORKING_GRACE
-        time.sleep(1)
+            working, deadline = True, pane.now() + WORKING_GRACE
+        pane.sleep(1)
 
 
 GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "

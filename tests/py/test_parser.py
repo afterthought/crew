@@ -25,3 +25,10 @@ def test_a_run_parses_as_the_whole_parser_parses_it(argv):
 
 def test_a_name_that_is_no_command_is_not_built():
     assert "no-such-command" not in plan.parser(only="no-such-command").built
+
+
+def test_a_unit_is_given_no_approval_to_run(capsys):
+    """plan.6: a unit whose change is committed goes on to code with no approval, so there is no command to give one."""
+    with pytest.raises(SystemExit):
+        plan.parser(only="unit").parse_args(["unit", "approve", "c"])
+    assert "invalid choice: 'approve'" in capsys.readouterr().err

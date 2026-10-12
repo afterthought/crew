@@ -1084,11 +1084,19 @@ def tidy_after(fleet, t, what):
     host that does not answer leaves that to the team's next read, and the write stands."""
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"]))
     READ.drop_kit(t["machine"], t["kit"]["main"])
-    if r.returncode:
-        why = "did not answer" if r.returncode == 255 else "failed (" + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1] + ")"
-        print(f"{t['name']}'s host {why}, so its worktrees for {what} are not removed yet: the team's next read removes them")
-    elif (r.stdout + r.stderr).strip():
-        print((r.stdout + r.stderr).strip())
+    said = tidied(t["name"], what, r.returncode, r.stdout, r.stderr)
+    if said:
+        print(said)
+
+
+def tidied(team, what, code, out, err):
+    """What a plan write that ended work says of the tidy it asked of the team's host: what the tidy said, or, when the
+    host did not answer (ssh's 255) or the tidy failed, that the team's next read removes what is over; the write
+    stands either way."""
+    if code:
+        why = "did not answer" if code == 255 else "failed (" + ((err or out).strip().splitlines() or [f"exit {code}"])[-1] + ")"
+        return f"{team}'s host {why}, so its worktrees for {what} are not removed yet: the team's next read removes them"
+    return (out + err).strip()
 
 
 # --------------------------------------------------------------------------------------------------- bolts
@@ -1108,26 +1116,13 @@ def bolt_give(fleet, a):
     held = held_by(plan, t["name"])
     if held:
         st = stages_for(fleet, plan, held)
-        for b in held:
-            open_ = [(u.name(), st.of(u.name())["stage"]) for u in plan.units_of(b.name()) if st.of(u.name())["stage"] != "landed"]
-            if open_:
-                fail(f"{t['name']} holds bolt {b.name()}, whose unit {open_[0][0]} has not landed ({open_[0][1]})")
-            if not plan.units_of(b.name()):
-                fail(f"{t['name']} holds bolt {b.name()}, which has no units yet")
-            fail(f"{t['name']} holds bolt {b.name()}, landed but still in the plan: crew bolt land {b.name()}")
+        fail(holding(t["name"], held[0], plan, lambda n: st.of(n)["stage"]))
     base = fresh_base(fleet, t)
 
     def change(w):
         again = held_by(w.plan, t["name"])
         not again or fail(f"{t['name']} holds bolt {again[0].name()} since {tip[:7]}")
-        if a.bolt:
-            b = w.bolt(a.bolt)
-            b.get("Repo") == kit or fail(f"bolt {a.bolt} is in {b.get('Repo')}, and {t['name']} builds {kit}")
-            not b.get("Team") or fail(f"bolt {a.bolt} is held by {b.get('Team')}")
-        else:
-            free = [b for b in w.plan.bolts() if b.get("Repo") == kit and not b.get("Team")]
-            free or fail(f"{label}/main has no planned bolt in {kit} for {t['name']}")
-            b = free[0]
+        b = to_give(w.plan, w.bolt(a.bolt) if a.bolt else None, t["name"], kit, label)
         b.set("Team", t["name"])
         w.subject = f"plan({b.name()}): give to {t['name']}"
         w.quiet = {t["name"]}  # greeted below, once its bolt's worktree exists
@@ -1152,19 +1147,53 @@ def bolt_give(fleet, a):
     crew.greet(fleet, t["name"], first=f"Your team now holds the bolt {b}. ", wait=90 if "conductor" in up else 0)
 
 
+def holding(team, b, plan, stage_of):
+    """Why a team that holds a bolt is given no other (teams.16 is proposed, not built): a unit of it that has not
+    landed, the bolt having no units yet, or every unit landed and the bolt not yet."""
+    open_ = [(u.name(), stage_of(u.name())) for u in plan.units_of(b.name()) if stage_of(u.name()) != "landed"]
+    if open_:
+        return f"{team} holds bolt {b.name()}, whose unit {open_[0][0]} has not landed ({open_[0][1]})"
+    if not plan.units_of(b.name()):
+        return f"{team} holds bolt {b.name()}, which has no units yet"
+    return f"{team} holds bolt {b.name()}, landed but still in the plan: crew bolt land {b.name()}"
+
+
+def to_give(plan, b, team, kit, label):
+    """The bolt a give hands a team: the one named (b), refused when it is in a kit the team does not build or another
+    team holds it; else the first bolt of the team's kit no team holds."""
+    if b is not None:
+        b.get("Repo") == kit or fail(f"bolt {b.name()} is in {b.get('Repo')}, and {team} builds {kit}")
+        not b.get("Team") or fail(f"bolt {b.name()} is held by {b.get('Team')}")
+        return b
+    free = [x for x in plan.bolts() if x.get("Repo") == kit and not x.get("Team")]
+    return free[0] if free else fail(f"{label}/main has no planned bolt in {kit} for {team}")
+
+
+def land_refusal(bolt, units, stage_of, outside, label):
+    """Why a bolt does not land, or None (plan.16): a unit crew cannot read, or one that has not landed on main, or
+    units whose latest change no batch has held yet (outside)."""
+    for u in units:
+        s = stage_of(u)
+        if s["stage"] == "unknown":
+            return f"cannot tell whether unit {u} has landed: {s.get('why')}"
+        if s["stage"] != "landed":
+            return f"unit {u} has not landed on main: it is {s['stage']}"
+    if outside:
+        return (f"bolt {bolt} lands only once every unit's latest change has been in a batch, and {either(outside)} "
+                + ("has" if len(outside) == 1 else "have") + f" not: a batch is due for them (crew review {label})")
+    return None
+
+
 def bolt_land(fleet, a):
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
     t = fleet["teams"].get(b.get("Team")) or fail(f"bolt {a.bolt} is held by no team, so it has not been built")
     st = stages_for(fleet, plan, [b])
     units = [u.name() for u in plan.units_of(a.bolt)]
-    for u in units:
-        s = st.of(u)
-        s["stage"] != "unknown" or fail(f"cannot tell whether unit {u} has landed: {s.get('why')}")
-        s["stage"] == "landed" or fail(f"unit {u} has not landed on main: it is {s['stage']}")
-    outside = [u for u, *_ in due_changes(plan, partition_entries(fleet, label)) if u in units]
-    not outside or fail(f"bolt {a.bolt} lands only once every unit's latest change has been in a batch, and {either(outside)} "
-                        + ("has" if len(outside) == 1 else "have") + f" not: a batch is due for them (crew review {label})")
+    landed = all(st.of(u)["stage"] == "landed" for u in units)
+    outside = [u for u, *_ in due_changes(plan, partition_entries(fleet, label)) if u in units] if landed else []
+    why = land_refusal(a.bolt, units, st.of, outside, label)
+    not why or fail(why)
     # A bolt landed on a main that lags GitHub's can't be pushed without force, and force would erase what it lacks.
     gap = host_run(fleet, t["machine"], BEHIND, t["kit"]["main"]).split()
     if gap and int(gap[1]):
@@ -1540,30 +1569,41 @@ def op_unit_amend(ctx, a):
             return
         by = f"proposal {ctx.n}" if not ctx.direct else "the user"
         conductor = f"{team['name']}-conductor"
-        # An agent of the unit past construct works to the old intent, and is ended where it stands, its commits kept;
-        # a construct still writing the change is not ended, and the unit's corrections wait until it settles (briefs.5).
-        force = ["--force"] if s["stage"] != "construct" else []
-        r = crew.on_machine(ctx.fleet, team["machine"], crew.crew_argv(ctx.fleet, team["machine"], "unit", "run", a.unit, "construct", *force))
+        r = crew.on_machine(ctx.fleet, team["machine"], crew.crew_argv(ctx.fleet, team["machine"], *construct_again(a.unit, s["stage"])))
         said = (r.stdout + r.stderr).strip()
         if said:
             print(said)
         if r.returncode == 0:
             m = re.search(rf"^(\S+) has {re.escape(a.unit)}: construct, in ", r.stdout, re.M)
-            slot = m.group(1) if m else f"a slot of {team['name']}"
-            text = (f"Unit {a.unit}'s intent was amended by {by}, and construct runs again on it in {slot}: wait for it "
-                    f"(crew unit wait {a.unit}); once it has committed, the unit goes on from its tasks.")
-            unsaid = f"construct runs again on unit {a.unit} in {slot}"
+            text, unsaid = amend_told(a.unit, by, m.group(1) if m else f"a slot of {team['name']}")
         else:
             why = (crew.unanswered(team["machine"], r)
                    or ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].rstrip("."))
             print(f"construct did not start on unit {a.unit}: {why}")
-            text = (f"Unit {a.unit}'s intent was amended by {by}, and construct did not start: {why}. Run it once it can "
-                    f"(crew unit run {a.unit} construct); once it has committed, the unit goes on from its tasks."
-                    + (f" {close_card(row)}" if row else ""))
-            unsaid = f"unit {a.unit} waits, amended, for construct to be run again"
+            text, unsaid = amend_told(a.unit, by, None, why, row)
         if not crew.tell(ctx.fleet, conductor, text):
             print(f"{conductor} is not up: {unsaid}")
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
+
+
+def construct_again(unit, stage):
+    """The crew command an amendment runs on its team's host (plan.15): construct on the unit, ending its agent where
+    it stands when the unit is past construct, since that agent works to the old intent; a construct still writing the
+    change is not ended, and the unit's corrections wait until it settles (briefs.5)."""
+    return ["unit", "run", unit, "construct"] + (["--force"] if stage != "construct" else [])
+
+
+def amend_told(unit, by, slot, why=None, row=None):
+    """What an amendment tells the conductor of the unit's team, and what crew says when the conductor is not up
+    (plan.15): construct runs again in the slot that started it, or did not start, why, and the card of the verify row
+    the amendment ended."""
+    if slot:
+        return (f"Unit {unit}'s intent was amended by {by}, and construct runs again on it in {slot}: wait for it "
+                f"(crew unit wait {unit}); once it has committed, the unit goes on from its tasks.",
+                f"construct runs again on unit {unit} in {slot}")
+    return (f"Unit {unit}'s intent was amended by {by}, and construct did not start: {why}. Run it once it can "
+            f"(crew unit run {unit} construct); once it has committed, the unit goes on from its tasks." + (f" {close_card(row)}" if row else ""),
+            f"unit {unit} waits, amended, for construct to be run again")
 
 
 def op_unit_order(ctx, a):
@@ -3060,10 +3100,14 @@ def sh(**pairs):
 def team_of_unit(fleet, a):
     """The team whose bolt holds a unit: crew unit run goes to that team's host."""
     label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-    u = plan.unit(a.unit)
-    u.get("Bolt") or fail(f"unit {a.unit} is queued: move it into a bolt first (crew unit move {a.unit} <bolt>)")
-    team = plan.bolt(u.get("Bolt")).get("Team") or fail(f"bolt {u.get('Bolt')} is held by no team yet: crew bolt give <team> {u.get('Bolt')}")
-    print(sh(TEAM=team))
+    print(sh(TEAM=unit_team(plan, a.unit)))
+
+
+def unit_team(plan, name):
+    """The team whose bolt holds a unit, which runs its stages; refused for a queued unit or a bolt no team holds."""
+    u = plan.unit(name)
+    u.get("Bolt") or fail(f"unit {name} is queued: move it into a bolt first (crew unit move {name} <bolt>)")
+    return plan.bolt(u.get("Bolt")).get("Team") or fail(f"bolt {u.get('Bolt')} is held by no team yet: crew bolt give <team> {u.get('Bolt')}")
 
 
 def in_bolt(fleet, a):
@@ -3207,10 +3251,14 @@ def undeclared(fleet, t, bolt, unit, entries, deps=()):
     held = [f"refs/heads/unit/{d}" for d in deps if head_of(fleet, t, main, f"unit/{d}")]
     _, mine = kit_git(fleet, t, main, "log", "--format=", "--name-only", "--no-merges", "--first-parent", f"unit/{unit}",
                       "--not", f"refs/heads/bolt/{bolt}", *held)
-    mine = set(mine.splitlines())
-    paths = [p for p in out.splitlines() if p and p in mine]
+    return not_declared(out.splitlines(), set(mine.splitlines()), unit, entries)
+
+
+def not_declared(changed, mine, unit, entries):
+    """Of the paths a unit's place changed against its bolt, those its own commits changed (mine) that no Touches
+    entry matches, its own change's folder aside: what its verify is told it did not declare (teams.12)."""
     own = f"openspec/changes/{unit}/"
-    return [p for p in paths if not p.startswith(own) and not any(matches(e, p) for e in entries)]
+    return [p for p in changed if p and p in mine and not p.startswith(own) and not any(matches(e, p) for e in entries)]
 
 
 def take(fleet, t, place, unit, bolt, deps):
@@ -3264,7 +3312,6 @@ def run_check(fleet, a):
     s = st_all.of(a.unit)
     st, place, mark = s["stage"], f"{t['kit']['dir']}/places/{a.unit}", u.get("Amended")
     st != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
-    words = f" {a.words}" if a.words else ""
     amended_at = entry = ""
     after = {d: st_all.of(d)["stage"] for d in u.all("After")}
     why = stage_refusal(a.unit, bolt, a.stage, st, mark, after, role(fleet, os.environ.get("CREW_AGENT")), t["name"],
@@ -3274,14 +3321,8 @@ def run_check(fleet, a):
     if a.stage == "construct":
         marking = bool(mark) or st in ("planned", "code", "verify")
         # The amendment's words, from the mark, so whoever starts the construct sends the same prompt.
-        again = ""
-        if mark == "intent":
-            again = " This unit's intent was amended by the user; revise the existing change to it."
-        elif amended(mark):
-            n = mark.split("/", 1)[1]
-            case = proposal(Plan(show(repo, tip, "proposals.rec") or PROPOSALS), n, label).get("Case")
-            again = (f" This unit's intent was amended by proposal {n}; revise the existing change to it. The planner's case, "
-                     f"as the user approved it: {' '.join(case.split())}")
+        case = proposal(Plan(show(repo, tip, "proposals.rec") or PROPOSALS), mark.split("/", 1)[1], label).get("Case") \
+            if amended(mark) and mark != "intent" else None
         make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
         took = take(fleet, t, place, a.unit, bolt, [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")
                                                    and (st_all.kit(plan.bolt(bolt))[0] or {"places": {}})["places"].get(d)])
@@ -3289,37 +3330,71 @@ def run_check(fleet, a):
             head = s.get("head") or host_run(fleet, t["machine"], HEAD, place)
             if head != mark:
                 amended_at, entry = f"{repo}@{mark_amended(fleet, label, a.unit, bolt, head)}", CONTEXT["eid"]
-        sources = u.all("Source")
-        prompt = f"/opsx:propose {a.unit} {u.get('Intent')}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + again + words
+        facts = dict(intent=u.get("Intent"), sources=u.all("Source"), again=again_words(mark, case))
     elif a.stage == "code":
         k, _ = st_all.kit(plan.bolt(bolt))
-        told = overlapping(plan, st_all, k, a.unit, declared(k, a.unit, "code"))
-        prompt = f"/opsx:apply {a.unit}{words}" + "".join(" " + x for x in told)
+        facts = dict(overlaps=overlapping(plan, st_all, k, a.unit, declared(k, a.unit, "code")))
     elif a.stage == "verify":
         k, _ = st_all.kit(plan.bolt(bolt))
         got = (k["places"].get(a.unit) or {}).get("touches") or {}
-        loose = undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After"))
-        prompt = f"/opsx:verify {a.unit}{words}" + (
-            (" Changed and not declared in its Touches: " + ", ".join(loose) + "."
-             + ("" if "entries" in got else f" Its change declares no Touches: {got.get('missing')}.")) if loose else "")
-    elif a.stage == "settle":
-        prompt = f"Settle {a.unit}:{words}"
+        facts = dict(loose=undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After")), touches=got)
+    elif a.stage == "merge":
+        facts = dict(bolt=bolt, merge=merge_command(t, st_all.kit(plan.bolt(bolt))[0], bolt))
     else:
-        prompt = f"Merge {a.unit} into bolt/{bolt}: {merge_command(t, st_all.kit(plan.bolt(bolt))[0], bolt)}{words}"
+        facts = {}
     # What reached the unit while no stage of it ran: forecasts, carried in this stage's prompt and named on its start.
     ids, said = carried_forecasts(fleet, t, plan, st_all, bolt, a.unit)
-    prompt += "".join(" " + x for x in said)
-    # The rail row the stage ends, whose card the conductor closes: a verify report acted on; for a unit whose intent
-    # was amended, the verify row its place reads without the mark, which the amendment ended. Bash crew names the card
-    # once the stage has started (stage_ended_row), since starting it can still be refused.
-    if a.stage == "construct" and amended(mark):
-        was = place_stage(s["place"]) if s.get("place") else None
-        ends = f"verify/{a.unit}" if was == "verify" else ""
-    else:
-        ends = f"verify/{a.unit}" if a.stage in ("construct", "code", "merge") and st == "verify" else ""
+    prompt = stage_prompt(a.stage, a.unit, a.words, carried=said, **facts)
+    # Bash crew names the card of the row the stage ends once the stage has started (stage_ended_row), since starting
+    # it can still be refused.
+    ends = ends_row(a.unit, a.stage, st, mark, place_stage(s["place"]) if s.get("place") else None)
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
     print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids),
              TOOK=took if a.stage == "construct" else ""))
+
+
+def again_words(mark, case=None):
+    """What construct run again on an amended intent adds to its prompt, from the unit's mark: the user's amendment, or
+    an approved proposal's, with the planner's case as the user approved it; nothing for any other mark."""
+    if mark == "intent":
+        return " This unit's intent was amended by the user; revise the existing change to it."
+    if amended(mark):
+        return (f" This unit's intent was amended by proposal {mark.split('/', 1)[1]}; revise the existing change to it. "
+                f"The planner's case, as the user approved it: {' '.join((case or '').split())}")
+    return ""
+
+
+def stage_prompt(stage, unit, words="", intent="", sources=(), again="", overlaps=(), loose=(), touches=None, bolt="",
+                 merge="", carried=()):
+    """The prompt a unit's stage is sent, the user's or conductor's words after the stage's own: construct proposes the
+    change from the intent and its sources, with an amendment's words; code applies it, told each Touches it overlaps
+    of an unmerged unit ahead of it; verify verifies it, told each path it changed and did not declare; settle names
+    what reached it; merge says how the unit merges into its bolt. What reached the unit while no stage of it ran is
+    carried at the end."""
+    w = f" {words}" if words else ""
+    if stage == "construct":
+        prompt = f"/opsx:propose {unit} {intent}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + again + w
+    elif stage == "code":
+        prompt = f"/opsx:apply {unit}{w}" + "".join(" " + x for x in overlaps)
+    elif stage == "verify":
+        touches = touches or {}
+        prompt = f"/opsx:verify {unit}{w}" + (
+            (" Changed and not declared in its Touches: " + ", ".join(loose) + "."
+             + ("" if "entries" in touches else f" Its change declares no Touches: {touches.get('missing')}.")) if loose else "")
+    elif stage == "settle":
+        prompt = f"Settle {unit}:{w}"
+    else:
+        prompt = f"Merge {unit} into bolt/{bolt}: {merge}{w}"
+    return prompt + "".join(" " + x for x in carried)
+
+
+def ends_row(unit, stage, st, mark, was):
+    """The rail row a stage ends, whose card the conductor closes once it has started: the unit's verify report, acted
+    on by construct, code or merge on a unit in verify; for construct on a unit whose intent was amended, the verify row
+    its place read before the mark (was), which the amendment ended. "" when it ends none."""
+    if stage == "construct" and amended(mark):
+        return f"verify/{unit}" if was == "verify" else ""
+    return f"verify/{unit}" if stage in ("construct", "code", "merge") and st == "verify" else ""
 
 
 def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, delivered_verify, has_words):
@@ -3607,29 +3682,33 @@ def slot_stages(fleet, t):
     plan = plan_of(fleet, t["label"])
     marks = {u.name(): u.get("Amended") for u in plan.units() if u.get("Amended")} if plan else {}
     bolts = {b.name() for b in held_by(plan, t["name"])} if plan else set()
-    out = []
-    for slot, kind, name, place in held:
-        stage, counts = "unknown", None
-        if kit.get("ok") and kind == "fix":
-            f = next((f for f in kit["fixes"] if f["fix"] == name), None)
-            stage = ("merged" if f["merged"] else "dropped" if plan and f["bolt"] and not plan.bolt(f["bolt"]) else "fix") if f else "none"
-        elif kit.get("ok"):
-            pl = kit["places"].get(name)
-            if name in kit["main"]:
-                stage = "landed"
-            elif pl and pl["bolt"] and name in kit["bolts"].get(pl["bolt"], {}).get("changes", []):
-                stage = "merged"
-            elif plan and not plan.unit(name):
-                stage = "dropped"
-            elif plan and plan.unit(name).get("Bolt") not in bolts:
-                stage = "left"
-            elif pl:
-                stage = place_stage(pl, marks.get(name))
-                counts = "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None
-            else:
-                stage = "none"
-        out.append(dict(slot=slot, kind=kind, name=name, stage=stage, counts=counts, place=place))
-    return out
+    return [dict(slot=slot, kind=kind, name=name, place=place, **dict(zip(("stage", "counts"), slot_stage(kind, name, kit, plan, bolts, marks))))
+            for slot, kind, name, place in held]
+
+
+def slot_stage(kind, name, kit, plan, bolts, marks):
+    """The stage of the work a slot holds, and its tasks done and total where its change has a task list (teams.1):
+    read from the kit as gathered (kit, unread unless ok) and the plan (None when it could not be read), bolts the
+    names of those the team holds, marks the plan's Amended marks. A fix has merged, been dropped with its bolt, or is
+    in flight; a unit has landed, merged into its bolt, been dropped from the plan, left the team's bolts, or reads its
+    stage from its place."""
+    if not kit.get("ok"):
+        return "unknown", None
+    if kind == "fix":
+        f = next((f for f in kit["fixes"] if f["fix"] == name), None)
+        return ("merged" if f["merged"] else "dropped" if plan and f["bolt"] and not plan.bolt(f["bolt"]) else "fix") if f else "none", None
+    pl = kit["places"].get(name)
+    if name in kit["main"]:
+        return "landed", None
+    if pl and pl["bolt"] and name in kit["bolts"].get(pl["bolt"], {}).get("changes", []):
+        return "merged", None
+    if plan and not plan.unit(name):
+        return "dropped", None
+    if plan and plan.unit(name).get("Bolt") not in bolts:
+        return "left", None
+    if pl:
+        return place_stage(pl, marks.get(name)), "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None
+    return "none", None
 
 
 @contextlib.contextmanager
@@ -3689,35 +3768,24 @@ def tidy(fleet, a):
     found = plans(fleet, sorted({o["label"] for o in kit_teams(fleet, kit)}), errors)
     errors.update({f"{l}/main of {repo}": f"{repo} has no {l}/main yet" for l, repo, tip, _ in found if not tip})
     if errors:
-        print("no worktree was removed: " + "; ".join(f"{k} could not be read: " + " ".join(v.split()) for k, v in errors.items()))
+        print(unread_plans(errors))
         return
     bolts = {b.name() for *_, p in found for b in p.bolts() if b.get("Repo") == kit}
     units = {u.name() for *_, p in found for u in p.units() if u.get("Repo") == kit}
     ups, on_main = gather.upstreams(main), set(gather.changes(main, "main"))
     for w in trees:
         path, branch = w["path"], w.get("branch") or ""
-        folder, up = os.path.basename(path), ups.get(branch, "")
-        bolt = up[5:] if up.startswith("bolt/") else None
-        if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch == f"bolt/{folder}":
-            name, over = None, None if folder in bolts else f"bolt {folder} is in no plan"
-        elif os.path.dirname(path) == os.path.join(kdir, "places") and branch == f"unit/{folder}":
-            name, over = folder, (f"unit {folder} has landed on main" if folder in on_main else
-                                  f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in gather.changes(main, f"bolt/{bolt}") else
-                                  None if folder in units else f"unit {folder} is in no plan")
-        elif os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("fix/") and bolt:
-            name, over = branch, (f"{branch} has merged into bolt/{bolt}" if gather.fix_merged(main, branch, bolt) else
-                                  None if bolt in bolts else f"bolt {bolt}, which {branch} was made from, is in no plan")
-        else:
+        crews = tidy_over(path, branch, kdir, ups.get(branch, ""), bolts, units, on_main,
+                          lambda bolt: gather.changes(main, f"bolt/{bolt}"), lambda fix, bolt: gather.fix_merged(main, fix, bolt))
+        if crews is None:
             continue
+        name, over = crews
         if not over or name in held or path in held or not os.path.isdir(path):
             continue
-        if w.get("locked"):
-            print(f"{path} is kept, and {branch} with it: it is locked")
-            continue
-        st = subprocess.run(["git", "-C", path, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
-        if st.returncode or st.stdout.strip():
-            print(f"{path} is kept, and {branch} with it: " + (f"git cannot read its status: {st.stderr.strip()}" if st.returncode else
-                  f"{over}, and it has uncommitted changes, which are the user's to keep or discard"))
+        st = None if w.get("locked") else subprocess.run(["git", "-C", path, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
+        why = kept_why(over, w.get("locked"), st and (st.returncode, st.stdout, st.stderr))
+        if why:
+            print(f"{path} is kept, and {branch} with it: {why}")
             continue
         sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
                              capture_output=True, text=True, env=gitenv()).stdout.strip()
@@ -3730,29 +3798,76 @@ def tidy(fleet, a):
             print(kept + f"wt, the kit's worktree tool, is not on {crew.this_host()}'s path")
             continue
         if r.returncode:
-            said = [l.strip() for l in r.stderr.splitlines() if l.strip() and not l.strip().startswith("↳")]  # ↳ advises --no-hooks or --yes
-            if any("Cannot prompt for approval" in l for l in said):
-                print(kept + f"the kit's remove hooks wait for the user's approval on {crew.this_host()}: wt config approvals add, in {main}")
-            else:
-                print(kept + "the kit's wt remove refused it: " + "; ".join(
-                    [l[1:].strip() for l in said if l.startswith("✗")] or said[-1:] or [f"wt remove exited {r.returncode}"]))
+            print(kept + wt_refused(r.returncode, r.stderr, crew.this_host(), main))
             continue
         READ.drop_kit(t["machine"], t["kit"]["main"])  # the command's next step reads the kit again
         if os.path.isdir(path):
             print(kept + "the kit's wt remove exited 0 and left it there")
             continue
-        try:
-            told = json.loads(r.stdout)
-            left = (len(told) == 1 and os.path.realpath(told[0]["path"]) == os.path.realpath(path)
-                    and told[0]["branch_outcome"] == "not_attempted")
-        except (ValueError, TypeError, KeyError, IndexError):
-            left = False
-        if not left:
+        if not wt_left_branch(r.stdout, path):
             print(f"{path} is removed, and {branch} is kept: crew could not read what wt remove said of the branch")
             continue
         r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
         print(f"{path} and {branch} are removed; the branch was at {sha}" if r.returncode == 0 else
               f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
+
+
+def tidy_over(path, branch, kdir, up, bolts, units, on_main, changes_of, fix_merged):
+    """Whether a worktree is one crew made, and whether its work is over (plan.9): None for one crew did not make; else
+    (the name a slot holds its work by, why its work is over or None while it goes on). crew made it when it is
+    directly in <kit>/bolts/ on bolt/<its folder>, or directly in <kit>/places/ on unit/<its folder>, or on a fix/
+    branch made from a bolt (up, its upstream). A bolt's is over once no plan has the bolt (bolts); a unit's once it
+    has landed on main (on_main), merged into its bolt (changes_of(bolt)) or no plan has it (units); a fix's once it
+    has merged into its bolt (fix_merged(branch, bolt)) or no plan has its bolt."""
+    folder, bolt = os.path.basename(path), up[5:] if up.startswith("bolt/") else None
+    if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch == f"bolt/{folder}":
+        return None, None if folder in bolts else f"bolt {folder} is in no plan"
+    if os.path.dirname(path) == os.path.join(kdir, "places") and branch == f"unit/{folder}":
+        return folder, (f"unit {folder} has landed on main" if folder in on_main else
+                        f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in changes_of(bolt) else
+                        None if folder in units else f"unit {folder} is in no plan")
+    if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("fix/") and bolt:
+        return branch, (f"{branch} has merged into bolt/{bolt}" if fix_merged(branch, bolt) else
+                        None if bolt in bolts else f"bolt {bolt}, which {branch} was made from, is in no plan")
+    return None
+
+
+def unread_plans(errors):
+    """What a tidy says when a plan the kit's work goes in could not be read, and so removes nothing (plan.9, read.1):
+    each plan and why, on one line."""
+    return "no worktree was removed: " + "; ".join(f"{k} could not be read: " + " ".join(v.split()) for k, v in errors.items())
+
+
+def kept_why(over, locked, status):
+    """Why a worktree whose work is over is kept, or None when it may go (plan.9): it is locked, or git status
+    (exit, output, error) says it has uncommitted changes, or git could not read it."""
+    if locked:
+        return "it is locked"
+    code, out, err = status
+    if code:
+        return f"git cannot read its status: {err.strip()}"
+    return f"{over}, and it has uncommitted changes, which are the user's to keep or discard" if out.strip() else None
+
+
+def wt_refused(code, stderr, host, main):
+    """Why the kit's wt remove kept a worktree, from its exit and its standing error, in its own words without its
+    advice to skip the hooks or approve them unseen (its ↳ lines): its hooks wait for the user's approval on the host,
+    or its ✗ lines, else its last line."""
+    said = [l.strip() for l in stderr.splitlines() if l.strip() and not l.strip().startswith("↳")]
+    if any("Cannot prompt for approval" in l for l in said):
+        return f"the kit's remove hooks wait for the user's approval on {host}: wt config approvals add, in {main}"
+    return "the kit's wt remove refused it: " + "; ".join([l[1:].strip() for l in said if l.startswith("✗")] or said[-1:]
+                                                         or [f"wt remove exited {code}"])
+
+
+def wt_left_branch(out, path):
+    """Whether wt remove's JSON answer says it removed this one worktree and left its branch alone, for crew to judge."""
+    try:
+        told = json.loads(out)
+        return (len(told) == 1 and os.path.realpath(told[0]["path"]) == os.path.realpath(path)
+                and told[0]["branch_outcome"] == "not_attempted")
+    except (ValueError, TypeError, KeyError, IndexError):
+        return False
 
 
 # ------------------------------------------------------------------------------------------ a stage's end
@@ -4138,18 +4253,28 @@ def deliver(fleet, t, entries, unit, stage, words):
     next wait tries again."""
     o = owed_by_unit(t).get(unit)
     status = crew.agent_status(fleet, o.agent) if o else None
-    if o and status == "working":
-        return None
-    if o and status:
+    way = reach_way(bool(o), status, stage, stage == "verify" and verified(t["label"], unit, entries))
+    if way == "told":
         return "told" if crew.tell(fleet, o.agent, words) else None
-    if stage == "verify" and verified(t["label"], unit, entries):
+    if way == "settle":
         r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "unit", "run", unit, "settle", words))
         if r.returncode:
             print(f"crew could not start {unit}'s settle stage: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1],
                   file=sys.stderr)
             return None
         return "settle"
-    return "prompt"
+    return way
+
+
+def reach_way(owed, status, stage, verified):
+    """How a forecast or an amendment reaches a unit, once (teams.12, teams.14): not yet while the agent of the stage it
+    owes is working; told to that agent while it is up; as a settle stage when the unit has delivered its verify and
+    waits to merge (verified); else carried in its next stage's prompt."""
+    if owed and status == "working":
+        return None
+    if owed and status:
+        return "told"
+    return "settle" if stage == "verify" and verified else "prompt"
 
 
 # A dependent's place rebased onto its bolt: printed "rebased" when it moved, nothing when it was already there; a
@@ -4204,12 +4329,9 @@ def rebase_dependents(fleet, t, plan, st, say):
             if not due:
                 continue
             o = owed.get(u.name())
-            if o and crew.agent_status(fleet, o.agent) == "working":
-                say(f"{u.name()} waits to be rebased onto bolt/{b.name()}, now that {', '.join(due)} merged: its agent is working")
-                continue
-            if not clean(pl["path"]):
-                say(f"{u.name()} waits to be rebased onto bolt/{b.name()}, now that {', '.join(due)} merged: {pl['path']} has "
-                    "uncommitted changes or work in progress")
+            waits = rebase_waits(u.name(), b.name(), due, o and crew.agent_status(fleet, o.agent), lambda: clean(pl["path"]), pl["path"])
+            if waits:
+                say(waits)
                 continue
             r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name()], capture_output=True, text=True, env=gitenv())
             READ.drop_kit(t["machine"], main)
@@ -4223,6 +4345,16 @@ def rebase_dependents(fleet, t, plan, st, say):
                             why=f"unit({u.name()}): rebase onto bolt/{b.name()}, now that {', '.join(due)} merged")
                 say(f"{u.name()} is rebased onto bolt/{b.name()}, now that {', '.join(due)} merged")
     return out
+
+
+def rebase_waits(unit, bolt, due, status, is_clean, path):
+    """Why a dependent whose After units (due) have merged is not rebased onto its bolt yet, or None when it is
+    rebased now: its agent is working, or its place is not clean (is_clean(), read only when its agent is not)."""
+    if status == "working":
+        return f"{unit} waits to be rebased onto bolt/{bolt}, now that {', '.join(due)} merged: its agent is working"
+    if not is_clean():
+        return f"{unit} waits to be rebased onto bolt/{bolt}, now that {', '.join(due)} merged: {path} has uncommitted changes or work in progress"
+    return None
 
 
 def rebase_cmd(fleet, a):
@@ -4247,12 +4379,20 @@ def rebase_cmd(fleet, a):
 
 def amendments(t, plan, st, entries):
     """For each dependent with a place, each After unit constructed again since the dependent's construct took its
-    head: [(bolt, dependent, after unit, its new head)], read from this host's run record. A construct whose head the
-    dependent already holds, such as one recorded late, is no amendment."""
+    head (amended_afters), git telling whether the head the dependent took already holds the new one."""
+    holds = lambda held, head: subprocess.run(["git", "-C", t["kit"]["main"], "merge-base", "--is-ancestor", head, held],
+                                              env=gitenv()).returncode == 0
+    return amended_afters(held_by(plan, t["name"]), plan, lambda n: st.of(n)["stage"], entries, holds)
+
+
+def amended_afters(bolts, plan, stage_of, entries, holds):
+    """For each unmerged dependent of the bolts, each After unit constructed again since the dependent's construct took
+    its head: [(bolt, dependent, after unit, its new head)], from the run record's entries. A construct whose head the
+    dependent already holds (holds(the head it took, the new head)), such as one recorded late, is no amendment."""
     out = []
-    for b in held_by(plan, t["name"]):
+    for b in bolts:
         for u in plan.units_of(b.name()):
-            if st.of(u.name())["stage"] in ("merged", "landed", "unknown") or not u.all("After"):
+            if stage_of(u.name()) in ("merged", "landed", "unknown") or not u.all("After"):
                 continue
             starts = [e for e in entries if e.get("Act") == "stage.start" and f"stage/{u.name()}/construct" in e["On"] and not e.get("Refused")]
             if not starts:
@@ -4264,8 +4404,7 @@ def amendments(t, plan, st, entries):
                         and e.get("Ended") == "delivered" and (e["At"], e["Id"]) > since]
                 head = (ends[-1].get("Delivered") or "").rpartition("@")[2] if ends else ""
                 held = took.get(a)
-                if head and head != held and not (held and subprocess.run(
-                        ["git", "-C", t["kit"]["main"], "merge-base", "--is-ancestor", head, held], env=gitenv()).returncode == 0):
+                if head and head != held and not (held and holds(held, head)):
                     out.append((b.name(), u.name(), a, head))
     return out
 
@@ -4323,59 +4462,76 @@ def reach(fleet, t):
         if not k:
             print(f"no forecast for {b.name()}: {why}", file=sys.stderr)
             continue
-        live = [u for u in plan.units_of(b.name()) if k["places"].get(u.name()) and k["places"][u.name()].get("head")
+        live = [(u.name(), k["places"][u.name()]["head"], u.all("After")) for u in plan.units_of(b.name())
+                if k["places"].get(u.name()) and k["places"][u.name()].get("head")
                 and st.of(u.name())["stage"] not in ("merged", "landed", "unknown")]
-        bolt_head = k["bolts"].get(b.name(), {}).get("head")
-        for i, u in enumerate(live):
-            name, head = u.name(), k["places"][u.name()]["head"]
-            others = ([(f"bolt/{b.name()}", bolt_head)] if bolt_head else []) + [(o.name(), k["places"][o.name()]["head"]) for o in live[:i]]
-            for other, ohead in others:
-                heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
-                paths = merge_tree(main, ohead, head)
-                if paths is None:
-                    print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
-                    continue
-                if not paths:
-                    continue
-                if heads in done:
-                    if other.startswith("bolt/"):
-                        break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
-                    continue
-                if not other.startswith("bolt/") and other not in u.all("After"):
-                    def change(w, name=name, other=other):
-                        v = w.unit(name)
-                        w.unit(other)
-                        if other not in v.all("After"):
-                            v.add("After", other, after="Intent")
-                        return [b.name()]
-                    try:
-                        with contextlib.redirect_stdout(sys.stderr):
-                            write(fleet, label, change, f"plan({b.name()}): {name} after {other}, forecast to conflict",
-                                  act="unit.after", on=[f"unit/{name}", f"bolt/{b.name()}"])
-                    except Refusal as e:
-                        print(f"{name} is not put after {other}: {e}", file=sys.stderr)
-                way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, b.name(), name, other, paths))
-                if way:
-                    record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
-                                why=f"unit({name}): forecast to conflict with {other}", Heads=heads, Paths=" ".join(paths), Reached=way)
-                    done.add(heads)
-                if other.startswith("bolt/"):
-                    break
+        due, unread = forecasts_due(live, b.name(), k["bolts"].get(b.name(), {}).get("head"), lambda o, h: merge_tree(main, o, h), done)
+        for name, other in unread:
+            print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
+        for name, other, paths, heads, after in due:
+            if after:
+                def change(w, name=name, other=other):
+                    v = w.unit(name)
+                    w.unit(other)
+                    if other not in v.all("After"):
+                        v.add("After", other, after="Intent")
+                    return [b.name()]
+                try:
+                    with contextlib.redirect_stdout(sys.stderr):
+                        write(fleet, label, change, f"plan({b.name()}): {name} after {other}, forecast to conflict",
+                              act="unit.after", on=[f"unit/{name}", f"bolt/{b.name()}"])
+                except Refusal as e:
+                    print(f"{name} is not put after {other}: {e}", file=sys.stderr)
+            way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, b.name(), name, other, paths))
+            if way:
+                record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
+                            why=f"unit({name}): forecast to conflict with {other}", Heads=heads, Paths=" ".join(paths), Reached=way)
+                done.add(heads)
+
+
+def forecasts_due(live, bolt, bolt_head, conflicts, done):
+    """The forecasts a conductor's wait makes for a bolt (teams.12): live is each unmerged unit with a place, in the
+    plan's order, as (name, head, its After units); conflicts(theirs, ours) the paths git merge-tree forecasts in
+    conflict when theirs is merged into ours, [] for none, None when git can't tell. Each unit is forecast against the
+    bolt, then against each unit ahead of it once it is clean with the bolt, the later unit taking the forecast; one
+    already made for the same heads (done) is not made again. Returns the forecasts as (unit, other, paths, heads,
+    whether the unit is to be put after the other), and the pairs git could not read."""
+    due, unread = [], []
+    for i, (name, head, after) in enumerate(live):
+        others = ([(f"bolt/{bolt}", bolt_head)] if bolt_head else []) + [(o, h) for o, h, _ in live[:i]]
+        for other, ohead in others:
+            paths = conflicts(ohead, head)
+            if paths is None:
+                unread.append((name, other))
+                continue
+            if not paths:
+                continue
+            heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
+            if heads not in done:
+                due.append((name, other, paths, heads, not other.startswith("bolt/") and other not in after))
+            if other.startswith("bolt/"):
+                break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
+    return due, unread
 
 
 def carried_forecasts(fleet, t, plan, st_all, bolt, unit):
     """The forecasts and amendments waiting to reach a unit in its next stage's prompt: this host's entries for it that
     reached it by prompt and that no stage start of it has carried since. Returns their ids and their words."""
-    entries = local_entries(t["label"])
-    taken = {i for e in entries if e.get("Act") == "stage.start" and f"unit/{unit}" in e["On"] for i in (e.get("Forecast") or "").split()}
-    waiting = [e for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Reached") == "prompt"
-               and e["On"][:1] == [f"unit/{unit}"] and e["Id"] not in taken]
+    waiting = waiting_for(unit, local_entries(t["label"]))
     if not waiting:
         return [], []
     k, _ = st_all.kit(plan.bolt(bolt))
     other = lambda e: e["On"][1][5:] if e["On"][1].startswith("unit/") else e["On"][1]
     return [e["Id"] for e in waiting], [amendment_words(t, k, bolt, other(e)) if e["Act"] == "amendment" else
                                         forecast_words(t, k, bolt, unit, other(e), (e.get("Paths") or "").split()) for e in waiting]
+
+
+def waiting_for(unit, entries):
+    """The forecasts and amendments that reached a unit by its next prompt and that no stage start of it has carried
+    yet (its Forecast field naming their ids), from the run record's entries, oldest first."""
+    taken = {i for e in entries if e.get("Act") == "stage.start" and f"unit/{unit}" in e["On"] for i in (e.get("Forecast") or "").split()}
+    return [e for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Reached") == "prompt"
+            and e["On"][:1] == [f"unit/{unit}"] and e["Id"] not in taken]
 
 
 # ------------------------------------------------------------------------------------------------- the wait
@@ -4443,7 +4599,12 @@ def last_end(t, agent):
 
 def ended_said(t, agent):
     """What a wait says of a stage whose end was recorded by something other than itself, from the run record."""
-    e = last_end(t, agent)
+    return ended_words(t["name"], agent, last_end(t, agent))
+
+
+def ended_words(team, agent, e):
+    """What a wait says of a stage that has ended, from the newest stage.end recorded for its agent (e), or None when
+    there is none: which stage, and how it ended."""
     if not e:
         return f"{agent} owes no stage's end, and none is recorded for it on this host"
     stage = next((o.split("/") for o in e["On"] if o.startswith("stage/")), None)
@@ -4452,7 +4613,7 @@ def ended_said(t, agent):
     what = (f"the proof of {stage[1]}" if stage and stage[2:] == ["proof"] else f"{stage[2]} on {stage[1]}" if stage and len(stage) > 2 else
             (f"fix {fix}" if not m or m.group(1) == "fix" else f"{m.group(1)} of {fix}") if fix else "its stage")
     how = {"delivered": f"{agent} delivered {e.get('Delivered')}" + (" (observed late)" if e.get("Observed") == "late" else ""),
-           "short": f"{agent} stopped short, and {t['name']}-conductor was told what it needs",
+           "short": f"{agent} stopped short, and {team}-conductor was told what it needs",
            "stopped": f"crew ended {agent} before it delivered"}.get(e.get("Ended"), f"{agent} reached {e.get('Result', 'unknown')}")
     return f"{what} has ended: {how}"
 
@@ -4494,45 +4655,65 @@ def stage_wait(fleet, a):
             with stages_file(t, shared=True) as lines:
                 words = handed(t, a.slot, o.eid)
                 owed = any(l[3:4] == [o.eid] for l in lines)
-            if words is not None:
-                print(f"{agent} stopped short in {o.phrase()}. It needs: {words}")
-                return
-            if not owed:
-                print(ended_said(t, agent))
-                return
-            info = crew.agent_get(fleet, agent)
+            info = crew.agent_get(fleet, agent) if words is None and owed else None
             status = info.get("agent_status") if info else None
-            got, missing = deliverable(fleet, t, o, place) if status != "working" else (None, None)
-            if got:
-                if end_owed(fleet, t, o, "delivered", got):
-                    unmark(fleet, t, o)
-                    if o.stage == "construct" and not o.fix and not o.proof:
-                        try:  # the change it delivered is due, and may make a batch due now
-                            batch_check(fleet, t)
-                        except Refusal as e:
-                            print(f"no batch reckoned: {e}", file=sys.stderr)
-                    print(f"{agent} delivered {o.phrase()}: {missing}")
-                    return
-                continue
-            if info is None:
-                print(f"{agent} is no longer running: {o.phrase()} delivered nothing and said nothing it needs")
-                return
+            got, missing = deliverable(fleet, t, o, place) if words is None and owed and status != "working" else (None, None)
             now = datetime.datetime.now(datetime.timezone.utc)
+            quiet = (False, "is working", None)
             if status == "working":
-                seen_working, doing = now, "is working"
-            else:
+                seen_working = now
+            elif info is not None and not got:
                 seen_quiet = seen_quiet or now
                 pending, last, unread = background(info)
-                is_stuck, doing = quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working)
-                if is_stuck:
-                    print(f"{agent} is stuck in {o.phrase()}: {doing}, with {missing} and nothing it needs said"
-                          + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
-                    return
+                quiet = (*quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working), unread)
             remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                print(f"{o.phrase()} is still running after the wait's {a.timeout} ms: {agent} {doing}; nothing is recorded yet")
+            how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0)
+            if how == "ended":
+                print(ended_said(t, agent))
+                return
+            if how == "delivered":
+                if not end_owed(fleet, t, o, "delivered", got):
+                    continue
+                unmark(fleet, t, o)
+                if o.stage == "construct" and not o.fix and not o.proof:
+                    try:  # the change it delivered is due, and may make a batch due now
+                        batch_check(fleet, t)
+                    except Refusal as e:
+                        print(f"no batch reckoned: {e}", file=sys.stderr)
+            if how:
+                print(said)
                 return
             time.sleep(min(POLL, remaining))
+
+
+def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time):
+    """One look of a wait at the stage o its agent owes, as facts (teams.4): the words a stop-short handed it, whether
+    the stage is still owed, whether the agent is gone, what it delivered (got, and missing: what the wait says of the
+    deliverable, or of what it lacks), and quiet, (stuck, what the agent is doing, what crew could not read of it).
+    Returns how the wait ends and the line it prints, "ended" when something else recorded the end, or (None, what the
+    agent is doing) to look again."""
+    if words is not None:
+        return "short", f"{agent} stopped short in {o.phrase()}. It needs: {words}"
+    if not owed:
+        return "ended", None
+    if got:
+        return "delivered", f"{agent} delivered {o.phrase()}: {missing}"
+    if gone:
+        return "gone", f"{agent} is no longer running: {o.phrase()} delivered nothing and said nothing it needs"
+    stuck, doing, unread = quiet
+    if stuck:
+        return "stuck", (f"{agent} is stuck in {o.phrase()}: {doing}, with {missing} and nothing it needs said"
+                         + (f"; crew could not read whether it waits on work of its own ({unread})" if unread else ""))
+    if out_of_time:
+        return "running", f"{o.phrase()} is still running after the wait's {timeout} ms: {agent} {doing}; nothing is recorded yet"
+    return None, doing
+
+
+def owed_of(t, slot, lines, held):
+    """The stage a slot's agent, or ops, owes an end, from the stages file's lines and the slots file's (held, by
+    slot), as crew needs reads it: refused when it owes none, or the slot now holds other work than the stage's."""
+    owed = [Owed(t, l) for l in lines if l[0] == slot and (slot == "ops" or held.get(slot, [None] * 3)[2] == l[1])]
+    return owed or fail(f"{t['name']}-{slot} runs no stage crew is waiting on")
 
 
 def stage_needs(fleet, a):
@@ -4554,8 +4735,7 @@ def stage_needs(fleet, a):
         tmp.replace(needs)
 
     with stages_file(t, shared=True) as lines:
-        owed += [Owed(t, l) for l in lines if l[0] == a.slot and (a.slot == "ops" or held.get(a.slot, [None] * 3)[2] == l[1])]
-    owed or fail(f"{agent} runs no stage crew is waiting on")
+        owed += owed_of(t, a.slot, lines, held)
     o = owed[0]
     end_owed(fleet, t, o, "short", then=hand) or fail(f"{agent} runs no stage crew is waiting on")
     # The words are the wait's once it takes the file; when no wait holds its lock, or the one there ends without
