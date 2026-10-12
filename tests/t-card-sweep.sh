@@ -7,6 +7,7 @@
 # named, and nothing there is ended, nor any verify session of its units; while a host of the run record does not
 # answer, no closed card's and no batch card's session is ended, and a row gone still ends its session. The rail tab's
 # refresh sweeps as crew rail does; crew board ends nothing. Each scenario of the card-sessions spec on the rail.
+# Reads: plugin/hooks/ plugin/lib/board.py plugin/lib/sites.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
 box=chuck-herdr-alpha
