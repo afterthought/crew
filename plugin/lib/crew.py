@@ -122,9 +122,11 @@ def roles_of(entry, what, allowed):
     return roles
 
 
+@functools.lru_cache(maxsize=None)
 def load():
     """The partitions and teams, written by the machine's own configuration (swancloud's lib/crew-teams.nix),
-    never by crew. Every entry is checked here, against the hosts file, before any is used."""
+    never by crew. Every entry is checked here, against the hosts file, before any is used, once a process: a later
+    call is answered with the same fleet."""
     if not TEAMS.exists():
         fail(f"{TEAMS} is missing; the machine's configuration writes it")
     data = json.loads(TEAMS.read_text())
@@ -213,8 +215,10 @@ def this_host():
 
 def on_machine(fleet, host, argv, input=None):
     """Run a command on a host: here when it is this host, else over ssh, never prompting. A host that does not
-    answer exits 255, as ssh does."""
+    answer exits 255, as ssh does. herdr here goes through its session's Herdr, so what it does is read again."""
     if host == this_host():
+        if argv[:2] == ["herdr", "--session"] and input is None:
+            return herdr_in(argv[2]).run(*argv[3:])
         return subprocess.run(argv, input=input, capture_output=True, text=True)
     return subprocess.run(["ssh", "-o", "BatchMode=yes", fleet["hosts"][host]["ssh"], shlex.join(argv)],
                           input=input, capture_output=True, text=True)
@@ -337,10 +341,16 @@ def unanswered(host, r):
     return f"{host} did not answer ({((r.stderr or '').strip().splitlines() or ['ssh exited 255'])[-1]})"
 
 
-def read_agent(fleet, name):
-    """An agent crew starts, as herdr's agent get answers wherever it runs: (the agent, None), (None, None) when it is
-    not up, or (None, what could not be read) when its host does not answer or herdr's answer can't be read."""
+def read_agent(fleet, name, fresh=True):
+    """An agent crew starts, as herdr answers wherever it runs: (the agent, None), (None, None) when it is not up, or
+    (None, what could not be read) when its host does not answer or herdr's answer can't be read. On this host, with
+    fresh False, it is answered from its session's listing as this command read it (Herdr)."""
     host, session = place_of_agent(fleet, name)
+    if host == this_host():
+        try:
+            return herdr_in(session).agent(name, fresh), None
+        except Refusal as e:
+            return None, str(e)
     r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "get", name])
     if r.returncode:
         return None, unanswered(host, r)
@@ -351,15 +361,106 @@ def read_agent(fleet, name):
     return (a, None) if isinstance(a, dict) else (None, f"herdr's answer on {host} about it can't be read")
 
 
-def agent_get(fleet, name):
-    """An agent crew starts, as herdr's agent get answers wherever it runs, or None when it is not up."""
-    return read_agent(fleet, name)[0]
+def agent_get(fleet, name, fresh=True):
+    """An agent crew starts, as herdr answers wherever it runs, or None when it is not up."""
+    return read_agent(fleet, name, fresh)[0]
 
 
-def agent_status(fleet, name):
-    """An agent crew starts, as herdr sees it wherever it runs: idle, done, working, blocked, or None when it is not up."""
-    a = agent_get(fleet, name)
+def agent_status(fleet, name, fresh=True):
+    """An agent crew starts, as herdr sees it wherever it runs: idle, done, working, blocked, or None when it is not up.
+    With fresh False, an agent on this host is answered from its session's listing as this command last read it."""
+    a = agent_get(fleet, name, fresh)
     return a.get("agent_status") if a else None
+
+
+# What each herdr command a crew command runs leaves to read again in its session: the agents (`agent list`), the panes
+# (`pane list`), both, or neither. A command not named here leaves both.
+STALE = {("agent", "list"): "", ("agent", "get"): "", ("agent", "read"): "", ("pane", "list"): "", ("pane", "get"): "",
+         ("pane", "read"): "", ("workspace", "list"): "", ("workspace", "get"): "", ("tab", "list"): "", ("tab", "get"): "",
+         ("tab", "rename"): "", ("workspace", "create"): "pane", ("tab", "create"): "pane", ("pane", "split"): "pane",
+         ("pane", "run"): "agent", ("pane", "send-keys"): "agent", ("agent", "prompt"): "agent", ("agent", "send-keys"): "agent",
+         ("agent", "rename"): "agent"}
+
+
+class Herdr:
+    """herdr's session on this host, as one crew command reads it (read.2): its agents (`agent list`) and its panes
+    (`pane list`), each listed once and listed again only after crew acts in the session in a way that can change it
+    (STALE), so every agent's status and every pane's life at a moment is answered from one listing, never a call each;
+    a poll of one agent, or a tell's reading of it, asks herdr of that agent afresh, and what it answers stands for that
+    agent until crew acts again. A session whose server is not running has no agents and no panes; any other listing
+    crew can't read is a refusal (read.1). An agent unnamed has no `name`, as herdr lists it."""
+
+    def __init__(self, session):
+        self.session, self.listed, self.got = session, {}, {}
+
+    def run(self, *args):
+        """herdr in this session, acting or reading: its answer, as subprocess.run gives it."""
+        stale = STALE.get(tuple(args[:2]), "agent pane")
+        for what in stale.split():
+            self.listed.pop(what, None)
+        if "agent" in stale:
+            self.got.clear()
+        return subprocess.run(["herdr", "--session", self.session, *args], capture_output=True, text=True)
+
+    def listing(self, what, fresh=False):
+        """herdr's `<what> list` in this session, agent or pane: its items, from this command's listing unless fresh."""
+        if fresh or what not in self.listed:
+            r = subprocess.run(["herdr", "--session", self.session, what, "list"], capture_output=True, text=True)
+            self.listed[what] = listed(what, r.returncode, r.stdout, r.stderr, f"in session {self.session} on {this_host()}")
+        return self.listed[what]
+
+    def agent(self, target, fresh=False):
+        """The agent in a pane, or by its name: herdr's item for it, or None when there is none. Fresh, it is herdr's
+        agent get of that one agent now, as a poll or a tell reads it, any failure taken as no agent; else it is from
+        this command's listing."""
+        if not target:
+            return None
+        if fresh:
+            r = self.run("agent", "get", target)
+            try:
+                a = None if r.returncode else json.loads(r.stdout)["result"]["agent"]
+            except (ValueError, KeyError, TypeError):
+                a = False
+            isinstance(a, dict) or a is None or fail(f"herdr's answer on {this_host()} about {target} can't be read")
+            self.got[target] = a
+            return a
+        if "agent" not in self.listed and target in self.got:
+            return self.got[target]
+        return next((a for a in self.listing("agent") if target in (a.get("pane_id"), a.get("name"))), None)
+
+    def status(self, target, fresh=False):
+        """An agent's status, by its pane or name: idle, done, working, blocked, or None when it is not up."""
+        s = (self.agent(target, fresh) or {}).get("agent_status")
+        return s if isinstance(s, str) and s else None
+
+    def live(self, pane):
+        """Whether the pane is there."""
+        return bool(pane) and any(p.get("pane_id") == pane for p in self.listing("pane"))
+
+
+def listed(what, code, out, err, where):
+    """The items of herdr's `agent list` or `pane list` (what: agent or pane), from its exit, standard output and
+    standard error (read.2): {"result": {"<what>s": [...]}} as herdr 0.9.3 answers, each item a JSON object; none when
+    the session's server is not running, as herdr says with the error code server_not_running. Any other failure, or
+    an answer crew can't read, is refused, saying where (read.1)."""
+    if code:
+        herdr_error(err) == "server_not_running" or fail(
+            f"herdr's {what} list {where} failed: " + ((err or "").strip().splitlines() or [f"exit {code}"])[-1])
+        return []
+    try:
+        items = json.loads(out)["result"][f"{what}s"]
+    except (ValueError, KeyError, TypeError):
+        items = None
+    isinstance(items, list) or fail(f"herdr's {what} list {where} can't be read")
+    return [i for i in items if isinstance(i, dict)]
+
+
+_SESSIONS = {}
+
+
+def herdr_in(session):
+    """This command's Herdr of a session on this host."""
+    return _SESSIONS.setdefault(session, Herdr(session))
 
 
 def waits_on_question(fleet, name):
@@ -402,18 +503,34 @@ def agent_reading(fleet, name):
 
 def piped(fleet, host, script, what, *args):
     """A reading crew pipes to python3 on a host, questions.py or transcript.py: its answer, one JSON object, or what
-    could not be read, its own {"unread": ...} among it."""
-    r = on_machine(fleet, host, ["python3", "-", *args], input=script)
-    if r.returncode:
-        return unanswered(host, r) or (
-            f"crew's reading of its {what} on {host} failed ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})")
-    try:
-        got = json.loads(r.stdout)
-    except ValueError:
-        got = None
+    could not be read, its own {"unread": ...} among it. On this host it is read in this process, the same reading."""
+    if host == this_host():
+        try:
+            got = here_reading(what, *args)
+        except Exception as e:
+            return f"crew's reading of its {what} on {host} failed ({e})"
+    else:
+        r = on_machine(fleet, host, ["python3", "-", *args], input=script)
+        if r.returncode:
+            return unanswered(host, r) or (
+                f"crew's reading of its {what} on {host} failed ({((r.stderr or '').strip().splitlines() or [f'exit {r.returncode}'])[-1]})")
+        try:
+            got = json.loads(r.stdout)
+        except ValueError:
+            got = None
     if isinstance(got, dict) and isinstance(got.get("unread"), str):
         return got["unread"]
     return got if isinstance(got, dict) else f"crew's reading of its {what} on {host} gave no answer crew reads"
+
+
+def here_reading(what, *args):
+    """What questions.py or transcript.py answers on this host, as its own command line would print it, read in this
+    process: questions <session>, or transcript end <session> | received <session> <offset> <text>."""
+    if what == "questions":
+        import questions
+        return questions.read(*args)
+    import transcript
+    return transcript.end(args[1]) if args[0] == "end" else transcript.received(args[1], int(args[2]), args[3])
 
 
 @functools.lru_cache(maxsize=None)

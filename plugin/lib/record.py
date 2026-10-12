@@ -88,16 +88,17 @@ def session():
     if not name:
         return None
     try:
-        host, sess = crew.place_of_agent(crew.load(), name)
+        fleet = crew.load()
+        host, _ = crew.place_of_agent(fleet, name)
     except Refusal:
         return None
     if host != crew.this_host():
         return None
-    try:
-        r = subprocess.run(["herdr", "--session", sess, "agent", "get", name], capture_output=True, text=True, timeout=10)
-        sid = json.loads(r.stdout)["result"]["agent"]["agent_session"]["value"] if r.returncode == 0 else None
-    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+    try:  # from the listing of its session this command reads (crew.Herdr)
+        sid = (crew.agent_get(fleet, name, fresh=False) or {}).get("agent_session", {}).get("value")
+    except (OSError, AttributeError):
         sid = None
+    sid = sid if isinstance(sid, str) else None
     _session = f"{host}:{sid}" if sid else None
     return _session
 

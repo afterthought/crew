@@ -70,7 +70,7 @@ Code
 
 **[read.1]** Rules out: a default partition; a stage guessed from a missing host; a tidy that removes when a plan can't be read; a stage start crew could not read taken as never started (`run_stage`, 2026-10-11, crw-1's construct that went to work while crew recorded it refused: `teams.15` details). Source: fixes f734f28, d9c8a11, e413c48; bolt-teams design; `plan.py` 686–690.
 
-**[read.2]** Rules out: a field read from a transcript without a probe; a "null" path printed from a missing value. Source: fixes 0aa835d, e1ed1df, 5a481ae; checked-capture design.
+**[read.2]** Rules out: a field read from a transcript without a probe; a "null" path printed from a missing value; an agent's status asked of herdr once for each agent where one listing answers them all. Source: fixes 0aa835d, e1ed1df, 5a481ae; checked-capture design; `crew.py` `listed` and `Herdr`, read against herdr 0.9.3's `agent list` and `pane list` on mac-studio on 2026-10-12, `tests/py/test_slots.py`.
 
 **[read.3]** Rules out: a listing that stops at the first dead host. Source: `bolt-plan` spec "What is in flight can be read from anywhere"; `crew-sites` spec; `run-record` spec; `tests/t-journey-board.sh`, where crew bolts, board, sites and page each name a host that does not answer.
 

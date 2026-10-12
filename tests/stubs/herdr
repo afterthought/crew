@@ -247,8 +247,9 @@ elif group == "agent" and cmd == "get":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     a = st["agents"][p]
     out({"agent": {"pane_id": p, "name": a["name"], "agent_status": a["status"], "agent_session": {"value": "sid-" + p.replace(":", "-")}}})
-elif group == "agent" and cmd == "list":
-    out({"agents": [{"pane_id": p, "name": a["name"], "agent_status": a["status"]} for p, a in st["agents"].items()]})
+elif group == "agent" and cmd == "list":  # as herdr 0.9.3 lists them: an agent with no name has none in its item
+    out({"agents": [dict({"pane_id": p, "agent_status": a["status"], "agent_session": {"value": "sid-" + p.replace(":", "-")}},
+                         **({"name": a["name"]} if a["name"] else {})) for p, a in st["agents"].items()]})
 elif group == "agent" and cmd == "rename":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     st["agents"][p]["name"] = rest[1]

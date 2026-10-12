@@ -4479,7 +4479,7 @@ def stage_ends(fleet, a):
             if a.ending:
                 got, _ = deliverable(fleet, t, o, held.get(o.slot, [None] * 4)[3])
                 ended.append((o, "delivered" if got else "stopped", got))
-            elif crew.agent_status(fleet, o.agent) != "working":
+            elif crew.agent_status(fleet, o.agent, fresh=False) != "working":
                 got, _ = deliverable(fleet, t, o, held.get(o.slot, [None] * 4)[3])
                 (ended.append((o, "delivered", got)) if got else keep.append(l))
             else:
@@ -4582,7 +4582,7 @@ def deliver(fleet, t, entries, unit, stage, words):
     stage's prompt. None while its stage's agent is working, or when telling it or starting its settle failed, so the
     next wait tries again."""
     o = owed_by_unit(t).get(unit)
-    status = crew.agent_status(fleet, o.agent) if o else None
+    status = crew.agent_status(fleet, o.agent, fresh=False) if o else None
     way = reach_way(bool(o), status, stage, stage == "verify" and verified(t["label"], unit, entries))
     if way == "told":
         return "told" if crew.tell(fleet, o.agent, words) else None
@@ -4667,7 +4667,7 @@ def rebase_dependents(fleet, t, plan, st, say):
             if not due:
                 continue
             o = owed.get(u.name())
-            waits = rebase_waits(u.name(), b.name(), due, o and crew.agent_status(fleet, o.agent), lambda: clean(pl["path"]), pl["path"])
+            waits = rebase_waits(u.name(), b.name(), due, o and crew.agent_status(fleet, o.agent, fresh=False), lambda: clean(pl["path"]), pl["path"])
             if waits:
                 say(waits)
                 continue
