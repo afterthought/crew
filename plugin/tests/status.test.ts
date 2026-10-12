@@ -10,7 +10,7 @@ const VIEWS = {
   stale: [['  ', null], ['read at 14:00; the rail tab on mac-studio has not refreshed it since', 'dim']],
   views: {
     'crw-1-conductor': [
-      [['  ', null], ['◕◔', null], ['  ', null], ['crew', 'dim'], [' ', null], ['curation-and-holds', null], ['  ', null], ['0 of 2 merged', null]],
+      [['  ', null], ['crew', null], ['  ', null], ['◕◔', null], ['  ', null], ['curation-and-holds', null], ['  ', null], ['0 of 2 merged', null]],
       [['✎   ', null], ['◕', null], ['  ', null], ['a-queued-unit-can-take-a-signal', null], ['  ', null], ['verify 3/3', null]],
     ],
   },

@@ -419,11 +419,12 @@ def held(p, team):
     return [b for b in p["construction"] if b["team"] == team]
 
 
-def bolt_row(b, *before):
-    """A held bolt on one line: its pips, its name, its state unless active and how many of its units have merged, its
-    landing's marker in the gutter, or attention once every unit has landed."""
-    return row(fields(*before, pips(b["units"]), named(b["repo"], b["bolt"]), "" if b["state"] == "active" else b["state"], merged(b)),
-               gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+def bolt_row(b, team=None):
+    """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
+    dim; then its pips, its name, its state unless active and how many of its units have merged; its landing's marker
+    in the gutter, or attention once every unit has landed."""
+    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], "" if b["state"] == "active" else b["state"],
+                      merged(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
 
 
 def ledger_rows(b):
@@ -435,8 +436,12 @@ def ledger_rows(b):
 
 
 def team_rows(p):
-    """Each team of the partition: the bolt it holds on one line, or that it holds none."""
-    return [r for t in p["teams"] for r in ([bolt_row(b, t["team"]) for b in held(p, t["team"])] or [row(fields(t["team"], ("holds no bolt", "dim")), " ")])]
+    """Each team of the partition, product by product: the bolt it holds on one line, or its product and that it holds
+    none."""
+    out = []
+    for t in sorted(p["teams"], key=lambda t: t["kit"]):
+        out += [bolt_row(b, t["team"]) for b in held(p, t["team"])] or [row(fields(t["kit"], (t["team"], "dim"), ("holds no bolt", "dim")), " ")]
+    return out
 
 
 def proposal_row(d, team=None):
@@ -450,15 +455,15 @@ def proposal_row(d, team=None):
 
 
 def next_rows(p, team=None):
-    """What comes after the work in hand, for one team or the whole partition: for each repository its first planned
-    bolt, the rest counted, then the queued units counted by repository."""
+    """What comes after the work in hand, for one team or the whole partition: for each product, the repository it
+    builds, its first planned bolt, the rest counted, then the queued units counted by product."""
     bp = p["bolt_plan"]
     planned = [b for b in bp["planned"] if team is None or team in b["teams"]]
     queued = [u for u in bp["queue"] if team is None or team in u["teams"]]
     out = []
     for repo in dict.fromkeys(b["repo"] for b in planned):
         mine = [b for b in planned if b["repo"] == repo]
-        out.append(row(fields(("next", "dim"), named(repo, mine[0]["bolt"]), f"and {len(mine) - 1} more planned" if len(mine) > 1 else ""), " "))
+        out.append(row(fields(repo or "", ("next", "dim"), mine[0]["bolt"], f"and {len(mine) - 1} more planned" if len(mine) > 1 else ""), " "))
     counts = {}
     for u in queued:
         counts[u["repo"] or "no repository"] = counts.get(u["repo"] or "no repository", 0) + 1
@@ -531,7 +536,10 @@ def agent_views(data):
     prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's and each host's
     operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
     With them, the line the mod adds once the frame is stale_after_ms old: when it was read, and that the rail tab has
-    not refreshed it since."""
+    not refreshed it since.
+
+    A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows)
+    changes these views and plugin/hooks/status.js with it, each with its cases (code.8)."""
     views = {}
     for p in data["partitions"]:
         views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
