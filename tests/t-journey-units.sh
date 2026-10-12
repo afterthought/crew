@@ -79,6 +79,7 @@ has "$out" "swb-1 holds tenant-environments: bolt/tenant-environments at $bolt o
 eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team)" "swb-1"
 eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
 eq "$(cat "$bolt/.prepared")" "$k"
+eq "$(field mac-studio bolt.give On) $(field mac-studio bolt.give Commit)" "bolt/tenant-environments team/swb-1 WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give makes the bolt's branch from main and its prepared worktree on the team's host"
 
 # The conductor runs the stages on the team's host.
@@ -420,6 +421,7 @@ grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land t
   "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
+eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, removing its worktree and what is over, and its conductor is told which cards to close"
 
 expect_ok crew bolt drop console-pages "the portal lists them"

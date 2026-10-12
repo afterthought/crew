@@ -18,13 +18,13 @@ The rules for the run record: what an entry is, when it is written, what it neve
 
 ## Details
 
-**[record.1]** Rules out: an entry before the act; an entry from `crew bolts`. Source: `run-record` spec; `record.py` 4–8; `plan.py` `ACTS`.
+**[record.1]** Rules out: an entry before the act; an entry from `crew bolts`. Source: `run-record` spec; `record.py` 4–8; `plan.py` `ACTS`, `named`; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
 
-**[record.2]** Rules out: `set -e` tripping on `entry`; a command failing for want of a record. Source: `record.py` 7–8, 151–153; `plugin/bin/crew` 123.
+**[record.2]** Rules out: `set -e` tripping on `entry`; a command failing for want of a record. Source: `record.py` 7–8, `emit`; `plugin/bin/crew` 123; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
 
-**[record.3]** Rules out: `Refused: \`unit add x "the whole intent"\``. Source: `run-record` spec "An entry holds no text anyone typed"; `record.py` 6–7.
+**[record.3]** Rules out: `Refused: \`unit add x "the whole intent"\``. Source: `run-record` spec "An entry holds no text anyone typed"; `record.py` 6–7; `tests/py/test_record.py`, `tests/t-journey-signals.sh`.
 
-**[record.4]** Rules out: a host writing another's file; an entry edited in place. Source: `record.py` 112–205; state-repository design.
+**[record.4]** Rules out: a host writing another's file; an entry edited in place. Source: `record.py` `emit`, `carry`; state-repository design; `tests/py/test_record.py`, `tests/contract/test_record.py`, `tests/t-journey-state.sh`.
 
 **[record.5]** Rules out: two ends for one start; an end never recorded. Source: `run-record` spec "A stage's end is recorded when crew sees it".
 
