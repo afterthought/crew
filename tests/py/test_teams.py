@@ -2,7 +2,7 @@
 greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with, crew.dispatch_place
 and crew.operator_session for where those run, crew.last_conversation for where a role resumes, and
 plan.amended_said for what a conductor brought back is told. Starting, greeting, reviving and taking them down through
-the command are the teams journey's (t-journey-teams)."""
+the command are the teams journey's (t-journey-teams, t-journey-main)."""
 import json
 import os
 
