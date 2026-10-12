@@ -20,7 +20,7 @@ Pending You, as its `post_request` tool schema read on 2026-10-11 says, and as t
 **Non-Goals:**
 
 - The animated change, a step at a time, which belongs to crew's page once `the-board-is-a-page` exists (record 0018).
-- How an image reaches Pending You, which `an-image-on-a-card-is-uploaded` puts in the card discipline; this change follows it.
+- How an image reaches Pending You, which `an-image-on-a-card-is-uploaded`, merged into this bolt before this unit, puts in the card discipline; this change follows it.
 - A batch's card (`a-batch-cards-notes-are-its-note-and-its-sessions`).
 - Leaving out a drop, an amendment, an order or a split: those take words, so the user does not approve and says why in the card's note, and the planner writes the proposal again (record 0018).
 
@@ -103,7 +103,9 @@ A proposal crew cannot read is refused, saying to post again later, as every che
 
 ### The briefs
 
-`planner.md` *Cards*: a proposal's card is what `crew plan card <n> --label <label>` prints; post `card` as it is with the row's key and your own fields, upload the picture from `picture` as the card discipline says for an image, and start a session only when `session` is true. When the user answers, from the card or a card split off it, run `crew plan answer <n> <question> <answer>` for each question answered, with `--note` for the note, and act on what it prints; close the card and each split with `ack_answer` once crew has applied or declined. Step 3 of *Proposals* says the same for an answer in the pane: `crew plan approve <n>`, with `--clear` for each unit the user leaves out. The sentence "An approval applies the commands exactly as the user read them" becomes "the commands the user read and kept". `cards_how` in `crew.py`: a proposal's card carries no session link unless `crew plan card` says it needs one; the paragraph that has every card that asks the user to read link a session names the proposal's exception.
+`planner.md` *Cards*: a proposal's card is what `crew plan card <n> --label <label>` prints; post `card` as it is with the row's key and your own fields, upload the picture from `picture` as the card discipline says for an image, and start a session only when `session` is true. When the user answers, from the card or a card split off it, run `crew plan answer <n> <question> <answer>` for each question answered, with `--note` for the note, and act on what it prints; close the card and each split with `ack_answer` once crew has applied or declined. Step 3 of *Proposals* says the same for an answer in the pane: `crew plan approve <n>`, with `--clear` for each unit the user leaves out. The sentence "An approval applies the commands exactly as the user read them" becomes "the commands the user read and kept". `cards_how` in `crew.py`: a proposal's card carries no session link unless `crew plan card` says it needs one; the paragraph that has every card that asks the user to read link a session names the proposal's exception; and the paragraph `an-image-on-a-card-is-uploaded` added, which has a card carry an artifact only for a picture or a document's substance as Markdown, names a proposal's card's picture and text, as `crew plan card` gives them.
+
+That unit's `rail-cards` delta adds the requirement that a card carries no artifact but such a picture or such Markdown, which the proposal's text block, a `code` artifact of lang `text`, would break. The text is plain text on purpose: it is the monospace block of at most forty characters a line that record 0018 item 4 names and the user approved on the phone (the exploration's `measurement-pages.card-request.json`), where Markdown would wrap it and set it in proportional type. So this change's `rail-cards` delta modifies that requirement to name the proposal's text as the one other artifact a card carries, and the whole-document link as not a proposal's.
 
 ### Docs
 
@@ -114,6 +116,7 @@ README's *Proposals* gains `crew plan card` and `crew plan answer`, and `crew pl
 - **The split's answers.** That each split keeps its question's `id`, and that the planner can tell which question a split answers, is read from the exploration's one accidental split, not from Pending You's reference. If a split loses the id, the planner still knows the question by its title and options, and `crew plan answer` checks what it is given against the card. → *Proof in dev* reads it on a real split.
 - **A bitmap font at two times** is coarser than the exploration's vector text. It is legible at a phone's width, and it needs nothing installed. → *Proof in dev*: the user reads it on the phone.
 - **Answers on one host.** The planner runs on one host and reads its cards there; a planner moved mid-card loses the gathered answers and records them again.
+- **The archive's order.** The `rail-cards` delta modifies a requirement `an-image-on-a-card-is-uploaded` adds, so that change is archived first; `openspec validate` says the archive would refuse this delta until then. → Whoever archives this bolt's changes takes the image unit's before this one.
 - **A card posted before this lands** is in the old form; the hook checks only new posts, so it stays until it is answered.
 
 ## Proof in dev
