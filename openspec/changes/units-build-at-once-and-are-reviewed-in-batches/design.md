@@ -66,7 +66,7 @@ On every `crew unit wait` and `crew prove --wait`, before it waits, crew runs on
 A forecast is recorded once for a pair of heads, `forecast` in the run record with both heads and the paths, and reaches the later unit once, in one of three ways:
 
 - its stage's agent is running: told with `crew tell` (`roles.4`) once the agent is not working (`teams.11`);
-- no agent of it is running and it has not delivered its verify: carried in the prompt of its next stage, which names the forecast entries it carries on its `stage.start`;
+- no agent of it is running and it has not delivered its verify: carried in the prompt of its next stage, which names the forecast entries it carries on its `stage.start`; a forecast against the bolt is dropped once a newer one against the bolt is made for the unit, since the bolt it was read against has moved;
 - it has delivered its verify and waits to merge: a settle stage (decision 6).
 
 Each carries the other unit's change path, its proposal's *Why* and *What Changes*, and the conflicting paths.

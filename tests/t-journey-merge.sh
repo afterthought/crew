@@ -3,7 +3,8 @@
 # that unit's work as its place took it is not forecast against the unit for the settle's revision of it; the unit
 # merges through worktrunk; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it,
 # and undoes a rebase that conflicts; the next read frees the merged unit's slot and removes its place; and the
-# dependent whose rebase conflicted is told how to make that rebase's upstream again.
+# dependent whose rebase conflicted is told how to make that rebase's upstream again, its older forecast against the
+# bolt dropped.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -67,7 +68,9 @@ has "$out" "$kd/places/a and unit/a are removed; the branch was at"
 [[ ! -d $kd/places/a ]] || fail "a's place is still there"
 ok "the next read frees a merged unit's slot and removes its place"
 
-# c's next prompt carries its rebase's conflict, naming the upstream that rebase used, made again by the command given.
+# c's next prompt carries its rebase's conflict, naming the upstream that rebase used, made again by the command given,
+# and not c's older forecast against the bolt, read before a merged, which this one replaces.
 expect_ok crew unit run c code
 has "$(prompt_to swb-1-unit-3)" "work as your place took it, which the bolt holds as merged (git rebase --onto bolt/tenant-environments \$(git commit-tree -p bolt/tenant-environments -p $c_took -m upstream"
-ok "a dependent whose rebase conflicts is told the upstream crew's rebase used, as a command that makes it again"
+lacks "$(prompt_to swb-1-unit-3)" "(git rebase bolt/tenant-environments)"
+ok "a dependent whose rebase conflicts is told the upstream crew's rebase used, as a command that makes it again, and only its newest forecast against the bolt"

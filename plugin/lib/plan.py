@@ -4896,10 +4896,14 @@ def carried_forecasts(fleet, t, plan, st_all, bolt, unit):
 
 def waiting_for(unit, entries):
     """The forecasts and amendments that reached a unit by its next prompt and that no stage start of it has carried
-    yet (its Forecast field naming their ids), from the run record's entries, oldest first."""
+    yet (its Forecast field naming their ids), from the run record's entries, oldest first. A forecast against the bolt
+    is dropped once a newer one against the bolt was made for the unit, however that one reached it: the bolt it was
+    read against has moved, and the newer one says how the unit meets the bolt now (teams.12)."""
     taken = {i for e in entries if e.get("Act") == "stage.start" and f"unit/{unit}" in e["On"] for i in (e.get("Forecast") or "").split()}
-    return [e for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Reached") == "prompt"
-            and e["On"][:1] == [f"unit/{unit}"] and e["Id"] not in taken]
+    mine = [e for e in entries if e.get("Act") in ("forecast", "amendment") and e["On"][:1] == [f"unit/{unit}"]]
+    newest = {e["On"][1]: e["Id"] for e in mine if e["Act"] == "forecast" and e["On"][1].startswith("bolt/")}
+    return [e for e in mine if e.get("Reached") == "prompt" and e["Id"] not in taken
+            and newest.get(e["On"][1], e["Id"]) == e["Id"]]
 
 
 # ------------------------------------------------------------------------------------------------- the wait

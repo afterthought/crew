@@ -142,14 +142,24 @@ class TestAmendedAfters:
 
 
 class TestCarried:
-    def fc(self, eid, unit="d", reached="prompt", act="forecast"):
-        return {"Act": act, "Id": eid, "On": [f"unit/{unit}", "bolt/t"], "Reached": reached}
+    def fc(self, eid, unit="d", reached="prompt", act="forecast", other="bolt/t"):
+        return {"Act": act, "Id": eid, "On": [f"unit/{unit}", other], "Reached": reached}
 
     def test_what_reached_the_unit_by_prompt_waits_until_a_start_carries_it(self):
-        entries = [self.fc("f1"), self.fc("f2", act="amendment"), self.fc("f3", reached="told"), self.fc("f4", unit="e")]
+        entries = [self.fc("f1"), self.fc("f2", act="amendment", other="unit/a"), self.fc("f3", reached="told", other="unit/a"),
+                   self.fc("f4", unit="e")]
         assert [e["Id"] for e in plan.waiting_for("d", entries)] == ["f1", "f2"]
         carried = {"Act": "stage.start", "On": ["stage/d/code", "unit/d"], "Forecast": "f1 f2"}
         assert plan.waiting_for("d", entries + [carried]) == []
+
+    def test_a_forecast_against_the_bolt_is_dropped_once_a_newer_one_against_the_bolt_was_made(self):
+        entries = [self.fc("f1"), self.fc("f2", other="unit/a"), self.fc("f3"), self.fc("f4", unit="e")]
+        assert [e["Id"] for e in plan.waiting_for("d", entries)] == ["f2", "f3"]
+        assert [e["Id"] for e in plan.waiting_for("d", entries + [self.fc("f5", reached="told")])] == ["f2"]
+
+    def test_a_newer_forecast_against_another_unit_drops_none(self):
+        entries = [self.fc("f1", other="unit/a"), self.fc("f2", act="amendment", other="unit/a"), self.fc("f3", other="unit/a")]
+        assert [e["Id"] for e in plan.waiting_for("d", entries)] == ["f1", "f2", "f3"]
 
 
 class TestRebase:

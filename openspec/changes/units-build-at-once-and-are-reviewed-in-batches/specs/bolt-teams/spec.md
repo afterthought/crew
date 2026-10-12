@@ -90,6 +90,10 @@ A predicted conflict SHALL reach the later unit once for the same two heads, wit
 - **WHEN** the conductor's wait runs again and neither head has moved
 - **THEN** nothing is told again
 
+#### Scenario: A newer forecast against the bolt
+- **WHEN** a unit with no agent running was forecast to conflict with the bolt, the bolt moved, and a newer forecast against the bolt was made for it
+- **THEN** its next stage's prompt carries only the newer one
+
 ### Requirement: A forecast conflict between two units orders them
 When a conflict is forecast between two units that have both not merged, the later unit SHALL gain `After` on the earlier one and merge after it, and the later unit's agent SHALL take the earlier unit's work into its place and resolve the conflict there.
 
