@@ -302,8 +302,13 @@ def proposal_refusal(label, key, given):
         return f"crew refuses card {key}: {str(e).rstrip('.')}.{again}"
     except Exception as e:
         return later.format(str(e).rstrip("."))
-    shown = f"`{plan.crew.HOME}/plugin/bin/crew plan card {n} --label {label}`"
-    new, lone, asks = m["new"], m["lone"], m["questions"]
+    return proposal_form(n, m, given, f"`{plan.crew.HOME}/plugin/bin/crew plan card {n} --label {label}`")
+
+
+def proposal_form(n, m, given, shown):
+    """None for proposal n's card in the form its card model m gives it, as `crew plan card` prints it (shown, the
+    command that prints it), else the words that refuse it (briefs.13)."""
+    key, (new, lone, asks) = f"proposal/{n}", (m["new"], m["lone"], m["questions"])
     kind, options, questions, action = given.get("kind"), given.get("options"), given.get("questions"), given.get("action")
     steps = action.get("steps") if isinstance(action, dict) else None
     wrong = [WORDS] if words(given) else []

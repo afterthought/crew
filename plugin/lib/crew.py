@@ -205,8 +205,10 @@ def partition_of(fleet, label):
 
 
 @functools.lru_cache(maxsize=None)
+@functools.lru_cache(maxsize=None)
 def this_host():
-    """The host crew runs on, as `hostname -s` names it: the same name the hosts file and the teams file use."""
+    """The host crew runs on, as `hostname -s` names it: the same name the hosts file and the teams file use. Read once
+    a process."""
     return subprocess.run(["hostname", "-s"], capture_output=True, text=True, check=True).stdout.strip()
 
 
@@ -266,16 +268,9 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     taken fails the tell, saying so of what was sent, with again, what to do once it is ready, when it was never
     taken. A tell is in the run record of the recipient's partition, with its length and never its text."""
     host, session = place_of_agent(fleet, name)
-    status, asking, unread = waits_on_question(fleet, name)
-    if unread:
-        print(f"could not tell {name} on {host}: {unread}, so crew can't tell whether it is waiting on a question; "
-              "nothing was sent", file=sys.stderr)
-        return False
-    if status is None:
-        print(f"could not tell {name} on {host}: it is not up", file=sys.stderr)
-        return False
-    if asking:
-        print(waiting_said(name), file=sys.stderr)
+    why = tell_refusal(name, host, *waits_on_question(fleet, name))
+    if why:
+        print(why, file=sys.stderr)
         return False
     mark = f"[crew tell from {sender}]" if sender else "[crew]"
     if taken:
@@ -288,14 +283,29 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     else:
         r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "prompt", name, f"{mark} {text}"])
         if r.returncode:
-            # herdr's own check, at the moment of typing: a question opened since crew read the agent.
-            print(waiting_said(name) if herdr_error(r.stderr) == "agent_blocked"
-                  else f"could not tell {name} on {host}: " + (r.stderr.strip() or "it is not up"), file=sys.stderr)
+            print(typed_refusal(name, host, r.stderr), file=sys.stderr)
         sent = r.returncode == 0
     if sent and record:
         import record as rec  # record imports this module
         rec.emit(label_of_agent(fleet, name), "tell", on=[f"agent/{name}"], why=f"tell {name}", Chars=len(text))
     return sent
+
+
+def tell_refusal(name, host, status, asking, unread):
+    """Why a tell types nothing (teams.11), from what crew read of the agent: what it could not read, the agent not
+    up, or waiting on a question in its pane; None when the tell may be typed."""
+    if unread:
+        return f"could not tell {name} on {host}: {unread}, so crew can't tell whether it is waiting on a question; nothing was sent"
+    if status is None:
+        return f"could not tell {name} on {host}: it is not up"
+    return waiting_said(name) if asking else None
+
+
+def typed_refusal(name, host, stderr):
+    """What a tell herdr refused to type says: herdr's own check, at the moment of typing, of a question opened since crew
+    read the agent, in the same words as crew's; else herdr's words, or that the agent is not up."""
+    return waiting_said(name) if herdr_error(stderr) == "agent_blocked" else f"could not tell {name} on {host}: " + (
+        (stderr or "").strip() or "it is not up")
 
 
 def waiting_said(name):

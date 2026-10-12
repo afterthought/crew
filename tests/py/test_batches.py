@@ -1,6 +1,6 @@
 """Constructed changes reach the user in batches that span the partition (briefs.12): which changes are due
-(plan.due_changes), when a batch is due and why (plan.batch_due), and a batch's cards (plan.batch_cards). Telling
-the planner, the reviewer's tab and the rail's rows are t-batches'."""
+(plan.due_changes), when a batch is due and why (plan.batch_due), and a batch's cards (plan.batch_cards). The rail's
+rows are test_rail's; telling the planner and the reviewer's tab, the review journey's (t-journey-review)."""
 import datetime
 
 from facts import START, constructed, plan_of, reviewed, told
