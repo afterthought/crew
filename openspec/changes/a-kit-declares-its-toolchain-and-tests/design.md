@@ -18,15 +18,15 @@ Departures: `code.1` names moon and python3 as devenv's; this change moves them 
 
 **Goals:**
 - crew assumes neither moon nor devenv of a kit, names no kit script and reads no kit's profile.
-- A kit's declaration means the same to crew as to sluice, so flywheel-next can compose sluice in crew's place on the same files.
+- A kit's declaration means the same to crew as to sluice, so flywheel, using sluice's SDK, can take over crew's steps on the same file, then named `flywheel.toml`.
 - A worktree crew makes in a kit with a declaration has its toolchain printed and its runner set up before its agent starts.
 - crew's tests run on the Python minor the hosts run crew on.
 
 **Non-Goals:**
 - How agents come to work inside their kit's toolchain: held for an elaboration.
-- The test adapter's run and read, built with the bolt's verification in `no-worktree-holds-a-bolts-branch`; this change builds its setup.
+- The test adapter's run and read: crew ports them when it first runs a kit's checks itself, which waits on the held bolt question (`openspec/explorations/bolt-branches-under-sluice/reading.md`); this change builds its setup.
 - Caching a kit's printed toolchain across worktrees (sluice's piece 11).
-- Changing any kit: switchboard-kit writes its declaration and drops `crew-prepare` in its own repository.
+- Changing any kit: switchboard-kit writes its declaration and drops `crew-prepare` in its own repository; until it does, it keeps working, since each of its suite scripts runs `bun install --frozen-lockfile` before it starts.
 
 ## Decisions
 
@@ -42,7 +42,7 @@ def declared(text):
     "command" with no command."""
 ```
 
-It reads only `[tests]`'s `toolchain`, `runner` and `command`; everything else in the file is sluice's. A file with no `[tests]` declares nothing. The file is read from the worktree being made ready, on the team's host: the script that makes the worktree prints it after `git worktree add`, between two marker lines so an absent file reads apart from an empty one, and `make_place` parses it in crew's process.
+It reads only `[tests]`'s `toolchain`, `runner` and `command`; everything else in the file is sluice's. The file's name is `kit.DECLARATION`, the one place crew names it, so its rename to `flywheel.toml` is one edit. A file with no `[tests]` declares nothing. The file is read from the worktree being made ready, on the team's host: the script that makes the worktree prints it after `git worktree add`, between two marker lines so an absent file reads apart from an empty one, and `make_place` parses it in crew's process.
 
 ### The adapters
 
@@ -78,20 +78,22 @@ A step that fails refuses the command through `fail()`, naming the worktree and 
 - `.moon/toolchains.yml`: `proto.version: '0.63.1'`; `unstable_python` with `versionFromPrototools: true` and `packageManager: uv`; `unstable_uv` with `versionFromPrototools: true`.
 - `tests/pyproject.toml`: a project with no dependencies, `requires-python = ">=3.13"`, and `pytest==9.1.1` in its `dev` group; `tests/uv.lock` as moon's first sync writes it, committed; `tests/.venv/` in `.gitignore`.
 - `.config/sluice.toml`: `[tests]` with `toolchain = ["devenv", "print-dev-env"]` and `runner = "moon"`, so crew's own worktrees are made ready through crew's adapters like any kit's.
-- `tests/moon-tasks`: every task's inputs gain `/.prototools`, `/.moon/toolchains.yml`, `/tests/pyproject.toml` and `/tests/uv.lock`. `tests/suite` keeps `MOON_HOME` and a caller's `MOON_CONCURRENCY` through its clearing of `MOON_*`.
+- The tasks' tag is `check-full`, beside sluice's `check-fast`, in place of `suite` (`tests.5`): `tests/moon-tasks` writes it and `tests/suite` targets `tests:#check-full`.
+- `tests/moon-tasks`: every task's inputs gain `/.prototools`, `/.moon/toolchains.yml`, `/tests/pyproject.toml` and `/tests/uv.lock`, and the command core gains `/plugin/lib/kit.py`. `tests/suite` keeps `MOON_HOME` and a caller's `MOON_CONCURRENCY` through its clearing of `MOON_*`.
 - CLAUDE.md's "`python3 -m pytest tests/py -q` for its output" becomes `moon run tests:logic`, since the shell's `python3` has no pytest and the tests' does.
 
 ### Every agent carries its name for sluice (built)
 
 `crew-role` exports `SLUICE_AGENT=$NAME` beside `CREW_AGENT` and `CREW_LABEL`; `session-start` writes it with them when herdr resumes an agent; `teams.6` names it (4bdc6d0).
 
-## Rules this changes, on acceptance
+## Rules this changes
 
-Written by the design agent once the user accepts record 0023 (`docs.7`); `teams.6` was amended with its build.
+Amended with the build, on the user's acceptance of record 0023; `teams.6` was amended with its own build.
 
 - `code.1`'s last clause: "devenv declares only proto, jq and recutils; `.prototools` pins moon, Python at the minor the hosts run crew on, and uv; pytest, the tests' one dependency, is locked in `tests/uv.lock`."
 - A new `plan.17`: "crew makes a worktree ready only through its kit's declaration in `.config/sluice.toml`, by the declared toolchain and then the declared runner's setup, run in the worktree on the team's host with sluice's cleaned environment; a kit that declares nothing gets nothing; crew names no kit script, reads no kit's profile and assumes neither moon nor devenv."
-- `tests.md`'s `paths` gain `.prototools` and `.moon/**`; `core.md`'s table row for `tests.md` with them.
+- `tests.5` names the tag `check-full`, and its details the user's word on `suite`.
+- `tests.md`'s `paths` gain `.prototools` and `.moon/**`, and `plan.md`'s gain `plugin/lib/kit.py`; `core.md`'s table rows with them.
 
 ## Risks / Trade-offs
 

@@ -1,5 +1,7 @@
 # No worktree holds a bolt's branch
 
+> Held for an elaboration (record 0023): this is option B of `openspec/explorations/bolt-branches-under-sluice/reading.md`, designed and not decided. It is not built until the user decides that question.
+
 ## Why
 
 A kit that merges through sluice has its bolt branches moved by sluice, through gix, and protected by sluice's reference-transaction hook, which refuses every other move: `git merge`, `git reset`, `git rebase`, `git branch -f`. crew keeps each bolt's branch checked out in `<kit>/bolts/<bolt>`, so every landing sluice makes leaves that worktree's index and files behind its HEAD; crew's landing rebases the bolt's branch onto main, and a carrying fix resets it, both of which sluice's hook refuses. The user: "we should try to move CREW outside of SLUICE's control to a design where we don't check out the bolt branch as a work tree." Record 0023, point 7.
