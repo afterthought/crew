@@ -1,4 +1,4 @@
-"""The contract tier (tests.11): git, recutils and worktrunk run for real in a scratch directory, each case pinning a
+"""The contract tier (tests.11): git, recutils, worktrunk and moon run for real in a scratch directory, each case pinning a
 behaviour crew's code assumes and naming what assumes it. Every git here runs with no global or system config, so
 the host's own settings and hooks reach nothing."""
 import os
