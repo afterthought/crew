@@ -74,7 +74,6 @@ LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
 import crew  # noqa: E402
 import gather  # noqa: E402
-import picture  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
@@ -2654,6 +2653,7 @@ def plan_card(fleet, a):
     d = CARDS / label / "proposal" / str(a.n)
     d.mkdir(parents=True, exist_ok=True)
     f, tmp = d / f"proposal-{a.n}.png", d / f".proposal-{a.n}.png"
+    import picture  # only a card's picture needs it, so no other command starts it
     tmp.write_bytes(picture.draw(m["sections"]))
     tmp.replace(f)
     print(json.dumps({"card": m["card"], "picture": str(f), "session": m["session"]}, indent=1, ensure_ascii=False))

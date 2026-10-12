@@ -66,7 +66,7 @@ tasks:
     options: { runFromWorkspaceRoot: true }
   t-cards:
     command: 'tests/run t-cards'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-cards.sh', '/plugin/hooks/**/*']
+    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-cards.sh', '/plugin/hooks/**/*', '/plugin/lib/picture.py', '/plugin/lib/font.py']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-dev-shell:
@@ -156,7 +156,7 @@ tasks:
     options: { runFromWorkspaceRoot: true }
   t-proposal-card:
     command: 'tests/run t-proposal-card'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-proposal-card.sh']
+    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-proposal-card.sh', '/plugin/lib/picture.py', '/plugin/lib/font.py']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-proposals:

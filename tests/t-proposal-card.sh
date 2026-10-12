@@ -9,6 +9,7 @@
 # installed but crew's own tools, its height growing with its rows, a dropped unit and a new one each in its colour.
 # A closed proposal, or one that no longer applies, has no card.
 # Each scenario of the plan-proposals spec on the card.
+# Reads: plugin/lib/picture.py plugin/lib/font.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
