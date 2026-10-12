@@ -5,8 +5,9 @@ Every crew test on a host, whichever worktree, team or suite runs it, takes one 
 until the test ends, so the tests running at once on the host never outnumber its slots however many suites run side
 by side. A slot is a lock file, slot-<n>, in ~/.cache/crew/test-slots (CREW_TEST_SLOTS_DIR names another), held
 with flock for as long as the command or anything it leaves running has the file open, and let go by the system when
-the last of them ends, killed or not. The host has CREW_TEST_SLOTS slots, else two fewer than its cores and at least
-two, so the agents beside the tests keep some of the host. A command waits, polling, until a slot is free.
+the last of them ends, killed or not. The host has CREW_TEST_SLOTS slots, else half its cores and at least two: each
+test keeps about a core busy starting processes, and the agents and the user beside the tests keep the rest. A
+command waits, polling, until a slot is free.
 
 A test runs with CREW_TEST_SLOT naming its slot. A suite or test started inside it (t-suite's) runs in that slot
 rather than waiting on another one its own test may be holding. Written for macOS, which has no flock command.
@@ -24,7 +25,7 @@ def count():
         if not want.isdigit() or int(want) < 1:
             sys.exit(f"tests/slot: CREW_TEST_SLOTS is '{want}', not a number of slots")
         return int(want)
-    return max(2, (os.cpu_count() or 4) - 2)
+    return max(2, (os.cpu_count() or 4) // 2)
 
 
 def take(d, n):
