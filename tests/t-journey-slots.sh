@@ -1,11 +1,11 @@
 # Four units in swb-1's four slots, through the crew command on the stubs (tests.11, record 0022), a part of the units
 # journey (t-journey-units): a construct fetches and gathers once on each host; its wait forecasts a conflict with an
 # unmerged unit ahead of it, puts it after that unit and tells only it; an agent's stop-short ends its stage and tells
-# its conductor; a fifth unit is refused with every slot in flight; a working agent is ended only with --force; a
-# prompt left typed is sent again, and one never taken starts nothing.
+# its conductor; and with --force a working agent is ended and a prompt left typed is sent again.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
-# cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
-# command's wiring once.
+# cases (tests/py/): a unit run refused with every slot in flight, on a working agent without --force, or for a prompt
+# never taken is tests/py/test_slots.py's (tests.12). How git and worktrunk behave for them, contract cases
+# (tests/contract/). Each step checks the command's wiring once.
 # Reads: plugin/hooks/ tests/units.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/units.sh"
@@ -38,13 +38,9 @@ eq "$(field $box stage.end Ended stage/d/construct)" "short"
 [[ $(record_of $box) != *ZQXN* ]] || fail "a stop-short's words are in the run record"
 ok "an agent's stop-short ends its stage and tells its conductor its words, which the run record never holds"
 
-expect_fail "all 4 of swb-1's slots are in flight: unit-1 holds a; unit-2 holds b; unit-3 holds c; unit-4 holds d" crew unit run e construct
 units_ws=$(herdr_state $box wldn-1 '.workspaces | to_entries[] | select(.value.label == "swb-1 units") | .key')
 eq "$(herdr_state $box wldn-1 "[.panes[] | select(.workspace == \"$units_ws\")] | length")" "4"
-has "$(field $box stage.start Refused stage/e/construct)" "all 4 of swb-1's slots are in flight"
 status swb-1-unit-4 working
-expect_fail "swb-1-unit-4 is working; add --force to end it anyway." crew unit run d construct
-has "$(field $box stage.start Refused stage/d/construct)" "swb-1-unit-4 is working"
 export CREW_TAKEN_WITHIN=1
 as $box herdr --session wldn-1 stub leave swb-1-unit-4 1
 : > "$CREW_TEST_LOG"
@@ -52,11 +48,5 @@ expect_ok crew unit run d construct "Name the tenant." --force
 eq "$(sent swb-1-unit-4 "'/opsx:propose d Unit d. Name the tenant.'")" "2"
 eq "$(field $box stage.start Refused stage/d/construct)" ""
 has "$(cat "$stages")" "unit-4 d construct "
-never="swb-1-unit-4 never took its construct prompt for d, sent twice; the stage never started and nothing is left typed in its pane: run it again with crew unit run d construct"
-as $box herdr --session wldn-1 stub leave swb-1-unit-4 2
-expect_fail "$never" crew unit run d construct
-eq "$(field $box stage.start Refused stage/d/construct)" "$never"
-lacks "$(cat "$stages")" "unit-4 d construct "
-has "$(cat "$slots")" "unit-4 unit d"
 unset CREW_TAKEN_WITHIN
-ok "a fifth unit is refused with every slot in flight, a working agent is ended only with --force, a prompt left typed is sent again, and one never taken starts nothing and keeps its slot"
+ok "the units workspace holds a pane for each slot in flight, and with --force a working agent is ended and a prompt left typed is sent again"
