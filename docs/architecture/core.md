@@ -82,7 +82,7 @@ Code
 
 **[code.2]** Rules out: a bare `raise` reaching the user; `sys.exit(1)` with no message. Source: `crew.py` 38–43, 662–666; `plan.py` 3072–3076.
 
-**[code.3]** Rules out: a team command acting on local slot files for a remote team; an ssh that can prompt. Source: `plugin/bin/crew` `forward`, `there` and `one`, which forwards a command that is one Python process once that process has named the team's host (`plan.py` `forwarded`); `crew.py` `on_machine`, `crew_argv`.
+**[code.3]** Rules out: a team command acting on local slot files for a remote team; an ssh that can prompt. Source: `plugin/bin/crew` `there` and `one`, which forwards a command that is one Python process once that process has named the host its team's or main level's agents run on (`plan.py` `forwarded`); `crew.py` `on_machine`, `crew_argv`; `plan.py` `elsewhere`, which runs `crew _dispatch` on each host of a partition.
 
 **[code.4]** Rules out: a unit named with a slash or a capital. Source: `crew.py` 31, 114, 138; `plan.py` 81, 89.
 

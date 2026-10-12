@@ -84,7 +84,7 @@ import gather  # noqa: E402
 import kit  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
-from crew import Refusal, fail  # noqa: E402
+from crew import Refusal, Stopped, fail  # noqa: E402
 from picture import cut, wrap  # noqa: E402
 
 REPLAYS = 5
@@ -4138,11 +4138,10 @@ def stage_ended_row(fleet, a):
         crew.tell(fleet, conductor, f"{agent()} ran {a.stage} on {'chore' if a.chore else 'unit'} {a.unit}. {close_card(a.row)}")
 
 
-def amended_units(fleet, a):
+def amended_units(fleet, t):
     """The line a team's conductor is greeted with, or sent on crew resume, naming each unit of its bolt whose stage is
-    amended, which no construct has run on since: nothing when there is none. When the plan or the bolt's kit cannot
-    be read it says so, rather than name no unit (read.1), and still exits 0, so the greeting goes out."""
-    t = crew.team_of(fleet, a.team)
+    amended, which no construct has run on since: "" when there is none. When the plan or the bolt's kit cannot be read
+    it says so, rather than name no unit (read.1), and the greeting still goes out."""
     CONTEXT["label"] = t["label"]
     errors, names, unread = {}, [], []
     found = plans(fleet, [t["label"]], errors)
@@ -4158,9 +4157,7 @@ def amended_units(fleet, a):
                     names.append(u.name())
                 elif s["stage"] == "unknown" and s.get("why") and s["why"] not in unread:
                     unread.append(s["why"])
-    said = amended_said(names, unread)
-    if said:
-        print(said)
+    return amended_said(names, unread)
 
 
 def amended_said(names, unread):
@@ -4179,11 +4176,11 @@ def amended_said(names, unread):
     return " ".join(said)
 
 
-def bolt_of_team(fleet, a):
-    t = crew.team_of(fleet, a.team)
+def bolt_of_team(fleet, t):
+    """The bolt a team holds, from its plan; refused when it holds none, or the plan can't be read."""
     repo, ref = state_of(fleet, t["label"])
     tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
-    print(sh(BOLT=bolt_held(read(repo, ref, tip), t["name"])))
+    return bolt_held(read(repo, ref, tip), t["name"])
 
 
 def bolt_held(plan, team):
@@ -5693,35 +5690,32 @@ def stage_needs(fleet, a):
 
 # ------------------------------------------------------------------------------ a team's commands, one process each
 
-class Stopped(Exception):
-    """A team's command that has said, and recorded, why it stops: it ends with code and says nothing more."""
-
-    def __init__(self, code=1):
-        super().__init__(code)
-        self.code = code
-
-
-def forwarded(fleet, t):
-    """A team's command runs on the team's host (code.3). On another host this process says on descriptor 3 where the
-    team runs and how crew is run there, as shell assignments (teams.9), for bash crew to run the same command there as
-    the one asking, and stops, having touched nothing."""
-    if t["machine"] == crew.this_host():
+def forwarded(fleet, machine):
+    """A team's or a main level's command runs on the host its agents run on (code.3). On another host this process says
+    on descriptor 3 where that is and how crew is run there, as shell assignments (teams.9), for bash crew to run the same
+    command there as the one asking, and stops, having touched nothing."""
+    if machine == crew.this_host():
         return
-    said = sh(MACHINE=t["machine"], SSH_TARGET=t["ssh"], **crew.reach(fleet, t["machine"]))
+    said = sh(MACHINE=machine, SSH_TARGET=fleet["hosts"][machine]["ssh"], **crew.reach(fleet, machine))
     try:
         os.write(3, (said + "\n").encode())
     except OSError:
-        fail(f"team {t['name']} runs on {t['machine']}: run this command there with crew")
+        fail(f"this runs on {machine}: run it there with crew")
     raise Stopped(0)
 
 
-def on_team_host(fleet, t, force=False):
-    """A team's command where it runs: forwarded to the team's host when this is not it (forwarded); what killed
-    commands left of their readings swept; the asker's Claude session read while herdr's listing of the team's session
-    is the one the command starts with (record.session); and the team's state folder there."""
-    forwarded(fleet, t)
+def arrived(fleet, machine):
+    """A command where it runs: forwarded there when this is not that host (forwarded); what killed commands left of
+    their readings swept; and the asker's Claude session read while herdr's listing is the one the command starts with
+    (record.session)."""
+    forwarded(fleet, machine)
     READ.sweep()
     record.session()
+
+
+def on_team_host(fleet, t, force=False):
+    """A team's command where it runs (arrived), with the team's state folder there."""
+    arrived(fleet, t["machine"])
     team = crew.Team(fleet, t, force)
     team.ensure()
     return team
@@ -5982,6 +5976,389 @@ def unit_free(fleet, a):
         print(e, file=sys.stderr)
 
 
+# ------------------------------------------------------------- the standing agents' commands, one process each
+
+def greeting(fleet, agents, roles):
+    """Each agent outside a team that a command started or brought back is greeted (teams.7), side by side, so one
+    waiting on a question holds back no other; a greeting that can't be sent fails nothing. Returns the greetings, for
+    the command to wait on before it ends (greeted)."""
+    import threading
+
+    def greet(name):
+        try:
+            crew.greet_standing(fleet, name)
+        except Refusal as e:
+            print(e, file=sys.stderr)
+    out = [threading.Thread(target=greet, args=(agents.agent_of(r),)) for r in roles]
+    for th in out:
+        th.start()
+    return out
+
+
+def greeted(greetings):
+    """Once every greeting has been sent, or given up on."""
+    for th in greetings:
+        th.join()
+
+
+def greet_conductor(fleet, t):
+    """A fresh conductor told to read where its bolt stands and carry on, before anyone asks it anything (teams.7), the
+    greeting opening with the units of its bolt that wait amended, for it to start their construct (plan.15). A greeting
+    that can't be sent fails nothing."""
+    try:
+        first = amended_units(fleet, t)
+    except Refusal:
+        first = ""
+    try:
+        crew.greet(fleet, t["name"], first=f"{first} " if first else "")
+    except Refusal as e:
+        print(e, file=sys.stderr)
+
+
+def picked(team, roles):
+    """The standing roles a command names, or all of them (crew.roles_picked); a role there is none of stops it, said,
+    with exit 2."""
+    try:
+        return crew.roles_picked(roles, team.standing)
+    except Refusal as e:
+        print(e, file=sys.stderr)
+        raise Stopped(2)
+
+
+def started_all(team):
+    """Each standing role of a team started fresh: the roles started. One that can't start stops the command."""
+    for role in team.standing:
+        if not team.start(role):
+            raise Stopped(1)
+    return list(team.standing)
+
+
+def team_cmd(fleet, a):
+    """crew up|close|rebuild|restart|resume|clear|down <team>, on the team's host, one process (code.7): the team's
+    conductor and ops started, brought back, cleared or ended there (teams.2, teams.6, teams.7), each act recorded
+    (record.1). close and rebuild end every agent, working or not."""
+    t = crew.team_of(fleet, a.team)
+    team = on_team_host(fleet, t, a.force or a.act in ("close", "rebuild"))
+    end, name = ending(fleet, t), t["name"]
+    if a.act == "up":
+        for role in team.standing:
+            not team.status(role) or fail(crew.already_up_said(team.agent_of(role), name))
+        team.mark(down=False)
+        team.panes()
+        team.record("team.up", f"team({name}): up", started_all(team))
+        greet_conductor(fleet, t)
+    elif a.act == "close":
+        team.teardown(end)
+        team.mark(down=True)
+        team.record("team.close", f"team({name}): close", team.ended)
+        print(f"{name} is closed")
+    elif a.act == "rebuild":  # a slot whose work is over, its agent ended with the rest, is freed rather than kept
+        team.teardown(end)
+        reap(fleet, team)
+        team.mark(down=False)
+        team.panes()
+        team.record("team.rebuild", f"team({name}): rebuild", started_all(team))
+        greet_conductor(fleet, t)
+    elif a.act == "restart":
+        roles, stopped_ = picked(team, a.roles), []
+        team.mark(down=False)
+        for role in roles:
+            why = team.stop(role, end)
+            print(why, file=sys.stderr) if why else stopped_.append(role)
+        team.panes()
+        for role in stopped_:
+            if not team.start(role):
+                raise Stopped(1)
+            team.record("agent.restart", f"team({name}): restart {role}", [role])
+        if a.greet and "conductor" in roles:
+            greet_conductor(fleet, t)
+    elif a.act == "resume":
+        roles, back = picked(team, a.roles), False
+        team.mark(down=False)
+        team.panes()
+        for role in roles:
+            if team.status(role):
+                print(f"{team.agent_of(role)} is already up")
+                continue
+            if team.start(role, "resume"):
+                team.record("agent.resume", f"team({name}): resume {role}", [role])
+            else:
+                print(f"{team.agent_of(role)} did not come back with its conversation; starting it fresh")
+                if not team.start(role):
+                    raise Stopped(1)
+                team.record("agent.start", f"team({name}): start {role}", [role])
+            back = back or role == "conductor"
+        # resume greets nobody: a conductor it brought back is sent, as crew's notice, the units of its bolt that wait amended
+        line = amended_units(fleet, t) if back else ""
+        if line:
+            crew.tell(fleet, f"{name}-conductor", line)
+    elif a.act == "clear":
+        role = picked(team, a.roles[:1])[0]
+        agent, pane = team.agent_of(role), team.pane(role)
+        why = crew.clear_refusal(agent, team.status(role), team.force)
+        not why or fail(why)
+        r = team.herdr.run("agent", "prompt", pane, "/clear")
+        r.returncode == 0 or fail((r.stderr or "").strip() or f"herdr could not send /clear to {agent}")
+        crew.nap(2)
+        if not team.give_name(pane, agent):
+            raise Stopped(1)
+        team.record("agent.clear", f"team({name}): clear {role}", [role])
+        print(f"{agent} cleared")
+    else:
+        for role in (*team.standing, *team.slots):
+            why = team.stop(role, end)
+            if why:
+                print(why, file=sys.stderr)
+        team.mark(down=True)
+        team.record("team.down", f"team({name}): down", team.ended)
+        print(f"{name} is down; its panes are still there.")
+
+
+def prove_cmd(fleet, a):
+    """crew prove <team> ["<words>"] | --wait, on the team's host: ops asked to deploy the bolt and work each unit's
+    Proof in dev list, the request taken or sent again (teams.15), the proof's start recorded and its end owed like a
+    stage's; or the wait on ops's proof file (stage_wait). Refused, and recorded, while the team holds no bolt or ops is
+    not up, and when ops never took the request, or crew can't tell it did, no proof is owed."""
+    t = crew.team_of(fleet, a.team)
+    team = on_team_host(fleet, t)
+    if a.wait:
+        return stage_wait(fleet, argparse.Namespace(team=t["name"], slot="ops", timeout=a.timeout, stuck=a.stuck))
+    name, ops = t["name"], f"{t['name']}-ops"
+    try:
+        bolt = bolt_of_team(fleet, t)
+    except Refusal as e:
+        stopped(t["label"], "stage.start", [f"team/{name}", f"agent/{ops}"], str(e))
+    on = [f"stage/{bolt}/proof", f"bolt/{bolt}", f"agent/{ops}"]
+    if not team.status("ops"):
+        stopped(t["label"], "stage.start", on, f"{ops} is not up: crew resume {name} ops brings it back")
+    if team.owes():  # a proof still owed is over once another is asked for
+        ending(fleet, t)("ops")
+    said = io.StringIO()
+    with contextlib.redirect_stderr(said):
+        taken = crew.tell(fleet, ops, "Deploy the bolt and work the Proof in dev list of each of its units." + (f" {a.words}" if a.words else ""),
+                          sender=record.who(), taken=True)
+    if not taken:
+        err = said.getvalue().strip()
+        print(err, file=sys.stderr)
+        print(f"the proof of {bolt} never started, and no proof is owed: crew prove {name} asks ops again", file=sys.stderr)
+        record.emit(t["label"], "stage.start", on, refused=err)
+        raise Stopped(1)
+    eid = record.emit(t["label"], "stage.start", on, why=f"bolt({bolt}): start proof")
+    if eid:
+        with stages_file(t) as lines:
+            lines.append(["ops", bolt, "proof", eid, f"bolt/{bolt}"])
+    print(f"{ops} is asked to prove bolt/{bolt}: crew prove {name} --wait waits for its proof file")
+
+
+def needs_cmd(fleet, a):
+    """crew needs "<what you need>", run by a stage's agent, or ops during a proof: its team and slot read from its own
+    name (crew.stage_agent), on the team's host, where its stage ends short (stage_needs)."""
+    who = record.who()
+    found = crew.stage_agent(list(fleet["teams"]), who)
+    if not found:
+        print(f"{who} runs no stage crew is waiting on", file=sys.stderr)
+        raise Stopped(1)
+    a.team, a.slot = found
+    on_team_host(fleet, crew.team_of(fleet, a.team))
+    stage_needs(fleet, a)
+
+
+def dispatch_up(fleet, label):
+    """This host's dispatcher of a partition started when it is not up, in a workspace of its own, recorded: its Agents
+    and the roles started, for the caller to greet."""
+    d = crew.standing(fleet, "dispatch", label)
+    d.ensure()
+    d.mark(down=False)
+    d.single(f"{label} dispatch", "dispatcher")
+    started = d.start_standing()
+    d.record("main.up", f"main({label}): up {d.agent_of('dispatcher')}", started)
+    return d, started
+
+
+def dispatch_cmd(fleet, a):
+    """crew _dispatch up|down|status <label>: this host's dispatcher of the partition, started and greeted, ended, or
+    listed, as crew main runs it on each host its teams run on."""
+    if a.act == "up":
+        greeted(greeting(fleet, *dispatch_up(fleet, a.label)))
+        return
+    d = crew.standing(fleet, "dispatch", a.label)
+    d.ensure()
+    name = d.agent_of("dispatcher")
+    if a.act == "down":
+        why = d.stop("dispatcher")
+        if why:
+            print(why, file=sys.stderr)
+        d.mark(down=True)
+        d.record("main.down", f"main({a.label}): down {name}", d.ended)
+        print(f"{name} is down")
+    else:
+        print("%-34s %-8s %s" % (name, d.pane("dispatcher"), d.status("dispatcher") or "not up"))
+
+
+def elsewhere(fleet, host, *argv):
+    """crew on another host, run as the one asking (crew_argv) and never prompting (code.3): its process, its output
+    this command's."""
+    return subprocess.Popen(["ssh", "-o", "BatchMode=yes", fleet["hosts"][host]["ssh"], shlex.join(crew.crew_argv(fleet, host, *argv))],
+                            stdin=subprocess.DEVNULL)
+
+
+def main_cmd(fleet, a):
+    """crew main up|down|status <label>, on the main level's host: its design agent, planner and ops, one tab each in
+    the <label> workspace, started and greeted, ended, or listed; and the dispatcher on each host the partition's teams
+    run on, that host's own, side by side, so one waiting on a question holds back no other host's. A dispatcher that
+    fails fails main up once the rest are up."""
+    p = crew.partition_of(fleet, a.label)
+    arrived(fleet, p["machine"])
+    m = crew.standing(fleet, "main", a.label, a.force)
+    m.ensure()
+    here, label = crew.this_host(), p["label"]
+    hosts = crew.partition_hosts(fleet, label)
+    if a.act == "up":
+        m.mark(down=False)
+        if not m.herdr.live(m.pane("design")):
+            m.first_tab(label, "design", m.cwd, "design")
+        for role in ("planner", "ops"):
+            if not m.herdr.live(m.pane(role)):
+                m.tab(label, role, m.cwd, role)
+        started = m.start_standing()
+        m.record("main.up", f"main({label}): up", started)
+        rc, greetings, away = 0, [], [(h, elsewhere(fleet, h, "_dispatch", "up", label)) for h in hosts if h != here]
+        if here in hosts:
+            try:
+                greetings += greeting(fleet, *dispatch_up(fleet, label))
+            except Refusal as e:
+                print(e, file=sys.stderr)
+                rc = 1
+            except Stopped as e:
+                rc = e.code
+        greetings += greeting(fleet, m, started)
+        for _, proc in away:
+            rc = proc.wait() or rc
+        greeted(greetings)
+        if rc:
+            raise Stopped(rc)
+    elif a.act == "down":
+        for role in m.standing:
+            why = m.stop(role)
+            if why:
+                print(why, file=sys.stderr)
+        m.mark(down=True)
+        m.record("main.down", f"main({label}): down", m.ended)
+        print(f"{label}'s main level is down; its panes are still there.")
+        for host in hosts:
+            if host == here:
+                dispatch_cmd(fleet, argparse.Namespace(act="down", label=label))
+            elif elsewhere(fleet, host, "_dispatch", "down", label).wait():
+                raise Stopped(1)
+    else:
+        for role in m.standing:
+            print("%-34s %-8s %s" % (m.agent_of(role), m.pane(role), m.status(role) or "not up"))
+        for host in hosts:
+            if host == here:
+                dispatch_cmd(fleet, argparse.Namespace(act="status", label=label))
+            elif elsewhere(fleet, host, "_dispatch", "status", label).wait():
+                print(f"{label}-dispatch-{host}  {host} did not answer")
+
+
+def review_cmd(fleet, a):
+    """crew review <label> [--wait [--timeout <ms>]], on the main level's host: the partition's reviewer started fresh
+    for the batch of changes due, in a review tab of the main level's workspace beside the planner, and sent its batch as
+    its prompt, the start recorded; with --wait, the wait for its summary, which records the batch, and then its agent
+    ended and its tab closed. Refused while a reviewer still reviews, or the main level is not up."""
+    p = crew.partition_of(fleet, a.label)
+    arrived(fleet, p["machine"])
+    m = crew.standing(fleet, "main", a.label)
+    m.ensure()
+    label, agent = p["label"], m.agent_of("reviewer")
+    if a.wait:
+        summary = review_wait(fleet, argparse.Namespace(label=label, timeout=a.timeout))
+        why = m.stop("reviewer")
+        if why:
+            print(why, file=sys.stderr)
+        m.close_pane("reviewer")
+        tab = m.get("layout", "tab:review")
+        if tab:
+            m.herdr.run("tab", "close", tab)
+            m.drop("layout", "tab:review")
+        print(f"batch summary: {summary}")
+        return
+    not m.status("reviewer") or fail(f"{agent} is still reviewing a batch: crew review {label} --wait waits for its summary")
+    m.get("layout", crew.ws_key(label)) or fail(f"{label}'s main level is not up: crew main up {label}")
+    b = review_start(fleet, argparse.Namespace(label=label))
+    if not m.herdr.live(m.pane("reviewer")):  # the tab is kept in the layout, so the batch's end closes it
+        made = m.tab(label, "review", m.cwd, "reviewer")
+        m.put("layout", "tab:review", made["tab"]["tab_id"])
+    if not m.start("reviewer"):
+        raise Stopped(1)
+    m.herdr.run("agent", "prompt", m.pane("reviewer"), b["PROMPT"])
+    record.emit(label, "review.start", [f"batch/{b['N']}", f"agent/{agent}"] + [f"unit/{u}" for u in b["NAMES"].split()],
+                why=f"batch({b['N']}): start review", Batch=b["N"], Units=b["UNITS"])
+    print(f"{agent} is reviewing batch {b['N']} of {label}, into {b['FILE']}: crew review {label} --wait waits for it")
+
+
+def operator_cmd(fleet, a):
+    """crew operator up <label>: the operator agent in this host's operator session of the partition, started and
+    greeted when it is not up, and its tabs, each opened once: flow, following the run record; rail, what waits on the
+    user above and a shell below with this crew on its path; and board, drawn from what the rail's loop read. The agent
+    is greeted once its rail is open."""
+    o = crew.standing(fleet, "operator", a.label)
+    o.ensure()
+    label, crew_cmd, started = a.label, shlex.quote(str(crew.HOME / "plugin/bin/crew")), []
+    o.single("operator", "operator")
+    if o.status("operator"):
+        print(f"{o.agent_of('operator')} is already up")
+    else:
+        if not o.start("operator"):
+            raise Stopped(1)
+        started = ["operator"]
+        o.record("operator.up", f"operator({label}): up {o.agent_of('operator')}", started)
+    for tab, run in (("flow", f"bash {crew_cmd} events --follow --label {label}"), ("rail", f"bash {crew_cmd} _rail {label}")):
+        if not o.herdr.live(o.pane(tab)):
+            o.tab("operator", tab, o.cwd, tab)
+            o.herdr.run("pane", "run", o.pane(tab), run)
+    if not o.herdr.live(o.pane("rail-shell")):
+        o.put("panes", "rail-shell", o.split(o.pane("rail"), "down", o.cwd))
+        o.herdr.run("pane", "run", o.pane("rail-shell"), f"export PATH={shlex.quote(str(crew.HOME / 'plugin/bin'))}:$PATH")
+    if not o.herdr.live(o.pane("board")):
+        o.tab("operator", "board", o.cwd, "board")
+        o.herdr.run("pane", "run", o.pane("board"), f"bash {crew_cmd} _board {label}")
+    greeted(greeting(fleet, o, started))
+
+
+def revive_cmd(fleet, a):
+    """crew revive, after a restart: on this host, each team's, main level's, dispatcher's and operator agent's standing
+    role whose pane came back with no agent in it picked up from its last conversation, a team's conductor greeted and
+    every agent brought back outside a team greeted; one taken down with crew down stays down. What can't be revived is
+    said, and the rest still are."""
+    greetings = []
+    for kind, scope in crew.here(fleet):
+        try:
+            agents = crew.Team(fleet, crew.team_of(fleet, scope)) if kind == "team" else crew.standing(fleet, kind, scope)
+            if not agents.lines("panes"):
+                continue
+            if agents.down():
+                print(f"{scope} was taken down; it stays down")
+                continue
+            back = []
+            for role in agents.standing:
+                if not agents.herdr.live(agents.pane(role)) or agents.status(role):
+                    continue
+                crew.nap(10)
+                if agents.status(role, fresh=True):  # herdr may still be resuming it
+                    continue
+                if not agents.start(role, "resume"):
+                    continue
+                agents.record("agent.resume", f"{kind}({scope}): resume {agents.agent_of(role)}", [role])
+                if kind != "team":
+                    back.append(role)
+                elif role == "conductor":
+                    greet_conductor(fleet, agents.t)
+            greetings += greeting(fleet, agents, back)
+        except Refusal as e:
+            print(e, file=sys.stderr)
+    greeted(greetings)
+
+
 # ----------------------------------------------------------------------------------------------- crew bolts
 
 def bolts_view(fleet, a):
@@ -6216,10 +6593,9 @@ def reading_command(fleet, label, team, sha, unit):
 
 
 def review_start(fleet, a):
-    """crew _review <label>: the batch the partition's reviewer is started for, as shell assignments for bash crew: its
-    number (N), the file it writes (FILE), its units as <unit>:<team>@<commit> (UNITS) and by name (NAMES), and its
-    prompt (PROMPT), naming each change, its team, its kit and host, and how to read it at its commit. Refused when no
-    change is due."""
+    """The batch the partition's reviewer is started for: its number (N), the file it writes (FILE), its units as
+    <unit>:<team>@<commit> (UNITS) and by name (NAMES), and its prompt (PROMPT), naming each change, its team, its kit
+    and host, and how to read it at its commit. Refused when no change is due."""
     p = crew.partition_of(fleet, a.label)
     label = p["label"]
     CONTEXT["label"] = label
@@ -6232,8 +6608,8 @@ def review_start(fleet, a):
     n = 1 + max([int(e["Batch"]) for e in entries if e.get("Act") in ("review.start", "review.batch") and (e.get("Batch") or "").isdigit()] or [0])
     f = batch_file(label, n)
     prompt = review_prompt(fleet, label, n, f, due)
-    print(sh(N=n, FILE=f, UNITS=" ".join(f"{u}:{team}@{sha}" for u, team, sha, _ in due), NAMES=" ".join(u for u, *_ in due),
-             PROMPT=prompt))
+    return dict(N=n, FILE=f, UNITS=" ".join(f"{u}:{team}@{sha}" for u, team, sha, _ in due), NAMES=" ".join(u for u, *_ in due),
+                PROMPT=prompt)
 
 
 def review_prompt(fleet, label, n, f, due):
@@ -6245,10 +6621,10 @@ def review_prompt(fleet, label, n, f, due):
 
 
 def review_wait(fleet, a):
-    """crew _review-wait <label>: wait, on the main level's host, for the summary of the batch the reviewer was last
-    started for, written since it started: once it is, the batch is recorded (`review.batch`, its number and each unit
-    at the commit its change was read at) and the file's path printed. A batch already recorded is printed at once.
-    Exit 3 when the timeout passes first, 1 when the reviewer is gone with no summary written."""
+    """Wait, on the main level's host, for the summary of the batch the reviewer was last started for, written since it
+    started: once it is, the batch is recorded (`review.batch`, its number and each unit at the commit its change was
+    read at) and the file's path returned. A batch already recorded is returned at once. Stopped with exit 3 when the
+    timeout passes first, refused when the reviewer is gone with no summary written."""
     label = crew.partition_of(fleet, a.label)["label"]
     CONTEXT["label"] = label
     entries = local_entries(label, BATCH_DAYS)
@@ -6257,8 +6633,7 @@ def review_wait(fleet, a):
     s = starts[-1]
     n, f = int(s["Batch"]), batch_file(label, s["Batch"])
     if any(e.get("Act") == "review.batch" and e.get("Batch") == s["Batch"] for e in entries):
-        print(f)
-        return
+        return f
     begun, deadline = utc(s["At"]), time.monotonic() + a.timeout / 1000
     while True:
         try:
@@ -6268,13 +6643,12 @@ def review_wait(fleet, a):
         if written:
             record.emit(label, "review.batch", [f"batch/{n}"] + [f"unit/{u}" for u, *_ in units_of_batch(s)],
                         why=f"batch({n}): reviewed", Batch=n, Units=s.get("Units"))
-            print(f)
-            return
+            return f
         if crew.agent_status(fleet, f"{label}-reviewer") is None:
             fail(f"{label}-reviewer is no longer running, and batch {n}'s summary {f} was not written")
         if time.monotonic() >= deadline:
             print(f"batch {n}'s review is still running after the wait's {a.timeout} ms: nothing is recorded yet", file=sys.stderr)
-            sys.exit(3)
+            raise Stopped(3)
         time.sleep(POLL)
 
 
@@ -7665,8 +8039,8 @@ def parser(cls=argparse.ArgumentParser, only=None):
     g.add_argument("--excerpt-file", help="a file holding them, for words the shell would mangle")
     x.add_argument("--label")
 
-    # A team's commands, each one process on the team's host (bash crew runs them, and forwards them when one names
-    # another host); and what bash crew asks there for the rest.
+    # The commands on a team and on a partition's main level, each one process on the host its agents run on (bash crew
+    # runs them, and forwards them when one names another host).
     x = sub.add_parser("_status")
     x.add_argument("team")
     x.add_argument("--force", action="store_true")
@@ -7695,28 +8069,35 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("unit")
     x.add_argument("--team")
     x.add_argument("--force", action="store_true")
-    x = sub.add_parser("_bolt-of")
+    x = sub.add_parser("_team")
+    x.add_argument("act", choices=("up", "close", "rebuild", "restart", "resume", "clear", "down"))
     x.add_argument("team")
-    x = sub.add_parser("_amended")
+    x.add_argument("roles", nargs="*")
+    x.add_argument("--force", action="store_true")
+    x.add_argument("--no-greet", dest="greet", action="store_false")
+    x = sub.add_parser("_prove")
     x.add_argument("team")
-    x = sub.add_parser("_review")
-    x.add_argument("label")
-    x = sub.add_parser("_review-wait")
-    x.add_argument("label")
-    x.add_argument("--timeout", type=int, default=3600000)
-    x = sub.add_parser("_ends")
-    x.add_argument("team")
-    x.add_argument("--slot")
-    x.add_argument("--ending", action="store_true")
-    x = sub.add_parser("_needs")
-    x.add_argument("team")
-    x.add_argument("--slot", required=True)
-    x.add_argument("words")
-    x = sub.add_parser("_wait")
-    x.add_argument("team")
-    x.add_argument("--slot", required=True)
+    x.add_argument("words", nargs="?", default="")
+    x.add_argument("--wait", action="store_true")
     x.add_argument("--timeout", type=int, default=3600000)
     x.add_argument("--stuck", type=int, default=900000)
+    x = sub.add_parser("_needs")
+    x.add_argument("words")
+    x.set_defaults(team=None, slot=None)
+    x = sub.add_parser("_main")
+    x.add_argument("act", choices=("up", "down", "status"))
+    x.add_argument("label")
+    x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_dispatch")
+    x.add_argument("act", choices=("up", "down", "status"))
+    x.add_argument("label")
+    x = sub.add_parser("_review")
+    x.add_argument("label")
+    x.add_argument("--wait", action="store_true")
+    x.add_argument("--timeout", type=int, default=3600000)
+    x = sub.add_parser("_operator")
+    x.add_argument("label")
+    sub.add_parser("_revive")
     return ap
 
 
@@ -7733,15 +8114,17 @@ COMMANDS = {
     ("chore", "move"): direct(("chore", "move")), ("chore", "drop"): direct(("chore", "drop")),
     ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
-    ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units, ("_review", None): review_start, ("_review-wait", None): review_wait,
+    ("_team", None): team_cmd, ("_prove", None): prove_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
+    ("_review", None): review_cmd, ("_operator", None): operator_cmd, ("_revive", None): revive_cmd,
     ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show, ("signal-land", None): signal_land,
-    ("_ends", None): stage_ends, ("_wait", None): stage_wait, ("_needs", None): stage_needs,
+    ("_needs", None): needs_cmd,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
-# A team's commands, each one process on the team's host.
-TEAM_COMMANDS = {("_status", None), ("_unit-run", None), ("_unit-wait", None), ("_fix-run", None), ("_tidy", None), ("_unit-free", None)}
+# The commands on a team and on a main level, each one process on the host its agents run on.
+TEAM_COMMANDS = {(c, None) for c in ("_status", "_unit-run", "_unit-wait", "_fix-run", "_tidy", "_unit-free", "_team", "_prove", "_needs",
+                                      "_main", "_dispatch", "_review", "_operator", "_revive")}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",

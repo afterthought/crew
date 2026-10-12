@@ -202,278 +202,38 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 py() { python3 "$here/../lib/crew.py" "$@"; }
-plan() { python3 "$here/../lib/plan.py" "$@"; }
-h() { herdr --session "$SESSION" "$@"; }
 teams() { py teams || exit 1; }
 this_host() { hostname -s; }
 usage() { awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
-orig=("$@"); force=0; forced=(); greet=1; args=(); started=(); ended=()
-for a in "$@"; do case $a in --force) force=1; forced=(--force) ;; --no-greet) greet=0 ;; *) args+=("$a") ;; esac; done
+orig=("$@"); forced=(); greet=(); args=()
+for a in "$@"; do case $a in --force) forced=(--force) ;; --no-greet) greet=(--no-greet) ;; *) args+=("$a") ;; esac; done
 set -- ${args[@]+"${args[@]}"}
 cmd=${1:-}
 
-# The command's reading (plan.12): a folder holding what its steps on this host have read of the plan and the kits, so
-# the command fetches the state branch and reads each kit once however many steps it has. The steps it starts on this
-# host share it through CREW_READ; a step on another host makes its own. It goes when the command ends, refused or
-# not, and one a killed command left goes once it is a day old. A command run as one process (exec'd below, or run by
-# one) keeps its reading in memory; the rail tab's loop and crew events make none, so each refresh reads afresh.
-reads=$HOME/.cache/crew/reads
-unread() { case ${CREW_READ:-} in "$reads"/????????) rm -rf -- "$CREW_READ" ;; esac; }
-reading() {
-  [[ -n ${CREW_READ:-} && $(cat "$CREW_READ/host" 2>/dev/null) == "$(this_host)" ]] && return 0
-  mkdir -p "$reads"
-  find "$reads" -mindepth 1 -maxdepth 1 -name '????????' -mtime +0 -exec rm -rf -- {} + 2>/dev/null || true
-  CREW_READ=$(mktemp -d "$reads/XXXXXXXX") || { echo "crew could not make its reading in $reads" >&2; exit 1; }
-  trap unread EXIT; export CREW_READ
-  this_host > "$CREW_READ/host"
-}
-case $cmd in
-  bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell | ops) ;;
-  status | unit | chore | fix | _tidy) ;;
-  events | _rail) unset CREW_READ ;;
-  *) reading ;;
-esac
+# ------------------------------------------------------------------------------------------- where a command runs
 
-# ------------------------------------------------------------------------------------------- what is acted on
-
-load_team() {
-  [[ -n ${1:-} ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }
-  local e; e=$(py env "$1") || exit 1; eval "$e"
-  KIND=team; SCOPE=$TEAM; standing=(conductor ops); slots=()
-  local n; for n in $(seq "$UNITS"); do slots+=("unit-$n"); done
-  state_files
-}
-load_main() {
-  [[ -n ${1:-} ]] || { echo "which partition? partitions: $(py labels | tr '\n' ' ')" >&2; exit 2; }
-  local e; e=$(py env-main "$1") || exit 1; eval "$e"; SCOPE=$LABEL; standing=(design planner ops); slots=(); state_files
-}
-load_dispatch() { local e; e=$(py env-dispatch "$1") || exit 1; eval "$e"; SCOPE=$LABEL; standing=(dispatcher); slots=(); state_files; }
-load_operator() { local e; e=$(py env-operator "$1") || exit 1; eval "$e"; SCOPE=$LABEL; standing=(operator); slots=(); state_files; }
-state_files() { panes=$STATE/panes; layout=$STATE/layout; held=$STATE/slots; }
-ensure_state() { mkdir -p "$STATE"; touch "$panes" "$layout" "$held"; }
-local_here() { [[ $(this_host) == "$MACHINE" ]]; }
-
-# Who asks, and the Claude session behind them, go with a command run on another host, so what it records there names them.
+# Every command is one Python process (code.7): exec'd below, or run by `one`, which runs a command on a team or a main
+# level on the host its agents run on. Who asks, and the Claude session behind them, go with a command run on another
+# host, so what it records there names them (code.3).
 identity() { echo "CREW_AGENT=${CREW_AGENT:-$(id -un)@$(this_host)}"; }
-session_of() { python3 "$here/../lib/record.py" session 2>/dev/null || true; }
-there() {  # there <host's ssh name> <crew on that host> <args...>: run a crew command on another host. The caller's
-  # session is the one the env of what is acted on gave (CALLER_SESSION, empty for the user), else asked of record.py.
-  local target=$1 remote=$2 sid; shift 2
-  if [[ ${CALLER_SESSION+set} ]]; then sid=$CALLER_SESSION; else sid=$(session_of); fi
-  ssh -o BatchMode=yes "$target" "$(printf '%q ' env "$(identity)" "CREW_LABEL=${CREW_LABEL:-}" "CREW_SESSION=$sid" bash "$remote" "$@")"
+there() {  # there <host's ssh name> <crew on that host> <args...>: run a crew command on another host, never prompting
+  local target=$1 remote=$2; shift 2
+  ssh -o BatchMode=yes "$target" "$(printf '%q ' env "$(identity)" "CREW_LABEL=${CREW_LABEL:-}" "CREW_SESSION=${CALLER_SESSION:-}" bash "$remote" "$@")"
 }
-# An entry in the run record (lib/record.py), written after the act. A failure is said on standard error and
-# changes nothing about the command.
-entry() { python3 "$here/../lib/record.py" emit "$@" >/dev/null || true; }
-record_agents() {  # record_agents <act> <why> [role...]: one entry for an act on agents, naming each; a team's names the team
-  local act=$1 why=$2 r on=(); shift 2
-  [[ $KIND == team ]] && on+=(--on "team/$TEAM")
-  for r in "$@"; do on+=(--on "agent/$(name_of "$r")"); done
-  (( ${#on[@]} )) || return 0
-  entry --label "$LABEL" --act "$act" "${on[@]}" --why "$why"
-}
-forward() {  # what is acted on lives on its host: run this same command there, unless this is that host. The crew
-  # there came with the env (REMOTE_CREW, or REMOTE_CREW_REFUSED saying why there is none).
-  local_here && return 0
-  [[ -z ${REMOTE_CREW_REFUSED:-} ]] || { echo "$REMOTE_CREW_REFUSED" >&2; exit 1; }
-  local remote=${REMOTE_CREW:-}; [[ -n $remote ]] || remote=$(py crew-at "$MACHINE") || exit 1
-  there "$SSH_TARGET" "$remote" "${orig[@]}"; exit $?
-}
-one() {  # one <plan.py entry> <args...>: a team's command, one Python process on the team's host (code.7). Run on
-  # another host, the process does nothing there but say on its descriptor 3 where the team runs and how crew runs
-  # there, and the command is forwarded (code.3).
+one() {  # one <plan.py entry> <args...>: the command as one Python process. Run on another host than its agents', the
+  # process does nothing there but say on its descriptor 3 where they run, how crew runs there and the asker's session,
+  # and the command is run there instead.
   local to rc=0
   { to=$(python3 "$here/../lib/plan.py" "$@" 3>&1 >&4 4>&-) || rc=$?; } 4>&1
   [[ -n $to ]] || exit $rc
-  eval "$to"; forward
+  eval "$to"
+  [[ -z ${REMOTE_CREW_REFUSED:-} ]] || { echo "$REMOTE_CREW_REFUSED" >&2; exit 1; }
+  there "$SSH_TARGET" "$REMOTE_CREW" "${orig[@]}"; exit $?
 }
 need_team() { [[ -n ${1:-} ]] || { echo "which team? teams: $(teams | tr '\n' ' ')" >&2; exit 2; }; }
-
-name_of() {
-  case $KIND in
-    team | main) echo "$SCOPE-$1" ;;
-    dispatch) echo "$LABEL-dispatch-$HOST" ;;
-    operator) echo "$LABEL-operator-$HOST" ;;
-  esac
-}
-is_slot() { [[ $1 == unit-* ]]; }
-get() { awk -v k="$2" '$1==k{print $2}' "$1"; }
-put() { { grep -v "^$2 " "$1" || true; echo "$2 $3"; } > "$1.new"; mv "$1.new" "$1"; }
-drop() { { grep -v "^$2 " "$1" || true; } > "$1.new"; mv "$1.new" "$1"; }
-pane_of() { get "$panes" "$1"; }
-pane_live() { [[ -n ${1:-} ]] && h pane get "$1" >/dev/null 2>&1; }
-agent_status() { [[ -n ${1:-} ]] || return 0; h agent get "$1" 2>/dev/null | jq -r '.result.agent.agent_status // empty' 2>/dev/null || true; }
-known_role() {
-  local r; for r in "${standing[@]}"; do [[ $r == "$1" ]] && return 0; done
-  echo "no role '$1' here; roles: ${standing[*]}" >&2; exit 2
-}
-split() { h pane split "$1" --direction "$2" --cwd "$3" --no-focus | jq -r '.result.pane.pane_id'; }
-close_pane() { local pane; pane=$(pane_of "$1"); if pane_live "$pane"; then h pane close "$pane" >/dev/null 2>&1 || true; fi; drop "$panes" "$1"; }
-
-give_name() {  # herdr drops an agent's name whenever its session changes
-  local pane=$1 name=$2
-  for _ in $(seq 60); do h agent rename "$pane" "$name" >/dev/null 2>&1 && return 0; sleep 1; done
-  echo "$name did not come up in $pane; look at that pane." >&2; return 1
-}
-
-stop() {  # end a role's session; each role whose agent it ends is added to `ended`
-  local role=$1 pane st=; pane=$(pane_of "$role")
-  pane_live "$pane" && st=$(agent_status "$pane")
-  if [[ $st == working && $force == 0 ]]; then echo "$(name_of "$role") is working; add --force to end it anyway." >&2; return 1; fi
-  # A slot's stage, or ops's proof, whose end nobody recorded ends here, with the agent that ran it: delivered when its
-  # deliverable is there, else stopped.
-  if [[ $KIND == team ]] && { is_slot "$role" || [[ $role == ops ]]; } && [[ -s $STATE/stages ]]; then
-    plan _ends "$TEAM" --slot "$role" --ending >/dev/null 2>&1 || true
-  fi
-  [[ -z $st ]] && return 0
-  h agent prompt "$pane" "/exit" >/dev/null 2>&1 || h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true
-  for _ in $(seq 30); do [[ -z $(agent_status "$pane") ]] && { ended+=("$role"); return 0; }; sleep 1; done
-  h pane send-keys "$pane" ctrl+c ctrl+c >/dev/null 2>&1 || true; sleep 2
-  # Still running means anything started next would be typed into it as a message. Say so and leave it be.
-  [[ -z $(agent_status "$pane") ]] || { echo "$(name_of "$role") did not exit (busy or waiting on the user); it was left running" >&2; return 1; }
-  ended+=("$role")
-}
-
-start() {  # start <role> [stage|resume]
-  local role=$1 pane name dir; pane=$(pane_of "$role"); name=$(name_of "$role")
-  [[ -z $(agent_status "$pane") ]] || { echo "$name is still running; not starting another over it" >&2; return 1; }
-  dir=$(py place "$SCOPE" "$role" ${2:-}) || return 1
-  # A Claude that died badly leaves the pane reporting mouse movement, which types escape codes into the shell
-  # and into whatever is run next. Clear the line and switch the reporting off first.
-  h pane send-keys "$pane" ctrl+c >/dev/null 2>&1 || true
-  h pane run "$pane" "printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?2004l'; clear" >/dev/null 2>&1 || true
-  sleep 1
-  # The pane's own shell moves to the folder the role runs in. herdr saves a pane's shell folder and, after a restart,
-  # resumes the agent's conversation there, and Claude finds a conversation only from the folder it began in.
-  h pane run "$pane" "cd $(printf '%q' "$dir") && bash $(printf '%q' "$here/crew-role") $SCOPE $role ${2:-}" >/dev/null
-  give_name "$pane" "$name" || return 1
-  # Claude asks whether a folder it has not seen is trusted. Every role starts in a folder the hosts file names:
-  # a session's space, a checkout in it, or a worktree crew made from the team's own repository. So that one
-  # question is answered for it. Nothing else is: not the Bypass Permissions warning, which swancloud's settings
-  # answer once for every account.
-  for _ in $(seq 15); do
-    sleep 2
-    if h pane read "$pane" --source visible --lines 30 2>/dev/null | command grep -q "Yes, I trust this folder"; then
-      h agent send-keys "$pane" down enter >/dev/null 2>&1 || true; sleep 3; break
-    fi
-    [[ $(agent_status "$pane") == idle ]] && break
-  done
-  case ${2:-} in resume) echo "$name resumed in $pane" ;; "") echo "$name started in $pane" ;; *) echo "$name started $2 in $pane" ;; esac
-}
-
-# ------------------------------------------------------------------------------------------- the workspaces
-
-ws_key() { echo "ws:${1// /_}"; }  # a workspace's label as a key of the layout file, which splits on spaces
-workspace() {  # workspace <label> <cwd>: a new workspace; its id goes in the layout, its root pane is printed
-  local ws; ws=$(h workspace create --cwd "$2" --label "$1" --no-focus)
-  put "$layout" "$(ws_key "$1")" "$(jq -r '.result.workspace.workspace_id' <<<"$ws")"
-  echo "$(jq -r '.result.tab.tab_id' <<<"$ws") $(jq -r '.result.root_pane.pane_id' <<<"$ws")"
-}
-tab() {  # tab <workspace label> <tab label> <cwd> <role>: a tab with one pane for the role
-  local t; t=$(h tab create --workspace "$(get "$layout" "$(ws_key "$1")")" --cwd "$3" --label "$2" --no-focus)
-  put "$panes" "$4" "$(jq -r '.result.root_pane.pane_id' <<<"$t")"
-}
-first_tab() {  # first_tab <workspace label> <tab label> <cwd> <role>: the workspace, its first tab holding the role
-  local r; r=$(workspace "$1" "$3"); h tab rename "${r% *}" "$2" >/dev/null; put "$panes" "$4" "${r#* }"
-}
-
-ensure_team() {  # "<team>": a conductor tab with the conductor and ops, and on a Mac a git tab, gitgui in each repo
-  local c o g b
-  c=$(pane_of conductor); pane_live "$c" || { first_tab "$TEAM" conductor "$KIT" conductor; c=$(pane_of conductor); }
-  o=$(pane_of ops); pane_live "$o" || put "$panes" ops "$(split "$c" right "$KIT")"
-  # gitgui draws with terminal graphics, which are too slow to use over a remote host's connection.
-  [[ ${HOST_KIND:-} == darwin ]] || return 0
-  g=$(pane_of git-kit)
-  if ! pane_live "$g"; then tab "$TEAM" git "$KIT" git-kit; g=$(pane_of git-kit); h pane run "$g" gitgui >/dev/null; fi
-  b=$(pane_of git-blueprints)
-  pane_live "$b" || { b=$(split "$g" right "$BLUEPRINTS"); put "$panes" git-blueprints "$b"; h pane run "$b" gitgui >/dev/null; }
-}
-
-ensure_main() {  # "<label>": design, planner and ops tabs, one agent each
-  local r p; p=$(pane_of design); pane_live "$p" || first_tab "$LABEL" design "$CWD" design
-  for r in planner ops; do p=$(pane_of "$r"); pane_live "$p" || tab "$LABEL" "$r" "$CWD" "$r"; done
-}
-ensure_single() {  # ensure_single <workspace label> <role>: a workspace holding one agent
-  local p; p=$(pane_of "$2"); pane_live "$p" || first_tab "$1" "$2" "$CWD" "$2"
-}
-ensure_flow() {  # the operator workspace's "flow" tab, following the partition's run record, opened once
-  local p; p=$(pane_of flow); pane_live "$p" && return 0
-  tab operator flow "$CWD" flow
-  h pane run "$(pane_of flow)" "bash $(printf '%q' "$here/crew") events --follow --label $LABEL" >/dev/null
-}
-ensure_rail() {  # the operator workspace's "rail" tab, opened once: what waits on the user above, kept current by
-  # crew _rail, and a shell below with this crew on its path, to paste a row's command into
-  local p s; p=$(pane_of rail)
-  if ! pane_live "$p"; then
-    tab operator rail "$CWD" rail; p=$(pane_of rail)
-    h pane run "$p" "bash $(printf '%q' "$here/crew") _rail $LABEL" >/dev/null
-  fi
-  s=$(pane_of rail-shell); pane_live "$s" && return 0
-  s=$(split "$p" down "$CWD"); put "$panes" rail-shell "$s"
-  h pane run "$s" "export PATH=$(printf '%q' "$here"):\$PATH" >/dev/null
-}
-ensure_board() {  # the operator workspace's "board" tab, after "rail", opened once: the partition's board, drawn by
-  # crew _board from what the rail tab's loop read at its last refresh
-  local p; p=$(pane_of board); pane_live "$p" && return 0
-  tab operator board "$CWD" board
-  h pane run "$(pane_of board)" "bash $(printf '%q' "$here/crew") _board $LABEL" >/dev/null
-}
-
-teardown() {  # end every session and give the panes back; the slots still say what is in flight
-  local role pane
-  for role in $(awk '{print $1}' "$panes"); do stop "$role" || true; done
-  for pane in $(awk '{print $2}' "$panes"); do if pane_live "$pane"; then h pane close "$pane" >/dev/null 2>&1 || true; fi; done
-  for pane in $(awk '$1 ~ /^ws:/ {print $2}' "$layout"); do h workspace close "$pane" >/dev/null 2>&1 || true; done
-  : > "$panes"; : > "$layout"
-}
-
-greet_conductor() {  # a fresh conductor reads where its bolt stands and carries on, before anyone asks it anything;
-  # the greeting opens with the units of its bolt that wait amended, for it to start their construct
-  local first; first=$(plan _amended "$TEAM" 2>/dev/null || true)
-  py greet "$TEAM" ${first:+--first "$first"} || true
-}
-greet_started() {  # greet_started [role...]: each agent outside a team that this command started or brought back is
-  # greeted, each in the background, so one waiting on a question holds back nobody else; the command waits for them
-  # before it ends, and a greeting that can't be sent fails nothing
-  local r; for r in "$@"; do { py greet-agent "$(name_of "$r")" || true; } & done
-}
-
-# A team or main level taken down stays down through a restart: crew revive leaves it be until it is brought up.
-mark_down() { touch "$STATE/down"; }
-mark_up() { rm -f "$STATE/down"; }
-
-revive() {  # start, from its last conversation, each standing role whose pane is there with no agent in it; a team's
-  # conductor is greeted, and every agent brought back outside a team, together once all are back
-  local role pane back=()
-  [[ -s $panes ]] || return 0
-  [[ -e $STATE/down ]] && { echo "$SCOPE was taken down; it stays down"; return 0; }
-  for role in "${standing[@]}"; do
-    pane=$(pane_of "$role"); pane_live "$pane" || continue
-    [[ -z $(agent_status "$pane") ]] || continue
-    sleep 10; [[ -z $(agent_status "$pane") ]] || continue  # herdr may still be resuming it
-    start "$role" resume || continue
-    record_agents agent.resume "${KIND}($SCOPE): resume $(name_of "$role")" "$role"
-    if [[ $KIND != team ]]; then back+=("$role"); elif [[ $role == conductor ]]; then greet_conductor; fi
-  done
-  greet_started ${back[@]+"${back[@]}"}; wait
-}
-
-start_standing() {  # start each standing role that is not up; each one started is added to `started`
-  local role
-  for role in "${standing[@]}"; do
-    if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; else start "$role"; started+=("$role"); fi
-  done
-}
-
-# ----------------------------------------------------------------------------------------------- unit slots
-
-reap() {  # the team's read (plan.py reap): the stages that ended with nobody waiting recorded; every slot freed whose
-  # unit or fix has merged into its bolt, been dropped from the plan or left the team's bolt, once its agent is not
-  # working; each dependent rebased whose After unit has merged; then the worktrees removed whose work is over
-  plan _tidy "$TEAM" ${forced[@]+"${forced[@]}"} || true
-}
-limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, as plan _wait takes them, in `limit`
+need_label() { [[ -n ${1:-} ]] || { echo "which partition? partitions: $(py labels | tr '\n' ' ')" >&2; exit 2; }; }
+limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, in `limit`
   limit=()
   while (( $# )); do
     case $1 in
@@ -481,38 +241,6 @@ limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, as plan _
       *) echo "a wait takes --timeout <ms> and --stuck <ms>, not $1" >&2; exit 2 ;;
     esac
   done
-}
-stage_wait() {  # stage_wait <slot|ops> [--timeout <ms>] [--stuck <ms>]: wait on the stage it owes, on the team's host
-  local slot=$1; shift; limits "$@"
-  plan _wait "$TEAM" --slot "$slot" ${limit[@]+"${limit[@]}"}
-}
-prove() {  # prove "<words>": ask ops to prove the team's bolt, and owe the proof's end like a stage's
-  local words=$1 bolt= err id
-  if ! err=$(plan _bolt-of "$TEAM" 2>&1); then
-    echo "$err" >&2; entry --label "$LABEL" --act stage.start --on "team/$TEAM" --on "agent/$TEAM-ops" --refused "$err"; exit 1
-  fi
-  eval "$(grep '^BOLT=' <<<"$err")"; bolt=$BOLT
-  if [[ -z $(agent_status "$(pane_of ops)") ]]; then
-    err="$TEAM-ops is not up: crew resume $TEAM ops brings it back"
-    echo "$err" >&2; entry --label "$LABEL" --act stage.start --on "stage/$bolt/proof" --on "bolt/$bolt" --on "agent/$TEAM-ops" --refused "$err"; exit 1
-  fi
-  # A proof still owed is over once another is asked for.
-  if [[ -s $STATE/stages ]]; then plan _ends "$TEAM" --slot ops --ending >/dev/null 2>&1 || true; fi
-  # The request is taken or sent again (teams.15); one ops never took, or one crew can't tell it took, starts no proof.
-  if ! err=$(py tell "$TEAM-ops" "Deploy the bolt and work the Proof in dev list of each of its units.${words:+ $words}" --taken 2>&1); then
-    echo "$err" >&2; echo "the proof of $bolt never started, and no proof is owed: crew prove $TEAM asks ops again" >&2
-    entry --label "$LABEL" --act stage.start --on "stage/$bolt/proof" --on "bolt/$bolt" --on "agent/$TEAM-ops" --refused "$err"; exit 1
-  fi
-  id=$(python3 "$here/../lib/record.py" emit --label "$LABEL" --act stage.start --on "stage/$bolt/proof" --on "bolt/$bolt" \
-    --on "agent/$TEAM-ops" --why "bolt($bolt): start proof" || true)
-  [[ -n $id ]] && echo "ops $bolt proof $id bolt/$bolt" >> "$STATE/stages"
-  echo "$TEAM-ops is asked to prove bolt/$bolt: crew prove $TEAM --wait waits for its proof file"
-}
-
-pick_roles() {  # with no role named, the standing roles
-  shift 2 || true; picked=(${@+"$@"})
-  [[ ${#picked[@]} -eq 0 ]] && picked=("${standing[@]}")
-  local r; for r in "${picked[@]}"; do known_role "$r"; done
 }
 
 # ------------------------------------------------------------------------------------------------- commands
@@ -529,53 +257,9 @@ case $cmd in
   status)
     if [[ -n ${2:-} ]]; then one _status "$2" ${forced[@]+"${forced[@]}"}
     else first=1; for t in $(teams); do [[ $first == 1 ]] || echo; first=0; bash "$0" status "$t" || true; done; fi ;;
-  up)
-    load_team "${2:-}"; forward; ensure_state
-    for role in "${standing[@]}"; do
-      [[ -n $(agent_status "$(pane_of "$role")") ]] && { echo "$(name_of "$role") is already up; use: crew restart $TEAM" >&2; exit 1; }
-    done
-    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; started+=("$role"); done
-    record_agents team.up "team($TEAM): up" "${started[@]}"; greet_conductor ;;
-  close)
-    load_team "${2:-}"; forward; ensure_state; force=1; teardown; mark_down
-    record_agents team.close "team($TEAM): close" ${ended[@]+"${ended[@]}"}; echo "$TEAM is closed" ;;
-  rebuild)  # a slot whose work is over, its agent ended with the rest, is freed rather than kept
-    load_team "${2:-}"; forward; ensure_state; force=1; teardown; reap
-    mark_up; ensure_team; for role in "${standing[@]}"; do start "$role"; started+=("$role"); done
-    record_agents team.rebuild "team($TEAM): rebuild" "${started[@]}"; greet_conductor ;;
-  restart)
-    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up
-    stopped=(); for role in "${picked[@]}"; do stop "$role" && stopped+=("$role"); done
-    ensure_team
-    for role in ${stopped[@]+"${stopped[@]}"}; do start "$role"; record_agents agent.restart "team($TEAM): restart $role" "$role"; done
-    [[ $greet == 1 && " ${picked[*]} " == *" conductor "* ]] && greet_conductor || true ;;
-  resume)
-    load_team "${2:-}"; forward; ensure_state; pick_roles "$@"; mark_up; ensure_team; back=0
-    for role in "${picked[@]}"; do
-      if [[ -n $(agent_status "$(pane_of "$role")") ]]; then echo "$(name_of "$role") is already up"; continue; fi
-      if start "$role" resume; then record_agents agent.resume "team($TEAM): resume $role" "$role"
-      else
-        echo "$(name_of "$role") did not come back with its conversation; starting it fresh"
-        start "$role"; record_agents agent.start "team($TEAM): start $role" "$role"
-      fi
-      if [[ $role == conductor ]]; then back=1; fi
-    done
-    # resume greets nobody: a conductor it brought back is sent, as crew's notice, the units of its bolt that wait amended
-    if [[ $back == 1 ]]; then
-      line=$(plan _amended "$TEAM" 2>/dev/null || true)
-      if [[ -n $line ]]; then py notice "$TEAM-conductor" "$line" || true; fi
-    fi ;;
-  clear)
-    load_team "${2:-}"; forward; ensure_state; role=${3:?usage: crew clear <team> conductor|ops}; known_role "$role"
-    pane=$(pane_of "$role"); st=$(agent_status "$pane")
-    [[ -z $st ]] && { echo "$(name_of "$role") is not up." >&2; exit 1; }
-    [[ $st == working && $force == 0 ]] && { echo "$(name_of "$role") is working; add --force to clear it anyway." >&2; exit 1; }
-    h agent prompt "$pane" "/clear" >/dev/null; sleep 2
-    give_name "$pane" "$(name_of "$role")" && { record_agents agent.clear "team($TEAM): clear $role" "$role"; echo "$(name_of "$role") cleared"; } ;;
-  down)
-    load_team "${2:-}"; forward; ensure_state
-    for role in "${standing[@]}" "${slots[@]}"; do stop "$role" || true; done; mark_down
-    record_agents team.down "team($TEAM): down" ${ended[@]+"${ended[@]}"}; echo "$TEAM is down; its panes are still there." ;;
+  up | close | rebuild | down) need_team "${2:-}"; one _team "$cmd" "$2" ${forced[@]+"${forced[@]}"} ;;
+  restart | resume) need_team "${2:-}"; one _team "$cmd" "$2" "${@:3}" ${forced[@]+"${forced[@]}"} ${greet[@]+"${greet[@]}"} ;;
+  clear) need_team "${2:-}"; one _team clear "$2" "${3:?usage: crew clear <team> conductor|ops}" ${forced[@]+"${forced[@]}"} ;;
   unit | chore)  # a chore's stages are code, verify and merge, with no construct (plan.11)
     kind=$cmd
     if [[ $kind == chore ]]; then stages="code verify merge"; as=(--chore); else stages="construct code verify settle merge"; as=(); fi
@@ -602,100 +286,32 @@ case $cmd in
       *) one _fix-run "$2" "$name" start ${forced[@]+"${forced[@]}"} -- "$words" ;;
     esac ;;
   needs)  # run by a stage's agent, or ops during a proof: the team and slot are its own name's
-    words=${2:-}; who=${CREW_AGENT:-$(id -un)@$(this_host)}; team= slot=
+    words=${2:-}
     [[ -n ${words//[[:space:]]/} ]] || { echo "usage: crew needs \"<what you tried and what you need>\"" >&2; exit 2; }
-    for t in $(teams); do
-      if [[ $who == "$t-ops" || $who == "$t-conductor" ]]; then team=$t; slot=${who#"$t"-}
-      elif [[ $who =~ ^$t-(unit-[1-9][0-9]*)$ ]]; then team=$t; slot=${BASH_REMATCH[1]}; fi
-    done
-    [[ -n $team ]] || { echo "$who runs no stage crew is waiting on" >&2; exit 1; }
-    load_team "$team"; forward; ensure_state
-    plan _needs "$TEAM" --slot "$slot" "$words" ;;
+    one _needs -- "$words" ;;
   prove)
-    load_team "${2:-}"; forward; ensure_state
-    if [[ ${3:-} == --wait ]]; then stage_wait ops "${@:4}"; else prove "${3:-}"; fi ;;
+    need_team "${2:-}"
+    if [[ ${3:-} == --wait ]]; then limits "${@:4}"; one _prove "$2" --wait ${limit[@]+"${limit[@]}"}; else one _prove "$2" -- "${3:-}"; fi ;;
   _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
     # is over (a plan write that ends work asks for it on the team's host)
     need_team "${2:-}"; one _tidy "$2" ${forced[@]+"${forced[@]}"} ;;
   main)
-    sub=${2:-}; load_main "${3:-}"; forward; ensure_state
-    case $sub in
-      up)
-        mark_up; ensure_main; start_standing; record_agents main.up "main($LABEL): up" ${started[@]+"${started[@]}"}
-        greet_started ${started[@]+"${started[@]}"}  # each host's own _dispatch up greets its dispatcher
-        ups=() rc=0  # side by side, so a dispatcher waiting on a question holds back no other host's; one that fails fails main up
-        while read -r host target remote; do
-          if [[ $host == $(this_host) ]]; then bash "$0" _dispatch up "$LABEL" </dev/null &
-          else there "$target" "$remote" _dispatch up "$LABEL" </dev/null & fi
-          ups+=($!)
-        done < <(py hosts "$LABEL")
-        for p in ${ups[@]+"${ups[@]}"}; do wait "$p" || rc=$?; done
-        wait; exit $rc ;;
-      down)
-        for role in "${standing[@]}"; do stop "$role" || true; done; mark_down
-        record_agents main.down "main($LABEL): down" ${ended[@]+"${ended[@]}"}; echo "$LABEL's main level is down; its panes are still there."
-        while read -r host target remote; do
-          if [[ $host == $(this_host) ]]; then bash "$0" _dispatch down "$LABEL"; else there "$target" "$remote" _dispatch down "$LABEL"; fi
-        done < <(py hosts "$LABEL") ;;
-      status)
-        for role in "${standing[@]}"; do st=$(agent_status "$(pane_of "$role")"); printf '%-34s %-8s %s\n' "$(name_of "$role")" "$(pane_of "$role")" "${st:-not up}"; done
-        while read -r host target remote; do
-          if [[ $host == $(this_host) ]]; then bash "$0" _dispatch status "$LABEL"; else there "$target" "$remote" _dispatch status "$LABEL" || echo "$LABEL-dispatch-$host  $host did not answer"; fi
-        done < <(py hosts "$LABEL") ;;
-      *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;;
-    esac ;;
+    need_label "${3:-}"
+    case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;
   review)  # crew review <label> [--wait [--timeout <ms>]]: the partition's reviewer, fresh for one batch, in a review tab
     # of the main level's workspace beside the planner; --wait waits for its summary, records the batch and closes its tab
-    load_main "${2:-}"; forward; ensure_state
+    need_label "${2:-}"
     if [[ ${3:-} == --wait ]]; then
       limit=(); [[ ${4:-} == --timeout ]] && { [[ ${5:-} =~ ^[0-9]+$ ]] || { echo "--timeout takes a number of milliseconds" >&2; exit 2; }; limit=(--timeout "$5"); }
-      rc=0; out=$(plan _review-wait "$LABEL" ${limit[@]+"${limit[@]}"}) || rc=$?
-      if [[ $rc == 0 ]]; then
-        stop reviewer || true; close_pane reviewer
-        t=$(get "$layout" tab:review); [[ -n $t ]] && { h tab close "$t" >/dev/null 2>&1 || true; drop "$layout" tab:review; }
-        echo "batch summary: $out"
-      fi
-      exit $rc
+      one _review "$2" --wait ${limit[@]+"${limit[@]}"}
     fi
-    [[ -n ${3:-} ]] && { echo "usage: crew review <label> [--wait [--timeout <ms>]]" >&2; exit 2; }
-    [[ -z $(agent_status "$(pane_of reviewer)") ]] || { echo "$(name_of reviewer) is still reviewing a batch: crew review $LABEL --wait waits for its summary" >&2; exit 1; }
-    [[ -n $(get "$layout" "$(ws_key "$LABEL")") ]] || { echo "$LABEL's main level is not up: crew main up $LABEL" >&2; exit 1; }
-    e=$(plan _review "$LABEL") || exit 1; eval "$e"
-    p=$(pane_of reviewer)
-    if ! pane_live "$p"; then  # the tab is kept in the layout, so the batch's end closes it
-      t=$(h tab create --workspace "$(get "$layout" "$(ws_key "$LABEL")")" --cwd "$CWD" --label review --no-focus)
-      put "$layout" tab:review "$(jq -r '.result.tab.tab_id' <<<"$t")"; put "$panes" reviewer "$(jq -r '.result.root_pane.pane_id' <<<"$t")"
-    fi
-    start reviewer || exit 1
-    h agent prompt "$(pane_of reviewer)" "$PROMPT" >/dev/null
-    on=(--on "batch/$N" --on "agent/$(name_of reviewer)"); for u in $NAMES; do on+=(--on "unit/$u"); done
-    entry --label "$LABEL" --act review.start "${on[@]}" --field "Batch=$N" --field "Units=$UNITS" --why "batch($N): start review"
-    echo "$(name_of reviewer) is reviewing batch $N of $LABEL, into $FILE: crew review $LABEL --wait waits for it" ;;
-  _dispatch)  # crew _dispatch up|down|status <label>: this host's dispatcher of the partition
-    sub=${2:-}; load_dispatch "${3:?}"; ensure_state
-    case $sub in
-      up)
-        mark_up; ensure_single "$LABEL dispatch" dispatcher; start_standing; record_agents main.up "main($LABEL): up $(name_of dispatcher)" ${started[@]+"${started[@]}"}
-        greet_started ${started[@]+"${started[@]}"}; wait ;;
-      down) stop dispatcher || true; mark_down; record_agents main.down "main($LABEL): down $(name_of dispatcher)" ${ended[@]+"${ended[@]}"}; echo "$(name_of dispatcher) is down" ;;
-      status) st=$(agent_status "$(pane_of dispatcher)"); printf '%-34s %-8s %s\n' "$(name_of dispatcher)" "$(pane_of dispatcher)" "${st:-not up}" ;;
-    esac ;;
-  revive)  # each team, main level, dispatcher and operator agent of this host, in a process of its own
-    while read -r kind scope; do [[ -n $kind ]] && { bash "$0" _revive "$kind" "$scope" || true; }; done < <(py here) ;;
-  _revive)  # crew _revive team|main|dispatch|operator <name>
-    case ${2:-} in
-      team) load_team "${3:?}" ;; main) load_main "${3:?}" ;; dispatch) load_dispatch "${3:?}" ;; operator) load_operator "${3:?}" ;;
-      *) echo "usage: crew _revive team|main|dispatch|operator <name>" >&2; exit 2 ;;
-    esac
-    revive ;;
+    [[ -z ${3:-} ]] || { echo "usage: crew review <label> [--wait [--timeout <ms>]]" >&2; exit 2; }
+    one _review "$2" ;;
+  _dispatch) one _dispatch "${2:?usage: crew _dispatch up|down|status <label>}" "${3:?usage: crew _dispatch up|down|status <label>}" ;;
+  revive) one _revive ;;
   operator)
     [[ ${2:-} == up ]] || { echo "usage: crew operator up <label>" >&2; exit 2; }
-    load_operator "${3:?usage: crew operator up <label>}"; ensure_state
-    ensure_single operator operator
-    if [[ -n $(agent_status "$(pane_of operator)") ]]; then echo "$(name_of operator) is already up"
-    else start operator; started+=(operator); record_agents operator.up "operator($LABEL): up $(name_of operator)" operator; fi
-    ensure_flow; ensure_rail; ensure_board
-    greet_started ${started[@]+"${started[@]}"}; wait ;;
+    one _operator "${3:?usage: crew operator up <label>}" ;;
   _rail)  # crew _rail <label>: the rail tab's list, printed again every 30 seconds and as soon as the run record gains
     # an entry; a burst of entries refreshes it once. Once the follow ends, it refreshes on the clock alone. Each refresh
     # is one read (crew _views), which prints the rail as crew rail does, ending the card sessions crew rail ends, and

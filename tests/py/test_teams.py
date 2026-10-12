@@ -1,8 +1,9 @@
-"""Teams, the main level and their agents (teams.6, teams.7, teams.11, plan.15): crew.greet_waits for one look of a
-greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with, crew.dispatch_place
-and crew.operator_session for where those run, crew.last_conversation for where a role resumes, and
-plan.amended_said for what a conductor brought back is told. Starting, greeting, reviving and taking them down through
-the command are the teams journey's (t-journey-teams, t-journey-main)."""
+"""Teams, the main level and their agents (teams.2, teams.6, teams.7, teams.11, plan.15): crew.greet_waits for one look of
+a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
+crew.dispatch_place and crew.operator_session for where those run, crew.last_conversation for where a role resumes,
+plan.amended_said for what a conductor brought back is told, and what crew up, restart, resume, clear and needs decide
+before they act. Starting, greeting, reviving and taking them down through the command are the teams journey's
+(t-journey-teams, t-journey-main)."""
 import json
 import os
 
@@ -142,3 +143,33 @@ def test_a_greeting_never_taken_says_the_tell_that_would_send_it_once_the_agent_
         "swb-1-conductor did not take its greeting, sent twice; nothing is left typed; " + again)
     assert crew.untaken_said("swb-1-conductor", "its greeting", "unread", "it went to work") == (
         "crew could not tell whether swb-1-conductor took its greeting: it went to work; nothing more was sent")
+
+
+class TestStandingCommands:
+    """What crew up, restart, resume, clear and needs decide before they act on an agent (teams.2), as plan.py's
+    commands decide them in one process; acting on the agents is the teams journey's (t-journey-teams)."""
+
+    def test_named_roles_are_acted_on_and_none_named_is_every_standing_role(self):
+        assert crew.roles_picked(["ops"], ("conductor", "ops")) == ["ops"]
+        assert crew.roles_picked([], ("conductor", "ops")) == ["conductor", "ops"]
+
+    def test_a_role_the_scope_has_not_is_refused_naming_its_roles(self):
+        with pytest.raises(crew.Refusal) as e:
+            crew.roles_picked(["fable"], ("conductor", "ops"))
+        assert str(e.value) == "no role 'fable' here; roles: conductor ops"
+
+    def test_a_team_with_an_agent_up_is_not_brought_up_over_it(self):
+        assert crew.already_up_said("swb-1-conductor", "swb-1") == "swb-1-conductor is already up; use: crew restart swb-1"
+
+    @pytest.mark.parametrize("status, force, said", [
+        (None, False, "swb-1-ops is not up."),
+        ("working", False, "swb-1-ops is working; add --force to clear it anyway."),
+        ("working", True, None), ("idle", False, None), ("blocked", False, None)])
+    def test_clear_is_sent_only_to_an_agent_that_is_up_and_not_working_unless_forced(self, status, force, said):
+        assert crew.clear_refusal("swb-1-ops", status, force) == said
+
+    @pytest.mark.parametrize("who, found", [
+        ("swb-1-unit-4", ("swb-1", "unit-4")), ("swb-1-ops", ("swb-1", "ops")), ("swb-1-conductor", ("swb-1", "conductor")),
+        ("swb-2-unit-1", ("swb-2", "unit-1")), ("swb-1-unit-0", None), ("wldn-planner", None), ("chuck@mac-studio", None)])
+    def test_needs_reads_its_team_and_slot_from_the_agents_name(self, who, found):
+        assert crew.stage_agent(["swb-1", "swb-2", "atl-1"], who) == found

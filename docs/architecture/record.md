@@ -20,7 +20,7 @@ The rules for the run record: what an entry is, when it is written, what it neve
 
 **[record.1]** Rules out: an entry before the act; an entry from `crew bolts`. Source: `run-record` spec; `record.py` 4–8; `plan.py` `ACTS`, `named`; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
 
-**[record.2]** Rules out: `set -e` tripping on `entry`; a command failing for want of a record. Source: `record.py` 7–8, `emit`; `plugin/bin/crew` 123; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
+**[record.2]** Rules out: `set -e` tripping on `entry`; a command failing for want of a record. Source: `record.py` 7–8, `emit`; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
 
 **[record.3]** Rules out: `Refused: \`unit add x "the whole intent"\``. Source: `run-record` spec "An entry holds no text anyone typed"; `record.py` 6–7; `tests/py/test_record.py`, `tests/t-journey-signals.sh`.
 

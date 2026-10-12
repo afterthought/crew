@@ -28,7 +28,7 @@ An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>,
 agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of
 the partition), and
 what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>."""
-import argparse, datetime, json, os, pathlib, re, signal, subprocess, sys
+import argparse, datetime, itertools, json, os, pathlib, re, signal, subprocess, sys
 # getpass, queue, tempfile and threading are imported where they are used, so a command that writes one entry starts
 # without them.
 
@@ -67,7 +67,7 @@ UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
 KINDS = ("unit/", "chore/", "bolt/", "queue/", "signals/", "agenda/", "team/", "agent/", "stage/", "fix/", "plan/", "proposal/", "report/",
          "proof/", "batch/", "env/")
 
-_count = 0
+_ids = itertools.count(1)  # each entry's count in this process, safe from threads
 _session = ...  # resolved once per process
 
 
@@ -124,10 +124,9 @@ def one_line(v):
 def new_id():
     """A new entry's id: the time, the host, the process and a count, unique without a lock. A write makes its
     entry's id before its commit, so the commit can name the entry its message describes."""
-    global _count
-    _count += 1
+    n = next(_ids)
     now = datetime.datetime.now(datetime.timezone.utc)
-    return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{crew.this_host()}-{os.getpid()}-{_count}"
+    return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{crew.this_host()}-{os.getpid()}-{n}"
 
 
 def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, **extra):
