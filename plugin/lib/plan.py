@@ -1511,8 +1511,9 @@ def op_unit_split(ctx, a):
 def op_unit_amend(ctx, a):
     """A unit's intent replaced. One that has a worktree has a change written for the old intent, so it is marked
     amended, proposal/<n> inside an approval and intent when the user runs it, and once the write has landed the
-    amendment runs its construct again on its team's host, in the name of whoever applied it, and tells its conductor
-    what started or why nothing did (plan.15). Merged work is not amended."""
+    amendment runs its construct again on its team's host, in the name of whoever applied it, ending the unit's agent
+    when it is past construct, and tells its conductor what started or why nothing did (plan.15). Merged work is not
+    amended."""
     label, plan = ctx.locate("Unit", a.unit)
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(
@@ -1539,7 +1540,10 @@ def op_unit_amend(ctx, a):
             return
         by = f"proposal {ctx.n}" if not ctx.direct else "the user"
         conductor = f"{team['name']}-conductor"
-        r = crew.on_machine(ctx.fleet, team["machine"], crew.crew_argv(ctx.fleet, team["machine"], "unit", "run", a.unit, "construct"))
+        # An agent of the unit past construct works to the old intent, and is ended where it stands, its commits kept;
+        # a construct still writing the change is not ended, and the unit's corrections wait until it settles (briefs.5).
+        force = ["--force"] if s["stage"] != "construct" else []
+        r = crew.on_machine(ctx.fleet, team["machine"], crew.crew_argv(ctx.fleet, team["machine"], "unit", "run", a.unit, "construct", *force))
         said = (r.stdout + r.stderr).strip()
         if said:
             print(said)

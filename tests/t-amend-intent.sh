@@ -59,24 +59,20 @@ lacks "$(prompts swb-1)" "Close your Pending You card"
 ok "a unit in code amended by the user has its construct started by the amendment, in the user's name, and its conductor is told to wait for it"
 
 # Construct ran and committed, so the unit goes on from its tasks, and they are all ticked: it is in verify. The slot's
-# agent is still working when it is amended again.
+# agent is still working, to the old intent, when it is amended again.
 as $box herdr --session wldn-1 stub status "$(pane swb-1-unit-1)" working
 echo "Written again." >> "$kd/places/the-deploy-is-logged/openspec/changes/the-deploy-is-logged/design.md"
 rewrite "$kd/places/the-deploy-is-logged/openspec/changes/the-deploy-is-logged/tasks.md" 's/- \[ \]/- [x]/'
 commit_all "$kd/places/the-deploy-is-logged" "docs(the-deploy-is-logged): written again"
 eq "$(stage the-deploy-is-logged)" "verify"
-: > "$CREW_TEST_LOG"; before=$(tip)
+: > "$CREW_TEST_LOG"
 expect_ok crew unit amend the-deploy-is-logged "The deploy writes a log the operator can search, kept for a year."
-has "$out" "construct did not start on unit the-deploy-is-logged: swb-1-unit-1 is working; add --force to end it anyway"
-eq "$(plan -t Unit -e "Unit = 'the-deploy-is-logged'" -P Intent,Amended)" $'The deploy writes a log the operator can search, kept for a year.\nintent'
-eq "$(git --git-dir "$ws" rev-parse wldn/main~1)" "$before"
-eq "$(stage the-deploy-is-logged)" "amended"
-grep -qE "agent prompt ($(pane swb-1-unit-1)|swb-1-unit-1) " "$CREW_TEST_LOG" && fail "the working agent in the slot was sent something"
-has "$(field $box stage.start Refused stage/the-deploy-is-logged/construct)" "swb-1-unit-1 is working"
-eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
-has "$(prompts swb-1)" "intent was amended by the user, and construct did not start: swb-1-unit-1 is working; add --force to end it anyway. Run it once it can (crew unit run the-deploy-is-logged construct); once it has committed, the unit goes on from its tasks."
-has "$(prompts swb-1)" "Close your Pending You card for verify/the-deploy-is-logged, if one is open, with what was done.'"
-ok "an amendment whose construct cannot start, the slot's agent working, stands: the unit reads amended, and its conductor is told why and the card it ended"
+has "$out" "swb-1-unit-1 has the-deploy-is-logged: construct, in"
+grep -qE "agent prompt ($(pane swb-1-unit-1)|swb-1-unit-1) /exit" "$CREW_TEST_LOG" || fail "the working agent was not ended"
+eq "$(field $box stage.start Amended stage/the-deploy-is-logged/construct | tail -1)" "yes"
+has "$(prompts swb-1)" "intent was amended by the user, and construct runs again on it in swb-1-unit-1"
+has "$(prompts swb-1)" "Close your Pending You card for verify/the-deploy-is-logged"
+ok "an amendment of a unit whose agent is working past construct ends that agent and runs construct again with no one remembering, and the conductor is told the card it ended"
 
 before=$(tip)
 expect_fail "unit merged-one has merged into its bolt, so it is not amended: a defect in it is a fix, and new work is a new unit" \
