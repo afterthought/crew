@@ -1,4 +1,5 @@
 """What crew assumes of git, each case naming what assumes it."""
+import os
 import subprocess
 
 
@@ -190,6 +191,77 @@ def test_a_move_whose_rebase_conflicts_leaves_the_branch_and_place_as_they_were(
     assert r.returncode == 3
     assert repo.git("rev-parse", "unit/d") == tip
     assert subprocess.run(["git", "-C", str(tmp_path / "place"), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
+
+
+def onto(place, bolt, *heads):
+    """plan.ONTO as rebase_dependents runs it in a dependent's place: <place> <bolt> [<head left out>...]."""
+    import plan
+    return subprocess.run(["bash", "-c", plan.ONTO, "crew", str(place), bolt, *heads], capture_output=True, text=True)
+
+
+def settled_and_merged(repo, tmp_path, moved=False):
+    """unit/a's change, and unit/b's place, which took a's head as crew's take does, by a merge, a fast-forward unless
+    the bolt moved after a's place was made (moved), and added a commit of its own; then the bolt changes a's line,
+    and a's settle rebases a onto it, resolving the line and revising a's design in the same commit, and a merges.
+    Returns b's place and the head it took, which crew records as the construct's Took."""
+    repo.commit("main", {"shared.txt": "one\ntwo\nthree\n", "f": "f\n"})
+    repo.git("branch", "bolt/t")
+    repo.git("checkout", "-q", "-b", "unit/a", "bolt/t")
+    took = repo.commit("feat(a): its change", {"a/design.md": "z\n", "shared.txt": "one\ntwo, as a has it\nthree\n"})
+    if moved:
+        repo.git("checkout", "-q", "bolt/t")
+        repo.commit("feat(x): its line", {"f": "x\n"})
+    place = tmp_path / "place"
+    repo.git("worktree", "add", "-q", "-b", "unit/b", str(place), "bolt/t")
+    in_place = lambda *a: subprocess.run(["git", "-C", str(place), *a], check=True, capture_output=True)
+    in_place("merge", "-q", "--no-edit", "-m", "chore(b): build on a as it stands", "unit/a")
+    (place / "b.md").write_text("b\n")
+    in_place("add", "b.md")
+    in_place("commit", "-qm", "feat(b): its own")
+    repo.git("checkout", "-q", "bolt/t")
+    repo.commit("feat: the bolt's line",
+                {"shared.txt": "one\ntwo, as the bolt has it\nthree\n", **({"f": "x, then y\n"} if moved else {})})
+    repo.git("checkout", "-q", "unit/a")
+    assert subprocess.run(["git", "-C", str(repo.path), "rebase", "-q", "bolt/t"], capture_output=True).returncode != 0
+    (repo.path / "shared.txt").write_text("one\ntwo, as a has it, and as the bolt has it\nthree\n")
+    (repo.path / "a" / "design.md").write_text("z, as it stands on the bolt\n")
+    repo.git("add", "shared.txt", "a/design.md")
+    subprocess.run(["git", "-C", str(repo.path), "rebase", "--continue"], check=True, capture_output=True,
+                   env=dict(os.environ, GIT_EDITOR="true"))
+    repo.git("checkout", "-q", "bolt/t")
+    repo.git("merge", "-q", "--no-ff", "unit/a", "-m", "Merge a")
+    return place, took
+
+
+def test_a_dependents_rebase_replaying_its_settled_dependencys_old_commit_conflicts_on_the_dependencys_own_files(repo, tmp_path):
+    """plan.rebase_dependents (plan.13): rebased onto the bolt alone, a dependent replays the commit of its dependency
+    its place took, which the dependency's settle rewrote, and conflicts on the dependency's own files; with the head it
+    took left out, only its own commit is replayed, and the rebase is clean."""
+    place, took = settled_and_merged(repo, tmp_path)
+    tip = repo.git("rev-parse", "unit/b")
+    r = onto(place, "t")
+    assert r.returncode == 3 and r.stdout.startswith("conflict ") and "a/design.md" in r.stdout.split()
+    assert repo.git("rev-parse", "unit/b") == tip
+    r = onto(place, "t", took[:7])
+    assert (r.returncode, r.stdout.strip()) == (0, "rebased")
+    assert repo.git("log", "--format=%s", "bolt/t..unit/b") == "feat(b): its own"
+
+
+def test_a_dependents_rebase_leaves_out_the_bolts_commits_with_the_head_it_took(repo, tmp_path):
+    """plan.ONTO: where the bolt moved between the dependency's place and the dependent's, git rebase --onto the bolt
+    from the head taken alone replays the bolt's commits between them and conflicts where the bolt changed them again;
+    ONTO's upstream, a commit with no ref whose parents are the bolt and that head, leaves out both."""
+    place, took = settled_and_merged(repo, tmp_path, moved=True)
+    r = subprocess.run(["git", "-C", str(place), "rebase", "-q", "--onto", "bolt/t", took], capture_output=True, text=True)
+    assert r.returncode != 0
+    unmerged = subprocess.run(["git", "-C", str(place), "diff", "--name-only", "--diff-filter=U"], capture_output=True, text=True)
+    assert unmerged.stdout.split() == ["f"]
+    subprocess.run(["git", "-C", str(place), "rebase", "--abort"], check=True)
+    r = onto(place, "t", took[:7])
+    assert (r.returncode, r.stdout.strip()) == (0, "rebased")
+    assert repo.git("log", "--format=%s", "--no-merges", "bolt/t..unit/b") == "feat(b): its own"
+    assert repo.git("for-each-ref", "--format=%(refname)", "refs/heads").split() == [
+        "refs/heads/bolt/t", "refs/heads/main", "refs/heads/unit/a", "refs/heads/unit/b"]
 
 
 def kit_with_github(repo, tmp_path):

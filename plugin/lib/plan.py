@@ -4608,11 +4608,18 @@ def reach_way(owed, status, stage, verified):
 
 
 # A dependent's place rebased onto its bolt: printed "rebased" when it moved, nothing when it was already there; a
-# rebase that conflicts is aborted, the place as it was, and printed "conflict <paths...>", exit 3.
+# rebase that conflicts is aborted, the place as it was, and printed "conflict <paths...>", exit 3. The heads given
+# after the bolt, of merged After units as the place took them, are left out with the bolt's commits: the rebase
+# replays what is beyond both, from a commit with no ref whose parents are the bolt and those heads.
 ONTO = r"""cd "$1" || exit 1
-bolt=$2
+bolt=$2; shift 2
 git merge-base --is-ancestor "refs/heads/bolt/$bolt" HEAD && exit 0
-if git rebase -q "refs/heads/bolt/$bolt" >/dev/null 2>&1; then echo rebased; exit 0; fi
+upstream=refs/heads/bolt/$bolt
+if [ $# -gt 0 ]; then
+  parents=(-p "$upstream"); for h; do parents+=(-p "$h"); done
+  upstream=$(git commit-tree "${parents[@]}" -m "crew: the bolt and the heads taken" "$upstream^{tree}") || exit 1
+fi
+if git rebase -q --onto "refs/heads/bolt/$bolt" "$upstream" >/dev/null 2>&1; then echo rebased; exit 0; fi
 paths=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
 git rebase --abort >/dev/null 2>&1
 echo "conflict $paths"; exit 3
@@ -4641,9 +4648,10 @@ def clean(path):
 def rebase_dependents(fleet, t, plan, st, say):
     """Each unmerged unit of the team's bolt with a place, one of whose After units has merged since its place last
     met the bolt, is rebased onto the bolt, only while its agent is not working and its place is clean (teams.2, plan.9):
-    the bolt's commits drop out of it. A rebase that conflicts is aborted, the place as it was, and returned to reach
-    the dependent as a conflict does: [(bolt, unit, paths)]. say(text) reports what was done or left."""
-    main, out = t["kit"]["main"], []
+    the bolt's commits drop out of it, and so does each merged After unit's work as its place took it (rebase_leaves_out,
+    from the run record's Took). A rebase that conflicts is aborted, the place as it was, and returned to reach the
+    dependent as a conflict does: [(bolt, unit, paths)]. say(text) reports what was done or left."""
+    main, out, entries = t["kit"]["main"], [], None
     owed = owed_by_unit(t)
     for b in held_by(plan, t["name"]):
         k, _ = st.kit(b)
@@ -4663,7 +4671,13 @@ def rebase_dependents(fleet, t, plan, st, say):
             if waits:
                 say(waits)
                 continue
-            r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name()], capture_output=True, text=True, env=gitenv())
+            entries = local_entries(t["label"]) if entries is None else entries
+            branch = f"refs/heads/unit/{u.name()}"
+            holds = lambda head: subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", head, branch], env=gitenv(),
+                                                stderr=subprocess.DEVNULL).returncode == 0
+            left_out = rebase_leaves_out(due, took_heads(u.name(), entries), holds)
+            r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name(), *left_out], capture_output=True, text=True,
+                               env=gitenv())
             READ.drop_kit(t["machine"], main)
             if r.returncode == 3:
                 out.append((b.name(), u.name(), r.stdout.strip().split()[1:], due))
@@ -4675,6 +4689,14 @@ def rebase_dependents(fleet, t, plan, st, say):
                             why=f"unit({u.name()}): rebase onto bolt/{b.name()}, now that {', '.join(due)} merged")
                 say(f"{u.name()} is rebased onto bolt/{b.name()}, now that {', '.join(due)} merged")
     return out
+
+
+def rebase_leaves_out(due, took, holds):
+    """The heads of a dependent's merged After units (due) that its place took (took, {after unit: head}) and still
+    holds (holds(head)), in due's order: its rebase onto the bolt leaves their work out as it took it, since the bolt
+    holds that work as it merged, rewritten since by a rebase or a settle (plan.13). [] when it took none or holds none
+    of them, and it is rebased onto the bolt alone."""
+    return [took[a] for a in due if took.get(a) and holds(took[a])]
 
 
 def rebase_waits(unit, bolt, due, status, is_clean, path):

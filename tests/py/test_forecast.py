@@ -1,9 +1,11 @@
 """Conflicts forecast and amendments reaching a unit (teams.12, teams.13, teams.14, plan.13): plan.forecasts_due for
 what a conductor's wait forecasts, a dependent from the head its place took (plan.took_heads), plan.reach_way for how
 a forecast or an amendment reaches the later unit, plan.amended_afters for each After unit constructed again since its
-dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent whose After unit merged, and
-plan.forecast_words and amendment_words for what it is told. That git merge-tree forecasts a conflict and moves no ref
-is a contract case (tests/contract/test_git.py); the wait that tells, starts a settle or carries, the journey's."""
+dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent
+whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
+amendment_words for what it is told. That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
+rebase replays its commits, are contract cases (tests/contract/test_git.py); the wait that tells, starts a settle or
+carries, and the rebase at a merge, the journey's."""
 import pytest
 
 from facts import at, plan_of
@@ -161,6 +163,20 @@ class TestRebase:
 
     def test_else_it_is_rebased(self):
         assert plan.rebase_waits("c", "t", ["a"], None, lambda: True, "/p/c") is None
+
+    def test_a_dependent_holding_the_head_its_place_took_of_a_merged_unit_leaves_that_work_out(self):
+        assert plan.rebase_leaves_out(["a"], {"a": "1111111"}, lambda head: head == "1111111") == ["1111111"]
+
+    def test_one_with_no_took_is_rebased_onto_the_bolt_alone_as_before(self):
+        assert plan.rebase_leaves_out(["a"], {}, lambda head: pytest.fail("nothing taken is read")) == []
+
+    def test_a_head_it_no_longer_holds_is_not_left_out(self):
+        assert plan.rebase_leaves_out(["a"], {"a": "1111111"}, lambda head: False) == []
+
+    def test_each_merged_unit_whose_taken_head_it_holds_is_left_out_and_no_unmerged_one(self):
+        took = {"a": "1111111", "c": "3333333", "d": "4444444"}
+        assert plan.rebase_leaves_out(["a", "c"], took, lambda head: True) == ["1111111", "3333333"]
+        assert plan.rebase_leaves_out(["a", "c"], took, lambda head: head != "1111111") == ["3333333"]
 
 
 class TestWords:

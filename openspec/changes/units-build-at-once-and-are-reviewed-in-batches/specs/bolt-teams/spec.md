@@ -14,7 +14,7 @@ Once a team holds a bolt, the conductor SHALL run construct, as slots allow and 
 - **THEN** two constructs run, and the next unit in the file's order is constructed as each slot frees
 
 ### Requirement: A dependent builds on its After units' work as it stands
-When a unit's place is made, crew SHALL bring into `unit/<unit>` the head of each of its `After` units that has not merged, as that head stands. When an `After` unit merges into the bolt, crew SHALL rebase the dependent's place onto the bolt, only while the dependent's agent is not working and its place has no uncommitted changes. A rebase that conflicts SHALL be undone and handed to the dependent as a conflict is.
+When a unit's place is made, crew SHALL bring into `unit/<unit>` the head of each of its `After` units that has not merged, as that head stands. When an `After` unit merges into the bolt, crew SHALL rebase the dependent's place onto the bolt, leaving out that unit's work as the place took it, only while the dependent's agent is not working and its place has no uncommitted changes. A rebase that conflicts SHALL be undone and handed to the dependent as a conflict is.
 
 #### Scenario: Construct on a constructed dependency
 - **WHEN** B has `After: A`, A's change is committed and A is in code, and B's construct starts
@@ -23,6 +23,10 @@ When a unit's place is made, crew SHALL bring into `unit/<unit>` the head of eac
 #### Scenario: The dependency merges
 - **WHEN** A merges into the bolt while B's agent is idle
 - **THEN** B's place is rebased onto the bolt, and holds no commit of A's that the bolt already holds
+
+#### Scenario: The dependency settled before it merged
+- **WHEN** A's settle rewrote A's change, which B's place holds as it took it, and A merges into the bolt while B's agent is idle
+- **THEN** B's place is rebased onto the bolt with only B's own commits replayed, and nothing conflicts on A's files
 
 #### Scenario: The dependent is working
 - **WHEN** A merges into the bolt while B's agent is working
