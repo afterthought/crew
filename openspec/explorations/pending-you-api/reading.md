@@ -117,17 +117,26 @@ Cards would also stop being the agent's. They would read as the webhook's name, 
   2. The builders, the briefs and the hook's refusal.
   The rail's read is a third, optional unit.
 
-## What only a real card can show
+## The probe: three test cards, waiting on the host's sign-in
 
-These were read in code, not watched. A short spike, with test cards posted with the user's consent in the *Getting started* area, would settle them before any unit:
+The user said yes to three test cards (2026-10-12). Readying them showed something the first reading missed: **mac-studio has no host sign-in.**
 
-1. A card crew's command posts under an agent's name (`session.label`) shows on that agent's pane in Herdr.
-2. `pendingyou hold <id>` in the agent's session makes its wake mod adopt the card, and the answer starts a turn.
-3. A session whose tools dropped can still be woken through the mod's `$.mcp.call`, or cannot. If it cannot, polling with `crew card read` is the whole fallback.
+- **Since 2026-10-10.** `~/.config/pendingyou/credentials.json` has held no sign-in since 09:05Z that day. `pendingyou status` says "Sign-in: not signed in", the headers helper exits 1 ("this computer isn't signed in to Pending You"), and `pendingyou mcp --app claude-code` answers every request with -32001.
+- **Sessions fall back to Claude Code's own sign-in.** Every session's MCP log since shows "headersHelper for MCP server 'pendingyou' did not return a valid value", then Claude Code's own OAuth tokens for the server, one sign-in per account's settings folder. That is what minted the connection of 2026-10-11 that ADR 0005 calls "minted by something unread".
+- **Some accounts have no tools at all.** Sessions of an account never signed in that way show "Authentication required": on 2026-10-12, sluice, willdan and flywheel-web.
 
-## Decisions for the user
+So a card crew posts under the host's sign-in and the agents' sessions are on different connections. Two things follow, read in the wake mod's code (`~/.config/pendingyou/mod/hooks/`) and the CLI's (`dist/herdr.js`):
 
-1. **Should crew's own command be the one path for crew agents' cards?** It would speak Pending You's MCP endpoint under the host's existing sign-in, and it reverses ADR 0005's "crew carries no Pending You client of its own". Recommended: yes. Pending You's own CLI posts this way, and it ends the card loss when tools drop.
-2. **May an agent post three test cards to you for the spike above?** Recommended: yes, before the units are queued.
-3. **Should webhooks and the person API be ruled out for crew's cards?** Recommended: yes. The person API cannot ask, and a webhook needs a hosted receiver, new secrets and cards that are no agent's. The person API's change feed is worth another look only if the rail must show cards closed in the app and `get_request` proves not enough.
-4. **Should `a-landing-cards-stakes-are-its-approvals-risk` land first, whatever is decided here?** Recommended: yes. It is independent, and no landing card posts without it.
+- **The badge.** A pane's herdr tokens (`py_waiting`, `py_card`, `py_cards`) are written by the wake mod inside the session, from the cards its own book holds. The mod learns a card from the session's own `post_request`, or from `pendingyou hold <id>` run in the session, which it answers itself (`answerHold`). So a card crew posts shows on the agent's pane only once the session adopts it.
+- **The wake.** The mod checks each card through its own session's connection (`$.mcp.call(card.server, 'get_request', …)`). A card on another connection reads "not found" to it, so adoption works only when the session and crew share the host's sign-in.
+
+The three cards are therefore not posted. They wait for the user to sign mac-studio in again (`pendingyou-signin`, on their phone, at a moment no card is open, ADR 0005). Each will be titled "crew test N of 3: …":
+1. A card crew posts, then `pendingyou hold <id>` in a throwaway session in a scratch herdr workspace: does the pane show it? Withdrawn once read.
+2. The same session, its card answered by the user: does the wake start a turn? The card asks for the user's answer.
+3. The same session after its transport is cut, through a local CONNECT proxy given as `HTTPS_PROXY`, until it shows no Pending You tools: is it still woken? The card asks the user to wait for a "ready" note before answering.
+
+## What the user decided
+
+- **Crew's own commands (2026-10-12): yes.** They are the one way crew's agents handle cards, as the asking assistant through Pending You's MCP endpoint, reversing ADR 0005's 2026-10-09 clause. The user asked whether the person API would do it; it acts as the person and cannot create or close a card. Recorded in ADR 0005 and `briefs.16`. The changes are `a-card-reaches-the-user-when-the-tools-drop`, built on `recovery/pendingyou`, and `every-crew-card-goes-through-crew`, after the test cards.
+- **Three test cards: yes.** They wait on the sign-in above.
+- **Webhooks, the person API, and the order of `a-landing-cards-stakes-are-its-approvals-risk`:** not yet ruled.
