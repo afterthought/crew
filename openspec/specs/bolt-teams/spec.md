@@ -414,3 +414,21 @@ When crew removes a worktree through the kit's worktree tool, the tool SHALL lea
 #### Scenario: The tool's answer can't be read
 - **WHEN** the tool removes a worktree but crew cannot read what it says of the branch
 - **THEN** crew says the worktree is removed and its branch kept, because crew could not tell what became of it
+
+### Requirement: A landing records the commit main holds
+`crew bolt land` SHALL record, in its `bolt.land` entry of the run record, the kit the bolt landed on and the commit that kit's main holds on the team's host once the bolt has landed, and SHALL be refused when it can't read that commit.
+
+#### Scenario: The landing's commit
+- **WHEN** main-level ops has merged swb-1's bolt into switchboard-kit's main, pushed it, and runs `crew bolt land`
+- **THEN** the landing's entry names switchboard-kit and the commit its main holds, and crew says the bolt has landed at that commit
+
+### Requirement: A bolt no team holds lands once its units are on main
+`crew bolt land` SHALL land a bolt no team holds, on the user's word, once its kit's main holds each of its units' changes, open or archived, and each of its chores, read on the host and main checkout of a team of the partition building that kit, recording the landing as any landing; it SHALL be refused for such a bolt with no units or chores, whose kit no team of the partition builds, or while any unit's change is not on main.
+
+#### Scenario: A bolt built outside a team
+- **WHEN** the plan holds the bolt `deploys-go-through-crew`, no team holds it, and each of its units' changes is archived on crew's main
+- **THEN** `crew bolt land deploys-go-through-crew` removes it and its units from the plan, and the landing's entry names crew and the commit its main holds
+
+#### Scenario: A unit not yet on main
+- **WHEN** one unit of a bolt no team holds has no change on its kit's main
+- **THEN** `crew bolt land` is refused, naming the unit and its stage
