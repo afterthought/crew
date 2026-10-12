@@ -1,5 +1,6 @@
 # Each role starts from its agent definition: the model and effort in its frontmatter, unless the teams file
-# overrides them for the team or partition, and its brief appended to Claude Code's system prompt.
+# overrides them for the team or partition, and its brief appended to Claude Code's system prompt; its name is in
+# CREW_AGENT, and in SLUICE_AGENT for sluice.
 # Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -14,7 +15,7 @@ role() {  # role <host> <scope> <role> [stage]: start it with the stub claude, p
   launch=$(python3 -c 'import json, sys
 l = json.loads(open(sys.argv[1]).read())
 a = l["argv"]; i = a.index("--append-system-prompt")
-print(" ".join(a[:i]), "| cwd", l["cwd"], "| agent", l["agent"], "| label", l["label"], "| brief", len(a[i + 1]), "chars")' "$CREW_TEST_CLAUDE_LOG")
+print(" ".join(a[:i]), "| cwd", l["cwd"], "| agent", l["agent"], "| sluice", l["sluice"], "| label", l["label"], "| brief", len(a[i + 1]), "chars")' "$CREW_TEST_CLAUDE_LOG")
   echo "${*:2}: $launch"
 }
 
@@ -22,7 +23,7 @@ opus='--model claude-opus-5-5[1m]'; fable='--model claude-fable-5-1'
 role chuck-herdr-alpha swb-1 conductor;     has "$launch" "$opus --effort high"; has "$launch" "--name swb-1-conductor"
 first=$(jq -r .session "$CREW_TEST_CLAUDE_LOG")
 has "$launch" "cwd $box/switchboard-kit/main"; has "$launch" "--add-dir $box/switchboard-kit --add-dir $box/willdan-blueprints/main"
-has "$launch" "agent swb-1-conductor | label wldn"
+has "$launch" "agent swb-1-conductor | sluice swb-1-conductor | label wldn"
 role chuck-herdr-alpha swb-1 ops;           has "$launch" "$opus --effort high"; has "$launch" "--name swb-1-ops"
 role chuck-herdr-alpha swb-1 unit-2 construct; has "$launch" "$opus --effort high"; has "$launch" "cwd $box/switchboard-kit/places/the-unit"
 role chuck-herdr-alpha swb-1 unit-2 code;   has "$launch" "$opus --effort xhigh"; has "$launch" "--name swb-1-unit-2"

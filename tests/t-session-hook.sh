@@ -1,5 +1,5 @@
 # crew's SessionStart hook records a crew agent's session; when herdr resumes that session without crew's
-# environment, the agent gets CREW_AGENT and CREW_LABEL back through CLAUDE_ENV_FILE and its pane its name.
+# environment, the agent gets CREW_AGENT, CREW_LABEL and SLUICE_AGENT back through CLAUDE_ENV_FILE and its pane its name.
 # Any other session, a subagent's, or input the hook can't read is left alone, and the hook always exits 0.
 # crew's PreToolUse hook marks a question or a plan a crew agent opens for the user, and a session's start clears it.
 # Reads: plugin/hooks/
@@ -18,10 +18,10 @@ ok "a crew agent's start records its session and the folder it began in"
 p=$(herdr workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
 herdr stub agent "$p"
 echo '{"session_id":"sid-1","source":"resume"}' | CLAUDE_ENV_FILE="$T/env" HERDR_ENV=1 HERDR_PANE_ID="$p" HERDR_BIN_PATH="$TESTS/stubs/herdr" hook
-eq "$(cat "$T/env")" "export CREW_AGENT=swb-1-conductor CREW_LABEL=wldn"
+eq "$(cat "$T/env")" "export CREW_AGENT=swb-1-conductor CREW_LABEL=wldn SLUICE_AGENT=swb-1-conductor"
 for _ in $(seq 6000); do [[ $(herdr agent get "$p" | jq -r .result.agent.name) == swb-1-conductor ]] && break; /bin/sleep 0.1; done
 eq "$(herdr agent get "$p" | jq -r .result.agent.name)" "swb-1-conductor"
-eq "$(env -i HOME="$HOME" PATH="$PATH" bash -c ". '$T/env'; echo \$CREW_AGENT \$CREW_LABEL")" "swb-1-conductor wldn"
+eq "$(env -i HOME="$HOME" PATH="$PATH" bash -c ". '$T/env'; echo \$CREW_AGENT \$CREW_LABEL \$SLUICE_AGENT")" "swb-1-conductor wldn swb-1-conductor"
 ok "a session herdr resumed gets its crew identity back and its pane renamed"
 
 : > "$CREW_TEST_LOG"; : > "$T/env"

@@ -15,7 +15,8 @@ folder = pathlib.Path(os.environ["HOME"]) / ".claude/projects" / re.sub(r"[^A-Za
 transcript = folder / f"{session}.jsonl"
 with open(os.environ["CREW_TEST_CLAUDE_LOG"], "a") as f:
     f.write(json.dumps({"host": os.environ.get("CREW_TEST_HOST"), "cwd": cwd, "argv": args, "session": session,
-                        "agent": os.environ.get("CREW_AGENT"), "label": os.environ.get("CREW_LABEL")}) + "\n")
+                        "agent": os.environ.get("CREW_AGENT"), "label": os.environ.get("CREW_LABEL"),
+                        "sluice": os.environ.get("SLUICE_AGENT")}) + "\n")
 if "--resume" in args and not transcript.exists():
     print(f"No conversation found with session ID: {session}")
     sys.exit(1)

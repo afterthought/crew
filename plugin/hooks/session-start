@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """crew's SessionStart hook: a crew agent that herdr resumes gets its name and its identity back.
 
-crew-role starts every role with CREW_AGENT and CREW_LABEL in its environment, and crew names the role's herdr
+crew-role starts every role with CREW_AGENT, CREW_LABEL and SLUICE_AGENT in its environment, and crew names the role's herdr
 pane after the agent. A herdr server that restarts resumes each agent with a bare `claude --resume <id>`. Claude
 Code brings back the conversation, the brief, the model, the permission mode and the added folders, but the pane
 comes back with no name, so `crew tell` and the greetings miss it, and the agent's crew commands lose who is
@@ -10,8 +10,8 @@ writing and which partition is theirs.
 So at every start this records a crew agent's session in ~/.local/state/crew/sessions/<session id>, which a
 resume keeps, with the folder it began in: Claude Code finds a conversation again only from that folder, so crew
 resumes a role there (crew.py last_conversation). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
-variables back through CLAUDE_ENV_FILE, which Claude Code applies to each of its Bash commands, and its pane gets
-its name back. Any other session costs one file lookup. At every start it also removes the session's question mark
+variables back, and SLUICE_AGENT, the same name for sluice, as crew-role sets them, through CLAUDE_ENV_FILE, which Claude Code applies to
+each of its Bash commands, and its pane gets its name back. Any other session costs one file lookup. At every start it also removes the session's question mark
 (hooks/questions), so a session resumed after its pane died with a question open carries no mark whose answer will
 never be written. The hook never fails a start."""
 import json
@@ -52,7 +52,8 @@ def main():
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:
         with open(env_file, "a") as f:
-            f.write(f"export CREW_AGENT={shlex.quote(agent)} CREW_LABEL={shlex.quote(saved.get('CREW_LABEL', ''))}\n")
+            f.write(f"export CREW_AGENT={shlex.quote(agent)} CREW_LABEL={shlex.quote(saved.get('CREW_LABEL', ''))} "
+                    f"SLUICE_AGENT={shlex.quote(agent)}\n")
     pane = os.environ.get("HERDR_PANE_ID")
     if os.environ.get("HERDR_ENV") == "1" and pane:
         herdr = os.environ.get("HERDR_BIN_PATH") or "herdr"
