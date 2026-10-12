@@ -22,12 +22,17 @@ expect_ok crew unit run c code
 has "$(prompt_to swb-1-unit-3)" "'/opsx:apply c "
 has "$(prompt_to swb-1-unit-3)" " Your branch is forecast to conflict with bolt/tenant-environments on shared.txt."
 has "$(field $box stage.start Forecast stage/c/code)" "$(field $box forecast Id unit/c bolt/tenant-environments)"
+looks() { grep -c " agent get swb-1-unit-3$" "$CREW_TEST_LOG" || true; }
+n=$(looks)
 crew unit wait c --stuck 3600000 --timeout 1800000 > "$T/wait.out" 2>&1 &
 waiting=$!
 lock=$(home_of $box)/.local/state/swb-1-team/waits/unit-3.lock
 until_ok eval '! python3 -c "import fcntl, sys; f = open(sys.argv[1], \"a\"); fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)" "$lock" 2>/dev/null' \
   || fail "the wait never took its lock"
 expect_fail "a wait on swb-1-unit-3's stage is already running: its answer is the one to read" crew unit wait c
+# The stop-short is said once the wait looks at its stage: a wait still forecasting and reckoning the batch, which a
+# loaded host can stretch past crew needs' minute, has not reached its first look (tests.8).
+until_ok eval '(( $(looks) > n ))' || fail "the wait never looked at c"
 CREW_AGENT=swb-1-unit-3 expect_ok crew needs "the user's word ZQXM"
 eq "$out" "code on c is ended, stopped short: swb-1-conductor's wait has what you need"
 wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
