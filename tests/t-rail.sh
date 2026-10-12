@@ -163,7 +163,7 @@ ok "a unit coded again after its report leaves the list at the next read, and a 
 
 card mac-studio wldn-design card.post record/atlas-kit/0021 req_rec-1 record/atlas-kit/0021/abc1234
 expect_ok crew rail --label wldn
-eq "$(grep -E '^[a-z]' <<<"$out" | tr '\n' '|')" "proposals|batches|verify|land|decision records waiting on you:|open cards with no row:|"
+eq "$(grep -E '^[a-z]' <<<"$out" | tr '\n' '|')" "proposals|batches|verify|land|operations|decision records waiting on you:|open cards with no row:|"
 records=$(awk '$0 == "decision records waiting on you:" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$out")
 eq "$(wc -l <<<"$records" | tr -d ' ')" "1"
 grep -qE "^  $(date +%Y-%m-%d) [0-9]{2}:[0-9]{2}  (<1m|[0-9]m) +record/atlas-kit/0021/abc1234 \(wldn\), asked by wldn-design on mac-studio$" <<<"$records" \
