@@ -7,22 +7,12 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 tasks:
   contract:
     command: 'python3 -m pytest -q -p no:cacheprovider tests/contract'
-    inputs: ['/plugin/lib/**/*', '/devenv.nix', '/devenv.lock', '/tests/contract/**/*']
+    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.lock', '/tests/contract/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   logic:
     command: 'python3 -m pytest -q -p no:cacheprovider tests/py'
-    inputs: ['/plugin/lib/**/*', '/devenv.nix', '/devenv.lock', '/tests/py/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-after:
-    command: 'tests/run t-after'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-after.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-amend:
-    command: 'tests/run t-amend'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-amend.sh', '/plugin/hooks/**/*']
+    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.lock', '/tests/py/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-amend-intent:
@@ -43,11 +33,6 @@ tasks:
   t-board:
     command: 'tests/run t-board'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-board.sh', '/tests/stubs-sites/**/*', '/plugin/lib/board.py', '/plugin/lib/sites.py']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-bolt:
-    command: 'tests/run t-bolt'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-bolt.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-bolts:
@@ -100,11 +85,6 @@ tasks:
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-fix.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
-  t-forecast:
-    command: 'tests/run t-forecast'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-forecast.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
   t-fresh:
     command: 'tests/run t-fresh'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-fresh.sh']
@@ -115,14 +95,14 @@ tasks:
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-greet.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
+  t-journey-units:
+    command: 'tests/run t-journey-units'
+    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-journey-units.sh', '/plugin/hooks/**/*']
+    tags: [suite]
+    options: { runFromWorkspaceRoot: true }
   t-main:
     command: 'tests/run t-main'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-main.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-merge:
-    command: 'tests/run t-merge'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-merge.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-merge-gate:
@@ -160,11 +140,6 @@ tasks:
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-plan-roles.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
-  t-prompt-taken:
-    command: 'tests/run t-prompt-taken'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-prompt-taken.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
   t-proposal-card:
     command: 'tests/run t-proposal-card'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-proposal-card.sh', '/plugin/lib/picture.py', '/plugin/lib/font.py']
@@ -178,11 +153,6 @@ tasks:
   t-rail:
     command: 'tests/run t-rail'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-rail.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-reads-once:
-    command: 'tests/run t-reads-once'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-reads-once.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-record:
@@ -220,11 +190,6 @@ tasks:
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-session-hook.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
-  t-settle:
-    command: 'tests/run t-settle'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-settle.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
   t-signal:
     command: 'tests/run t-signal'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-signal.sh']
@@ -253,11 +218,6 @@ tasks:
   t-sluice:
     command: 'tests/run t-sluice'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-sluice.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-stage-ends:
-    command: 'tests/run t-stage-ends'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-stage-ends.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-stage-facts:
@@ -295,38 +255,8 @@ tasks:
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-teams.sh']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
-  t-tidy:
-    command: 'tests/run t-tidy'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-tidy.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-touches:
-    command: 'tests/run t-touches'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-touches.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
   t-transcript:
     command: 'tests/run t-transcript'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-transcript.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-unit:
-    command: 'tests/run t-unit'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-unit.sh']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-unit-free:
-    command: 'tests/run t-unit-free'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-unit-free.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-unit-run:
-    command: 'tests/run t-unit-run'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-unit-run.sh', '/plugin/hooks/**/*']
-    tags: [suite]
-    options: { runFromWorkspaceRoot: true }
-  t-units-ws:
-    command: 'tests/run t-units-ws'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/tests/t-units-ws.sh', '/plugin/hooks/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }

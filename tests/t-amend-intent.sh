@@ -1,8 +1,9 @@
-# crew unit amend <unit> "<new intent>": a unit's intent replaced, by the user directly or by the planner only inside
-# a proposal; a unit with a worktree is marked amended, and the amendment itself runs its construct again on its
-# team's host in the applier's name and tells its conductor what started, or why nothing did and the card it ended;
-# merged work is refused. A proposal shows an amendment as before and after. Each scenario of unit-amendments' and
-# an-amendment-runs-construct-again-itself's bolt-plan, bolt-teams and plan-proposals specs.
+# An amendment through a proposal, and one whose team is down: the planner proposes amending units in code and in
+# verify, the proposal shows each as before and after, its conductor agrees, and approval replaces each intent and
+# runs each construct again in the approver's name, with the planner's case; an amendment while the team is down
+# stands, the unit reading amended, and every stage on a team taken down is refused before anything is written. What
+# an amendment does to the plan, who may write one, and what its conductor is told are logic cases
+# (tests/py/test_amend.py); one the user runs directly, the journey's (t-journey-units).
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -23,67 +24,14 @@ es = [e for f in sorted(glob.glob(os.path.expanduser("~/.local/state/crew/wldn/r
 print(json.dumps(es[-1] if es else {}))' "$CREW/plugin/lib" "$2" "$4" | jq -r --arg f "$3" 'if (.[$f] | type) == "array" then .[$f] | join(" ") else .[$f] // "" end'
 }
 crew bolt new tenant-environments "A tenant holds environments of its own." --repo switchboard-kit >/dev/null
-for u in cfn-lint-treefmt the-deploy-is-logged in-verify merged-one; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null 2>&1; done
-crew unit add queued-one "Later work." --repo switchboard-kit >/dev/null 2>&1
+for u in cfn-lint-treefmt the-deploy-is-logged in-verify; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null 2>&1; done
 crew bolt give swb-1 tenant-environments >/dev/null 2>&1
 for u in cfn-lint-treefmt the-deploy-is-logged; do
   p=$(place "$k" tenant-environments $u); change "$p" $u 1 3; commit_all "$p" "docs($u): the change"
 done
 p=$(place "$k" tenant-environments in-verify); change "$p" in-verify 3 3; commit_all "$p" "docs(in-verify): the change"
-change "$kd/bolts/tenant-environments" merged-one 2 2; commit_all "$kd/bolts/tenant-environments" "feat(merged-one): merged"
 c=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-1 stub agent "$c" swb-1-conductor
-
-: > "$CREW_TEST_LOG"; before=$(tip)
-expect_ok crew unit amend queued-one "Later work, done another way."
-eq "$(plan -t Unit -e "Unit = 'queued-one'" -P Intent,Amended)" "Later work, done another way."
-eq "$(git --git-dir "$ws" diff "$before" wldn/main -- plan.rec | grep '^[-+][A-Z]')" $'-Intent: Later work.\n+Intent: Later work, done another way.'
-eq "$(prompts swb-1)" ""
-eq "$(field mac-studio unit.amend On unit/queued-one)" "unit/queued-one"
-grep -q "unit run" "$CREW_TEST_LOG" && fail "an amendment to a queued unit ran something"
-ok "a queued unit's intent is replaced, and nothing else changes"
-
-: > "$CREW_TEST_LOG"
-expect_ok crew unit amend the-deploy-is-logged "The deploy writes a log the operator can search."
-has "$out" "swb-1-unit-1 has the-deploy-is-logged: construct, in $kd/places/the-deploy-is-logged"
-eq "$(plan -t Unit -e "Unit = 'the-deploy-is-logged'" -P Intent)" "The deploy writes a log the operator can search."
-eq "$(git --git-dir "$ws" log -2 --format=%s wldn/main)" "plan(tenant-environments): the-deploy-is-logged amended, construct runs again ($me@mac-studio)
-plan(tenant-environments): amend the-deploy-is-logged ($me@mac-studio)"
-eq "$(plan -t Unit -e "Unit = 'the-deploy-is-logged'" -P Amended)" "$(git -C "$k" rev-parse unit/the-deploy-is-logged)"
-eq "$(stage the-deploy-is-logged)" "construct"
-eq "$(prompt_to swb-1-unit-1)" "'/opsx:propose the-deploy-is-logged The deploy writes a log the operator can search. This unit'\"'\"'s intent was amended by the user; revise the existing change to it.'"
-eq "$(field $box stage.start By stage/the-deploy-is-logged/construct)" "$me@mac-studio"
-eq "$(field $box stage.start Amended stage/the-deploy-is-logged/construct)" "yes"
-has "$(prompts swb-1)" "intent was amended by the user, and construct runs again on it in swb-1-unit-1: wait for it (crew unit wait the-deploy-is-logged); once it has committed, the unit goes on from its tasks."
-lacks "$(prompts swb-1)" "Close your Pending You card"
-ok "a unit in code amended by the user has its construct started by the amendment, in the user's name, and its conductor is told to wait for it"
-
-# Construct ran and committed, so the unit goes on from its tasks, and they are all ticked: it is in verify. The slot's
-# agent is still working, to the old intent, when it is amended again.
-as $box herdr --session wldn-1 stub status "$(pane swb-1-unit-1)" working
-echo "Written again." >> "$kd/places/the-deploy-is-logged/openspec/changes/the-deploy-is-logged/design.md"
-rewrite "$kd/places/the-deploy-is-logged/openspec/changes/the-deploy-is-logged/tasks.md" 's/- \[ \]/- [x]/'
-commit_all "$kd/places/the-deploy-is-logged" "docs(the-deploy-is-logged): written again"
-eq "$(stage the-deploy-is-logged)" "verify"
-: > "$CREW_TEST_LOG"
-expect_ok crew unit amend the-deploy-is-logged "The deploy writes a log the operator can search, kept for a year."
-has "$out" "swb-1-unit-1 has the-deploy-is-logged: construct, in"
-grep -qE "agent prompt ($(pane swb-1-unit-1)|swb-1-unit-1) /exit" "$CREW_TEST_LOG" || fail "the working agent was not ended"
-eq "$(field $box stage.start Amended stage/the-deploy-is-logged/construct | tail -1)" "yes"
-has "$(prompts swb-1)" "intent was amended by the user, and construct runs again on it in swb-1-unit-1"
-has "$(prompts swb-1)" "Close your Pending You card for verify/the-deploy-is-logged"
-ok "an amendment of a unit whose agent is working past construct ends that agent and runs construct again with no one remembering, and the conductor is told the card it ended"
-
-before=$(tip)
-expect_fail "unit merged-one has merged into its bolt, so it is not amended: a defect in it is a fix, and new work is a new unit" \
-  crew unit amend merged-one "Something else."
-CREW_AGENT=wldn-planner expect_fail "the planner changes the plan through a proposal: crew plan propose, not crew unit amend" \
-  crew unit amend cfn-lint-treefmt "Something else."
-CREW_AGENT=swb-1-conductor expect_fail "swb-1-conductor does not write the plan with crew unit amend: tell wldn-planner" \
-  crew unit amend cfn-lint-treefmt "Something else."
-eq "$(tip)" "$before"
-has "$(field mac-studio unit.amend Refused unit/merged-one)" "has merged into its bolt"
-ok "a merged unit is refused, and so is the planner's direct amendment and a conductor's"
 
 # The planner proposes amending a unit in code and one in verify, in the bolt swb-1 holds.
 export CREW_AGENT=wldn-planner
@@ -110,8 +58,8 @@ HOST=$box CREW_AGENT=swb-1-conductor expect_ok crew plan agree 1
 expect_ok crew plan proposed 1; has "$out" "- agreed: swb-1"; lacks "$out" "- swb-1-conductor, to agree"
 : > "$CREW_TEST_LOG"
 expect_ok crew plan approve 1
-has "$out" "swb-1-unit-2 has cfn-lint-treefmt: construct, in $kd/places/cfn-lint-treefmt"
-has "$out" "swb-1-unit-3 has in-verify: construct, in $kd/places/in-verify"
+has "$out" "swb-1-unit-1 has cfn-lint-treefmt: construct, in $kd/places/cfn-lint-treefmt"
+has "$out" "swb-1-unit-2 has in-verify: construct, in $kd/places/in-verify"
 approval=$(git --git-dir "$ws" log --format=%H --grep='^plan(proposal 1): approve' -1 wldn/main)
 eq "$(git --git-dir "$ws" show "$approval:plan.rec" | recsel -t Unit -e "Unit = 'cfn-lint-treefmt'" -P Intent,Amended)" \
   $'cfn-lint in treefmt fails the check on a warning as well as an error\nproposal/1'
@@ -127,12 +75,12 @@ done
 expect_ok crew plan proposed 1; has "$out" "Closed"
 ok "approval waits for the conductor, then replaces each intent, and starts each unit's construct in the approver's name"
 
-has "$(prompt_to swb-1-unit-2)" "/opsx:propose cfn-lint-treefmt cfn-lint in treefmt fails the check on a warning as well as an error This unit"
-has "$(prompt_to swb-1-unit-2)" "s intent was amended by proposal 1; revise the existing change to it. The planner"
-has "$(prompt_to swb-1-unit-2)" "s case, as the user approved it: cfn-lint is already in treefmt; what the unit should do is fail the check on a warning."
+has "$(prompt_to swb-1-unit-1)" "/opsx:propose cfn-lint-treefmt cfn-lint in treefmt fails the check on a warning as well as an error This unit"
+has "$(prompt_to swb-1-unit-1)" "s intent was amended by proposal 1; revise the existing change to it. The planner"
+has "$(prompt_to swb-1-unit-1)" "s case, as the user approved it: cfn-lint is already in treefmt; what the unit should do is fail the check on a warning."
 has "$(prompts swb-1)" "Unit cfn-lint-treefmt"
-has "$(prompts swb-1)" "intent was amended by proposal 1, and construct runs again on it in swb-1-unit-2: wait for it (crew unit wait cfn-lint-treefmt); once it has committed, the unit goes on from its tasks."
-has "$(prompts swb-1)" "intent was amended by proposal 1, and construct runs again on it in swb-1-unit-3: wait for it (crew unit wait in-verify)"
+has "$(prompts swb-1)" "intent was amended by proposal 1, and construct runs again on it in swb-1-unit-1: wait for it (crew unit wait cfn-lint-treefmt); once it has committed, the unit goes on from its tasks."
+has "$(prompts swb-1)" "intent was amended by proposal 1, and construct runs again on it in swb-1-unit-2: wait for it (crew unit wait in-verify)"
 has "$(prompts swb-1)" "wldn-planner ran construct on unit in-verify. Close your Pending You card for verify/in-verify, if one is open, with what was done."
 lacks "$(prompts swb-1)" "verify/cfn-lint-treefmt"
 trace=$(crew trace unit/cfn-lint-treefmt)
@@ -141,35 +89,9 @@ eq "$(grep -v 'refused:' <<<"$trace" | grep -v ' unit/in-verify ← ' | awk '{pr
 has "$(grep ' stage.start ' <<<"$trace")" "wldn-planner"
 ok "each fresh construct agent is given the new intent and the planner's case, the conductor is told to wait and to close the verify card the amendment ended, and the trace shows the way there"
 
-# The construct cannot start because its team's host does not answer. A host down from the start leaves the unit's
-# stage unread, so nothing is written (read.1). One that drops once the stage is read, before the amendment's run of
-# construct reaches it, leaves the amendment standing: in-verify's construct has committed again, so it goes on from
-# its tasks, all ticked: it is in verify.
-unset CREW_AGENT
-echo "Written again." >> "$kd/places/in-verify/openspec/changes/in-verify/design.md"
-commit_all "$kd/places/in-verify" "docs(in-verify): written again"
-eq "$(stage in-verify)" "verify"
-echo "$box" > "$T/down"; before=$(tip)
-expect_fail "cannot tell unit in-verify's stage: $box did not answer" crew unit amend in-verify "in-verify reads its intent from the plan, once."
-rm "$T/down"
-eq "$(tip)" "$before"
-mkdir -p "$T/drops"
-printf '#!/usr/bin/env bash\n[[ "$*" == *"/crew unit run "* ]] && { echo "ssh: connect to host %s port 22: Operation timed out" >&2; exit 255; }\nexec %q "$@"\n' \
-  "$box" "$TESTS/stubs/ssh" > "$T/drops/ssh"
-chmod +x "$T/drops/ssh"
-: > "$CREW_TEST_LOG"
-PATH="$T/drops:$PATH" expect_ok crew unit amend in-verify "in-verify reads its intent from the plan, once."
-has "$out" "construct did not start on unit in-verify: $box did not answer (ssh: connect to host $box port 22: Operation timed out)"
-eq "$(plan -t Unit -e "Unit = 'in-verify'" -P Intent,Amended)" $'in-verify reads its intent from the plan, once.\nintent'
-eq "$(stage in-verify)" "amended"
-grep -qE "agent prompt ($(pane swb-1-unit-3)|swb-1-unit-3) " "$CREW_TEST_LOG" && fail "in-verify's slot was sent something"
-eq "$(prompts swb-1 | wc -l | tr -d ' ')" "1"
-has "$(prompts swb-1)" "intent was amended by the user, and construct did not start: $box did not answer (ssh: connect to host $box port 22: Operation timed out). Run it once it can (crew unit run in-verify construct); once it has committed, the unit goes on from its tasks."
-has "$(prompts swb-1)" "Close your Pending You card for verify/in-verify, if one is open, with what was done.'"
-ok "an amendment whose team's host does not answer is refused unread, and one whose host drops before its construct runs stands: the unit reads amended, and its conductor is told why and the card it ended"
-
 # The construct cannot start because its team is down: cfn-lint-treefmt's construct has committed again, so it goes on
 # from its tasks, in code, and then the team is taken down, its conductor with it.
+unset CREW_AGENT
 echo "Written again." >> "$kd/places/cfn-lint-treefmt/openspec/changes/cfn-lint-treefmt/design.md"
 commit_all "$kd/places/cfn-lint-treefmt" "docs(cfn-lint-treefmt): written again"
 eq "$(stage cfn-lint-treefmt)" "code"

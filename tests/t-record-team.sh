@@ -1,9 +1,7 @@
 # Team, main-level and operator commands record what they do to agents, on the host where they run, naming who asked
-# from wherever they asked; tells record their length, never their text. A stage's start is an entry, and its end is
-# one too, at what it delivers: when crew unit wait sees it, or late, once, when the next command reads the team, or
-# when crew ends its agent first. Refusals that
-# would have moved work are entries. The operator workspace follows the run record in a flow tab, keeps what waits
-# on the user in a rail tab, with a shell below it, and draws the board in a board tab after it.
+# from wherever they asked; tells record their length, never their text. The operator workspace follows the run record
+# in a flow tab, keeps what waits on the user in a rail tab, with a shell below it, and draws the board in a board tab
+# after it. What a stage's start and end record is the journey's (t-journey-units).
 # Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -69,7 +67,7 @@ eq "$(field mac-studio tell On)" "agent/wldn-planner"
 eq "$(field mac-studio tell Chars)" "17"
 eq "$(field mac-studio tell By)" "$user@mac-studio"
 crew bolt new tenant-environments "Tenants hold environments." --repo switchboard-kit >/dev/null
-for u in a b c e; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/null; done
+crew unit add a "Unit a." --bolt tenant-environments >/dev/null
 crew bolt give swb-1 >/dev/null 2>&1
 eq "$(field mac-studio bolt.give On)" "bolt/tenant-environments team/swb-1"
 eq "$(field $box agent.restart On agent/swb-1-conductor)" "team/swb-1 agent/swb-1-conductor"
@@ -79,72 +77,6 @@ eq "$(field mac-studio tell On agent/swb-1-conductor)" "agent/swb-1-conductor"
 [[ $(record_of mac-studio; record_of $box) != *ZQXR* ]] || fail "a tell's text is in the run record"
 ok "a tell records the recipient and its length, never its text, and so do the tells a write sends; a give's restarts are recorded"
 
-export CREW_AGENT=swb-1-conductor
-expect_ok crew unit run a construct
-s1=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-1") | .key')
-as $box herdr --session wldn-1 stub status "$s1" working  # building, as a stage agent is until it settles
-eq "$(field $box stage.start On stage/a/construct)" "stage/a/construct unit/a agent/swb-1-unit-1"
-eq "$(field $box stage.start By stage/a/construct)" "swb-1-conductor"
-stages=$(home_of $box)/.local/state/swb-1-team/stages
-[[ $(cat "$stages") == "unit-1 a construct "*" unit/a" ]] || fail "the stages file does not owe construct's end: $(cat "$stages")"
-expect_fail "unit a is in construct: code waits until its change is committed" crew unit run a code
-eq "$(field $box stage.start On stage/a/code)" "unit/a stage/a/code"
-has "$(field $box stage.start Refused stage/a/code)" "unit a is in construct"
-change "$kd/places/a" a 0 2; commit_all "$kd/places/a" "docs(a): the change"
-ok "a stage's start is recorded with its slot's agent and owed an end; code before the change is committed is a refused entry"
-
-as $box herdr --session wldn-1 stub status "$s1" idle
-expect_ok crew unit wait a
-has "$out" "swb-1-unit-1 delivered construct on a: its change is committed at $(git -C "$k" rev-parse --short unit/a)"
-eq "$(field $box stage.end On stage/a/construct)" "stage/a/construct unit/a agent/swb-1-unit-1"
-eq "$(field $box stage.end Result stage/a/construct)" "planned"
-eq "$(field $box stage.end Head stage/a/construct)" "$(git -C "$k" rev-parse --short unit/a)"
-eq "$(field $box stage.end Ended stage/a/construct)" "delivered"
-eq "$(field $box stage.end Delivered stage/a/construct)" "unit/a@$(git -C "$k" rev-parse --short unit/a)"
-eq "$(field $box stage.end Observed stage/a/construct)" ""
-eq "$(cat "$stages")" ""
-expect_ok crew unit run a code
-s1=$(herdr_state $box wldn-1 '.agents | to_entries[] | select(.value.name == "swb-1-unit-1") | .key')
-as $box herdr --session wldn-1 stub status "$s1" working
-expect_ok crew unit wait a --timeout 10
-eq "$out" "code on a is still running after the wait's 10 ms: swb-1-unit-1 is working; nothing is recorded yet"
-eq "$(count $box stage.end)" "1"
-ok "crew unit wait records the stage's end with what it delivered, what it reached and the branch's head; a wait that times out records nothing"
-
-expect_fail "swb-1-unit-1 is working; add --force to end it anyway" crew unit run a code
-has "$(field $box stage.start Refused stage/a/code agent/swb-1-unit-1)" "swb-1-unit-1 is working"
-rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
-expect_fail "unit a is in code, with these tasks still open: 1.2 task 2" crew unit run a verify
-eq "$(field $box stage.start Refused stage/a/verify)" "unit a is in code, with 1 task still open"
-[[ $(record_of $box) != *"task 2"* ]] || fail "an open task's title is in the run record"
-as $box herdr --session wldn-1 stub status "$s1" idle
-expect_ok crew status swb-1
-eq "$(count $box stage.end)" "1"
-rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.2/- [x] 1.2/'; commit_all "$kd/places/a" "feat(a): task 2"
-expect_ok crew status swb-1
-expect_ok crew status swb-1
-eq "$(count $box stage.end)" "2"
-eq "$(field $box stage.end Observed stage/a/code)" "late"
-eq "$(field $box stage.end Ended stage/a/code)" "delivered"
-eq "$(field $box stage.end Result stage/a/code)" "verify"
-eq "$(field $box stage.end Tasks stage/a/code)" "2/2"
-ok "a working agent without --force and verify before every task are refused entries; a quiet code stage with a task open has not ended, and once it delivers, its unwaited end is recorded late, once"
-
-expect_ok crew fix swb-1 tidy "The banner flickers ZQXS"
-eq "$(field $box fix.start On)" "fix/tenant-environments/tidy bolt/tenant-environments agent/swb-1-unit-2"
-eq "$(field $box fix.start Why)" "fix(tidy): start fix"
-expect_ok crew fix swb-1 tidy --merge
-eq "$(field $box fix.merge On)" "fix/tenant-environments/tidy bolt/tenant-environments agent/swb-1-unit-2"
-eq "$(field $box stage.end On fix/tenant-environments/tidy)" "fix/tenant-environments/tidy agent/swb-1-unit-2"
-eq "$(field $box stage.end Ended fix/tenant-environments/tidy)" "stopped"
-eq "$(field $box stage.end Observed fix/tenant-environments/tidy)" ""
-eq "$(field $box stage.end Why fix/tenant-environments/tidy)" "fix(tidy): fix ended"
-[[ $(record_of $box) != *ZQXS* ]] || fail "a fix's words are in the run record"
-crew unit run b construct >/dev/null; crew unit run c construct >/dev/null
-expect_fail "all 4 of swb-1's slots are in flight" crew unit run e construct
-has "$(field $box stage.start Refused stage/e/construct)" "all 4 of swb-1's slots are in flight"
-ok "a fix's start and merge are recorded, a fix merged before it committed anything ended as stopped, the fix's words are not recorded, and a stage with no free slot is a refused entry"
-
 unset CREW_AGENT
 expect_ok crew restart swb-1 ops
 eq "$(field $box agent.restart On agent/swb-1-ops)" "team/swb-1 agent/swb-1-ops"
@@ -152,7 +84,6 @@ expect_ok crew clear swb-1 ops
 eq "$(field $box agent.clear On)" "team/swb-1 agent/swb-1-ops"
 expect_ok crew down swb-1 --force
 has "$(field $box team.down On)" "team/swb-1 agent/swb-1-conductor agent/swb-1-ops"
-has "$(field $box team.down On)" "agent/swb-1-unit-1"
 expect_ok crew resume swb-1
 eq "$(count $box agent.resume)" "2"
 eq "$(field $box agent.resume On agent/swb-1-conductor)" "team/swb-1 agent/swb-1-conductor"
