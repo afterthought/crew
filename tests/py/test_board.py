@@ -340,10 +340,24 @@ class TestViews:
         assert mine[at + 1] == f"✓ mac-studio  deploy {S2[:7]}  waits on the user's word  2 operations waiting"
         assert "waits on the user  ✓ 2 to approve" in mine
 
-    def test_each_conductor_the_planner_the_design_agent_and_each_hosts_operator_has_a_view_and_no_other_agent(self):
+    def test_main_level_ops_reads_each_deploy_waiting_on_the_word_or_running_and_each_operation_step_with_its_doer(self):
+        running = entry("ops.deploy", 10, env="swancloud-srv", Head=S1, Base="none", Phase="start")
+        assert view("wldn-ops", entries=OPS + [running], cards=[DEPLOY_CARD]) == [
+            "wldn operations  1 deploy waits on the user's word  1 deploy running  2 operations waiting",
+            f"✓ mac-studio  deploy {S2[:7]}  waits on the user's word  card open, asked by wldn-ops",
+            f"  mac-studio  restart-teams/1  after {S1[:7]}  handed  doer dispatcher, wldn-dispatch-mac-studio",
+            "✓ mac-studio  rotate-key  waiting  doer user  no card open",
+            f"  swancloud-srv  deploy {S1[:7]}  deploying since {board.local(ago(10))}"]
+
+    def test_main_level_ops_with_nothing_waiting_reads_its_head_and_no_deploy_done_or_replaced(self):
+        done = [entry("ops.offer", 30, Head=S1, Base="none"), entry("ops.offer", 20, Head=S2, Base="none"), entry("ops.approve", 15, Head=S2),
+                entry("ops.deploy", 12, Head=S2, Phase="start"), entry("ops.deploy", 10, Head=S2, Phase="end", Outcome="done")]
+        assert view("wldn-ops", entries=done) == ["wldn operations  0 deploys wait on the user's word  0 deploys running  0 operations waiting"]
+
+    def test_each_conductor_the_planner_the_design_agent_main_level_ops_and_each_hosts_operator_has_a_view_and_no_other_agent(self):
         v = board.agent_views(data())
         assert sorted(v["views"]) == sorted(["swb-1-conductor", "swb-2-conductor", "brd-1-conductor", "atl-1-conductor", "wldn-planner", "wldn-design",
-                                             f"wldn-operator-{BOX}", "wldn-operator-mac-studio"])
+                                             "wldn-ops", f"wldn-operator-{BOX}", "wldn-operator-mac-studio"])
         assert v["read_at"] == data()["read_at"] and v["stale_after_ms"] == board.STALE * 1000
         assert v["stale"][0][0].endswith("; the rail tab on mac-studio has not refreshed it since") and v["stale"][0][1] == "dim"
 

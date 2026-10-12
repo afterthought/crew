@@ -16,7 +16,7 @@ The page's release notes for a carried bolt are the proposals the lineage joins 
 
 ## The board and the agents' views
 
-`rail_record` already reads the main level's host's ops entries for the rail's rows; it hands them, with the landings, to the board's read. The Operation lane keeps the week's landings first, then each environment's deploys and waiting operations, one to a line, with their markers. The JSON's `environments` gives each environment the teams on its host, which is what the page narrows by. The operator's view names each environment with something on it under Operation and counts their cards with the rest; the views file's shape does not change, so the mod draws them as it is.
+`rail_record` already reads the main level's host's ops entries for the rail's rows; it hands them, with the landings, to the board's read. The Operation lane keeps the week's landings first, then each environment's deploys and waiting operations, one to a line, with their markers. The JSON's `environments` gives each environment the teams on its host, which is what the page narrows by. The operator's view names each environment with something on it under Operation and counts their cards with the rest. Main-level ops, which posts the operations' cards (`briefs.11`), gets a view of its own: the deploys waiting on the word, approved or running, and each operation step waiting, handed or failed with its doer, environment by environment. The views file's shape does not change, so the mod draws them as it is.
 
 ## The deploys view
 

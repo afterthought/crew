@@ -606,10 +606,31 @@ def operator_view(p):
             + attention_rows(p))
 
 
+def ops_view(p):
+    """Main-level ops's: the partition's operations in brief, then, environment by environment, each deploy waiting on
+    the user's word with its card, each approved and not yet deployed, each running, and each operation step waiting,
+    handed or failed, with the deploy it comes after and its doer; and what keeps a host or the plan from being read."""
+    pending = [(e["env"], d) for e in p.get("environments", []) for d in e["deploys"] if not d["ended"] and d["answer"] != "replaced"]
+    steps = [(e["env"], w) for e in p.get("environments", []) for w in e["waiting"]]
+    word = sum(d["answer"] == "waiting" for _, d in pending)
+    running = sum(bool(d["started"]) for _, d in pending)
+    head = row(fields((f"{p['label']} operations", "bold"), many(word, "deploy waits on the user's word", "deploys wait on the user's word"),
+                      many(running, "deploy running", "deploys running"), many(len(steps), "operation waiting", "operations waiting")))
+    out = [head]
+    for e in p.get("environments", []):
+        for d in (d for env, d in pending if env == e["env"]):
+            out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))
+        for w in (w for env, w in steps if env == e["env"]):
+            doer = (w["doer"] or "no doer named") + (f", {w['agent']}" if w["agent"] else "")
+            out.append(row(fields(e["env"], w["key"], (f"after {w['to'][:7]}", "dim") if w["to"] else "", w["state"], f"doer {doer}"),
+                           gutter(w["markers"]), 0, w["markers"]))
+    return out + attention_rows(p, lambda a: a["what"] in ("host", "plan"))
+
+
 def agent_views(data):
     """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
-    prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's and each host's
-    operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
+    prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
+    each host's operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
     With them, the line the mod adds once the frame is stale_after_ms old: when it was read, and that the rail tab has
     not refreshed it since.
 
@@ -618,7 +639,7 @@ def agent_views(data):
     views = {}
     for p in data["partitions"]:
         views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
-        views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p)})
+        views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p), f"{p['label']}-ops": ops_view(p)})
         views.update({f"{p['label']}-operator-{h}": operator_view(p) for h in p["hosts"]})
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
             "stale": row([(f"read at {plan.utc(data['read_at']).astimezone():%H:%M}; the rail tab on {data['from']} has not refreshed it since", "dim")]),

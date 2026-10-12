@@ -7,6 +7,7 @@
 ## 2. The board
 
 - [x] 2.1 `rail_record` hands the board the entries; the Operation lane, `crew board --json`'s `environments` and the operator's view show the deploys and the operations waiting with their markers, with logic cases in `tests/py/test_board.py` and one wiring step in `tests/t-journey-board.sh` (design: *The board and the agents' views*; `state.4`, `code.8`).
+- [x] 2.2 Main-level ops has a view of the operations among the agents' views, with logic cases in `tests/py/test_board.py` (`code.8`).
 
 ## 3. The page
 

@@ -14,3 +14,10 @@ After the bolts landed in the last seven days, the Operation lane SHALL show eac
 #### Scenario: Operations waiting
 - **WHEN** a step after a deploy is handed to the dispatcher and a step on its own waits on the user
 - **THEN** Operation shows the first handed to the dispatcher and the second with ✓ and its card, and not a step marked done
+
+### Requirement: Main-level ops's view shows the operations
+Main-level ops (`<label>-ops`) SHALL have a view among the agents' views, drawn above its prompt by crew's mod: a head counting the deploys waiting on the user's word, those running and the operations waiting, then, environment by environment, each deploy waiting on the word with its card, each approved and not yet deployed, each running, and each operation step waiting, handed or failed with the deploy it comes after and its doer.
+
+#### Scenario: A deploy offered and a step handed
+- **WHEN** a deploy of mac-studio waits on the user's word with wldn-ops's card open, and a step after the last deploy is handed to the dispatcher
+- **THEN** wldn-ops's view counts one deploy waiting on the word and one operation, and shows the deploy with ✓ and its card, and the step as handed with the dispatcher as its doer
