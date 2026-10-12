@@ -42,9 +42,13 @@ cards_say() {  # the card discipline the planner's and the conductor's briefs sh
     "update its summary, background and links together" \
     "give it the form its row takes, as your brief says" "crew refuses a row's card in another form, and names the form to use" \
     'kind `image` with `upload: true`' "with its content type" 'Never attach an image as kind `path`' \
-    'kind `code` with lang `markdown`' "never an uploaded file and never HTML" "reached through the card's plannotator link"; do
+    'kind `code` with lang `markdown`' "never an uploaded file and never HTML" "reached through the card's plannotator link" \
+    "A proposal's card is what \`$CREW/plugin/bin/crew plan card <n> --label wldn\` prints" "it links no session but when that says so" \
+    "a proposal's card carries the picture and the text" "A proposal's card links no session, since it holds the proposal whole" \
+    "but for one of more than fifteen new units"; do
     has "$out" "$want"
   done
+  lacks "$out" "something, a proposal, a batch's changes"
   lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"; lacks "$out" "leave the card's artifacts empty"
 }
 cards_say
@@ -94,11 +98,16 @@ for want in "An intent names the outcome and the records that govern it" "never 
   "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" \
-  "carries the link to the plannotator session on the page" "not the page as a file" \
-  "is a Pending You \`approve\` card, with a note for changes or for dropping it"; do has "$out" "$want"; done
-lacks "$out" "offers approval"
+  "crew plan card <n> --label wldn\` prints, drawn by crew from the plan and the proposal" "every one ticked, each cleared to leave it out" \
+  "Post its \`card\` as it is" "upload its picture from \`picture\` as the card discipline says for an image" \
+  "A proposal's card links no session" "start one only when \`session\` is true, for a proposal of more than fifteen new units" \
+  "crew refuses a proposal's card in any other form" "crew plan answer <n> <question> <answer>... --label wldn" \
+  "\`units-<k>\` and the units left ticked" "--note \"<the user's note>\"" "with \`ack_answer\` once crew has applied or declined" \
+  "add \`--clear <unit>\` for each of them" "An approval applies the commands the user read and kept" \
+  "when a command they kept names a unit they left out"; do has "$out" "$want"; done
+lacks "$out" "offers approval"; lacks "$out" "exactly as the user read them"; lacks "$out" "not the page as a file"
 cards_say
-has "$out" "Its words are the proposal's case and each of its changes in a line, as \`"; has "$out" "plan proposed <n>\` words them, with no command."
+lacks "$out" "Its words are the proposal's case and each of its changes in a line"
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\`" "or answers your card" \
   "close the old proposal's card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
   "A row's key changes when what it asks changes" "Pending You gives that card back"; do

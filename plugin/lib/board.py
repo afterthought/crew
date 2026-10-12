@@ -7,15 +7,17 @@
                                      bolts and the queue), Construction (each held bolt as a ledger of its units and
                                      fixes) and Operation (the bolts landed in the last seven days); every rail row a
                                      marker on its object, and what needs attention at the foot
-  crew _views <label>                the rail tab's refresh: one read, the rail printed as crew rail prints it, and
+  crew _views <label>                the rail tab's refresh: one read, the rail printed as crew rail prints it, the
+                                     card sessions of closed cards and gone rows ended as crew rail ends them, and
                                      the board's data written for the board tab
   crew _board <label> [--once]       the board tab: the latest board the rail tab's loop wrote, drawn at the pane's
                                      width whenever it or the pane changes
 
 Read from the plan, the proposals, the moves, the signals, the kits and the run record, in one read that also makes the
-rail (plan.rail_read); nothing is written but the frame the rail tab hands the board tab, in crew's cache, which is one
-redraw and not state (state.4). The board answers nothing and prints no command: the rail and its shell are where
-things are answered."""
+rail (plan.rail_read); no state is written, only the frame the rail tab hands the board tab, in crew's cache, which is
+one redraw and not state (state.4). The rail tab's refresh, as it prints the rail, ends the card sessions whose card is
+closed or whose row is gone, as crew rail does; crew board ends nothing. The board answers nothing and prints no
+command: the rail and its shell are where things are answered."""
 import argparse, datetime, json, os, pathlib, re, shutil, subprocess, sys, tempfile, time
 
 LIB = pathlib.Path(__file__).resolve().parent
@@ -116,11 +118,12 @@ def signals(fleet, label, tip):
     return out, {}
 
 
-def flow_read(fleet, labels):
+def flow_read(fleet, labels, sweep=False):
     """One read of the labels' flow, which makes both the rail and the board: the rail's read with every team of the
     labels surveyed, its dev servers, slots and explorations too (plan.rail_read), and the signals of each label whose
-    plan was read; a plan that could not be read leaves its moves unknown, and is named already."""
-    read = plan.rail_read(fleet, labels, board=True)
+    plan was read; a plan that could not be read leaves its moves unknown, and is named already. With sweep, the rail
+    tab's, the read ends the card sessions of closed cards and gone rows, as crew rail's does."""
+    read = plan.rail_read(fleet, labels, board=True, sweep=sweep)
     read["signals"] = {l: signals(fleet, l, tip) for l, _, tip, _ in read["found"]}
     return read
 
@@ -468,7 +471,7 @@ def main(argv):
         a = ap.parse_args(argv)
         label = plan.default_label(fleet, a)
         labels = [label] if label else list(fleet["partitions"])
-    read = flow_read(fleet, labels)
+    read = flow_read(fleet, labels, sweep=sub == "_views")
     now = datetime.datetime.now(datetime.timezone.utc)
     data = board_data(fleet, labels, read, now)
     if sub == "_views":

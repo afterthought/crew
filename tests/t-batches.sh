@@ -3,8 +3,9 @@
 # partition's setting, N changes or T hours since the last batch, and the planner is told once; crew review starts
 # the reviewer fresh in a review tab beside the planner, its prompt the due changes and how to read each at its commit;
 # its summary file ends the batch, recorded with each unit at its commit, and its tab closes; the rail lists each
-# batch as cards of at most five units; and a bolt with every unit merged is offered for landing only once every unit's
-# latest change has been in a batch. Each scenario of the review-batches and rail-cards specs crew holds.
+# batch as one row, keyed batch/<n>, however many units it holds, and a batch posted as cards of five before a batch was
+# one card as a row for each card posted, until it closes, the planner refused batch/<n> for it; and a bolt with every
+# unit merged is offered for landing only once every unit's latest change has been in a batch. Each scenario of the review-batches and rail-cards specs crew holds.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -76,20 +77,38 @@ ok "the summary file ends the batch: the run record names its units at their com
 
 expect_ok crew rail --label wldn; r=$out
 eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches verify land operations "
-has "$r" "batch 1 (wldn), card 1 of 1: x1 (swb-1), x2 (swb-1), x3 (swb-1), y1 (swb-2), y2 (swb-2)"
-has "$r" "    card:   batch/1-1, none open"
-has "$r" "    answer: crew tell wldn-planner \"On batch 1, these need notes: \""
-# A batch of seven, as the run record would hold one: two cards, of five and of two.
+has "$r" "batch 1 (wldn): x1 (swb-1), x2 (swb-1), x3 (swb-1), y1 (swb-2), y2 (swb-2)"
+has "$r" "    card:   batch/1, none open"
+has "$r" "    answer: crew tell wldn-planner \"On batch 1: \""
+# A batch of seven, as the run record would hold one: one row, holding all seven.
 units7=$(for u in a b c d e f g; do printf '%s:swb-1@abc1234 ' "u$u"; done)
-CREW_AGENT=wldn-reviewer as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act review.batch --on batch/2 --field Batch=2 --field "Units=$units7" >/dev/null
+emit() { CREW_AGENT=$1 as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn "${@:2}" >/dev/null; }
+emit wldn-reviewer --act review.batch --on batch/2 --field Batch=2 --field "Units=$units7"
 expect_ok crew rail --label wldn; r=$out
-has "$r" "batch 2 (wldn), card 1 of 2: ua (swb-1), ub (swb-1), uc (swb-1), ud (swb-1), ue (swb-1)"
-has "$r" "batch 2 (wldn), card 2 of 2: uf (swb-1), ug (swb-1)"
-has "$r" "    card:   batch/2-1, none open"; has "$r" "    card:   batch/2-2, none open"
-CREW_AGENT=wldn-planner as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act card.close --on batch/2 --field Card=req_b-1 --field Key=batch/2-2 >/dev/null
+has "$r" "batch 2 (wldn): ua (swb-1), ub (swb-1), uc (swb-1), ud (swb-1), ue (swb-1), uf (swb-1), ug (swb-1)"
+has "$r" "    card:   batch/2, none open"
+lacks "$r" "card 1 of"; lacks "$r" "batch/2-"
+ok "the rail lists each batch as one row, keyed batch/<n>, however many units it holds"
+
+# A batch of seven posted as cards of five before a batch was one card: a row for each card posted, until it closes.
+emit wldn-reviewer --act review.batch --on batch/3 --field Batch=3 --field "Units=$units7"
+emit wldn-planner --act card.post --on batch/3 --field Card=req_b-1 --field Key=batch/3-1
+emit wldn-planner --act card.post --on batch/3 --field Card=req_b-2 --field Key=batch/3-2
+expect_ok crew rail --label wldn; r=$out
+has "$r" "batch 3 (wldn), card 1 of 2: ua (swb-1), ub (swb-1), uc (swb-1), ud (swb-1), ue (swb-1)"
+has "$r" "batch 3 (wldn), card 2 of 2: uf (swb-1), ug (swb-1)"
+has "$r" "    card:   batch/3-1, open, asked by wldn-planner"; has "$r" "    card:   batch/3-2, open, asked by wldn-planner"
+lacks "$r" "batch/3,"
+emit wldn-planner --act card.close --on batch/3 --field Card=req_b-2 --field Key=batch/3-2
 expect_ok crew rail --label wldn
-lacks "$out" "batch 2 (wldn), card 2 of 2"; has "$out" "batch 2 (wldn), card 1 of 2"
-ok "the rail lists each batch as cards of at most five units, keyed batch/<n>-<k>, each until its card closes"
+lacks "$out" "batch 3 (wldn), card 2 of 2"; has "$out" "batch 3 (wldn), card 1 of 2"
+before() { jq -nc --arg k "$1" '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",
+  tool_input: {name: "wldn-planner", title: "Batch", idempotencyKey: $k}}' | CREW_AGENT=wldn-planner as $box python3 "$CREW/plugin/hooks/cards" --before |
+  jq -r '.hookSpecificOutput.permissionDecisionReason'; }
+why=$(before batch/3)
+has "$why" "crew refuses a card under batch/3: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, or batch/<n> for one of its batches open now, batch/1, batch/2 or batch/3-1"
+has "$(before batch/3-2)" "crew refuses a card under batch/3-2"
+ok "a batch posted as cards of five before keeps a row for each card posted, keyed batch/<n>-<k>, until it closes, and the planner is refused batch/<n> for it"
 
 # x1 constructed again with the user's notes: due again, and so is b1's landing once its units merge.
 CREW_AGENT=swb-1-conductor crew unit run x1 construct "Say what the tenant sees." >/dev/null
@@ -114,7 +133,7 @@ has "$(grep "agent prompt wldn-planner" "$CREW_TEST_LOG")" "bolt b1 has every un
 ok "a change constructed again is due again; a bolt with every unit merged and one outside a batch is not offered for landing, and a batch is due at once"
 
 CREW_AGENT=wldn-planner crew review wldn >/dev/null
-printf '# Batch 3\n' > "$(home_of $box)/.local/state/crew/wldn-main/reports/batch-wldn-3.md"
+printf '# Batch 4\n' > "$(home_of $box)/.local/state/crew/wldn-main/reports/batch-wldn-4.md"
 CREW_AGENT=wldn-planner crew review wldn --wait >/dev/null
 expect_ok crew rail --label wldn
 has "$(awk '$0 == "land" {on = 1; next} /^[^ ]/ {on = 0} on' <<<"$out")" "    answer: crew tell wldn-ops \"Land bolt b1.\""
