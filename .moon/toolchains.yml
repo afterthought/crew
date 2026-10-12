@@ -1,0 +1,15 @@
+$schema: 'https://moonrepo.dev/schemas/toolchains.json'
+
+# The proto that installs and runs the toolchains: devenv's, so a shell and moon agree on it.
+proto:
+  version: '0.63.1'
+
+# Python and uv at the versions .prototools pins. moon makes tests/.venv from tests/pyproject.toml and its lock,
+# syncs pytest into it before the first task that needs it, and runs the tests' python3 from it; the version is part
+# of every Python task's hash, so a toolchain change never replays an older result. moon 2.6 names both unstable_.
+unstable_python:
+  versionFromPrototools: true
+  packageManager: uv
+
+unstable_uv:
+  versionFromPrototools: true

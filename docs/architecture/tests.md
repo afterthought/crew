@@ -2,6 +2,8 @@
 paths:
   - "tests/**"
   - "devenv.nix"
+  - ".prototools"
+  - ".moon/**"
   - ".config/**"
   - ".claude/settings.json"
   - ".claude/hooks/**"
@@ -18,7 +20,7 @@ The rules for how crew is tested and gated. `core.md` binds here too; the how-to
 - **[tests.2]** Every `tests/t-*.sh` opens with a comment saying what it proves and, as its first command, sources `lib.sh` through `${TESTS:?…}`, so it stops when run outside the runner; a test reaches a real service only under `CREW_TEST_LIVE=1`.
 - **[tests.3]** A test edits a fixture in place with `rewrite`, never `sed -i`, and runs crew only as a simulated host.
 - **[tests.4]** A fix to `plugin/` lands with a test that reproduces the case it fixes, at the lowest tier that can hold it: a decision's in the logic tier, a local tool's behaviour in a contract test; and when the fix depends on how a tool crew stubs behaves, the stub is changed to behave the same way.
-- **[tests.5]** Every merge into a bolt and onto main is gated by the suite, and the full suite on the bolt after each merge is the bolt's verification; the suite runs as moon tasks in parallel, one for the logic tier, one for the contract tier, one for crew's mod's own cases and one per end-to-end test file, each replayed on an identical tree.
+- **[tests.5]** Every merge into a bolt and onto main is gated by the suite, and the full suite on the bolt after each merge is the bolt's verification; the suite runs as moon tasks in parallel, one for the logic tier, one for the contract tier, one for crew's mod's own cases and one per end-to-end test file, each tagged `check-full` and replayed on an identical tree.
 - **[tests.6]** Every rule a brief carries is pinned by a phrase `tests/t-briefs.sh` checks.
 - **[tests.7]** A Claude session in a crew checkout works inside crew's devenv shell, entered at its start by the checkout's SessionStart hook; no CLAUDE.md, README, brief or skill tells an agent to wrap a command in `devenv shell --`, and only worktrunk's merge hooks enter the shell themselves.
 - **[tests.8]** A test waits on a condition, never on the clock: no fixed sleep decides an outcome, every wait it makes has a limit that holds on a host under heavy load, and a verification that reddens only because the host was busy is a defect of the test, fixed before the next bolt lands.
@@ -37,7 +39,7 @@ The rules for how crew is tested and gated. `core.md` binds here too; the how-to
 
 **[tests.4]** Rules out: a code fix with no test; a stub that behaves unlike the tool. Source: fixes e413c48, f734f28, 5e11de2, 25c300d, 04daa5d.
 
-**[tests.5]** Rules out: a merge with no gate; one task for the whole suite. Not ruled out: a kit opted into sluice, whose pre-merge hooks run the suite as `wt submit`'s submit gate and whose verdict decides the merge (ADR 0014, D7; sluice record 0002). Source: ADR 0008; `tests/suite`; `tests/moon-tasks`.
+**[tests.5]** Rules out: a merge with no gate; one task for the whole suite; a task or tag named `suite`, which says nothing of which checks it holds (the user, 2026-10-11, in sluice's session: "Naming a task simply 'suite' is ignorant and agents have been fucking it up for me"; renamed `check-full`, beside sluice's `check-fast`, on the user's word of 2026-10-12). Not ruled out: a kit opted into sluice, whose pre-merge hooks run the suite as `wt submit`'s submit gate and whose verdict decides the merge (ADR 0014, D7; sluice record 0002). Source: ADR 0008; `tests/suite`; `tests/moon-tasks`.
 
 **[tests.6]** Rules out: a brief rule with no phrase in `t-briefs.sh`. Source: fix a2ea85e; rulings-rest-on-readings design. Five brief fixes have no phrase: `_open.md`.
 

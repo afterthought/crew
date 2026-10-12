@@ -1,0 +1,7 @@
+# The application tools, installed by proto and activated by the devenv shell (devenv.nix): moon, which runs crew's
+# tests as tasks, and Python with uv, which moon's Python toolchain reads (.moon/toolchains.yml). Python is the minor
+# every host runs crew on, so crew's tests run on what crew runs on (code.1). The system tools, proto among them, are
+# devenv.nix's.
+moon = "2.6.1"
+python = "3.13.15"
+uv = "0.13.0"

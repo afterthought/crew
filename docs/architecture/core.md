@@ -9,7 +9,7 @@ The rules every change to crew holds to, wherever it is made. A rule that binds 
 | `record.md` | `plugin/lib/record.py`: the run record |
 | `signals.md` | `plugin/lib/transcript.py` and the signal commands in `plan.py` |
 | `briefs.md` | `plugin/roles/`, `plugin/skills/`: what each role may and may not do |
-| `tests.md` | `tests/`, `devenv.nix`, `.config/`, `.claude/`, `.envrc` |
+| `tests.md` | `tests/`, `devenv.nix`, `.prototools`, `.moon/`, `.config/`, `.claude/`, `.envrc` |
 | `docs.md` | `README.md`, `openspec/`, `docs/`, `CLAUDE.md` |
 
 ## Rules
@@ -39,7 +39,7 @@ Reading
 
 Code
 
-- **[code.1]** crew's Python imports nothing outside the standard library and its own modules; `gather.py` imports only the standard library, since it is piped to hosts whose crew may be older; devenv declares only jq, moon, python3 and recutils, and pytest for the tests.
+- **[code.1]** crew's Python imports nothing outside the standard library and its own modules; `gather.py` imports only the standard library, since it is piped to hosts whose crew may be older; devenv declares only jq, proto and recutils; `.prototools` pins moon, Python at the minor the hosts run crew on, and uv; pytest, the tests' one dependency, is locked in `tests/uv.lock` and synced by moon.
 - **[code.2]** A refusal is a `Refusal` raised through `fail()`, turned into `sys.exit(<message>)` at each entry point, never a traceback.
 - **[code.3]** Every bash command about a team, main level or slot forwards to the host the teams file names before touching any state, carrying the asker's `CREW_AGENT`, `CREW_LABEL` and `CREW_SESSION`; every ssh crew runs passes `-o BatchMode=yes`.
 - **[code.4]** Every name crew mints or accepts matches `^[a-z0-9][a-z0-9-]*$`.
@@ -78,7 +78,7 @@ Code
 
 **[read.5]** Rules out: a landing on mac-studio refused because macbook-pro, which runs no team, is off the tailnet (crw-3, 2026-10-11: crew main held units-build-at-once-and-are-reviewed-in-batches at 26e22a4 and `crew bolt land` refused to close it, "crew can't tell which changes have been in a batch: macbook-pro did not answer"; the user: "Hmm this seems like a design issue that we need to talk about. The laptop isn't going to be on most of the time", signal 2026-10-11-crw-3-conductor-883e3042/01); a run record gathered over ssh from the hosts because entries wait in a local file until that host's next write carries them (`plan.2`), which the user named as against the design (2026-10-11: "it seems intrusive to be reaching across the hosts over SSH when the design is that we should be looking in Git"); a decision that reads part of the record. Not ruled out: `read.3`'s listing of stages, which asks every host for its kits and names the silent ones. Source: `state.1`, `state.4`, `read.1`; `record.gather`, which reads the branch and then every host of the partition for its uncarried entries, so `batch_due` and the landing's guard refuse when any is silent: the fix is `the-run-record-reaches-the-branch-as-it-is-written`, queued once the rule is accepted: `_open.md`.
 
-**[code.1]** Rules out: `import yaml`; `gather.py` importing `crew`. Source: `plan.py` 57–65; `gather.py` 13–15; `devenv.nix`; ADR 0008, for moon.
+**[code.1]** Rules out: `import yaml`; `gather.py` importing `crew`; tests run on a Python no host runs crew on (crew's devenv gave 3.14.7 while mac-studio ran crew on 3.13.15, read 2026-10-12); a moon or Python from nixpkgs or the user's own proto. Source: `plan.py` 57–65; `gather.py` 13–15; `devenv.nix`, `.prototools`, `.moon/toolchains.yml`, `tests/pyproject.toml`; ADR 0008, for moon; record 0023, point 5, the user's "Add proto now" (2026-10-12).
 
 **[code.2]** Rules out: a bare `raise` reaching the user; `sys.exit(1)` with no message. Source: `crew.py` 38–43, 662–666; `plan.py` 3072–3076.
 

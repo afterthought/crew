@@ -11,7 +11,7 @@
 # counted, and with none says so and passes.
 # Reads: .moon/workspace.yml tests/suite tests/moon-tasks
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
-[[ $(moon --version 2>/dev/null) == "moon 2."* ]] || fail "this test needs moon 2 from crew's devenv, not: $(moon --version 2>&1)"
+[[ $(moon --version 2>/dev/null) == "moon 2."* ]] || fail "this test needs moon 2 from crew's toolchain (.prototools), not: $(moon --version 2>&1)"
 gitconfig "$HOME"
 # The stubs' sleep returns at once; the stand-in waits with the real one.
 zzz=$(type -a -P sleep | grep -vxF "$TESTS/stubs/sleep" | head -1)

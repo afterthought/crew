@@ -25,7 +25,7 @@
 set -uo pipefail
 [[ -n ${DEVENV_ROOT:-} ]] || { echo "tests/suite runs inside crew's devenv shell: a Claude session in a crew checkout is in it from its start; from a terminal, enter it with devenv shell, or direnv with the checkout's .envrc" >&2; exit 2; }
 for c in moon jq; do
-  command -v "$c" >/dev/null || { echo "tests/suite needs $c on PATH (it comes with crew's devenv)" >&2; exit 2; }
+  command -v "$c" >/dev/null || { echo "tests/suite needs $c on PATH (it comes with crew's devenv shell)" >&2; exit 2; }
 done
 TESTS=$(cd "$(dirname "$0")" && pwd -P)
 root=$(dirname "$TESTS")
@@ -56,7 +56,7 @@ if (( ${#names[@]} )); then
     targets+=("tests:$n")
   done
 else
-  targets=("tests:#suite")
+  targets=("tests:#check-full")
 fi
 args=(--on-failure continue)
 [[ -n $affected ]] && args+=(--affected remote)
@@ -64,9 +64,9 @@ args=(--on-failure continue)
 
 # moon hands its tasks its own settings (MOON_CACHE, MOON_CACHE_DIR, MOON_WORKSPACE_ROOT…), and reads the same
 # variables as options: a run started from inside a task, as t-suite's are, would write into that task's cache and
-# replay nothing. Only the shell's MOON_TOOLCHAIN_FORCE_GLOBALS and a caller's MOON_CONCURRENCY are kept.
+# replay nothing. Only the shell's MOON_HOME, crew's own moon home, and a caller's MOON_CONCURRENCY are kept.
 for v in $(env | sed -n 's/^\(MOON_[A-Z0-9_]*\)=.*/\1/p'); do
-  case $v in MOON_TOOLCHAIN_FORCE_GLOBALS | MOON_CONCURRENCY) ;; *) unset "$v" ;; esac
+  case $v in MOON_HOME | MOON_CONCURRENCY) ;; *) unset "$v" ;; esac
 done
 
 cache=$root/.moon/cache

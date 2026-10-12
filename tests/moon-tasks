@@ -2,13 +2,13 @@
 """Generate crew's moon tasks: tests/moon-tasks [--check].
 
 A task for each of the logic and contract tiers (tests/py and tests/contract, record 0022), run by pytest, its
-inputs plugin/lib, plugin/roles (whose definitions name each stage's effort), the tier's folder and crew's devenv files,
+inputs plugin/lib, plugin/roles (whose definitions name each stage's effort), the tier's folder and crew's toolchain files,
 and for the logic tier the mod it reads keys from (code.8); a task, mod, for crew's mod's own cases, run by tests/mod
 under Claude Code's test kit, its inputs the mod, the files that load it, its cases and the runner; and one task per end-to-end test, tests/t-*.sh, written
 into tests/moon.yml, the live tests (t-*-live.sh) left out. Each end-to-end task runs its one test through tests/run,
-tagged suite, and its inputs are everything the test's outcome depends on in crew's tree
+tagged check-full, and its inputs are everything the test's outcome depends on in crew's tree
 (tests.10): the command core every crew command crosses (CORE: plugin/bin/, the modules plan.py and crew.py import),
-tests/run, tests/slot, tests/lib.sh, tests/stubs/, crew's devenv files, the test file itself and each path the test
+tests/run, tests/slot, tests/lib.sh, tests/stubs/, crew's toolchain files, the test file itself and each path the test
 names on a `# Reads:` line of its opening comment (a directory as everything under it). The rest of plugin/ is a
 test's input only when it names it: plugin/hooks when it starts an agent, since the stub claude runs the
 session-start hook; plugin/roles when it reads a brief's words; board.py, page.py, page.html and sites.py when it
@@ -31,17 +31,19 @@ MOON_YML = os.path.join(TESTS, "moon.yml")
 # The command core: what every crew command runs, whichever test runs it.
 CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plugin/lib/record.py", "/plugin/lib/gather.py",
         "/plugin/lib/transcript.py", "/plugin/lib/questions.py", "/plugin/lib/ops.py", "/plugin/lib/cards.py"]
-COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*", "/devenv.nix", "/devenv.lock"]
+# crew's toolchain: devenv's system tools, proto's pins, moon's toolchains and the tests' locked dependencies.
+TOOLCHAIN = ["/devenv.nix", "/devenv.lock", "/.prototools", "/.moon/toolchains.yml", "/tests/pyproject.toml", "/tests/uv.lock"]
+COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*"] + TOOLCHAIN
 # The two pytest tiers: name, folder, and what else of crew's its cases read: the logic tier reads crew's mod for the
 # keys it takes from the agents' views (code.8). Each is one task over its whole folder (tests.5, tests.11), in a
 # checkout that has the folder.
 TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js"]))
          if os.path.isdir(os.path.join(ROOT, f))]
-TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*", "/devenv.nix", "/devenv.lock"]
+TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*"] + TOOLCHAIN
 # crew's mod's own cases under Claude Code's test kit (tests/mod, tests.11): its inputs the mod, the plugin's manifest and
 # hooks file that load it, its cases and the runner, in a checkout that has the runner.
 MOD = (["/plugin/hooks/status.js", "/plugin/hooks/hooks.json", "/plugin/.claude-plugin/plugin.json", "/plugin/tsconfig.json",
-        "/plugin/tests/**/*", "/tests/mod", "/devenv.nix", "/devenv.lock"] if os.path.isfile(os.path.join(TESTS, "mod")) else None)
+        "/plugin/tests/**/*", "/tests/mod"] + TOOLCHAIN if os.path.isfile(os.path.join(TESTS, "mod")) else None)
 HEADER = """\
 # Written by tests/moon-tasks from tests/t-*.sh and the pytest tiers; never edited by hand. After adding or removing a test, or changing
 # what one reads (its `# Reads:` line), run tests/moon-tasks and commit this file: tests/suite refuses to run while
@@ -136,13 +138,13 @@ def tasks():
         blocks[name] = (f"  {name}:\n"
                         f"    command: 'python3 -m pytest -q -p no:cacheprovider {folder}'\n"
                         f"    inputs: [{', '.join(repr(i) for i in inputs)}]\n"
-                        f"    tags: [suite]\n"
+                        f"    tags: [check-full]\n"
                         f"    options: {{ runFromWorkspaceRoot: true }}\n")
     if MOD:
         blocks["mod"] = (f"  mod:\n"
                          f"    command: 'tests/mod'\n"
                          f"    inputs: [{', '.join(repr(i) for i in MOD)}]\n"
-                         f"    tags: [suite]\n"
+                         f"    tags: [check-full]\n"
                          f"    options: {{ runFromWorkspaceRoot: true }}\n")
     for name, path in tests():
         with open(path) as f:
@@ -156,7 +158,7 @@ def tasks():
         blocks[name] = (f"  {name}:\n"
                         f"    command: 'tests/run {name}'\n"
                         f"    inputs: [{', '.join(repr(i) for i in inputs)}]\n"
-                        f"    tags: [suite]\n"
+                        f"    tags: [check-full]\n"
                         f"    options: {{ runFromWorkspaceRoot: true }}\n")
     return blocks, problems
 

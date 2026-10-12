@@ -5,7 +5,8 @@
 # nothing, still exits 0, and gives the session one line that names no workaround. The hook is the one
 # .claude/settings.json runs. tests/run refuses to start outside a devenv shell. No CLAUDE.md, README, brief or
 # skill tells an agent to wrap a command in `devenv shell --`, and a checkout carries the .envrc and ignores
-# devenv's and direnv's working files.
+# devenv's and direnv's working files and the tests' .venv. Inside crew's toolchain moon is 2.6 or later, from crew's
+# own proto home, and the tests run on Python 3.13, the hosts' minor, with pytest (code.1).
 # Reads: .claude/hooks/devenv-shell .claude/settings.json .envrc .gitignore CLAUDE.md README.md plugin/roles/ plugin/skills/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 hook=$CREW/.claude/hooks/devenv-shell
@@ -89,5 +90,11 @@ wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/CLAUDE.md" "$CREW/README.md" "$C
 ok "no doc an agent reads wraps a command in devenv shell --"
 
 grep -qxF 'use devenv' "$CREW/.envrc" || fail ".envrc does not enter devenv"
-for line in .devenv/ .direnv/ '!.envrc'; do grep -qxF -- "$line" "$CREW/.gitignore" || fail ".gitignore lacks $line"; done
-ok "a checkout carries the .envrc and ignores devenv's and direnv's working files"
+for line in .devenv/ .direnv/ '!.envrc' tests/.venv/; do grep -qxF -- "$line" "$CREW/.gitignore" || fail ".gitignore lacks $line"; done
+ok "a checkout carries the .envrc and ignores devenv's and direnv's working files and the tests' .venv"
+
+[[ $(moon --version) =~ ^moon\ 2\.([6-9]|[1-9][0-9])\. ]] || fail "crew's toolchain runs $(moon --version), not moon 2.6 or later"
+[[ $(command -v moon) == "$PROTO_HOME"/* ]] || fail "moon is $(command -v moon), not proto's under crew's own home $PROTO_HOME"
+eq "$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')" "3.13"
+python3 -c 'import pytest' || fail "the tests' python3 cannot import pytest"
+ok "crew's toolchain runs proto's moon 2.6 and the tests on Python 3.13 with pytest"

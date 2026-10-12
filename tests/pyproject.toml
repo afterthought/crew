@@ -1,0 +1,11 @@
+# crew's tests: pytest runs the logic and contract tiers (record 0022). crew's own Python imports nothing outside the
+# standard library (code.1), so the project has no dependencies; pytest is the tests' one, locked in uv.lock and
+# synced by moon into tests/.venv (.moon/toolchains.yml).
+[project]
+name = "crew-tests"
+version = "0"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]

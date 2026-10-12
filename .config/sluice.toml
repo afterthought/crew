@@ -1,0 +1,6 @@
+# What crew's toolchain and tests are, in sluice's words: crew reads [tests] when it makes a worktree of crew ready
+# (plugin/lib/kit.py, plan.17), as it reads any kit's, and sluice would read the same table to run crew's checks.
+# crew does not merge through sluice (.config/crew.toml has no `sluice = true`), so no branch is gated here.
+[tests]
+toolchain = ["devenv", "print-dev-env"]
+runner = "moon"
