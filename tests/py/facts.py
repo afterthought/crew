@@ -64,3 +64,85 @@ def reviewed(n, units, minutes=0):
 def told(minutes=0):
     """A run-record entry: the planner was told a batch is due."""
     return {"Act": "batch.due", "At": at(minutes), "On": []}
+
+
+FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}}},
+         "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha"},
+                   "swb-2": {"name": "swb-2", "label": "wldn", "machine": "chuck-herdr-alpha"}},
+         "hosts": {}}
+
+
+def plan_text(bolts=(), units=()):
+    """plan.rec text with its descriptors: bolts as (name, repo, team or None), units as (name, repo, bolt or None,
+    [after...]), in order."""
+    text = "%rec: Bolt\n%key: Bolt\n\n" + "".join(
+        f"Bolt: {b}\nRepo: {r}\nGoal: Goal of {b}.\n" + (f"Team: {t}\n" if t else "") + "\n" for b, r, t in bolts)
+    text += "%rec: Unit\n%key: Unit\n\n" + "".join(
+        f"Unit: {u}\nRepo: {r}\n" + (f"Bolt: {b}\n" if b else "") + f"Intent: Unit {u}.\n" + "".join(f"After: {x}\n" for x in after) + "\n"
+        for u, r, b, after in units)
+    return text
+
+
+class FactsWrite:
+    """A plan.Write over a plan in memory: its files given, and a refusal for a missing bolt or unit that reads no
+    git for the commit that removed it."""
+
+    def __new__(cls, text, files=None):
+        import plan
+
+        class W(plan.Write):
+            def text(self, path):
+                return self.files.get(path)
+
+            def gone(self, kind, name):
+                plan.fail(f"no {kind.lower()} {name} in {self.label}/main")
+        w = W(None, "wldn", None, plan.Plan(text))
+        w.files = dict(files or {})
+        return w
+
+
+def known(w, stages=None, taken=(), n=None):
+    """A plan command's reads as a logic case gives them (plan.Reads): each unit's stage as given, else ready; a
+    change's name free unless taken on the kit's main; work a held bolt needs ahead of its first unit not merged."""
+    import plan
+
+    class Known(plan.Proposed):
+        direct = n is None
+
+        def of(self, name):
+            st = (stages or {}).get(name, "ready")
+            return {"stage": st, "worktree": st not in ("ready", "waiting"), "open": [], "head": None}
+
+        def stages(self, p, bolts):
+            return self
+
+        def stage(self, p, name):
+            return self.of(name)
+
+        def free(self, label, kit, names):
+            for x in names:
+                plan.crew.NAME.match(x) or plan.fail(f"a unit's name is lowercase words with dashes, not {x}")
+                x not in taken or plan.fail(f"{kit}'s main already has a change named {x}, open or archived; pick another name")
+
+        def first_open(self, p, bolt):
+            return next((u.name() for u in p.units_of(bolt) if self.of(u.name())["stage"] not in ("merged", "landed")), None)
+
+        def kit(self, kit):
+            return self.label
+    return Known(FLEET, "wldn", w, n)
+
+
+def apply(w, *dos, ctx=None):
+    """Each Do line, as a proposal holds it, built and applied in order to the write's plan, then crew's own rules
+    checked: what plan.apply_all and check_ops do, without recfix's process."""
+    import plan
+    for do in dos:
+        a = plan.do_args("wldn", do)
+        plan.OPS[(a.cmd, a.sub)](ctx or known(w, n=1), a).change(w)
+    plan.check(w.plan)
+    return w
+
+
+def units_of(w, bolt=None, repo=None):
+    """The plan's units in a bolt, or in a repo's queue, in order."""
+    return [u.name() for u in w.plan.units() if (u.get("Bolt") == bolt if bolt else not u.get("Bolt") and u.get("Repo") == repo)]

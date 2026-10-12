@@ -244,7 +244,6 @@ ok "a refused proposal's entry names its command and objects, and holds no inten
 # The user leaves new units out: the approval applies what they kept, in one commit, and records what they cleared.
 CREW_AGENT= crew bolt new clears "Units can be left out." --repo switchboard-kit >/dev/null
 CREW_AGENT= crew unit add a-drop "Dropped." --bolt clears >/dev/null
-CREW_AGENT= crew unit add q-queued "Queued, and moved in." --repo switchboard-kit >/dev/null
 last() { props -t Proposal -P Proposal | tail -1; }
 crew plan propose "$(proposal 'Case: Two units replace one.' 'Do: unit drop a-drop "Replaced."' \
   'Do: unit add b-keep "Kept." --bolt clears' 'Do: unit add c-clear "Cleared." --bolt clears' 'Do: unit order c-clear --first')" >/dev/null
@@ -261,25 +260,7 @@ has "$(git --git-dir "$ws" log -1 --format=%b wldn/main)" "Left out: c-clear"
 has "$(crew trace unit/c-clear)" "plan.approve"
 ok "a new unit left out: one commit drops, adds what was kept, makes no cleared unit and runs no order of it, and records it as cleared"
 
-crew plan propose "$(proposal 'Case: The queued unit joins, with another.' 'Do: unit move q-queued clears' 'Do: unit add d-keep "Kept too." --bolt clears')" >/dev/null
-n=$(last)
-expect_ok crew plan approve "$n" --clear q-queued
-eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit)" $'b-keep\nd-keep'
-eq "$(plan -t Unit -e "Unit = 'q-queued'" -P Bolt,Repo)" "switchboard-kit"
-ok "a unit moved in from the queue and left out stays in the queue as it was"
-
-crew plan propose "$(proposal 'Case: Two units, one after the other.' 'Do: unit add e-b "First." --bolt clears' \
-  'Do: unit add e-c "Second." --bolt clears --after e-b' 'Do: unit amend d-keep "Kept, amended."')" >/dev/null
-n=$(last); before=$(tip)
-expect_fail "\`unit add e-c \"Second.\" --bolt clears --after e-b\` names e-b, which the user left out: write the proposal again without it" \
-  crew plan approve "$n" --clear e-b
-has "$(field plan.approve Refused proposal/$n)" '`unit add e-c` names e-b, which the user left out'
-expect_fail "proposal $n neither adds nor moves into a bolt d-keep, so the user can't leave it out: the units it may leave out are e-b or e-c" \
-  crew plan approve "$n" --clear d-keep
-eq "$(tip)" "$before"; eq "$(props -t Proposal -e "Proposal = $n" -P State)" "open"
-expect_ok crew plan approve "$n" --clear e-c
-eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit)" $'b-keep\nd-keep\ne-b'
-ok "a kept command naming a cleared unit, and a cleared unit the proposal does not make new, refuse the approval with nothing changed; clearing the dependent applies"
+# Which units may be left out, and what is applied without them, are logic cases (tests/py/test_proposals.py).
 
 # The card's answers, gathered on the planner's host, split or not, before the approval.
 answers=$(home_of mac-studio)/.local/state/crew/cards/wldn/proposal
