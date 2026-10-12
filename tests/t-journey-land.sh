@@ -1,8 +1,8 @@
 # A bolt carried onto main and landed, through the crew command on the stubs (tests.11, record 0022), a part of the units
 # journey (t-journey-units): when the landing's rebase onto main conflicts, a fix carries the bolt onto main, becomes its
 # head with no merge stage and the kit's post-merge hooks run on it; the bolt lands once every unit has, recording the
-# commit main holds and removing its worktree, and its conductor is told which cards to close; and dropping a held bolt
-# removes its worktree and places.
+# commit main holds and removing its worktree, and its conductor is told which cards to close; a bolt no team holds
+# lands once its unit's change is on main; and dropping a held bolt removes its worktree and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -63,6 +63,17 @@ git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "b
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
 ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its worktree and what is over, and its conductor is told which cards to close"
+
+# A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
+crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null
+crew unit add done-x "Unit done-x." --bolt done-outside >/dev/null
+expect_fail "unit done-x has not landed on main: it is ready" crew bolt land done-outside
+mkdir -p "$k/openspec/changes/archive/2026-10-12-done-x"; echo "# done-x" > "$k/openspec/changes/archive/2026-10-12-done-x/proposal.md"
+commit_all "$k" "chore(openspec): archive done-x"
+expect_ok crew bolt land done-outside
+eq "$(tail -1 <<<"$out")" "done-outside has landed at switchboard-kit's $(git -C "$k" rev-parse main | cut -c1-7); no team held it"
+eq "$(field mac-studio bolt.land Head bolt/done-outside) $(plan -t Bolt -e "Bolt = 'done-outside'" -c)" "$(git -C "$k" rev-parse main) 0"
+ok "a bolt no team holds lands once its unit's change is on its kit's main, recording the commit main holds"
 
 expect_ok crew bolt drop console-pages "the portal lists them"
 has "$out" "$kd/bolts/console-pages and bolt/console-pages are removed; the branch was at"

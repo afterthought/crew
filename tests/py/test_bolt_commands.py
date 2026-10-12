@@ -1,5 +1,6 @@
 """crew bolt new|order|drop on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
-reads given; which bolt a give hands a team (plan.to_give, plan.holding), and when a bolt lands (plan.land_refusal).
+reads given; which bolt a give hands a team (plan.to_give, plan.holding), and when a bolt lands (plan.land_refusal),
+held by a team or by none (plan.unheld_stages, plan.unheld_refusal, plan.builder).
 The branch and worktree give makes and land removes, and the commits every write makes, are the journey's
 (t-journey-units and t-journey-land)."""
 import pytest
@@ -103,9 +104,9 @@ class TestGive:
 
 
 class TestLand:
-    def land(self, stages, outside=()):
+    def land(self, stages, outside=(), of=None):
         return plan.land_refusal("console-pages", ["a-console-page", "a-console-filter"],
-                                 lambda u: {"stage": stages[u], "why": "its host did not answer"}, list(outside), "wldn")
+                                 of or (lambda u: {"stage": stages[u], "why": "its host did not answer"}), list(outside), "wldn")
 
     def test_lands_once_every_unit_has_landed_and_been_in_a_batch(self):
         assert self.land({"a-console-page": "landed", "a-console-filter": "landed"}) is None
@@ -124,6 +125,29 @@ class TestLand:
             "origin/main, check it again, then land; never push it with force"))
         assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", "") == (
             None, "crew can't read what switchboard-kit's main on chuck-herdr-alpha holds: nothing was said")
+
+    def test_a_bolt_no_team_holds_lands_once_each_units_change_is_on_its_kits_main(self):
+        planned = lambda u: {"stage": "ready"}
+        of = plan.unheld_stages({"main": ["a-console-page", "a-console-filter"]}, None, planned)
+        assert self.land({}, of=of) is None
+        of = plan.unheld_stages({"main": ["a-console-page"]}, None, planned)
+        assert self.land({}, of=of) == "unit a-console-filter has not landed on main: it is ready"
+        of = plan.unheld_stages({"main": ["a-console-page", "a-console-filter"], "chores": []}, None, planned, ["a-console-filter"])
+        assert self.land({}, of=of) == "chore a-console-filter has not landed on main: it is ready"
+        of = plan.unheld_stages({"main": ["a-console-page"], "chores": ["a-console-filter"]}, None, planned, ["a-console-filter"])
+        assert self.land({}, of=of) is None
+        of = plan.unheld_stages(None, "chuck-herdr-alpha did not answer", planned)
+        assert self.land({}, of=of) == "cannot tell whether unit a-console-page has landed: chuck-herdr-alpha did not answer"
+
+    def test_a_bolt_no_team_holds_is_read_where_a_team_of_the_partition_builds_its_kit(self):
+        swb, brd = {"name": "swb-2", "kit": {"name": KIT}}, {"name": "brd-1", "kit": {"name": BOARD}}
+        fleet = {"partitions": {"wldn": {"teams": ["swb-2", "brd-1"]}}, "teams": {"swb-2": swb, "brd-1": brd}}
+        assert plan.builder(fleet, "wldn", BOARD) is brd and plan.builder(fleet, "wldn", "rocs-kit") is None
+        assert plan.unheld_refusal("console-pages", ["a-console-page"], KIT, swb, "wldn") is None
+        assert plan.unheld_refusal("console-pages", ["a-console-page"], "rocs-kit", None, "wldn") == (
+            "bolt console-pages is held by no team, and no team of wldn builds rocs-kit, so crew can't read its main")
+        assert plan.unheld_refusal("console-pages", [], KIT, swb, "wldn") == (
+            "bolt console-pages is held by no team and holds no units or chores, so nothing of it has landed")
 
     def test_a_change_no_batch_has_held_refuses_it(self):
         assert self.land({"a-console-page": "landed", "a-console-filter": "landed"}, ["a-console-page", "a-console-filter"]) == (

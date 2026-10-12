@@ -32,7 +32,8 @@ five times. A write that changes several files is one commit, and it carries the
                                              team's host
   crew bolt land <bolt>                      once every unit has landed on main, recording the commit main then
                                              holds; its worktree then goes from its team's host, unless it has
-                                             uncommitted changes
+                                             uncommitted changes; a bolt no team holds lands once each unit's change
+                                             is on its kit's main
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]
@@ -1359,15 +1360,57 @@ def land_refusal(bolt, units, stage_of, outside, label):
     return None
 
 
+def builder(fleet, label, kit):
+    """The team of the partition building a kit, the first by name, on whose host and main checkout a bolt no team
+    holds is read and landed; None when no team of the partition builds it."""
+    return next((fleet["teams"][t] for t in sorted(crew.partition_of(fleet, label)["teams"]) if fleet["teams"][t]["kit"]["name"] == kit), None)
+
+
+def unheld_stages(k, why, other, chores=()):
+    """Each unit's and chore's stage for the landing of a bolt no team holds: landed when main holds it on its kit as
+    read there (k), a unit's change open or archived and a chore's trailer (chores, the bolt's chores' names), unknown
+    with why when the kit could not be read, else its stage in the plan (other(name))."""
+    def of(name):
+        kind = "chore" if name in chores else "unit"
+        if k is None:
+            return {"stage": "unknown", "why": why, "kind": kind}
+        return {"stage": "landed", "kind": kind} if name in (k.get("chores", []) if kind == "chore" else k["main"]) else dict(other(name), kind=kind)
+    return of
+
+
+def unheld_refusal(bolt, units, kit, t, label):
+    """Why a bolt no team holds can't land, or None: it holds units or chores, since a bolt with none has nothing on
+    main, and a team of the partition builds its kit, whose main checkout is read."""
+    if not units:
+        return f"bolt {bolt} is held by no team and holds no units or chores, so nothing of it has landed"
+    if t is None:
+        return f"bolt {bolt} is held by no team, and no team of {label} builds {kit}, so crew can't read its main"
+    return None
+
+
 def bolt_land(fleet, a):
+    """A bolt whose units and chores have all landed on its kit's main, out of the plan, the landing recording the
+    commit main holds (plan.14, plan.16). A bolt no team holds, built outside a team, is read on the host and main
+    checkout of a team of the partition building its kit, and lands the same way once main holds each of its units'
+    changes and chores, on the user's word (roles.2)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
-    t = fleet["teams"].get(b.get("Team")) or fail(f"bolt {a.bolt} is held by no team, so it has not been built")
-    st = stages_for(fleet, plan, [b])
+    t = fleet["teams"].get(b.get("Team"))
     units = [u.name() for u in plan.work_of(a.bolt)]
-    landed = all(st.of(u)["stage"] == "landed" for u in units)
+    if t:
+        stage_of = stages_for(fleet, plan, [b]).of
+    else:
+        t = builder(fleet, label, b.get("Repo"))
+        why = unheld_refusal(a.bolt, units, b.get("Repo"), t, label)
+        not why or fail(why)
+        h = survey(fleet, [(t["name"], None)]).get(t["machine"]) or {"ok": False, "error": "it was not asked"}
+        k = h["kits"].get(t["kit"]["main"]) if h["ok"] else None
+        k = k if k and k.get("ok") else None
+        stage_of = unheld_stages(k, h.get("error") or f"{t['machine']} did not read {t['kit']['main']}", Stages(fleet, plan, {}).of,
+                                 [u.name() for u in plan.work_of(a.bolt) if is_chore(u)])
+    landed = all(stage_of(u)["stage"] == "landed" for u in units)
     outside = [u for u, *_ in due_changes(plan, partition_entries(fleet, label)) if u in units] if landed else []
-    why = land_refusal(a.bolt, units, st.of, outside, label)
+    why = land_refusal(a.bolt, units, stage_of, outside, label)
     not why or fail(why)
     # What main holds once the bolt has landed on it, which the landing records (plan.14).
     head, why = main_held(t["kit"]["name"], t["machine"], host_run(fleet, t["machine"], MAIN, t["kit"]["main"]))
@@ -1384,8 +1427,11 @@ def bolt_land(fleet, a):
         return [a.bolt]
     write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"],
           fields=dict(Repo=t["kit"]["name"], Head=head))
-    print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]} and {t['name']} holds no bolt")
-    tidy_after(fleet, t, f"bolt {a.bolt}")
+    if b.get("Team"):
+        print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]} and {t['name']} holds no bolt")
+        tidy_after(fleet, t, f"bolt {a.bolt}")
+    else:
+        print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]}; no team held it")
 
 
 # ---------------------------------------------------------------------------------------------------- units
