@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Run crew's suite as moon tasks: tests/suite [--affected | --force] [name...]. Each tests/t-*.sh but the live one is
-# a task (tests/moon.yml, written by tests/moon-tasks) that runs that one test through tests/run, and the tasks run
-# side by side. A task whose inputs are identical to a run that passed on this host, in any worktree of crew, is
+# Run crew's suite as moon tasks: tests/suite [--affected | --force] [name...]. The logic tier (tests/py) and the
+# contract tier (tests/contract) are a task each, run by pytest, and each tests/t-*.sh but the live one is a task
+# that runs that one end-to-end test through tests/run (tests/moon.yml, written by tests/moon-tasks); the tasks run
+# side by side (tests.5, tests.11). A task whose inputs are identical to a run that passed on this host, in any worktree of crew, is
 # replayed from moon's archives instead of run again; a run that failed is never replayed.
 #
 #   tests/suite                 every task
+#   tests/suite logic           the logic tier alone, as a coder runs it while iterating (tests.12)
 #   tests/suite merge docs      those tasks (merge, t-merge and t-merge.sh all name tests:t-merge)
 #   tests/suite --affected      the tasks whose inputs differ from the merge-base with main, uncommitted edits
 #                               included; the rest are not run
@@ -47,7 +49,7 @@ done
 targets=()
 if (( ${#names[@]} )); then
   for n in "${names[@]}"; do
-    n=${n#t-}; n=t-${n%.sh}
+    case $n in logic | contract) ;; *) n=${n#t-}; n=t-${n%.sh} ;; esac
     grep -qx "  $n:" "$TESTS/moon.yml" || { echo "tests/suite: $n is no task in tests/moon.yml; tests/run $n runs a test that has none" >&2; exit 2; }
     targets+=("tests:$n")
   done

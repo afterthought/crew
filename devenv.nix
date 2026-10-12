@@ -1,9 +1,10 @@
 { pkgs, config, ... }:
 {
   # What crew's own scripts call. herdr, wt and openspec come from the machine and from each team's repository.
-  # recutils (recsel, recfix) reads and checks the bolt plan. moon runs crew's suite as one task per test file, in
-  # parallel, and replays a test whose inputs already passed (tests/suite, .moon/workspace.yml; record 0008).
-  packages = [ pkgs.jq pkgs.moon pkgs.python3 pkgs.recutils ];
+  # recutils (recsel, recfix) reads and checks the bolt plan. moon runs crew's suite as tasks in parallel, and
+  # replays a task whose inputs already passed (tests/suite, .moon/workspace.yml; record 0008). pytest runs the
+  # logic and contract tiers (record 0022); crew's own Python imports nothing but the standard library (code.1).
+  packages = [ pkgs.jq pkgs.moon (pkgs.python3.withPackages (ps: [ ps.pytest ])) pkgs.recutils ];
 
   # moon's task archives (.moon/cache/outputs) are a link into the git common dir, so every worktree of crew on a
   # host and its main checkout share them: a test the coder passed replays at the merge's gate, and one the gate
