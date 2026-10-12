@@ -87,16 +87,16 @@ swept() { sed -n '/^card sessions /,/^$/p' <<<"$1" | sed '/^$/d'; }
 HOST=$box crew card session proposal/1 >/dev/null; pp1=$(rec $box proposal/1 .pid)
 for u in v1 v2 v3; do HOST=$box crew card session verify/$u/$s >/dev/null; done
 pv1=$(rec $box verify/v1/$s .pid); pv2=$(rec $box verify/v2/$s .pid); pv3=$(rec $box verify/v3/$s .pid)
-HOST=$box crew card session batch/1-1 x1 >/dev/null; px1=$(rec $box batch/1-1/x1 .pid)
-HOST=$box crew card session batch/1-1 z1 >/dev/null; pz1=$(rec mac-studio batch/1-1/z1 .pid)
-for f in proposal/1 verify/v1/$s verify/v2/$s verify/v3/$s batch/1-1/x1; do aged $box $f; done; aged mac-studio batch/1-1/z1
+HOST=$box crew card session batch/1 x1 >/dev/null; px1=$(rec $box batch/1/x1 .pid)
+HOST=$box crew card session batch/1 z1 >/dev/null; pz1=$(rec mac-studio batch/1/z1 .pid)
+for f in proposal/1 verify/v1/$s verify/v2/$s verify/v3/$s batch/1/x1; do aged $box $f; done; aged mac-studio batch/1/z1
 mine=$(by_hand $box "$(rec $box proposal/1 .document)")
 emit $box wldn-planner card.post proposal/1 req_p-1 proposal/1
 emit $box swb-1-conductor card.post unit/v2 req_v-2 verify/v2/$s
-emit $box wldn-planner card.post batch/1 req_b-1 batch/1-1
+emit $box wldn-planner card.post batch/1 req_b-1 batch/1
 
 # The planner closes the batch card and the conductor v2's, and the user approves proposal 1, whose card stays open.
-emit $box wldn-planner card.close batch/1 req_b-1 batch/1-1
+emit $box wldn-planner card.close batch/1 req_b-1 batch/1
 emit $box swb-1-conductor card.close unit/v2 req_v-2 verify/v2/$s
 crew plan approve 1 >/dev/null
 
@@ -119,10 +119,10 @@ HOST=$box crew card session proposal/2 >/dev/null; pp2=$(rec $box proposal/2 .pi
 crew plan drop 2 "Replaced." >/dev/null
 expect_ok crew rail --label wldn
 eq "$(swept "$out")" "card sessions ended:
-  batch/1-1 x1 (wldn) on $box: its row is gone; ended batch/1-1 x1's session, plannotator pid $px1
+  batch/1 x1 (wldn) on $box: its row is gone; ended batch/1 x1's session, plannotator pid $px1
   verify/v1/$s (wldn) on $box: its row is gone; ended verify/v1/$s's session, plannotator pid $pv1
   verify/v2/$s (wldn) on $box: its card is closed; ended verify/v2/$s's session, plannotator pid $pv2
-  batch/1-1 z1 (wldn) on mac-studio: its row is gone; ended batch/1-1 z1's session, plannotator pid $pz1"
+  batch/1 z1 (wldn) on mac-studio: its row is gone; ended batch/1 z1's session, plannotator pid $pz1"
 for p in $px1 $pv1 $pv2 $pz1; do gone $p; done
 [[ ! -e $(home_of $box)/$cards/verify/v1 && ! -e $(home_of $box)/$cards/batch && ! -e $(home_of mac-studio)/$cards/batch ]] ||
   fail "an ended session's key was not forgotten"
