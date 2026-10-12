@@ -11,7 +11,7 @@ What is still open now that every page is written. A working file: an item leave
 - **ADR 0020, proposed 2026-10-11 on the user's card**: a team is free for its next bolt once its current one is proven, every unit merged and the proof green, the landing holding no slot; the emergency ssh bolt, approved, waited an hour on swc-1's unrelated landing. Once accepted: `teams.16`, `a-team-is-free-once-its-bolt-is-proven`.
 - **`gitenv()` for every git call**: used for the cache and the tidy, not for `stage_ends` or `gather.py`.
 
-- **What minted mac-studio's new Pending You connection** after the headers helper judged the old sign-in stale (2026-10-10 04:57Z) and the credential file was cleared (09:05Z), orphaning every card posted before: unread (ADR 0005 as amended 2026-10-11); swancloud's doctor row will show the next change the day it happens.
+- **mac-studio's Pending You sign-in**: the host has had none since its credential file was cleared (2026-10-10 09:05Z), so the headers helper gives no token and every session uses Claude Code's own sign-in, one per account's settings folder, which minted the connection of 2026-10-11; sessions of an account never signed in so have no Pending You tools. `crew card` posts under the host's sign-in, and an agent's wake hears only cards of its own session's connection, so the host is signed in again (`pendingyou-signin`, the user's, on their phone, at a moment no card is open, ADR 0005) before the three test cards and `every-crew-card-goes-through-crew`.
 
 ## Accepted, not built
 
@@ -21,6 +21,7 @@ Each is a queued or placed unit; the rule stands and the code catches up.
 - `plan.10`: a drop keeps a branch with unmerged patches, judged by `git cherry`; `tidy()` deletes with `git branch -D` and `gather.fix_merged` judges by ancestry (`a-drop-keeps-unmerged-work`, fix-places).
 - `plan.11`: the chore kind (`chores-beside-units-and-fixes`, curation-and-holds).
 - `plan.14`: a landing records the sha main holds afterwards; `crew bolt land` records no sha yet, and `construct.md` knows one proof list.
+- `briefs.16`, ADR 0005 as amended 2026-10-12: a crew agent's cards go only through `crew card post|change|close|read`, through the fleet's `pendingyou mcp` under the host's sign-in (`a-card-reaches-the-user-when-the-tools-drop`, built on `recovery/pendingyou`); a row's card built from its row in place of the hook's checks, the briefs moved to the commands, and crew's hook refusing an agent's own post, change, close or area (`every-crew-card-goes-through-crew`, after the three test cards); today the briefs have agents call Pending You's tools and the hook checks and records them.
 - ADR 0006: a change archived at its merge (`a-merged-change-is-archived`); the coder brief has no archive step and ops reads the proof from the open change.
 - `plan.14`, `roles.2` as amended: the board's Operation lane rows per environment and the lineage page's deploys view (`the-page-shows-the-deploys`, record 0010); the deploys and the other operations, their approval, rows and cards, are built (`crew ops`, `a-deploy-is-approved-and-recorded-through-crew`).
 - `briefs.14`'s spike clause, ADR 0016: a spike beside the design agent; crew has no spike. ADR 0016 is back to proposed on 2026-10-11 and its bolt `a-spike-runs-beside-the-design-agent` held until the elaboration record is settled with the user.
