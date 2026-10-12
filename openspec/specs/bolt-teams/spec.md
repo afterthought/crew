@@ -120,7 +120,7 @@ files, for the team to carry the bolt onto main by a fix.
 
 #### Scenario: The bolt lands
 - **WHEN** the user approves swb-1's landing card
-- **THEN** main holds every unit's change, GitHub's main holds it too, the bolt's records are gone from the plan, the landing's entry in the run record names switchboard-kit and the commit its main holds, and swb-1 can be given its next bolt
+- **THEN** main holds every unit's change, GitHub's main holds it too, the bolt's records are gone from the plan, and swb-1 can be given its next bolt
 
 #### Scenario: The bolt's worktree has uncommitted changes
 - **WHEN** `crew bolt land` runs on a bolt whose worktree has a modified file
