@@ -3194,16 +3194,17 @@ def overlapping(plan, st_all, k, unit, mine):
 
 
 def undeclared(fleet, t, bolt, unit, entries, deps=()):
-    """The paths a unit changed against its bolt that no Touches entry matches, its own change's folder aside. A
-    dependent's place holds its After units' work as it stood: a path only their commits changed is theirs, not the
-    dependent's."""
+    """The paths a unit changed against its bolt that no Touches entry matches, its own change's folder aside. Only
+    the unit's own commits count: a dependent's place holds its After units' work as it stood, and a place that took a
+    sibling unit's work by a merge, to settle a forecast, holds that unit's commits behind the merge's second parent;
+    a path only their commits changed is theirs."""
     main = t["kit"]["main"]
     _, out = kit_git(fleet, t, main, "diff", "--name-only", f"bolt/{bolt}...unit/{unit}")
-    paths = [p for p in out.splitlines() if p]
     held = [f"refs/heads/unit/{d}" for d in deps if head_of(fleet, t, main, f"unit/{d}")]
-    if held:
-        _, mine = kit_git(fleet, t, main, "log", "--format=", "--name-only", "--no-merges", f"unit/{unit}", "--not", f"refs/heads/bolt/{bolt}", *held)
-        paths = [p for p in paths if p in set(mine.splitlines())]
+    _, mine = kit_git(fleet, t, main, "log", "--format=", "--name-only", "--no-merges", "--first-parent", f"unit/{unit}",
+                      "--not", f"refs/heads/bolt/{bolt}", *held)
+    mine = set(mine.splitlines())
+    paths = [p for p in out.splitlines() if p and p in mine]
     own = f"openspec/changes/{unit}/"
     return [p for p in paths if not p.startswith(own) and not any(matches(e, p) for e in entries)]
 

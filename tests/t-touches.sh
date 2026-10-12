@@ -2,7 +2,8 @@
 # proposal has no `## Touches` heading, no fenced block under it or an empty one; a unit whose Touches overlap those
 # of an unmerged unit ahead of it in the bolt starts code with the overlap and the other unit's change in its prompt,
 # overlap holding nothing; and verify's prompt names each path the unit changed against its bolt and did not declare,
-# its own change's folder aside. Each scenario of the bolt-teams spec on Touches.
+# its own change's folder aside and counting only the unit's own commits, never a sibling unit's work its place took by
+# a merge. Each scenario of the bolt-teams spec on Touches.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -50,3 +51,11 @@ rewrite "$kd/places/b/openspec/changes/b/tasks.md" 's/- \[ \]/- [x]/'; commit_al
 expect_ok crew unit run b verify
 eq "$(prompt_to swb-1-unit-2)" "'/opsx:verify b Changed and not declared in its Touches: README.md, docs/b.md.'"
 ok "verify's prompt names each path the unit changed against its bolt and did not declare, and none of its own change"
+
+mkdir -p "$kd/places/a/plugin/lib"; echo a > "$kd/places/a/plugin/lib/plan.py"; commit_all "$kd/places/a" "feat(a): built"
+git -C "$kd/places/c" merge -q --no-ff unit/a -m "chore: take a's work"
+echo c > "$kd/places/c/README.md"
+rewrite "$kd/places/c/openspec/changes/c/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/c" "feat(c): built"
+expect_ok crew unit run c verify
+eq "$(prompt_to swb-1-unit-3)" "'/opsx:verify c Changed and not declared in its Touches: README.md.'"
+ok "a sibling unit's work a place took by a merge is not the unit's: verify names only the unit's own undeclared paths"
