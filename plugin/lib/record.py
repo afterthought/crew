@@ -404,14 +404,18 @@ def events(fleet, a):
         return follow(fleet, labels, a.about)
     day, stamp = when(a.since)
     found, missing = gather(fleet, labels, day)
-    found = [e for e in found if e["At"] >= stamp and (not a.about or names(e, a.about))]
-    if a.json:
-        print(json.dumps({"entries": found, "unreachable": missing}, indent=1))
-        return
-    for e in found:
-        print(line(e))
-    for h, why in missing.items():
-        print(f"{h} did not answer: {why}")
+    out = events_text(found, missing, stamp, a.about, a.json)
+    if out:
+        print(out)
+
+
+def events_text(found, missing, stamp, about=None, as_json=False):
+    """crew events: the entries gathered at or after stamp, those naming about alone when given, one line each, then
+    each host that did not answer; or the same as JSON."""
+    found = [e for e in found if e["At"] >= stamp and (not about or names(e, about))]
+    if as_json:
+        return json.dumps({"entries": found, "unreachable": missing}, indent=1)
+    return "\n".join([line(e) for e in found] + [f"{h} did not answer: {why}" for h, why in missing.items()])
 
 
 def follow(fleet, labels, about):
@@ -514,8 +518,7 @@ def lineage(entries, start, index=None):
 def trace(fleet, a):
     """One object's history, as lineage() walks it. A bare name is tried as a unit, then a bolt, then a signal."""
     found, missing = gather(fleet, labels_for(fleet, a.label), "0000-00-00")
-    candidates = [a.object] if a.object.startswith(KINDS) else [f"{k}{a.object}" for k in ("unit/", "bolt/", "signals/")]
-    start = next((c for c in candidates if any(names(e, c) for e in found)), None)
+    start, candidates = trace_start(found, a.object)
     if start is None:
         for h, why in missing.items():
             print(f"{h} did not answer: {why}", file=sys.stderr)
@@ -524,6 +527,13 @@ def trace(fleet, a):
         print(line(e, zoe=True))
     for h, why in missing.items():
         print(f"{h} did not answer: {why}")
+
+
+def trace_start(found, obj):
+    """The object a trace starts from, or None, and the names it was looked for by: a typed one as it is, a bare name
+    as a unit, then a bolt, then a signal, the first that an entry names."""
+    candidates = [obj] if obj.startswith(KINDS) else [f"{k}{obj}" for k in ("unit/", "bolt/", "signals/")]
+    return next((c for c in candidates if any(names(e, c) for e in found)), None), candidates
 
 
 # ------------------------------------------------------------------------------------------------- command

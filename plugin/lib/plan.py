@@ -720,12 +720,8 @@ def state_init(fleet, a):
         t = fetch(bp, f"plan/{label}")
         if t:
             old.append((bp, t, read(bp, f"plan/{label}", t)))
-    owner = {}
-    for bp, _, plan in old:
-        for r in plan.bolts() + plan.units():
-            other = owner.setdefault((r.kind, r.name()), bp)
-            other == bp or fail(f"plan/{label} of {other} and plan/{label} of {bp} both hold {r.kind.lower()} {r.name()}: "
-                                "rename one in its plan first; nothing was written")
+    shared = shared_name(label, [(bp, plan) for bp, _, plan in old])
+    shared is None or fail(shared)
     first = old[0] if old and old[0][0] == p["blueprints"][0] else None
     joins = [o for o in old if o is not first]
     did = []
@@ -749,12 +745,7 @@ def state_init(fleet, a):
 
         def join(w_tip, files, bp=bp, plan=plan):
             have = read(repo, ref, w_tip)
-            for r in plan.bolts() + plan.units():
-                (have.bolt if r.kind == "Bolt" else have.unit)(r.name()) is None or fail(
-                    f"{ref} of {repo} already holds {r.kind.lower()} {r.name()}, which plan/{label} of {bp} also holds; nothing was joined")
-                fields = [(n, v if n != "Source" or ":" in v else f"{bp}:{v}") for n, v in r.fields]
-                have.insert(Rec(r.kind, fields))
-            check(have)
+            joined_into(have, plan, bp, f"{ref} of {repo}", label)
             files["plan.rec"] = have.text()
         tip = init_step(repo, ref, label, f"state({label}): {mark}", join)
         did.append(f"joined plan/{label} of {bp} at {t[:7]}")
@@ -774,7 +765,7 @@ def state_init(fleet, a):
 
         def start_moves(w_tip, files):
             show(repo, w_tip, "moves.rec") is None or fail(f"{ref} of {repo} has moves.rec since {w_tip[:7]}")
-            files["moves.rec"] = MOVES + "".join("\n" + "\n".join(r.lines()) + "\n" for r in recs)
+            files["moves.rec"] = moves_file(recs)
             if show(repo, w_tip, "proposals.rec") is None:
                 files["proposals.rec"] = PROPOSALS
         tip = init_step(repo, ref, label, f"state({label}): moves.rec, with the {len(recs)} moves of {src}'s signals/moves.rec{at}", start_moves)
@@ -783,6 +774,34 @@ def state_init(fleet, a):
         print(f"{ref} of {repo} {tip[:7]}: " + "; ".join(did))
     else:
         print(f"{ref} of {repo} exists, at {tip[:7]}: nothing to do")
+
+
+def shared_name(label, plans):
+    """Why the partition's plans can't be adopted together, or None: two of them, [(blueprints repo, plan)], hold a
+    bolt or a unit by the same name."""
+    owner = {}
+    for bp, plan in plans:
+        for r in plan.bolts() + plan.units():
+            other = owner.setdefault((r.kind, r.name()), bp)
+            if other != bp:
+                return (f"plan/{label} of {other} and plan/{label} of {bp} both hold {r.kind.lower()} {r.name()}: "
+                        "rename one in its plan first; nothing was written")
+    return None
+
+
+def joined_into(have, plan, bp, where, label):
+    """Another blueprints repo's plan joined into the branch's (have): each bolt and unit added, a Source naming no repo
+    made to name bp, refused when the branch (where) already holds one by that name; then crew's own rules checked."""
+    for r in plan.bolts() + plan.units():
+        (have.bolt if r.kind == "Bolt" else have.unit)(r.name()) is None or fail(
+            f"{where} already holds {r.kind.lower()} {r.name()}, which plan/{label} of {bp} also holds; nothing was joined")
+        have.insert(Rec(r.kind, [(n, v if n != "Source" or ":" in v else f"{bp}:{v}") for n, v in r.fields]))
+    check(have)
+
+
+def moves_file(recs):
+    """A new moves.rec: crew's descriptor, then each move it starts with."""
+    return MOVES + "".join("\n" + "\n".join(r.lines()) + "\n" for r in recs)
 
 
 def init_step(repo, ref, label, subject, make_files):

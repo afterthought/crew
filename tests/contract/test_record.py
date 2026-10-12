@@ -41,3 +41,21 @@ def test_a_days_file_begun_now_allows_them(runs):
     assert record.emit("wldn", "card.post", ["unit/y"], Card="req_new-1", Key="verify/y/20261007-1500")
     day, = runs.glob("*.rec")
     assert subprocess.run(["recfix", "--check", str(day)], capture_output=True).returncode == 0
+
+
+def test_two_entries_written_at_once_by_two_processes_are_both_whole_and_the_file_passes_recfix(tmp_path):
+    """record.emit: the descriptor goes in by a link and each entry in one append, so processes writing at once never
+    interleave (record.4)."""
+    import os
+    import pathlib
+    import sys
+    lib = pathlib.Path(record.__file__).parent
+    env = dict(os.environ, CREW_SESSION="")
+    env.pop("CREW_AGENT", None)
+    ps = [subprocess.Popen([sys.executable, str(lib / "record.py"), "emit", "--label", "wldn", "--act", f"test.{n}", "--on", f"unit/{n}"], env=env)
+          for n in ("one", "two")]
+    assert [p.wait() for p in ps] == [0, 0]
+    f, = pathlib.Path(os.environ["HOME"]).glob(".local/state/crew/wldn/runs/*/*.rec")
+    assert subprocess.run(["recfix", "--check", str(f)], capture_output=True).returncode == 0
+    got = subprocess.run(["recsel", "-t", "Entry", "-C", "-P", "Act", str(f)], capture_output=True, text=True).stdout.split()
+    assert sorted(got) == ["test.one", "test.two"]
