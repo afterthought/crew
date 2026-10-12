@@ -140,13 +140,20 @@ def offer(fleet, a):
 
 def approve(fleet, a):
     offers, _, _ = state(entries(a.label))
-    e = offers.get(a.env)
-    if not e or e["Head"] != a.to:
-        why = (f"no deploy of {a.env} is offered" if not e else f"the deploy of {a.env} offered is to {e['Head'][:7]}, not {a.to[:7]}")
+    why = approve_refusal(offers, a.env, a.to)
+    if why:
         emit(a.label, "ops.approve", a.env, f"approve a deploy of {a.to[:7]}", refused=why, Head=a.to)
         fail(f"{why}: crew ops approve answers the offer the rail shows (crew rail --label {a.label})")
     emit(a.label, "ops.approve", a.env, f"approve a deploy of {a.to[:7]}", Head=a.to)
     print(f"the deploy of {a.env} to {a.to[:7]} is approved: the deployer runs it at its next run")
+
+
+def approve_refusal(offers, env, to):
+    """Why the user's approval of a deploy of env to to is refused, or None: it answers only the offer open now."""
+    e = offers.get(env)
+    if not e:
+        return f"no deploy of {env} is offered"
+    return None if e["Head"] == to else f"the deploy of {env} offered is to {e['Head'][:7]}, not {to[:7]}"
 
 
 def word(fleet, a):
@@ -261,17 +268,27 @@ def parser():
     return ap
 
 
-def main(argv):
-    a = parser().parse_args(argv)
-    fleet = crew.load()
-    NAME.match(a.env) or fail(f"{a.env} is no environment's name: lowercase words and dashes")
-    a.label in fleet["partitions"] or fail(f"no partition {a.label} in the teams file. partitions: " + " ".join(fleet["partitions"]))
+def args_refusal(fleet, a):
+    """Why crew ops refuses what it was given, or None: an environment's name, a partition of the teams file, a
+    commit as a sha in hex (--from none for nothing deployed), and a step key crew takes."""
+    if not NAME.match(a.env):
+        return f"{a.env} is no environment's name: lowercase words and dashes"
+    if a.label not in fleet["partitions"]:
+        return f"no partition {a.label} in the teams file. partitions: " + " ".join(fleet["partitions"])
     for f in ("to", "from"):
         v = getattr(a, f, None)
         if v and not (v == "none" and f == "from") and not SHA.match(v):
-            fail(f"--{f} {v} is no commit: a sha in hex")
+            return f"--{f} {v} is no commit: a sha in hex"
     if getattr(a, "key", None) and not STEP_KEY.match(a.key):
-        fail(f"--key {a.key} is no step key crew takes")
+        return f"--key {a.key} is no step key crew takes"
+    return None
+
+
+def main(argv):
+    a = parser().parse_args(argv)
+    fleet = crew.load()
+    why = args_refusal(fleet, a)
+    why is None or fail(why)
     machine = crew.partition_of(fleet, a.label)["machine"]
     if a.cmd != "quiet" and machine != crew.this_host():
         r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "ops", *argv))
