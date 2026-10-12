@@ -80,8 +80,11 @@
 #                                      every bolt and unit of the plans, each unit's stage read from its kit
 #   crew bolt  new|give|order|drop|land ...
 #   crew unit  add|split|amend|order|after|move|drop ...
-#   crew plan  propose|proposed|agree|approve|drop ...
-#                                      the planner's proposals: a change to the plan, applied once the user approves it
+#   crew plan  propose|proposed|agree|card|approve|answer|drop ...
+#                                      the planner's proposals: a change to the plan, applied once the user approves it;
+#                                      card prints a proposal's Pending You card and draws its picture, which link no
+#                                      session; approve --clear leaves out the new units the user cleared; answer
+#                                      records the card's answers and applies the approval once it holds them all
 #   crew rail  [--label L]             what waits on the user: proposals, review batches, verify reports and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
 #                                      You card; then any open card whose row is gone. It ends, on every host of the
