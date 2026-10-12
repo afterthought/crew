@@ -1,12 +1,12 @@
-# crew ops: the operations on a partition's environments, a deploy being one kind (plan.14), as swancloud's deployer
-# calls them. An offer of a deploy is a row under operations whose card is main-level ops's, the same offer again
-# writes nothing and a newer one replaces it; the user's word, recorded by crew ops approve for the offer the rail
-# shows and refused for any other, is what crew ops word answers until that deploy's end is recorded; a deploy's start,
-# steps and end are entries of the run record as it runs; any other operation's state is recorded, after a deploy or
-# on its own, crew ops steps gives each one's latest, and one the user is to take that waits is a rail row until it is
-# marked; quiet answers whether the environment's host runs a working stage
-# or a test; main-level ops may post a card under an open deploy row's key alone; and a deploy command run away from
-# the partition's main level runs there.
+# The operations on a partition's environments, a deploy being one kind (plan.14), through crew ops as swancloud's
+# deployer calls it, on the stubs (tests.11, record 0022): an offer is a rail row whose card is main-level ops's and
+# the same offer again writes nothing; crew ops approve records the user's word, refusing an approval of another
+# commit, and crew ops word answers it until that deploy's end is recorded; a deploy's start, step and end are entries
+# as it runs; an operation's states are recorded and crew ops steps gives each one's latest, one the user is to take a
+# rail row until marked; main-level ops may post a card under an open operations row's key; quiet reads the host's
+# agents and test slots; and an ops command run away from the partition's main level runs there. Which offer is open,
+# the word, each step's latest state, the rows and their words, and what crew ops refuses are logic cases
+# (tests/py/test_ops.py); each step here checks a command's wiring once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints afterthought/blueprints >/dev/null; blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -16,10 +16,6 @@ s1=$(printf 'a%.0s' $(seq 40)); s2=$(printf 'b%.0s' $(seq 40))
 runs() { cat "$(home_of "${1:-mac-studio}")/.local/state/crew/${2:-swancloud}/runs/${1:-mac-studio}"/*.rec 2>/dev/null || true; }
 acts() { runs "$@" | grep -c "^Act: $3\$" || true; }
 dep() { crew ops "$@" --label swancloud; }
-
-expect_ok crew ops --help
-has "$out" "usage: crew ops"
-ok "crew ops answers --help, as the deployer's probe reads it"
 
 expect_ok dep offer mac-studio --from none --to "$s1"
 expect_ok dep offer mac-studio --from none --to "$s1"
@@ -34,7 +30,6 @@ rc=0; out=$(dep word mac-studio 2>&1) || rc=$?
 eq "$rc" "1"; has "$out" "no word is given for a deploy of mac-studio"
 expect_fail "the deploy of mac-studio offered is to ${s1:0:7}, not ${s2:0:7}" dep approve mac-studio --to "$s2"
 has "$(runs)" "Refused: the deploy of mac-studio offered is to ${s1:0:7}, not ${s2:0:7}"
-expect_fail "no deploy of macbook-pro is offered" dep approve macbook-pro --to "$s1"
 expect_ok dep approve mac-studio --to "$s1"
 has "$out" "the deploy of mac-studio to ${s1:0:7} is approved"
 expect_ok dep word mac-studio; eq "$out" "$s1"
@@ -108,8 +103,3 @@ eq "$(acts "$box" wldn ops.offer)" "1"
 eq "$(acts mac-studio wldn ops.offer)" "0"
 expect_fail "no word is given for a deploy of $box" crew ops word "$box" --label wldn
 ok "an ops command run away from the partition's main level is run there"
-
-expect_fail "--to nothex is no commit" dep offer mac-studio --from none --to nothex
-expect_fail "Bad_Env is no environment's name" dep offer Bad_Env --from none --to "$s1"
-expect_fail "no partition nolabel" crew ops word mac-studio --label nolabel
-ok "a commit, an environment or a partition crew can't take is refused"
