@@ -3,6 +3,9 @@ kits and run record, as plan.rail_read and board.signals give it, and board.boar
 board.stamp on what that makes. That crew board reads it all and writes nothing, and the rail tab's refresh writes the
 frame the board tab draws, are the board journey's (t-journey-board)."""
 import datetime
+import json
+import pathlib
+import re
 
 import pytest
 
@@ -232,8 +235,8 @@ WAITS = [{"label": "wldn", "proposal": 2, "by": "wldn-planner", "opened": "2026-
 
 class TestViews:
     def test_a_conductor_reads_its_bolt_as_a_ledger_a_pip_to_each_unit_then_what_comes_next(self):
-        assert view("swb-1-conductor") == ["  ◑◔  switchboard-kit tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
-                                           "    fix/tenant-environments/edge  fix  unit-4", "  next  switchboard-kit apex-zones", "  queued  1 in switchboard-kit"]
+        assert view("swb-1-conductor") == ["  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
+                                           "    fix/tenant-environments/edge  fix  unit-4", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
 
     def test_a_unit_waiting_on_the_users_answer_has_its_marker_and_its_card(self):
         rows = [{"label": "wldn", "group": "verify", "key": "verify/a", "at": NOW}]
@@ -241,7 +244,7 @@ class TestViews:
         assert view("swb-1-conductor", rows=rows, cards=[card])[1] == "✎   ◑  a  code 1/2  unit-1  card open, asked by swb-1-conductor"
 
     def test_a_team_holding_no_bolt_says_so_and_what_is_planned_for_its_kit(self):
-        assert view("swb-2-conductor") == ["  swb-2 holds no bolt", "  next  switchboard-kit apex-zones", "  queued  1 in switchboard-kit"]
+        assert view("swb-2-conductor") == ["  swb-2 holds no bolt", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
         assert view("atl-1-conductor") == ["  atl-1 holds no bolt"]
 
     def test_a_proposal_waiting_on_a_conductors_agreement_is_in_its_view_alone(self):
@@ -250,20 +253,30 @@ class TestViews:
 
     def test_a_conductor_whose_host_does_not_answer_is_told_and_its_units_are_unknown(self):
         mine = view("swb-1-conductor", sv=kits(ok=False))
-        assert mine[0] == "  ??  switchboard-kit tenant-environments  unknown  0 of 2 merged" and mine[1] == "    ?  a  unknown"
+        assert mine[0] == "  switchboard-kit  ??  tenant-environments  unknown  0 of 2 merged" and mine[1] == "    ?  a  unknown"
         assert f"! {BOX} did not answer (its kits: ssh: timed out)" in mine
         assert not [l for l in view("atl-1-conductor", sv=kits(ok=False)) if "did not answer" in l]
 
     def test_a_bolt_landed_and_still_in_the_plan_is_named_for_attention_to_its_conductor(self):
-        assert view("brd-1-conductor") == ["! ●  breadboard-kit board-done  landed  1 of 1 merged", "    ●  done-one  landed",
+        assert view("brd-1-conductor") == ["! breadboard-kit  ●  board-done  landed  1 of 1 merged", "    ●  done-one  landed",
                                            "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
 
     def test_the_planner_reads_the_plan_in_brief_each_teams_bolt_and_the_proposals_with_whom_they_wait_on(self):
         assert view("wldn-planner", props=WAITS) == [
-            "wldn plan  2 held  1 planned  1 queued  1 proposal open", "  swb-1  ◑◔  switchboard-kit tenant-environments  0 of 2 merged",
-            "  swb-2  holds no bolt", "! brd-1  ●  breadboard-kit board-done  landed  1 of 1 merged", "  atl-1  holds no bolt",
-            "✓ proposal 2 by wldn-planner  Tenants get d.  waiting on swb-1-conductor  no card open", "  next  switchboard-kit apex-zones",
-            "  queued  1 in switchboard-kit", "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
+            "wldn plan  2 held  1 planned  1 queued  1 proposal open", "  atlas-kit  atl-1  holds no bolt",
+            "! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged", "  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged",
+            "  switchboard-kit  swb-2  holds no bolt", "✓ proposal 2 by wldn-planner  Tenants get d.  waiting on swb-1-conductor  no card open",
+            "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit",
+            "! bolt board-done: every unit has landed on main, and the bolt is still in the plan"]
+
+    def test_each_bolt_held_or_planned_is_led_by_its_product_and_a_held_ones_team_is_dim_after_it(self):
+        lines = board.agent_views(data())["views"]["wldn-planner"]
+        held = next(l for l in lines if "tenant-environments" in "".join(s for s, _ in l))
+        assert held[:4] == [("  ", None), ("switchboard-kit", None), ("  ", None), ("swb-1", "dim")]
+        idle = next(l for l in lines if "swb-2" in "".join(s for s, _ in l))
+        assert idle[:4] == [("  ", None), ("switchboard-kit", None), ("  ", None), ("swb-2", "dim")]
+        planned = next(l for l in lines if "apex-zones" in "".join(s for s, _ in l))
+        assert planned[:4] == [("  ", None), ("switchboard-kit", None), ("  ", None), ("next", "dim")]
 
     def test_the_design_agent_reads_the_signals_by_who_captured_them_and_the_first_explorations(self, monkeypatch):
         monkeypatch.setattr(board, "SHOWN", 0)
@@ -276,6 +289,8 @@ class TestViews:
         mine = view(f"wldn-operator-{BOX}", props=WAITS, signals=SIGS)
         assert mine[:4] == [f"wldn board  read from {BOX}, mac-studio", "Inception  3 signals not moved  1 exploration",
                             "Bolt plan  1 proposal open  1 planned  1 queued", "Construction"]
+        assert mine[4:8] == ["  atlas-kit  atl-1  holds no bolt", "! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged",
+                             "  switchboard-kit  swb-1  ◑◔  tenant-environments  0 of 2 merged", "  switchboard-kit  swb-2  holds no bolt"]
         assert "Operation  0 landed in seven days" in mine and "waits on the user  ✓ 1 to approve" in mine
 
     def test_each_conductor_the_planner_the_design_agent_and_each_hosts_operator_has_a_view_and_no_other_agent(self):
@@ -295,3 +310,18 @@ class TestViews:
         board.write_frame("wldn", board.agent_views(data()), board.agents_path("wldn"))
         assert sorted(p.name for p in tmp_path.iterdir()) == ["wldn.agents.json"]
         assert board.read_frame("wldn") is None
+
+    def test_the_views_file_holds_every_key_crews_mod_reads_in_the_form_it_draws(self):
+        """code.8: plugin/hooks/status.js reads exactly these keys from the views file, finds its agent's view by name,
+        and draws each line as (text, style) segments, bold, dim or plain; a change to the views' shape, or a key the
+        mod reads that they lack, fails here."""
+        mod = (pathlib.Path(board.__file__).resolve().parent.parent / "hooks/status.js").read_text()
+        v = json.loads(json.dumps(board.agent_views(data(props=WAITS, signals=SIGS))))
+        assert set(re.findall(r"live\.frame\.(\w+)", mod)) == set(v) == {"read_at", "stale_after_ms", "stale", "views"}
+        assert "live.frame.views[live.agent]" in mod and "Date.parse(live.frame.read_at)" in mod
+        assert re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", v["read_at"]) and isinstance(v["stale_after_ms"], int)
+        assert "home + '/.cache/crew/board/' + label + '.agents.json'" in mod and board.agents_path("wldn").parts[-4:] == (".cache", "crew", "board", "wldn.agents.json")
+        assert re.findall(r"style === '(\w+)'", mod) == ["bold"] and "dimColor: true" in mod
+        lines = [v["stale"]] + [l for lines in v["views"].values() for l in lines]
+        assert all(isinstance(l, list) and all(isinstance(t, str) and len(seg) == 2 and style in (None, "bold", "dim") for seg in l for t, style in [seg])
+                   for l in lines)

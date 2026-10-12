@@ -3,6 +3,10 @@
 // refreshes (crew _views), and this module finds its own agent's and draws it, deciding nothing itself (code.7). It
 // starts no process and costs no tokens: every few seconds it looks at the file's time, and reads the file only when
 // that has moved (state.4: a frame is one redraw, not state).
+//
+// A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows)
+// changes this module and board.agent_views together, each with its cases: tests/py/test_board.py pins every key this
+// reads from the views file, and plugin/tests/status.test.ts what it draws (code.8).
 
 // How often the file's time is looked at; the rail tab writes it every 30 seconds and on each run-record entry.
 const EVERY_MS = 5000

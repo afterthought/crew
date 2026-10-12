@@ -30,9 +30,11 @@ MOON_YML = os.path.join(TESTS, "moon.yml")
 CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plugin/lib/record.py", "/plugin/lib/gather.py",
         "/plugin/lib/transcript.py", "/plugin/lib/questions.py", "/plugin/lib/ops.py"]
 COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*", "/devenv.nix", "/devenv.lock"]
-# The two pytest tiers: name, folder. Each is one task over its whole folder (tests.5, tests.11), in a checkout that
-# has the folder.
-TIERS = [(n, f) for n, f in (("contract", "tests/contract"), ("logic", "tests/py")) if os.path.isdir(os.path.join(ROOT, f))]
+# The two pytest tiers: name, folder, and what else of crew's its cases read: the logic tier reads crew's mod for the
+# keys it takes from the agents' views (code.8). Each is one task over its whole folder (tests.5, tests.11), in a
+# checkout that has the folder.
+TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js"]))
+         if os.path.isdir(os.path.join(ROOT, f))]
 TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*", "/devenv.nix", "/devenv.lock"]
 HEADER = """\
 # Written by tests/moon-tasks from tests/t-*.sh and the pytest tiers; never edited by hand. After adding or removing a test, or changing
@@ -123,8 +125,8 @@ def undeclared(name, text, inputs):
 def tasks():
     """The tasks this writes, as {name: block text}, and each read of a test's that its inputs leave out."""
     blocks, problems = {}, []
-    for name, folder in TIERS:
-        inputs = TIER_INPUTS + [f"/{folder}/**/*"]
+    for name, folder, extra in TIERS:
+        inputs = TIER_INPUTS + extra + [f"/{folder}/**/*"]
         blocks[name] = (f"  {name}:\n"
                         f"    command: 'python3 -m pytest -q -p no:cacheprovider {folder}'\n"
                         f"    inputs: [{', '.join(repr(i) for i in inputs)}]\n"
@@ -176,7 +178,7 @@ def committed():
 def check():
     want, problems = tasks()
     have = committed()
-    names = {n for n, _ in tests()} | {n for n, _ in TIERS}
+    names = {n for n, _ in tests()} | {n for n, _, _ in TIERS}
     if have is None:
         stale = ["tests/moon.yml is missing or not what tests/moon-tasks writes"]
     else:

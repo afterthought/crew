@@ -12,7 +12,7 @@ tasks:
     options: { runFromWorkspaceRoot: true }
   logic:
     command: 'python3 -m pytest -q -p no:cacheprovider tests/py'
-    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.lock', '/tests/py/**/*']
+    inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.lock', '/plugin/hooks/status.js', '/tests/py/**/*']
     tags: [suite]
     options: { runFromWorkspaceRoot: true }
   t-briefs:

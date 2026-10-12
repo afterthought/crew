@@ -49,15 +49,17 @@ Read from the mods pages (code.claude.com/docs/en/plugins/mods: overview, create
 
 **What each agent sees, in the band above its prompt** (from swancloud's board as read at 14:30; bold and dim lost here):
 
+Every bolt's line is led by its product, the repository it builds, so crew's bolts and swancloud's read apart at a glance; in the planner's and the operator's views the team holding it follows, dim, and the teams are listed product by product.
+
 A conductor (`<team>-conductor`): the bolt its team holds as a ledger, the open proposals naming its team (the one waiting on its agreement said so), what is planned and queued next for its kit, and attention for its host, its landed bolt or the plan.
 
 ```
-  ◕◔○○  crew curation-and-holds  0 of 4 merged
+  crew  ◕◔○○  curation-and-holds  0 of 4 merged
     ◕  a-queued-unit-can-take-a-signal  verify 3/3  unit-1
     ◔  curate-into-agenda  planned  unit-2
     ○  hold-unit-on-blocking-finding  ready
     ○  chores-beside-units-and-fixes  waiting
-  next  crew signals-arrive-and-curate-unattended  and 5 more planned
+  crew  next  signals-arrive-and-curate-unattended  and 5 more planned
   queued  7 in crew
 ```
 
@@ -65,12 +67,12 @@ The planner: the plan in brief, each team's bolt as its pips, the open proposals
 
 ```
 swancloud plan  3 held  9 planned  10 queued  0 proposals open
-  crw-1  ◕◔○○  crew curation-and-holds  0 of 4 merged
-  crw-2  holds no bolt
-  crw-3  ●◑  crew a-crew-agents-questions-reach-the-user-on-cards  1 of 2 merged
-  swc-1  ●●◔◕○  swancloud every-host-reaches-every-other-by-its-tailnet-name  2 of 5 merged
-  next  crew signals-arrive-and-curate-unattended  and 5 more planned
-  next  swancloud pending-you-works-on-every-host  and 2 more planned
+  crew  crw-1  ◕◔○○  curation-and-holds  0 of 4 merged
+  crew  crw-2  holds no bolt
+  crew  crw-3  ●◑  a-crew-agents-questions-reach-the-user-on-cards  1 of 2 merged
+  swancloud  swc-1  ●●◔◕○  every-host-reaches-every-other-by-its-tailnet-name  2 of 5 merged
+  crew  next  signals-arrive-and-curate-unattended  and 5 more planned
+  swancloud  next  pending-you-works-on-every-host  and 2 more planned
   queued  7 in crew, 3 in swancloud
 ```
 
@@ -83,8 +85,10 @@ swancloud board  read from mac-studio, macbook-pro
 Inception  0 signals not moved  13 explorations
 Bolt plan  0 proposals open  9 planned  10 queued
 Construction
-  crw-1  ◕◔○○  crew curation-and-holds  0 of 4 merged
-  ...
+  crew  crw-1  ◕◔○○  curation-and-holds  0 of 4 merged
+  crew  crw-2  holds no bolt
+  crew  crw-3  ●◑  a-crew-agents-questions-reach-the-user-on-cards  1 of 2 merged
+  swancloud  swc-1  ●●◔◕○  every-host-reaches-every-other-by-its-tailnet-name  2 of 5 merged
 Operation  44 landed in seven days  the last a-card-is-whole-and-clean, Mon 08:24
 ```
 
@@ -98,24 +102,26 @@ Unit agents, team and main-level ops, dispatchers and the reviewer get no view. 
 
 **When it cannot show.** Views more than 90 s old (three rail periods, the board tab's `STALE`) end with "read at HH:MM; the rail tab on <host> has not refreshed it since". With no views on the host, a crew agent's band says so in one dim line naming `crew operator up <label>` (read.1). An agent on a host other than its partition's rail tab finds no views: today every partition's teams and main level share its host (madswan and swancloud on mac-studio, wldn on chuck-herdr-alpha), so this bites only a partition split across hosts.
 
+**Keeping it true.** A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows) updates `board.agent_views` and `status.js` in the same change, with their cases (`code.8`, on the user's word). CLAUDE.md's Crew section says so where a team building crew reads it, both files say so at their head, and a logic case reads `status.js` for every key it takes from the views file and fails when the views' shape and the mod part.
+
 **Later, if wanted.** A `/board` command opening a pane with the whole board (the board's own lines, written into the same file), or a unit agent's one line. Neither is needed for what was asked.
 
 ## Estimate, and the prototype
 
-About 450 lines in six parts, built on `recovery/mods` as two commits:
+About 500 lines in six parts, built on `recovery/mods`:
 
 | part | lines |
 |---|---|
 | `board.agent_views` and its helpers in `board.py`, and `_views` writing the file; `row`, `gutter`, `stage_of`, `attention_text` lifted out of `board_text` | ~190 |
-| logic cases in `tests/py/test_board.py` (12) | 76 |
+| logic cases in `tests/py/test_board.py` (14, one pinning every key the mod reads) | ~110 |
 | the journey's check that the refresh writes the views (`t-journey-board`) | 3 |
 | the mod, `plugin/hooks/status.js`, and `"modules"` in `hooks.json`, `plugin/tsconfig.json` | 95 |
 | the mod's cases, `plugin/tests/status.test.ts` (6, `claude plugin test`) | 73 |
 | README | 1 paragraph |
 
-`claude plugin validate plugin` passes (hooks `session.start`, `ui.render{component=AbovePrompt}`; calls `$.clock`, `$.env.get`, `$.fs.read`, `$.fs.stat`, `$.session.id`, `$.ui.invalidate`, `$.ui.resolve`; reads `CREW_AGENT`, `CREW_LABEL`, `HOME`). The mod's six cases pass and three of them fail when it looks up the wrong view. The logic tier is 680 passed, and `t-journey-board` passes.
+`claude plugin validate plugin` passes (hooks `session.start`, `ui.render{component=AbovePrompt}`; calls `$.clock`, `$.env.get`, `$.fs.read`, `$.fs.stat`, `$.session.id`, `$.ui.invalidate`, `$.ui.resolve`; reads `CREW_AGENT`, `CREW_LABEL`, `HOME`). The mod's six cases pass and three of them fail when it looks up the wrong view. The logic tier is 682 passed, and `tests/suite --affected` 19 passed, 0 failed.
 
-Not seen on a real screen: the prototype has run only under the test kit, which checks the tree is valid for the terminal and not how Ink paints it. Its first sight is a session that loads the branch's plugin.
+The user saw it on a real screen on 2026-10-12 ("That looks great") and asked that each bolt be told apart by its product and team, which every bolt's line now leads with.
 
 ## For the user
 

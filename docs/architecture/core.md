@@ -46,6 +46,7 @@ Code
 - **[code.5]** crew reads `teams.json` (version 2) and `herdr-hosts.json`, checks every entry before any is used, and never writes either; no field has a default.
 - **[code.6]** Every commit is a Conventional Commit, staged by path; `git add -A`, `git stash` and `git reset` are never used.
 - **[code.7]** A decision of crew's is a function of plain facts that starts no process and calls no tool; the reads that feed it and the acts that follow it stay thin around it, and a decision in `plugin/bin/crew`'s bash moves to Python when its test is converted.
+- **[code.8]** A change to what crew models, its bolts, units, stages, proposals, explorations and elaborations, cards and rail rows, updates in the same change, each with its cases, the agents' views of it, `board.agent_views`, and the mod that draws them above each agent's prompt, `plugin/hooks/status.js`.
 
 ## Details
 
@@ -90,3 +91,5 @@ Code
 **[code.6]** Rules out: `git add -A` in a brief or a script; an agent moving a bolt's branch by `git reset`. Not ruled out: crew moving a branch it made, `UNREBASE`'s undo of its own rebase and the bolt's move to a fix that carries it (ADR 0015), which move a branch and discard nothing. Source: `openspec/config.yaml`; every brief's committing section.
 
 **[code.7]** Rules out: a `subprocess`, `kit_git`, `on_machine` or `crew.tell` call inside a decision; a decision only bash can make. Not ruled out: the reads and acts themselves, proved by the contract and end-to-end tiers. Source: ADR 0022; `tests.11`. Not built: decisions come out of `plan.py` and `plugin/bin/crew` as their tests convert: `_open.md`.
+
+**[code.8]** Rules out: a new stage, object or field the board reads that the agents' bands leave out or draw wrong; a change to the views file's shape that `status.js` does not follow, which the logic tier fails (`tests/py/test_board.py`, the case pinning every key the mod reads). Not ruled out: a change that moves nothing the views draw. Source: the user, 2026-10-12: "We need to make sure we have some context in the right spot so that agents know that, as we make changes to crew (especially to any of the modeling parts, like elaborations), these mods need to be updated."; `openspec/explorations/agent-status-mods/reading.md`.
