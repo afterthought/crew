@@ -7,7 +7,7 @@
 
 ## 2. The rail shows the live card
 
-- [ ] 2.1 `crew rail` names the open card's id on a row's card line, and takes a newer card posted under a key by the same owner as the row's, the older as lost (design: *The rail names the open card's id*, *A newer post under a key, by the same owner, replaces the older*; Task notes 2.1; `read.1`, `state.4`).
+- [x] 2.1 `crew rail` names the open card's id on a row's card line, and takes a newer card posted under a key by the same owner as the row's, the older as lost (design: *The rail names the open card's id*, *A newer post under a key, by the same owner, replaces the older*; Task notes 2.1; `read.1`, `state.4`).
 - [ ] 2.2 `tests/t-rail.sh` proves the id on the card line, a re-posted card replacing the older on the row and among the cards with no row, and another owner's card not replacing it, and `tests/suite t-rail t-board t-card-sweep` ends with "0 failed" (Task notes 2.2).
 
 ## 3. The docs say so

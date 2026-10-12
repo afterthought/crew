@@ -4798,12 +4798,14 @@ def rail_record(fleet, found, props):
     earlier, since Opened is the writing host's date and the record's files are named by the UTC day. Returns when each
     open proposal was proposed, {(label, proposal/<n>): time}, from the earliest plan.propose entry naming it (a
     proposal whose entry isn't found is left out); the cards open, each {label, card, key, on, by, host, at}, from each
-    card.post of the last 14 days with a Card that no later card.close of that Card closes; the hosts whose record did
-    not answer, {label: {host: why}}; the landings, each {label, bolt, units, at, by, host}, from each bolt.land entry
-    not refused, oldest first; the team each bolt was given to, {(label, bolt): team}, from the newest bolt.give entry
-    naming it that was not refused; and what the batches hold, {label: {"batches": [(n, at, units)], "closed": card
-    keys closed, "posts": batch card keys posted, "due": units whose latest change no batch has held}}, the last None
-    for a partition whose record did not all answer, since then it can't be told."""
+    card.post of the last 14 days with a Card that no later card.close of that Card closes, and that no later card.post
+    by the same agent under the same Key names another Card for: within one Pending You sign-in a key gives its card
+    back, so a second card under it from its owner means the first was lost to it, and the newer is the row's; the hosts
+    whose record did not answer, {label: {host: why}}; the landings, each {label, bolt, units, at, by, host}, from each
+    bolt.land entry not refused, oldest first; the team each bolt was given to, {(label, bolt): team}, from the newest
+    bolt.give entry naming it that was not refused; and what the batches hold, {label: {"batches": [(n, at, units)],
+    "closed": card keys closed, "posts": batch card keys posted, "due": units whose latest change no batch has held}},
+    the last None for a partition whose record did not all answer, since then it can't be told."""
     times, cards, unread, landings, gives, held, deploys = {}, [], {}, [], {}, {}, []
     today = datetime.datetime.now(datetime.timezone.utc).date()
     fresh = utc(f"{today - datetime.timedelta(days=CARD_DAYS)}T00:00:00Z")
@@ -4822,6 +4824,9 @@ def rail_record(fleet, found, props):
                     if o.startswith("proposal/"):
                         times.setdefault((l, o), utc(e["At"]))
             elif act == "card.post" and e.get("Card") and utc(e["At"]) >= fresh:
+                if e.get("Key"):  # the same owner's card under the same key, but another, is the older copy, lost to it
+                    for c in [c for c, d in posted.items() if (d["key"], d["by"]) == (e["Key"], e.get("By")) and c != e["Card"]]:
+                        del posted[c]
                 posted.setdefault(e["Card"], dict(label=l, card=e["Card"], key=e.get("Key"), on=(e["On"] or [None])[0],
                                                   by=e.get("By"), host=e.get("Host"), at=utc(e["At"])))
             elif act == "card.close" and e.get("Card"):
@@ -5030,12 +5035,13 @@ def rail_read(fleet, labels, board=False, sweep=False):
 
 def rail_text(fleet, labels, read, now):
     """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
-    wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it and
-    whose, oldest first; then the decision records waiting on the user, each the design agent's open card for one, with
-    when it was asked and by whom, and no command, since the card is where it is answered; then any open card whose row
-    is gone, with the tell that asks its owner to close it; then, from a read that swept, each card session ended, with
-    its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds
-    a bolt of the plans read, so a read that surveyed more (the board's) gives the same text."""
+    wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it,
+    whose and its id, by which its owner asks Pending You for it, oldest first; then the decision records waiting on the
+    user, each the design agent's open card for one, with when it was asked and by whom, and no command, since the card
+    is where it is answered; then any open card whose row is gone, with the tell that asks its owner to close it; then,
+    from a read that swept, each card session ended, with its host and why, and each host whose sessions were not
+    checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
+    (the board's) gives the same text."""
     found, rows, cards = read["found"], read["rows"], read["cards"]
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
@@ -5051,7 +5057,7 @@ def rail_text(fleet, labels, read, now):
             lines.append(f"  {when:<16}  {age(r['at'], now) if r['at'] else '-':<7}  {first}")
             lines += [" " * 29 + w for w in rest]
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
-            lines += [f"    {'card:':<8}{r['key']}, open, asked by {c['by']}" for c in cards
+            lines += [f"    {'card:':<8}{r['key']}, open, asked by {c['by']} ({c['card']})" for c in cards
                       if (c["label"], c["key"]) == (r["label"], r["key"])] or [f"    {'card:':<8}{r['key']}, none open"]
     records = record_cards(sv, cards, read["unread"])
     if records:
