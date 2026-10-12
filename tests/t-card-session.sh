@@ -4,7 +4,8 @@
 # key, a key whose row is gone, a document on another host and a link only the host can open are refused with nothing
 # left running. crew card wait gives each decision with the user's words as they are, a decision made before it began
 # at once, and a session that ended or was ended; crew card end ends only a session plannotator lists on the document
-# crew recorded, and forgets the key either way. Each scenario of the card-sessions spec.
+# crew recorded, and forgets the key whether or not it ended one, but when plannotator's list can't be read it ends
+# nothing, says so and keeps the key's session for a later end. Each scenario of the card-sessions spec.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -196,3 +197,16 @@ kill "$p5"; settle gone "$p5"
 HOST=$box expect_ok crew card end "$vk"
 eq "$(listed $box)" ""
 ok "a recorded pid plannotator lists on another document is not killed, and the key is forgotten"
+
+HOST=$box expect_ok crew card session "$vk"; v3=$(rec $box "$vk" .pid)
+mkdir -p "$T/broken"; printf '#!/usr/bin/env bash\necho "plannotator: its registry is locked" >&2\nexit 1\n' > "$T/broken/plannotator"
+chmod +x "$T/broken/plannotator"
+HOST=$box PATH="$T/broken:$PATH" expect_ok crew card end "$vk"
+eq "$out" "crew can't read plannotator's sessions (plannotator sessions: plannotator: its registry is locked): it ended nothing, and keeps $vk to end later"
+kill -0 "$v3" 2>/dev/null || fail "a session was ended while plannotator's list could not be read"
+eq "$(rec $box "$vk" .pid)" "$v3"
+HOST=$box expect_ok crew card end "$vk"
+eq "$out" "ended $vk's session, plannotator pid $v3"
+settle gone "$v3"
+eq "$(listed $box)" ""
+ok "when plannotator's list can't be read, crew card end ends nothing, says so and keeps the key's session, which a later end ends"

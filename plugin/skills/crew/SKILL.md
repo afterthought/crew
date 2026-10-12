@@ -19,8 +19,9 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 |---|---|
 | see a team's conductor and ops (state, context use, compactions, age) and each slot's unit and stage | `crew status [team]` |
 | see every bolt, each unit's stage, and the queue | `crew bolts [--label <label>]` |
-| see everything that waits on the user, and the command that answers each | `crew rail [--label <label>]` |
+| see everything that waits on the user, and the command that answers each; it also ends the card sessions of closed cards and gone rows, on every host, and says which | `crew rail [--label <label>]` |
 | see whether a rail row's card is open, or a card has no row | `crew rail [--label <label>]` |
+| see the decision records waiting on the user, each the design agent's open card for one, with who asked and when | `crew rail [--label <label>]` |
 | see the whole flow of a partition, by phase | `crew board [--label <label>]` |
 | start the plannotator session a card links, on what its row asks the user to read, and print its link; a batch card's for each of its units | `crew card session <key> [<unit>]` |
 | wait for the user's decision in a card's session, or end the session by hand | `crew card wait <key> [<unit>]`, `crew card end <key> [<unit>]` |

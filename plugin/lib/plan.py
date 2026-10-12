@@ -4424,13 +4424,25 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     return rows
 
 
+def record_cards(sv, cards, unread):
+    """The open cards under a decision record's key, oldest first: no row's, so never among the cards with no row. A
+    card is left out when its own host's record did not answer, as stray_cards leaves one out, since its close may not
+    have been read."""
+    out = []
+    for c in cards:
+        down = {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
+        if re.fullmatch(RECORD_KEY, c["key"] or "") and c["host"] not in down:
+            out.append(c)
+    return sorted(out, key=lambda c: (c["at"], c["card"]))
+
+
 def stray_cards(fleet, found, sv, rows, cards, unread):
-    """The open cards that match no row, oldest first. A card is left out when whether it has a row can't be known: its
-    own host's record did not answer, so its close may not have been read, or it is a verify or land card of a unit or
-    bolt whose team's host did not answer."""
+    """The open cards that match no row, oldest first, but a decision record's (record_cards). A card is left out when
+    whether it has a row can't be known: its own host's record did not answer, so its close may not have been read, or
+    it is a verify or land card of a unit or bolt whose team's host did not answer."""
     plans_, rowed, out = {l: p for l, _, _, p in found if p}, {(r["label"], r["key"]) for r in rows}, []
     for c in cards:
-        if (c["label"], c["key"]) in rowed:
+        if (c["label"], c["key"]) in rowed or re.fullmatch(RECORD_KEY, c["key"] or ""):
             continue
         down = {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
         if c["host"] in down:
@@ -4447,12 +4459,59 @@ def stray_cards(fleet, found, sv, rows, cards, unread):
     return sorted(out, key=lambda c: (c["at"], c["card"]))
 
 
-def rail_read(fleet, labels, board=False):
+def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
+    """End the card sessions crew started whose card is closed or whose row is gone, on every host of each partition
+    whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
+    as live every row key less each the record holds as closed with no card open under it (batched, what the batches
+    hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge,
+    verify/<unit>/ for each unit of a bolt whose team's kit was not read and batch/ while the record did not answer
+    whole, when no key is taken out for being closed either (read.1). A host the survey found not answering is not
+    asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why "its row is gone" or "its
+    card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
+    ended, unchecked = [], []
+    for l, _, _, plan in found:
+        if not plan:
+            continue
+        rowed = {r["key"] for r in rows if r["label"] == l}
+        closed = set() if unread.get(l) else batched[l]["closed"] - {c["key"] for c in cards if c["label"] == l}
+        blind = ["batch/"] if unread.get(l) else []
+        st = Stages(fleet, plan, sv)
+        blind += [f"verify/{u.name()}/" for b in plan.bolts() if b.get("Team") and not st.kit(b)[0] for u in plan.units_of(b.name())]
+        judged = json.dumps({"live": sorted(rowed - closed), "blind": sorted(blind)})
+        for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
+            if h in sv and not sv[h]["ok"]:
+                unchecked.append(dict(label=l, host=h, why=f"did not answer ({sv[h]['error']})"))
+                continue
+            try:
+                r = crew.on_machine(fleet, h, crew.crew_argv(fleet, h, "card", "sweep", "--label", l), input=judged)
+            except Refusal as e:
+                unchecked.append(dict(label=l, host=h, why=str(e)))
+                continue
+            if r.returncode:
+                said = ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]
+                unchecked.append(dict(label=l, host=h, why=f"did not answer ({said})" if r.returncode == 255 else f"its sweep failed ({said})"))
+                continue
+            try:
+                got = json.loads(r.stdout)
+            except ValueError:
+                got = None
+            if not (isinstance(got, list) and all(isinstance(x, dict) and isinstance(x.get("key"), str) and isinstance(x.get("said"), str)
+                                                  and (x.get("unit") is None or isinstance(x["unit"], str)) for x in got)):
+                unchecked.append(dict(label=l, host=h, why="its sweep printed no list of sessions crew reads"))
+                continue
+            ended += [dict(label=l, host=h, key=x["key"], unit=x.get("unit"), said=x["said"],
+                           why="its card is closed" if x["key"] in rowed else "its row is gone") for x in got]
+    return ended, unchecked
+
+
+def rail_read(fleet, labels, board=False, sweep=False):
     """Everything the rail is made from, in one read of the labels' plans, proposals, kits and run record: the plans
     found and the errors of those that could not be read, the survey, the open proposals, the cards, the hosts whose
     record did not answer, the landings and gives, and the rows. The survey is of each host holding a bolt; with board,
     of every team of the labels, with the bolt it holds or none, and its dev servers, slots and explorations too, for
-    the board (board.py), from which the rail's text is made as well. Nothing is written."""
+    the board (board.py), from which the rail's text is made as well. With sweep, once the rows are made, the card
+    sessions whose card is closed or whose row is gone are ended on every host of the labels read, and what was ended
+    and which hosts were not checked are in the read (sweep_sessions). No state is written."""
     errors = {}
     found = plans(fleet, labels, errors)
     held = [(b.get("Team"), b.name()) for _, _, _, p in found if p for b in p.bolts() if b.get("Team")]
@@ -4461,16 +4520,21 @@ def rail_read(fleet, labels, board=False):
     sv = survey(fleet, held, board=board)
     props = open_proposals(fleet, [l for l, _, _, p in found if p], found)
     times, cards, unread, landings, gives, batched, deploys = rail_record(fleet, found, props)
-    return dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
+    read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards, unread=unread, landings=landings,
                 gives=gives, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
+    if sweep:
+        read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], cards, unread, batched)
+    return read
 
 
 def rail_text(fleet, labels, read, now):
     """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
     wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it and
-    whose, oldest first; then any open card whose row is gone, with the tell that asks its owner to close it. A host
-    is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more (the board's)
-    gives the same text."""
+    whose, oldest first; then the decision records waiting on the user, each the design agent's open card for one, with
+    when it was asked and by whom, and no command, since the card is where it is answered; then any open card whose row
+    is gone, with the tell that asks its owner to close it; then, from a read that swept, each card session ended, with
+    its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds
+    a bolt of the plans read, so a read that surveyed more (the board's) gives the same text."""
     found, rows, cards = read["found"], read["rows"], read["cards"]
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
@@ -4488,6 +4552,12 @@ def rail_text(fleet, labels, read, now):
             lines += [f"    {c + ':':<8}{cmd}" for c, cmd in r["cmds"]]
             lines += [f"    {'card:':<8}{r['key']}, open, asked by {c['by']}" for c in cards
                       if (c["label"], c["key"]) == (r["label"], r["key"])] or [f"    {'card:':<8}{r['key']}, none open"]
+    records = record_cards(sv, cards, read["unread"])
+    if records:
+        lines += ["", "decision records waiting on you:"]
+    for c in records:
+        lines.append(f"  {c['at'].astimezone():%Y-%m-%d %H:%M}  {age(c['at'], now):<7}  {c['key']} ({c['label']}), "
+                     f"asked by {c['by']} on {c['host']}")
     stray = stray_cards(fleet, found, sv, rows, cards, read["unread"])
     if stray:
         lines += ["", "open cards with no row:"]
@@ -4496,6 +4566,11 @@ def rail_text(fleet, labels, read, now):
                      f"asked by {c['by']} on {c['host']}")
         say = f"Close your Pending You card {c['key'] or c['card']}: its row is gone."
         lines.append(f"    {'answer:':<8}crew tell {shlex.quote(c['by'])} " + (f'"{say}"' if re.fullmatch(r"[\w/:. -]+", say) else shlex.quote(say)))
+    swept = [f"  {e['key']}{' ' + e['unit'] if e['unit'] else ''} ({e['label']}) on {e['host']}: {e['why']}; {e['said']}"
+             for e in read.get("ended") or []]
+    unswept = [f"  {u['host']} ({u['label']}): {u['why']}" for u in read.get("unchecked") or []]
+    lines += [""] if swept or unswept else []
+    lines += (["card sessions ended:"] + swept if swept else []) + (["card sessions not checked:"] + unswept if unswept else [])
     for h, v in sv.items():
         if not v["ok"]:
             lines.append(f"\n{h} did not answer ({v['error']}): its units and bolts may also wait on you")
@@ -4504,11 +4579,12 @@ def rail_text(fleet, labels, read, now):
 
 def rail_view(fleet, a):
     """crew rail [--label L]: what waits on the user, as rail_text gives it, read from the plans, the proposals, the
-    kits and the run record; nothing is written. It prints everything it could read, then exits non-zero naming each
-    plan it could not."""
+    kits and the run record. It ends the card sessions whose card is closed or whose row is gone, on every host of the
+    partitions read, and says which, and writes no state. It prints everything it could read, then exits non-zero
+    naming each plan it could not."""
     label = default_label(fleet, a)
     labels = [label] if label else list(fleet["partitions"])
-    read = rail_read(fleet, labels)
+    read = rail_read(fleet, labels, sweep=True)
     print(rail_text(fleet, labels, read, datetime.datetime.now(datetime.timezone.utc)))
     if read["errors"]:
         sys.exit("\n".join(read["errors"].values()))
@@ -4523,8 +4599,12 @@ CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # The rail's card keys, as crew's card hook reads them.
 CARD_KEYS = (r"proposal/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}",
              r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
+# A decision record's card key, the design agent's: the kit, the record's number and the commit that proposed the record
+# or its amendment (briefs.15). It is no rail row's: the rail lists its open cards apart.
+RECORD_KEY = r"record/([a-z0-9][a-z0-9-]*)/(\d{4})/([0-9a-f]{7})"
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
+CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
 
 
 def batch_keys(fleet, label):
@@ -4543,10 +4623,11 @@ def card_refusal(fleet, name, label, tool, key):
     key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
     from proposals.rec, or batch/<n>-<k> for a card of one of its batches whose row is open, read from the run record; a
     conductor's land/<bolt>/<head> for the bolt its team holds, or verify/<unit>/<stamp> for a unit of it, read from the
-    plan. Every other agent owns no key. An area's key is create-area:<owner>/<kit> for a kit the agent's team builds
-    or, for the main level, a kit of any team of its partition, read from the teams file. The state branch is fetched
-    once (plan.12), and only for the planner's or a conductor's card; what can't be read is a Refusal naming it
-    (read.1). The user's own name is never checked."""
+    plan. The design agent's is a decision record's, record/<kit>/<number>/<commit> for a kit of any team of its
+    partition, read from the teams file (briefs.15). Every other agent owns no key. An area's key is
+    create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
+    partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
+    conductor's card; what can't be read is a Refusal naming it (read.1). The user's own name is never checked."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
@@ -4602,8 +4683,16 @@ def card_refusal(fleet, name, label, tool, key):
                 "the conductor asks it on the bolt's landing card." if name == f"{of}-ops"
                 else f"Say what you need with `{cmd} needs`, and the conductor gets it.")
         return f"{said}: {name} owns no card key, since a team's cards are its conductor's. {left}"
-    return (f"{said}: {name} owns no card key, since only the planner, the conductors and main-level ops post cards. Tell the partition's "
-            "operator agents what you wait on, as your brief says.")
+    if kind == "design":
+        kits = sorted({fleet["teams"][t]["kit"]["name"] for t in crew.partition_of(fleet, of)["teams"]})
+        m = re.fullmatch(RECORD_KEY, key)
+        if m and m.group(1) in kits:
+            return None
+        return (f"{said}: {name} posts a card only for a decision record, under record/<kit>/<number>/<commit> "
+                + (f"for a kit of {of}'s, {either(kits)}, " if kits else f"for a kit of {of}'s, and no team of {of} builds one, ")
+                + "the commit the one that proposed the record or its amendment.")
+    return (f"{said}: {name} owns no card key, since only the planner, the conductors, main-level ops and, for a decision "
+            "record, the design agent post cards. Tell the partition's operator agents what you wait on, as your brief says.")
 
 
 def card_of(fleet, a, unit_needed=True):
@@ -4875,18 +4964,22 @@ def card_wait(fleet, a):
 def end_session(label, key, unit=None):
     """End the plannotator session crew started for a card key on this host, a batch card's for one of its units, and
     forget it: its folder goes first, so a wait on it hears crew ended it, then the recorded pid is sent SIGTERM only
-    while plannotator lists it as serving the recorded document (read.4). Returns what it did, in words. crew's card
-    hook runs it when a crew agent closes or withdraws a keyed card."""
+    while plannotator lists it as serving the recorded document (read.4). When plannotator's list can't be read, nothing
+    is ended and the session is kept as recorded, so a later rail read ends it (read.1). Returns what it did, in words,
+    and whether it sent SIGTERM. crew's card hook runs it when a crew agent closes or withdraws a keyed card, and crew
+    card sweep for each session the rail judges dead."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
     d = CARDS / label / key / unit if unit else CARDS / label / key
     key = f"{key} {unit}" if unit else key
     if not d.is_dir():
-        return f"no session was running for {key}"
+        return f"no session was running for {key}", False
     try:
         s = card_recorded(d)
     except Refusal:
         s = None
     listed, why = plannotator_sessions() if s else (None, None)
+    if s and listed is None:
+        return f"crew can't read plannotator's sessions ({why}): it ended nothing, and keeps {key} to end later", False
     import shutil
     shutil.rmtree(d)
     for p in d.parents:
@@ -4894,16 +4987,14 @@ def end_session(label, key, unit=None):
             break
         p.rmdir()
     if not s:
-        return f"no session was recorded for {key}; its folder is removed"
-    if listed is None:
-        return f"crew can't read plannotator's sessions ({why}): it ended nothing, and {key} is forgotten"
+        return f"no session was recorded for {key}; its folder is removed", False
     if not serving(listed, s):
-        return f"plannotator lists no session of pid {s['pid']} on {s['document']}: crew ended nothing, and {key} is forgotten"
+        return f"plannotator lists no session of pid {s['pid']} on {s['document']}: crew ended nothing, and {key} is forgotten", False
     try:
         os.kill(s["pid"], SIGTERM)
     except ProcessLookupError:
-        return f"{key}'s session had already ended, and {key} is forgotten"
-    return f"ended {key}'s session, plannotator pid {s['pid']}"
+        return f"{key}'s session had already ended, and {key} is forgotten", False
+    return f"ended {key}'s session, plannotator pid {s['pid']}", True
 
 
 def card_end(fleet, a):
@@ -4911,7 +5002,7 @@ def card_end(fleet, a):
     card's for one of its units on that unit's team's host, or with no unit for each of its units, as its close does."""
     label, _ = card_of(fleet, a, unit_needed=False)
     if not a.key.startswith("batch/"):
-        print(end_session(label, a.key))
+        print(end_session(label, a.key)[0])
         return
     names = [a.unit] if a.unit else card_units(fleet, label, a.key)
     for u in names:
@@ -4919,7 +5010,74 @@ def card_end(fleet, a):
         if t["machine"] != crew.this_host():
             forward_card(fleet, t, argparse.Namespace(**dict(vars(a), unit=u)), label)
         else:
-            print(end_session(label, a.key, u))
+            print(end_session(label, a.key, u)[0])
+
+
+def card_folder(rel):
+    """The card key and unit (None but for a batch card's) whose session a folder under ~/.local/state/crew/cards/<label>/
+    keeps, from its path there; None when the path is no key's folder."""
+    path = "/".join(rel.parts)
+    if any(re.fullmatch(k, path) for k in CARD_KEYS):
+        return path, None
+    key = "/".join(rel.parts[:2])
+    if len(rel.parts) == 3 and key.startswith("batch/") and any(re.fullmatch(k, key) for k in CARD_KEYS) and crew.NAME.match(rel.parts[2]):
+        return key, rel.parts[2]
+    return None
+
+
+def card_sweep(fleet, a):
+    """crew card sweep --label L: the rail's, run on each host of the partition with its judgment on standard input as
+    JSON, {"live": [card keys], "blind": [key prefixes]}. It ends, through end_session, each session crew recorded on
+    this host for the partition whose key is in no live entry and starts with no blind prefix, once it is at least two
+    minutes old by its own start against this host's clock and its folder's lock is free (crew card session holds it
+    while it starts one). It prints, as a JSON list, each session it acted on: its key, its unit (a batch card's) or
+    null, what it said, and whether it sent SIGTERM. A folder with no session.json, or whose path is no card key's, is
+    left alone, and a record it can't read is kept and said (read.1, read.4)."""
+    a.key is None or fail("crew card sweep takes no key: it judges every session crew recorded on this host, from the "
+                          "rail's judgment on standard input")
+    label = default_label(fleet, a) or fail("crew card sweep runs for a partition: add --label")
+    try:
+        j = json.loads(sys.stdin.read())
+    except ValueError:
+        j = None
+    (isinstance(j, dict) and set(j) == {"live", "blind"}
+     and all(isinstance(j[k], list) and all(isinstance(x, str) for x in j[k]) for k in j)) or fail(
+        'crew card sweep reads the rail\'s judgment on standard input as {"live": [card keys], "blind": [key prefixes]}')
+    live, blind, root = set(j["live"]), tuple(j["blind"]), CARDS / label
+    now, out = datetime.datetime.now(datetime.timezone.utc), []
+    for f in sorted(root.rglob("session.json")) if root.is_dir() else []:
+        found = card_folder(f.parent.relative_to(root))
+        if not found or found[0] in live or found[0].startswith(blind):
+            continue
+        key, unit = found
+        name = f"{key} {unit}" if unit else key
+        try:
+            lock = open(f.parent / ".lock", "a")
+        except FileNotFoundError:
+            continue  # ended while the sweep looked
+        with lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue  # its session is being started
+            try:
+                s = card_recorded(f.parent)
+            except Refusal as e:
+                out.append(dict(key=key, unit=unit, said=f"{e}; crew ended nothing, and keeps {name}", ended=False))
+                continue
+            if not s:
+                continue
+            try:
+                young = (now - utc(s["started"])).total_seconds() < CARD_GRACE
+            except (ValueError, TypeError):
+                out.append(dict(key=key, unit=unit, ended=False,
+                                said=f"crew can't read when {name}'s session started ({s['started']}): it ended nothing, and keeps {name}"))
+                continue
+            if young:
+                continue
+            said, ended = end_session(label, key, unit)
+            out.append(dict(key=key, unit=unit, said=said, ended=ended))
+    print(json.dumps(out))
 
 
 def card_units(fleet, label, key):
@@ -4952,6 +5110,10 @@ def parser(cls=argparse.ArgumentParser):
         x.add_argument("key")
         x.add_argument("unit", nargs="?")
         x.add_argument("--label")
+    x = ca.add_parser("sweep")  # the rail's, run on each host; a key or unit given is refused
+    x.add_argument("key", nargs="?")
+    x.add_argument("unit", nargs="?")
+    x.add_argument("--label")
 
     bo = sub.add_parser("bolt").add_subparsers(dest="sub", required=True)
     x = bo.add_parser("new")
@@ -5129,7 +5291,7 @@ def parser(cls=argparse.ArgumentParser):
 
 COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
-    ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end,
+    ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
