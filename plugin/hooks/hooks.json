@@ -1,5 +1,6 @@
 {
-  "description": "Give a crew agent back its herdr name and crew identity when herdr resumes it after a restart, mark each question or plan a crew agent opens for the user so no tell is typed into it, refuse a Pending You card or area a crew agent posts under a key that is not its own, or a rail row's card it posts or changes in another form than its row's, and record each card it posts, updates or closes in crew's run record",
+  "description": "Draw each crew agent's view of its partition's board above its prompt (status.js), give a crew agent back its herdr name and crew identity when herdr resumes it after a restart, mark each question or plan a crew agent opens for the user so no tell is typed into it, refuse a Pending You card or area a crew agent posts under a key that is not its own, or a rail row's card it posts or changes in another form than its row's, and record each card it posts, updates or closes in crew's run record",
+  "modules": ["./status.js"],
   "hooks": {
     "SessionStart": [
       {
