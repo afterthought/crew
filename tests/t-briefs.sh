@@ -35,6 +35,9 @@ for want in "crew card session" "crew card wait" "answeredHere" "Never open a br
   has "$out" "$want"
 done
 ok "a conductor's verify card links the session crew starts on the report, and it opens nothing"
+# The words a row's card posted again carries, after its link and its bolt, so the user tells the live copy from the
+# dead one (ADR 0005, "A card belongs to the host's sign-in").
+lost_card='"An older copy of this card is dead: it can no longer be answered, so dismiss it in the app. Answer this one."'
 cards_say() {  # the card discipline the planner's and the conductor's briefs share
   for want in "begins with the link to the card's plannotator session, then names the bolt" "in the document's own words" \
     "never reworded" "No card carries a path" "an empty list as its files touched" \
@@ -45,7 +48,8 @@ cards_say() {  # the card discipline the planner's and the conductor's briefs sh
     'kind `code` with lang `markdown`' "never an uploaded file and never HTML" "reached through the card's plannotator link" \
     "A proposal's card is what \`$CREW/plugin/bin/crew plan card <n> --label wldn\` prints" "it links no session but when that says so" \
     "a proposal's card carries the picture and the text" "A proposal's card links no session, since it holds the proposal whole" \
-    "but for one of more than fifteen new units"; do
+    "but for one of more than fifteen new units" "reads \"not found\"" "whenever Pending You has you call \`whoami\` again" \
+    "$lost_card" "under the row's key" "posted again by nobody" "The one exception is a lost card"; do
     has "$out" "$want"
   done
   lacks "$out" "something, a proposal, a batch's changes"
@@ -154,6 +158,8 @@ for want in "wt merge main --no-squash --no-remove" "bolt land <bolt>" "## Deplo
   "git -C <kit>/main push origin main" "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
   "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>/<head>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
   "run \`wt merge\` in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
+for want in "$lost_card" "reads \"not found\"" "under the row's key" "posted again by nobody"; do has "$out" "$want"; done
+has "$out" $'A landing is never that word.\n\nA card of yours is lost when it reads'
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
 
