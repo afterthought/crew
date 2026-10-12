@@ -4495,11 +4495,11 @@ def stage_ends(fleet, a):
 
 # ----------------------------------------------------------------------------------- what reaches a unit
 
-def merge_tree(main, ours, theirs):
-    """The paths git merge-tree forecasts in conflict when theirs is merged into ours, [] for a clean merge, or None when
-    git can't tell. It writes objects and no ref."""
-    r = subprocess.run(["git", "-C", main, "merge-tree", "--write-tree", "--name-only", "--no-messages", ours, theirs],
-                       capture_output=True, text=True, env=gitenv())
+def merge_tree(main, ours, theirs, base=None):
+    """The paths git merge-tree forecasts in conflict when theirs is merged into ours, from their merge base or from
+    the base given (git 2.40+), [] for a clean merge, or None when git can't tell. It writes objects and no ref."""
+    r = subprocess.run(["git", "-C", main, "merge-tree", "--write-tree", "--name-only", "--no-messages",
+                        *([f"--merge-base={base}"] if base else []), ours, theirs], capture_output=True, text=True, env=gitenv())
     if r.returncode == 0:
         return []
     if r.returncode != 1:
@@ -4754,8 +4754,9 @@ def took_heads(unit, entries):
 def reach(fleet, t):
     """On each of the conductor's waits, before it waits: for each unmerged unit of the team's bolt with a place, git
     merge-tree on the team's host forecasts its merge with the bolt and with each unmerged unit ahead of it in the file's
-    order, writing no ref; a unit that conflicts with the bolt resolves that first, and is forecast against the units
-    ahead of it once it is clean with the bolt. A conflict is a forecast for the later unit, recorded once for a pair of
+    order, writing no ref, a dependent's with a unit it comes after from the head its place took; a unit that
+    conflicts with the bolt resolves that first, and is forecast against the units ahead of it once it is clean with
+    the bolt. A conflict is a forecast for the later unit, recorded once for a pair of
     heads (`forecast`, with both heads, the paths and how it reached the unit) and reaching it once (deliver). The
     earlier unit is told nothing. A forecast between two unmerged units gives the later After on the earlier, in a write that is the waiting
     conductor's own (plan.13, roles.1). What crew can't read or write here is said on standard error, and the wait
@@ -4807,7 +4808,9 @@ def reach(fleet, t):
         live = [(u.name(), k["places"][u.name()]["head"], u.all("After")) for u in plan.units_of(b.name())
                 if k["places"].get(u.name()) and k["places"][u.name()].get("head")
                 and st.of(u.name())["stage"] not in ("merged", "landed", "unknown")]
-        due, unread = forecasts_due(live, b.name(), k["bolts"].get(b.name(), {}).get("head"), lambda o, h: merge_tree(main, o, h), done)
+        took = {name: took_heads(name, entries) for name, _, _ in live}
+        due, unread = forecasts_due(live, b.name(), k["bolts"].get(b.name(), {}).get("head"),
+                                    lambda o, h, base: merge_tree(main, o, h, base), done, took)
         for name, other in unread:
             print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
         for name, other, paths, heads, after in due:
@@ -4831,18 +4834,21 @@ def reach(fleet, t):
                 done.add(heads)
 
 
-def forecasts_due(live, bolt, bolt_head, conflicts, done):
+def forecasts_due(live, bolt, bolt_head, conflicts, done, took):
     """The forecasts a conductor's wait makes for a bolt (teams.12): live is each unmerged unit with a place, in the
-    plan's order, as (name, head, its After units); conflicts(theirs, ours) the paths git merge-tree forecasts in
-    conflict when theirs is merged into ours, [] for none, None when git can't tell. Each unit is forecast against the
-    bolt, then against each unit ahead of it once it is clean with the bolt, the later unit taking the forecast; one
-    already made for the same heads (done) is not made again. Returns the forecasts as (unit, other, paths, heads,
+    plan's order, as (name, head, its After units); conflicts(theirs, ours, base) the paths git merge-tree forecasts in
+    conflict when theirs is merged into ours, from base or, when it is None, their merge base, [] for none, None when
+    git can't tell. Each unit is forecast against the bolt, then against each unit ahead of it once it is clean with the
+    bolt, the later unit taking the forecast; one already made for the same heads (done) is not made again. A unit is
+    forecast against one it comes after only on what it adds beyond that unit's head its place took (took, {unit:
+    {after unit: head}}), so the other's own work it carries, rewritten since by a rebase or a settle, is no conflict
+    of its; with no head taken, from their merge base (plan.13). Returns the forecasts as (unit, other, paths, heads,
     whether the unit is to be put after the other), and the pairs git could not read."""
     due, unread = [], []
     for i, (name, head, after) in enumerate(live):
         others = ([(f"bolt/{bolt}", bolt_head)] if bolt_head else []) + [(o, h) for o, h, _ in live[:i]]
         for other, ohead in others:
-            paths = conflicts(ohead, head)
+            paths = conflicts(ohead, head, took.get(name, {}).get(other) if other in after else None)
             if paths is None:
                 unread.append((name, other))
                 continue

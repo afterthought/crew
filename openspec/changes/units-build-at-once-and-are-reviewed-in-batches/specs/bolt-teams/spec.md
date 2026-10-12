@@ -57,11 +57,15 @@ At verify, every path `git diff --name-only bolt/<bolt>...unit/<unit>` names tha
 - **THEN** the verify report names `README.md` as changed and not declared, and the code stage run on the finding adds it to the Touches block
 
 ### Requirement: A conflict is forecast on the conductor's waits
-Each time the conductor waits on a stage or a proof through crew, crew SHALL dry-run, with `git merge-tree`, the merge of each unmerged unit's head with `bolt/<bolt>` and with the head of each unmerged unit ahead of it in the file's order, writing no ref.
+Each time the conductor waits on a stage or a proof through crew, crew SHALL dry-run, with `git merge-tree`, the merge of each unmerged unit's head with `bolt/<bolt>` and with the head of each unmerged unit ahead of it in the file's order, writing no ref. A dependent SHALL be compared with a unit it comes after only on what it adds beyond the head of that unit its place took.
 
 #### Scenario: The dry run moves nothing
 - **WHEN** the conductor's wait forecasts the merges of three unmerged units
 - **THEN** no branch of the kit has moved
+
+#### Scenario: A dependent carries its After unit's rewritten work
+- **WHEN** B, after A, holds A's work as its place took it, A is rebased onto the bolt and its settle revises A's own file, and the conductor's wait runs
+- **THEN** B is forecast nothing against A for that file, and a line B's own commit changed that A's settle also changed is forecast
 
 ### Requirement: A forecast reaches the later unit once
 A predicted conflict SHALL reach the later unit once for the same two heads, with the conflicting paths and the other unit's OpenSpec change: told to its agent once the agent is not working, when its stage is running; carried in the prompt of its next stage, when no agent of it is running; or as a settle stage, when it has delivered and waits to merge. Overlap SHALL order merging only, and SHALL NOT hold any unit's construct, code or verify.

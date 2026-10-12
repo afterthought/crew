@@ -1,7 +1,7 @@
 """Conflicts forecast and amendments reaching a unit (teams.12, teams.13, teams.14, plan.13): plan.forecasts_due for
-what a conductor's wait forecasts, plan.reach_way for how a forecast or an amendment reaches the later unit,
-plan.amended_afters for each After unit constructed again since its dependent took its head, plan.waiting_for for
-what the unit's next prompt carries, plan.rebase_waits for a dependent whose After unit merged, and
+what a conductor's wait forecasts, a dependent from the head its place took (plan.took_heads), plan.reach_way for how
+a forecast or an amendment reaches the later unit, plan.amended_afters for each After unit constructed again since its
+dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent whose After unit merged, and
 plan.forecast_words and amendment_words for what it is told. That git merge-tree forecasts a conflict and moves no ref
 is a contract case (tests/contract/test_git.py); the wait that tells, starts a settle or carries, the journey's."""
 import pytest
@@ -13,9 +13,11 @@ import plan
 A, B, C, BOLT = "a" * 40, "b" * 40, "c" * 40, "f" * 40
 
 
-def due(live, bolt_head=BOLT, clash=(), done=()):
-    """forecasts_due over units whose heads conflict as clash says: pairs of heads, each (theirs, ours)."""
-    return plan.forecasts_due(live, "t", bolt_head, lambda o, h: ["shared.txt"] if (o, h) in clash else [], set(done))
+def due(live, bolt_head=BOLT, clash=(), done=(), took=None):
+    """forecasts_due over units whose heads conflict as clash says: pairs of heads, each (theirs, ours), compared from
+    their merge base."""
+    return plan.forecasts_due(live, "t", bolt_head, lambda o, h, base: ["shared.txt"] if (o, h) in clash and base is None else [],
+                              set(done), took or {})
 
 
 class TestDue:
@@ -35,11 +37,58 @@ class TestDue:
         assert due([("a", A, []), ("b", B, [])], clash=[(BOLT, B), (A, B)], done=[f"b@{B[:7]} bolt/t@{BOLT[:7]}"]) == ([], [])
 
     def test_what_git_cannot_read_is_named_and_the_rest_forecast(self):
-        got = plan.forecasts_due([("a", A, []), ("b", B, [])], "t", BOLT, lambda o, h: None if o == BOLT else ["x"], set())
+        got = plan.forecasts_due([("a", A, []), ("b", B, [])], "t", BOLT, lambda o, h, base: None if o == BOLT else ["x"],
+                                 set(), {})
         assert got == ([("b", "a", ["x"], f"b@{B[:7]} a@{A[:7]}", True)], [("a", "bolt/t"), ("b", "bolt/t")])
 
     def test_units_clean_with_each_other_have_none(self):
         assert due([("a", A, []), ("b", B, []), ("c", C, [])]) == ([], [])
+
+
+class TestDependent:
+    """A dependent b holds a's work as its place took it, a@1111111; a was since rebased onto the bolt and settled, its
+    head now A. git compares the two from 1111111, what b adds beyond it, else from their merge base, where both
+    change a's own files."""
+    OLD = "1111111"
+
+    def due(self, git, took=None, after=("a",)):
+        asked = []
+
+        def conflicts(o, h, base):
+            asked.append((o, h, base))
+            return git(base)
+        got = plan.forecasts_due([("a", A, []), ("b", B, list(after))], "t", None, conflicts, set(),
+                                 {"b": {"a": self.OLD}} if took is None else took)
+        return got, asked
+
+    def test_one_holding_its_after_units_old_head_is_not_forecast_on_that_units_own_files(self):
+        got, asked = self.due(lambda base: [] if base == self.OLD else ["openspec/changes/a/design.md"])
+        assert got == ([], [])
+        assert asked == [(A, B, self.OLD)]
+
+    def test_one_whose_own_commit_overlaps_the_after_units_rewritten_change_is(self):
+        got, _ = self.due(lambda base: ["shared.txt"])
+        assert got == ([("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}", False)], [])
+
+    def test_one_with_no_took_is_compared_from_their_merge_base_as_before(self):
+        got, asked = self.due(lambda base: ["openspec/changes/a/design.md"] if base is None else [], took={})
+        assert got == ([("b", "a", ["openspec/changes/a/design.md"], f"b@{B[:7]} a@{A[:7]}", False)], [])
+        assert asked == [(A, B, None)]
+
+    def test_a_head_taken_of_a_unit_it_does_not_come_after_is_not_its_base(self):
+        _, asked = self.due(lambda base: [], after=())
+        assert asked == [(A, B, None)]
+
+
+class TestTook:
+    def test_the_latest_construct_start_that_took_a_head_says_it(self):
+        refused = dict(start("b", 3, took="a@3333333"), Refused="all slots are in flight")
+        entries = [start("b", 1, took="a@1111111 c@cccccc1"), start("b", 2), refused, start("a", 4, took="z@2222222")]
+        assert plan.took_heads("b", entries) == {"a": "1111111", "c": "cccccc1"}
+        assert plan.took_heads("b", entries + [start("b", 5, took="a@5555555")]) == {"a": "5555555", "c": "cccccc1"}
+
+    def test_a_start_recorded_before_took_existed_took_none(self):
+        assert plan.took_heads("b", [dict(start("b", 1), Took=None)]) == {}
 
 
 class TestWay:

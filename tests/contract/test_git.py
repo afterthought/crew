@@ -35,6 +35,45 @@ def test_merge_tree_names_the_conflicting_paths_and_writes_no_ref(repo):
     assert repo.git("for-each-ref") == refs
 
 
+def dependency_rebased(repo, own=None):
+    """A dependency a and a dependent b whose place took a's head and added its own commit (own, else one of b's own
+    files); then the bolt moves, a is rebased onto it, new hashes, and its settle revises a's own work. Returns the
+    head b took, which crew records as the construct's Took."""
+    repo.commit("main", {"shared.txt": "one\ntwo\nthree\n"})
+    repo.git("branch", "bolt")
+    repo.git("checkout", "-q", "-b", "a", "bolt")
+    took = repo.commit("feat(a): its change", {"a/design.md": "z\n", "shared.txt": "one\ntwo, as a has it\nthree\n"})
+    repo.git("checkout", "-q", "-b", "b", "a")
+    repo.commit("feat(b): its change", own or {"b/design.md": "y\n"})
+    repo.git("checkout", "-q", "bolt")
+    repo.commit("feat: the bolt's own", {"bolt.txt": "the bolt\n"})
+    repo.git("checkout", "-q", "a")
+    repo.git("rebase", "-q", "bolt")
+    repo.commit("fix(a): settled on the bolt", {"a/design.md": "z, as it stands on the bolt\n",
+                                                "shared.txt": "one\ntwo, as a has it, settled\nthree\n"})
+    assert repo.git("merge-base", "a", "b") != took
+    return took
+
+
+def test_merge_tree_from_the_head_a_dependent_took_leaves_out_its_dependencys_own_work(repo):
+    """plan.forecasts_due through plan.merge_tree (teams.12, plan.13): from their merge base, the bolt both started on,
+    a dependent carrying its dependency's old commits conflicts with the dependency rebased and settled on the
+    dependency's own files; git merge-tree --merge-base=<the head it took> (git 2.40+) compares only what the dependent
+    adds beyond it, and finds no conflict."""
+    import plan
+    took = dependency_rebased(repo)
+    assert plan.merge_tree(str(repo.path), "a", "b") == ["a/design.md", "shared.txt"]
+    assert plan.merge_tree(str(repo.path), "a", "b", took) == []
+
+
+def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overlap(repo):
+    """plan.forecasts_due through plan.merge_tree (teams.12): a dependent whose own commit changes the line its
+    dependency's settle rewrote is forecast to conflict there from the head it took, and only there."""
+    import plan
+    took = dependency_rebased(repo, own={"shared.txt": "one\ntwo, as b has it\nthree\n"})
+    assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
+
+
 def here():
     import crew
     return {}, {"machine": crew.this_host()}
