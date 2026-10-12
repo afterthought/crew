@@ -16,7 +16,7 @@ One `write` on the flywheel's branch: at each tip, `capture_landing` adds each f
 
 ## Not here
 
-The daily pass's meeting captures, which land in the blueprints repo and may be unread stubs, are `daily-pass-through-crew`'s. A capture name with a version's dots is refused by `code.4`; whether crew takes a dot in a program's capture name, or the release adapter dashes its versions, is the user's call.
+The daily pass's meeting captures, which land in the blueprints repo and may be unread stubs, are `daily-pass-through-crew`'s. A capture name with a version's dots is refused by `code.4`, which stands: swancloud's release adapter dashes its versions (the user, 2026-10-12), a change of swancloud's.
 
 ## Proof in dev
 

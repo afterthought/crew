@@ -17,6 +17,7 @@ What is still open now that every page is written. A working file: an item leave
 
 Each is a queued or placed unit; the rule stands and the code catches up.
 
+- `plan.14`'s quiet: `crew ops quiet` reads only the stage agents working on the environment's host and crew's own test slots there; whether any other kit's test runs are in flight on a host becomes sluice's to answer, as each kit's tests run through it (the user, 2026-10-12: "the idea of tests and logs goes away with sluice"), and no kit declares its test runs' locks to crew.
 - `tests.11`, `tests.12`, `code.7`: the three tiers are built test by test, slowest first by CPU, each measured before and after, by the recovery session (ADR 0022); until a test converts, its decisions are reached only end to end.
 - `plan.10`: a drop keeps a branch with unmerged patches, judged by `git cherry`; `tidy()` deletes with `git branch -D` and `gather.fix_merged` judges by ancestry (`a-drop-keeps-unmerged-work`, fix-places).
 - `plan.14`: `construct.md` knows one proof list.

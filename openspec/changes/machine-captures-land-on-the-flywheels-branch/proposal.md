@@ -20,7 +20,7 @@ A program records captures too: swancloud's release adapter one per release newe
 
 - `plugin/lib/plan.py` (`signal_land`, `capture_refusal`, `capture_landing`), `plugin/bin/crew`'s usage, README, `plugin/skills/crew/SKILL.md`.
 - `tests/py/test_signals.py`, `tests/t-journey-signals.sh`.
-- swancloud's release adapter and deployer land their captures with no change of theirs, but for the release adapter's capture names, which carry a version's dots and are refused by `code.4`.
+- swancloud's release adapter and deployer land their captures with no change of theirs, once the release adapter dashes the versions in its capture names, which `code.4` refuses with dots (the user, 2026-10-12).
 
 ## Touches
 
