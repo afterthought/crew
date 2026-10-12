@@ -69,7 +69,7 @@ def env_of(e):
 def state(es):
     """Each environment's operations as the record holds them: its deploy offer still open (unanswered, no deploy of
     it ended), {env: entry}; the word the user gave and no deploy has ended since, {env: entry}; and each step's
-    latest entry, {(env, to or "", key): entry}."""
+    latest entry, {(env, to or "", key): entry}, in the order of each step's first entry."""
     offers, words, steps = {}, {}, {}
     for e in es:
         env, act, to = env_of(e), e["Act"], e.get("Head")
@@ -95,10 +95,21 @@ def ordered(steps):
     return sorted(steps.items(), key=lambda kv: (kv[1]["At"], kv[1]["Id"]))
 
 
+def numbered(steps):
+    """Each step with its number among its environment's steps, counted in the order each was first recorded, so a
+    step's number never changes when another's state does: [(n, (env, to, key), latest entry)]."""
+    n, out = {}, []
+    for k, e in steps.items():
+        n[k[0]] = n.get(k[0], 0) + 1
+        out.append((n[k[0]], k, e))
+    return out
+
+
 def rows(fleet, label, es):
     """The rail's rows for the partition's operations, from its entries: each open deploy offer, deploy/<env>/<to>,
     answered by crew ops approve; and each step the user is to take that waits, op/<env>/<n>, its n counting the
-    environment's steps, answered by marking it done or declined. Each row's card is main-level ops's (briefs.11)."""
+    environment's steps in the order they were first recorded, answered by marking it done or declined. Each row's
+    card is main-level ops's (briefs.11)."""
     offers, _, steps = state(es)
     out = []
     for env, e in sorted(offers.items()):
@@ -107,9 +118,7 @@ def rows(fleet, label, es):
                 f"{label}-ops posts its card, and holding it is the word to deploy"]
         out.append(dict(group="operations", label=label, key=f"deploy/{env}/{to[:7]}", at=e["At"], what=what,
                         cmds=[("answer", f"crew ops approve {env} --to {to} --label {label}")]))
-    n = {}
-    for (env, to, key), e in ordered(steps):
-        n[env] = n.get(env, 0) + 1
+    for n, (env, to, key), e in numbered(steps):
         if e.get("Doer") != "user" or e.get("State") != "waiting":
             continue
         after = f"after the deploy of {env} to {to[:7]}" if to else f"on {env}"
@@ -117,7 +126,7 @@ def rows(fleet, label, es):
         to_arg = f" --to {to}" if to else ""
         cmds = [(s, f"crew ops step {env}{to_arg} --key {key} --state {'done' if s == 'done' else 'declined'} --label {label}")
                 for s in ("done", "decline")]
-        out.append(dict(group="operations", label=label, key=f"op/{env}/{n[env]}", at=e["At"], what=what, cmds=cmds))
+        out.append(dict(group="operations", label=label, key=f"op/{env}/{n}", at=e["At"], what=what, cmds=cmds))
     return out
 
 

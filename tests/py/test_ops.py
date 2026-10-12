@@ -69,6 +69,13 @@ class TestRows:
                                    ("decline", "crew ops step mac-studio --key rotate-tailnet-key --state declined --label swancloud")]
         assert ops.rows(None, "swancloud", steps + [e("ops.step", minutes=4, Key="rotate-tailnet-key", State="declined", Doer="user")])[1:] == []
 
+    def test_a_waiting_steps_row_keeps_its_key_when_an_earlier_steps_state_changes(self):
+        steps = [e("ops.step", minutes=1, Key="restart-herdr", State="waiting", Doer="user"),
+                 e("ops.step", minutes=2, Key="rotate-tailnet-key", State="waiting", Doer="user")]
+        assert [r["key"] for r in ops.rows(None, "swancloud", steps)] == ["op/mac-studio/1", "op/mac-studio/2"]
+        done = steps + [e("ops.step", minutes=3, Key="restart-herdr", State="done", Doer="user")]
+        assert [r["key"] for r in ops.rows(None, "swancloud", done)] == ["op/mac-studio/2"]
+
 
 class TestRefusals:
     def test_an_approval_answers_only_the_offer_open_now(self):
