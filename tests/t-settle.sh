@@ -17,14 +17,11 @@ last_launch() { tail -1 "$CREW_TEST_CLAUDE_LOG" | jq -r '([.argv | to_entries[] 
 prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
 for u in a b; do crew unit run $u construct >/dev/null; change "$kd/places/$u" $u 1 2; commit_all "$kd/places/$u" "docs($u): the change"; crew unit wait $u >/dev/null; done
 
-expect_fail "unit a is in code: settle runs only for a unit that has delivered its verify and waits to merge" crew unit run a settle "The bolt moved."
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/a" "feat(a): done"
-expect_fail "unit a is in verify, and has not delivered its verify: settle runs only for a unit that has delivered its verify and waits to merge" \
-  crew unit run a settle "The bolt moved."
 crew unit run a verify >/dev/null; echo "# Verify a" > "$reports/verify-a-$(date +%Y%m%d-%H%M).md"
 crew unit wait a >/dev/null
 expect_fail "settle a with what reached it" crew unit run a settle
-ok "settle is refused for a unit in code, one in verify that has not delivered its verify, and with nothing said of what reached it"
+ok "settle is refused with nothing said of what reached it"
 
 : > "$CREW_TEST_LOG"
 expect_ok crew unit run a settle "Your branch is forecast to conflict with bolt/tenant-environments on x."

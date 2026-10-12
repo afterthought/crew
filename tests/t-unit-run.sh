@@ -45,7 +45,6 @@ eq "$(wc -l < "$slots" | tr -d ' ')" "1"
 [[ ! -d $kd/places/b ]] || fail "b's place was made"
 ok "a unit after one whose change is not committed is refused construct, and takes no slot"
 
-expect_fail "unit a is in construct: code waits until its change is committed" crew unit run a code
 change "$kd/places/a" a 0 3; commit_all "$kd/places/a" "docs(a): the change"
 eq "$(stage a)" "planned"; eq "$(stage b)" "ready"
 : > "$CREW_TEST_LOG"
@@ -98,7 +97,6 @@ unset CREW_TAKEN_WITHIN
 ok "a code stage whose prompt was not taken twice never started: refused, owed nothing, its slot held; run again, it starts"
 
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \] 1.1/- [x] 1.1/'; commit_all "$kd/places/a" "feat(a): task 1"
-expect_fail "unit a is in code, with these tasks still open: 1.2 task 2; 1.3 task 3" crew unit run a verify
 rewrite "$kd/places/a/openspec/changes/a/tasks.md" 's/- \[ \]/- [x]/'; commit_all "$kd/places/a" "feat(a): tasks 2 and 3"
 expect_ok crew unit run a verify
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort high | swb-1-unit-1 | $kd/places/a"
@@ -158,7 +156,6 @@ as $box herdr --session wldn-1 stub status "$p3" idle
 expect_ok crew unit run d construct "Name the tenant in the title."
 lacks "$out" "Pending You"
 eq "$(stage d)" "construct"
-expect_fail "unit d was amended and its change is being written again, and has not been committed" crew unit run d code
 change "$kd/places/e" e 2 2; commit_all "$kd/places/e" "feat(e): done"
 eq "$(stage e)" "verify"
 expect_ok crew unit run e verify

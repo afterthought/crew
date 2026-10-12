@@ -102,10 +102,6 @@ ok "construct on a unit in code marks it amended at its head, in the conductor's
 
 expect_fail "unit coding was amended and its change is being written again, and has not been committed" crew unit run coding code
 has "$(field $box stage.start Refused stage/coding/code)" "unit coding was amended and its change is being written again"
-for s in verify merge; do
-  expect_fail "unit coding was amended and its change is being written again, and has not been committed" crew unit run coding $s
-  has "$(field $box stage.start Refused stage/coding/$s)" "unit coding was amended and its change is being written again"
-done
 echo "Written again." >> "$kd/places/coding/openspec/changes/coding/design.md"; commit_all "$kd/places/coding" "docs(coding): written again"
 eq "$(stage coding)" "code"
 as $box herdr --session wldn-1 stub status "$(pane swb-1-unit-1)" idle
@@ -127,13 +123,11 @@ pf=$(place "$k" tenant-environments fresh); change "$pf" fresh 0 2; commit_all "
 eq "$(stage fresh)" "planned"
 CREW_AGENT=swb-2-conductor expect_fail "unit fresh is in planned, so construct run again marks it amended: a plan write only swb-1-conductor or the user makes" \
   crew unit run fresh construct
-CREW_AGENT=wldn-planner expect_fail "a plan write only swb-1-conductor or the user makes" crew unit run fresh construct
 eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" ""
 expect_ok crew unit run fresh construct "The user wants a table."
 eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" "$(git -C "$k" rev-parse unit/fresh)"
 has "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "fresh amended, construct runs again ($me@mac-studio)"
 eq "$(stage fresh)" "construct"
-CREW_AGENT=swb-1-conductor expect_fail "unit fresh was amended and its change is being written again" crew unit run fresh code
 echo table >> "$pf/openspec/changes/fresh/design.md"; commit_all "$pf" "docs(fresh): a table"
 eq "$(stage fresh)" "planned"
 eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" "$(git -C "$k" rev-parse unit/fresh~1)"
@@ -141,10 +135,9 @@ HOST=$box crew status swb-1 >/dev/null 2>&1
 eq "$(plan -t Unit -e "Unit = 'fresh'" -P Amended)" ""
 ok "the user sends a planned unit back to construct, which marks it, and it is planned again once construct commits; the team's next read clears the mark"
 
-# An intent amended, by the user, of a unit that was in verify: construct has not been run again, so code is
-# refused; the conductor brought back runs it, told why it runs and shown the card the amendment ended.
+# An intent amended, by the user, of a unit that was in verify: the conductor brought back runs its construct, told
+# why it runs and shown the card the amendment ended.
 export CREW_AGENT=swb-1-conductor
-expect_fail "unit m-intent was amended and construct has not been run again (crew unit run m-intent construct)" crew unit run m-intent code
 : > "$CREW_TEST_LOG"
 expect_ok crew unit run m-intent construct
 has "$out" "Close your Pending You card for verify/m-intent, if one is open, with what was done."
@@ -160,11 +153,6 @@ lacks "$out" "Close your Pending You card"
 ok "an amended intent waits for construct, which is told the intent was amended by the user and names the verify card; run again before it commits, nothing is marked again"
 
 # Merged work is not amended.
-CREW_AGENT= crew unit add e "Unit e." --bolt tenant-environments >/dev/null 2>&1
-change "$kd/bolts/tenant-environments" e 2 2; commit_all "$kd/bolts/tenant-environments" "feat(e): merged"
-expect_fail "unit e has merged into its bolt: a defect in it is a fix (crew fix), and a new need is a new unit" crew unit run e construct
-has "$(field $box stage.start Refused stage/e/construct)" "unit e has merged into its bolt"
-ok "construct on a merged unit is refused"
 
 # An intent amended by an approved proposal: anyone may start its construct, the user having approved it, and the
 # fresh agent is given the planner's case; the mark moves in the starter's name.

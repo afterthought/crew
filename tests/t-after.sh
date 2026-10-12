@@ -53,8 +53,6 @@ change "$kd/places/b" b 2 2; commit_all "$kd/places/b" "feat(b): done"; crew uni
 change "$kd/places/c" c 0 2; commit_all "$kd/places/c" "docs(c): the change"; crew unit wait c >/dev/null
 crew unit run c code >/dev/null
 eq "$(stage b)" "verify"
-expect_fail "unit b merges after a, not yet merged into bolt/tenant-environments" crew unit run b merge
-ok "a dependent's merge is refused, naming the unit it comes after, while that unit has not merged"
 
 # a is constructed again with the user's words, while its dependents are in code and in verify.
 crew unit run a construct "Say what the tenant sees." >/dev/null

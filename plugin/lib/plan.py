@@ -3266,18 +3266,13 @@ def run_check(fleet, a):
     st != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
     words = f" {a.words}" if a.words else ""
     amended_at = entry = ""
+    after = {d: st_all.of(d)["stage"] for d in u.all("After")}
+    why = stage_refusal(a.unit, bolt, a.stage, st, mark, after, role(fleet, os.environ.get("CREW_AGENT")), t["name"],
+                        s.get("open") or [], a.stage == "settle" and st == "verify" and verified(label, a.unit), bool(a.words))
+    if why:
+        refuse(*why) if isinstance(why, tuple) else fail(why)
     if a.stage == "construct":
-        if st == "waiting":
-            deps = [d for d in u.all("After") if st_all.of(d)["stage"] not in CONSTRUCTED]
-            fail(f"unit {a.unit} is waiting: it comes after " + ", ".join(deps) + ", whose change is not committed yet")
-        st not in ("merged", "landed") or fail(f"unit {a.unit} has " + ("merged into its bolt" if st == "merged" else "landed on main")
-                                               + ": a defect in it is a fix (crew fix), and a new need is a new unit")
         marking = bool(mark) or st in ("planned", "code", "verify")
-        if marking and not amended(mark):
-            kind, team = role(fleet, os.environ.get("CREW_AGENT"))
-            kind == "user" or (kind, team) == ("conductor", t["name"]) or fail(
-                f"unit {a.unit} is in {st}, so construct run again marks it amended: a plan write only {t['name']}-conductor "
-                "or the user makes")
         # The amendment's words, from the mark, so whoever starts the construct sends the same prompt.
         again = ""
         if mark == "intent":
@@ -3296,21 +3291,11 @@ def run_check(fleet, a):
                 amended_at, entry = f"{repo}@{mark_amended(fleet, label, a.unit, bolt, head)}", CONTEXT["eid"]
         sources = u.all("Source")
         prompt = f"/opsx:propose {a.unit} {u.get('Intent')}" + (" Sources: " + "; ".join(sources) + "." if sources else "") + again + words
-    elif st in ("amended", "construct") and mark:
-        fail(f"unit {a.unit} was amended and " + (f"construct has not been run again (crew unit run {a.unit} construct)" if st == "amended"
-                                                  else "its change is being written again, and has not been committed"))
     elif a.stage == "code":
-        st in ("planned", "code", "verify") or fail(f"unit {a.unit} is in {st}: " + (
-            "code waits until its change is committed" if st == "construct" else "it has no change to code yet"))
         k, _ = st_all.kit(plan.bolt(bolt))
         told = overlapping(plan, st_all, k, a.unit, declared(k, a.unit, "code"))
         prompt = f"/opsx:apply {a.unit}{words}" + "".join(" " + x for x in told)
     elif a.stage == "verify":
-        if st == "code":
-            n = len(s["open"])
-            refuse(f"unit {a.unit} is in code, with these tasks still open: " + "; ".join(s["open"]),
-                   f"unit {a.unit} is in code, with {n} task{'' if n == 1 else 's'} still open")  # titles are typed text
-        st == "verify" or fail(f"unit {a.unit} is in {st}: verify waits until every task is ticked")
         k, _ = st_all.kit(plan.bolt(bolt))
         got = (k["places"].get(a.unit) or {}).get("touches") or {}
         loose = undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After"))
@@ -3318,15 +3303,8 @@ def run_check(fleet, a):
             (" Changed and not declared in its Touches: " + ", ".join(loose) + "."
              + ("" if "entries" in got else f" Its change declares no Touches: {got.get('missing')}.")) if loose else "")
     elif a.stage == "settle":
-        st == "verify" and verified(label, a.unit) or fail(
-            f"unit {a.unit} is in {st}" + (", and has not delivered its verify" if st == "verify" else "")
-            + ": settle runs only for a unit that has delivered its verify and waits to merge")
-        a.words or fail(f"settle {a.unit} with what reached it: crew unit run {a.unit} settle \"<the forecast or the amendment>\"")
         prompt = f"Settle {a.unit}:{words}"
     else:
-        st == "verify" or fail(f"unit {a.unit} is in {st}: it merges once every task is ticked and verify has run")
-        ahead = [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")]
-        not ahead or fail(f"unit {a.unit} merges after " + ", ".join(ahead) + ", not yet merged into bolt/" + bolt)
         prompt = f"Merge {a.unit} into bolt/{bolt}: {merge_command(t, st_all.kit(plan.bolt(bolt))[0], bolt)}{words}"
     # What reached the unit while no stage of it ran: forecasts, carried in this stage's prompt and named on its start.
     ids, said = carried_forecasts(fleet, t, plan, st_all, bolt, a.unit)
@@ -3342,6 +3320,51 @@ def run_check(fleet, a):
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
     print(sh(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids),
              TOOK=took if a.stage == "construct" else ""))
+
+
+def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, delivered_verify, has_words):
+    """Why a unit's stage may not start, or None when it may (plan.6, plan.13, teams.5): stage is the one asked, st the
+    unit's stage read from its place, mark its Amended mark, after each After unit's stage, caller the asker's (kind,
+    team), team the name of the team holding its bolt, open_tasks the titles of its tasks still open. A refusal that
+    quotes typed text is (what is said, what the run record holds), else one string. Construct waits on its After
+    units' construct, is never run on merged or landed work, and on a committed or amended unit is run again only by
+    its conductor or the user, unless the user's approved amendment asked for it; every other stage waits while the
+    mark stands; code needs the change committed; verify every task ticked; settle a delivered verify and what reached
+    the unit; merge a verified unit whose After units have merged."""
+    if stage == "construct":
+        if st == "waiting":
+            deps = [d for d, x in after.items() if x not in CONSTRUCTED]
+            return f"unit {unit} is waiting: it comes after " + ", ".join(deps) + ", whose change is not committed yet"
+        if st in ("merged", "landed"):
+            return (f"unit {unit} has " + ("merged into its bolt" if st == "merged" else "landed on main")
+                    + ": a defect in it is a fix (crew fix), and a new need is a new unit")
+        marking = bool(mark) or st in ("planned", "code", "verify")
+        if marking and not amended(mark) and caller[0] != "user" and tuple(caller) != ("conductor", team):
+            return (f"unit {unit} is in {st}, so construct run again marks it amended: a plan write only {team}-conductor "
+                    "or the user makes")
+        return None
+    if st in ("amended", "construct") and mark:
+        return f"unit {unit} was amended and " + (f"construct has not been run again (crew unit run {unit} construct)" if st == "amended"
+                                                  else "its change is being written again, and has not been committed")
+    if stage == "code":
+        if st not in ("planned", "code", "verify"):
+            return f"unit {unit} is in {st}: " + ("code waits until its change is committed" if st == "construct" else "it has no change to code yet")
+        return None
+    if stage == "verify":
+        if st == "code":
+            n = len(open_tasks)
+            return (f"unit {unit} is in code, with these tasks still open: " + "; ".join(open_tasks),
+                    f"unit {unit} is in code, with {n} task{'' if n == 1 else 's'} still open")  # titles are typed text
+        return None if st == "verify" else f"unit {unit} is in {st}: verify waits until every task is ticked"
+    if stage == "settle":
+        if not (st == "verify" and delivered_verify):
+            return (f"unit {unit} is in {st}" + (", and has not delivered its verify" if st == "verify" else "")
+                    + ": settle runs only for a unit that has delivered its verify and waits to merge")
+        return None if has_words else f"settle {unit} with what reached it: crew unit run {unit} settle \"<the forecast or the amendment>\""
+    if st != "verify":
+        return f"unit {unit} is in {st}: it merges once every task is ticked and verify has run"
+    ahead = [d for d, x in after.items() if x not in ("merged", "landed")]
+    return f"unit {unit} merges after " + ", ".join(ahead) + f", not yet merged into bolt/{bolt}" if ahead else None
 
 
 def stage_ended_row(fleet, a):
