@@ -201,7 +201,7 @@ case $cmd in
   bolts | bolt | signal | state | plan | rail | board | _views | _board | card | trace | page | sites | list | tell | ops) ;;
   status) ;;
   events | _rail) unset CREW_READ ;;
-  unit) case ${2:-} in run | free | wait) reading ;; esac ;;
+  unit) case ${2:-} in run | free) reading ;; esac ;;
   *) reading ;;
 esac
 
@@ -575,14 +575,6 @@ stage_wait() {  # stage_wait <slot|ops> [--timeout <ms>] [--stuck <ms>]: wait on
   local slot=$1; shift; limits "$@"
   plan _wait "$TEAM" --slot "$slot" ${limit[@]+"${limit[@]}"}
 }
-unit_wait() {  # unit_wait <unit> [--timeout <ms>] [--stuck <ms>]: wait for the unit's stage to end, and say how
-  local unit=${1:?usage: crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]} slot e; shift
-  limits "$@"
-  e=$(plan _team-of "$unit") || exit 1; eval "$e"
-  load_team "$TEAM"; forward; ensure_state
-  slot=$(slot_of "$unit"); [[ -n $slot ]] || { echo "no slot of $TEAM holds $unit" >&2; exit 1; }
-  stage_wait "$slot" "$@"
-}
 prove() {  # prove "<words>": ask ops to prove the team's bolt, and owe the proof's end like a stage's
   local words=$1 bolt= err id
   if ! err=$(plan _bolt-of "$TEAM" 2>&1); then
@@ -675,7 +667,10 @@ case $cmd in
     record_agents team.down "team($TEAM): down" ${ended[@]+"${ended[@]}"}; echo "$TEAM is down; its panes are still there." ;;
   unit)
     [[ ${2:-} == free ]] && { unit_free "${@:3}"; exit 0; }
-    [[ ${2:-} == wait ]] && { unit_wait "${@:3}"; exit $?; }
+    if [[ ${2:-} == wait ]]; then
+      unit=${3:?usage: crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]}; limits "${@:4}"
+      one _unit-wait "$unit" ${limit[@]+"${limit[@]}"}; exit $?
+    fi
     [[ ${2:-} == run ]] || exec python3 "$here/../lib/plan.py" "${args[@]}"
     unit=${3:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}
     stage=${4:?usage: crew unit run <unit> construct|code|verify|settle|merge [\"<words>\"]}

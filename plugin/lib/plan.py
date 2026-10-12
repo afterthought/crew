@@ -3290,9 +3290,14 @@ def sh(**pairs):
 
 
 def team_of_unit(fleet, a):
-    """The team whose bolt holds a unit: crew unit run goes to that team's host."""
+    """The team whose bolt holds a unit, from its plan: crew unit run and wait go to that team's host."""
     label, repo, _, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a))
-    print(sh(TEAM=unit_team(plan, a.unit)))
+    return crew.team_of(fleet, unit_team(plan, a.unit))
+
+
+def team_of_unit_said(fleet, a):
+    """crew _team-of <unit>: the team whose bolt holds a unit, as a shell assignment for bash crew (teams.9)."""
+    print(sh(TEAM=team_of_unit(fleet, a)["name"]))
 
 
 def unit_team(plan, name):
@@ -5233,6 +5238,15 @@ def reap(fleet, team):
     rebase_and_tidy(fleet, t)
 
 
+def unit_wait(fleet, a):
+    """crew unit wait <unit> [--timeout <ms>] [--stuck <ms>], on the host of the team whose bolt holds the unit: the wait
+    on the stage the slot holding it owes (stage_wait)."""
+    t = team_of_unit(fleet, a)
+    team = on_team_host(fleet, t)
+    slot = team.holding(a.unit) or fail(f"no slot of {t['name']} holds {a.unit}")
+    stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=a.timeout, stuck=a.stuck))
+
+
 def team_status(fleet, a):
     """crew status <team>, on the team's host: the team's read (reap); then its conductor and ops, each with its pane,
     its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of); and
@@ -6788,6 +6802,10 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("_status")
     x.add_argument("team")
     x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_unit-wait")
+    x.add_argument("unit")
+    x.add_argument("--timeout", type=int, default=3600000)
+    x.add_argument("--stuck", type=int, default=900000)
     x = sub.add_parser("_team-of")
     x.add_argument("unit")
     x.add_argument("--label")
@@ -6865,8 +6883,8 @@ COMMANDS = {
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),
     ("unit", "order"): direct(("unit", "order")), ("unit", "after"): direct(("unit", "after")),
     ("unit", "move"): direct(("unit", "move")), ("unit", "drop"): direct(("unit", "drop")),
-    ("_status", None): team_status,
-    ("_team-of", None): team_of_unit, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
+    ("_status", None): team_status, ("_unit-wait", None): unit_wait,
+    ("_team-of", None): team_of_unit_said, ("_run", None): run_check, ("_ended", None): stage_ended_row, ("_bolt-of", None): bolt_of_team, ("_amended", None): amended_units,
     ("_place", None): place_cmd, ("_fix", None): fix_cmd,
     ("_carry", None): carry_cmd, ("_slots", None): slots_cmd, ("_tidy", None): tidy, ("_rebase", None): rebase_cmd, ("_review", None): review_start, ("_review-wait", None): review_wait, ("_in-bolt", None): in_bolt, ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show,
@@ -6875,7 +6893,7 @@ COMMANDS = {
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
 # A team's commands, each one process on the team's host.
-TEAM_COMMANDS = {("_status", None)}
+TEAM_COMMANDS = {("_status", None), ("_unit-wait", None)}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",

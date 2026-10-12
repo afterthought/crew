@@ -1400,6 +1400,10 @@ class Team:
     def status(self, role, fresh=False):
         return self.herdr.status(self.pane(role), fresh)
 
+    def holding(self, name):
+        """The slot holding a unit or fix, or None."""
+        return next((l[0] for l in self.lines("slots") if l[2:3] == [name]), None)
+
     def held(self, slot):
         """The slots file's line for a slot, split, or None."""
         return next((l for l in self.lines("slots") if l[0] == slot), None)
