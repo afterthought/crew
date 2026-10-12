@@ -4855,8 +4855,9 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     for a batch card, whose units, their teams and the commits the batch read them at the row holds too, (host, path)
     for a verify report, None for a landing. A batch is one row, keyed batch/<n>, holding every unit, until its card
     closes; a batch posted as cards of five before a batch was one card is a row for each card posted, keyed
-    batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row, offered for landing only once every unit's latest change has been in a
-    batch: until then the row names the units that have not, and offers nothing (briefs.12)."""
+    batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row, offered for landing only once
+    every unit's latest change has been in a batch: until then the row names the units that have not, and offers
+    nothing (briefs.12)."""
     rows, here, held = [], crew.this_host(), held or {}
     for d in props:
         l, n = d["label"], d["proposal"]
