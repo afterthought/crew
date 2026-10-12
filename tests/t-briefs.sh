@@ -423,8 +423,8 @@ for want in "## A chore" "\`Verify chore <name>: <its words>\`" "\`git log @{ups
 expect_ok crewpy brief swb-1 conductor
 for want in "A bolt may also hold **chores**" "with no construct, no change and no review" "chore run <chore> code" "chore run <chore> verify" \
   "chore run <chore> merge" "chore wait <chore>" "chore order" "chore after" "A chore takes its turn in the plan's order with the units" \
-  "has no construct and no batch" "until verify has run since its last code and every commit carries its trailer" \
-  "A unit that comes after a chore is constructed once that chore has merged" "each holding one unit, chore or fix in flight"; do
+  "has no construct and no batch" "until verify has run since its last code, every commit of its own carries its trailer and everything it comes after has merged" \
+  "A unit that comes after a chore is constructed once the chore's code has delivered" "never waiting on a merge: its place takes their work as it stands" "each holding one unit, chore or fix in flight"; do
   has "$out" "$want"
 done
 expect_ok crewpy brief wldn planner

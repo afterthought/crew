@@ -6,11 +6,11 @@
 
 ## 2. A chore's stage is read from its kit
 
-- [x] 2.1 gather.py reads each kit's chore trailers on main and each bolt and each chore's place, in its one read; `Stages.of` reads a chore's stage by the design's table and a unit after a chore waits on its merge; a bolt is landed once every unit and chore is; and logic cases prove the table, with a contract case pinning the trailer reading on real git (design: *A chore's stage is read from its kit*, *`After` across kinds is met at the chore's merge*; `state.2`, `plan.12`, `read.1`).
+- [x] 2.1 gather.py reads each kit's chore trailers on main and each bolt and each chore's place, in its one read; `Stages.of` reads a chore's stage by the design's table, and a dependent of either kind starts once what it comes after has something committed to build on, its place taking a chore's head as a unit's (`took_from`, `TAKE`, `Took`) and rebased onto the bolt once it merges; a bolt is landed once every unit and chore is; and logic cases prove the table, with a contract case pinning the trailer reading on real git (design: *A chore's stage is read from its kit*, *`After` across kinds is met at the chore's merge*; `state.2`, `plan.12`, `read.1`).
 
 ## 3. A chore is built by code, verify and merge
 
-- [x] 3.1 `plan _run --chore` decides by `chore_refusal`, makes the place at its first code, refuses a merge while a commit lacks the trailer, prints the stage's prompt, and refuses a stage of the other kind; `crew chore run|wait|free` in bash take the chore's slot and run its stages; `Owed`, the deliverables, the slots, the tidy and `transcript.STAGE` know a chore; logic cases prove each decision, and `tests/t-journey-chores.sh` proves the wiring from `chore add` through code, verify and merge to the slot's freeing (design: *Running a chore's stages*, *A stage ends at its deliverable*, *Slots and places*; `teams.1`, `teams.2`, `teams.4`, `teams.5`, `teams.15`, `plan.9`, `tests.12`).
+- [x] 3.1 `plan _run --chore` decides by `chore_refusal`, makes the place at its first code, refuses a merge while a commit lacks the trailer, prints the stage's prompt, and refuses a stage of the other kind; `crew chore run|wait|free` in bash take the chore's slot and run its stages; `Owed`, the deliverables, the slots, the tidy and `transcript.STAGE` know a chore; logic cases prove each decision, and `tests/t-journey-chores.sh` proves the wiring from `chore add` through code, a unit built on the chore's code, verify and merge to the dependent's rebase and the slot's freeing (design: *Running a chore's stages*, *A stage ends at its deliverable*, *Slots and places*; `teams.1`, `teams.2`, `teams.4`, `teams.5`, `teams.15`, `plan.9`, `tests.12`).
 
 ## 4. Chores everywhere work is counted
 

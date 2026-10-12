@@ -174,18 +174,34 @@ class TestStage:
         s = stages(kit(places={"bump": place(None)})).of("bump")
         assert (s["stage"], s["why"]) == ("unknown", "chore bump's place /kit/places/chore-bump tracks no bolt crew can read")
 
-    def test_a_chore_waits_for_each_after_to_merge_and_a_unit_after_a_chore_for_its_merge(self):
+    def test_a_dependent_starts_once_what_it_comes_after_has_something_committed_to_build_on_never_waiting_on_a_merge(self):
+        """plan.13, the user's ruling of 2026-10-12: a unit's change once its construct has finished, a chore's code
+        once its commits are in its place, for a unit or a chore that comes after either."""
         text = plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, ["a"], "chore"), ("b", KIT, TE, ["bump"])])
-        assert stages(kit(places={"bump": place(1)}), text).of("b")["stage"] == "waiting"
-        assert stages(kit(bolt_chores=["bump"]), text).of("b")["stage"] == "ready"
+        assert stages(kit(places={"bump": place(0)}), text).of("b")["stage"] == "waiting"
+        assert stages(kit(places={"bump": place(1)}), text).of("b")["stage"] == "ready"
         assert stages(kit(), text).of("bump")["stage"] == "waiting"
+        unit_place = {"path": "/kit/places/a", "head": "a" * 40, "head_at": "2026-10-12T10:00:00Z", "tasks": (0, 2), "planning": True,
+                      "open": [], "bolt": TE}
+        assert stages(dict(kit(), places={"a": unit_place}), text).of("bump")["stage"] == "ready"
 
-    @pytest.mark.parametrize("chore, deps, met", [
-        (True, [("unit", "verify")], False), (True, [("unit", "merged"), ("chore", "landed")], True),
-        (False, [("unit", "planned")], True), (False, [("chore", "verify")], False), (False, [("chore", "merged")], True),
-        (False, [("unit", "unknown")], None)])
-    def test_after_met(self, chore, deps, met):
-        assert plan.after_met(chore, deps) is met
+    def test_a_dependents_place_takes_each_unmerged_unit_or_chore_it_comes_after_and_its_start_records_the_heads(self):
+        text = plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore"), ("b", KIT, TE, ["a", "bump"]),
+                                             ("pin", KIT, TE, ["bump"], "chore")])
+        unit_place = {"path": "/kit/places/a", "head": "a" * 40, "head_at": "2026-10-12T10:00:00Z", "tasks": (0, 2), "planning": True,
+                      "open": [], "bolt": TE}
+        k = dict(kit(places={"bump": place(1)}), places={"a": unit_place})
+        st = stages(k, text)
+        assert plan.took_from(st, k, st.plan.unit("b")) == ["unit/a", "chore/bump"]
+        assert plan.took_from(st, k, st.plan.chore("pin")) == ["chore/bump"]
+        code = {"Act": "stage.start", "On": ["stage/pin/code", "chore/pin"], "Took": "bump@1111111", "At": "2026-10-12T10:00:00Z", "Id": "x"}
+        assert plan.took_heads("pin", [code]) == {"bump": "1111111"}
+
+    @pytest.mark.parametrize("deps, met", [
+        ([("unit", "construct")], False), ([("unit", "planned")], True), ([("unit", "merged"), ("chore", "landed")], True),
+        ([("chore", "code")], False), ([("chore", "verify")], True), ([("chore", "ready")], False), ([("unit", "unknown")], None)])
+    def test_after_met(self, deps, met):
+        assert plan.after_met(deps) is met
 
     def test_a_bolt_lands_once_every_unit_and_chore_has(self):
         p = plan.Plan(plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore")]))
@@ -200,8 +216,10 @@ class TestRun:
         ("code", "ready", {}, False, None),
         ("code", "verify", {}, False, None),
         ("verify", "verify", {}, False, None),
-        ("merge", "verify", {"a": "merged"}, True, None),
-        ("code", "waiting", {"a": "verify"}, False, f"chore bump comes after a, not yet merged into bolt/{TE}"),
+        ("merge", "verify", {"a": ("unit", "merged")}, True, None),
+        ("code", "ready", {"a": ("unit", "verify")}, False, None),
+        ("code", "waiting", {"a": ("unit", "construct")}, False, "chore bump is waiting: it comes after a, which has nothing committed to build on yet"),
+        ("merge", "verify", {"a": ("unit", "verify"), "pin": ("chore", "verify")}, True, f"chore bump merges after a, pin, not yet merged into bolt/{TE}"),
         ("verify", "code", {}, False, f"chore bump has nothing committed beyond bolt/{TE} yet: verify waits for its code"),
         ("verify", "ready", {}, False, "chore bump has not been coded yet: crew chore run bump code"),
         ("merge", "code", {}, False, f"chore bump has nothing committed beyond bolt/{TE} yet: it merges once its code is committed and verify has run"),
@@ -232,9 +250,11 @@ class TestRun:
         assert plan.untrailed(commits, "bump") == [("e4f5a6b", "chore: and its lock"), ("c7d8e9f", "chore: other")]
 
     def test_a_unit_waiting_on_a_chore_names_it(self):
-        assert plan.stage_refusal("b", TE, "construct", "waiting", None, {"bump": "verify", "a": "construct"}, ("user", None), "swb-1", [],
+        assert plan.stage_refusal("b", TE, "construct", "ready", None, {"bump": "verify", "a": "planned"}, ("user", None), "swb-1", [],
+                                  False, False, chores={"bump"}) is None
+        assert plan.stage_refusal("b", TE, "construct", "waiting", None, {"bump": "code", "a": "construct"}, ("user", None), "swb-1", [],
                                   False, False, chores={"bump"}) == (
-            f"unit b is waiting: it comes after a, whose change is not committed yet; and chore bump, not yet merged into bolt/{TE}")
+            "unit b is waiting: it comes after a, whose change is not committed yet; and chore bump, whose code has not delivered yet")
 
 
 class TestEnds:

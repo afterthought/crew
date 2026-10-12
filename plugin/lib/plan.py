@@ -965,14 +965,23 @@ def place_stage(pl, mark=None):
 CONSTRUCTED = ("planned", "code", "verify", "merged", "landed")
 
 
-def after_met(chore, deps):
-    """Whether a unit's or chore's After is met, from each one it names as (its kind, its stage): a chore waits on each,
-    unit or chore, to merge into the bolt or land (plan.11); a unit on each unit to finish construct (plan.13) and on
-    each chore to merge, since a chore has no construct and its code reaches the unit only from the bolt. None while
+# The stages at which a chore has something committed to build on: its code has delivered its commits (plan.11).
+CODED = ("verify", "merged", "landed")
+
+
+def built_on(kind, stage):
+    """Whether a unit or chore it comes after has something committed for the dependent to build on (plan.13): a unit
+    its change, once construct has finished; a chore its code, once its commits are in its place."""
+    return stage in (CODED if kind == "chore" else CONSTRUCTED)
+
+
+def after_met(deps):
+    """Whether a unit's or chore's After is met, from each one it names as (its kind, its stage): each has something
+    committed to build on (built_on), never waiting on a merge (plan.13), whichever kind the dependent is. None while
     one's stage is unknown (read.1)."""
     if any(s == "unknown" for _, s in deps):
         return None
-    return all(s in ("merged", "landed") if chore or k == "chore" else s in CONSTRUCTED for k, s in deps)
+    return all(built_on(k, s) for k, s in deps)
 
 
 def chore_stage(name, bolt, k, pl):
@@ -1047,7 +1056,7 @@ class Stages:
                     res.update(tasks=pl["tasks"], open=pl["open"])
                 res["stage"] = place_stage(pl, u.get("Amended"))
                 return res
-        met = after_met(is_chore(u), [(self.of(a)["kind"], self.of(a)["stage"]) for a in u.all("After")])
+        met = after_met([(self.of(a)["kind"], self.of(a)["stage"]) for a in u.all("After")])
         res["stage"] = "unknown" if met is None else "ready" if met else "waiting"
         return res
 
@@ -3478,23 +3487,26 @@ def in_bolt(fleet, t, unit):
 
 
 HEAD = r"""cd "$1" && git rev-parse HEAD"""
-# A dependent's place takes the head of each unmerged After unit, as it stands, while it holds nothing of its own beyond
-# the bolt and their work: printed as "<unit> <head>" for each it holds. A merge that conflicts is undone, the place put
-# back where it was, and printed as "conflict <unit> <paths...>", exit 3. Never a push, never a write to their branches.
+# A dependent's place takes the head of each unmerged unit or chore it comes after, each given by its branch (unit/<name>
+# or chore/<name>), as it stands, while it holds nothing of its own beyond the bolt and their work: printed as "<name>
+# <head>" for each it holds. A merge that conflicts is undone, the place put back where it was, and printed as "conflict
+# <name> <paths...>", exit 3. Each taking is a merge commit of its own, never a fast-forward, so the place's own work is
+# its first-parent line with no merges (a chore's, plan.11). Never a push, never a write to their branches.
 TAKE = r"""cd "$1" || exit 1
 unit=$2 bolt=$3; shift 3
 start=$(git rev-parse HEAD)
-refs=(); for a; do refs+=("refs/heads/unit/$a"); done
-[ -z "$(git rev-list -n1 HEAD --not "refs/heads/bolt/$bolt" "${refs[@]}")" ] || exit 0
-for a; do
-  if ! git merge-base --is-ancestor "unit/$a" HEAD; then
-    if ! git merge -q --no-edit -m "chore($unit): build on $a as it stands" "unit/$a" >/dev/null 2>&1; then
+refs=(); for b; do refs+=("refs/heads/$b"); done
+[ -z "$(git rev-list -n1 --no-merges HEAD --not "refs/heads/bolt/$bolt" "${refs[@]}")" ] || exit 0
+for b; do
+  a=${b#*/}
+  if ! git merge-base --is-ancestor "refs/heads/$b" HEAD; then
+    if ! git merge -q --no-ff --no-edit -m "chore($unit): build on $a as it stands" "refs/heads/$b" >/dev/null 2>&1; then
       paths=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
       git merge --abort >/dev/null 2>&1; git reset -q --keep "$start"
       echo "conflict $a $paths"; exit 3
     fi
   fi
-  echo "$a $(git rev-parse --short=7 "unit/$a")"
+  echo "$a $(git rev-parse --short=7 "refs/heads/$b")"
 done
 """
 
@@ -3612,18 +3624,26 @@ def not_declared(changed, mine, unit, entries):
     return [p for p in changed if p and p in mine and not p.startswith(own) and not any(matches(e, p) for e in entries)]
 
 
-def take(fleet, t, place, unit, bolt, deps):
-    """A dependent's place takes the head of each unmerged After unit with a branch, as it stands, while it holds
-    nothing of its own (TAKE): the heads it holds, as "<unit>@<head>" words for its construct's start. Refused, with the
-    place as it was, when two of them conflict."""
+def took_from(st_all, k, u):
+    """The branches a dependent's place takes, as TAKE takes them: of each unit or chore it comes after that has not
+    merged and has a place, unit/<name> or chore/<name> (plan.13)."""
+    places = lambda d: (k or {}).get("chore_places" if st_all.of(d)["kind"] == "chore" else "places", {})
+    return [f"{st_all.of(d)['kind']}/{d}" for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed") and places(d).get(d)]
+
+
+def take(fleet, t, place, unit, bolt, deps, kind="unit"):
+    """A dependent's place takes the head of each unmerged unit or chore it comes after with a place (deps, their
+    branches, took_from), as it stands, while it holds nothing of its own (TAKE): the heads it holds, as "<name>@<head>"
+    words for the start of its construct, or of a chore's code. Refused, with the place as it was, when two of them
+    conflict."""
     if not deps:
         return ""
     r = crew.on_machine(fleet, t["machine"], ["bash", "-c", TAKE, "crew", place, unit, bolt, *deps])
     READ.drop_kit(t["machine"], t["kit"]["main"])
     if r.returncode == 3:
         _, other, *paths = r.stdout.strip().splitlines()[-1].split()
-        fail(f"unit {unit}'s place can't take {other}'s work with the rest it comes after: they conflict on {', '.join(paths)}; "
-             "order the units it comes after with crew unit after, then run construct again")
+        fail(f"{kind} {unit}'s place can't take {other}'s work with the rest it comes after: they conflict on {', '.join(paths)}; "
+             f"order what it comes after with crew {kind} after, then run " + ("code" if kind == "chore" else "construct") + " again")
     r.returncode == 0 or fail(f"on {t['machine']}: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
     return " ".join(f"{a}@{h}" for a, h in (l.split() for l in r.stdout.strip().splitlines() if l))
 
@@ -3674,8 +3694,7 @@ def run_check(fleet, a):
         case = proposal(Plan(show(repo, tip, "proposals.rec") or PROPOSALS), mark.split("/", 1)[1], label).get("Case") \
             if amended(mark) and mark != "intent" else None
         make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
-        took = take(fleet, t, place, a.unit, bolt, [d for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed")
-                                                   and (st_all.kit(plan.bolt(bolt))[0] or {"places": {}})["places"].get(d)])
+        took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], u))
         if marking:
             head = s.get("head") or host_run(fleet, t["machine"], HEAD, place)
             if head != mark:
@@ -3717,46 +3736,50 @@ def run_kind_refusal(kind, chore, name, stage):
 
 def chore_check(fleet, a, label, plan, c):
     """Whether a chore's stage may start (chore_refusal), its place (made at its first code, on chore/<name> from the
-    bolt, tracking it), and the prompt the stage is sent (chore_prompt), as facts for the stage's start, as run_check
-    gives a unit's. A merge is refused while a commit beyond the bolt lacks the chore's trailer, which is
-    how its merge and its landing are read (plan.11)."""
+    bolt, tracking it, and taking the head of each unmerged unit or chore it comes after, as a unit's construct's place
+    does, TOOK, plan.13), and the prompt the stage is sent (chore_prompt), as facts for the stage's start, as run_check
+    gives a unit's. A merge is refused while a commit of its own lacks the chore's trailer, which is how its merge and
+    its landing are read (plan.11)."""
     bolt = c.get("Bolt") or fail(f"chore {a.unit} is queued: move it into a bolt first")
     t = fleet["teams"][plan.bolt(bolt).get("Team")]
     st_all = Stages(fleet, plan, survey(fleet, [(t["name"], bolt)]))
     s = st_all.of(a.unit)
     st, place = s["stage"], f"{t['kit']['dir']}/places/chore-{a.unit}"
     st != "unknown" or fail(f"cannot tell chore {a.unit}'s stage: {s.get('why')}")
-    after = {d: st_all.of(d)["stage"] for d in c.all("After")}
+    after = {d: (st_all.of(d)["kind"], st_all.of(d)["stage"]) for d in c.all("After")}
     why = chore_refusal(a.unit, bolt, a.stage, st, after, a.stage == "merge" and st == "verify" and verified(label, a.unit))
     not why or fail(why)
-    merge = ""
+    merge = took = ""
     if a.stage == "code":
         make_place(fleet, t, place, f"chore/{a.unit}", f"bolt/{bolt}", track=True)
+        took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], c), "chore")
     elif a.stage == "merge":
         loose = untrailed(chore_commits(fleet, t, bolt, a.unit), a.unit)
-        not loose or fail(f"chore {a.unit} merges only once every commit beyond bolt/{bolt} carries `Chore: {a.unit}`, and "
+        not loose or fail(f"chore {a.unit} merges only once every commit of its own beyond bolt/{bolt} carries `Chore: {a.unit}`, and "
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
                           + f" not: run its code again to add the trailer (crew chore run {a.unit} code)")
         merge = merge_command(t, st_all.kit(plan.bolt(bolt))[0], bolt)
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENDS=ends_row(a.unit, a.stage, st, None, None), ENTRY="",
-                FORECAST="", TOOK="")
+                FORECAST="", TOOK=took)
 
 
 def chore_refusal(name, bolt, stage, st, after, delivered_verify):
-    """Why a chore's stage may not start, or None when it may (plan.11, teams.5): stage is the one asked, st the
-    chore's stage read from its kit, after each After unit's or chore's stage, delivered_verify whether a verify has
-    delivered since its last code began. Every stage waits for each After to merge; none runs on merged or landed
-    work; code runs on a ready, coding or verified chore; verify once its place holds a commit beyond the bolt; merge
-    once verify has delivered since its last code."""
+    """Why a chore's stage may not start, or None when it may (plan.11, plan.13, teams.5): stage is the one asked, st
+    the chore's stage read from its kit, after each After unit's or chore's (kind, stage), delivered_verify whether a
+    verify has delivered since its last code began. None runs on merged or landed work; code waits until each it comes
+    after has something committed to build on, never a merge (built_on), and runs on a ready, coding or verified chore;
+    verify once its place holds a commit of its own; merge once verify has delivered since its last code and each it
+    comes after has merged."""
     if stage not in ("code", "verify", "merge"):
         return f"a chore has no {stage}: its stages are code, verify and merge (crew chore run {name} code)"
     if st in ("merged", "landed"):
         return (f"chore {name} has " + ("merged into its bolt" if st == "merged" else "landed on main")
                 + ": a defect in it is a fix (crew fix), and new maintenance a new chore")
-    ahead = [d for d, x in after.items() if x not in ("merged", "landed")]
-    if ahead:
-        return f"chore {name} comes after " + ", ".join(ahead) + f", not yet merged into bolt/{bolt}"
+    if st == "waiting":
+        unbuilt = [d for d, (k, x) in after.items() if not built_on(k, x)]
+        return (f"chore {name} is waiting: it comes after " + ", ".join(unbuilt) + (", which has" if len(unbuilt) == 1 else ", which have")
+                + " nothing committed to build on yet")
     if stage == "code":
         return None
     if st == "ready":
@@ -3766,7 +3789,8 @@ def chore_refusal(name, bolt, stage, st, after, delivered_verify):
                 + ("verify waits for its code" if stage == "verify" else "it merges once its code is committed and verify has run"))
     if stage == "merge" and not delivered_verify:
         return f"chore {name} merges once verify has run on its code since it was last coded: crew chore run {name} verify"
-    return None
+    ahead = [d for d, (_, x) in after.items() if stage == "merge" and x not in ("merged", "landed")]
+    return f"chore {name} merges after " + ", ".join(ahead) + f", not yet merged into bolt/{bolt}" if ahead else None
 
 
 def chore_prompt(stage, name, words_of, words="", bolt="", merge=""):
@@ -3781,13 +3805,15 @@ def chore_prompt(stage, name, words_of, words="", bolt="", merge=""):
     return f"Merge {name} into bolt/{bolt}: {merge}{w}"
 
 
-# How a chore's commits beyond its bolt are read: each commit ended by NUL and its fields split by SOH, which no subject or
-# name holds: its short sha, its subject, and the names its `Chore:` trailers give, joined by commas, as git parses them.
-CHORE_LOG = ("log", "--reverse", "-z", "--abbrev=7", "--format=%h%x01%s%x01%(trailers:key=Chore,valueonly,separator=%x2c)")
+# How a chore's own commits beyond its bolt are read: its first-parent line with no merges, so the work it took of what it
+# comes after, merged in by TAKE, is not its own; each commit ended by NUL and its fields split by SOH, which no subject
+# or name holds: its short sha, its subject, and the names its `Chore:` trailers give, joined by commas, as git parses them.
+CHORE_LOG = ("log", "--reverse", "--first-parent", "--no-merges", "-z", "--abbrev=7",
+             "--format=%h%x01%s%x01%(trailers:key=Chore,valueonly,separator=%x2c)")
 
 
 def chore_commits(fleet, t, bolt, chore):
-    """Each commit on chore/<chore> beyond its bolt, oldest first, read on the team's host (chore_log)."""
+    """Each commit of the chore's own on chore/<chore> beyond its bolt, oldest first, read on the team's host (chore_log)."""
     return chore_log(kit_git(fleet, t, t["kit"]["main"], *CHORE_LOG, f"refs/heads/bolt/{bolt}..refs/heads/chore/{chore}")[1])
 
 
@@ -3855,15 +3881,15 @@ def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, 
     units' construct, is never run on merged or landed work, and on a committed or amended unit is run again only by
     its conductor or the user, unless the user's approved amendment asked for it; every other stage waits while the
     mark stands; code needs the change committed; verify every task ticked; settle a delivered verify and what reached
-    the unit; merge a verified unit whose After units have merged. chores names the After that are chores, which a
-    unit waits on until they have merged (plan.11)."""
+    the unit; merge a verified unit whose After units have merged. chores names the After that are chores, whose code
+    a unit's construct waits on as it waits on a unit's change (plan.13)."""
     if stage == "construct":
         if st == "waiting":
-            deps = [d for d, x in after.items() if d not in chores and x not in CONSTRUCTED]
-            unmerged = [d for d, x in after.items() if d in chores and x not in ("merged", "landed")]
+            deps = [d for d, x in after.items() if d not in chores and not built_on("unit", x)]
+            uncoded = [d for d, x in after.items() if d in chores and not built_on("chore", x)]
             return (f"unit {unit} is waiting: it comes after "
                     + "; and ".join(([", ".join(deps) + ", whose change is not committed yet"] if deps else [])
-                                    + ([f"chore {', '.join(unmerged)}, not yet merged into bolt/{bolt}"] if unmerged else [])))
+                                    + ([f"chore {', '.join(uncoded)}, whose code has not delivered yet"] if uncoded else [])))
         if st in ("merged", "landed"):
             return (f"unit {unit} has " + ("merged into its bolt" if st == "merged" else "landed on main")
                     + ": a defect in it is a fix (crew fix), and a new need is a new unit")
@@ -4596,9 +4622,10 @@ def deliverable(fleet, t, o, place=None):
 
 def deliverable_facts(fleet, t, o, place=None):
     """What delivered judges an owed stage by, read on the team's host, only what its stage asks: the newest proof or
-    report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it and its head; else the
-    branch's head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since
-    it began, whether its planning is complete."""
+    report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it and its head; for a
+    chore's code, its own newest commit and when it was committed; else the branch's head and when it was committed, a
+    code stage's ticks at that head, and, for a construct with a commit since it began, whether its planning is
+    complete."""
     main, f = t["kit"]["main"], {}
     if o.start is None:
         return f
@@ -4613,8 +4640,16 @@ def deliverable_facts(fleet, t, o, place=None):
                           o.name in gather.changes(main, f"bolt/{f['bolt']}"))
             f["bolt_head"] = short_head(main, f"refs/heads/bolt/{f['bolt']}")
         return f
+    if o.chore:  # its own newest commit: what its place took of what it comes after is not its code (plan.13)
+        bolt = bolt_of_unit(fleet, t, main, o.name, "chore")
+        head, at = gather.own_head(main, o.branch(), bolt) if bolt else (None, None)
+        try:
+            f["head"], f["at"] = head, datetime.datetime.fromisoformat(at).astimezone(datetime.timezone.utc) if at else None
+        except ValueError:
+            f["head"], f["at"] = head, None
+        return f
     f["head"], f["at"] = short_head(main, f"refs/heads/{o.branch()}"), committed_at(main, f"refs/heads/{o.branch()}")
-    if o.fix or o.chore or o.stage == "settle":
+    if o.fix or o.stage == "settle":
         return f
     if o.stage == "code":
         f["ticks"] = ticks(main, o.branch(), o.name)
@@ -4930,9 +4965,12 @@ echo "conflict $paths"; exit 3
 """
 
 
-def landed_at(main, bolt, unit):
-    """The commit on a bolt that brought a unit's change there, the first that holds its folder; None when it holds none."""
-    out = gather.run(["git", "log", "--format=%H", "--reverse", f"refs/heads/bolt/{bolt}", "--", f"openspec/changes/{unit}"], main)
+def landed_at(main, bolt, unit, kind="unit"):
+    """The commit on a bolt that brought a unit's change there, the first that holds its folder, or a chore's work, the
+    first carrying its trailer (plan.11); None when it holds none."""
+    where = ([f"--grep=^Chore: {unit}$", f"refs/heads/bolt/{bolt}"] if kind == "chore" else
+             [f"refs/heads/bolt/{bolt}", "--", f"openspec/changes/{unit}"])
+    out = gather.run(["git", "log", "--format=%H", "--reverse", *where], main)
     return (out or "").split("\n")[0].strip() or None
 
 
@@ -4950,25 +4988,27 @@ def clean(path):
 
 
 def rebase_dependents(fleet, t, plan, st, say):
-    """Each unmerged unit of the team's bolt with a place, one of whose After units has merged since its place last
-    met the bolt, is rebased onto the bolt, only while its agent is not working and its place is clean (teams.2, plan.9):
-    the bolt's commits drop out of it, and so does each merged After unit's work as its place took it (rebase_leaves_out,
-    from the run record's Took). A rebase that conflicts is aborted, the place as it was, and returned to reach the
-    dependent as a conflict does, with what it left out: [(bolt, unit, paths, <after unit>@<head> words)]. say(text)
-    reports what was done or left."""
+    """Each unmerged unit or chore of the team's bolt with a place, one of whose After units or chores has merged since
+    its place last met the bolt, is rebased onto the bolt, only while its agent is not working and its place is clean
+    (teams.2, plan.9): the bolt's commits drop out of it, and so does each merged After's work as its place took it
+    (rebase_leaves_out, from the run record's Took). A unit's rebase that conflicts is aborted, the place as it was, and
+    returned to reach the dependent as a conflict does, with what it left out: [(bolt, unit, paths, <after>@<head>
+    words)]; a chore's is said, since no forecast reaches a chore, and its merge meets it. say(text) reports what was
+    done or left."""
     main, out, entries = t["kit"]["main"], [], None
     owed = owed_by_unit(t)
     for b in held_by(plan, t["name"]):
         k, _ = st.kit(b)
         if not k:
             continue
-        for u in plan.units_of(b.name()):
-            pl = k["places"].get(u.name())
+        for u in plan.work_of(b.name()):
+            kind = kind_of(u)
+            pl = (k.get("chore_places", {}) if kind == "chore" else k["places"]).get(u.name())
             if not pl or st.of(u.name())["stage"] in ("merged", "landed", "unknown"):
                 continue
             merged = [a for a in u.all("After") if st.of(a)["stage"] in ("merged", "landed")]
-            due = [a for a in merged if (lambda c: c and subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", c, f"refs/heads/unit/{u.name()}"],
-                                                                       env=gitenv()).returncode != 0)(landed_at(main, b.name(), a))]
+            due = [a for a in merged if (lambda c: c and subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", c, f"refs/heads/{kind}/{u.name()}"],
+                                                                       env=gitenv()).returncode != 0)(landed_at(main, b.name(), a, st.of(a)["kind"]))]
             if not due:
                 continue
             o = owed.get(u.name())
@@ -4977,21 +5017,24 @@ def rebase_dependents(fleet, t, plan, st, say):
                 say(waits)
                 continue
             entries = local_entries(t["label"]) if entries is None else entries
-            branch = f"refs/heads/unit/{u.name()}"
+            branch = f"refs/heads/{kind}/{u.name()}"
             holds = lambda head: subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", head, branch], env=gitenv(),
                                                 stderr=subprocess.DEVNULL).returncode == 0
             left_out = rebase_leaves_out(due, took_heads(u.name(), entries), holds)
             r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name(), *(w.split("@", 1)[1] for w in left_out)],
                                capture_output=True, text=True, env=gitenv())
             READ.drop_kit(t["machine"], main)
-            if r.returncode == 3:
+            if r.returncode == 3 and kind == "chore":
+                say(f"rebasing chore {u.name()} onto bolt/{b.name()} conflicts on {', '.join(r.stdout.strip().split()[1:])}: its place "
+                    "is as it was, and its merge meets the conflict")
+            elif r.returncode == 3:
                 out.append((b.name(), u.name(), r.stdout.strip().split()[1:], left_out))
                 say(f"rebasing {u.name()} onto bolt/{b.name()} conflicts: its place is as it was, and it is told")
             elif r.returncode:
                 say(f"{u.name()} was not rebased onto bolt/{b.name()}: " + ((r.stderr or r.stdout).strip() or f"exit {r.returncode}"))
             elif r.stdout.strip() == "rebased":
-                record.emit(t["label"], "unit.rebase", [f"unit/{u.name()}", f"bolt/{b.name()}"], frm=[f"unit/{a}" for a in due],
-                            why=f"unit({u.name()}): rebase onto bolt/{b.name()}, now that {', '.join(due)} merged")
+                record.emit(t["label"], f"{kind}.rebase", [f"{kind}/{u.name()}", f"bolt/{b.name()}"], frm=[f"{st.of(a)['kind']}/{a}" for a in due],
+                            why=f"{kind}({u.name()}): rebase onto bolt/{b.name()}, now that {', '.join(due)} merged")
                 say(f"{u.name()} is rebased onto bolt/{b.name()}, now that {', '.join(due)} merged")
     return out
 
@@ -5068,10 +5111,12 @@ def construct_starts(unit, entries):
 
 
 def took_heads(unit, entries):
-    """The head of each unit it comes after that a unit's construct took into its place, from its construct starts'
-    Took (<unit>@<sha7> words), the latest taking of each: {after unit: head}. A start recorded before Took existed,
-    or one whose place already held work of its own, took none."""
-    return dict(w.split("@", 1) for e in construct_starts(unit, entries) for w in (e.get("Took") or "").split() if "@" in w)
+    """The head of each unit or chore it comes after that a unit's construct, or a chore's code, took into its place,
+    from those starts' Took (<name>@<sha7> words), the latest taking of each: {name: head}. A start recorded before
+    Took existed, or one whose place already held work of its own, took none."""
+    starts = [e for e in entries if e.get("Act") == "stage.start" and not e.get("Refused")
+              and any(o in e["On"] for o in (f"stage/{unit}/construct", f"stage/{unit}/code"))]
+    return dict(w.split("@", 1) for e in starts for w in (e.get("Took") or "").split() if "@" in w)
 
 
 def reach(fleet, t):

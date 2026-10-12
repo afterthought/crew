@@ -12,7 +12,7 @@ chores its history holds (each `Chore:` trailer's name), and for each local bolt
 whether bolt/<bolt> exists, the changes and chores it holds, its worktree, its head and the head's time; each place under
 <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
 paths its proposal declares it touches; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
-head, head's time and how many commits it holds beyond the bolt; each fix branched from a bolt;
+head, head's time and how many commits of its own it holds beyond the bolt; each fix branched from a bolt;
 each unit's newest verify report in the reports folders, with its path and time; and whether the kit merges through
 sluice, by the flag in its main checkout's .config/crew.toml. With sites, each worktree's devurl names and the host's
 portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
@@ -58,9 +58,10 @@ def chores(main, ref):
 
 
 def chore_place(path, bolt):
-    """A chore's place: its head and the head's time, and how many commits it holds beyond its bolt (ahead), None when
-    it tracks no bolt or git can't count them."""
-    ahead = (run(["git", "rev-list", "--count", f"refs/heads/bolt/{bolt}..HEAD"], path) or "").strip() if bolt else ""
+    """A chore's place: its head and the head's time, and how many commits of its own it holds beyond its bolt (ahead):
+    its first-parent line with no merges, so the work it took of what it comes after is not counted; None when it
+    tracks no bolt or git can't count them."""
+    ahead = (run(["git", "rev-list", "--count", "--first-parent", "--no-merges", f"refs/heads/bolt/{bolt}..HEAD"], path) or "").strip() if bolt else ""
     return {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None, "head_at": head_at(path, "HEAD"),
             "ahead": int(ahead) if ahead.isdigit() else None}
 
@@ -120,6 +121,14 @@ def sluice(main):
     if not isinstance(v, bool):
         return None, f"{path}: 'sluice' is true or false, not {json.dumps(v)}"
     return v, None
+
+
+def own_head(cwd, branch, bolt):
+    """The newest commit of a chore's own on its branch beyond its bolt, its first-parent line with no merges, as
+    (short sha, committer time in ISO 8601); (None, None) when it has none."""
+    out = (run(["git", "log", "-1", "--first-parent", "--no-merges", "--format=%h %cI", f"refs/heads/bolt/{bolt}..refs/heads/{branch}"], cwd)
+           or "").split()
+    return (out[0], out[1]) if len(out) == 2 else (None, None)
 
 
 def head_at(cwd, ref):

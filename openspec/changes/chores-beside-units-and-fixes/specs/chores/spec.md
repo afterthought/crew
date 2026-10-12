@@ -50,7 +50,7 @@ The planner SHALL write a chore only by proposal, a conductor only `chore order`
 - **THEN** the chore is queued in crew's queue, with no proposal
 
 ### Requirement: A chore's stage is read from its kit
-crew SHALL read a chore's stage from its kit on its team's host, nothing recorded by hand; the first rule that holds is the stage: `queued` with no bolt; `unknown` when its host does not answer or its place tracks no bolt crew can read; `landed` when main's history holds a commit carrying `Chore: <name>`; `merged` when `bolt/<bolt>` holds one; `verify` when its place holds a commit beyond the bolt; `code` when its place holds none; `ready` or `waiting` with no place.
+crew SHALL read a chore's stage from its kit on its team's host, nothing recorded by hand; the first rule that holds is the stage: `queued` with no bolt; `unknown` when its host does not answer or its place tracks no bolt crew can read; `landed` when main's history holds a commit carrying `Chore: <name>`; `merged` when `bolt/<bolt>` holds one; `verify` when its place holds a commit of its own beyond the bolt; `code` when its place holds none; `ready` or `waiting` with no place.
 
 #### Scenario: Coded and not yet verified
 - **WHEN** a chore's place holds two commits beyond its bolt
@@ -60,12 +60,24 @@ crew SHALL read a chore's stage from its kit on its team's host, nothing recorde
 - **WHEN** the bolt holds the chore's commits, each carrying `Chore: bump-biome`, and its place is gone
 - **THEN** its stage is `merged`
 
-### Requirement: After between a unit and a chore is met at the chore's merge
-A chore SHALL be `ready` only once each `After`, unit or chore, has merged into the bolt or landed, and `waiting` until then. A unit whose `After` names a chore SHALL be `waiting` until that chore has merged.
+#### Scenario: What its place took is not its own
+- **WHEN** a chore's place has taken a unit's head and holds no commit of the chore's own
+- **THEN** its stage is `code`
+
+### Requirement: After means for a chore what it means for a unit
+A unit or chore SHALL be `ready` once each `After` has something committed to build on, a unit's change once its construct has finished or a chore's code once its commits are in its place, and `waiting` until then, never waiting on a merge; its new place SHALL take the head of each unmerged one as it stands, recorded on its start as `Took`, and it SHALL merge only after each has merged. When one merges, the dependent's place SHALL be rebased onto the bolt.
 
 #### Scenario: A unit after a chore
-- **WHEN** unit `b` has `After: bump-biome` and the chore is in verify
-- **THEN** `b` is `waiting`, and its construct is refused until the chore has merged
+- **WHEN** unit `b` has `After: bump-biome`, and the chore's code has not yet committed
+- **THEN** `b` is `waiting`, and its construct is refused naming the chore's code
+
+#### Scenario: The chore's code has delivered
+- **WHEN** the chore's code has committed in its place and the conductor runs `crew unit run b construct`
+- **THEN** `b`'s construct starts, its place holds the chore's work, and its start records `Took: bump-biome@<head>`
+
+#### Scenario: The chore merges
+- **WHEN** the chore merges into the bolt
+- **THEN** `b`'s place is rebased onto the bolt, leaving out the chore's work as it took it
 
 ### Requirement: A chore is built by code, verify and merge
 `crew chore run <chore> code|verify|merge ["<words>"]` SHALL start the stage in a slot of the team holding the chore's bolt, a fresh agent at that stage's effort, on `chore/<name>` branched from the bolt in `<kit>/places/chore-<name>`, made at its first code. Code SHALL be sent `Chore <name>: <its words>`, verify `Verify chore <name>: <its words>`, merge the unit's merge prompt, each followed by any words given.
@@ -75,7 +87,7 @@ A chore SHALL be `ready` only once each `After`, unit or chore, has merged into 
 - **THEN** a free slot holds it, its place is made from the bolt on `chore/bump-biome`, and the fresh agent is sent `Chore bump-biome: Biome follows the shell's version`
 
 ### Requirement: A chore's stage starts only when it may
-crew SHALL refuse any stage of a chore while an `After` has not merged, any stage of a merged or landed chore, verify before its place holds a commit beyond the bolt, and merge before a verify has delivered since its last code began or while a commit beyond the bolt lacks the `Chore: <name>` trailer, naming that commit. A chore has no construct and no settle: `crew unit run` naming a chore SHALL be refused, naming its kind.
+crew SHALL refuse a chore's code while an `After` has nothing committed to build on, any stage of a merged or landed chore, verify before its place holds a commit of its own beyond the bolt, and merge before a verify has delivered since its last code began, while a commit of its own lacks the `Chore: <name>` trailer, naming that commit, or while an `After` has not merged. A chore has no construct and no settle: `crew unit run` naming a chore SHALL be refused, naming its kind.
 
 #### Scenario: Construct on a chore
 - **WHEN** someone runs `crew unit run bump-biome construct`

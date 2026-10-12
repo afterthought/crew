@@ -47,9 +47,12 @@
 #                                      start a chore's stage in its slot, a fresh agent at that stage's effort, in
 #                                      places/chore-<chore> on chore/<chore> from the bolt: code does the chore's words,
 #                                      each commit carrying its Chore: trailer; verify checks the commits against them;
-#                                      merge merges it into the bolt as a unit's merge does. Every stage waits for what it
-#                                      comes after to merge; verify needs a commit; merge needs verify run since its code
-#                                      and the trailer on every commit. A chore has no construct and no review
+#                                      merge merges it into the bolt as a unit's merge does. Code starts once what it
+#                                      comes after has something committed to build on, its place taking their heads;
+#                                      verify needs a commit of its own; merge needs verify run since its code, the
+#                                      trailer on every commit of its own, and what it comes after merged. A chore has no
+#                                      construct and no review; a unit after a chore is constructed once its code has
+#                                      delivered
 #   crew chore wait|free <chore> ...   as a unit's wait and free
 #   crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]
 #                                      first forecast conflicts with git merge-tree, telling each later unit once,

@@ -10,7 +10,7 @@ decision-makers:
 
 # Chores beside units and fixes
 
-Deciders: the user, by the question put to swancloud-design through swancloud-planner; swancloud-design.
+Deciders: the user, by the question put to swancloud-design through swancloud-planner; swancloud-design. Amended 2026-10-12 on the user's ruling, relayed by the main session to the chores workstream that built it (`chores-beside-units-and-fixes`): how the plan marks a chore, how its stage is read, and what `After` means for it.
 Sources: swancloud's `openspec/explorations/rollout/plan.md` (step 2.3); Flywheel Next's glossary and requirements 59–63, 91 and 123 (`agentplot/blueprints:design/flywheel-next/requirements.md`); crew's `openspec/specs/bolt-teams/spec.md` and `bolt-plan/spec.md`; the briefs `conductor.md`, `coder.md`, `verify.md`, `planner.md`.
 
 ## Context and problem statement
@@ -69,7 +69,7 @@ The conductor adds none: what breaks on its bolt is a fix, and what its bolt nee
 
 A chore is built in its bolt, on `chore/<name>` branched from the bolt, in `<kit>/places/chore-<name>`, in a free slot of the team, three stages, each a fresh agent the conductor starts with `crew chore run <chore> code|verify|merge`:
 
-- **code**: the coder, in the chore's worktree, told `Chore: <the chore's words>`. It does exactly what the words say, in the kit's conventions, commits as `chore:` with a `Chore: <name>` trailer on each commit, and touches nothing under `openspec/`, with one exception: the archive of a change whose every task is ticked is done with openspec's own archive command, and that is the one chore that touches `openspec/`. It stops and says so if the words need a decision, or an archive's change has an open task.
+- **code**: the coder, in the chore's worktree, told `Chore <name>: <the chore's words>`. It does exactly what the words say, in the kit's conventions, commits as `chore:` with a `Chore: <name>` trailer on each commit, and touches nothing under `openspec/`, with one exception: the archive of a change whose every task is ticked is done with openspec's own archive command, and that is the one chore that touches `openspec/`. It stops and says so if the words need a decision, or an archive's change has an open task.
 - **verify**: the verifier, in the chore's worktree, given the chore's words. It changes nothing. It checks that every commit on the branch serves the words and nothing else changed; that the tests of what changed pass; that `openspec/` is untouched, or touched only by an archive. It writes its report to a file as a unit's verify does, and the conductor decides with the user what goes back to code, with the findings, as for a unit.
 - **merge**: as a unit's, into the bolt with the kit's merge hooks (`wt merge bolt/<bolt> --no-squash --no-remove`). The bolt's verification runs after it as after any merge; red is a fix. The chore's slot is freed and its place removed the next time crew reads the team.
 
@@ -79,7 +79,7 @@ A chore lands with its bolt. There is no chore on main outside a bolt: main chan
 
 ### How it shows in the plan
 
-`plan.rec` holds a third record beside Bolt and Unit: **Chore**, with the Unit's fields and no others: `Name`, `Repo`, `Bolt` (absent when queued), `Intent` (its words), `Source`, `After`. Chores sit in the same file in build order with the units; `After` may name units and chores of the same bolt either way round; a unit may wait on a chore and a chore on a unit. A name is taken once in a kit, by a unit or a chore.
+A chore is a record of the plan's Unit set marked `Kind: chore`, a field the plan's schema allows, with the unit's other fields and no others: `Unit` (its name), `Repo`, `Bolt` (absent when queued), `Intent` (its words), `Source`, `After`; never `Amended`. Chores sit in the same file in build order with the units; `After` may name units and chores of the same bolt either way round; a unit may wait on a chore and a chore on a unit. A name is taken once in a kit, by a unit or a chore. (Amended 2026-10-12 on the user's ruling: in recutils a record belongs to the record set whose descriptor is above it, so the records of two sets never interleave, and a record set of its own could not sit in build order with the units, which the plan's order and `After` across kinds rest on. In every command, view, brief and spec a chore is called a chore, and "a unit is one OpenSpec change" stays true of every unit.)
 
 The commands mirror the unit's, with the same flags and the same refusals: `crew chore add|move|order|after|drop`, `crew chore run <chore> code|verify|merge`. There is no `chore split` and no amendment: a chore is small, and since it has no review there is nothing to return to; its words change by a proposal that drops it and adds it again, and a chore in flight that is dropped is freed as a dropped unit is. The direct-write table is the unit's: the planner by proposal, the conductor `chore order` and `chore after` within its bolt, the design agent `chore add --repo`, the user everything.
 
@@ -90,11 +90,11 @@ A chore's stage is read with nothing kept by hand:
 | stage | read from |
 |---|---|
 | `queued`, `waiting`, `ready` | the plan, as a unit's |
-| `code`, `verify` | the team's state on its host: the stage its slot last ran, as a fix's shows today |
+| `code`, `verify` | its place, `<kit>/places/chore-<name>` on `chore/<name>`: `code` while it holds no commit of the chore's own beyond the bolt, `verify` once it holds one, read from the kit as `state.2` has every stage (amended 2026-10-12) |
 | `merged` | the bolt's history holds commits carrying its `Chore:` trailer |
 | `landed` | main's history does |
 
-crew refuses verify while the code agent is working, merge before verify has run, any stage of a chore whose `After` has not merged, and a chore by a name the kit already has.
+`After` means for a chore what it means for a unit (record 0011, `plan.13`): the dependent builds on the other's work, and starts once there is something committed to build on, never waiting on a merge: for a unit that is its construct's change, for a chore its code. A dependent of a chore, unit or chore, starts once the chore's code stage has delivered its commits, from the chore's head, as its start's `Took` records it, and merges only after the chore has merged. (Amended 2026-10-12 on the user's ruling: a chore does not differ from any other unit here.) crew refuses code while what a chore comes after has nothing committed to build on, verify before its place holds a commit of its own, merge before verify has run since its last code, while a commit of its own lacks its trailer or while what it comes after has not merged, and a chore by a name the kit already has.
 
 ### How it shows in the run record
 
