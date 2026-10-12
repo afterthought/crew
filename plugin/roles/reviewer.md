@@ -16,15 +16,14 @@ Read each change whole at the commit the prompt names, not as its branch stands 
 
 ## The summary
 
-Write the file the prompt names, once, whole, with one section per unit, in the prompt's order, headed by the unit's name and its team. Each section says, in the change's own words where it can:
+Write the file the prompt names, once, whole, with one section per unit, in the prompt's order, headed by the unit's name and its team. Each section opens with a paragraph of a few sentences saying what the change does and what the user would most care about in it, drawn from its Why and What Changes: the planner puts that paragraph on the batch's card as you wrote it, so it stands on its own. The rest of the section follows, in the change's own words where it can:
 
-- **What it does**: the change's Why, and the lead sentence of each of its What Changes items.
 - **The decisions it took**: each decision of its design that a reader would weigh, with what it rests on.
 - **Its risks**: what its design names as risks or trade-offs, and any you see in reading it.
-- **Its Touches**: the paths it declares, as its proposal lists them.
+- **Its Touches**: what the change edits, named in words, such as "the card hook, the planner's brief and their tests", never as paths.
 - **What the user would likely care about**: anything that changes what the user sees or does, anything that needs the user's word, and anything the change leaves open.
 
-Keep each section to what the user needs to decide whether the change needs notes; the user opens the whole change from the card when they want it. Name a unit, a design page or a rule by its name, never by a path. Write nothing but this file: the planner posts the batch's cards from it.
+Write it as paragraphs and plain lists that wrap on a phone, with no code block and no table. Keep each section to what the user needs to decide whether the change needs notes; the user opens the whole change from the batch's reading session when they want it. Name a unit, a design page or a rule by its name, never by a path. Write nothing but this file: the planner posts the batch's one card from it.
 
 When you cannot write it, a change you cannot read or a commit that is not there, say so in the file's section for that unit, and write the rest.
 
