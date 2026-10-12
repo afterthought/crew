@@ -232,3 +232,22 @@ def test_a_closed_proposal_is_not_approved_and_its_reason_is_not_recorded():
     assert plan.closed_refusal(p, 1) is None
     plan.close(p, "dropped", TODAY, "Dropped ZQXF.")
     assert plan.closed_refusal(p, 1) == ("proposal 1 is dropped: Dropped ZQXF.", "proposal 1 is dropped")
+
+
+class TestSignalOnThePage:
+    SIG = "2026-10-12-chuck-mac-studio-abcd1234/01-deploys-are-dry-run"
+
+    def page(self, signal_of, alone=False):
+        dos = [f'unit add deploys-dry-run-first "A deploy is dry-run before it runs." --repo switchboard-kit --signal {self.SIG}']
+        p = plan.proposal(proposals_with(("The user asked for it.", dos)), 1, "wldn")
+        return plan.page(plan.describe(FLEET, "wldn", write().plan, p, alone=alone, signal_of=signal_of), "wldn")
+
+    def test_a_unit_from_a_signal_shows_its_assertion_and_its_excerpt_with_the_excerpts_grade(self):
+        text = f'---\nsignal: {self.SIG}\nkind: ask\n---\n\nDeploys should be dry-run first.\n\n> "Deploys should be dry-run first." — 14:00:00Z\n'
+        out = self.page(lambda sig: (*plan.asserted(text), "own"))
+        assert f'From: signals/{self.SIG}: "Deploys should be dry-run first."' in out
+        assert 'Excerpt (own): > "Deploys should be dry-run first." — 14:00:00Z' in out
+
+    def test_a_signal_crew_cannot_read_is_named_alone_and_a_card_reads_none(self):
+        assert f"From: signals/{self.SIG}\n" in self.page(lambda sig: (None, None, None)) + "\n"
+        assert "From: signals/" not in self.page(lambda sig: pytest.fail("a card reads no signal"), alone=True)

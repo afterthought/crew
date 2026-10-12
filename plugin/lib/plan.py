@@ -2242,11 +2242,15 @@ def signal_text(fleet, label, sig):
     if not hit:
         return None, None, None
     _, repo, tip, text = hit
+    return (*asserted(text), field(show(repo, tip, capture_of(sig)) or "", "excerpt"))
+
+
+def asserted(text):
+    """A signal's assertion and its quoted excerpt, the first paragraph of its body that is not a quote and the first
+    that is, or None for either it lacks."""
     body = text.split("---", 2)[2] if text.startswith("---") and text.count("---") >= 2 else text
     paras = [p.strip() for p in body.strip().split("\n\n") if p.strip()]
-    excerpt = next((p for p in paras if p.startswith(">")), None)
-    assertion = next((p for p in paras if not p.startswith(">")), None)
-    return assertion, excerpt, field(show(repo, tip, capture_of(sig)) or "", "excerpt")
+    return next((p for p in paras if not p.startswith(">")), None), next((p for p in paras if p.startswith(">")), None)
 
 
 def amendment(fleet, plan, a, alone=False):
@@ -2276,11 +2280,12 @@ def amendment_lines(plan, a, s):
             "On approval: its intent is replaced; it has no change written yet, so nothing else changes."]
 
 
-def describe(fleet, label, plan, p, alone=False):
+def describe(fleet, label, plan, p, alone=False, signal_of=None):
     """A proposal as the user reads it: each change in plain words, with what the user is comparing beside it (a unit's
     intent and sources, the goal and team of the bolt it would join, an amended unit's intent before and after), and
     who has yet to agree. alone, it reads nothing but the plan and the proposal: no kit for an amended unit's stage and
-    no signal, as a proposal's card is drawn (plan.12)."""
+    no signal, as a proposal's card is drawn (plan.12). signal_of(id) gives a unit's signal as signal_text reads it."""
+    signal_of = signal_of or (lambda sig: signal_text(fleet, label, sig))
     argvs = [do_args(label, d) for d in p.all("Do")]
     per = touched_by(plan, argvs)
     new_bolts, changes = {}, []
@@ -2316,7 +2321,7 @@ def describe(fleet, label, plan, p, alone=False):
             if getattr(a, "unblocks", None):
                 lines.append(f"Unblocks: bolt `{a.unblocks}`, which can't be proven or land without it")
             if a.signal and not alone:
-                assertion, excerpt, grade = signal_text(fleet, label, a.signal)
+                assertion, excerpt, grade = signal_of(a.signal)
                 lines.append(f"From: signals/{a.signal}" + (f": \"{assertion}\"" if assertion else ""))
                 if excerpt:
                     lines.append(f"Excerpt" + (f" ({grade})" if grade else "") + f": {excerpt}")
@@ -2951,15 +2956,20 @@ def signal_move(fleet, a):
     """Curation's five moves, each written through crew the way the route is: one move per signal, appended to
     moves.rec on the flywheel's branch of its state repository, never merged."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
-    a.move not in ("attach", "challenge", "answered") or a.target or fail(
-        f"a {a.move} move names its target (--target): the intent, claim or record it " + {"attach": "lands on", "challenge": "argues with", "answered": "was settled by"}[a.move])
-    a.move != "drop" or a.reason or fail("a drop gives its reason (--reason)")
-    rec = Rec("Move", [("Signal", a.signal), ("Move", a.move)] + ([("Target", a.target)] if a.target else [])
-              + ([("Reason", a.reason)] if a.reason else []) + [("Date", datetime.date.today().isoformat()), ("By", agent())])
-    # A target is a pointer, a typed name such as unit/<unit> or a path; anything else could be typed text.
-    target = [a.target] if a.target and re.fullmatch(r"[a-z]+/[^\s]+", a.target) else []
-    write(fleet, label, lambda w: move(fleet, label, w, a.signal, rec), f"signals({a.signal}): {a.move}",
-          act="signal.move", on=[f"signals/{a.signal}"] + target)
+    rec, on = curation_move(a.signal, a.move, a.target, a.reason, datetime.date.today().isoformat(), agent())
+    write(fleet, label, lambda w: move(fleet, label, w, a.signal, rec), f"signals({a.signal}): {a.move}", act="signal.move", on=on)
+
+
+def curation_move(sig, kind, target, reason, today, by):
+    """A curation move's record, and the objects its run-record entry names: the signal, and its target when that is a
+    pointer, a typed name such as unit/<unit> or a path, never words that could be typed text. Refused when an attach,
+    a challenge or an answered names no target, or a drop gives no reason."""
+    kind not in ("attach", "challenge", "answered") or target or fail(
+        f"a {kind} move names its target (--target): the intent, claim or record it " + {"attach": "lands on", "challenge": "argues with", "answered": "was settled by"}[kind])
+    kind != "drop" or reason or fail("a drop gives its reason (--reason)")
+    rec = Rec("Move", [("Signal", sig), ("Move", kind)] + ([("Target", target)] if target else [])
+              + ([("Reason", reason)] if reason else []) + [("Date", today), ("By", by)])
+    return rec, [f"signals/{sig}"] + ([target] if target and re.fullmatch(r"[a-z]+/[^\s]+", target) else [])
 
 
 class Already(Exception):
@@ -3021,9 +3031,7 @@ def signal(fleet, a):
     copied to this host's raw/ outside git; a second signal from that record joins the capture, and the same signal
     again writes nothing. The user's note at a shell is its own excerpt. One write, one commit."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
-    crew.NAME.match(a.slug) or fail(f"a signal's slug is lowercase words with dashes, not {a.slug}")
-    a.slug not in ("move", "show") or fail(f"a signal's slug can't be '{a.slug}'")
-    a.asserts.strip() or fail("a signal says what it asserts, in a sentence")
+    signal_refusal(a.slug, a.asserts) and fail(signal_refusal(a.slug, a.asserts))
     name, host = os.environ.get("CREW_AGENT"), crew.this_host()
     now = datetime.datetime.now(datetime.timezone.utc)
     excerpt = a.excerpt
@@ -3032,6 +3040,7 @@ def signal(fleet, a):
             excerpt = pathlib.Path(a.excerpt_file).read_text()
         except (OSError, UnicodeDecodeError) as e:
             fail(f"cannot read the excerpt from {a.excerpt_file}: {getattr(e, 'strerror', None) or e}")
+    v = sid = user = None
     if name:
         excerpt = (excerpt or "").strip()
         excerpt or fail('a signal quotes the words that show it: add --excerpt "<the exact words the user said or the '
@@ -3039,30 +3048,11 @@ def signal(fleet, a):
         v, sid = check_excerpt(fleet, name, a, excerpt, host)
         v.grade != "refused" or fail("the excerpt is not in your session's transcript: quote the words as you received "
                                      "them, from the user or from a tool's output")
-        # The capture's key and name, by grade: a received record by its uuid, any other line by its hash, and an
-        # unchecked excerpt by its own; dated by the record's time where it has one.
-        when = transcript.stamp(v.at) if v.grade == "verified" else None
-        date = (transcript.stamp(v.at) or now).date().isoformat()
-        rid = re.sub(r"[^a-z0-9]", "", (v.uuid or "").lower()) if v.grade == "verified" else ""
-        if v.grade == "unverified":
-            h = sha16(excerpt)
-            key, part = f"unverified/{name}/{h}", h[:8]
-        elif rid:
-            key, part = f"session/{sid}/{v.uuid}", rid[:8]
-        else:
-            h = v.line_hash()[:16]
-            key, part = f"session/{sid}/line-{h}", h[:8]
-        cap = f"{date}-{dashed(name)}-{part}"
-        who = {"user": "user", "crew": "crew"}.get(v.asserted_by) or (v.asserted_by[6:] if v.asserted_by.startswith("agent:") else name)
-        position = "unverified" if v.grade == "unverified" else when.strftime("%H:%M:%SZ") if when else f"line {v.n}"
-        kind = a.kind or "constraint"
     else:
-        excerpt = (excerpt or a.asserts).strip()
-        h = sha16(excerpt)
-        v = sid = when = None
-        date, key = now.date().isoformat(), f"operator/{agent()}/{h}"
         import getpass
-        cap, who, position, kind = f"{date}-{dashed(getpass.getuser())}-{dashed(host)}-{h[:8]}", "user", now.strftime("%H:%M:%SZ"), a.kind or "ask"
+        excerpt, user = (excerpt or a.asserts).strip(), getpass.getuser()
+    by = agent()
+    key, cap, date, who, position, kind = capture_named(name, v, sid, excerpt, now, a.kind, user, host, by)
     # An id is unique across both homes, so it is looked up in either without asking which.
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
     btip = fetch(srepo, "main")
@@ -3073,7 +3063,6 @@ def signal(fleet, a):
         bank(record.ROOT / label / "raw" / f"{cap}.jsonl", v.raw)
         raw = f"{host}:~/.local/state/crew/{label}/raw/{cap}.jsonl"
     quote = quoted(excerpt, position)
-    subject = "[" + ", ".join(x.strip() for x in a.subject.split(",") if x.strip()) + "]" if a.subject else None
     seen = {}
 
     def change(w):
@@ -3081,19 +3070,14 @@ def signal(fleet, a):
         have = w.text(cpath)
         names = []
         if have is not None:
-            field(have, "key") == key or fail(f"signals/{cap} on {label}/main is another capture ({field(have, 'key')}), not {key}")
             listed = git(w.repo, "ls-tree", "--name-only", f"{w.tip}:signals/{cap}", check=False)
-            names = [n for n in (listed.stdout.split() if listed.returncode == 0 else []) if re.match(r"^[0-9]{2}-.*\.md$", n)]
-            for n in names:
-                if n[3:-3] == a.slug and quote in (w.text(f"signals/{cap}/{n}") or ""):
-                    raise Already(f"{cap}/{n[:-3]}")
-        nn = 1 + max([int(n[:2]) for n in names] or [0])
+            names = listed.stdout.split() if listed.returncode == 0 else []
+        nn, count = signal_number(have, key, cap, label, names, a.slug, quote, lambda n: w.text(f"signals/{cap}/{n}"))
         sig = f"{cap}/{nn:02d}-{a.slug}"
         if have is None:
-            have = capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, w.plan)
-        w.replace(cpath, re.sub(r"(?m)^signals: [0-9]+$", f"signals: {len(names) + 1}", have, count=1))
-        w.replace(f"signals/{sig}.md", "---\n" + f"signal: {sig}\nkind: {kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "")
-                  + "---\n\n" + a.asserts.strip() + "\n\n" + quote + "\n")
+            have = capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, w.plan, by)
+        w.replace(cpath, re.sub(r"(?m)^signals: [0-9]+$", f"signals: {count}", have, count=1))
+        w.replace(f"signals/{sig}.md", signal_md(sig, kind, who, a.subject, a.asserts, quote))
         w.subject = f"signals({sig}): {a.slug}"
         w.on.append(f"signals/{sig}")
         seen["id"] = sig
@@ -3103,33 +3087,109 @@ def signal(fleet, a):
     except Already as e:
         print(f"signal {e} is recorded already; nothing was written")
         return
+    print(signal_said(seen["id"], v))
+
+
+def signal_refusal(slug, asserts):
+    """Why crew signal refuses a signal before reading anything, or None: its slug is a name and not a subcommand's,
+    and it says what it asserts."""
+    if not crew.NAME.match(slug):
+        return f"a signal's slug is lowercase words with dashes, not {slug}"
+    if slug in ("move", "show"):
+        return f"a signal's slug can't be '{slug}'"
+    if not asserts.strip():
+        return "a signal says what it asserts, in a sentence"
+    return None
+
+
+def capture_named(name, v, sid, excerpt, now, kind=None, user=None, host=None, by=None):
+    """The capture a signal goes in, and how it quotes its excerpt: (key, capture name, date, who asserted it, the
+    quote's position, kind). An agent's (name) by the verdict v on its excerpt in session sid: a received record by its
+    uuid, any other line by its hash, an unchecked excerpt by its own, dated by the record's time where it has one,
+    asserted by whom the verdict says, the agent itself for a tool's output; kind constraint unless given. The user's
+    note at a shell (no name), by user, at host, recorded by by: its own excerpt, by its hash, kind ask unless given."""
+    if not name:
+        h = sha16(excerpt)
+        date = now.date().isoformat()
+        return f"operator/{by}/{h}", f"{date}-{dashed(user)}-{dashed(host)}-{h[:8]}", date, "user", now.strftime("%H:%M:%SZ"), kind or "ask"
+    when = transcript.stamp(v.at) if v.grade == "verified" else None
+    date = (transcript.stamp(v.at) or now).date().isoformat()
+    rid = re.sub(r"[^a-z0-9]", "", (v.uuid or "").lower()) if v.grade == "verified" else ""
+    if v.grade == "unverified":
+        h = sha16(excerpt)
+        key, part = f"unverified/{name}/{h}", h[:8]
+    elif rid:
+        key, part = f"session/{sid}/{v.uuid}", rid[:8]
+    else:
+        h = v.line_hash()[:16]
+        key, part = f"session/{sid}/line-{h}", h[:8]
+    who = {"user": "user", "crew": "crew"}.get(v.asserted_by) or (v.asserted_by[6:] if v.asserted_by.startswith("agent:") else name)
+    position = "unverified" if v.grade == "unverified" else when.strftime("%H:%M:%SZ") if when else f"line {v.n}"
+    return key, f"{date}-{dashed(name)}-{part}", date, who, position, kind or "constraint"
+
+
+def signal_number(have, key, cap, label, names, slug, quote, text_of):
+    """The number a signal takes in its capture, and how many signals the capture then holds: 1 and 1 in a capture
+    not yet written (have is None); else one past the highest of the capture's signals (names, the files in its
+    folder), refused when the capture there is another's (its key), and Already when one of them is this signal, by
+    its slug and its quote (text_of(name), read only then)."""
+    if have is None:
+        return 1, 1
+    field(have, "key") == key or fail(f"signals/{cap} on {label}/main is another capture ({field(have, 'key')}), not {key}")
+    names = [n for n in names if re.match(r"^[0-9]{2}-.*\.md$", n)]
+    for n in names:
+        if n[3:-3] == slug and quote in (text_of(n) or ""):
+            raise Already(f"{cap}/{n[:-3]}")
+    return 1 + max([int(n[:2]) for n in names] or [0]), len(names) + 1
+
+
+def signal_md(sig, kind, who, subject, asserts, quote):
+    """A signal's file: its frontmatter, what it asserts, and its quote; subject, as typed, a comma-separated list."""
+    subject = "[" + ", ".join(x.strip() for x in subject.split(",") if x.strip()) + "]" if subject else None
+    return ("---\n" + f"signal: {sig}\nkind: {kind}\nwho: {who}\n" + (f"subject: {subject}\n" if subject else "")
+            + "---\n\n" + asserts.strip() + "\n\n" + quote + "\n")
+
+
+def signal_said(sig, v):
+    """What crew signal says once the signal is written: its id and its excerpt's grade, own for the user's note,
+    with who asserted a verified one and why one is unverified."""
     grade = "own" if v is None else v.grade
-    print(f"signal {seen['id']}: excerpt {grade}" + (f", asserted by {v.asserted_by}" if v and v.grade == "verified" else "")
-          + (f" ({v.reason})" if v and v.grade == "unverified" else ""))
+    return (f"signal {sig}: excerpt {grade}" + (f", asserted by {v.asserted_by}" if v and v.grade == "verified" else "")
+            + (f" ({v.reason})" if v and v.grade == "unverified" else ""))
 
 
 def check_excerpt(fleet, name, a, excerpt, host):
     """The agent's excerpt checked against its own Claude session's transcript, which is on this host: crew signal
-    is never run on another. The session is the one a forwarded command carries, else herdr's for the agent. A slot's
-    agent runs its team's stages, whose own prompts are its conductor's. Returns the verdict and the session id."""
-    sess = record.session()
-    shost, sid = sess.split(":", 1) if sess and ":" in sess else (host, sess)
-    if sid and shost != host:
-        return transcript.unverified(f"session {sid} is on {shost}, not {host}"), sid
+    is never run on another. The session is the one a forwarded command carries, else herdr's for the agent. Returns
+    the verdict and the session id."""
+    sid, elsewhere = session_here(record.session(), host)
+    if elsewhere:
+        return transcript.unverified(elsewhere), sid
     skip = [a.excerpt_file, str(pathlib.Path(a.excerpt_file).resolve())] if a.excerpt_file else []
+    return transcript.check(sid, excerpt, skip, stage_by(fleet, name)), sid
+
+
+def session_here(sess, host):
+    """The session a signal's excerpt is checked in, from the caller's <host>:<id>, and why it can't be read on this
+    host, or None: a session on another host is not."""
+    shost, sid = sess.split(":", 1) if sess and ":" in sess else (host, sess)
+    return sid, (f"session {sid} is on {shost}, not {host}" if sid and shost != host else None)
+
+
+def stage_by(fleet, name):
+    """The conductor whose stages a slot's agent runs, whose own prompts are the conductor's; None for any other."""
     kind, of = role(fleet, name)
-    slot = kind == "team" and re.fullmatch(rf"{re.escape(of)}-unit-[1-9][0-9]*", name)
-    return transcript.check(sid, excerpt, skip, f"{of}-conductor" if slot else None), sid
+    return f"{of}-conductor" if kind == "team" and re.fullmatch(rf"{re.escape(of)}-unit-[1-9][0-9]*", name) else None
 
 
-def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan):
+def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan, by=None):
     """A new capture.md: where its excerpt came from and how well crew could check it, with the count of its signals,
-    which each signal that joins it rewrites."""
+    which each signal that joins it rewrites. The user's note (v None) is captured by by, the user at this host."""
     today = now.date().isoformat()
     if v is None:
-        fields = [("capture", cap), ("source", "operator"), ("key", key), ("captured_by", agent()), ("host", host),
+        fields = [("capture", cap), ("source", "operator"), ("key", key), ("captured_by", by), ("host", host),
                   ("excerpt", "own"), ("asserted_by", "user")]
-        title, body = f"{agent()}, {date}", "The user's own note, recorded with crew signal at a shell."
+        title, body = f"{by}, {date}", "The user's own note, recorded with crew signal at a shell."
     else:
         when = transcript.stamp(v.at) if v.grade != "unverified" else None
         record_name = None if v.grade == "unverified" else v.uuid or f"line {v.n}"
@@ -3163,24 +3223,31 @@ def signal_show(fleet, a):
     hit or fail(f"no signal {a.signal} on the branches of " + ", ".join(f"{l}/main" for l in labels)
                 + " or on main of their first blueprints repos" + "".join(f"; {l} could not be read: {e}" for l, e in errors.items()))
     found_in, (where, repo, tip, text) = hit
-    out = [f"signals/{a.signal}, on {where} of {repo}", "", text.rstrip(), ""]
-    cap = show(repo, tip, capture_of(a.signal))
-    if cap is None:
-        out.append(f"No capture.md beside it in {repo}.")
-    else:
-        out.append(f"Its capture, {capture_of(a.signal)}:")
-        out += [f"  {k}: {x}" for k, x in frontmatter(cap)]
     # A signal in the state is its flywheel's alone; one in a blueprints repo is read by each flywheel it is first for.
     readers = [found_in] if where != "main" else [l for l in labels if crew.partition_of(fleet, l)["blueprints"][0] == repo]
-    out.append("")
+    moves = []
     for l in readers:
         srepo, ref = state_of(fleet, l)
         stip = fetch(srepo, ref)
-        moves = show(srepo, stip, "moves.rec") if stip else None
-        m = next((m for m in Plan(moves).recs("Move") if m.get("Signal") == a.signal), None) if moves else None
+        recs = show(srepo, stip, "moves.rec") if stip else None
+        moves.append((l, next((m for m in Plan(recs).recs("Move") if m.get("Signal") == a.signal), None) if recs else None))
+    print(shown_signal(a.signal, where, repo, text, show(repo, tip, capture_of(a.signal)), moves))
+
+
+def shown_signal(sig, where, repo, text, cap, moves):
+    """crew signal show: where the signal is, its text, its capture's fields in plain lines (cap, its capture.md, None
+    when it has none), and its move in each flywheel that reads it (moves, [(label, its Move record or None)])."""
+    out = [f"signals/{sig}, on {where} of {repo}", "", text.rstrip(), ""]
+    if cap is None:
+        out.append(f"No capture.md beside it in {repo}.")
+    else:
+        out.append(f"Its capture, {capture_of(sig)}:")
+        out += [f"  {k}: {x}" for k, x in frontmatter(cap)]
+    out.append("")
+    for l, m in moves:
         out.append(f"No move yet in {l}." if not m else f"Its move in {l}: {m.get('Move')}" + (f" {m.get('Target')}" if m.get("Target") else "")
                    + f", by {m.get('By')} on {m.get('Date')}" + (f": {m.get('Reason')}" if m.get("Reason") else ""))
-    print("\n".join(out))
+    return "\n".join(out)
 
 
 # ------------------------------------------------------------------------------------- what bash crew asks

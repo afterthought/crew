@@ -1,0 +1,38 @@
+"""What crew assumes of recfix --check, each case naming what assumes it: plan.checked runs it on every file a write
+commits, a signal's and a capture's markdown by its frontmatter as one record, so a value that breaks the record is
+refused, named by its file and line, and nothing is pushed (plan.1, signals.4); a Move the moves file's enum does not
+allow is refused (the route a unit add --signal writes); and a hand edit that duplicates a key is refused by name
+(read.1, crew bolts naming the commit)."""
+import re
+
+import pytest
+
+from crew import Refusal
+import plan
+
+SIG = "2026-10-12-chuck-mac-studio-abcd1234/01-tiles-split"
+
+
+def test_a_signal_and_its_capture_pass_by_their_frontmatter():
+    plan.checked({f"signals/{SIG}.md": plan.signal_md(SIG, "ask", "user", "tiles, seams", "Tiles split.", plan.quoted("Tiles split.", "14:00:00Z")),
+                  "signals/2026-10-12-chuck-mac-studio-abcd1234/capture.md": "---\ncapture: x\nsource: operator\nsignals: 1\n---\n\n# x\n"})
+
+
+def test_a_value_that_breaks_a_signals_frontmatter_is_refused_naming_the_file_and_its_line():
+    text = plan.signal_md(SIG, "ask", "user", "tiles\nseams", "Tiles split at the seam.", plan.quoted("Tiles split.", "14:00:00Z"))
+    with pytest.raises(Refusal, match=re.escape(f"signals/{SIG}.md fails recfix --check: 01-tiles-split.md: 6: error")):
+        plan.checked({f"signals/{SIG}.md": text})
+
+
+def test_a_route_the_moves_files_enum_does_not_allow_is_refused():
+    route = "\n".join(plan.Rec("Move", [("Signal", SIG), ("Move", "route"), ("Target", "unit/u"), ("Date", "2026-10-12"), ("By", "d")]).lines())
+    assert " drop route" in plan.MOVES
+    plan.checked({"moves.rec": plan.MOVES + "\n" + route + "\n"})
+    with pytest.raises(Refusal, match="^moves.rec fails recfix --check"):
+        plan.checked({"moves.rec": plan.MOVES.replace(" drop route", " drop") + "\n" + route + "\n"})
+
+
+def test_a_plan_with_a_duplicated_key_is_refused_by_name():
+    text = "%rec: Unit\n%key: Unit\n\nUnit: a\nRepo: switchboard-kit\nIntent: once\n\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n"
+    with pytest.raises(Refusal, match="^plan.rec fails recfix --check: .*duplicated key"):
+        plan.recfix(text, "plan.rec")
