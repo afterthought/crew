@@ -1,5 +1,5 @@
 """What crew assumes of moon, each case naming what assumes it. tests/suite runs every selected task afresh, for
---force and for a landing's gate, with `moon exec --cache off`, because moon installs a project's dependencies then and
+--force, with `moon exec --cache off`, because moon installs a project's dependencies then and
 skips them under its own --force ("Force updating cache, skipping dependency install", moon 2.6.1): deliverable-race's
 landing on 2026-10-12, the first suite run in its worktree since crew's toolchain moved to proto, ran crew's tests
 with no pytest in tests/.venv. The workspace here is crew's own toolchain, its .prototools and .moon/toolchains.yml,

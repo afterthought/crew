@@ -1,7 +1,7 @@
 # A verified unit fixed in its one round, settled and merged, through the crew command on the stubs (tests.11, record
 # 0022), a part of the units journey (t-journey-units): a forecast against the bolt starts the settle stage of a unit
 # verified and then fixed once (teams.14, teams.17); a dependent holding that unit's work as its place took it is not
-# forecast against the unit for the settle's revision of it; the unit merges through worktrunk once its change is
+# forecast against the unit for the settle's revision of it; the unit merges through sluice once its change is
 # archived; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it, and undoes a
 # rebase that conflicts; the next read frees the merged unit's slot and removes its place; and the dependent whose
 # rebase conflicted is told how to make that rebase's upstream again, its older forecast against the bolt dropped.
@@ -25,7 +25,7 @@ crew unit run c construct >/dev/null; change "$kd/places/c" c 0 2
 printf 'one\ntwo, as c has it\nthree\n' > "$kd/places/c/shared.txt"; commit_all "$kd/places/c" "docs(c): the change"; crew unit wait c >/dev/null
 # The bolt takes a line of shared.txt that a, verified, fixed and waiting to merge, also changed: the next wait forecasts it,
 # and starts a's settle stage.
-printf 'one\ntwo, as the bolt has it\nthree\n' > "$bolt/shared.txt"; commit_all "$bolt" "feat: the bolt's own line"
+on_branch "$k" bolt/tenant-environments "feat: the bolt's own line" shared.txt $'one\ntwo, as the bolt has it\nthree\n'
 : > "$CREW_TEST_LOG"
 expect_ok crew unit wait b --timeout 0
 eq "$(field $box forecast Reached unit/a bolt/tenant-environments)" "settle"
@@ -45,11 +45,12 @@ expect_ok crew unit wait a
 has "$out" "swb-1-unit-1 delivered settle on a: its branch is at $(short unit/a), ready to merge"
 eq "$(field $box forecast Heads unit/b unit/a)" ""
 expect_ok crew unit run a merge
-eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
+eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
 lacks "$out" "Pending You card"
 mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
 git -C "$kd/places/a" commit -qm "docs(openspec): archive a"
-(cd "$kd/places/a" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge failed"
+(cd "$kd/places/a" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit failed"
+eq "$(git -C "$k" log -1 --format='%an %(trailers:key=Sluice-Result,valueonly)' bolt/tenant-environments)" "sluice passed (stub)"
 b_before=$(git -C "$k" rev-parse unit/b) c_before=$(git -C "$k" rev-parse unit/c)
 expect_ok crew unit wait a
 has "$out" "swb-1-unit-1 delivered merge on a: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"

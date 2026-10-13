@@ -13,7 +13,7 @@ trap stop EXIT
 timeout 30 portless proxy start --port "$PORTLESS_PORT" --no-tls </dev/null >/dev/null 2>&1 || fail "the test's proxy did not start"
 
 team_world
-ak=$(kit mac-studio willdan atlas-kit); akd=$(dirname "$ak")
+ak=$(kit mac-studio willdan atlas-kit)
 git -C "$ak" remote add origin https://github.com/WilldanGroup/atlas-kit.git
 export CREW_LABEL=wldn
 crew bolt new atlas-maps "Atlas draws maps." --repo atlas-kit >/dev/null
@@ -29,7 +29,7 @@ portless list | grep -q "$name" || { cat "$T/serve.log"; fail "devurl-serve's ro
 
 expect_ok crew sites wldn --json; json=$out
 eq "$(jq -r '.partitions[0].hosts[] | select(.host == "mac-studio") | .bolts[0].units[0] | "\(.unit) \(.url)"' <<<"$json")" "map-one http://$name.localhost:$PORTLESS_PORT"
-eq "$(jq -r '.partitions[0].hosts[] | select(.host == "mac-studio") | .bolts[0] | "\(.worktree) \(.url)"' <<<"$json")" "$akd/bolts/atlas-maps null"
+eq "$(jq -r '.partitions[0].hosts[] | select(.host == "mac-studio") | .bolts[0] | "\(.worktree) \(.url)"' <<<"$json")" "null null"
 eq "$(jq -r '.partitions[0].hosts[] | select(.host == "chuck-herdr-alpha") | .bolts | length' <<<"$json")" "0"
 expect_ok crew sites wldn
 has "$out" "map-one"; has "$out" "places/map-one"; has "$out" "http://$name.localhost:$PORTLESS_PORT"

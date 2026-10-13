@@ -66,16 +66,16 @@ crew chore run bump code "Fix every finding the verify report at $report marks f
 git -C "$cp" commit -q --amend --no-edit --trailer "Chore: bump"
 crew chore wait bump >/dev/null
 expect_ok crew chore run bump merge
-eq "$(prompt_to swb-1-unit-1)" "'Merge bump into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
+eq "$(prompt_to swb-1-unit-1)" "'Merge bump into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
 lacks "$out" "Pending You card"
-(cd "$cp" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge of the chore failed"
+(cd "$cp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of the chore failed"
 expect_ok crew chore wait bump
 has "$out" "swb-1-unit-1 delivered merge on chore bump: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 eq "$(stage_of)" "chore merged"
 has "$out" "b is rebased onto bolt/tenant-environments, now that bump merged"
 git -C "$k" merge-base --is-ancestor bolt/tenant-environments unit/b || fail "b was not rebased onto the bolt"
 eq "$(field $box unit.rebase From unit/b)" "chore/bump"
-ok "a merge is refused while a commit lacks the chore's trailer; once its one round of fixes adds it, it merges with no verify again, through worktrunk, and its wait ends once the bolt holds the trailer"
+ok "a merge is refused while a commit lacks the chore's trailer; once its one round of fixes adds it, it merges with no verify again, through sluice, and its wait ends once the bolt holds the trailer"
 
 expect_ok crew status swb-1
 has "$out" "swb-1-unit-1 is free: bump has merged into its bolt"

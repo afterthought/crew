@@ -241,9 +241,9 @@ class TestRun:
         ("code", "", "Chore bump: Biome follows the shell."),
         ("code", "Fix the finding: x.", "Chore bump: Biome follows the shell. Fix the finding: x."),
         ("verify", "", "Verify chore bump: Biome follows the shell."),
-        ("merge", "", f"Merge bump into bolt/{TE}: wt merge bolt/{TE} --no-squash --no-remove")])
+        ("merge", "", f"Merge bump into bolt/{TE}: wt submit bolt/{TE} --no-remove")])
     def test_its_prompts(self, stage, words, prompt):
-        assert plan.chore_prompt(stage, "bump", "Biome follows the shell.", words, TE, f"wt merge bolt/{TE} --no-squash --no-remove") == prompt
+        assert plan.chore_prompt(stage, "bump", "Biome follows the shell.", words, TE, plan.merge_command(TE)) == prompt
 
     def test_a_merge_is_refused_for_each_commit_without_the_trailer(self):
         commits = [("a1b2c3d", "chore: bump biome", ["bump"]), ("e4f5a6b", "chore: and its lock", []), ("c7d8e9f", "chore: other", ["pin"])]

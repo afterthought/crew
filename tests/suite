@@ -13,9 +13,6 @@
 #   tests/suite --affected      the tasks whose inputs differ from the merge-base with main, uncommitted edits
 #                               included; the rest are not run
 #   tests/suite --force         every selected task run, none replayed, the tests' dependencies installed as ever
-#   tests/suite --gate <branch> the merge gate's run (.config/wt.toml) of a merge into that branch: as tests/suite,
-#                               and onto main as --force, so a landing runs every test afresh whatever the archives
-#                               hold (tests.10)
 #
 # Every selected task runs even when one fails. It prints a line per test in tests/run's words, `ok    t-<name>`,
 # with `   (replayed)` on one moon replayed, or `FAIL  t-<name>`; then each failing test's output; then
@@ -44,9 +41,7 @@ while (( $# )); do
   case $1 in
     --affected) affected=1 ;;
     --force) force=1 ;;
-    --gate) [[ -n ${2:-} ]] || { echo "usage: tests/suite --gate <branch>" >&2; exit 2; }
-      [[ $2 == main ]] && force=1; shift ;;
-    -*) echo "usage: tests/suite [--affected | --force | --gate <branch>] [name...]" >&2; exit 2 ;;
+    -*) echo "usage: tests/suite [--affected | --force] [name...]" >&2; exit 2 ;;
     *) names+=("$1") ;;
   esac
   shift
@@ -69,7 +64,7 @@ args=(--on-failure continue)
 [[ -n $affected ]] && args+=(--affected remote)
 # Every selected task afresh: moon's cache neither read nor written. Not moon's own --force, which skips installing a
 # project's dependencies ("Force updating cache, skipping dependency install", moon 2.6.1), so a worktree whose first
-# run is a landing's gate would run the tests with no pytest in tests/.venv (tests/contract/test_moon.py).
+# run is forced would run the tests with no pytest in tests/.venv (tests/contract/test_moon.py).
 [[ -n $force ]] && args+=(--cache off)
 
 # moon hands its tasks its own settings (MOON_CACHE, MOON_CACHE_DIR, MOON_WORKSPACE_ROOT…), and reads the same

@@ -2,8 +2,7 @@
 # .moon/workspace.yml, tests/suite and tests/moon-tasks, a stand-in tests/run (it fails a test when plugin/bin/ holds
 # red-<name>) and three stand-in tests: a first run runs every test side by side and replays none; a second replays
 # all; a test-only edit reruns that test alone; an edit to crew's command core reruns all, and one to a plugin/ path
-# outside it reruns only the test naming it on its # Reads: line (tests.10); the gate of a landing onto main replays
-# nothing while a merge into a bolt's does; a red test is named on one FAIL line with
+# outside it reruns only the test naming it on its # Reads: line (tests.10); a red test is named on one FAIL line with
 # its output while the others still run, the exit is non-zero, and it runs again on the next run; __pycache__ under
 # plugin/ changes no hash; --force replays nothing; the live test gets no task and never runs; a new test with no
 # task, and a test reading a file of crew's its task doesn't name, refuse the run before anything runs; a second
@@ -126,13 +125,6 @@ eq "$(ran)" "t-a t-b t-c"
 suite b
 eq "$rc" 0; has "$out" "ok    t-b   (replayed)"$'\n'"1 passed (1 replayed), 0 failed"
 ok "--force runs every test without the cache, and named tests run alone"
-
-suite --gate bolt/b
-eq "$rc" 0; has "$out" "3 passed (3 replayed), 0 failed"
-suite --gate main
-eq "$rc" 0; has "$out" "3 passed (0 replayed), 0 failed"
-eq "$(ran)" "t-a t-b t-c"
-ok "the gate of a merge into a bolt replays, and the gate of a landing onto main runs every test afresh"
 
 echo "# t-sites-live: the live test." > "$r/tests/t-sites-live.sh"
 (cd "$r" && tests/moon-tasks) || fail "tests/moon-tasks could not write the tasks"

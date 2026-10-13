@@ -13,8 +13,8 @@ CREW=$(cd "$TESTS/.." && pwd -P)
 export CREW_TEST_ROOT=$T CREW_TEST_LOG=$T/calls.log CREW_TEST_CLAUDE_LOG=$T/claude.log
 export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
 unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH GIT_DIR GIT_WORK_TREE
-# A wt merge running the suite as its gate hands its hooks worktrunk's own variables, among them the file its shell
-# wrapper reads a cd from: a test's wt never writes there, or the merge ends trying to cd into a removed scratch dir.
+# A wt run that starts the suite, a hook's, hands it worktrunk's own variables, among them the file its shell wrapper
+# reads a cd from: a test's wt never writes there, or the run ends trying to cd into a removed scratch dir.
 unset $(env | sed -n 's/^\(WORKTRUNK_[A-Za-z0-9_]*\)=.*/\1/p')
 # A test's wt, crew's tidy among them, reads its config and approvals under the simulated host's HOME, never the user's.
 unset XDG_CONFIG_HOME
@@ -175,11 +175,13 @@ commit_all() { git -C "$1" add -A && git -C "$1" commit -qm "${2:-wip}"; }
 # rewrite <file> <sed script>: the file edited in place, alike under macOS's sed and the GNU sed devenv's shell puts first
 rewrite() { sed -e "$2" "$1" > "$1.new" && mv "$1.new" "$1"; }
 
-# kit <host> <space> <name>: a kit's main checkout at <space>/<name>/main, with OpenSpec set up
+# kit <host> <space> <name>: a kit's main checkout at <space>/<name>/main, with OpenSpec set up and a sluice policy
+# naming the checks its bolt branches require, which a bolt is given only with (teams.5)
 kit() {
   local d; d=$(space "$1" "$2")/$3/main
-  mkdir -p "$d/openspec/changes/archive" "$d/openspec/specs"
+  mkdir -p "$d/openspec/changes/archive" "$d/openspec/specs" "$d/.config"
   git init -q "$d"; printf 'schema: spec-driven\n' > "$d/openspec/config.yaml"
+  printf '[branches."bolt/*"]\nrequired = ["#check-full"]\n' > "$d/.config/sluice.toml"
   touch "$d/openspec/changes/archive/.keep" "$d/openspec/specs/.keep"; echo "# $3" > "$d/README.md"
   commit_all "$d" "chore: start $3"
   echo "$d"
@@ -266,6 +268,18 @@ fi
 exit 0
 HOOK
   chmod +x "$r/hooks/pre-receive"
+}
+
+# on_branch <kit main> <branch> <message> <file> <text>: a commit on the branch writing the file, made with no
+# checkout of it, as a bolt's branch takes work in a test that is not the merge it proves
+on_branch() {
+  local idx=$T/on-branch.index blob tree c
+  blob=$(printf '%s' "$5" | git -C "$1" hash-object -w --stdin)
+  GIT_INDEX_FILE=$idx git -C "$1" read-tree "$2"
+  GIT_INDEX_FILE=$idx git -C "$1" update-index --add --cacheinfo "100644,$blob,$4"
+  tree=$(GIT_INDEX_FILE=$idx git -C "$1" write-tree); rm -f "$idx"
+  c=$(git -C "$1" commit-tree "$tree" -p "$2" -m "$3")
+  git -C "$1" update-ref "refs/heads/$2" "$c"
 }
 
 # place <kit main> <bolt> <unit>: the unit's worktree, made the way construct makes it

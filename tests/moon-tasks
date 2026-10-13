@@ -13,7 +13,8 @@ names on a `# Reads:` line of its opening comment (a directory as everything und
 test's input only when it names it: plugin/hooks when it starts an agent, since the stub claude runs the
 session-start hook; plugin/roles when it reads a brief's words; board.py, page.py, page.html and sites.py when it
 runs them. moon replays a task whose inputs are unchanged since a pass, so an input left out could replay a stale
-pass; a landing's gate onto main runs every test afresh (.config/wt.toml), whatever the archives hold.
+pass; main's policy takes no replay (.config/sluice.toml), so a landing runs every test afresh, whatever the archives
+hold.
 
 With no argument it writes tests/moon.yml. With --check it writes nothing and exits 1, naming each, when a test has
 no task, a task has no test, a task is not what this would write, or a test refers to $CREW/<path> or $TESTS/<path>

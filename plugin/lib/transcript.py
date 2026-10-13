@@ -57,8 +57,9 @@ import datetime, json, pathlib, re, sys
 COMMAND = re.compile(r"crew signal(?:\\\n|.)*?(?<!\S)--excerpt(?:\\\n|.)*")
 TELL = re.compile(r"^\[crew tell from ([^\]\s]+)\]")
 # A stage's own prompt, as crew's run_stage sends it: a fix, a chore's code or verify, a merge, or construct, code and
-# verify as slash commands.
-STAGE = re.compile(r"^(Fix: |Chore \S+: |Verify chore \S+: |Merge \S+ into bolt/\S+: wt merge bolt/\S+ --no-squash --no-remove)")
+# verify as slash commands. A merge is a submission to the bolt through sluice; one sent before record 0026 merged with
+# wt merge, and a transcript of then still reads as the conductor's.
+STAGE = re.compile(r"^(Fix: |Chore \S+: |Verify chore \S+: |Merge \S+ into bolt/\S+: wt (?:submit bolt/\S+|merge bolt/\S+ --no-squash) --no-remove)")
 SLASH = re.compile(r"<command-name>/opsx:(propose|apply|verify)</command-name>")
 ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 FRESH = datetime.timedelta(minutes=15)

@@ -1174,10 +1174,6 @@ def make_place(fleet, t, path, branch, base, track=False):
     READ.drop_kit(t["machine"], t["kit"]["main"])
 
 
-# A host clones a kit once and never pulls it, so its main can lag GitHub's by hundreds of commits. Prints the ref a
-# bolt is cut from: GitHub's main, fetched now, with the checkout's main fast-forwarded to it when that is safe; or the
-# checkout's own main when it already holds all of GitHub's. A main with commits of its own that also lacks some of
-# GitHub's is refused, since a bolt cut from either side would lose the other. A kit with no origin keeps its main.
 # What a kit's main holds of its policy, on its host: POLICY=<the file, base64> or POLICY=- when main has none, read
 # from main's commit, not its working tree, as sluice reads a branch's policy (kit.bolt_checks).
 POLICY = r"""main=$1 file=$2

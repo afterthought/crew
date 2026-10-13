@@ -1,6 +1,25 @@
-# What crew's toolchain and tests are, in sluice's words: crew reads [tests] when it makes a worktree of crew ready
-# (plugin/lib/kit.py, plan.17), as it reads any kit's, and sluice would read the same table to run crew's checks.
-# crew does not merge through sluice (.config/crew.toml has no `sluice = true`), so no branch is gated here.
+# crew's policy for sluice, read from each branch's own revision: what crew's toolchain and tests are, which crew reads
+# when it makes a worktree of crew ready (plugin/lib/kit.py, plan.17), and what gates a merge into a bolt and a landing
+# on main. Every merge into crew's branches is a submission (record 0026): units, chores and fixes `wt submit
+# bolt/<bolt>`, main-level ops's landing `crew bolt submit <bolt>`; nothing else moves them (teams.5, plan.8).
 [tests]
 toolchain = ["devenv", "print-dev-env"]
 runner = "moon"
+
+[checkout]
+method = "git-worktree"
+
+# crew's tests run open on the host, as they run in a worktree: they write the host's test slots, ~/.cache/crew/test-slots
+# (tests.9), and moon's archives in the git common dir, both outside the checkout sluice's sandbox confines writes to.
+[executor]
+kind = "open"
+
+# A bolt takes every check-full task, replaying one whose inputs passed already on this host (tests.5, tests.10).
+[branches."bolt/*"]
+required = ["#check-full"]
+trust = ["open", "cache"]
+
+# A landing runs every check-full task afresh, none replayed (tests.10).
+[branches.main]
+required = ["#check-full"]
+trust = ["open"]

@@ -1,8 +1,7 @@
-# A fix, a proof and the plan moving under a team, through the crew command on the stubs (tests.11, record 0022), a part
-# of the units journey (t-journey-units): a fix takes a slot in its own place from the bolt, writes no plan and merges
-# as a stage does; crew prove asks ops for the proof and its wait returns with the file ops saved; a moved unit's branch
-# is rebased onto its new bolt; and the team's reads free the slots a moved unit, a merged fix and a dropped unit leave,
-# keeping a place that holds a stray file.
+# A fix and the plan moving under a team, through the crew command on the stubs (tests.11, record 0022), a part of the
+# units journey (t-journey-units): a fix takes a slot in its own place from the bolt, writes no plan and merges through
+# sluice as a stage does; a moved unit's branch is rebased onto its new bolt; and the team's reads free the slots a
+# moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -30,30 +29,12 @@ echo steady > "$fp/banner"; commit_all "$fp" "fix: the banner holds still"
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered fix $fb: its branch is at $(short $fb)"
 expect_ok crew fix swb-1 tidy --merge
-has "$out" "$fb does not carry the bolt onto main"
-eq "$(prompt_to swb-1-unit-1)" "'Merge $fb into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
-(cd "$fp" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge of the fix failed"
+eq "$(prompt_to swb-1-unit-1)" "'Merge $fb into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
+(cd "$fp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of the fix failed"
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered merge of $fb: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 [[ $(record_of $box) != *ZQXS* ]] || fail "a fix's words are in the run record"
-ok "a fix takes a slot in its own place from the bolt and writes no plan, starts again there, ends at its commit, merges as a stage does and ends once the bolt holds it"
-
-expect_ok crew prove swb-1
-has "$out" "swb-1-ops is asked to prove bolt/tenant-environments"
-grep -qF "agent prompt swb-1-ops '[crew tell from swb-1-conductor] Deploy the bolt and work the Proof in dev list of each of its units.'" "$CREW_TEST_LOG" \
-  || fail "ops was not asked for the proof, marked as from the conductor"
-proof=$reports/proof-tenant-environments-20261008-1630.md; echo "- ✅ sign-in: passed" > "$proof"
-expect_ok crew prove swb-1 --wait
-has "$out" "swb-1-ops delivered the proof of tenant-environments: $proof"
-eq "$(field $box stage.end Delivered stage/tenant-environments/proof)" "proof/proof-tenant-environments-20261008-1630.md"
-export CREW_TAKEN_WITHIN=1
-as $box herdr --session wldn-1 stub leave swb-1-ops 2
-expect_fail "the proof of tenant-environments never started, and no proof is owed: crew prove swb-1 asks ops again" crew prove swb-1
-has "$out" "swb-1-ops did not take its prompt, sent twice; nothing is left typed"
-eq "$(field $box stage.start Refused stage/tenant-environments/proof)" "swb-1-ops did not take its prompt, sent twice; nothing is left typed"
-lacks "$(cat "$stages")" "ops tenant-environments proof"
-unset CREW_TAKEN_WITHIN
-ok "crew prove asks ops for the proof, owes its end, and its wait returns with the file ops saved; a request ops never took starts no proof"
+ok "a fix takes a slot in its own place from the bolt and writes no plan, starts again there, ends at its commit, merges through sluice as a stage does and ends once the bolt holds it"
 
 # The user moves c to another team's bolt and drops d while its agent works, with the merged fix's place holding a file
 # nobody committed: the reads that follow free each slot once its agent settles, remove d's place, and keep the fix's.

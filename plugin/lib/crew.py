@@ -844,8 +844,9 @@ def slot_of(t, slot):
 
 
 def bolt_place(t):
-    """The worktree of the bolt a team holds, from the plan, where its conductor and ops start; None when it holds
-    none. A plan that can't be read is reported, and the role starts in the kit's main checkout."""
+    """The worktree of the bolt a team holds, from the plan, where its conductor and ops start while a bolt given
+    before bolts were branches alone keeps one (plan.9); None when it holds none or its bolt is a branch, and the role
+    starts in the kit's main checkout. A plan that can't be read is reported, and the role starts there too."""
     import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
     try:
         bolt = plan.bolt_of_team(this.load(), t)

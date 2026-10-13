@@ -1,10 +1,11 @@
 # A team's agents through the crew command on the stubs (tests.11, record 0022): crew up starts a team's conductor and
 # ops on its host in one workspace, greeted once and recorded, and status, down, resume, restart, clear, rebuild and
-# close act on them; a bolt given to a team that is up is cut from GitHub's main and restarts them in its worktree; a
-# role resumes where its conversation began; a conductor brought back is told a unit waits amended; and a landing is
-# refused while the kit's main is behind GitHub's. The main level's agents are t-journey-main's. What each agent is
-# greeted with, where it runs and resumes, and what a conductor brought back is told are logic cases
-# (tests/py/test_teams.py); how git cuts a bolt from GitHub's main, contract cases (tests/contract/test_git.py).
+# close act on them; a bolt given to a team that is up is cut from the kit's main as it stands, with no worktree, and
+# restarts them in the kit's main checkout; a role resumes where its conversation began; a conductor brought back is
+# told a unit waits amended; and a landing is refused while the kit's main is behind GitHub's. The main level's agents
+# are t-journey-main's. What each agent is greeted with, where it runs and resumes, and what a conductor brought back is
+# told are logic cases (tests/py/test_teams.py); how git makes a bolt's branch, contract cases
+# (tests/contract/test_git.py).
 # Reads: plugin/hooks/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
@@ -32,14 +33,14 @@ crew bolt new smoke "Prove the loop." --repo switchboard-kit >/dev/null
 pushed from-a-mac
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew bolt give swb-1 smoke
-has "$out" "main fast-forwarded 1 commit to GitHub's"
-eq "$(git -C "$k" rev-parse bolt/smoke)" "$(git -C "$other" rev-parse main)"
-eq "$(launched swb-1-conductor)" "$kd/bolts/smoke fresh"; eq "$(launched swb-1-ops)" "$kd/bolts/smoke fresh"
-eq "$(pane_cwd conductor)" "$kd/bolts/smoke"
+eq "$(git -C "$k" rev-parse bolt/smoke)" "$(git -C "$k" rev-parse main)"
+[[ $(git -C "$k" rev-parse bolt/smoke) != "$(git -C "$other" rev-parse main)" ]] || fail "the bolt was cut from GitHub's main"
+eq "$(launched swb-1-conductor)" "$k fresh"; eq "$(launched swb-1-ops)" "$k fresh"
+eq "$(pane_cwd conductor)" "$k"
 eq "$(greetings $box wldn-1 swb-1-conductor)" "1"
 has "$(grep "agent prompt swb-1-conductor '" "$CREW_TEST_LOG")" "Your team now holds the bolt smoke. Read where your bolt stands"
 eq "$(field $box agent.restart By agent/swb-1-ops)" "$me@mac-studio"
-ok "a bolt given to a team that is up is cut from GitHub's main, fetched first, and restarts its conductor and ops in the bolt's worktree, then greets the conductor once"
+ok "a bolt given to a team that is up is cut from the kit's main as it stands, with no worktree, and restarts its conductor and ops in the kit's main checkout, then greets the conductor once"
 
 first=$(jq -r 'select(.agent == "swb-1-ops") | .session' "$CREW_TEST_CLAUDE_LOG" | tail -1)
 expect_ok crew down swb-1
@@ -48,7 +49,7 @@ has "$(field $box team.down On)" "team/swb-1 agent/swb-1-conductor agent/swb-1-o
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew resume swb-1
 has "$out" "swb-1-conductor resumed"; has "$out" "swb-1-ops resumed"
-eq "$(launched swb-1-ops)" "$kd/bolts/smoke resumed"
+eq "$(launched swb-1-ops)" "$k resumed"
 eq "$(jq -r 'select(.agent == "swb-1-ops") | .argv | .[index("--resume") + 1]' "$CREW_TEST_CLAUDE_LOG")" "$first"
 eq "$(count $box agent.resume)" "2"
 grep -q "agent prompt swb-1-conductor '" "$CREW_TEST_LOG" && fail "crew resume greeted the conductor"
@@ -99,7 +100,7 @@ eq "$(grep "agent prompt swb-2-conductor '" "$CREW_TEST_LOG")" "$box wldn-1 agen
 ok "a conductor brought back is told the unit that waits amended: in its greeting by crew up, as crew's notice by crew resume"
 
 # A landing is refused while the kit's main is behind GitHub's.
-change "$k" amended-one 3 3; commit_all "$k" "feat: amended-one"; git -C "$kd/bolts/later" merge -q --ff-only main
+change "$k" amended-one 3 3; commit_all "$k" "feat: amended-one"; git -C "$k" branch -q -f bolt/later main
 pushed later-from-a-mac
-expect_fail "switchboard-kit's main on chuck-herdr-alpha is 1 commit behind GitHub's" crew bolt land later
+expect_fail "switchboard-kit's main on chuck-herdr-alpha is 2 commits behind GitHub's" crew bolt land later
 ok "a landing reads how far the kit's main is behind GitHub's, and is refused while it is"

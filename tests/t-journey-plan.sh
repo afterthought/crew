@@ -176,7 +176,7 @@ ok "a unit from a signal is added with its route move, in the approval's commit"
 CREW_AGENT= crew bolt give swb-2 console-pages >/dev/null 2>&1
 pz=$(place "$k" tenant-environments zone-first); echo z > "$pz/z-file"; commit_all "$pz" "feat(zone-first): z"
 pt=$kd/places/the-deploy-names-its-host-tenant; echo t > "$pt/same-file"; commit_all "$pt" "feat: same file"
-echo console > "$kd/bolts/console-pages/same-file"; commit_all "$kd/bolts/console-pages" "feat: same file, otherwise"
+on_branch "$k" bolt/console-pages "feat: same file, otherwise" same-file $'console\n'
 ztip=$(git -C "$k" rev-parse unit/zone-first); ttip=$(git -C "$k" rev-parse unit/the-deploy-names-its-host-tenant)
 crew plan propose "$(proposal 'Case: Both belong with the console.' 'Do: unit move zone-first console-pages' \
   'Do: unit move the-deploy-names-its-host-tenant console-pages')" >/dev/null

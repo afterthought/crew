@@ -1,14 +1,14 @@
-# The units journey's world, which each of its parts sources after lib.sh: a team world whose kit declares its
-# toolchain and the moon runner in .config/sluice.toml and holds a file the units share; the team's state files on the
-# box; and the helpers the parts read it with. The kit's toolchain, tools/print, puts the kit's own stand-in moon on
-# PATH, which no other PATH holds, so a moon the log shows ran inside the toolchain crew kept for that worktree: it
-# logs "<where> <args> <the worktree the toolchain was printed for>" to $T/moon.log, prints moon 2.6.1 for --version,
-# and fails setup while $T/moon-fails exists.
+# The units journey's world, which each of its parts sources after lib.sh: a team world whose kit declares its toolchain
+# and the moon runner in .config/sluice.toml, beside its bolt branches' checks, and holds a file the units share; the
+# team's state files on the box; and the helpers the parts read it with. The kit's toolchain, tools/print, puts the
+# kit's own stand-in moon on PATH, which no other PATH holds, so a moon the log shows ran inside the toolchain crew kept
+# for that worktree: it logs "<where> <args> <the worktree the toolchain was printed for>" to $T/moon.log, prints moon
+# 2.6.1 for --version, and fails setup while $T/moon-fails exists.
 command -v wt >/dev/null || fail "this test needs worktrunk's wt"
 team_world
 box=chuck-herdr-alpha
 mkdir -p "$k/.config" "$k/tools/bin"
-printf '[tests]\ntoolchain = ["sh", "tools/print"]\nrunner = "moon"\n' > "$k/.config/sluice.toml"
+printf '[tests]\ntoolchain = ["sh", "tools/print"]\nrunner = "moon"\n' >> "$k/.config/sluice.toml"
 cat > "$k/tools/print" <<'PRINT'
 #!/bin/sh
 echo "export PATH=\"$(pwd -P)/tools/bin:\$PATH\" TOOLCHAIN_FROM=\"$(pwd -P)\""
@@ -28,7 +28,6 @@ export CREW_LABEL=wldn
 slots=$(home_of $box)/.local/state/swb-1-team/slots
 stages=$(home_of $box)/.local/state/swb-1-team/stages
 reports=$(home_of $box)/.local/state/swb-1-team/reports
-bolt=$kd/bolts/tenant-environments
 plan() { git --git-dir "$ws" show wldn/main:plan.rec > "$T/plan.rec"; recsel -C "$@" "$T/plan.rec"; }
 subject() { git --git-dir "$ws" log -1 --format=%s wldn/main; }
 short() { git -C "$k" rev-parse --short "$1"; }

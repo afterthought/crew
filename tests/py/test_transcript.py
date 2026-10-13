@@ -117,12 +117,14 @@ class TestCheck:
                  isMeta=True),
             user("u-22", "Fix: The deploy leaves open security groups on stack edge."),
             user("u-23", "Merge fix/smoke-2/edge into bolt/smoke-2: wt merge bolt/smoke-2 --no-squash --no-remove"),
-            user("u-24", "Leave Fix: as it is, the open security groups are mine.\n\nARGUMENTS: edge-groups Close the open security groups verify found."))
+            user("u-24", "Leave Fix: as it is, the open security groups are mine.\n\nARGUMENTS: edge-groups Close the open security groups verify found."),
+            user("u-25", "Merge fix/smoke-2/rule into bolt/smoke-2: wt submit bolt/smoke-2 --no-remove"))
         by = "swb-2-conductor"
         assert said("s-stage", "/opsx:apply", stage_by=by) == "verified agent:swb-2-conductor 1 u-20"
         assert said("s-stage", "Implement tasks from an OpenSpec change.", stage_by=by) == "verified agent:swb-2-conductor 2 u-21"
         assert said("s-stage", "open security groups on stack edge", stage_by=by) == "verified agent:swb-2-conductor 3 u-22"
         assert said("s-stage", "wt merge bolt/smoke-2", stage_by=by) == "verified agent:swb-2-conductor 4 u-23"
+        assert said("s-stage", "wt submit bolt/smoke-2", stage_by=by) == "verified agent:swb-2-conductor 6 u-25"
         assert said("s-stage", "the open security groups are mine", stage_by=by) == "verified user 5 u-24"
         assert said("s-stage", "Close the open security groups verify found.", stage_by=by) == "verified user 5 u-24"
         assert said("s-stage", "open security groups on stack edge") == "verified user 3 u-22"
@@ -210,8 +212,8 @@ class TestReceived:
 
     def test_the_agents_own_words_quoting_a_prompt_and_another_commands_name_or_arguments_are_not_received(self, put):
         put("s-said", user(None, "<command-name>/opsx:verify</command-name>\n<command-args>edge-groups</command-args>"),
-            wrote(None, "Merge a into bolt/b: wt merge bolt/b --no-squash --no-remove"))
-        assert transcript.received("s-said", 0, "Merge a into bolt/b: wt merge bolt/b --no-squash --no-remove") == {"received": False}
+            wrote(None, "Merge a into bolt/b: wt submit bolt/b --no-remove"))
+        assert transcript.received("s-said", 0, "Merge a into bolt/b: wt submit bolt/b --no-remove") == {"received": False}
         assert transcript.received("s-said", 0, "/opsx:verify edge-groups Close the groups.") == {"received": False}
         assert transcript.received("s-said", 0, "/opsx:apply edge-groups") == {"received": False}
         assert transcript.received("s-said", 0, "/opsx:verify edge-groups") == {"received": True}

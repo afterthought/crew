@@ -1,9 +1,10 @@
 # A unit's stages from the bolt's give, through the crew command on the stubs (tests.11, record 0022): give makes the
-# bolt's worktree, ready through the kit's declaration as every worktree crew makes is (plan.17), a setup that fails
-# refusing the stage until a second run sets the place up; each stage of a unit takes a slot, starts a fresh agent in the unit's place and sends its prompt;
-# the waits end each stage at its deliverable and record it; the team's read records an end nobody waited on, fetching
-# and gathering once; verify's report ends it; and code's prompt names an unmerged unit's overlapping Touches. The
-# units journey's other parts: t-journey-slots, t-journey-merge, t-journey-prompts, t-journey-fix, t-journey-land.
+# bolt's branch and no worktree (record 0026); a unit's place is ready through the kit's declaration as every worktree
+# crew makes is (plan.17), a setup that fails refusing the stage until a second run sets the place up; each stage of a
+# unit takes a slot, starts a fresh agent in the unit's place and sends its prompt; the waits end each stage at its
+# deliverable and record it; the team's read records an end nobody waited on, fetching and gathering once; verify's
+# report ends it; and code's prompt names an unmerged unit's overlapping Touches. The units journey's other parts:
+# t-journey-slots, t-journey-merge, t-journey-prompts, t-journey-fix, t-journey-land.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -24,12 +25,12 @@ has "$(grep '^%allowed: Unit' "$T/plan.rec")" "Amended"
 by_hand 'unit("b", "tenant-environments", "a"); [unit(u, "tenant-environments") for u in "cde"]
 p.insert(plan.Rec("Bolt", [("Bolt", "console-pages"), ("Repo", "switchboard-kit"), ("Goal", "The console lists them.")]))'
 expect_ok crew bolt give swb-1
-has "$out" "swb-1 holds tenant-environments: bolt/tenant-environments at $bolt on $box"
+has "$out" "swb-1 holds tenant-environments: bolt/tenant-environments from switchboard-kit's main at $(git -C "$k" rev-parse --short main) on $box, merged into only through sluice"
 eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team)" "swb-1"
 eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
-eq "$(ready "$bolt")" 1
+[[ ! -e $kd/bolts ]] || fail "give made a worktree for the bolt"
 eq "$(field mac-studio bolt.give On) $(field mac-studio bolt.give Commit)" "bolt/tenant-environments team/swb-1 WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
-ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give makes the bolt's branch from main and its worktree on the team's host, its toolchain printed and moon set up inside it"
+ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give makes the bolt's branch from main on the team's host and no worktree"
 
 # The conductor runs the stages on the team's host.
 export CREW_AGENT=swb-1-conductor
