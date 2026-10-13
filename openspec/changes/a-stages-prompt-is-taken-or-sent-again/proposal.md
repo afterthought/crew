@@ -11,7 +11,7 @@ crew types a stage's prompt with `herdr agent prompt` and reads nothing back. he
 - When crew starts a stage (construct, code, verify, merge, a fix, a fix's merge) it waits until the fresh agent is ready for input, sends the stage's prompt, and then reads the agent's own transcript to see that Claude received it. It does not say the stage started until it has.
 - When the transcript does not show the prompt within a short time, crew clears whatever was left typed in the input and sends the prompt once more, and reads again.
 - When the second sending is not taken either, crew clears the input, records the stage as never started, and the command fails saying so and how to run it again. Nothing is left typed in the pane, and no stage end is owed for it.
-- The same holds for crew's greetings (a conductor's, and each agent's crew starts outside a team) and for the request that starts ops's proof of a bolt: sent once the agent is ready, read back, sent once more, and reported as not delivered when the second is not taken.
+- The same holds for crew's greetings (a conductor's, and each agent's crew starts outside a team): sent once the agent is ready, read back, sent once more, and reported as not delivered when the second is not taken.
 - An agent that never becomes ready for input (it stays on a question in its pane, or herdr never names its session) gets nothing typed, and its stage is reported as never started.
 - When crew cannot read whether the prompt was taken (the agent went straight to work but its transcript shows no prompt, or the transcript can't be read), it sends nothing more, records no start, and says what it could not read.
 
@@ -23,7 +23,7 @@ None.
 
 ### Modified Capabilities
 
-- `bolt-teams`: new requirements that a stage begins only when its agent takes its prompt, that a prompt not taken is sent once more, that a stage whose prompt is not taken never started, and that ops's proof request is taken or sent again.
+- `bolt-teams`: new requirements that a stage begins only when its agent takes its prompt, that a prompt not taken is sent once more, and that a stage whose prompt is not taken never started.
 - `main-level`: new requirements that a greeting is taken or sent again, and that a greeting not taken is reported with nothing left typed.
 
 ## Impact

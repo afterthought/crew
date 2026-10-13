@@ -124,7 +124,7 @@ A conflict between two units, forecast, met at a rebase or met at merge, SHALL b
 - code: `/opsx:apply`;
 - verify: `/opsx:verify`;
 - settle: the coder's brief, with the forecast or amendment that reached a unit waiting to merge;
-- merge: rebase and merge into the bolt, through `wt submit bolt/<bolt>` where the kit opts into sluice, else `wt merge bolt/<bolt> --no-squash --no-remove`.
+- merge: a submission to the bolt, `wt submit bolt/<bolt> --no-remove`, which sluice lands only when the checks the kit's policy requires of its bolt branches pass on the bolt with the unit merged.
 
 Code SHALL start as soon as the unit's change is committed, with no review between.
 
@@ -144,20 +144,24 @@ Code SHALL start as soon as the unit's change is committed, with no review betwe
 - **WHEN** `crew unit run <unit> verify` runs on a unit in `code`
 - **THEN** it is refused, naming the tasks still open
 
-#### Scenario: Merging without sluice
-- **WHEN** a kit has not opted into sluice and a verified unit's merge stage runs
-- **THEN** it merges with `wt merge`, one merge into the bolt at a time, gated by the kit's merge hooks
-
-#### Scenario: Merging through sluice
-- **WHEN** a kit has opted into sluice and a verified unit's merge stage runs
-- **THEN** it submits with `wt submit bolt/<bolt>`, the kit's pre-merge hooks run as the submit gate, sluice's verdict decides the merge, and the unit's `After` units are its after-entries
+#### Scenario: Merging
+- **WHEN** a verified unit's merge stage runs
+- **THEN** its agent is told to run `wt submit bolt/<bolt> --no-remove` in the unit's place, and sluice's verdict decides whether the unit lands on the bolt
 
 ### Requirement: Work happens in fixed places
-A bolt SHALL be built on `bolt/<bolt>`, branched from main, in the worktree `<kit>/bolts/<bolt>`. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt with the kit's merge hooks, or through sluice where the kit opts into it. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over.
+A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.
+
+#### Scenario: A bolt is given
+- **WHEN** `crew bolt give swb-1` gives swb-1 the bolt `b`
+- **THEN** `bolt/b` is made from the kit's main on swb-1's host, no worktree is made for it, and swb-1's conductor and ops start in the kit's main checkout
 
 #### Scenario: A unit merges
-- **WHEN** the merge stage of a verified unit finishes
-- **THEN** `bolt/<bolt>` holds the unit's change, `places/<unit>` is gone, and the unit's slot is free
+- **WHEN** the merge stage of a verified unit submits it and sluice lands it
+- **THEN** `bolt/<bolt>` holds the unit's change in a merge commit sluice made, `places/<unit>` is gone, and the unit's slot is free
+
+#### Scenario: A kit with a crew-prepare script
+- **WHEN** crew makes a unit's place in a kit whose main checkout's devenv profile holds a `crew-prepare` script
+- **THEN** the script does not run
 
 ### Requirement: A unit in flight goes back through construct and review
 `crew unit run <unit> construct "<words>"` SHALL be accepted at any stage before the unit has merged into its bolt. Run on a unit that is in code or in verify, it SHALL mark the unit amended in the plan before the stage starts. While construct runs again, `crew unit run <unit> code`, `verify` and `merge` SHALL be refused; once it has committed, the unit SHALL go on from its tasks with no approval asked, and its revised change SHALL be due for the next batch.

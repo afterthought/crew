@@ -16,7 +16,7 @@ crew SHALL read a kit's declaration from the `[tests]` table of `.config/sluice.
 - **THEN** crew refuses, naming the file and the key
 
 ### Requirement: A worktree is made ready through its kit's declaration
-When crew makes a bolt's, unit's or fix's worktree, on the team's host and before any agent starts there, it SHALL run the declared toolchain command in the worktree and keep what it prints in the worktree's git directory, outside its tree; then, for a moon runner, `moon setup` inside that toolchain. A `"command"` runner SHALL need no setup. A kit that declares nothing SHALL have nothing run. crew SHALL do the same when it finds the worktree already made.
+When crew makes a unit's, chore's or fix's worktree, on the team's host and before any agent starts there, it SHALL run the declared toolchain command in the worktree and keep what it prints in the worktree's git directory, outside its tree; then, for a moon runner, `moon setup` inside that toolchain. A `"command"` runner SHALL need no setup. A kit that declares nothing SHALL have nothing run. crew SHALL do the same when it finds the worktree already made.
 
 #### Scenario: A kit on moon
 - **WHEN** crew makes a unit's place in a kit declaring a toolchain and the moon runner

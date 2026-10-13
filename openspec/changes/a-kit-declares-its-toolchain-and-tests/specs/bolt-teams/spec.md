@@ -1,11 +1,15 @@
 ## MODIFIED Requirements
 
 ### Requirement: Work happens in fixed places
-A bolt SHALL be built on `bolt/<bolt>`, branched from main, in the worktree `<kit>/bolts/<bolt>`. A unit SHALL be built on `unit/<unit>`, branched from its bolt, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt with the kit's merge hooks. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew.
+A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.
+
+#### Scenario: A bolt is given
+- **WHEN** `crew bolt give swb-1` gives swb-1 the bolt `b`
+- **THEN** `bolt/b` is made from the kit's main on swb-1's host, no worktree is made for it, and swb-1's conductor and ops start in the kit's main checkout
 
 #### Scenario: A unit merges
-- **WHEN** the merge stage of a verified unit finishes
-- **THEN** `bolt/<bolt>` holds the unit's change, `places/<unit>` is gone, and the unit's slot is free
+- **WHEN** the merge stage of a verified unit submits it and sluice lands it
+- **THEN** `bolt/<bolt>` holds the unit's change in a merge commit sluice made, `places/<unit>` is gone, and the unit's slot is free
 
 #### Scenario: A kit with a crew-prepare script
 - **WHEN** crew makes a unit's place in a kit whose main checkout's devenv profile holds a `crew-prepare` script

@@ -28,10 +28,3 @@ When the second sending is not taken either, or the agent never becomes ready fo
 #### Scenario: crew cannot read whether it was taken
 - **WHEN** a merge stage's prompt is sent, and the agent's transcript cannot be read, or the agent is working while its transcript shows no prompt received
 - **THEN** the prompt is not sent again and nothing is pressed in the pane, and the command fails naming what crew could not read
-
-### Requirement: Ops's proof request is taken or sent again
-The request crew sends ops to start its proof of a bolt SHALL be read back and sent once more on the same terms as a stage's prompt. A proof whose request is not taken SHALL be reported as never started, with no proof owed.
-
-#### Scenario: Ops's proof request is not taken
-- **WHEN** `crew prove swb-1` sends ops its request and neither sending shows in ops's transcript within the time
-- **THEN** ops's input is cleared, the command fails saying the proof never started, and no proof is owed
