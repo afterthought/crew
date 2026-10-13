@@ -89,7 +89,7 @@ Code
 
 **[code.5]** Rules out: crew editing the teams file; a version-1 file accepted. Source: `bolt-teams` spec "Teams are fixed in the teams file"; `crew.py` 100–161.
 
-**[code.6]** Rules out: `git add -A` in a brief or a script; an agent moving a bolt's branch by `git reset`. Not ruled out: crew moving a branch it made, `UNREBASE`'s undo of its own rebase and the bolt's move to a fix that carries it (ADR 0015), which move a branch and discard nothing. Source: `openspec/config.yaml`; every brief's committing section.
+**[code.6]** Rules out: `git add -A` in a brief or a script; an agent moving a bolt's branch by `git reset`. Not ruled out: crew moving a branch it made, `UNREBASE`'s undo of its own rebase, which moves a branch and discards nothing; the bolt's move to a carrying fix went with record 0015 (superseded by record 0026). Source: `openspec/config.yaml`; every brief's committing section.
 
 **[code.7]** Rules out: a `subprocess`, `kit_git`, `on_machine` or `crew.tell` call inside a decision; a decision only bash can make. Not ruled out: the reads and acts themselves, proved by the contract and end-to-end tiers. Source: ADR 0022; `tests.11`. Not built: decisions come out of `plan.py` and `plugin/bin/crew` as their tests convert: `_open.md`.
 

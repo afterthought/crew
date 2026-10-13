@@ -1,7 +1,7 @@
 ---
 number: 15
 title: A bolt meets main at its landing, and a fix carries it there when they conflict
-status: accepted
+status: superseded
 date: 2026-10-09
 decision-makers:
 - Chuck Swanberg
@@ -9,6 +9,8 @@ decision-makers:
 ---
 
 # A bolt meets main at its landing, and a fix carries it there when they conflict
+
+Superseded 2026-10-13 by record 0026, proposed in the elaboration session: a bolt meets main through sluice, a conflict is taken into the bolt by a submission, and no fix carries a bolt.
 
 Deciders: the user (through crw-1's conductor and swancloud-planner, signal 2026-10-09-crw-1-conductor-47d11d45/01: the bolt a-teams-cards-are-its-conductors cannot land because its landing conflicts with crew's main and a fix cannot carry a rebase into the bolt; for this bolt the user moves the bolt's branch by hand); swancloud-design.
 Sources: `plugin/roles/main-ops.md` steps 2 and 3; `plugin/roles/coder.md` on a merge whose rebase conflicts; `docs/architecture/plan.md` plan.8; `teams.md` teams.5; `core.md` code.6, read.4; `plan.py` `REBASE` and `UNREBASE`; `wt merge --help` (rebase, then fast-forward the target; `--no-rebase` requires a fast-forward).
