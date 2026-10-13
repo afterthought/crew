@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: A verify's report says what to do with each finding
-A unit's verify SHALL run once, when its tasks are all ticked, and a chore's once its code has committed. Its report SHALL end by marking each finding it raised fix, leave or amend: amend for one that would change what the unit is for, its intent or what its specs say must be true. A chore's report SHALL mark each finding fix or leave.
+A unit's verify SHALL run once, when its tasks are all ticked, and a chore's once its code has committed. It SHALL check the code against the unit's change as written, its proposal, specs, design and tasks, or a chore's against its words, and its report SHALL end by marking each finding it raised fix or leave. Nothing from verify SHALL go to the planner or wait on the user.
 
 #### Scenario: A report's last section
 - **WHEN** unit `u`'s verify raises a critical finding, a warning and a suggestion
-- **THEN** its saved report ends with a line for each, marked fix, leave or amend, and the critical one is not marked leave
+- **THEN** its saved report ends with a line for each, marked fix or leave, and the critical one is not marked leave
 
 ### Requirement: A verify's findings are fixed in one round, with no card
 The conductor SHALL take a report's marks as they stand, post no card for it and ask the user nothing about it. When the report marks a finding fix, the conductor SHALL run code once more, a fresh agent told the report's path, which fixes every finding marked fix and only those; a finding marked leave SHALL be left. No verify SHALL run after the fix round, and the unit then merges. A fix round that stops short or fails SHALL be a stuck stage, run again or passed over only on the user's word.
@@ -15,19 +15,12 @@ The conductor SHALL take a report's marks as they stand, post no card for it and
 - **THEN** the conductor runs `crew unit run u code "Fix every finding the verify report at <path> marks fix."` with no card posted, the coder fixes those two and not the third, and once that stage delivers the conductor runs the merge with no verify again
 
 #### Scenario: A report with nothing to fix
-- **WHEN** unit `u`'s report marks no finding fix or amend
+- **WHEN** unit `u`'s report marks no finding fix
 - **THEN** the conductor runs its merge next
 
 #### Scenario: A fix round that stops short
 - **WHEN** the coder of `u`'s fix round stops short, saying a finding marked fix needs a task reworded
 - **THEN** the conductor tells the user it is stuck, and runs it again or merges `u` only on the user's word
-
-### Requirement: A finding that would change what a unit is for goes to the user
-A finding a report marks amend SHALL go to the planner, in the report's words, as the unit's amendment, and the unit SHALL wait to merge until the user answers it: approved, construct runs again; dropped, the unit merges with the finding left.
-
-#### Scenario: An amendment raised by a verify
-- **WHEN** unit `u`'s report marks a finding amend
-- **THEN** the conductor tells the planner in the report's words and holds `u`'s merge; when the user approves the amendment, construct runs again, and when they drop it, `u` merges with the finding left
 
 ### Requirement: A unit fixed after its verify waits to merge
 A unit that has delivered its verify, and its fix round when one ran, SHALL wait to merge: a forecast or an amended `After` unit reaches it as a settle stage, and a chore's merge needs its verify once. Construct run again SHALL end the wait, since its change is new.

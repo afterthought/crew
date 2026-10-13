@@ -2,15 +2,15 @@
 
 ## Context
 
-Record 0027, proposed on 2026-10-13 on the user's words in the recovery session, makes a unit's verify one round with no card, and builds record 0006's archive at the merge. Today `conductor.md` step 3 has the conductor read the report, tell the user what it would do about each finding and post a verify card (`verify/<unit>/<stamp>`, a `choice` or `multi`); the rail lists the report as a row until a commit or the merge ends it (`rail_rows`); starting construct, code or merge on a unit in verify names that row's card for the conductor to close (`ends_row`, `stage_ended_row`); a write that takes a unit out of a team's bolt names its verify row (`lost_rows`); the board marks the unit ✎; and crew refuses a chore's merge until verify has run since its last code (`chore_refusal`, `verified`). Nothing archives a change.
+Record 0027, accepted on 2026-10-13 on the user's words in the recovery session, makes a unit's verify one round with no card, grounded in the unit's change as written, and builds record 0006's archive at the merge. Today `conductor.md` step 3 has the conductor read the report, tell the user what it would do about each finding and post a verify card (`verify/<unit>/<stamp>`, a `choice` or `multi`); the rail lists the report as a row until a commit or the merge ends it (`rail_rows`); starting construct, code or merge on a unit in verify names that row's card for the conductor to close (`ends_row`, `stage_ended_row`); a write that takes a unit out of a team's bolt names its verify row (`lost_rows`); the board marks the unit ✎; and crew refuses a chore's merge until verify has run since its last code (`chore_refusal`, `verified`). Nothing archives a change.
 
-The rules this rests on: `state.2`, `read.1`, `code.6`, `code.7`, `code.8`; `briefs.2`, `briefs.11`, `briefs.13`, `briefs.15`; `teams.2`, `teams.4`, `teams.5`, `teams.14`, `teams.17`; `plan.6`, `plan.11`, `plan.15`; `tests.4`, `tests.6`, `tests.10`, `tests.11`; `docs.2`, `docs.4`, `docs.5`, `docs.6`. Pages whose area this touches: `plan.md`, `teams.md`, `briefs.md`, `tests.md`, `docs.md`.
+The rules this rests on: `state.2`, `read.1`, `code.6`, `code.7`, `code.8`; `briefs.2`, `briefs.11`, `briefs.13`, `briefs.15`; `teams.2`, `teams.4`, `teams.5`, `teams.14`, `teams.17`; `plan.11`; `tests.4`, `tests.6`, `tests.10`, `tests.11`; `docs.2`, `docs.4`, `docs.5`, `docs.6`. Pages whose area this touches: `plan.md`, `teams.md`, `briefs.md`, `tests.md`, `docs.md`.
 
 ## Goals / Non-Goals
 
 **Goals:**
 - A unit goes from every task ticked to merged with no wait on the user: verify once, fix once when the report says so, archive, merge.
-- What would change what a unit is for still reaches the user, by the amendment's path.
+- Verify answers to the unit's change as written: nothing it finds changes what the change says.
 - A change reaches its bolt, and so main, archived.
 
 **Non-Goals:**
@@ -22,9 +22,9 @@ The rules this rests on: `state.2`, `read.1`, `code.6`, `code.7`, `code.8`; `bri
 
 ### The report marks each finding, and the marks are taken as they stand
 
-Verify's brief has it end the report OpenSpec's verify produced, left whole, with a section of its own, `## What to do`: a line per finding, in the report's order, starting **fix**, **leave** or **amend**, with why. Fix is what the unit can put right within what its change already says; leave is what is not worth a round or not the unit's; amend is what would change its intent or what its specs say. A CRITICAL finding is never left. A chore's report marks fix or leave, since a chore has no intent to amend (`plan.11`).
+Verify checks the code against the unit's change as it is written, its proposal, specs, design and tasks: a finding is where the code falls short of the change or goes beyond it, and the change is never what verify would change (the user, accepting record 0027: "the whole point of verify is that it should be grounded in the original proposal"). Its brief has it end the report OpenSpec's verify produced, left whole, with a section of its own, `## What to do`: a line per finding, in the report's order, starting **fix** or **leave**, with why. Fix is where the code does not do what the change says, or does more, and can be put right in code, tests, a task's own work or the Touches block; leave is what is not worth a round or not the unit's. A CRITICAL finding is never left. A chore's report is marked the same way, against its words.
 
-The report's author decides, not the conductor: the verify agent has read the change against its code, and the conductor writes no design (`briefs.1`). The conductor chooses no findings, posts no card and asks the user nothing. crew does not parse the section: the conductor reads it and the coder reads it, and a check on its shape would refuse a stage's deliverable over prose.
+The report's author decides, not the conductor: the verify agent has read the change against its code, and the conductor writes no design (`briefs.1`). The conductor chooses no findings, posts no card, asks the user nothing and takes nothing of it to the planner. crew does not parse the section: the conductor reads it and the coder reads it, and a check on its shape would refuse a stage's deliverable over prose.
 
 Alternatives considered: crew reading the marks and starting the fix round itself (a parser of an agent's prose deciding a stage); the conductor's options without a card (the conductor deciding design).
 
@@ -37,10 +37,6 @@ A fix round that stops short or fails is a stuck stage: the conductor tells the 
 ### A verify stands through its fix round
 
 `verified` reads a delivered verify end later than every construct start of the unit; a code start after it no longer undoes it. So a unit fixed once still waits to merge, a forecast reaches it as a settle (`reach_way`, `teams.14`), and a chore's merge needs its verify once (`chore_refusal`, `teams.5`). Construct run again undoes it, since the change is new and its round starts over.
-
-### An amend holds the merge until the user answers
-
-The conductor tells the planner in the report's words, as it tells any change to what a unit builds; the planner proposes `unit amend` (`plan.15`); the unit waits to merge, since a merged unit is never amended (`plan.6`). Approved, crew runs construct again and the unit goes round again from its tasks; dropped, the planner tells the conductor, and the unit merges with the finding left. crew holds nothing: the hold is the conductor's, as the merge's start is.
 
 ### A unit's merge archives its change first, and delivers only so
 
@@ -58,7 +54,7 @@ Alternatives considered: crew archiving at the merge's start (crew committing in
 
 ### Specs that other open changes touch
 
-`Each rail row has a card key`, `The owner of a row posts its card`, `A card carries what the user would read and the row's answers` and `A card's words are the document's own` in `rail-cards`, and `A session is started for a card's row by its key` in `card-sessions`, are also modified by changes open on main with every task ticked (`units-build-at-once-and-are-reviewed-in-batches`, `a-batch-cards-notes-are-its-note-and-its-sessions`, `a-card-lost-to-its-owner-is-posted-again`, `a-proposals-card-shows-the-change-and-lets-new-units-be-left-out`). This change's deltas are written on the text those changes leave, less what it drops, so they hold once those are archived first. The `chores` delta modifies requirements `chores-beside-units-and-fixes` adds, so that change is archived first. `every-crew-card-goes-through-crew` and `units-merge-and-bolts-land-only-through-sluice`, not built, are not read here; whichever archives later carries the other's words.
+`Each rail row has a card key`, `The owner of a row posts its card`, `A card carries what the user would read and the row's answers` and `A card's words are the document's own` in `rail-cards`, and `A session is started for a card's row by its key` in `card-sessions`, are also modified by changes open on main with every task ticked (`units-build-at-once-and-are-reviewed-in-batches`, `a-batch-cards-notes-are-its-note-and-its-sessions`, `a-card-lost-to-its-owner-is-posted-again`, `a-proposals-card-shows-the-change-and-lets-new-units-be-left-out`). This change's deltas are written on the text those changes leave, less what it drops, so they hold once those are archived first. The `crew card` requirements `a-card-reaches-the-user-when-the-tools-drop` added, archived on main, show a landing card where they showed a verify card. `every-crew-card-goes-through-crew` and `units-merge-and-bolts-land-only-through-sluice`, not built, are not read here; whichever archives later carries the other's words.
 
 ## Risks / Trade-offs
 

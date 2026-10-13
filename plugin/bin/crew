@@ -36,7 +36,7 @@
 #                                      kit's .config/sluice.toml (its toolchain, then its runner's setup); code
 #                                      builds it as soon as it is committed, its prompt naming an overlap of
 #                                      Touches; verify checks it once, naming the paths it changed and did not
-#                                      declare, its report marking each finding fix, leave or amend; code run again
+#                                      declare, its report marking each finding fix or leave; code run again
 #                                      with the report's path is its one round of fixes; settle takes what reached
 #                                      a verified unit; merge archives its change and merges it into the bolt once
 #                                      each unit it comes after has merged, delivered once the bolt holds the change

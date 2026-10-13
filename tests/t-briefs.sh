@@ -368,33 +368,32 @@ for want in "Settle <unit>: <what reached it>" "keeping both changes' intents" "
 done
 lacks "$out" "the user reviewed and approved it"
 expect_ok crewpy brief swb-1 verify; has "$out" "\"changed and not declared\""
-# A verify is one round with no card (teams.17, record 0027): its report marks each finding fix, leave or amend; the
-# conductor takes the marks as they stand, runs one fresh coder on what is marked fix and sends an amend to the planner;
-# the coder fixes those alone, and a unit's merge archives its change first.
+# A verify is one round with no card (teams.17, record 0027): it checks the code against the change as written, and its
+# report marks each finding fix or leave; the conductor takes the marks as they stand and runs one fresh coder on what is
+# marked fix, taking nothing to the planner; the coder fixes those alone, and a unit's merge archives its change first.
 expect_ok crewpy brief swb-1 conductor
-for want in "run verify, once" "Its recommendations are taken as they stand: post no card for it, ask the user nothing about it, and choose no findings yourself" \
+for want in "run verify, once" "Its recommendations are taken as they stand: post no card for it, ask the user nothing about it, take nothing of it to the planner, and choose no findings yourself" \
   "unit run <unit> code \"Fix every finding the verify report at <path> marks fix.\"" "Once that delivers, the unit goes on to merge, with no verify again" \
-  "A finding marked leave is left" "hold that unit's merge until the planner tells you the user's answer" \
-  "A fix round that stops short, is stuck or is no longer running is a stuck stage" "Its merge stage archives the unit's change first" \
-  "a chore's report marking each finding fix or leave"; do
+  "A finding marked leave is left" "A fix round that stops short, is stuck or is no longer running is a stuck stage" \
+  "Its merge stage archives the unit's change first" "run its verify, once, and act on its report as for a unit"; do
   has "$out" "$want"
 done
-lacks "$out" "the user decides with you what is fixed"
+lacks "$out" "the user decides with you what is fixed"; lacks "$out" "marked amend"
 expect_ok crewpy brief swb-1 verify
-for want in "\`## What to do\`" "starting **fix**, **leave** or **amend**" "A CRITICAL finding is never left." "\"Nothing to do.\"" \
-  "nothing verifies the fixes again" "each finding fix or leave, since a chore has no intent to amend"; do
+for want in "You check the code against the unit's change as it is written, its proposal, specs, design and tasks" \
+  "\`## What to do\`" "starting **fix** or **leave**" "A CRITICAL finding is never left." "\"Nothing to do.\"" \
+  "nothing verifies the fixes again, and the unit merges" "end it with *What to do* as below"; do
   has "$out" "$want"
 done
-lacks "$out" "decides with the user"
+lacks "$out" "decides with the user"; lacks "$out" "**amend**"
 expect_ok crewpy brief swb-1 coder
 for want in "you are the unit's one round of fixes after its verify" "marks fix, and only those" "No verify runs after you" \
   "\`openspec archive <unit> --yes\`" "crew reads the merge as delivered only once the bolt holds the change archived" \
   "A chore or a fix has no change to archive"; do
   has "$out" "$want"
 done
-lacks "$out" "When the prompt carries findings from a verify"
-expect_ok crewpy brief wldn planner; has "$out" "holds that unit's merge for your proposal"
-ok "a verify is one round with no card: the report marks each finding, one fresh coder fixes what it marks fix, an amend goes to the planner, and the merge archives the change first"
+lacks "$out" "When the prompt carries findings from a verify"; lacks "$out" "leave or amend"
+ok "a verify is one round with no card, grounded in the change as written: the report marks each finding fix or leave, one fresh coder fixes what it marks fix, nothing goes to the planner, and the merge archives the change first"
 expect_ok crewpy brief wldn reviewer
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/reviewer.md left ${BASH_REMATCH[0]} unfilled"
 for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but this file" "at the commit the prompt names" \

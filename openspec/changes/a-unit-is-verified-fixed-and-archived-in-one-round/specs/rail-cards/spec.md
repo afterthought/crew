@@ -133,6 +133,79 @@ Before a Pending You card is posted from a session crew started, crew SHALL refu
 - **WHEN** brd-2-conductor, whose team holds bolt `y`, posts a card keyed `verify/u/20261013-1200` for a unit `u` of `y`
 - **THEN** the call is refused before it reaches Pending You, naming `land/y/<head>`
 
+### Requirement: A crew agent's card acts are in the run record
+Each card a crew agent posts, updates, withdraws or closes in Pending You, through Pending You's tools in its session or through `crew card`, SHALL be an entry in its partition's run record, naming the row's object, the card's id in `Card`, and the key in `Key` when it is a row's key. Through `crew card` the card's id SHALL be read from Pending You's own reply. An entry SHALL NOT hold a card's title, summary or any other text written on it.
+
+#### Scenario: A card posted and closed
+- **WHEN** swb-1-conductor posts the card `review/x/abc1234` and later closes it
+- **THEN** the run record has a `card.post` entry on `unit/x` with that key and the card's id, and a `card.close` entry with the same id
+
+#### Scenario: A card posted through crew
+- **WHEN** swb-1-conductor runs `crew card post land/b1/<head>` and Pending You answers with the card `req_b1`
+- **THEN** the run record has a `card.post` entry on `bolt/b1` with the key `land/b1/<head>` and the card `req_b1`, and nothing written on the card
+
+#### Scenario: The user's own sessions
+- **WHEN** a Claude session crew did not start posts a Pending You card
+- **THEN** nothing is written to crew's run record
+
+### Requirement: A crew agent's card is posted through crew
+`crew card post <key>` SHALL post the card given as one JSON object on its standard input as the asking assistant, through the fleet's `pendingyou mcp --app claude-code` under the host's sign-in, and SHALL print the card's id and its link. crew SHALL set the card's `idempotencyKey` to the key, its session to the agent's crew name, this host and the folder the command runs in, and its area to the one Pending You matches to the folder's git remote, or, when none matches, the kit's area made under `create-area:<owner>/<kit>`. It SHALL refuse a card that gives any of those itself. Before anything reaches Pending You it SHALL refuse a key and a form that crew's card hook refuses, in the hook's words.
+
+#### Scenario: A landing card posted
+- **WHEN** swb-1-conductor, whose team holds bolt `b1`, runs `crew card post land/b1/<head>` in its worktree with a landing card on standard input
+- **THEN** Pending You is asked, as swb-1-conductor, to post that card under the key `land/b1/<head>`, with swb-1-conductor's name, the host and the worktree as its session and the kit's area, and the command prints the card's id and link
+
+#### Scenario: A verify card posted
+- **WHEN** swb-1-conductor runs `crew card post verify/v1/<stamp>`
+- **THEN** the command refuses in the hook's words, naming `land/b1/<head>`: a verify report is no row, and Pending You is not called
+
+#### Scenario: Posted again
+- **WHEN** swb-1-conductor runs the same post a second time
+- **THEN** Pending You gives the same card back under the same key, and no second card is made
+
+#### Scenario: A key that is not the agent's
+- **WHEN** swb-1-conductor runs `crew card post proposal/9`
+- **THEN** the command refuses in the hook's words, naming the keys that are swb-1-conductor's, and Pending You is not called
+
+#### Scenario: A card in another form than its row's
+- **WHEN** swb-1-conductor posts its landing card as a choice
+- **THEN** the command refuses, naming the form a landing's card takes, and Pending You is not called
+
+#### Scenario: A card that sets crew's fields
+- **WHEN** a card on standard input gives its own `areaId`
+- **THEN** the command refuses, saying crew sets `idempotencyKey`, `areaId` and `session` itself
+
+#### Scenario: No kit's area yet
+- **WHEN** Pending You matches no area to the worktree's remote `github.com/WilldanGroup/switchboard-kit`
+- **THEN** crew makes the area under `create-area:WilldanGroup/switchboard-kit`, named `switchboard-kit`, in the partition's group, and files the card there
+
+### Requirement: A crew agent's card is changed, closed and read through crew
+`crew card change <key>` SHALL change the card the agent holds under the key with the fields given on its standard input, at the version Pending You reports, and SHALL refuse a change that takes a row's card out of its form, as the hook does. `crew card close <key>` SHALL close it with `--outcome` once the agent has acted on its answer, or withdraw it with `--reason`, and SHALL then end its plannotator session as a close through Pending You's tools does. `crew card read <key>` SHALL print the card's status, whose turn it is and, when it is the agent's, the user's answer and words, and SHALL record nothing. The card a key names SHALL be the agent's newest card posted under it on this host that no close has closed; with none, each command SHALL refuse, naming the key.
+
+#### Scenario: A change
+- **WHEN** swb-1-conductor runs `crew card change land/b1/<head>` with a new summary and a change note
+- **THEN** Pending You is asked to change that card at the version it last reported, and a `card.update` entry names it
+
+#### Scenario: An answer read
+- **WHEN** the user has approved swb-1-conductor's landing card with a note
+- **THEN** `crew card read land/b1/<head>` prints that it is the agent's turn, the approval and the note
+
+#### Scenario: Closed on its answer
+- **WHEN** swb-1-conductor runs `crew card close land/b1/<head> --outcome "Told wldn-ops to land b1."`
+- **THEN** Pending You is told the answer was acted on at the card's version, a `card.close` entry names the card, and the card's plannotator session ends
+
+#### Scenario: Withdrawn
+- **WHEN** swb-1-conductor runs `crew card close land/b1/<head> --reason "A fix moved the bolt's head"`
+- **THEN** Pending You withdraws the card with that reason, and a `card.close` entry names it
+
+#### Scenario: A card lost to its owner
+- **WHEN** the host has signed in to Pending You again, and swb-1-conductor runs `crew card read land/b1/<head>` for a card it posted before
+- **THEN** the command refuses, saying the card is lost to its owner and to post the row's card again with `crew card post land/b1/<head>`, its summary saying an older copy is dead; and once posted again, the new card is the one the key names
+
+#### Scenario: No card under the key
+- **WHEN** swb-1-conductor runs `crew card read land/b1/<head>` and has posted no card under it
+- **THEN** the command refuses, saying swb-1-conductor holds no open card under that key
+
 ## REMOVED Requirements
 
 ### Requirement: A verify report's card is the conductor's options
