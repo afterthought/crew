@@ -11,7 +11,7 @@ RUNS = [
     ["card", "sweep", "--label", "wldn"],
     ["state", "init", "wldn"],
     ["_team", "restart", "swb-1", "ops", "--no-greet"],
-    ["_prove", "swb-1", "--wait", "--timeout", "0", "--stuck", "60000"],
+    ["bolt", "submit", "b", "--label", "wldn"],
     ["_unit-run", "a", "construct", "--force", "--", "-x is the tenant"],
     ["_fix-run", "swb-1", "tidy", "wait", "--timeout", "0"],
 ]

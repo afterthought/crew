@@ -38,10 +38,10 @@
 #                                      Touches; verify checks it once, naming the paths it changed and did not
 #                                      declare, its report marking each finding fix or leave; code run again
 #                                      with the report's path is its one round of fixes; settle takes what reached
-#                                      a verified unit; merge archives its change and merges it into the bolt once
-#                                      each unit it comes after has merged, delivered once the bolt holds the change
-#                                      archived, with wt merge, or wt submit where the kit opts into
-#                                      sluice. Construct run again on a planned unit marks it amended: code waits
+#                                      a verified unit; merge archives its change and submits it to the bolt
+#                                      through sluice, wt submit, once each unit it comes after has merged,
+#                                      delivered once the bolt holds the change archived. Construct run again on a
+#                                      planned unit marks it amended: code waits
 #                                      until that construct has committed. An amendment to a unit's intent runs
 #                                      its construct itself, and anyone may start construct on a unit that waits
 #                                      amended. Refused while the team is down. The stage begins only once its
@@ -71,20 +71,11 @@
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
 #                                      built by a fresh code agent; a name already in use on the bolt is refused.
 #                                      Its prompt, and its merge's, is taken or sent again as a unit stage's is
-#   crew fix     <team> <name> --merge merge the fix into the bolt; or, when the fix carries the bolt onto main (the
-#                                      bolt's own commits replayed onto the kit's main, each with its message and
-#                                      author, and nothing else), end its agent, make its head the bolt's head, and
-#                                      run the kit's post-merge checks there: the bolt is then proven again before it
-#                                      lands. git range-diff of the two is printed beside the judgment as the
-#                                      reading, and judges nothing
+#   crew fix     <team> <name> --merge merge the fix into the bolt: a merge stage, its submission to sluice as a
+#                                      unit's is
 #   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>]
 #                                      wait for the fix's stage to end: its commits, or its merge on the bolt
-#   crew prove   <team> ["<words>"]    ask the team's ops to deploy the bolt and work each unit's Proof in dev list;
-#                                      its proof file in the team's reports folder is the proof's end. The request is
-#                                      taken or sent again as a stage's prompt is; one not taken starts no proof
-#   crew prove   <team> --wait [--timeout <ms>] [--stuck <ms>]
-#                                      wait for ops's proof file
-#   crew needs   "<what you need>"     run by a stage's agent, or ops during a proof, that can't finish without
+#   crew needs   "<what you need>"     run by a stage's agent that can't finish without
 #                                      something only someone else can give: its stage ends short, and the conductor
 #                                      is given the words, by its wait or by a tell
 #
@@ -287,13 +278,10 @@ case $cmd in
       --merge) one _fix-run "$2" "$name" merge ${forced[@]+"${forced[@]}"} ;;
       *) one _fix-run "$2" "$name" start ${forced[@]+"${forced[@]}"} -- "$words" ;;
     esac ;;
-  needs)  # run by a stage's agent, or ops during a proof: the team and slot are its own name's
+  needs)  # run by a stage's agent: the team and slot are its own name's
     words=${2:-}
     [[ -n ${words//[[:space:]]/} ]] || { echo "usage: crew needs \"<what you tried and what you need>\"" >&2; exit 2; }
     one _needs -- "$words" ;;
-  prove)
-    need_team "${2:-}"
-    if [[ ${3:-} == --wait ]]; then limits "${@:4}"; one _prove "$2" --wait ${limit[@]+"${limit[@]}"}; else one _prove "$2" -- "${3:-}"; fi ;;
   _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
     # is over (a plan write that ends work asks for it on the team's host)
     need_team "${2:-}"; one _tidy "$2" ${forced[@]+"${forced[@]}"} ;;

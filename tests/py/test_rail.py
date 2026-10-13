@@ -44,7 +44,8 @@ def place(unit, tasks, ago, planning=True):
 def survey(ok=True, merged=True):
     kit = {"ok": True, "main": [], "fixes": [],
            "places": {"early": place("early", (0, 2), 180), "checked": place("checked", (2, 2), 120), "stale": place("stale", (2, 2), 50)},
-           "bolts": {"apex-zones": {"head": "abc1234" + "0" * 33, "head_at": iso(30), "changes": ["zone-one"] if merged else []},
+           "bolts": {"apex-zones": {"exists": True, "head": "abc1234" + "0" * 33, "head_at": iso(30), "changes": ["zone-one"] if merged else [],
+                                    "verdict": "passed (3 run, 1 replayed)"},
                      "tenant-environments": {"head": "d" * 40, "head_at": iso(200), "changes": []}}}
     return {BOX: {"ok": True, "kits": {"/kit/main": kit}}} if ok else {BOX: {"ok": False, "error": "ssh: connect to host timed out"}}
 
@@ -81,6 +82,13 @@ class TestRows:
         assert (land["key"], land["at"]) == ("land/apex-zones/abc1234", plan.utc(iso(30)))
         assert land["what"] == [f"bolt apex-zones (wldn), swb-2 on {BOX}: every unit merged; wldn-ops lands it"]
         assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+
+    def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
+        sv = survey()
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"]["verdict"] = ""
+        land, = [r for r in rows(sv=sv) if r["group"] == "land"]
+        assert land["what"][1] == "lands once its verification is green; now its head abc1234 is no landing of sluice's, so it has no verdict"
+        assert land["cmds"] == []
 
     def test_a_bolt_lands_only_once_every_units_latest_change_has_been_in_a_batch(self):
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": {"zone-one"}}}
@@ -219,6 +227,11 @@ class TestBolts:
         assert out.splitlines()[0] == "wldn/main abcdef1  WilldanGroup/crew-state"
         assert f"tenant-environments  switchboard-kit  swb-1 @ {BOX}  active" in out
         assert "  checked                                  verify 2/2   places/checked" in out
+
+    def test_a_held_bolt_shows_its_verification(self):
+        b = {x["bolt"]: x for x in self.data()["partitions"][0]["plans"][0]["bolts"]}
+        assert b["apex-zones"]["verification"] == {"state": "green", "said": "sluice's verdict on its last landing, abc1234: passed (3 run, 1 replayed)"}
+        assert "  verification: green, sluice's verdict on its last landing, abc1234: passed (3 run, 1 replayed)" in plan.bolts_text(self.data())
 
     def test_an_unreachable_hosts_bolts_read_unknown_and_the_host_is_named(self):
         d = self.data(sv=survey(ok=False))

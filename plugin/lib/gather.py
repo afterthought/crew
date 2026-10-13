@@ -12,8 +12,9 @@ chores its history holds (each `Chore:` trailer's name), and for each local bolt
 whether bolt/<bolt> exists, the changes and chores it holds, its worktree, its head and the head's time; each place under
 <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
 paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
-head, head's time and how many commits of its own it holds beyond the bolt; each fix branched from a bolt; and whether the kit merges through
-sluice, by the flag in its main checkout's .config/crew.toml. With sites, each worktree's devurl names and the host's
+head, head's time and how many commits of its own it holds beyond the bolt; each fix branched from a bolt; the kit's
+policy, its main's .config/sluice.toml as text; and each bolt's verdict, the Sluice-Result trailer on its head when
+sluice landed it. With sites, each worktree's devurl names and the host's
 portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
 folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
 system, devurl and portless and, for a change whose workflow it does not read itself, openspec, and changes nothing.
@@ -114,26 +115,6 @@ def fix_merged(main, branch, bolt):
         ["git", "merge-base", "--is-ancestor", branch, f"bolt/{bolt}"], cwd=main).returncode == 0
 
 
-def sluice(main):
-    """Whether a kit opts into sluice, by `sluice = true` in its main checkout's .config/crew.toml: (True or False,
-    None), False when it has no such file; or (None, why) when crew can't read it."""
-    path = os.path.join(main, ".config", "crew.toml")
-    if not os.path.exists(path):
-        return False, None
-    try:
-        import tomllib
-    except ImportError:
-        return None, f"python3 on this host has no tomllib to read {path}"
-    try:
-        with open(path, "rb") as f:
-            v = tomllib.load(f).get("sluice", False)
-    except (OSError, ValueError) as e:
-        return None, f"{path} can't be read: {e}"
-    if not isinstance(v, bool):
-        return None, f"{path}: 'sluice' is true or false, not {json.dumps(v)}"
-    return v, None
-
-
 def own_head(cwd, branch, bolt):
     """The newest commit of a chore's own on its branch beyond its bolt, its first-parent line with no merges, as
     (short sha, committer time in ISO 8601); (None, None) when it has none."""
@@ -148,8 +129,6 @@ def head_at(cwd, ref):
 
 
 REPORT = re.compile(r"^verify-(.+)-(\d{8}-\d{4})\.md$")
-# Ops's proof of a bolt, saved once, whole, in the same folder.
-PROOF = re.compile(r"^proof-(.+)-(\d{8}-\d{4})\.md$")
 
 
 # A change's tasks and whether its planning is complete, read from its files by openspec 1.14.1's own rules for its
@@ -391,7 +370,8 @@ def kit(req, sites=False, running=None, board=False):
     ups = upstreams(main)
     out = {"ok": True, "main": changes(main, "main"), "chores": chores(main, "refs/heads/main"), "bolts": {}, "places": {},
            "chore_places": {}, "fixes": []}
-    out["sluice"], out["sluice_error"] = sluice(main)
+    # The kit's policy, as its main holds it: what gates its bolt branches, which crew reads before it gives a bolt.
+    out["policy"] = run(["git", "show", "main:.config/sluice.toml"], main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
     # asked for, or tracked by a place, that has no branch is marked missing.
     have = [r[len("refs/heads/bolt/"):] for r in (run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/"], main) or "").split()]
@@ -403,7 +383,10 @@ def kit(req, sites=False, running=None, board=False):
                            "chores": chores(main, f"refs/heads/bolt/{b}") if exists else [],
                            "worktree": wt if at.get(wt) == f"bolt/{b}" else None,
                            "head": (run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}^{{commit}}"], main) or "").strip() or None if exists else None,
-                           "head_at": head_at(main, f"refs/heads/bolt/{b}") if exists else None}
+                           "head_at": head_at(main, f"refs/heads/bolt/{b}") if exists else None,
+                           # sluice's verdict on the bolt's last landing: its head's trailer, empty when it is no landing.
+                           "verdict": (run(["git", "log", "-1", "--format=%(trailers:key=Sluice-Result,valueonly)",
+                                            f"refs/heads/bolt/{b}"], main) or "").strip() if exists else None}
     places = os.path.join(kdir, "places")
     for path, branch in at.items():
         if os.path.dirname(path) != places or not branch:

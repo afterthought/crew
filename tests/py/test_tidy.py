@@ -122,3 +122,15 @@ class TestTidied:
 
     def test_else_it_says_what_the_tidy_said(self):
         assert plan.tidied("swb-2", "unit d", 0, "swb-2-unit-1 is free\n", "") == "swb-2-unit-1 is free"
+
+
+class TestBoltBranch:
+    """A bolt is a branch and no worktree (record 0026): the branch crew marked when it gave the bolt goes once no plan
+    has the bolt and no worktree holds it (plan.9)."""
+
+    def test_a_bolt_no_plan_has_goes(self):
+        assert plan.bolt_branch_over("b", {"a"}, False) == "bolt b is in no plan"
+
+    def test_a_planned_bolt_or_one_a_worktree_holds_stays(self):
+        assert plan.bolt_branch_over("b", {"b"}, False) is None
+        assert plan.bolt_branch_over("b", set(), True) is None

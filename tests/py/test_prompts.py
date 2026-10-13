@@ -65,21 +65,10 @@ def test_settle_names_what_reached_it():
 
 
 class TestMerge:
-    T = {"kit": {"name": "switchboard-kit"}, "machine": "chuck-herdr-alpha"}
-
-    def test_a_unit_merges_through_wt_merge_into_its_bolt(self):
-        merge = plan.merge_command(self.T, {"sluice": False}, "tenant-environments")
+    def test_a_unit_merges_into_its_bolt_only_by_a_submission_to_sluice(self):
+        merge = plan.merge_command("tenant-environments")
         assert plan.stage_prompt("merge", "a", bolt="tenant-environments", merge=merge) == (
-            "Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove")
-
-    def test_a_kit_on_sluice_submits(self):
-        assert plan.merge_command(self.T, {"sluice": True}, "b") == "wt submit bolt/b"
-
-    def test_a_kit_crew_could_not_read_is_refused(self):
-        with pytest.raises(plan.Refusal, match="its checkout on chuck-herdr-alpha was not read"):
-            plan.merge_command(self.T, None, "b")
-        with pytest.raises(plan.Refusal, match="whether switchboard-kit merges through sluice: its config is unreadable"):
-            plan.merge_command(self.T, {"sluice": None, "sluice_error": "its config is unreadable"}, "b")
+            "Merge a into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove")
 
 
 def test_what_reached_the_unit_is_carried_last():

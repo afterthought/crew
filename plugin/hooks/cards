@@ -5,28 +5,27 @@ posts, updates, withdraws or closes a card, the card is an entry in its partitio
 of its rows, and which decision records, have a card open, and whose.
 
 The PreToolUse half is the hook run as `cards --before`, before Pending You's post_request, create_area or
-update_request in a session crew started. Before a card is posted or an area made, it asks plan.card_refusal whether the
-agent may use the call's idempotencyKey: a card's must be a rail row's key the agent owns, which only the planner and
-the conductors have, or, for the design agent, a decision record's, record/<kit>/<number>/<commit> for a kit of its
-partition (briefs.15); an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key is
-refused in words naming the key to use, and so is a call crew could not check, in words saying to post it again later,
-since a card crew let through can't be taken back (read.1). A card posted under a row's key the agent owns, or a
-record key, is then checked against its key's form (FORMS), but a proposal's, which is checked against the proposal
+update_request in a session crew started. Before a card is posted or an area made, it asks plan.card_refusal whether
+the agent may use the call's idempotencyKey: a card's must be a rail row's key the agent owns, which only the planner
+and the conductors have, or, for the design agent, a decision record's, record/<kit>/<number>/<commit> for a kit of
+its partition (briefs.15); an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key
+is refused in words naming the key to use, and so is a call crew could not check, in words saying to post it again
+later, since a card crew let through can't be taken back (read.1). A card posted under a row's key the agent owns, or
+a record key, is then checked against its key's form (FORMS), but a proposal's, which is checked against the proposal
 itself: in the form `crew plan card <n>` prints, its unit questions holding the units the proposal makes new to a
 bolt, each once (briefs.13); a proposal crew can't read refuses the card, saying to post it again later, and one that
 no longer applies refuses it, saying to write the proposal again. A batch's card is one notice naming every unit of
 the batch, read from the run record, with nothing to answer, no attachment, no code block in its words and one link,
 to the batch's reading session; a batch's card posted under batch/<n>-<k>, before a batch was one card, is read as it
-was posted and not checked. A record's card is an approval of low risk, reversible, with no options or steps. No
-row's card asks a question in words, which Pending You makes required. A change is checked when this host's card.post
-entry for the card names one of those keys, for what the change gives it: a landing card's high stakes cleared,
-options on an approval or a notice, steps on any card but a landing's, a landing step that lands the bolt, a question
-in words, a batch card's approval, attachment, code block, second link or background that leaves out a unit, or a
-record card's approval of a risk other than low, or not reversible. What the half cannot read of a batch's units
-refuses the card, saying to post it again later. A card in another form is refused with the form to use. A refused
-call never reaches Pending You. What the half cannot otherwise check, its own input that is not a JSON object and the
-run record among it, is refused with what failed. A change to a card under any other key, or to a card this host has
-no post of, passes unchecked.
+was posted and not checked. A record's card is an approval of low risk, reversible, with no options or steps. No row's
+card asks a question in words, which Pending You makes required. A change is checked when this host's card.post entry
+for the card names one of those keys, for what the change gives it: a landing card's high stakes cleared, options on
+an approval or a notice, steps on any card, a question in words, a batch card's approval, attachment, code block,
+second link or background that leaves out a unit, or a record card's approval of a risk other than low, or not
+reversible. What the half cannot read of a batch's units refuses the card, saying to post it again later. A card in
+another form is refused with the form to use. A refused call never reaches Pending You. What the half cannot otherwise
+check, its own input that is not a JSON object and the run record among it, is refused with what failed. A change to a
+card under any other key, or to a card this host has no post of, passes unchecked.
 
 The PostToolUse half is the hook run with no argument, after a Pending You tool that posts (post_request), updates
 (update_request), withdraws (cancel_request) or closes (ack_answer) a card, in a session crew started, and writes one
@@ -72,16 +71,15 @@ KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
         (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})/[0-9a-f]{7}$"), "record/{}/{}"))
 # The form each row's card takes, and a decision record's, in Pending You's kinds of card, by the key's shape: the kinds
 # it may be, whether it is marked high stakes, whether it must carry options (True) or may carry none (False), whether it
-# may carry steps, for a record's the risk its approval names, and the form in the briefs' words. A landing card's steps
-# are those a proof leaves the user, never the landing itself.
+# may carry steps, for a record's the risk its approval names, and the form in the briefs' words. A landing card asks
+# only for the landing (record 0025): a step only the user can take is the deploy's, on its own card.
 FORMS = {
     "proposal": dict(kinds=("approve",), high=False, options=False, steps=False,
                      says="a proposal's card is posted as `crew plan card <n>` prints it, and a change to it changes "
                           "only its words: no questions, options or steps"),
-    "land": dict(kinds=("approve",), high=True, options=False, steps=True,
+    "land": dict(kinds=("approve",), high=True, options=False, steps=False,
                  says="a landing's card is an approval, kind \"approve\", marked high stakes with highStakes true, "
-                      "whose yes has you tell main-level ops to land; it has no options, and no step or command for "
-                      "the user to land it"),
+                      "whose yes has you tell main-level ops to land; it has no options and no steps"),
     "batch": dict(kinds=("fyi",), high=False, options=False, steps=False,
                   says="a batch's card is one notice for the whole batch, kind \"fyi\", saying what it is, naming "
                        "every unit, with each unit's summary as prose in its background, one link to the batch's reading "
@@ -95,8 +93,6 @@ WORDS = "asks a question in words, which Pending You makes required"
 NOTE = "The card's note is where the user's words go."
 # A line of a card's words that opens a code block, which scrolls sideways on the phone.
 FENCE = re.compile(r"^[ \t]*(```|~~~)", re.M)
-# What in a landing card's step lands the bolt: main-level ops's act on the user's yes.
-LANDS = ("bolt land", "wt merge")
 # How far back a close looks for its card's post.
 DAYS = 30
 
@@ -246,10 +242,6 @@ def form_refusal(key, given, update=False, units=None):
                 wrong.append(f"gives it {said}" if update else f"has {said}")
             if approve.get("reversible") is not True:
                 wrong.append("makes it not reversible" if update else "is not reversible")
-    for s in steps if form["steps"] else []:
-        said = " ".join(v for v in (s.get("text"), s.get("command")) if isinstance(v, str))
-        if any(act in said for act in LANDS):
-            wrong.append(f"{'gives it' if update else 'has'} a step that lands the bolt: \"{said}\"")
     if row == "batch":
         if given.get("approve") is not None:
             wrong.append("gives it an approval" if update else "approves something")

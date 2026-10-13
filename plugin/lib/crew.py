@@ -941,8 +941,7 @@ def signal_how(cmd, label, state):
             f"`signals/` on `{label}/main` of {state}.")
 
 
-# How a stage's agent, or ops during a proof, stops short, the same in every brief that runs a stage: work is "stage"
-# or "proof".
+# How a stage's agent stops short, the same in every brief that runs a stage: work is "stage".
 def needs_how(cmd, work):
     return (f"When you cannot finish without something only someone else can give (a decision, a fact about a live system, "
             f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. Post no Pending "
@@ -1084,7 +1083,7 @@ def team_tokens(fleet, t, role, self_name):
         "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
         "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
         "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named([kit])), "RESULTS": RESULTS,
-        "NEEDS": needs_how(f"{HOME}/plugin/bin/crew", "proof" if role == "ops" else "stage"),
+        "NEEDS": needs_how(f"{HOME}/plugin/bin/crew", "stage"),
         "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
     }
     tok["ROSTER"] = (

@@ -108,3 +108,60 @@ def step_failed(place, what, code, output, lines=15):
     tail = "\n".join((output or "").strip().splitlines()[-lines:])
     return (f"{place} is made but not ready: {what} exited {code}" + (f":\n{tail}\n" if tail else "; ")
             + "Running the command again sets it up.")
+
+
+# How a landing sluice made names its verdict: a trailer on its merge commit (sluice record 0006), as
+# `Sluice-Result: passed (9 run, 0 replayed)`. sluice lands nothing that did not pass.
+VERDICT = "Sluice-Result"
+
+
+def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt"):
+    """The checks a kit's policy requires of its bolt branches (teams.5, record 0026): the `required` list of the
+    [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it.
+    Refused, naming the file, when the kit has none, it is not TOML, or no table names bolt branches with a check: a
+    kit merges and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
+    import fnmatch
+    if text is None:
+        crew.fail(f"{kit} merges only through sluice, and has no {where} on its main: write one whose "
+                  f"[branches.\"bolt/*\"] names the checks a bolt's merges must pass, then give the bolt again")
+    try:
+        branches = tomllib.loads(text).get("branches", {})
+    except tomllib.TOMLDecodeError as e:
+        crew.fail(f"{kit}'s {where} is not TOML, so crew can't read what gates its bolt branches: {e}")
+    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
+                      key=lambda p: (p.count("*"), -len(p)))
+    required = branches[matching[0]].get("required") if matching and isinstance(branches[matching[0]], dict) else None
+    if not (isinstance(required, list) and required and all(isinstance(r, str) and r for r in required)):
+        crew.fail(f"{kit} merges only through sluice, and its {where} names no checks for its bolt branches: give "
+                  f"[branches.\"bolt/*\"] a `required` list of the checks a bolt's merges must pass, then give the bolt again")
+    return required
+
+
+def verification(head, result):
+    """A bolt's verification (tests.5, record 0025): sluice's verdict on the bolt's last landing, read from its head's
+    VERDICT trailer, as (state, words): "green" when the head is a landing sluice made, which it makes only on a pass;
+    "none" when its head is no landing of sluice's (nothing has landed on the bolt since it was cut, or a commit came
+    another way); "unknown" when there is no head to read. Never green on anything but sluice's own trailer."""
+    if not head:
+        return "unknown", "no head crew can read"
+    result = (result or "").strip()
+    if not result:
+        return "none", f"its head {head[:7]} is no landing of sluice's, so it has no verdict"
+    if result.split()[0] == "passed":
+        return "green", f"sluice's verdict on its last landing, {head[:7]}: {result}"
+    return "unknown", f"its head {head[:7]} carries a verdict crew does not read as a pass: {result}"
+
+
+def policy_said(out):
+    """The policy text POLICY printed of a kit's main, or None when main holds none; refused when the output is not
+    POLICY's."""
+    said = dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
+    text = said.get("POLICY")
+    if text is None:
+        crew.fail(f"crew can't read what the kit's main holds of {DECLARATION} from: {(out or '').strip()[:200] or 'nothing'}")
+    if text == "-":
+        return None
+    try:
+        return base64.b64decode(text).decode()
+    except (binascii.Error, UnicodeDecodeError) as e:
+        crew.fail(f"crew can't read the kit's {DECLARATION} as it was sent: {e}")

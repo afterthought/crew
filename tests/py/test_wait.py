@@ -54,10 +54,9 @@ class TestPhrase:
     @pytest.mark.parametrize("stage, name, obj, said", [
         ("code", "a", "unit/a", "code on a"),
         ("fix", "fix/tenant-environments/tidy", "fix/tenant-environments/tidy", "fix fix/tenant-environments/tidy"),
-        ("merge", "fix/tenant-environments/tidy", "fix/tenant-environments/tidy", "merge of fix/tenant-environments/tidy"),
-        ("proof", "tenant-environments", "bolt/tenant-environments", "the proof of tenant-environments")])
+        ("merge", "fix/tenant-environments/tidy", "fix/tenant-environments/tidy", "merge of fix/tenant-environments/tidy")])
     def test_a_stage_is_named_by_what_it_is_of(self, stage, name, obj, said):
-        assert owed(stage, name=name, slot="ops" if stage == "proof" else "unit-1", obj=obj).phrase() == said
+        assert owed(stage, name=name, slot="unit-1", obj=obj).phrase() == said
 
 
 class TestEnded:
@@ -76,11 +75,9 @@ class TestEnded:
     def test_a_stage_crew_ended_first(self):
         assert self.end("stopped") == "code on a has ended: crew ended swb-1-unit-1 before it delivered"
 
-    def test_a_fix_and_a_proof(self):
+    def test_a_fix(self):
         assert self.end("delivered", on=("fix/t/tidy", "agent/swb-1-unit-1"), Delivered="bolt/t@abc1234", Why="fix(tidy): merge ended") == (
             "merge of fix/t/tidy has ended: swb-1-unit-1 delivered bolt/t@abc1234")
-        assert self.end("stopped", on=("stage/t/proof", "bolt/t", "agent/swb-1-ops")) == (
-            "the proof of t has ended: crew ended swb-1-unit-1 before it delivered")
 
     def test_with_no_end_recorded(self):
         assert plan.ended_words("swb-1", "swb-1-unit-1", None) == (
@@ -95,9 +92,10 @@ class TestNeeds:
         o, = plan.owed_of(self.T, "unit-2", [["unit-2", "b", "construct", "20261012T100000Z-h-1-1", "unit/b"]], self.HELD)
         assert (o.agent, o.phrase()) == ("swb-1-unit-2", "construct on b")
 
-    def test_ops_owes_its_proof(self):
-        o, = plan.owed_of(self.T, "ops", [["ops", "t", "proof", "20261012T100000Z-h-1-1", "bolt/t"]], {})
-        assert o.phrase() == "the proof of t"
+    def test_ops_owes_no_proof(self):
+        # A bolt's proof is its verification (record 0025): a line ops's proof left from before is owed nothing.
+        with pytest.raises(plan.Refusal, match="swb-1-ops runs no stage crew is waiting on"):
+            plan.owed_of(self.T, "ops", [["ops", "t", "proof", "20261012T100000Z-h-1-1", "bolt/t"]], {})
 
     @pytest.mark.parametrize("slot, lines", [
         ("unit-2", []),

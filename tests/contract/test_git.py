@@ -75,88 +75,6 @@ def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overl
     assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
 
 
-def here():
-    import crew
-    return {}, {"machine": crew.this_host()}
-
-
-def test_commits_beyond_reads_each_commits_message_and_author_whole(repo):
-    """plan.commits_beyond, which carry_refusal judges by (plan.8): oldest first, a message of several lines whole."""
-    import plan
-    base = repo.commit("main", {"a": "1\n"})
-    repo.commit("feat: one\n\nWhy, over\ntwo lines.", {"a": "2\n"})
-    repo.commit("feat: two", {"b": "1\n"})
-    fleet, t = here()
-    got = plan.commits_beyond(fleet, t, str(repo.path), base, "HEAD")
-    assert [c["subject"] for c in got] == ["feat: one", "feat: two"]
-    assert got[0]["who"] == ("Crew Test", "test@crew.invalid", "feat: one\n\nWhy, over\ntwo lines.\n")
-    assert got[0]["short"] == got[0]["sha"][:7]
-
-
-def test_a_patch_id_holds_for_a_replay_and_changes_with_its_context(repo):
-    """plan.patch_ids, which changed_by_resolution counts by: a commit replayed onto the same lines keeps its patch id;
-    one replayed where main rewrote the lines around it gets another; an empty commit has none."""
-    import plan
-    twenty = "".join(f"{i}\n" for i in range(1, 21))
-    base = repo.commit("main", {"twenty": twenty})
-    repo.git("checkout", "-q", "-b", "bolt")
-    ten = repo.commit("feat: ten", {"twenty": twenty.replace("\n10\n", "\nten\n")})
-    empty = repo.commit("chore: empty")
-    repo.git("checkout", "-q", "-b", "same", base)
-    repo.git("cherry-pick", "--allow-empty", ten, empty)
-    same_ten, same_empty = repo.git("rev-parse", "HEAD~1"), repo.git("rev-parse", "HEAD")
-    repo.git("checkout", "-q", "-b", "moved", base)
-    around = "".join(f"main {i}\n" if i in (7, 8, 9, 11, 12, 13) else f"{i}\n" for i in range(1, 21))
-    repo.commit("docs: main's lines around ten", {"twenty": around})
-    moved_base = repo.git("rev-parse", "HEAD")
-    moved_ten = repo.commit("feat: ten", {"twenty": around.replace("\n10\n", "\nten\n")})
-    fleet, t = here()
-    ids = plan.patch_ids(fleet, t, str(repo.path), base, "bolt", "same")
-    assert ids[ten] == ids[same_ten]
-    assert empty not in ids and same_empty not in ids
-    moved = plan.patch_ids(fleet, t, str(repo.path), moved_base, "moved")
-    assert moved[moved_ten] != ids[ten]
-
-
-def bolt_and_fix(repo):
-    """main, a bolt of two commits beyond it, and a fix holding them replayed onto main moved on, plus one of its own."""
-    base = repo.commit("main", {"a": "1\n"})
-    repo.git("checkout", "-q", "-b", "bolt")
-    repo.commit("feat: one", {"one": "1\n"})
-    repo.commit("feat: two", {"two": "2\n"})
-    repo.git("checkout", "-q", "main")
-    main = repo.commit("docs: main moves", {"m": "m\n"})
-    repo.git("checkout", "-q", "-b", "fix", "bolt")
-    repo.git("rebase", "-q", "main")
-    repo.commit("fix: one of its own", {"own": "o\n"})
-    return base, main
-
-
-def test_range_diff_is_printed_as_the_reading(repo, capsys):
-    """plan.range_reading (plan.8): git range-diff of the two sides beyond main, printed whole on standard error under
-    a line saying it judges nothing; a commit only the fix has shows as added."""
-    import plan
-    _, main = bolt_and_fix(repo)
-    fleet, t = here()
-    plan.range_reading(fleet, t, str(repo.path), main, repo.git("rev-parse", "bolt"), repo.git("rev-parse", "fix"), "b", "fix/b/f")
-    err = capsys.readouterr().err
-    assert err.startswith("git range-diff main..bolt/b main..fix/b/f, the reading, which judges nothing")
-    own = repo.git("rev-parse", "--short=7", "fix")
-    assert f"-:  ------- > 3:  {own} fix: one of its own" in err
-
-
-def test_a_range_diff_that_fails_is_named_in_gits_words_without_its_usage(repo, capsys):
-    """plan.range_reading: git range-diff refuses a range that is not one (here an unknown commit), and crew names it
-    in git's first paragraph, never the usage git prints after it, and judges as before."""
-    import plan
-    _, main = bolt_and_fix(repo)
-    fleet, t = here()
-    plan.range_reading(fleet, t, str(repo.path), main, "0" * 40, repo.git("rev-parse", "fix"), "b", "fix/b/f")
-    err = capsys.readouterr().err
-    assert err.startswith("git range-diff main..bolt/b main..fix/b/f could not be read: ")
-    assert "usage:" not in err
-
-
 def rebase(repo, tmp_path, unit, src, to):
     """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit>."""
     import plan
@@ -303,42 +221,9 @@ def kit_with_github(repo, tmp_path):
     return pushed
 
 
-def fresh(repo):
-    import plan
-    return subprocess.run(["bash", "-c", plan.FRESH, "crew", str(repo.path)], capture_output=True, text=True)
-
-
 def main_at(repo):
     import plan
     return subprocess.run(["bash", "-c", plan.MAIN, "crew", str(repo.path)], capture_output=True, text=True)
-
-
-def test_a_bolt_is_cut_from_githubs_main_and_a_clean_main_behind_it_fast_forwarded(repo, tmp_path):
-    """plan.fresh_base (plan.8): a host's kit main lags GitHub's; the bolt is cut from origin/main, fetched first."""
-    kit_with_github(repo, tmp_path)("from-a-mac")
-    r = fresh(repo)
-    assert (r.returncode, r.stdout.strip(), r.stderr.strip()) == (0, "origin/main", "main fast-forwarded 1 commit to GitHub's")
-    assert repo.git("rev-parse", "main") == repo.git("rev-parse", "origin/main")
-
-
-def test_a_main_holding_all_of_githubs_and_more_cuts_the_bolt_from_itself(repo, tmp_path):
-    kit_with_github(repo, tmp_path)
-    repo.commit("feat: local", {"local": "l\n"})
-    r = fresh(repo)
-    assert (r.stdout.strip(), r.stderr.strip()) == ("main", "main holds 1 commit GitHub's main does not yet have; the bolt is cut from them")
-
-
-def test_a_main_gone_its_own_way_is_refused_and_a_dirty_one_left_as_it_is(repo, tmp_path):
-    pushed = kit_with_github(repo, tmp_path)
-    repo.commit("feat: local", {"local": "l\n"}); pushed("another")
-    r = fresh(repo)
-    assert r.returncode == 1 and r.stderr.strip() == (
-        "main on this host has 1 commit of its own and lacks 1 commit of GitHub's: rebase it onto origin/main first, and never push it with force")
-    repo.git("rebase", "-q", "origin/main"); repo.git("push", "-q", "origin", "main")
-    (repo.path / "README.md").write_text("wip\n"); pushed("yet-another")
-    r = fresh(repo)
-    assert (r.stdout.strip(), r.stderr.strip()) == ("origin/main", "main is 1 commit behind GitHub's and was left as it is "
-                                                     "(another branch is checked out there, or it has uncommitted changes)")
 
 
 def test_a_landing_reads_the_commit_main_holds_and_how_far_it_is_from_githubs(repo, tmp_path):
@@ -349,3 +234,83 @@ def test_a_landing_reads_the_commit_main_holds_and_how_far_it_is_from_githubs(re
     pushed = kit_with_github(repo, tmp_path)
     head = repo.commit("feat: local", {"local": "l\n"}); pushed("later")
     assert main_at(repo).stdout.strip() == f"{head} 1 1"
+
+
+def script(name, *args, cwd=None):
+    import plan
+    return subprocess.run(["bash", "-c", getattr(plan, name), "crew", *args], capture_output=True, text=True, cwd=cwd)
+
+
+def test_a_bolt_is_a_branch_from_main_as_it_stands_marked_as_crews_and_no_worktree(repo):
+    """plan.bolt_give (plan.8, record 0026): bolt/<bolt> is made from the kit's main with no worktree, marked in the
+    kit's git config as crew's, and the mark goes with the branch when git deletes it, so the tidy reads it as crew's
+    while the branch stands and never after (plan.9, read.4)."""
+    head = repo.commit("main", {"README": "r\n"})
+    r = script("BOLT_BRANCH", str(repo.path), "b")
+    assert (r.returncode, r.stdout.strip()) == (0, head[:7])
+    assert repo.git("rev-parse", "bolt/b") == head
+    assert "bolt/b" not in repo.git("worktree", "list", "--porcelain")
+    assert repo.git("config", "--get-regexp", r"^branch\.bolt/.*\.crew$") == "branch.bolt/b.crew given"
+    repo.commit("feat: more", {"more": "m\n"})
+    assert script("BOLT_BRANCH", str(repo.path), "b").stdout.strip() == head[:7]  # one already there is kept
+    repo.git("branch", "-q", "-D", "bolt/b")
+    assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
+
+
+def test_a_kits_policy_is_read_from_mains_commit(repo):
+    """plan.kit_policy (teams.5): the policy is what main's commit holds, as sluice reads a branch's policy, not the
+    main checkout's files; a main without one says so."""
+    import base64
+    import kit
+    repo.commit("main", {"README": "r\n"})
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) is None
+    text = '[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+    repo.commit("chore: policy", {".config/sluice.toml": text})
+    (repo.path / ".config" / "sluice.toml").write_text("not what main holds\n")
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == text
+
+
+def test_a_landings_verdict_is_its_trailer(repo):
+    """gather.kit (tests.5, record 0025): sluice's verdict on a landing is the Sluice-Result trailer of its merge
+    commit, read with git log's trailer format; a commit sluice did not make has none."""
+    import gather
+    repo.commit("main", {"README": "r\n"})
+    assert gather.run(["git", "log", "-1", "--format=%(trailers:key=Sluice-Result,valueonly)", "HEAD"], str(repo.path)).strip() == ""
+    repo.commit("chore(land): #9 unit/a\n\nSluice-Submission: 9\nSluice-From: swb-1-unit-1 (unit/a)\nSluice-Tested: abc\n"
+                "Sluice-Result: passed (9 run, 0 replayed)")
+    assert gather.run(["git", "log", "-1", "--format=%(trailers:key=Sluice-Result,valueonly)", "HEAD"], str(repo.path)).strip() == (
+        "passed (9 run, 0 replayed)")
+
+
+def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(repo, tmp_path):
+    """plan.bolt_submit (plan.16, record 0026): sluice takes a submission only from a worktree on its branch, so the
+    landing makes one on bolt/<bolt>, runs `wt submit main` there, removes it, and brings the kit's main checkout level
+    with what sluice moved, keeping an untracked file there. A stand-in wt lands as sluice does: a merge commit moved
+    onto main by git update-ref, which leaves a checkout on main behind its HEAD."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    (repo.path / "notes.txt").write_text("the user's own\n")
+    land = tmp_path / "places" / "land-b"
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "wt").write_text(f'''#!/bin/sh
+[ "$1 $2 $3" = "submit main --no-remove" ] || exit 9
+[ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
+echo "$SLUICE_AGENT" > "{tmp_path}/agent"
+tree=$(printf 'x\\n' | git hash-object -w --stdin)
+idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree main
+GIT_INDEX_FILE=$idx git update-index --add --cacheinfo 100644,$tree,landed.txt
+new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p main -p HEAD -m "chore(land): #1 bolt/b")
+git update-ref refs/heads/main "$new"
+echo "landed #1"
+''')
+    (bin_ / "wt").chmod(0o755)
+    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
+    r = subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"], capture_output=True, text=True, env=env)
+    landed, words = plan.landing_said("b", "kit", r.stdout)
+    assert landed, r.stdout + r.stderr
+    assert (tmp_path / "agent").read_text().strip() == "wldn-ops"
+    assert not land.exists() and "land-b" not in repo.git("worktree", "list")
+    assert (repo.path / "landed.txt").read_text() == "x\n"
+    assert repo.git("status", "--porcelain") == "?? notes.txt"

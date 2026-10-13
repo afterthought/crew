@@ -75,7 +75,7 @@ class TestKeys:
 
     def test_a_teams_ops_and_slots_own_no_card_key(self):
         assert "swb-1-ops owns no card key, since a team's cards are its conductor's" in key("swb-1-ops", "land/tenant-environments/abc1234")
-        assert "in your proof file, under Left for the user" in key("swb-1-ops", "x")
+        assert "Tell swb-1-conductor what you wait on with crew tell." in key("swb-1-ops", "x")
         assert f"{crew.HOME}/plugin/bin/crew needs" in key("swb-1-unit-2", "verify/x/20261007-1412")
 
     def test_a_conductor_posts_under_its_own_bolts_landing_row_and_never_a_verify_reports(self):
@@ -150,15 +150,16 @@ def form(k, given, update=False, units=None):
 
 
 class TestForms:
-    def test_a_landing_card_is_a_high_stakes_approval_with_no_step_that_lands_it(self):
+    def test_a_landing_card_is_a_high_stakes_approval_that_asks_only_for_the_landing(self):
+        # A step only the user can take is the deploy's, on its own card (record 0025).
         assert form("land/b/abc1234", LANDING) is None
-        assert form("land/b/abc1234", dict(LANDING, action={"steps": [{"text": "Open the gateway on your Mac"}]})) is None
-        said = form("land/b/abc1234", {"kind": "action", "action": {"steps": [{"text": "Land the bolt", "command": "crew bolt land b"}]}})
+        said = form("land/b/abc1234", dict(LANDING, action={"steps": [{"text": "Open the gateway on your Mac"}]}))
         assert said.startswith("crew refuses card land/b/abc1234. A landing's card is an approval")
-        assert 'This card is an "action", is not marked high stakes, and has a step that lands the bolt: "Land the bolt crew bolt land b". Post it again' in said
+        assert said.endswith("This card has steps for the user to take. Post it again in that form.")
+        said = form("land/b/abc1234", {"kind": "action", "action": {"steps": [{"text": "Land the bolt", "command": "crew bolt land b"}]}})
+        assert 'This card is an "action", is not marked high stakes, and has steps for the user to take. Post it again' in said
         assert form("land/b/abc1234", {"kind": "approve"}).endswith("This card is not marked high stakes. Post it again in that form.")
         assert "This card has options." in form("land/b/abc1234", dict(LANDING, **TWO))
-        assert "has a step that lands the bolt" in form("land/b/abc1234", dict(LANDING, action={"steps": [{"text": "Merge with wt merge main"}]}))
 
     def test_a_verify_reports_card_has_no_form_since_none_is_posted_and_one_posted_before_changes_unchecked(self):
         assert not cards.formed("verify/x/20261007-1412") and cards.formed("land/b/abc1234")
@@ -194,8 +195,8 @@ class TestForms:
     def test_a_change_is_checked_for_what_it_changes(self):
         assert form("land/b/abc1234", {"highStakes": False}, update=True) == (
             "crew refuses this change to card land/b/abc1234. A landing's card is an approval, kind \"approve\", marked high stakes "
-            "with highStakes true, whose yes has you tell main-level ops to land; it has no options, and no step or command for the user "
-            "to land it. This change clears its high stakes. Change the card without it.")
+            "with highStakes true, whose yes has you tell main-level ops to land; it has no options and no steps. This change clears "
+            "its high stakes. Change the card without it.")
         assert form("land/b/abc1234", {"title": "Land it"}, update=True) is None
         assert "This change gives it options." in form("proposal/1", TWO, update=True)
         assert 'This change gives it risk "medium".' in form("record/atlas-kit/0021/abc1234", {"approve": {"risk": "medium", "reversible": True}}, update=True)

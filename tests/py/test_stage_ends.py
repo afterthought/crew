@@ -130,15 +130,6 @@ class TestFix:
             "bolt/b@def5678", "bolt/b holds it at def5678")
 
 
-class TestProof:
-    def test_a_proof_file_saved_since_it_began_ends_it(self):
-        proof = saved("proof-b-20261012-1001.md")
-        assert plan.delivered(owed("proof", name="b", slot="ops"), {"saved": proof}) == ("proof/proof-b-20261012-1001.md", str(proof))
-
-    def test_no_proof_file(self):
-        assert plan.delivered(owed("proof", name="b", slot="ops"), {"saved": None}) == (None, "no proof file saved")
-
-
 class TestStuck:
     NOW = AFTER + 30 * MIN
 

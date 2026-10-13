@@ -94,3 +94,51 @@ def test_a_failed_step_names_the_place_the_step_and_its_last_lines():
     why = kit.step_failed("/kit/places/a", "moon setup", 1, out)
     assert why.startswith("/kit/places/a is made but not ready: moon setup exited 1")
     assert "line 39" in why and "line 24" not in why and why.endswith("Running the command again sets it up.")
+
+
+POLICY = '[tests]\nrunner = "moon"\n\n[branches."bolt/*"]\nrequired = ["#check-full"]\n\n[branches.main]\nrequired = ["#check-full"]\n'
+
+
+class TestBoltChecks:
+    """A kit merges and lands only through sluice, so crew gives a bolt only in a kit whose policy names the checks its
+    bolt branches must pass (teams.5, record 0026)."""
+
+    def test_the_bolt_branches_required_checks(self):
+        assert kit.bolt_checks(POLICY, "switchboard-kit") == ["#check-full"]
+
+    def test_the_most_specific_pattern_wins(self):
+        text = '[branches."*"]\nrequired = ["#check-fast"]\n[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+        assert kit.bolt_checks(text, "k") == ["#check-full"]
+
+    @pytest.mark.parametrize("text, said", [
+        (None, "has no .config/sluice.toml on its main"),
+        ("[tests]\nrunner = \"moon\"\n", "names no checks for its bolt branches"),
+        ('[branches.main]\nrequired = ["#check-full"]\n', "names no checks for its bolt branches"),
+        ('[branches."bolt/*"]\nrequired = []\n', "names no checks for its bolt branches"),
+        ("[branches\n", "is not TOML"),
+    ])
+    def test_a_kit_whose_policy_gates_no_bolt_is_given_none_naming_the_file(self, text, said):
+        with pytest.raises(Refusal) as e:
+            kit.bolt_checks(text, "switchboard-kit")
+        assert "switchboard-kit" in str(e.value) and said in str(e.value)
+
+    def test_policy_said(self):
+        assert kit.policy_said(f"POLICY={base64.b64encode(POLICY.encode()).decode()}\n") == POLICY
+        assert kit.policy_said("POLICY=-\n") is None
+        with pytest.raises(Refusal):
+            kit.policy_said("fatal: bad\n")
+
+
+class TestVerification:
+    """A bolt's verification is sluice's verdict on its last landing, read from its head's trailer (tests.5)."""
+
+    def test_a_head_sluice_landed_is_green(self):
+        assert kit.verification("d5f8aa4" + "0" * 33, "passed (9 run, 0 replayed)") == (
+            "green", "sluice's verdict on its last landing, d5f8aa4: passed (9 run, 0 replayed)")
+
+    def test_a_head_that_is_no_landing_has_no_verdict(self):
+        assert kit.verification("abc1234" + "0" * 33, "") == ("none", "its head abc1234 is no landing of sluice's, so it has no verdict")
+
+    def test_nothing_else_reads_green(self):
+        assert kit.verification(None, "passed (1 run, 0 replayed)")[0] == "unknown"
+        assert kit.verification("abc1234", "failed (1 run, 0 replayed)")[0] == "unknown"

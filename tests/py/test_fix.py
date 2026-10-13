@@ -1,9 +1,7 @@
 """A fix (teams.3, teams.5, plan.8, teams.15): plan.fix_in_slot for what crew fix <name> acts on, plan.leftover and
-plan.own_place for a fix refused its place, plan.bolt_held for the bolt a fix is of, plan.move_refusal for a carry
-that moves nothing, plan.checks_said for what a carry says of the bolt's checks, and crew.never_started for a fix's or
-unit's stage whose prompt was never taken. Whether a fix carries the bolt is test_carry's; how worktrunk's post-merge
-hook answers, a contract case (tests/contract/test_wt.py); the fix's place, stage and carry through the command, the
-journey's (t-journey-fix, t-journey-land)."""
+plan.own_place for a fix refused its place, plan.bolt_held for the bolt a fix is of, and crew.never_started for a
+fix's or unit's stage whose prompt was never taken. A fix merges as a unit does, by a submission to sluice (teams.5);
+the fix's place and stage through the command are the journey's (t-journey-fix)."""
 import pytest
 
 from facts import plan_of
@@ -59,47 +57,6 @@ class TestPlace:
         ("", "", "/p is on no branch, made from no bolt, not fix/t/x from bolt/t")])
     def test_any_other_is_refused(self, on, up, said):
         assert plan.own_place("/p", on, up, "fix/t/x", "bolt/t") == said + ": crew starts a fix only in its own place"
-
-
-class TestMove:
-    def move(self, **facts):
-        base = dict(there=True, busy=None, on="bolt/t", status="", now={"bolt/t": "o" * 40, "fix/t/c": "n" * 40})
-        return plan.move_refusal("swb-1", "fix/t/c", "t", "/kit/bolts/t", "o" * 40, "n" * 40, **{**base, **facts})
-
-    def test_a_clean_bolt_worktree_with_both_heads_where_crew_read_them_moves(self):
-        assert self.move() is None
-
-    def test_a_worktree_with_untracked_files_or_an_operation_in_progress_moves_nothing(self):
-        assert self.move(status="?? stray-note") == ("bolt/t is not moved: its worktree /kit/bolts/t has uncommitted changes (stray-note); "
-                                                    "commit or remove them, then run crew fix swb-1 c --merge again")
-        assert "(f0, f1, f2, f3, f4 and 2 more)" in self.move(status="\n".join(f"?? f{i}" for i in range(7)))
-        assert self.move(busy="a rebase") == ("bolt/t is not moved: its worktree /kit/bolts/t has a rebase in progress; finish or "
-                                              "abort it, then run crew fix swb-1 c --merge again")
-
-    def test_a_worktree_gone_or_on_another_branch_moves_nothing(self):
-        assert self.move(there=False) == "bolt/t is not moved: its worktree /kit/bolts/t is not there"
-        assert self.move(on="") == "bolt/t is not moved: its worktree /kit/bolts/t is on no branch, not bolt/t"
-
-    def test_a_head_that_moved_since_the_judgment_moves_nothing(self):
-        assert self.move(now={"bolt/t": "x" * 40, "fix/t/c": "n" * 40}) == (
-            "bolt/t is not moved: bolt/t moved from ooooooo to xxxxxxx since crew read it; then run crew fix swb-1 c --merge again")
-
-
-class TestChecks:
-    NEW = "abcdef0123"
-
-    def test_hooks_waiting_for_approval_say_so_in_worktrunks_words(self):
-        assert plan.checks_said(1, "✗ Cannot prompt for approval in non-interactive environment\n↳ add --yes\n", self.NEW) == (
-            "the bolt's checks did not start: Cannot prompt for approval in non-interactive environment; ask ops to run the "
-            "bolt's verification again, then prove the bolt again before it lands")
-        assert plan.checks_said(127, "wt: command not found\n", self.NEW).startswith("the bolt's checks did not start: wt: command not found;")
-
-    def test_a_kit_with_no_post_merge_hooks_runs_no_checks(self):
-        assert plan.checks_said(0, "○ No post-merge hooks configured\n", self.NEW) == (
-            "the kit has no post-merge hooks, so no checks run on abcdef0; prove the bolt again before it lands")
-
-    def test_else_its_checks_run_on_the_new_head(self):
-        assert plan.checks_said(0, "Running post-merge mark\n", self.NEW) == "the bolt's checks are running on abcdef0; prove the bolt again before it lands"
 
 
 class TestNeverStarted:
