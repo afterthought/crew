@@ -37,7 +37,7 @@ Option 1. A unit's change is archived by its merge stage: the first thing the me
 What follows from it:
 
 - A merged unit is read from the archive: `merged` when the bolt holds the unit's change, open or archived, as `landed` already reads main.
-- Ops's proof of the bolt reads each unit's *Proof in dev* list from the archived change on the bolt.
+- Struck 2026-10-13 by record 0025: ops proves no bolt from a list; a bolt's proof is its verification, and a merged change is read from the archive for its tasks and specs alone.
 - A change whose spec delta modifies a requirement that a sibling unit adds in the same bolt archives only after that sibling has merged; the merge is refused until then, and the conductor sets the dependency. Two units' deltas to one spec file meet at the merge as any two changes to one file do, and are resolved there keeping both intents.
 - A kit whose proof on real work needs main (crew itself) keeps that proof as a section of the change's design, worked after landing from the archive, never as tasks, since open tasks would hold the unit before verify.
 - Changes already on main open from before this rule (crew's run-record, state-repository and plan-proposals; swancloud's crew-state) are archived once each, as the chores already planned; no new archive units are planned after this.
