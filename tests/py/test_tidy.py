@@ -12,9 +12,9 @@ import plan
 KD = "/kit"
 
 
-def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix_merged=False):
+def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix_merged=False, dropped=()):
     return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), set(units), set(on_main),
-                          lambda bolt: set(merged), lambda fix, bolt: fix_merged)
+                          lambda bolt: set(merged), lambda fix, bolt: fix_merged, dropped=set(dropped))
 
 
 class TestOver:
@@ -29,8 +29,9 @@ class TestOver:
         assert over("places/ignored-only", "unit/ignored-only", "bolt/t") == ("ignored-only", "unit ignored-only is in no plan")
         assert over("places/planned", "unit/planned", "bolt/t") == ("planned", None)
 
-    def test_a_fixs_place_is_over_once_it_merged_or_its_bolt_left_every_plan(self):
+    def test_a_fixs_place_is_over_once_it_merged_was_dropped_or_its_bolt_left_every_plan(self):
         assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix_merged=True) == ("fix/t/y", "fix/t/y has merged into bolt/t")
+        assert over("places/fix-t--y", "fix/t/y", "bolt/t", dropped={"fix/t/y"}) == ("fix/t/y", "fix/t/y was dropped")
         assert over("places/fix-gone--y", "fix/gone/y", "bolt/gone") == ("fix/gone/y", "bolt gone, which fix/gone/y was made from, is in no plan")
         assert over("places/fix-t--y", "fix/t/y", "bolt/t") == ("fix/t/y", None)
 

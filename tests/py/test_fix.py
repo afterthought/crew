@@ -1,12 +1,14 @@
 """A fix (teams.3, teams.5, plan.8, teams.15): plan.fix_in_slot for what crew fix <name> acts on, plan.leftover and
-plan.own_place for a fix refused its place, plan.bolt_held for the bolt a fix is of, and crew.never_started for a
-fix's or unit's stage whose prompt was never taken. A fix merges as a unit does, by a submission to sluice (teams.5);
-the fix's place and stage through the command are the journey's (t-journey-fix)."""
+plan.own_place for a fix refused its place, plan.fix_prompt for what its agent starts with, told of a place that could
+not be made ready (record 0028), plan.fix_drop_why and plan.fix_branch_kept for a fix dropped, plan.bolt_held for the bolt a fix is of, and crew.never_started for a fix's or unit's
+stage whose prompt was never taken. A fix merges as a unit does, by a submission to sluice (teams.5); the fix's place
+and stage through the command are the journey's (t-journey-fix)."""
 import pytest
 
 from facts import plan_of
 
 import crew
+import kit
 import plan
 
 KD = "/kit"
@@ -57,6 +59,7 @@ class TestPlace:
         ("", "", "/p is on no branch, made from no bolt, not fix/t/x from bolt/t")])
     def test_any_other_is_refused(self, on, up, said):
         assert plan.own_place("/p", on, up, "fix/t/x", "bolt/t") == said + ": crew starts a fix only in its own place"
+        assert plan.own_place("/p", on, up, "fix/t/x", "bolt/t", "drops a fix") == said + ": crew drops a fix only in its own place"
 
 
 class TestNeverStarted:
@@ -78,3 +81,51 @@ class TestNeverStarted:
         assert crew.never_started("swb-1-unit-1", "merge", "a", "unit/a", "swb-1", "unread", "it is waiting on a question in its pane") == (
             "crew could not tell whether swb-1-unit-1 took its merge prompt for a: it is waiting on a question in its pane; "
             "nothing more was sent, and the stage is taken as never started: run it again with crew unit run a merge")
+
+
+class TestUnready:
+    """A fix's agent starts in a place that could not be made ready, told what failed (teams.3, record 0028)."""
+
+    def test_a_ready_place_starts_the_fix_with_its_words_alone(self):
+        assert plan.fix_prompt("The banner flickers.", "/kit/places/fix-b--tidy") == "Fix: The banner flickers."
+
+    def test_a_place_not_ready_tells_the_agent_the_step_and_its_last_lines_on_one_line(self):
+        why = kit.step_failed("/kit/places/fix-b--tidy", "moon setup", 1, "resolving toolchains\nbun: no such version 1.2.23\n")
+        prompt = plan.fix_prompt("Take main into the bolt.", "/kit/places/fix-b--tidy", why)
+        assert prompt.startswith("Fix: Take main into the bolt. Your place /kit/places/fix-b--tidy could not be made ready, so the kit's "
+                                 "tools may not run in it: /kit/places/fix-b--tidy is made but not ready: moon setup exited 1: / ")
+        assert "bun: no such version 1.2.23" in prompt and "\n" not in prompt
+        assert prompt.endswith("Repairing that may be part of this fix.")
+
+
+class TestDrop:
+    """A fix is dropped by its conductor (teams.3, record 0028): refused once merged or when nothing of it is there; its
+    branch kept when it holds commits beyond the bolt (plan.10)."""
+
+    def test_a_merged_fix_is_not_dropped(self):
+        assert plan.fix_drop_why("fix/t/x", "t", "swb-1", "unit-1", True, True, True) == (
+            "fix/t/x has merged into bolt/t, so it is not dropped: what it changed is the bolt's, and a new fix undoes it")
+
+    def test_one_no_slot_place_or_branch_holds_is_not_there_to_drop(self):
+        assert plan.fix_drop_why("fix/t/x", "t", "swb-1", None, False, False, False) == (
+            "swb-1 has no fix fix/t/x: no slot, place or branch holds it")
+
+    @pytest.mark.parametrize("slot, place, branch", [
+        ("unit-1", True, True), ("unit-1", False, False), (None, True, True), (None, False, True)])
+    def test_one_in_flight_or_standing_with_no_slot_is_dropped(self, slot, place, branch):
+        assert plan.fix_drop_why("fix/t/x", "t", "swb-1", slot, place, branch, False) is None
+
+    def test_its_branch_goes_when_git_cherry_finds_nothing_of_its_own(self):
+        assert plan.fix_branch_kept("bolt/t", (0, "", "")) is None
+        assert plan.fix_branch_kept("bolt/t", (0, "- 1a2b3c\n", "")) is None
+
+    def test_one_holding_patches_the_bolt_lacks_is_kept_and_counted(self):
+        assert plan.fix_branch_kept("bolt/t", (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
+            "it holds 1 commit whose patch bolt/t lacks (git cherry), the user's to keep or delete")
+        assert plan.fix_branch_kept("bolt/t", (0, "+ 1a2b3c\n+ 4d5e6f\n", "")) == (
+            "it holds 2 commits whose patch bolt/t lacks (git cherry), the user's to keep or delete")
+
+    def test_one_that_cannot_be_compared_is_kept(self):
+        assert plan.fix_branch_kept("bolt/gone", (128, "", "fatal: unknown commit bolt/gone\n")) == (
+            "git cannot compare it with bolt/gone: fatal: unknown commit bolt/gone")
+        assert plan.fix_branch_kept("", None) == "it tracks no bolt to compare it with"

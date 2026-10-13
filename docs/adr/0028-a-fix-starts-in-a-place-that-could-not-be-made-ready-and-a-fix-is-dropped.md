@@ -1,7 +1,7 @@
 ---
 number: 28
 title: A fix starts in a place that could not be made ready, and a fix is dropped
-status: proposed
+status: accepted
 date: 2026-10-13
 decision-makers:
 - Chuck Swanberg
@@ -9,9 +9,9 @@ decision-makers:
 
 # A fix starts in a place that could not be made ready, and a fix is dropped
 
-Status: proposed by swancloud-design on 2026-10-13, from two readings wldn's planner recorded; accepted on the user's yes (`briefs.15`).
+Status: accepted by the user on 2026-10-13, in the recovery session ("Yes, accept"), on the plain explanation quoted under *Decision outcome* (`briefs.15`). Proposed by swancloud-design the same day, from two readings wldn's planner recorded.
 
-Deciders: the user, on acceptance. Written by swancloud-design.
+Deciders: the user. Written by swancloud-design.
 Amends: `teams.3`; the details of `plan.9` and `plan.17`; record 0023, point 4, for a fix's place.
 Sources: signals 2026-10-13-swancloud-planner-2e24fc2d/01 (a refused fix cannot be closed) and /02 (a bolt with a broken toolchain cannot take main), both asserted by wldn-planner; `plugin/lib/plan.py` `fix_run`, `fix_cmd`, `leftover`, `own_place`, `fix_place`, `make_place`, `reap`, `tidy`, `tidy_over`, `op_unit_drop`; `plugin/lib/kit.py` `readying`, `step_failed`; the `bolt-teams` spec, "Work happens in fixed places", "Fixes during a bolt are built beside its units", "A worktree goes when its work is over"; the `kit-toolchain` delta of `a-kit-declares-its-toolchain-and-tests`, "A toolchain that fails"; record 0023, point 4; `plan.8`, `plan.10`, `teams.5`, `read.4`.
 
@@ -31,6 +31,8 @@ Two readings from wldn on 2026-10-13, both worked around by hand.
 - `plan.10`: a branch holding commits the bolt lacks is kept and named when its worktree goes.
 
 ## Decision outcome
+
+The user, on reading this record: "I'm reading the ADR for this and I'm going to be honest: I don't fucking understand it. Can you please explain it to me more simply?" Told, plainly, that a fix's agent starts even when its folder's setup fails, and is told what failed, since a fix is often the repair; that units still wait for a working setup; and that a conductor can cancel an unwanted fix with `crew fix <team> <name> --drop`, its slot freed, its agent stopped, its folder removed, its branch kept and named when it holds work the bolt doesn't: "Yes, accept".
 
 1. **A fix's agent starts once its place is made, whether or not the place could be made ready.** The step that failed and its last lines go to the agent with the fix's words, so the agent knows what it stands in. A unit's or chore's stage stays refused until its place is ready, as record 0023 point 4 has it: its agent builds on the bolt and is not its repair, and the command run again readies the place again. A fix refused for a place that is not its own, hand-made or made from another bolt, stays refused (`read.4`).
 2. **A fix ends by its merge, by `crew fix <team> <name> --drop`, or with its bolt.** The drop is the conductor's, as the fix's start is; it frees the fix's slot, ends its agent when one is up, and its place and branch go as a dropped unit's do, through the kit's worktree tool, the branch kept and named when it holds commits beyond the bolt (`plan.10`). A fix that has merged into its bolt can't be dropped.

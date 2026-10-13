@@ -1,7 +1,9 @@
 # A fix and the plan moving under a team, through the crew command on the stubs (tests.11, record 0022), a part of the
 # units journey (t-journey-units): a fix takes a slot in its own place from the bolt, writes no plan and merges through
-# sluice as a stage does; a moved unit's branch is rebased onto its new bolt; and the team's reads free the slots a
-# moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file.
+# sluice as a stage does; a moved unit's branch is rebased onto its new bolt; the team's reads free the slots a
+# moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file; a fix whose place could
+# not be made ready starts all the same, told what failed; and a fix not wanted is dropped, its branch kept when it
+# holds a commit of its own, while a merged one is not.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -33,8 +35,10 @@ eq "$(prompt_to swb-1-unit-1)" "'Merge $fb into bolt/tenant-environments: wt sub
 (cd "$fp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of the fix failed"
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered merge of $fb: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
+expect_fail "$fb has merged into bolt/tenant-environments, so it is not dropped" crew fix swb-1 tidy --drop
+has "$(field $box fix.drop Refused "$fb")" "so it is not dropped"
 [[ $(record_of $box) != *ZQXS* ]] || fail "a fix's words are in the run record"
-ok "a fix takes a slot in its own place from the bolt and writes no plan, starts again there, ends at its commit, merges through sluice as a stage does and ends once the bolt holds it"
+ok "a fix takes a slot in its own place from the bolt and writes no plan, starts again there, ends at its commit, merges through sluice as a stage does and ends once the bolt holds it, and is not dropped then"
 
 # The user moves c to another team's bolt and drops d while its agent works, with the merged fix's place holding a file
 # nobody committed: the reads that follow free each slot once its agent settles, remove d's place, and keep the fix's.
@@ -68,3 +72,45 @@ has "$said" "$fp is kept, and $fb with it: $fb has merged into bolt/tenant-envir
 eq "$(awk '{print $1, $3}' "$slots")" "unit-2 b"
 rm "$fp/note"
 ok "a moved unit's branch is rebased onto its new bolt; the team's reads free the slot it left and a merged fix's, keeping a merged place holding a stray file, and crew unit free a dropped unit's once its agent settles"
+
+# A bolt whose own toolchain fails: a fix's agent starts in its place all the same, told the step that failed, since a
+# fix is how the bolt is repaired (teams.3, record 0028).
+touch "$T/moon-fails"
+xf=fix/tenant-environments/repair xp=$kd/places/fix-tenant-environments--repair
+expect_ok crew fix swb-1 repair "Take main into the bolt."
+has "$out" "$xp is made but not ready: moon setup exited 1; swb-1-unit-"
+xs=$(awk -v f="$xf" '$3 == f {print $1}' "$slots")
+has "$(prompt_to "swb-1-$xs")" "'Fix: Take main into the bolt. Your place $xp could not be made ready, so the kit"
+has "$(prompt_to "swb-1-$xs")" "moon setup exited 1"
+eq "$(field $box fix.start Refused "$xf")" ""
+rm "$T/moon-fails"
+ok "a fix whose place could not be made ready starts all the same, its agent told what failed"
+
+# The conductor drops the repair while its agent works, then with --force: its slot is freed and its place and branch
+# go, holding nothing beyond the bolt. A fix whose branch and place stand with no slot, holding a commit of their own,
+# is dropped too: its place, holding a stray file, is kept until the file goes, and its branch then kept and named
+# (teams.3, plan.9, plan.10, record 0028).
+status "swb-1-$xs" working
+expect_fail "swb-1-$xs is working; add --force to end it anyway" crew fix swb-1 repair --drop
+has "$(field $box fix.drop Refused "$xf")" "is working"
+expect_ok crew fix swb-1 repair --drop --force
+has "$out" "swb-1-$xs is free: $xf is dropped"
+has "$out" "$xp and $xf are removed; the branch was at"
+eq "$(field $box fix.drop On "$xf")" "$xf bolt/tenant-environments agent/swb-1-$xs"
+[[ ! -d $xp ]] || fail "the dropped fix's place stayed"
+lacks "$(cat "$slots")" "$xf"
+of=fix/tenant-environments/old op=$kd/places/fix-tenant-environments--old
+git -C "$k" worktree add -q --track -b "$of" "$op" bolt/tenant-environments || fail "the standing fix's place was not made"
+echo kept > "$op/kept"; commit_all "$op" "fix: a commit of its own"
+at=$(short "$of")
+echo stray > "$op/note"
+expect_ok crew fix swb-1 old --drop
+has "$out" "$op is kept, and $of with it: $of was dropped, and it has uncommitted changes"
+rm "$op/note"
+expect_ok crew status swb-1
+has "$out" "$op is removed, and $of is kept at $at: it was dropped, and it holds 1 commit whose patch bolt/tenant-environments lacks"
+[[ ! -d $op ]] || fail "the standing fix's place stayed"
+eq "$(short "$of")" "$at"
+eq "$(git -C "$k" config "branch.$of.crew")" ""
+expect_fail "swb-1 has no fix fix/tenant-environments/gone: no slot, place or branch holds it" crew fix swb-1 gone --drop
+ok "a fix not wanted is dropped, its slot freed and its working agent ended only with --force, its place and branch removed, a place with a stray file kept until it goes, and a branch with a commit of its own kept and named"
