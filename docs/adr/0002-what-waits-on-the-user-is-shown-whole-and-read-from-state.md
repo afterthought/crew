@@ -51,7 +51,7 @@ Option 1. `crew rail [--label <label>]`, named as Flywheel Next names it, prints
 |---|---|---|---|
 | an open proposal, with whose agreement it still needs | `proposals.rec` on the flywheel's branch | its `plan.propose` entry in the run record, else its `Opened` date | it is approved or dropped |
 | a unit in review, with the plannotator command that opens its whole change | the unit's stage, from the kit | the time of the unit branch's head, construct's last commit | it is approved, or construct runs again |
-| a unit in verify whose report is newer than its branch's head, with the report's path and its conductor | the team's host: the unit's stage, the reports folder, the branch | the report file's time | code commits again, or the unit merges |
+| a unit in verify whose report is newer than its branch's head, with the report's path and its conductor | the team's host: the unit's stage, the reports folder, the branch | the report file's time | code commits again, or the unit merges (amended 2026-10-13 by record 0027: a verify report waits on no one, and is no row) |
 | a bolt whose every unit has merged and that has not landed, with its team and the main-level ops that lands it | the plan and the kit | the time of the bolt branch's head, the last merge into it | it lands |
 
 The time comes from the same state as the row, never from a record kept for the rail, so a row's age is as true as its presence (the user, 2026-10-07: "a column with the time/age so I know how old each is, and ordered").

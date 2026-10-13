@@ -31,7 +31,7 @@ The user's point: this is not about verify. Agents everywhere wait on processes.
    | construct | the change on the unit's branch, its planning complete |
    | code | every task ticked, each in a commit on the unit's branch |
    | verify | the report file for this run, under the team's reports folder |
-   | merge | the merge commit on the bolt |
+   | merge | the merge commit on the bolt, a unit's change archived in it (amended 2026-10-13 by record 0027) |
    | a fix's code, a chore's code | its commits on its branch |
    | ops's proof of a bolt | the proof file for the bolt |
 
@@ -60,4 +60,4 @@ Option 2 fixes verify's case and nothing else: an agent that is asked a question
 ## Consequences
 
 - One unit in crew once the user accepts this: `crew unit wait`, the run record's `stage.end`, the conductor's and verify's briefs, the `run-record` and `bolt-teams` specs.
-- The rail's verify row, "a report newer than the branch's head", becomes "the stage's deliverable exists and waits on the user", the same reading.
+- The rail's verify row, "a report newer than the branch's head", becomes "the stage's deliverable exists and waits on the user", the same reading. (Amended 2026-10-13 by record 0027: a verify report waits on no one, and is no row.)
