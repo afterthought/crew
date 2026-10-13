@@ -17,7 +17,7 @@ A command that would write the plan, run by a partition's planner, SHALL be refu
 - **THEN** it is refused in the same way
 
 ### Requirement: Other agents write the plan only within their own job
-A conductor SHALL write directly only `crew unit split`, `crew unit order` and `crew unit after`, and only on units of the bolt its team holds. The design agent SHALL write directly only `crew unit add` into a kit's queue. A dispatcher's `crew bolt give` and the main-level ops' `crew bolt land` SHALL stay direct. Any other plan write by an agent crew started SHALL be refused, naming the planner. The user at a shell SHALL write the plan directly.
+A conductor SHALL write directly only `crew unit split`, `crew unit order`, `crew unit after`, `crew chore order` and `crew chore after`, and only on units and chores of the bolt its team holds. The design agent SHALL write directly only `crew unit add` and `crew chore add` into a kit's queue. A dispatcher's `crew bolt give` and the main-level ops' `crew bolt land` SHALL stay direct. Any other plan write by an agent crew started SHALL be refused, naming the planner. The user at a shell SHALL write the plan directly.
 
 #### Scenario: A conductor narrows a unit of its bolt
 - **WHEN** swb-2's conductor runs `crew unit split` on a unit of the bolt swb-2 holds
@@ -25,6 +25,10 @@ A conductor SHALL write directly only `crew unit split`, `crew unit order` and `
 
 #### Scenario: A conductor adds a unit to its bolt
 - **WHEN** swb-2's conductor runs `crew unit add <unit> "<intent>" --bolt <its bolt>`
+- **THEN** it is refused, and the message says to tell the planner
+
+#### Scenario: A conductor adds a chore to its bolt
+- **WHEN** swb-2's conductor runs `crew chore add <chore> "<words>" --bolt <its bolt>`
 - **THEN** it is refused, and the message says to tell the planner
 
 #### Scenario: The design agent queues a unit
@@ -36,7 +40,7 @@ A conductor SHALL write directly only `crew unit split`, `crew unit order` and `
 - **THEN** the bolt is written, with no proposal
 
 ### Requirement: A proposal is a case and the commands it would run
-`crew plan propose <file>` SHALL write one Proposal record to `proposals.rec` on the flywheel's branch: its number, the planner's case, the plan commands it would run in order, who wrote it and when, and its state, `open`. The commands SHALL be among `bolt new`, `bolt order`, `bolt drop`, `unit add`, `unit amend`, `unit move`, `unit split`, `unit order`, `unit after` and `unit drop`. A number SHALL be given once and never reused, and a proposal SHALL never be removed or its commands changed.
+`crew plan propose <file>` SHALL write one Proposal record to `proposals.rec` on the flywheel's branch: its number, the planner's case, the plan commands it would run in order, who wrote it and when, and its state, `open`. The commands SHALL be among `bolt new`, `bolt order`, `bolt drop`, `unit add`, `unit amend`, `unit move`, `unit split`, `unit order`, `unit after`, `unit drop`, `chore add`, `chore move`, `chore order`, `chore after` and `chore drop`. A number SHALL be given once and never reused, and a proposal SHALL never be removed or its commands changed.
 
 #### Scenario: A new bolt with two units
 - **WHEN** the planner proposes `bolt new cfn-checks …`, `unit add cfn-nag-security-check … --bolt cfn-checks` and `unit move retire-suite-cfn-lint cfn-checks`, with its case
@@ -53,6 +57,10 @@ A conductor SHALL write directly only `crew unit split`, `crew unit order` and `
 #### Scenario: An amendment to a unit in flight
 - **WHEN** the planner proposes `unit amend <unit> "<new intent>"` for a unit in code in a bolt a team holds
 - **THEN** the proposal is written, the unit's intent is unchanged, and that bolt's conductor is told
+
+#### Scenario: A chore's words changed
+- **WHEN** the planner proposes `chore drop bump-biome "…"` then `chore add bump-biome "<new words>" --bolt tooling`
+- **THEN** the proposal is written; a chore has no amendment, so its words change by a drop and an add
 
 ### Requirement: A proposal is checked when it is written
 Before a proposal is written, each of its commands SHALL be applied in order to a copy of the plan at the branch's tip, and SHALL pass every refusal and rule that command has when run directly. A proposal with a command that would be refused SHALL be refused, naming the command and the reason, and nothing SHALL be written.

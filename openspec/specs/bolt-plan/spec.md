@@ -160,7 +160,7 @@ When anyone other than a bolt's conductor writes to an active bolt or its units,
 - **THEN** swb-1's conductor receives the commit's subject
 
 ### Requirement: A flywheel keeps one plan in its state repository
-Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal, sources and team. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`). The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got.
+Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of its state repository, for all of its kits. The plan SHALL hold only Bolt and Unit records. A Bolt has its name, repo, goal, sources and team. A Unit has its name, repo, bolt, intent, sources and dependencies (`After`); a Unit record marked `Kind: chore` is a chore, whose intent is its words. The plan SHALL hold what is meant to be built and any hold on it, never how far the work has got.
 
 #### Scenario: Business and agentplot work
 - **WHEN** the business partition (label `madswan`) builds kits whose design is in afterthought/blueprints and kits whose design is in agentplot/blueprints
@@ -173,6 +173,10 @@ Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of
 #### Scenario: A source in a blueprints repo
 - **WHEN** a unit's source is a page of the partition's first blueprints repo
 - **THEN** its `Source` is that page's path, and a page of another repo is `<owner>/<name>:<path>`
+
+#### Scenario: A chore among the units
+- **WHEN** a bolt holds two units and a chore between them
+- **THEN** `plan.rec` holds the chore's Unit record, marked `Kind: chore`, between the two units' records, and the file's order is their build order
 
 ### Requirement: A unit's intent is amended through crew
 `crew unit amend <unit> "<new intent>"` SHALL replace the unit's intent in the plan. A unit that has a worktree SHALL also be marked amended, and its bolt's conductor told to run construct again. A unit that has merged into its bolt or landed SHALL be refused. Run by the planner it SHALL be refused outside a proposal; the user at a shell runs it directly.
