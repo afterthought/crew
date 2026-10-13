@@ -30,14 +30,9 @@ tasks:
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/plugin/lib/kit.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/t-card-commands.sh', '/plugin/hooks/**/*']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
-  t-dev-shell:
-    command: 'tests/run t-dev-shell'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/plugin/lib/kit.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/t-dev-shell.sh', '/.claude/hooks/devenv-shell', '/.claude/settings.json', '/.envrc', '/.gitignore', '/CLAUDE.md', '/README.md', '/plugin/roles/**/*', '/plugin/skills/**/*']
-    tags: [check-full]
-    options: { runFromWorkspaceRoot: true }
   t-docs:
     command: 'tests/run t-docs'
-    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/plugin/lib/kit.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/t-docs.sh', '/README.md', '/plugin/skills/crew/SKILL.md']
+    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/plugin/lib/kit.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/t-docs.sh', '/README.md', '/CLAUDE.md', '/plugin/roles/**/*', '/plugin/skills/**/*', '/.envrc', '/.gitignore']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
   t-journey-board:
@@ -123,6 +118,11 @@ tasks:
   t-roles:
     command: 'tests/run t-roles'
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/plugin/lib/kit.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/t-roles.sh', '/plugin/hooks/**/*', '/plugin/roles/**/*']
+    tags: [check-full]
+    options: { runFromWorkspaceRoot: true }
+  t-runner:
+    command: 'tests/run t-runner'
+    inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/plugin/lib/kit.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/t-runner.sh', '/tests/suite']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
   t-session-hook:

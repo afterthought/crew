@@ -3,10 +3,17 @@
 # its own ($T) with tests/lib.sh to source, in one of the host's test slots (tests/slot). lib.sh gives each simulated host a scratch HOME holding fixture
 # teams.json and herdr-hosts.json files, makes bare git remotes, and puts stub herdr, ssh, hostname, sleep,
 # plannotator, pendingyou and claude commands first on PATH. The stubs record their calls in $T/calls.log and $T/claude.log, so no test
-# ever reaches a real herdr session, a real host or a real agent. It runs only inside a devenv shell, so a test
-# never runs on the host's tools in place of the shell's.
+# ever reaches a real herdr session, a real host or a real agent. It runs only inside crew's devenv shell, so a test
+# never runs on the host's tools in place of the shell's: started outside it, it runs itself again inside it, from the
+# checkout it is in (tests.1, record 0024).
 set -uo pipefail
-[[ -n ${DEVENV_ROOT:-} ]] || { echo "tests/run runs inside crew's devenv shell: a Claude session in a crew checkout is in it from its start; from a terminal, enter it with devenv shell, or direnv with the checkout's .envrc" >&2; exit 2; }
+if [[ -z ${DEVENV_ROOT:-} ]]; then
+  [[ -z ${CREW_TESTS_ENTERING:-} ]] || { echo "tests/run: devenv shell set no DEVENV_ROOT, so crew can't tell it is inside crew's devenv shell" >&2; exit 2; }
+  command -v devenv >/dev/null || { echo "tests/run runs inside crew's devenv shell, and devenv is not on this host's path" >&2; exit 2; }
+  here=$(cd "$(dirname "$0")/.." && pwd -P) || exit 2
+  cd "$here" && CREW_TESTS_ENTERING=1 exec devenv shell -- "$here/tests/run" "$@"
+fi
+unset CREW_TESTS_ENTERING
 TESTS=$(cd "$(dirname "$0")" && pwd -P); export TESTS
 
 # A test must never reach the real herdr, ssh, plannotator or Pending You: refuse to run if the stubs would not be the

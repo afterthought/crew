@@ -21,7 +21,7 @@ When crew makes a bolt's, unit's or fix's worktree it runs `crew-prepare` from t
 ### Modified Capabilities
 
 - `bolt-teams`: "Work happens in fixed places" makes each worktree ready through its kit's declaration and runs no kit script; a requirement is added for the agent's name for sluice.
-- `dev-shell`: a requirement is added for crew's own toolchain: devenv's system tools, and proto's pins of moon, Python and uv.
+- `test-suite`: a requirement is added for crew's own toolchain, which the suite runs on: devenv's system tools, and proto's pins of moon, Python and uv.
 
 ## Impact
 

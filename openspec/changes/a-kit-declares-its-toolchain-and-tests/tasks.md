@@ -3,7 +3,7 @@
 ## 1. crew's own toolchain
 
 - [x] 1.1 crew's devenv carries moon 2.6.1 from moonrepo's release for each platform, hashes pinned, as sluice's did, and `tests/suite t-suite t-merge-gate logic contract` ends with "0 failed" (dc1e6ce; `code.1`, `tests.5`).
-- [x] 1.2 crew's devenv carries proto, jq and recutils; `.prototools` pins moon 2.6.1, Python 3.13.15 and uv, activated with crew's own proto and moon homes; moon's Python toolchain syncs pytest from `tests/pyproject.toml` and `tests/uv.lock`; crew declares its toolchain and runner in `.config/sluice.toml`; the tasks' tag is `check-full`; `MOON_TOOLCHAIN_FORCE_GLOBALS` is gone; `t-dev-shell` checks moon's version and the tests' Python, and `tests/suite --affected` ends with "0 failed" (design: *crew's own toolchain*; Task notes 1.2; `code.1`, `tests.5`, `tests.10`).
+- [x] 1.2 crew's devenv carries proto, jq and recutils; `.prototools` pins moon 2.6.1, Python 3.13.15 and uv, activated with crew's own proto and moon homes; moon's Python toolchain syncs pytest from `tests/pyproject.toml` and `tests/uv.lock`; crew declares its toolchain and runner in `.config/sluice.toml`; the tasks' tag is `check-full`; `MOON_TOOLCHAIN_FORCE_GLOBALS` is gone; `tests/contract/test_toolchain.py` checks moon's version and the tests' Python, and `tests/suite --affected` ends with "0 failed" (design: *crew's own toolchain*; Task notes 1.2; `code.1`, `tests.5`, `tests.10`).
 
 ## 2. A worktree is made ready through its kit's declaration
 

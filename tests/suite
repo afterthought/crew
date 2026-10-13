@@ -21,9 +21,16 @@
 # with `   (replayed)` on one moon replayed, or `FAIL  t-<name>`; then each failing test's output; then
 # `<n> passed (<k> replayed), <m> failed`, and exits 0 only when none failed. moon's own output is in
 # .moon/cache/suite.log. It refuses before running anything when the tasks are out of step with the tests.
-# Written for bash 3.2, as tests/run is.
+# Written for bash 3.2, as tests/run is. It runs inside crew's devenv shell: started outside it, it runs itself again
+# inside it, from the checkout it is in (tests.1, record 0024).
 set -uo pipefail
-[[ -n ${DEVENV_ROOT:-} ]] || { echo "tests/suite runs inside crew's devenv shell: a Claude session in a crew checkout is in it from its start; from a terminal, enter it with devenv shell, or direnv with the checkout's .envrc" >&2; exit 2; }
+if [[ -z ${DEVENV_ROOT:-} ]]; then
+  [[ -z ${CREW_TESTS_ENTERING:-} ]] || { echo "tests/suite: devenv shell set no DEVENV_ROOT, so crew can't tell it is inside crew's devenv shell" >&2; exit 2; }
+  command -v devenv >/dev/null || { echo "tests/suite runs inside crew's devenv shell, and devenv is not on this host's path" >&2; exit 2; }
+  here=$(cd "$(dirname "$0")/.." && pwd -P) || exit 2
+  cd "$here" && CREW_TESTS_ENTERING=1 exec devenv shell -- "$here/tests/suite" "$@"
+fi
+unset CREW_TESTS_ENTERING
 for c in moon jq; do
   command -v "$c" >/dev/null || { echo "tests/suite needs $c on PATH (it comes with crew's devenv shell)" >&2; exit 2; }
 done
