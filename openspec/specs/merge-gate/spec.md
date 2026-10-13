@@ -1,82 +1,39 @@
 # merge-gate Specification
 
 ## Purpose
-crew's own repository checks what it merges: a merge into a bolt or onto main is refused when crew's suite is red, and a bolt is verified by the whole suite after each merge into it, with an outcome ops reads.
+Every merge into a bolt and every landing on main is a submission sluice tests on the checks the kit's policy requires and lands only when they pass; a bolt's verification is sluice's verdict on its last landing, and crew's own policy requires its whole suite.
 
 ## Requirements
 
-### Requirement: A merge into a bolt is refused when the suite is red
+### Requirement: Every merge into a bolt or onto main is a submission sluice gates
+Every merge into a bolt, a unit's, a chore's or a fix's, and every landing of a bolt on main SHALL be a submission to sluice, which lands it as a merge commit only when the checks the kit's policy requires of the target branch pass on the target with the submission merged, and otherwise lands nothing and leaves the target where it was. crew SHALL run no merge gate or verification of its own, and nothing of crew's SHALL move a bolt's branch or main by git.
 
-A unit's or fix's `wt merge bolt/<bolt>` in crew SHALL run crew's whole suite through `tests/run`, inside crew's devenv, on the tree about to land, after the rebase and before the bolt moves. When any test fails, the merge SHALL be refused, the bolt SHALL be left where it was, and the merge's output SHALL name each failing test. The gate SHALL run without `--no-hooks` or `--yes`, and SHALL NOT run the live test.
+#### Scenario: A red check refuses a unit's merge
+- **WHEN** a unit's place holds a change under which a required check fails, and its merge stage runs `wt submit bolt/<bolt> --no-remove`
+- **THEN** the submission fails naming the check, and `bolt/<bolt>` is at the commit it was at before
 
-#### Scenario: A red suite refuses a unit's merge
-- **WHEN** a unit's place holds a change under which one test fails, and its merge stage runs `wt merge bolt/<bolt> --no-squash --no-remove`
-- **THEN** the merge fails naming that test, and `bolt/<bolt>` is at the commit it was at before
+#### Scenario: A green submission lands
+- **WHEN** every required check passes on the bolt with the unit merged
+- **THEN** `bolt/<bolt>` is a merge commit sluice made, holding the unit's commits
 
-#### Scenario: A green suite lets the merge land
-- **WHEN** every test passes on the rebased tree
-- **THEN** `bolt/<bolt>` holds the unit's commits
+#### Scenario: A landing is gated the same way
+- **WHEN** main-level ops runs `crew bolt submit <bolt>` and a required check of main fails on main with the bolt merged
+- **THEN** nothing lands, and main is at the commit it was at before
 
-#### Scenario: A fix is gated the same way
-- **WHEN** a fix on `fix/<bolt>/<name>` merges into its bolt
-- **THEN** the same gate runs on the fix's rebased tree and refuses it when the suite is red
+### Requirement: A bolt's verification is sluice's verdict on its last landing
+A bolt's verification SHALL be read from the `Sluice-Result` trailer of the merge commit at the bolt's head, which sluice writes on every landing: green only when it starts `passed`; none when the head is no landing of sluice's; unknown when there is no head to read. crew SHALL never read a bolt's verification as green from anything but that trailer.
 
-#### Scenario: The live test stays out
-- **WHEN** the gate runs in an environment where `CREW_TEST_LIVE=1` is set
-- **THEN** the live test is skipped as it is without the variable
+#### Scenario: A bolt after a landing
+- **WHEN** the last submission to `bolt/b` landed with `Sluice-Result: passed (9 run, 0 replayed)`
+- **THEN** `crew bolts` shows the bolt's verification green, naming its head and that verdict
 
-### Requirement: A bolt's merge onto main is refused when the suite is red
+#### Scenario: A bolt nothing has landed on
+- **WHEN** `bolt/b`'s head is a commit sluice did not make
+- **THEN** its verification reads none, and the bolt is not offered for landing
 
-A bolt's `wt merge main`, run by main-level ops from the bolt's worktree, SHALL run the same gate on the tree about to land on main, and SHALL be refused, with main left where it was, when any test fails.
+### Requirement: crew's own policy gates its bolts and main on its whole suite
+crew's `.config/sluice.toml` SHALL require the `check-full` tasks of every `bolt/*` branch and of `main`, run open on the host, and SHALL accept a replayed task for a bolt and none for main, so a landing runs every test afresh. The live test SHALL be no task.
 
-#### Scenario: A red bolt does not land
-- **WHEN** main-level ops runs `wt merge main --no-squash --no-remove` from a bolt's worktree and one test fails on the rebased tree
-- **THEN** the merge fails naming that test, and main is at the commit it was at before
-
-### Requirement: Every merge into a bolt starts the bolt's verification
-
-After every merge into `bolt/<bolt>`, the whole suite SHALL run on the revision the bolt then holds, in the background, on a copy of that revision that no later merge or edit changes. Its outcome SHALL be recorded per revision where every worktree on the host can read it: running, green, or red with each failing test and the run's log. A merge onto main SHALL start no verification. Two runs SHALL NOT verify the same revision at once.
-
-#### Scenario: A merge is verified
-- **WHEN** a unit merges into `bolt/<bolt>`
-- **THEN** a verification of the bolt's new head starts, and reads `running` until it ends `green` or `red`
-
-#### Scenario: A red verification names what failed
-- **WHEN** a test fails in the verification of the bolt's head
-- **THEN** the outcome reads `red` with that test's name and the path of the run's log
-
-#### Scenario: A later merge during a run
-- **WHEN** a second merge lands on the bolt while the first merge's verification is still running
-- **THEN** the first run finishes on the revision it started with, the second merge's run verifies the new head, and each outcome is recorded for its own revision
-
-#### Scenario: Landing on main
-- **WHEN** a bolt merges onto main
-- **THEN** no verification runs in the main checkout
-
-### Requirement: The bolt's verification is read for its head
-
-One command, run in a bolt's worktree, SHALL print the verification of the bolt's current head: its state, revision, when it ran, each failing test and the log's path. It SHALL exit zero only when that state is green. A head with no recorded run SHALL read as not verified, never as another head's outcome. A run recorded as running whose process is gone SHALL read as interrupted. A record the command cannot read SHALL be named, and SHALL NOT read as green.
-
-#### Scenario: ops reads a green bolt
-- **WHEN** the last merge's verification passed and nothing has merged since
-- **THEN** the command prints `green` with the bolt's head and exits zero
-
-#### Scenario: The head has moved
-- **WHEN** a merge landed after the last recorded run and its own run has not started
-- **THEN** the command says the head is not verified, and exits non-zero
-
-#### Scenario: A run cut off
-- **WHEN** the run of the bolt's head was killed before it recorded an end
-- **THEN** the command prints `interrupted`, and exits non-zero
-
-### Requirement: ops runs the verification again on the same head
-
-The verification SHALL be runnable by hand from a bolt's worktree on the bolt's head, with the same record, for when a run was cut off or a machine was fixed and nothing has merged since. It SHALL refuse to start while a run of the same revision is still alive.
-
-#### Scenario: A rerun after a cut-off run
-- **WHEN** ops runs the verification from the bolt's worktree after the head's run was interrupted
-- **THEN** a new run of the same revision starts, and its outcome replaces the interrupted one
-
-#### Scenario: A rerun while one is running
-- **WHEN** ops runs the verification while the head's run is still alive
-- **THEN** it refuses, saying a run of that revision is in progress
+#### Scenario: crew's policy
+- **WHEN** crew's `.config/sluice.toml` is read
+- **THEN** `[branches."bolt/*"]` and `[branches.main]` each require `#check-full`, the bolt's trust holds `cache` and main's does not
