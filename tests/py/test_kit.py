@@ -71,8 +71,8 @@ def test_a_command_inside_the_toolchain_is_sourced_by_the_bash_on_path():
     ("bash: moon: command not found\n", "no version crew can read: bash: moon: command not found"),
 ])
 def test_any_moon_the_kit_runs_is_set_up_and_only_one_whose_version_cant_be_read_is_refused(version, refused):
-    """plan.17: which moon a kit runs is the kit's own choice; readying refuses a moon only when it can't read its
-    version (read.1)."""
+    """plan.17: crew enforces no moon floor; readying refuses a moon only when it can't read its version (read.1).
+    sluice's moon runner keeps its own floor, 2.6, at its run."""
     why = kit.moon_said(version)
     assert why is None if refused is None else refused in why
 

@@ -1,5 +1,5 @@
 """What crew assumes of its own toolchain, each case naming what assumes it: tests/suite runs crew's tasks (`moon exec`,
-the `check-full` tag) with the moon crew's .prototools pins, crew's own choice as every kit's moon is its own
+the `check-full` tag) with the moon crew's .prototools pins, crew's own choice
 (plan.17), installed by proto under crew's own proto home in the git common dir (devenv.nix), never a moon of the
 user's; and crew's tests run on Python 3.13, the minor every host runs crew on (code.1), with pytest synced from
 tests/pyproject.toml. Each run of crew's tools through the shell, `devenv shell -- <command>`, gets the same

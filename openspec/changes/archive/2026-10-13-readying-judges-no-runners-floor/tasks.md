@@ -7,4 +7,4 @@
 
 ## 2. Nothing says sluice needs moon 2.6
 
-- [x] 2.1 plan.17's rule and detail, record 0023's context and point 4, and the README say a kit's moon is the kit's own and readying refuses only a version it cannot read, quoting the user: `tests/t-docs.sh` and `tests/suite --affected` ending with "0 failed" (`docs.5`, `plan.17`).
+- [x] 2.1 plan.17's rule and detail, record 0023's context and point 4, and the README say crew enforces no moon floor and readying refuses only a version it cannot read, while sluice's moon runner refuses a moon below 2.6 at its run, quoting the user's words and ruling: `tests/t-docs.sh` and `tests/suite --affected` ending with "0 failed" (`docs.5`, `plan.17`).

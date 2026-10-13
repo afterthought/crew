@@ -154,7 +154,7 @@ A task SHALL be replayed from moon's cache, without running the test, when its i
 - **THEN** that test runs again
 
 ### Requirement: crew's own toolchain is devenv's system tools and proto's pins
-crew's devenv shell SHALL carry proto, jq and recutils as its system tools, and SHALL install, when one is missing, and activate the tools crew's `.prototools` pins: moon at the version crew pins, crew's own choice as every kit's moon is its own, Python at the minor the hosts run crew on, and uv. crew's tests SHALL run on that Python, with pytest from `tests/pyproject.toml`, locked in `tests/uv.lock`, synced by moon. crew SHALL declare its own toolchain and runner in `.config/sluice.toml` like any kit.
+crew's devenv shell SHALL carry proto, jq and recutils as its system tools, and SHALL install, when one is missing, and activate the tools crew's `.prototools` pins: moon at the version crew pins, Python at the minor the hosts run crew on, and uv. crew's tests SHALL run on that Python, with pytest from `tests/pyproject.toml`, locked in `tests/uv.lock`, synced by moon. crew SHALL declare its own toolchain and runner in `.config/sluice.toml` like any kit.
 
 #### Scenario: The tests' Python
 - **WHEN** crew's logic tier runs as a moon task inside crew's shell

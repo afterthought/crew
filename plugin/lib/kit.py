@@ -75,8 +75,8 @@ def readying(decl, script):
 
 def moon_said(version):
     """Why the moon runner's setup does not go on, or None: only output of `moon --version` that names no version crew
-    can read (read.1). Which moon a kit runs is the kit's own choice, for the features it takes up, and neither sluice
-    nor crew requires a version (plan.17), so any version read goes on to `moon setup`."""
+    can read (read.1). crew enforces no moon floor (plan.17): any version read goes on to `moon setup`, and a kit's moon
+    is its own but for sluice's moon runner, which refuses one below 2.6 at its own run."""
     if re.search(r"\bmoon \d+\.\d+\.\d+", version or ""):
         return None
     return f"moon --version printed no version crew can read: {(version or '').strip()[:80] or 'nothing'}"

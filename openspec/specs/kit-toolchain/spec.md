@@ -47,7 +47,7 @@ Every command crew runs in a worktree for its kit's toolchain or runner SHALL ru
 - **THEN** the setup still runs inside the toolchain
 
 ### Requirement: A kit's moon is its own
-Which moon a kit's toolchain runs SHALL be the kit's own choice: crew SHALL judge no version of it, nor take any as sluice's to require. For a moon runner, crew SHALL run `moon --version` inside the toolchain before `moon setup`, and SHALL refuse only output that names no version it can read, naming what was printed; any version it reads SHALL go on to `moon setup`.
+crew SHALL enforce no floor on the version of moon a kit's toolchain runs: which moon a kit runs is its own, but for sluice's moon runner, which refuses a moon below 2.6 at its run, so a kit runs 2.6 or later before it goes onto sluice. For a moon runner, crew SHALL run `moon --version` inside the toolchain before `moon setup`, and SHALL refuse only output that names no version it can read, naming what was printed; any version it reads SHALL go on to `moon setup`.
 
 #### Scenario: An older moon
 - **WHEN** the moon inside a kit's toolchain is 1.41.7, or 2.5.3
