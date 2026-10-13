@@ -3828,13 +3828,42 @@ def declared(k, unit, why):
     return got["entries"]
 
 
+def comes_after(after_of, a, b):
+    """Whether a comes after b through After at any depth (plan.13): after_of is each unit's or chore's After names."""
+    seen, todo = set(), list(after_of.get(a, ()))
+    while todo:
+        x = todo.pop()
+        if x == b:
+            return True
+        if x not in seen:
+            seen.add(x)
+            todo += after_of.get(x, ())
+    return False
+
+
+def ahead(order, after_of, a, b):
+    """Whether a is ahead of b in their bolt's merge order (teams.12, plan.13): b comes after a, at any depth; else,
+    unless a comes after b, a is earlier in the plan's order (order, the work's names as the file lists them). A unit's
+    dependents are never ahead of it, however the file lists them."""
+    if comes_after(after_of, b, a):
+        return True
+    return not comes_after(after_of, a, b) and order.index(a) < order.index(b)
+
+
+def bolt_order(plan, bolt):
+    """A bolt's work as ahead reads it: its names in the plan's order, and each one's After names."""
+    work = plan.work_of(bolt)
+    return [w.name() for w in work], {w.name(): w.all("After") for w in work}
+
+
 def overlapping(plan, st_all, k, unit, mine):
-    """What a unit's Touches overlap among the unmerged units ahead of it in its bolt that have a place: the prompt's
-    words for each, naming the entries and the other unit's change."""
-    out = []
-    for o in plan.units_of(plan.unit(unit).get("Bolt")):
-        if o.name() == unit:
-            break
+    """What a unit's Touches overlap among the unmerged units ahead of it in its bolt's merge order that have a place
+    (ahead): the prompt's words for each, naming the entries and the other unit's change."""
+    out, bolt = [], plan.unit(unit).get("Bolt")
+    order, after_of = bolt_order(plan, bolt)
+    for o in plan.units_of(bolt):
+        if o.name() == unit or not ahead(order, after_of, o.name(), unit):
+            continue
         pl = k["places"].get(o.name())
         if not pl or st_all.of(o.name())["stage"] in ("merged", "landed") or "entries" not in (pl.get("touches") or {}):
             continue
@@ -5214,7 +5243,7 @@ def reach(fleet, t):
                 and st.of(u.name())["stage"] not in ("merged", "landed", "unknown")]
         took = {name: took_heads(name, entries) for name, _, _ in live}
         due, unread = forecasts_due(live, b.name(), k["bolts"].get(b.name(), {}).get("head"),
-                                    lambda o, h, base: merge_tree(main, o, h, base), done, took)
+                                    lambda o, h, base: merge_tree(main, o, h, base), done, took, bolt_order(plan, b.name())[1])
         for name, other in unread:
             print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
         for name, other, paths, heads, after in due:
@@ -5238,19 +5267,24 @@ def reach(fleet, t):
                 done.add(heads)
 
 
-def forecasts_due(live, bolt, bolt_head, conflicts, done, took):
+def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
     """The forecasts a conductor's wait makes for a bolt (teams.12): live is each unmerged unit with a place, in the
     plan's order, as (name, head, its After units); conflicts(theirs, ours, base) the paths git merge-tree forecasts in
     conflict when theirs is merged into ours, from base or, when it is None, their merge base, [] for none, None when
-    git can't tell. Each unit is forecast against the bolt, then against each unit ahead of it once it is clean with the
-    bolt, the later unit taking the forecast; one already made for the same heads (done) is not made again. A unit is
-    forecast against one it comes after only on what it adds beyond that unit's head its place took (took, {unit:
-    {after unit: head}}), so the other's own work it carries, rewritten since by a rebase or a settle, is no conflict
-    of its; with no head taken, from their merge base (plan.13). Returns the forecasts as (unit, other, paths, heads,
-    whether the unit is to be put after the other), and the pairs git could not read."""
+    git can't tell. Each unit is forecast against the bolt, then against each unit ahead of it in the bolt's merge order
+    (ahead, through after_of, the bolt's work's After names, the live units' own when none is given) once it is clean
+    with the bolt, the later unit taking the forecast, so a unit is never forecast against one that comes after it; one
+    already made for the same heads (done) is not made again. A unit is forecast against one it comes after only on
+    what it adds beyond that unit's head its place took (took, {unit: {after unit: head}}), so the other's own work it
+    carries, rewritten since by a rebase or a settle, is no conflict of its; with no head taken, from their merge base
+    (plan.13). Returns the forecasts as (unit, other, paths, heads, whether the unit is to be put after the other, which
+    it is unless it already comes after it), and the pairs git could not read."""
     due, unread = [], []
-    for i, (name, head, after) in enumerate(live):
-        others = ([(f"bolt/{bolt}", bolt_head)] if bolt_head else []) + [(o, h) for o, h, _ in live[:i]]
+    order = [name for name, _, _ in live]
+    after_of = after_of if after_of is not None else {name: after for name, _, after in live}
+    for name, head, after in live:
+        others = ([(f"bolt/{bolt}", bolt_head)] if bolt_head else []) + [
+            (o, h) for o, h, _ in live if o != name and ahead(order, after_of, o, name)]
         for other, ohead in others:
             paths = conflicts(ohead, head, took.get(name, {}).get(other) if other in after else None)
             if paths is None:
@@ -5260,7 +5294,7 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took):
                 continue
             heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
             if heads not in done:
-                due.append((name, other, paths, heads, not other.startswith("bolt/") and other not in after))
+                due.append((name, other, paths, heads, not other.startswith("bolt/") and not comes_after(after_of, name, other)))
             if other.startswith("bolt/"):
                 break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
     return due, unread
