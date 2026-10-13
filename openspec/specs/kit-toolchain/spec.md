@@ -1,7 +1,7 @@
 # kit-toolchain Specification
 
 ## Purpose
-TBD - created by archiving change a-kit-declares-its-toolchain-and-tests. Update Purpose after archive.
+How a kit declares its toolchain and test runner in sluice's words, and how crew makes a worktree ready from that declaration and runs commands inside it, judging no version of the runner a kit chooses (plan.17, record 0023).
 
 ## Requirements
 
@@ -46,9 +46,13 @@ Every command crew runs in a worktree for its kit's toolchain or runner SHALL ru
 - **WHEN** the kept toolchain uses bash 4 syntax and the host's `/bin/bash` is 3.2
 - **THEN** the setup still runs inside the toolchain
 
-### Requirement: The moon runner needs moon 2.6
-For a moon runner, crew SHALL run `moon --version` inside the toolchain before `moon setup`, and SHALL refuse a moon older than 2.6, naming the version it found.
+### Requirement: A kit's moon is its own
+Which moon a kit's toolchain runs SHALL be the kit's own choice: crew SHALL judge no version of it, nor take any as sluice's to require. For a moon runner, crew SHALL run `moon --version` inside the toolchain before `moon setup`, and SHALL refuse only output that names no version it can read, naming what was printed; any version it reads SHALL go on to `moon setup`.
 
-#### Scenario: An old moon
-- **WHEN** the moon inside a kit's toolchain is 2.5.3
-- **THEN** crew refuses to make the place ready, naming moon 2.5.3 and the floor 2.6
+#### Scenario: An older moon
+- **WHEN** the moon inside a kit's toolchain is 1.41.7, or 2.5.3
+- **THEN** crew runs `moon setup` in the place and makes it ready, as for any other version
+
+#### Scenario: A version crew cannot read
+- **WHEN** `moon --version` inside a kit's toolchain prints `bash: moon: command not found`, or nothing
+- **THEN** crew refuses to make the place ready, naming what was printed
