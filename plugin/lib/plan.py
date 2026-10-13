@@ -1169,7 +1169,7 @@ def make_place(fleet, t, path, branch, base, track=False):
         r = crew.on_machine(fleet, t["machine"], ["bash", "-c", IN_PLACE, "crew", path, out or "", " ".join(kit.KEEP), *argv])
         r.returncode == 0 or fail(kit.step_failed(path, what, r.returncode, r.stderr + r.stdout))
         if what == "moon --version":
-            why = kit.moon_floor(r.stdout)
+            why = kit.moon_said(r.stdout)
             not why or fail(f"{path} is made but not ready: {why}")
     READ.drop_kit(t["machine"], t["kit"]["main"])
 

@@ -66,13 +66,14 @@ def test_a_command_inside_the_toolchain_is_sourced_by_the_bash_on_path():
 
 
 @pytest.mark.parametrize("version, refused", [
-    ("moon 2.6.1\n", None), ("moon 2.6.0", None), ("moon 3.0.2", None),
-    ("moon 2.5.3\n", "moon 2.5.3, below the moon runner's floor, 2.6"),
-    ("moon 1.41.7", "below the moon runner's floor"),
-    ("", "no version crew can read"),
+    ("moon 2.6.1\n", None), ("moon 3.0.2", None), ("moon 2.5.3\n", None), ("moon 1.41.7", None),
+    ("", "no version crew can read: nothing"),
+    ("bash: moon: command not found\n", "no version crew can read: bash: moon: command not found"),
 ])
-def test_the_moon_runner_needs_moon_2_6(version, refused):
-    why = kit.moon_floor(version)
+def test_any_moon_the_kit_runs_is_set_up_and_only_one_whose_version_cant_be_read_is_refused(version, refused):
+    """plan.17: which moon a kit runs is the kit's own choice; readying refuses a moon only when it can't read its
+    version (read.1)."""
+    why = kit.moon_said(version)
     assert why is None if refused is None else refused in why
 
 
