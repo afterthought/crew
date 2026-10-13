@@ -1,6 +1,7 @@
 # A host's tests run in its test slots (tests.9). With one slot, a second test waits while the first holds it and
 # runs once it is let go; a test started inside another's slot, as t-suite's suites are, runs at once in it; a slot
-# whose holder was killed is free again; the slot count is CREW_TEST_SLOTS, and a count that is not one is refused.
+# whose holder was killed is free again; the slot count is CREW_TEST_SLOTS, and a count that is not one is refused;
+# with none given, it is the host's cores less two, at least two.
 # Reads: tests/slot
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 # The stubs' sleep returns at once; the holders here wait with the real one.
@@ -56,3 +57,9 @@ ok "a slot whose holder was killed is free again"
 
 expect_fail "CREW_TEST_SLOTS is 'none', not a number of slots" env CREW_TEST_SLOTS=none python3 "$TESTS/slot" true
 ok "a slot count that is not a number is refused"
+
+# With no count given, a host's slots are its cores less two, at least two (tests.9, record 0021 as amended 2026-10-12).
+count() { env -u CREW_TEST_SLOTS python3 -c 'import importlib.machinery, sys
+print(importlib.machinery.SourceFileLoader("slot", sys.argv[1]).load_module().count())' "$TESTS/slot"; }
+eq "$(count)" "$(python3 -c 'import os; print(max(2, (os.cpu_count() or 4) - 2))')"
+ok "with no count given, a host's slots are its cores less two, at least two"
