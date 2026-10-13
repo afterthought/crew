@@ -13,6 +13,10 @@ Each rail row SHALL have one card key, derived from the row's state: `proposal/<
 - **WHEN** unit `u` was constructed at head `abc1234`, and construct runs again and commits `def5678`
 - **THEN** no review row or key exists for either head; the unit's revised change is due for the partition's next batch, whose card's key is the batch's
 
+#### Scenario: A bolt proven again on a new head
+- **WHEN** bolt `y` was ready to land at head `abc1234`, its landing failed, and a fix moved its head to `def5678` and ops proved it again
+- **THEN** its landing row's key is `land/y/def5678`, its conductor posts a new landing card under that key, and a card keyed `land/y/abc1234` belongs to no row
+
 ### Requirement: The owner of a row posts its card
 When an agent crew started has Pending You's tools, it SHALL post one card for each row it owns: the planner for each proposal it opens and for each card of a review batch, a conductor for each verify report its team's units wait on the user for, and for its bolt once the bolt is proven. It SHALL post no second card for a row that has one open.
 
@@ -27,3 +31,7 @@ When an agent crew started has Pending You's tools, it SHALL post one card for e
 #### Scenario: No Pending You
 - **WHEN** a conductor's session has no Pending You tools and its bolt is proven, or a unit of its waits on a verify report
 - **THEN** no card is posted, the rail row is as before, and the conductor tells the operator agents it waits on the user
+
+#### Scenario: A proof leaves the user a check
+- **WHEN** brd-2's ops finishes its proof with every item green but one check only the user can make on their Mac
+- **THEN** ops writes that check in its proof file and posts no card, and the user gets one card for it, the conductor's landing card for the bolt

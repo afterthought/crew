@@ -13,6 +13,10 @@
 - **WHEN** the planner runs `crew card session batch/3-1 w`, and `w` is not among the units of that card
 - **THEN** it is refused, naming the units the card holds, and no session is started
 
+#### Scenario: A review card's session
+- **WHEN** a conductor runs `crew card session review/x/abc1234` once units are reviewed in batches
+- **THEN** it is refused, naming that no review row or key exists and that `x`'s change is read from its batch's card, and no session is started
+
 #### Scenario: A proposal card's session
 - **WHEN** the planner runs `crew card session proposal/4`
 - **THEN** a session is running on proposal 4's page as `crew plan proposed 4` prints it, and its link is printed
