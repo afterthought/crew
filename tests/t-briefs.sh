@@ -154,6 +154,9 @@ for want in "bolt give <team>" "up <team>" "account ia" "makes its branch from t
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
+expect_ok crewpy brief wldn operator
+for want in "swancloud's main moves only through sluice (\`state.3\`), so never edit or commit in its main checkout" \
+  "wt submit main --no-remove" "read-tree -m -u <main's commit before you submitted> main"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
   "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" "The word to land is also the word to push main" \
