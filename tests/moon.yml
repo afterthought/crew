@@ -7,11 +7,13 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 tasks:
   contract:
     command: 'python3 -m pytest -q -p no:cacheprovider tests/contract'
+    deps: ['~:venv']
     inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/contract/**/*']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
   logic:
     command: 'python3 -m pytest -q -p no:cacheprovider tests/py'
+    deps: ['~:venv']
     inputs: ['/plugin/lib/**/*', '/plugin/roles/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/plugin/hooks/status.js', '/tests/py/**/*']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
@@ -150,3 +152,7 @@ tasks:
     inputs: ['/plugin/bin/**/*', '/plugin/lib/crew.py', '/plugin/lib/plan.py', '/plugin/lib/record.py', '/plugin/lib/gather.py', '/plugin/lib/transcript.py', '/plugin/lib/questions.py', '/plugin/lib/ops.py', '/plugin/lib/cards.py', '/plugin/lib/kit.py', '/tests/run', '/tests/slot', '/tests/lib.sh', '/tests/stubs/**/*', '/devenv.nix', '/devenv.lock', '/.prototools', '/.moon/toolchains.yml', '/tests/pyproject.toml', '/tests/uv.lock', '/tests/t-teams.sh']
     tags: [check-full]
     options: { runFromWorkspaceRoot: true }
+  venv:
+    command: 'uv sync --locked'
+    inputs: ['/tests/pyproject.toml', '/tests/uv.lock', '/.prototools', '/.moon/toolchains.yml']
+    options: { cache: false }

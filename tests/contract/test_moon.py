@@ -2,7 +2,9 @@
 --force, with `moon exec --cache off`, because moon installs a project's dependencies then and
 skips them under its own --force ("Force updating cache, skipping dependency install", moon 2.6.1): deliverable-race's
 landing on 2026-10-12, the first suite run in its worktree since crew's toolchain moved to proto, ran crew's tests
-with no pytest in tests/.venv. The workspace here is crew's own toolchain, its .prototools and .moon/toolchains.yml,
+with no pytest in tests/.venv. sluice runs every check with moon's --force, so the tiers depend on a never-cached task
+that syncs tests/.venv with the uv moon's toolchain gives (tests/moon-tasks): sluice's first runs of crew, on
+2026-10-13, failed both tiers on "No module named pytest" in a fresh place. The workspace here is crew's own toolchain, its .prototools and .moon/toolchains.yml,
 with a project that has no dependencies, so uv needs nothing it has not got; moon checks for a network before it
 installs, and skips the install on a host with none."""
 import json
@@ -49,3 +51,24 @@ def test_moons_force_skips_installing_a_projects_dependencies(workspace):
 def test_an_uncached_run_installs_them_and_still_runs_every_task_afresh(workspace):
     assert installed(workspace, "--cache", "off") == "passed"
     assert (workspace / "proj" / "uv.lock").exists()
+
+
+def test_a_never_cached_sync_task_installs_the_tiers_dependencies_under_force(workspace):
+    """tests/moon-tasks' venv task: under `moon exec --force`, which skips moon's own install, a task the check depends
+    on, never cached, runs `uv sync --locked` with the uv moon's toolchain puts on its path, from the project's lock,
+    and the check's python3 then imports what the lock holds: crew's tests' own pyproject and lock, pytest in them."""
+    shutil.copy(CREW / "tests" / "pyproject.toml", workspace / "proj" / "pyproject.toml")
+    shutil.copy(CREW / "tests" / "uv.lock", workspace / "proj" / "uv.lock")
+    (workspace / "proj" / "moon.yml").write_text(
+        "tasks:\n"
+        "  venv:\n    command: 'uv sync --locked'\n    options: { cache: false }\n"
+        "  check:\n    command: 'python3 -c \"import pytest\"'\n    deps: ['~:venv']\n")
+    for args in (["add", "-A"], ["commit", "-q", "-m", "the tests' project"]):
+        subprocess.run(["git", "-C", str(workspace), *args], check=True, capture_output=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MOON_") or k == "MOON_HOME"}
+    r = subprocess.run(["moon", "exec", "proj:check", "--force"], cwd=workspace, env=env, capture_output=True, text=True,
+                       stdin=subprocess.DEVNULL)
+    assert r.returncode == 0, r.stdout + r.stderr
+    report = json.loads((workspace / ".moon" / "cache" / "runReport.json").read_text())
+    ran = {a["label"]: a["status"] for a in report["actions"] if a["label"].startswith("RunTask(")}
+    assert ran == {"RunTask(proj:venv)": "passed", "RunTask(proj:check)": "passed"}, ran
