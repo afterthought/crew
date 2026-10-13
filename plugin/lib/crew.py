@@ -1495,7 +1495,7 @@ class Agents:
     def stop(self, role, ending=None):
         """End a role's agent before anything else starts in its pane (teams.2): None once it is ended, or when none was
         up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. A slot's
-        stage, or ops's proof, still owed an end ends with it first, by ending(role)."""
+        stage still owed an end ends with it first, by ending(role)."""
         pane = self.pane(role)
         st = self.herdr.status(pane)
         if st == "working" and not self.force:

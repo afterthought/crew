@@ -34,7 +34,7 @@ A wait on a stage reads the same transcript for the work the agent started in th
 <task-id><id></task-id> in it, recorded as a queue-operation and again as an attachment. When these stop holding, a
 quiet agent waiting on its own work reads as waiting on nothing, and is reported stuck sooner; never as finished.
 
-When crew sends an agent a prompt, a stage's, a greeting or ops's proof request, it reads here whether Claude received
+When crew sends an agent a prompt, a stage's or a greeting, it reads here whether Claude received
 it (teams.15). Run on the agent's host, sent there as questions.py is, it answers one JSON object and writes nothing:
 
   python3 - end <session>                      where the session's transcript ends: {"path": <path>, "size": <bytes>},
