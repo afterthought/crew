@@ -1419,16 +1419,18 @@ def bolt_land(fleet, a):
 
 
 
-# A landing's submission (plan.16, record 0026), on the team's host: a short-lived worktree on the bolt's branch, the
-# one place sluice takes a submission from, nothing moving the branch there; `wt submit main` from it, waiting for
-# sluice's outcome; the worktree removed; and, when main moved, the kit's main checkout brought level with it, since
-# sluice moves the branch and not that checkout's files; the submission is in the name of whoever asked for it. Prints
-# what it did as shell assignments: RC, the submission's exit (sluice's: 0 landed, 1 its checks failed, 2 a conflict
-# or a refusal, 130 stopped); OLD and NEW, main's commit before and after; KEPT, the worktree when git could not
-# remove it; LEVEL, "yes", "no" or why it was not tried.
+# A landing's submission (plan.16, record 0026), on the team's host, refused there when sluice's wt-submit, which
+# worktrunk runs as `wt submit`, is not on its path: a short-lived worktree on the bolt's branch, the one place sluice
+# takes a submission from, nothing moving the branch there; `wt submit main` from it, waiting for sluice's outcome; the
+# worktree removed; and, when main moved, the kit's main checkout brought level with it, since sluice moves the branch
+# and not that checkout's files; the submission is in the name of whoever asked for it. Prints what it did as shell
+# assignments: RC, the submission's exit (sluice's: 0 landed, 1 its checks failed, 2 a conflict or a refusal, 130
+# stopped); OLD and NEW, main's commit before and after; KEPT, the worktree when git could not remove it; LEVEL, "yes",
+# "no" or why it was not tried.
 LANDING = r"""main=$1 path=$2 bolt=$3
 export SLUICE_AGENT=$4
 cd "$main" || exit 2
+command -v wt-submit >/dev/null || { echo "wt submit needs sluice's wt-submit, which is not on $(hostname -s)'s path" >&2; exit 2; }
 old=$(git rev-parse --verify -q refs/heads/main) || { echo "$main has no branch main" >&2; exit 2; }
 git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main has no branch bolt/$bolt" >&2; exit 2; }
 [ -d "$path" ] || git worktree add -q "$path" "bolt/$bolt" >&2 || exit 2

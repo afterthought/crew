@@ -2,7 +2,7 @@
 # .config/sluice.toml on main names the checks its bolt branches require, refusing, with the plan unchanged and no
 # branch made, a kit with no policy or one naming no bolt branch checks, naming the file; and a unit's and a fix's merge
 # stage submits with wt submit bolt/<bolt>; and crew's own policy requires its check-full tasks of a bolt and of main,
-# main taking no replay (tests.5, tests.10). Each scenario of the bolt-teams spec on merging; which table and checks a
+# run open on the host and taking no replay (tests.5, tests.10). Each scenario of the bolt-teams spec on merging; which table and checks a
 # policy names for a bolt branch is a logic case (tests/py/test_kit.py), and that the policy is read from main's
 # commit, a contract case (tests/contract/test_git.py).
 # Reads: plugin/hooks/ .config/sluice.toml
@@ -41,6 +41,6 @@ ok "a unit's and a fix's merge into the bolt is a submission, wt submit bolt/<bo
 
 policy() { python3 -c 'import sys, tomllib; sys.path.insert(0, sys.argv[1]); import kit
 text = open(sys.argv[2]).read(); b = tomllib.loads(text)["branches"]
-print(kit.bolt_checks(text, "crew"), b["main"]["required"], "cache" in b["bolt/*"]["trust"], "cache" in b["main"]["trust"])' "$CREW/plugin/lib" "$CREW/.config/sluice.toml"; }
-eq "$(policy)" "['#check-full'] ['#check-full'] True False"
-ok "crew's own policy requires its check-full tasks of a bolt and of main, and main takes no replay"
+print(tomllib.loads(text)["executor"]["kind"], kit.bolt_checks(text, "crew"), b["main"]["required"], b["bolt/*"]["trust"], b["main"]["trust"])' "$CREW/plugin/lib" "$CREW/.config/sluice.toml"; }
+eq "$(policy)" "open ['#check-full'] ['#check-full'] ['open'] ['open']"
+ok "crew's own policy requires its check-full tasks of a bolt and of main, run open on the host, and takes no replay"

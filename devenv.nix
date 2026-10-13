@@ -43,9 +43,9 @@ in
   packages = [ pkgs.jq proto pkgs.recutils ];
 
   # moon's task archives (.moon/cache/outputs) are a link into the git common dir, so every worktree of crew on a
-  # host and its main checkout share them: a test the coder passed replays in sluice's run of the merge into its
-  # bolt. The rest of .moon/cache stays the checkout's own, since it records the checkout's absolute paths. moon reads
-  # no setting for where its cache lives, hence the link.
+  # host and its main checkout share them: a test one worktree passed replays in another's run of the same inputs.
+  # The rest of .moon/cache stays the checkout's own, since it records the checkout's absolute paths. moon reads no
+  # setting for where its cache lives, hence the link.
   #
   # proto's and moon's homes are crew's own, in the git common dir, so every worktree shares one install: moon puts
   # both homes' bin first on every task's PATH, and a user's own installs there (an older moon among them) must never

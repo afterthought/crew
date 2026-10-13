@@ -1,6 +1,9 @@
 """What crew assumes of git, each case naming what assumes it."""
 import os
+import shutil
 import subprocess
+
+import pytest
 
 
 def test_a_first_parent_log_leaves_out_a_siblings_work_taken_by_a_merge(repo):
@@ -284,9 +287,10 @@ def test_a_landings_verdict_is_its_trailer(repo):
 
 def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(repo, tmp_path):
     """plan.bolt_submit (plan.16, record 0026): sluice takes a submission only from a worktree on its branch, so the
-    landing makes one on bolt/<bolt>, runs `wt submit main` there, removes it, and brings the kit's main checkout level
-    with what sluice moved, keeping an untracked file there. A stand-in wt lands as sluice does: a merge commit moved
-    onto main by git update-ref, which leaves a checkout on main behind its HEAD."""
+    landing makes one on bolt/<bolt>, runs `wt submit main` there, which the real worktrunk runs as wt-submit from the
+    path, removes it, and brings the kit's main checkout level with what sluice moved, keeping an untracked file there.
+    A stand-in wt-submit lands as sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout
+    on main behind its HEAD. With no wt-submit on the path the landing is refused, naming it, with nothing made."""
     import plan
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/b")
@@ -294,8 +298,18 @@ def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(rep
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
     bin_.mkdir()
-    (bin_ / "wt").write_text(f'''#!/bin/sh
-[ "$1 $2 $3" = "submit main --no-remove" ] || exit 9
+    wt = shutil.which("wt") or pytest.skip("worktrunk's wt is not on this host's path")
+    os.symlink(wt, bin_ / "wt")
+    for tool in ("git", "bash", "sh", "env", "hostname", "mktemp", "xargs", "dirname", "cat", "printf"):
+        if shutil.which(tool):
+            os.symlink(shutil.which(tool), bin_ / tool)
+    land_with = lambda path: subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
+                                            capture_output=True, text=True, env=dict(os.environ, PATH=path))
+    r = land_with(str(bin_))
+    assert r.returncode == 2 and "wt submit needs sluice's wt-submit, which is not on" in r.stderr, r.stderr
+    assert not land.exists()
+    (bin_ / "wt-submit").write_text(f'''#!/bin/sh
+[ "$1 $2" = "main --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
 tree=$(printf 'x\\n' | git hash-object -w --stdin)
@@ -305,9 +319,8 @@ new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p 
 git update-ref refs/heads/main "$new"
 echo "landed #1"
 ''')
-    (bin_ / "wt").chmod(0o755)
-    env = dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}")
-    r = subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"], capture_output=True, text=True, env=env)
+    (bin_ / "wt-submit").chmod(0o755)
+    r = land_with(f"{bin_}:{os.environ['PATH']}")
     landed, words = plan.landing_said("b", "kit", r.stdout)
     assert landed, r.stdout + r.stderr
     assert (tmp_path / "agent").read_text().strip() == "wldn-ops"
