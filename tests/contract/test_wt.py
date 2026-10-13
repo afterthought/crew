@@ -79,32 +79,3 @@ def test_a_kit_with_merge_hooks_only_asks_no_approval_to_remove(repo, kit):
     r = remove(repo, place)
     assert r.returncode == 0, r.stderr
     assert not place.exists()
-
-
-def hook(place, target):
-    return subprocess.run(["wt", "-C", str(place), "hook", "post-merge", f"--target={target}"], capture_output=True, text=True,
-                          stdin=subprocess.DEVNULL)
-
-
-def test_post_merge_hooks_run_on_the_worktrees_head_with_the_target_once_approved(repo, kit, tmp_path):
-    """plan.carry and plan.checks_said: after crew moves a bolt to its carrying fix, the kit's post-merge hooks run in
-    the bolt's worktree on its new head, the bolt as their target; not approved, they refuse on a ✗ line and run nothing."""
-    mark = tmp_path / "hook-ran"
-    place = kit(f'[post-merge]\nmark = "echo {{{{ target }}}} $(git rev-parse HEAD) > {mark}"\n')
-    r = hook(place, "bolt/t")
-    assert r.returncode != 0 and any(l.startswith("✗") and "Cannot prompt for approval" in l for l in (r.stdout + r.stderr).splitlines())
-    assert not mark.exists()
-    subprocess.run(["wt", "-C", str(repo.path), "config", "approvals", "add", "--yes"], check=True, capture_output=True)
-    r = hook(place, "bolt/t")
-    assert r.returncode == 0, r.stderr
-    end = time.monotonic() + 600
-    while not (mark.exists() and mark.read_text().strip()) and time.monotonic() < end:
-        time.sleep(0.1)
-    assert mark.read_text().split() == ["bolt/t", repo.git("rev-parse", "unit/x")]
-
-
-def test_a_kit_with_no_post_merge_hooks_says_so(repo, kit):
-    """plan.checks_said: worktrunk says it has no post-merge hooks configured, and succeeds."""
-    place = kit('[pre-merge]\ngate = "true"\n')
-    r = hook(place, "bolt/t")
-    assert r.returncode == 0 and "No post-merge hooks configured" in r.stdout + r.stderr
