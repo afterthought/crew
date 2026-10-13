@@ -1,7 +1,8 @@
 # What reaches a unit's agent, through the crew command on the stubs (tests.11, record 0022), a part of the units journey
 # (t-journey-units): a conflict with the bolt forecast for a unit with no stage running reaches its next stage's prompt,
 # once; a second wait on a stage is refused, and a stop-short's words are the running wait's answer; and the user's
-# amendment marks a unit and runs its construct again in their name, its wait clearing the mark.
+# amendment marks a unit and hands its construct to the team's host, which runs it again in their name, its wait
+# clearing the mark.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -44,7 +45,9 @@ ok "a conflict met at a rebase reaches a unit with no stage running in its next 
 unset CREW_AGENT
 : > "$CREW_TEST_LOG"
 expect_ok crew unit amend b "Unit b, said again."
-has "$out" "swb-1-unit-2 has b: construct, in $kd/places/b"
+has "$out" "construct on unit b is handed to $box, where it starts again: swb-1-conductor is told what started, and crew unit wait b waits for it"
+lacks "$out" "swb-1-unit-2 has b"
+until_ok eval '[[ $(told swb-1-conductor) == *"construct runs again on it in swb-1-unit-2"* ]]' || fail "the handed construct never told the conductor"
 eq "$(git --git-dir "$ws" log -2 --format=%s wldn/main)" "plan(tenant-environments): b amended, construct runs again ($me@mac-studio)
 plan(tenant-environments): amend b ($me@mac-studio)"
 eq "$(plan -t Unit -e "Unit = 'b'" -P Amended)" "$(git -C "$k" rev-parse unit/b)"
@@ -56,9 +59,15 @@ eq "$(field $box stage.start Commit stage/b/construct)" "WilldanGroup/crew-state
 has "$(git --git-dir "$ws" log -1 --format=%B wldn/main)" "Crew-Entry: $(field $box stage.start Id stage/b/construct)"
 echo "Said again." >> "$kd/places/b/openspec/changes/b/design.md"; commit_all "$kd/places/b" "docs(b): written again"
 export CREW_AGENT=swb-1-conductor
+handed=$(home_of $box)/.local/state/swb-1-team/handed/b
+printf '{"by": "the user", "at": 0, "pid": %s}' $$ > "$handed"
+expect_fail "construct on unit b is starting on this host, handed there by the user: crew unit wait b waits for it" crew unit run b code
+printf '{"by": "the user", "at": 0, "pid": %s, "failed": "swb-1 is down; crew up swb-1 brings it back"}' $$ > "$handed"
+expect_fail "construct did not start on unit b: swb-1 is down; crew up swb-1 brings it back" crew unit wait b
+[[ ! -e $handed ]] || fail "the wait that said the handed construct failed left its marker"
 expect_ok crew unit wait b
 has "$out" "swb-1-unit-2 delivered construct on b"
 eq "$(plan -t Unit -e "Unit = 'b'" -P Amended)" ""
 eq "$(subject)" "plan(tenant-environments): b constructed again, its mark cleared (swb-1-conductor)"
 git --git-dir "$ws" show "wldn/main:runs/$box/$(date -u +%F).rec" | grep -q "^Act: stage.end" || fail "the write that clears the mark carries no construct end"
-ok "the user's amendment marks the unit and runs its construct again in their name, tells the conductor, and the wait that ends it clears the mark"
+ok "the user's amendment marks the unit and answers once its construct is handed to the team's host, which runs it again in their name and tells the conductor; a stage is refused while it starts, a wait says why it did not, and the wait that ends it clears the mark"

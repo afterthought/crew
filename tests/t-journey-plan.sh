@@ -1,10 +1,10 @@
 # The plan changed through proposals, and the writes that race on its branch, through the crew command on the stubs
 # (tests.11, record 0022): the planner proposes, a held bolt's conductor is told and agrees, the user approves, leaves
 # units out on the card and answers it, a proposal is dropped and replaced, a unit from a signal is routed, an
-# approval's rebases are undone when one conflicts, amendments start their constructs, and two writes racing on one
-# branch, or on two branches of one repository, both land. Whether a proposal holds, whom it waits on, what its page and
-# card say and who may write the plan are logic cases (tests/py/test_proposals.py, test_proposal_life.py,
-# test_proposal_card.py, test_plan_roles.py); each step here checks a command's wiring once.
+# approval's rebases are undone when one conflicts, amendments hand their constructs to the team's host, and two writes
+# racing on one branch, or on two branches of one repository, both land. Whether a proposal holds, whom it waits on,
+# what its page and card say and who may write the plan are logic cases (tests/py/test_proposals.py,
+# test_proposal_life.py, test_proposal_card.py, test_plan_roles.py); each step here checks a command's wiring once.
 # Reads: plugin/hooks/ plugin/lib/picture.py plugin/lib/font.py
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -190,7 +190,8 @@ eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/zone
 CREW_AGENT= crew plan drop "$n" "they stay" >/dev/null
 ok "an approval's rebases are prepared before its push, and a conflict undoes them and writes nothing"
 
-# The planner proposes amending a unit in code and one in verify; the approval runs each one's construct again.
+# The planner proposes amending a unit in code and one in verify; the approval hands each one's construct to the team's
+# host, which runs it again.
 : > "$CREW_TEST_LOG"
 crew plan propose "$(proposal 'Case: The deploy should fail on a warning as well.' \
   'Do: unit amend the-deploy-names-its-host-tenant "The deploy writes the host tenant, and fails on a warning."' \
@@ -203,14 +204,17 @@ has "$out" "**Amend unit \`in-verify\`** in bolt \`tenant-environments\` (swb-1)
 HOST=$box CREW_AGENT=swb-1-conductor crew plan agree "$n" >/dev/null
 : > "$CREW_TEST_LOG"
 expect_ok crew plan approve "$n"
-has "$out" "swb-1-unit-1 has the-deploy-names-its-host-tenant: construct, in $kd/places/the-deploy-names-its-host-tenant"
-has "$out" "swb-1-unit-2 has in-verify: construct, in $kd/places/in-verify"
+has "$out" "construct on unit the-deploy-names-its-host-tenant is handed to $box, where it starts again"
+has "$out" "construct on unit in-verify is handed to $box, where it starts again"
+until_ok eval '[[ $(prompts swb-1) == *"construct runs again on it in swb-1-unit-2: wait for it (crew unit wait in-verify)"* ]]' || fail "in-verify's handed construct never told the conductor"
+until_ok eval '[[ $(prompts swb-1) == *"construct runs again on it in swb-1-unit-1: wait for it (crew unit wait the-deploy-names-its-host-tenant)"* ]]' \
+  || fail "the-deploy-names-its-host-tenant's handed construct never told the conductor"
 eq "$(plan -t Unit -e "Unit = 'in-verify'" -P Amended)" "$(git -C "$k" rev-parse unit/in-verify)"
 has "$(prompt_to swb-1-unit-2)" "s intent was amended by proposal $n; revise the existing change to it. The planner"
 eq "$(field $box stage.start By stage/in-verify/construct)" "wldn-planner"
 has "$(prompts swb-1)" "intent was amended by proposal $n, and construct runs again on it in swb-1-unit-2: wait for it (crew unit wait in-verify)"
 lacks "$(prompts swb-1)" "Close your Pending You card"
-ok "an approved amendment marks each unit and runs its construct again in the approver's name, with the planner's case, and the conductor is told to wait"
+ok "an approved amendment marks each unit and answers once their constructs are handed to the team's host, which runs each again in the approver's name, with the planner's case, and tells the conductor to wait"
 
 # With its team taken down, an amendment stands and every stage is refused before anything is written.
 unset CREW_AGENT

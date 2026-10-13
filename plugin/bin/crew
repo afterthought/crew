@@ -303,6 +303,9 @@ case $cmd in
   _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
     # is over (a plan write that ends work asks for it on the team's host)
     need_team "${2:-}"; one _tidy "$2" ${forced[@]+"${forced[@]}"} ;;
+  _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
+    # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
+    need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
   main)
     need_label "${3:-}"
     case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;

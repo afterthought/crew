@@ -1867,9 +1867,10 @@ def op_unit_split(ctx, a):
 def op_unit_amend(ctx, a):
     """A unit's intent replaced. One that has a worktree has a change written for the old intent, so it is marked
     amended, proposal/<n> inside an approval and intent when the user runs it, and once the write has landed the
-    amendment runs its construct again on its team's host, in the name of whoever applied it, ending the unit's agent
-    when it is past construct, and tells its conductor what started or why nothing did (plan.15). Merged work is not
-    amended, and a chore never is (plan.11)."""
+    amendment hands its construct to its team's host, in the name of whoever applied it (construct_hand): the command
+    answers once the host has it, and the host starts construct again, ending the unit's agent when it is past
+    construct, and tells the conductor what started or why nothing did (plan.15, code.9). A host that does not answer
+    is told to the conductor from here. Merged work is not amended, and a chore never is (plan.11)."""
     label, plan = the_work(ctx, a)
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(
@@ -1893,29 +1894,52 @@ def op_unit_amend(ctx, a):
         if not (mark and team):
             return
         by = f"proposal {ctx.n}" if not ctx.direct else "the user"
-        conductor = f"{team['name']}-conductor"
-        r = crew.on_machine(ctx.fleet, team["machine"], crew.crew_argv(ctx.fleet, team["machine"], *construct_again(a.unit, s["stage"])))
+        r = crew.on_machine(ctx.fleet, team["machine"],
+                            crew.crew_argv(ctx.fleet, team["machine"], *construct_again(team["name"], a.unit, s["stage"], by)))
         said = (r.stdout + r.stderr).strip()
         if said:
             print(said)
-        if r.returncode == 0:
-            m = re.search(rf"^(\S+) has {re.escape(a.unit)}: construct, in ", r.stdout, re.M)
-            text, unsaid = amend_told(a.unit, by, m.group(1) if m else f"a slot of {team['name']}")
-        else:
+        if r.returncode:
             why = (crew.unanswered(team["machine"], r)
                    or ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].rstrip("."))
             print(f"construct did not start on unit {a.unit}: {why}")
-            text, unsaid = amend_told(a.unit, by, None, why)
-        if not crew.tell(ctx.fleet, conductor, text):
-            print(f"{conductor} is not up: {unsaid}")
+            amend_tell(ctx.fleet, team["name"], *amend_told(a.unit, by, None, why))
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
 
 
-def construct_again(unit, stage):
-    """The crew command an amendment runs on its team's host (plan.15): construct on the unit, ending its agent where
-    it stands when the unit is past construct, since that agent works to the old intent; a construct still writing the
-    change is not ended, and the unit's corrections wait until it settles (briefs.5)."""
-    return ["unit", "run", unit, "construct"] + (["--force"] if stage != "construct" else [])
+def construct_again(team, unit, stage, by):
+    """The crew command an amendment runs on its team's host (plan.15, code.9): construct on the unit handed to that
+    host (construct_hand), in the name of what amended it (by), ending its agent where it stands when the unit is past
+    construct, since that agent works to the old intent; a construct still writing the change is not ended, and the
+    unit's corrections wait until it settles (briefs.5)."""
+    return ["_construct-again", team, unit, "--by", by] + (["--force"] if stage != "construct" else [])
+
+
+def amend_tell(fleet, team, text, unsaid):
+    """An amendment's word to its team's conductor (amend_told), or what crew says when the conductor is not up."""
+    conductor = f"{team}-conductor"
+    if not crew.tell(fleet, conductor, text):
+        print(f"{conductor} is not up: {unsaid}")
+
+
+# How long a handed construct's process has to name itself in its marker before crew takes it as never started.
+HAND_NAMED = 60
+
+
+def handed_state(unit, marker, alive, now):
+    """Where a construct an amendment handed to the team's host stands (plan.15), from its marker (None when nothing
+    was handed, or once it started), whether the process it names is alive, and the time now: (None, None) when nothing
+    is handed; ("failed", why) when it could not start; ("starting", what) while it starts, or for HAND_NAMED seconds
+    from the hand-off before its process has named itself; ("gone", what) when its process ended, or never named
+    itself, without saying either."""
+    if marker is None:
+        return None, None
+    if marker.get("failed"):
+        return "failed", f"construct did not start on unit {unit}: {marker['failed']}"
+    if alive or ("pid" not in marker and now - marker.get("at", 0) < HAND_NAMED):
+        return "starting", f"construct on unit {unit} is starting on this host, handed there by {marker.get('by', 'an amendment')}"
+    return "gone", (f"construct handed to this host for unit {unit} ended before it said whether it started (its words are in "
+                    f"{marker.get('log', 'its log')}): crew unit run {unit} construct runs it")
 
 
 def amend_told(unit, by, slot, why=None):
@@ -5850,17 +5874,126 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
 
 def unit_run(fleet, a):
     """crew unit run <unit> construct|code|verify|settle|merge ["<words>"] [--force], or crew chore run <chore>
-    code|verify|merge (--chore), on the host of the team whose bolt holds it: its stage started there (run_unit_stage)."""
-    run_unit_stage(fleet, on_team_host(fleet, team_of_unit(fleet, a), a.force), a.unit, a.stage, a.words, "chore" if a.chore else "unit")
+    code|verify|merge (--chore), on the host of the team whose bolt holds it: its stage started there (run_unit_stage),
+    refused while a construct an amendment handed there is starting (handed_state), whose wait is crew unit wait."""
+    t = team_of_unit(fleet, a)
+    team = on_team_host(fleet, t, a.force)
+    state, said = construct_handed_state(t, a.unit)
+    state != "starting" or fail(f"{said}: crew unit wait {a.unit} waits for it")
+    if state:
+        handed_path(t, a.unit).unlink(missing_ok=True)  # this run is the one that starts it now
+    run_unit_stage(fleet, team, a.unit, a.stage, a.words, "chore" if a.chore else "unit")
 
 
 def unit_wait(fleet, a):
-    """crew unit wait <unit> [--timeout <ms>] [--stuck <ms>], on the host of the team whose bolt holds the unit: the wait
-    on the stage the slot holding it owes (stage_wait)."""
+    """crew unit wait <unit> [--timeout <ms>] [--stuck <ms>], on the host of the team whose bolt holds the unit: first,
+    while a construct an amendment handed there is starting, its start (handed_state), saying why when it did not
+    start; then the wait on the stage the slot holding it owes (stage_wait), within what is left of the timeout."""
     t = team_of_unit(fleet, a)
     team = on_team_host(fleet, t)
+    until = time.monotonic() + a.timeout / 1000
+    state, said = construct_handed_state(t, a.unit)
+    while state == "starting" and time.monotonic() < until:
+        time.sleep(1)
+        state, said = construct_handed_state(t, a.unit)
+    if state == "starting":
+        print(f"{said}, past the wait's timeout: wait again")
+        return
+    if state:
+        handed_path(t, a.unit).unlink(missing_ok=True)
+        fail(said)
     slot = team.holding(a.unit) or fail(f"no slot of {t['name']} holds {a.unit}")
-    stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=a.timeout, stuck=a.stuck))
+    left = max(int((until - time.monotonic()) * 1000), 0)
+    stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=left, stuck=a.stuck))
+
+
+def handed_path(t, unit):
+    """The marker of a construct an amendment handed to the team's host (construct_hand): there from the hand-off until
+    the construct starts, holding who handed it, the process starting it once that has named itself, and why it did
+    not start when it could not."""
+    return team_state(t) / "handed" / unit
+
+
+def construct_handed_state(t, unit):
+    """handed_state, read on the team's host from the unit's marker and whether its process is alive."""
+    try:
+        marker = json.loads(handed_path(t, unit).read_text())
+    except (OSError, ValueError):
+        marker = None
+    alive = False
+    if marker and marker.get("pid"):
+        try:
+            os.kill(int(marker["pid"]), 0)
+            alive = True
+        except (OSError, ValueError):
+            alive = False
+    return handed_state(unit, marker, alive, time.time())
+
+
+def construct_hand(fleet, a):
+    """crew _construct-again <team> <unit> --by <by> [--force], run by an amendment on its team's host (plan.15,
+    code.9). A team taken down starts nothing: the start is recorded refused, and the conductor told, at once. Else the
+    construct is handed to a process of its own on this host (--handed), which outlives this command: its marker is
+    written (handed_path), and this command answers. The handed process, one at a time on a team, runs construct
+    again (run_unit_stage), its agent ended first when forced, then clears the marker, or writes why it did not start
+    into it, and tells the conductor what started or why nothing did; crew unit wait waits for it."""
+    t = crew.team_of(fleet, a.team)
+    team = on_team_host(fleet, t, a.force)
+    if a.handed:
+        return construct_handed(fleet, team, a)
+    if team.down():
+        why = crew.down_said(t["name"])
+        record.emit(team.label, "stage.start", [f"stage/{a.unit}/construct", f"unit/{a.unit}"], refused=why)
+        print(f"construct did not start on unit {a.unit}: {why}")
+        amend_tell(fleet, t["name"], *amend_told(a.unit, a.by, None, why))
+        return
+    mark = handed_path(t, a.unit)
+    mark.parent.mkdir(parents=True, exist_ok=True)
+    log = mark.parent / f"{a.unit}.log"
+    mark.write_text(json.dumps({"by": a.by, "log": str(log), "at": time.time()}))
+    argv = ["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "crew"), "_construct-again",
+            t["name"], a.unit, "--by", a.by, "--handed"] + (["--force"] if a.force else [])
+    try:
+        with open(log, "w") as out:
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+    except OSError as e:
+        mark.unlink(missing_ok=True)
+        fail(f"construct could not be handed on {t['machine']}: {e}")
+    print(f"construct on unit {a.unit} is handed to {t['machine']}, where it starts again: {t['name']}-conductor is told "
+          f"what started, and crew unit wait {a.unit} waits for it")
+
+
+def construct_handed(fleet, team, a):
+    """The handed construct (construct_hand), in its own process on the team's host."""
+    t, mark = team.t, handed_path(team.t, a.unit)
+    try:
+        marker = json.loads(mark.read_text())
+    except (OSError, ValueError):
+        marker = {"by": a.by}
+    mark.write_text(json.dumps({**marker, "pid": os.getpid()}))
+    out, err, why = io.StringIO(), io.StringIO(), None
+    with open(team_state(t) / "handed" / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)  # one handed construct at a time on a team, as one approval's were in turn
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                run_unit_stage(fleet, team, a.unit, "construct")
+        except Refusal as e:
+            why = str(e)
+        except Stopped:
+            why = (err.getvalue().strip().splitlines() or ["it stopped"])[-1]
+        except Exception as e:  # said in the log, and to the conductor and the wait as any other
+            import traceback
+            traceback.print_exc()
+            why = f"{type(e).__name__}: {e}"
+        finally:
+            print(out.getvalue() + err.getvalue(), end="")
+            if why:
+                why = why.rstrip(".")
+                mark.write_text(json.dumps({**marker, "failed": why}))
+            else:
+                mark.unlink(missing_ok=True)
+    m = re.search(rf"^(\S+) has {re.escape(a.unit)}: construct, in ", out.getvalue(), re.M)
+    amend_tell(fleet, t["name"], *amend_told(a.unit, a.by, (m.group(1) if m else f"a slot of {t['name']}") if not why else None, why))
 
 
 def fix_run(fleet, a):
@@ -8030,6 +8163,12 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("words", nargs="?", default="")
     x.add_argument("--chore", action="store_true", help="crew chore run asks: the name is a chore's")
     x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_construct-again")
+    x.add_argument("team")
+    x.add_argument("unit")
+    x.add_argument("--by", required=True)
+    x.add_argument("--handed", action="store_true", help="the handed construct's own process")
+    x.add_argument("--force", action="store_true")
     x = sub.add_parser("_unit-wait")
     x.add_argument("unit")
     x.add_argument("--timeout", type=int, default=3600000)
@@ -8087,6 +8226,7 @@ COMMANDS = {
     ("chore", "add"): direct(("chore", "add")), ("chore", "order"): direct(("chore", "order")), ("chore", "after"): direct(("chore", "after")),
     ("chore", "move"): direct(("chore", "move")), ("chore", "drop"): direct(("chore", "drop")),
     ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
+    ("_construct-again", None): construct_hand,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
     ("_review", None): review_cmd, ("_operator", None): operator_cmd, ("_revive", None): revive_cmd,
@@ -8097,8 +8237,8 @@ COMMANDS = {
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
 }
 # The commands on a team and on a main level, each one process on the host its agents run on.
-TEAM_COMMANDS = {(c, None) for c in ("_status", "_unit-run", "_unit-wait", "_fix-run", "_tidy", "_unit-free", "_team", "_needs",
-                                      "_main", "_dispatch", "_review", "_operator", "_revive")}
+TEAM_COMMANDS = {(c, None) for c in ("_status", "_unit-run", "_unit-wait", "_fix-run", "_construct-again", "_tidy", "_unit-free",
+                                      "_team", "_needs", "_main", "_dispatch", "_review", "_operator", "_revive")}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",
