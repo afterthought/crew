@@ -336,7 +336,7 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
   "You post no card for a unit, and open nothing for a batch" "run construct again with them, word for word" \
   "hold the notes until it settles" "Overlapping *Touches* never hold a unit back" "crew puts the later after the earlier itself" \
   "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
-  "the card names them too" "The merge stage submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches"; do
+  "the card names them too" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches"; do
   has "$out" "$want"
 done
 for gone in "build them one after the other" "When in doubt, don't" "## Review with the user"; do lacks "$out" "$gone"; done

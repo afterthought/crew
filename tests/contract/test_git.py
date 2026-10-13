@@ -327,3 +327,22 @@ echo "landed #1"
     assert not land.exists() and "land-b" not in repo.git("worktree", "list")
     assert (repo.path / "landed.txt").read_text() == "x\n"
     assert repo.git("status", "--porcelain") == "?? notes.txt"
+
+
+def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):
+    """plan.landed_at (plan.13, teams.17, record 0026): the commit that brought a unit's change to its bolt, which
+    rebase_dependents compares with what a dependent's place holds, is found when sluice landed the unit as a merge
+    commit and the unit's merge archived the change first. git log's default history simplification follows only the
+    first parent of a merge whose tree matches it on the path, and the bolt's side never held openspec/changes/<unit>, so
+    without --full-history the unit's side is pruned and nothing is found."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("checkout", "-q", "-b", "unit/a", "bolt/b")
+    made = repo.commit("docs(a): the change", {"openspec/changes/a/proposal.md": "p\n"})
+    repo.git("mv", "openspec/changes/a", "openspec/changes/archive-2026-10-13-a")
+    repo.git("commit", "-q", "-m", "docs(openspec): archive a")
+    repo.git("checkout", "-q", "bolt/b")
+    repo.commit("feat: the bolt's own", {"other": "o\n"})
+    repo.git("merge", "-q", "--no-ff", "-m", "chore(land): #1 unit/a", "unit/a")
+    assert plan.landed_at(str(repo.path), "b", "a") == made

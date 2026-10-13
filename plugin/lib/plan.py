@@ -5000,9 +5000,11 @@ echo "conflict $paths"; exit 3
 
 def landed_at(main, bolt, unit, kind="unit"):
     """The commit on a bolt that brought a unit's change there, the first that holds its folder, or a chore's work, the
-    first carrying its trailer (plan.11); None when it holds none."""
+    first carrying its trailer (plan.11); None when it holds none. A unit lands on its bolt in sluice's merge commit with
+    its change already archived (teams.17, record 0026), so the bolt's own side never held the folder: --full-history
+    follows the merge's other parent, which git's default simplification prunes."""
     where = ([f"--grep=^Chore: {unit}$", f"refs/heads/bolt/{bolt}"] if kind == "chore" else
-             [f"refs/heads/bolt/{bolt}", "--", f"openspec/changes/{unit}"])
+             ["--full-history", f"refs/heads/bolt/{bolt}", "--", f"openspec/changes/{unit}"])
     out = gather.run(["git", "log", "--format=%H", "--reverse", *where], main)
     return (out or "").split("\n")[0].strip() or None
 
