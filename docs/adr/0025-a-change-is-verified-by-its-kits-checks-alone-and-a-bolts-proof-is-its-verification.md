@@ -1,7 +1,7 @@
 ---
 number: 25
 title: A change is verified by its kit's checks alone, which is each kit's own rule, and a bolt's proof is its verification
-status: proposed
+status: accepted
 date: 2026-10-13
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # A change is verified by its kit's checks alone, which is each kit's own rule, and a bolt's proof is its verification
 
-Status: proposed to the user on 2026-10-13, in the elaboration session; accepted only on their yes.
+Status: accepted by the user on 2026-10-13, in the elaboration session ("Yes, accept"), on the words quoted under *Decision outcome* and *Whose rule it is*.
 
 Deciders: the user, in the elaboration session of 2026-10-12 and 13, whose words below are the decision; written by the elaboration session.
 Amends: `docs.6`, `briefs.3`, `briefs.1`, `briefs.11` and `plan.16`; record 0012, point 3; record 0006, its consequence on ops's proof; the `bolt-teams`, `main-level` and `rail-cards` specs through the units that build this (`docs.4`).
@@ -45,7 +45,7 @@ The user: yes, "the kit's checks only"; yes, "the verification is the proof"; ye
 
 ### Consequences
 
-- `docs.6` says what a crew change holds, crew's own rule; `briefs.3` says a crew brief names nothing of a change's content beyond what crew's machinery reads, so `construct.md` loses its proof, task-shape and *Task notes* paragraphs and crew's own conventions move to crew's `openspec/config.yaml`, where OpenSpec hands them to crew's agents; `briefs.1` has ops edit no code, deploy nothing and prove nothing; `briefs.11` sends a user's step to the deploy's card; `plan.16` has the conductor post the landing card on the verification. Amended in this commit, marked proposed until the user's yes.
+- `docs.6` says what a crew change holds, crew's own rule; `briefs.3` says a crew brief names nothing of a change's content beyond what crew's machinery reads, so `construct.md` loses its proof, task-shape and *Task notes* paragraphs and crew's own conventions move to crew's `openspec/config.yaml`, where OpenSpec hands them to crew's agents; `briefs.1` has ops edit no code, deploy nothing and prove nothing; `briefs.11` sends a user's step to the deploy's card; `plan.16` has the conductor post the landing card on the verification. Amended with this record and standing accepted.
 - Record 0012, point 3, loses *Proof in dev* and gains point 4's branch neutrality; record 0006 loses its proof consequence. Both amended in this commit.
 - The plan's bolt `changes-say-what-is-true-and-what-is-proved` and its unit `a-change-holds-what-is-true-and-what-is-proved` are reworded to this record and gain a second unit, `a-bolts-proof-is-its-verification`: `crew prove` and the proof report go from the command, `ops.md`, `main-ops.md` step 1, `conductor.md`'s landing words, CLAUDE.md's *Proving and landing a bolt*, and the `bolt-teams` ("A bolt is deployed and tested from its branch"), `main-level` and `rail-cards` specs through deltas. `a-merged-change-is-archived` loses "ops's proof reads the archived change" from its intent.
 - swancloud and every other kit: nothing of crew's reaches their changes. swancloud's `openspec/config.yaml` and `testing.6` already say its shape; whether to drop *Proof in dev* from its own changes is its design agent's, told of this record.
