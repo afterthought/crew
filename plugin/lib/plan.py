@@ -1169,20 +1169,26 @@ exec env -i "${env[@]}" "$@" </dev/null
 """
 
 
-def make_place(fleet, t, path, branch, base, track=False):
+def make_place(fleet, t, path, branch, base, track=False, unready=False):
     """A worktree at a fixed path, made with git itself on the team's host, then made ready through its kit's
     declaration (plan.17), whether it is new or was already there: the declared toolchain, its output kept in the
     worktree's git directory, and the runner's setup inside it. A step that fails refuses the command with the
-    worktree made. The command's next step reads the kit again."""
+    worktree made; with unready, as a fix's place is made (teams.3, record 0028), it stops the readying instead, and
+    what failed is returned. None once the worktree is ready. The command's next step reads the kit again."""
     said = host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "", kit.DECLARATION)
     gitdir, text = kit.place_said(said)
+    why = None
     for what, argv, out in kit.readying(kit.declared(text, f"{path}/{kit.DECLARATION}"), f"{gitdir}/crew/toolchain.sh"):
         r = crew.on_machine(fleet, t["machine"], ["bash", "-c", IN_PLACE, "crew", path, out or "", " ".join(kit.KEEP), *argv])
-        r.returncode == 0 or fail(kit.step_failed(path, what, r.returncode, r.stderr + r.stdout))
-        if what == "moon --version":
-            why = kit.moon_said(r.stdout)
-            not why or fail(f"{path} is made but not ready: {why}")
+        if r.returncode:
+            why = kit.step_failed(path, what, r.returncode, r.stderr + r.stdout)
+        elif what == "moon --version" and kit.moon_said(r.stdout):
+            why = f"{path} is made but not ready: {kit.moon_said(r.stdout)}"
+        if why:
+            unready or fail(why)
+            break
     READ.drop_kit(t["machine"], t["kit"]["main"])
+    return why
 
 
 # What a kit's main holds of its policy, on its host: POLICY=<the file, base64> or POLICY=- when main has none, read
@@ -4285,10 +4291,18 @@ def bolt_held(plan, team):
 
 def fix_place(fleet, t, place, fix, bolt):
     """A fix's place made from the team's bolt, tracking it, and refused unless it is on the fix's own branch made
-    from that bolt (teams.3)."""
-    make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True)
+    from that bolt (teams.3, read.4). A place that could not be made ready is no refusal, since a fix is how a bolt is
+    repaired (record 0028): what failed is returned, for the fix's agent to be told; None once it is ready."""
+    unready = make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True, unready=True)
     why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
     not why or fail(why)
+    return unready
+
+
+def fix_prompt(words, place, unready=None):
+    """The prompt a fix's agent starts with: the fix's words, and when its place could not be made ready, what failed
+    (kit.unready_said), so it knows what it stands in (teams.3, record 0028)."""
+    return f"Fix: {words}" + (f" {kit.unready_said(place, unready)}" if unready else "")
 
 
 def fix_in_slot(held, bolt, name, kdir):
@@ -5785,7 +5799,8 @@ def unit_wait(fleet, a):
 def fix_run(fleet, a):
     """crew fix <team> <name> "<what is wrong>" | --merge | --wait, on the team's host (teams.3, teams.5, plan.8): the
     team's read first, but for a wait; then what fix_cmd decides. A new fix takes a slot, is refused and recorded when
-    every slot is in flight or its place is not its own, and starts as a code stage; a merge starts as a merge stage,
+    every slot is in flight or its place is not its own, and starts as a code stage, in a place that could not be made
+    ready as in one that could, its agent told what failed (record 0028); a merge starts as a merge stage,
     a submission of the fix to the bolt through sluice; a wait waits on the stage the fix's slot owes (stage_wait)."""
     t = crew.team_of(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
@@ -5797,6 +5812,7 @@ def fix_run(fleet, a):
     on = [obj, f"bolt/{bolt}"]
     if a.mode == "wait":
         return stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=a.timeout, stuck=a.stuck))
+    unready = None
     if a.mode == "start":
         taken = False
         if not slot:  # a new fix never takes over a branch or place that is already there (fix_cmd)
@@ -5807,7 +5823,7 @@ def fix_run(fleet, a):
                 record.emit(team.label, "fix.start", on, refused=f"all {t['units']} of {t['name']}'s slots are in flight")
                 raise Stopped(1)
         try:
-            fix_place(fleet, t, place, fix, bolt)
+            unready = fix_place(fleet, t, place, fix, bolt)
         except Refusal as e:
             if taken:
                 team.drop("slots", slot)
@@ -5818,7 +5834,9 @@ def fix_run(fleet, a):
         run_stage(fleet, team, slot, "merge", f"Merge {fix} into bolt/{bolt}: {said['MERGE']}", "fix.merge", fix, obj, on + [f"agent/{agent}"])
         print(f"{agent} has {fix}: merge, in {place}")
     else:
-        run_stage(fleet, team, slot, "fix", f"Fix: {a.words}", "fix.start", fix, obj, on + [f"agent/{agent}"])
+        if unready:
+            print(f"{unready.splitlines()[0].rstrip(':')}; {agent} starts on the fix all the same, told what failed")
+        run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"])
         print(f"{agent} has {fix}: code, in {place}")
 
 

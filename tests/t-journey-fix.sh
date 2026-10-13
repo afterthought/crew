@@ -1,7 +1,8 @@
 # A fix and the plan moving under a team, through the crew command on the stubs (tests.11, record 0022), a part of the
 # units journey (t-journey-units): a fix takes a slot in its own place from the bolt, writes no plan and merges through
-# sluice as a stage does; a moved unit's branch is rebased onto its new bolt; and the team's reads free the slots a
-# moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file.
+# sluice as a stage does; a moved unit's branch is rebased onto its new bolt; the team's reads free the slots a
+# moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file; and a fix whose place
+# could not be made ready starts all the same, told what failed.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -68,3 +69,16 @@ has "$said" "$fp is kept, and $fb with it: $fb has merged into bolt/tenant-envir
 eq "$(awk '{print $1, $3}' "$slots")" "unit-2 b"
 rm "$fp/note"
 ok "a moved unit's branch is rebased onto its new bolt; the team's reads free the slot it left and a merged fix's, keeping a merged place holding a stray file, and crew unit free a dropped unit's once its agent settles"
+
+# A bolt whose own toolchain fails: a fix's agent starts in its place all the same, told the step that failed, since a
+# fix is how the bolt is repaired (teams.3, record 0028).
+touch "$T/moon-fails"
+xf=fix/tenant-environments/repair xp=$kd/places/fix-tenant-environments--repair
+expect_ok crew fix swb-1 repair "Take main into the bolt."
+has "$out" "$xp is made but not ready: moon setup exited 1; swb-1-unit-"
+xs=$(awk -v f="$xf" '$3 == f {print $1}' "$slots")
+has "$(prompt_to "swb-1-$xs")" "'Fix: Take main into the bolt. Your place $xp could not be made ready, so the kit"
+has "$(prompt_to "swb-1-$xs")" "moon setup exited 1"
+eq "$(field $box fix.start Refused "$xf")" ""
+rm "$T/moon-fails"
+ok "a fix whose place could not be made ready starts all the same, its agent told what failed"

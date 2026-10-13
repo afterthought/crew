@@ -105,6 +105,15 @@ def step_failed(place, what, code, output, lines=15):
             + "Running the command again sets it up.")
 
 
+def unready_said(place, why, lines=15):
+    """What a fix's agent is told of a place that is made but could not be made ready (teams.3, record 0028), on one
+    line, since it goes in the fix's prompt: the step that failed and its last lines (why), and that the fix may be
+    what repairs it."""
+    said = " / ".join(l.strip() for l in (why or "").strip().splitlines()[:lines + 1] if l.strip())
+    return (f"Your place {place} could not be made ready, so the kit's tools may not run in it: {said}. Repairing that "
+            "may be part of this fix.")
+
+
 # How a landing sluice made names its verdict: a trailer on its merge commit (sluice record 0006), as
 # `Sluice-Result: passed (9 run, 0 replayed)`. sluice lands nothing that did not pass.
 VERDICT = "Sluice-Result"

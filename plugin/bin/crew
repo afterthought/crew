@@ -73,7 +73,9 @@
 #   crew fix     <team> <name> "<what is wrong>"
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
 #                                      built by a fresh code agent; a name already in use on the bolt is refused.
-#                                      Its prompt, and its merge's, is taken or sent again as a unit stage's is
+#                                      A place that could not be made ready refuses no fix: its agent starts there,
+#                                      told the step that failed, since a fix is how a bolt is repaired. Its prompt,
+#                                      and its merge's, is taken or sent again as a unit stage's is
 #   crew fix     <team> <name> --merge merge the fix into the bolt: a merge stage, its submission to sluice as a
 #                                      unit's is
 #   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>]

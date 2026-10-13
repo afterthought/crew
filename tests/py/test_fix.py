@@ -1,12 +1,14 @@
 """A fix (teams.3, teams.5, plan.8, teams.15): plan.fix_in_slot for what crew fix <name> acts on, plan.leftover and
-plan.own_place for a fix refused its place, plan.bolt_held for the bolt a fix is of, and crew.never_started for a
-fix's or unit's stage whose prompt was never taken. A fix merges as a unit does, by a submission to sluice (teams.5);
-the fix's place and stage through the command are the journey's (t-journey-fix)."""
+plan.own_place for a fix refused its place, plan.fix_prompt for what its agent starts with, told of a place that could
+not be made ready (record 0028), plan.bolt_held for the bolt a fix is of, and crew.never_started for a fix's or unit's
+stage whose prompt was never taken. A fix merges as a unit does, by a submission to sluice (teams.5); the fix's place
+and stage through the command are the journey's (t-journey-fix)."""
 import pytest
 
 from facts import plan_of
 
 import crew
+import kit
 import plan
 
 KD = "/kit"
@@ -78,3 +80,18 @@ class TestNeverStarted:
         assert crew.never_started("swb-1-unit-1", "merge", "a", "unit/a", "swb-1", "unread", "it is waiting on a question in its pane") == (
             "crew could not tell whether swb-1-unit-1 took its merge prompt for a: it is waiting on a question in its pane; "
             "nothing more was sent, and the stage is taken as never started: run it again with crew unit run a merge")
+
+
+class TestUnready:
+    """A fix's agent starts in a place that could not be made ready, told what failed (teams.3, record 0028)."""
+
+    def test_a_ready_place_starts_the_fix_with_its_words_alone(self):
+        assert plan.fix_prompt("The banner flickers.", "/kit/places/fix-b--tidy") == "Fix: The banner flickers."
+
+    def test_a_place_not_ready_tells_the_agent_the_step_and_its_last_lines_on_one_line(self):
+        why = kit.step_failed("/kit/places/fix-b--tidy", "moon setup", 1, "resolving toolchains\nbun: no such version 1.2.23\n")
+        prompt = plan.fix_prompt("Take main into the bolt.", "/kit/places/fix-b--tidy", why)
+        assert prompt.startswith("Fix: Take main into the bolt. Your place /kit/places/fix-b--tidy could not be made ready, so the kit's "
+                                 "tools may not run in it: /kit/places/fix-b--tidy is made but not ready: moon setup exited 1: / ")
+        assert "bun: no such version 1.2.23" in prompt and "\n" not in prompt
+        assert prompt.endswith("Repairing that may be part of this fix.")
