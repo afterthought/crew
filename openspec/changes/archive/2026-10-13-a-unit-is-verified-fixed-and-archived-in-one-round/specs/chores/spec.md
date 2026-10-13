@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: A chore's stage starts only when it may
-crew SHALL refuse a chore's code while an `After` has nothing committed to build on, any stage of a merged or landed chore, verify before its place holds a commit of its own beyond the bolt, and merge before its verify has delivered, a fix round after it calling for no verify again (`teams.17`), while a commit of its own lacks the `Chore: <name>` trailer, naming that commit, or while an `After` has not merged. A chore has no construct and no settle: `crew unit run` naming a chore SHALL be refused, naming its kind.
+crew SHALL refuse a chore's code while an `After` has nothing committed to build on, any stage of a merged or landed chore, verify before its place holds a commit of its own beyond the bolt, and merge before its verify has delivered, while a commit of its own lacks the `Chore: <name>` trailer, naming that commit, or while an `After` has not merged. A chore has no construct and no settle: `crew unit run` naming a chore SHALL be refused, naming its kind.
 
 #### Scenario: Construct on a chore
 - **WHEN** someone runs `crew unit run bump-biome construct`

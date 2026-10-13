@@ -90,7 +90,7 @@ A unit or chore SHALL be `ready` once each `After` has something committed to bu
 - **THEN** a free slot holds it, its place is made from the bolt on `chore/bump-biome`, and the fresh agent is sent `Chore bump-biome: Biome follows the shell's version`
 
 ### Requirement: A chore's stage starts only when it may
-crew SHALL refuse a chore's code while an `After` has nothing committed to build on, any stage of a merged or landed chore, verify before its place holds a commit of its own beyond the bolt, and merge before a verify has delivered since its last code began, while a commit of its own lacks the `Chore: <name>` trailer, naming that commit, or while an `After` has not merged. A chore has no construct and no settle: `crew unit run` naming a chore SHALL be refused, naming its kind.
+crew SHALL refuse a chore's code while an `After` has nothing committed to build on, any stage of a merged or landed chore, verify before its place holds a commit of its own beyond the bolt, and merge before its verify has delivered, while a commit of its own lacks the `Chore: <name>` trailer, naming that commit, or while an `After` has not merged. A chore has no construct and no settle: `crew unit run` naming a chore SHALL be refused, naming its kind.
 
 #### Scenario: Construct on a chore
 - **WHEN** someone runs `crew unit run bump-biome construct`
@@ -100,6 +100,10 @@ crew SHALL refuse a chore's code while an `After` has nothing committed to build
 - **WHEN** the conductor runs `crew chore run bump-biome merge` and one commit beyond the bolt lacks `Chore: bump-biome`
 - **THEN** the merge is refused, naming that commit
 
+#### Scenario: A merge after the fix round
+- **WHEN** the chore's verify delivered its report, and code ran once more on it, fixing what the report marked fix
+- **THEN** `crew chore run bump-biome merge` is not refused for want of a verify
+
 ### Requirement: A chore's stage ends at its deliverable
 A chore's code SHALL end at a commit on its branch made since the stage began, its verify at a report for it saved since then, and its merge at its bolt holding a commit carrying its trailer, or at its agent saying what it needs; `crew chore wait <chore>` SHALL wait on it as `crew unit wait` waits on a unit's. Its end SHALL be recorded on `stage/<chore>/<stage>` and `chore/<name>`.
 
@@ -108,7 +112,7 @@ A chore's code SHALL end at a commit on its branch made since the stage began, i
 - **THEN** `crew chore wait bump-biome` answers that it delivered its branch's head
 
 ### Requirement: A chore is never constructed or reviewed
-No batch SHALL hold a chore, the planner SHALL never be told a batch is due for one, and a bolt's landing SHALL never wait on a batch for one. A chore's verify report SHALL be a rail row keyed `verify/<chore>/<stamp>`, whose card is its conductor's.
+No batch SHALL hold a chore, the planner SHALL never be told a batch is due for one, and a bolt's landing SHALL never wait on a batch for one. A chore's verify report SHALL be no rail row and have no card, as a unit's has none: its findings marked fix are fixed in one round (`teams.17`).
 
 #### Scenario: A bolt of chores
 - **WHEN** every chore of a bolt has merged and the bolt holds no unit

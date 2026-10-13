@@ -90,7 +90,7 @@ The operator agent SHALL post no Pending You card, whatever a Pending You remind
 - **THEN** the operator agent posts no card for it
 
 ### Requirement: The operator agent shows only a wait with no card
-When told of a wait for a unit in review, a verify report or a landing, the operator agent SHALL read that row on the rail and send nothing when its card is open. A wait with no card, a question asked in a pane or a row whose card is not open, SHALL be shown as a herdr notification in the operator session, with one line to the user on what it needs and where.
+When told of a wait for a unit in review or a landing, the operator agent SHALL read that row on the rail and send nothing when its card is open. A wait with no card, a question asked in a pane or a row whose card is not open, SHALL be shown as a herdr notification in the operator session, with one line to the user on what it needs and where.
 
 #### Scenario: A landing whose card is open
 - **WHEN** a conductor tells the operator agent it waits on the user to land bolt `y`, and the rail shows the landing row's card open

@@ -5,16 +5,20 @@ One list of everything that waits on the user, read from the state crew already 
 
 ## Requirements
 
-### Requirement: The rail lists what waits on the user in five groups
-`crew rail [--label L]` SHALL print, from any host, what waits on the user in a partition, or in every partition when no label is given or known. It SHALL group the rows in this order: proposals, batches, verify, land, operations. Every group heading SHALL be printed, with `none` under a group that has no rows.
+### Requirement: The rail lists what waits on the user in four groups
+`crew rail [--label L]` SHALL print, from any host, what waits on the user in a partition, or in every partition when no label is given or known. It SHALL group the rows in this order: proposals, batches, land, operations. A verify report SHALL be no row: its findings are fixed in one round with no wait on the user (`teams.17`). Every group heading SHALL be printed, with `none` under a group that has no rows.
 
 #### Scenario: Something waits in two groups
 - **WHEN** a proposal is open and a deploy is offered, and nothing else waits
-- **THEN** `crew rail --label swancloud` prints the five headings in order, one row under proposals, one under operations, and `none` under batches, verify and land
+- **THEN** `crew rail --label swancloud` prints the four headings in order, one row under proposals, one under operations, and `none` under batches and land
 
 #### Scenario: Run from another host
 - **WHEN** `crew rail --label wldn` runs on a host that holds none of wldn's teams
 - **THEN** it prints the same rows as it does on the teams' host
+
+#### Scenario: A unit in verify with its report
+- **WHEN** unit `x` is in verify and its report was written after the last commit on `unit/x`
+- **THEN** `crew rail` has no row for `x`
 
 ### Requirement: Each row has its time, its age and the command that answers it
 Each row SHALL name what waits, when it began to wait, how long ago that was, and the command that answers it, written to be pasted into a shell, with every path quoted. Within a group, rows SHALL be ordered oldest first. A row's time SHALL be read from the same state as the row itself, never from a record kept for the rail.
@@ -48,17 +52,6 @@ Each unit whose stage is review SHALL be a row under review, naming its team and
 #### Scenario: Construct runs again
 - **WHEN** the unit is sent back to construct
 - **THEN** the next `crew rail` has no row for it until its change is in review again
-
-### Requirement: A verify report the user has not answered is a row
-A unit in verify whose newest verify report in its team's reports folder is newer than the last commit on its branch SHALL be a row under verify. The row SHALL show the report's path, a command that opens it, and `crew tell <team>-conductor "On <unit>'s verify report: "` for the user to complete in their own words. It SHALL have begun to wait at the report file's time.
-
-#### Scenario: A report written after the last commit
-- **WHEN** unit `x` is in verify and its report was written after the last commit on `unit/x`
-- **THEN** `x` is a row under verify with the report's path
-
-#### Scenario: Code commits again
-- **WHEN** a code stage then commits on `unit/x`
-- **THEN** the next `crew rail` has no verify row for `x`
 
 ### Requirement: A bolt whose every unit has merged and that has not landed is a row
 A bolt held by a team, whose units have all merged and not all landed, SHALL be a row under land. It SHALL name its team and the partition's main-level ops, and carry `crew tell <label>-ops "Land bolt <bolt>."`. It SHALL have begun to wait at the time of the last commit on its bolt branch.
