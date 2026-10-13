@@ -93,3 +93,29 @@ A coder building or fixing a change, and a verify checking one, SHALL run only t
 #### Scenario: A bolt that already holds other work
 - **WHEN** the bolt already holds a merged change to `plugin/`, its verification passed, and a coder's change edits only `tests/t-merge.sh`
 - **THEN** the affected tests are every test, `t-merge` runs, and every other test is replayed from the bolt's verification
+
+### Requirement: Every suite on a host shares the host's test slots
+Every crew test on a host, whichever worktree, team or suite runs it, SHALL take one of the host's test slots before it runs and hold it until it ends, killed or not, and a test that finds none free SHALL wait its turn. A host SHALL have `CREW_TEST_SLOTS` slots, else its cores less two and at least two; a count that is not a number SHALL be refused. A test started inside another's slot SHALL run in that slot.
+
+#### Scenario: Two tests and one slot
+- **WHEN** a host has one slot and a second test starts while the first holds it
+- **THEN** the second waits, and runs once the first lets its slot go
+
+#### Scenario: A killed test
+- **WHEN** a test holding a slot is killed
+- **THEN** its slot is free again for the next test
+
+#### Scenario: No count given
+- **WHEN** `CREW_TEST_SLOTS` is not set on a host with ten cores
+- **THEN** the host has eight slots
+
+### Requirement: A test waits on a condition, never on the clock
+No fixed sleep SHALL decide a test's outcome: a test SHALL wait on the condition it proves, ending as soon as it holds, with a limit that holds on a host loaded far past its cores, ten minutes for a wait on a condition and thirty for a background wait; a test that needs time to have passed SHALL move the time rather than wait for it.
+
+#### Scenario: A follower's tails on a loaded host
+- **WHEN** the test of `crew events --follow` runs on a host loaded past its cores and the follower's tails take longer than usual to start
+- **THEN** the test waits until they start, up to ten minutes, and passes
+
+#### Scenario: A commit in an earlier second
+- **WHEN** a test needs a commit made before a stage began
+- **THEN** it backdates the commit rather than sleeping into the next second
