@@ -5,8 +5,10 @@ proto:
   version: '0.63.1'
 
 # Python and uv at the versions .prototools pins. moon makes tests/.venv from tests/pyproject.toml and its lock,
-# syncs pytest into it before the first task that needs it, and runs the tests' python3 from it; the version is part
-# of every Python task's hash, so a toolchain change never replays an older result. moon 2.6 names both unstable_.
+# syncs pytest into it before the first task that needs it, unless the run is forced, and runs the tests' python3
+# from it; the tiers' venv task (tests/moon-tasks) syncs it again on every run with this uv, so a forced run, as
+# sluice's are, has pytest too. The version is part of every Python task's hash, so a toolchain change never replays
+# an older result. moon 2.6.1 names both unstable_.
 unstable_python:
   versionFromPrototools: true
   packageManager: uv

@@ -63,8 +63,8 @@ fi
 args=(--on-failure continue)
 [[ -n $affected ]] && args+=(--affected remote)
 # Every selected task afresh: moon's cache neither read nor written. Not moon's own --force, which skips installing a
-# project's dependencies ("Force updating cache, skipping dependency install", moon 2.6.1), so a worktree whose first
-# run is forced would run the tests with no pytest in tests/.venv (tests/contract/test_moon.py).
+# project's dependencies ("Force updating cache, skipping dependency install", moon 2.6.1); the tiers' venv task syncs
+# tests/.venv whatever the run, so a forced run holds too, as sluice's is (tests/moon-tasks, tests/contract/test_moon.py).
 [[ -n $force ]] && args+=(--cache off)
 
 # moon hands its tasks its own settings (MOON_CACHE, MOON_CACHE_DIR, MOON_WORKSPACE_ROOT…), and reads the same
@@ -101,6 +101,8 @@ pass=0 replayed=0
 failed=()
 while read -r name status; do
   [[ -n $name ]] || continue
+  # The tiers' venv sync is no test: it is named only when it fails, and then fails the run.
+  [[ $name == venv && ( $status == passed || $status == cached ) ]] && continue
   case $status in
     passed) pass=$((pass + 1)); echo "ok    $name" ;;
     cached) pass=$((pass + 1)); replayed=$((replayed + 1)); echo "ok    $name   (replayed)" ;;

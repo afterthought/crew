@@ -42,6 +42,13 @@ COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/
 TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js"]))
          if os.path.isdir(os.path.join(ROOT, f))]
 TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*"] + TOOLCHAIN
+# The tiers' environment, tests/.venv, synced from tests/uv.lock by the uv moon's toolchain gives, before every run of a
+# tier, forced or not: moon 2.6.1's own sync is its dependency install, which `moon exec --force` skips ("Force updating
+# cache, skipping dependency install"), as sluice runs every check (tests.10), so a fresh place, sluice's own among
+# them, would run pytest from a venv with nothing in it. Never cached, so it runs whoever runs the tiers; a venv already
+# in step costs uv a check of the lock. In a checkout that has the tiers and the tests' project.
+VENV = (["/tests/pyproject.toml", "/tests/uv.lock", "/.prototools", "/.moon/toolchains.yml"]
+        if TIERS and os.path.isfile(os.path.join(TESTS, "pyproject.toml")) else None)
 # crew's mod's own cases under Claude Code's test kit (tests/mod, tests.11): its inputs the mod, the plugin's manifest and
 # hooks file that load it, its cases and the runner, in a checkout that has the runner.
 MOD = (["/plugin/hooks/status.js", "/plugin/hooks/hooks.json", "/plugin/.claude-plugin/plugin.json", "/plugin/tsconfig.json",
@@ -139,9 +146,15 @@ def tasks():
         inputs = TIER_INPUTS + extra + [f"/{folder}/**/*"]
         blocks[name] = (f"  {name}:\n"
                         f"    command: 'python3 -m pytest -q -p no:cacheprovider {folder}'\n"
+                        + (f"    deps: ['~:venv']\n" if VENV else "") +
                         f"    inputs: [{', '.join(repr(i) for i in inputs)}]\n"
                         f"    tags: [check-full]\n"
                         f"    options: {{ runFromWorkspaceRoot: true }}\n")
+    if VENV:
+        blocks["venv"] = (f"  venv:\n"
+                          f"    command: 'uv sync --locked'\n"
+                          f"    inputs: [{', '.join(repr(i) for i in VENV)}]\n"
+                          f"    options: {{ cache: false }}\n")
     if MOD:
         blocks["mod"] = (f"  mod:\n"
                          f"    command: 'tests/mod'\n"
@@ -194,7 +207,7 @@ def committed():
 def check():
     want, problems = tasks()
     have = committed()
-    names = {n for n, _ in tests()} | {n for n, _, _ in TIERS} | ({"mod"} if MOD else set())
+    names = {n for n, _ in tests()} | {n for n, _, _ in TIERS} | ({"mod"} if MOD else set()) | ({"venv"} if VENV else set())
     if have is None:
         stale = ["tests/moon.yml is missing or not what tests/moon-tasks writes"]
     else:
