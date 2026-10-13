@@ -3992,6 +3992,7 @@ def run_check(fleet, a):
     elif a.stage == "merge":
         if not s.get("worktree"):  # carried onto the bolt inside another's merge, its place gone: made again from the bolt
             make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "unit", a.unit)
         facts = dict(bolt=bolt, merge=merge_command(bolt))
     else:
         facts = {}
@@ -4001,6 +4002,42 @@ def run_check(fleet, a):
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENTRY=entry, FORECAST=" ".join(ids),
                 TOOK=took if a.stage == "construct" else "")
+
+
+def merge_carries(fleet, t, plan, k, bolt, kind, name):
+    """A unit's or chore's merge refused before its submission while its branch holds another unit's change open that
+    its bolt does not hold archived (teams.17): read on the team's host, the branch's open changes in git and the bolt's
+    archived ones as gathered (k), decided by carried_in and worded by carried_refusal. Refused when either can't be
+    read (read.1)."""
+    k or fail(f"can't tell what {kind}/{name} carries into bolt/{bolt}: its kit on {t['machine']} was not read")
+    _, out = kit_git(fleet, t, t["kit"]["main"], "ls-tree", "-d", "--name-only", f"refs/heads/{kind}/{name}", "openspec/changes/")
+    opened = [l[len("openspec/changes/"):] for l in out.splitlines() if l.startswith("openspec/changes/")]
+    carried = carried_in(name, {u.name() for u in plan.units()}, opened, k["bolts"].get(bolt, {}).get("archived", []))
+    not carried or fail(carried_refusal(kind, name, bolt, carried, bolt_order(plan, bolt)[1]))
+
+
+def carried_in(name, units, opened, archived):
+    """The changes a unit's or chore's branch holds open (opened) that are another unit's of the plan (units) and that
+    its bolt does not hold archived (archived): what its merge would carry onto the bolt inside its own, which no merge
+    may (teams.17). A change that is no unit's, as one main has held open since before archives, is not counted."""
+    return sorted(c for c in opened if c != name and c in units and c not in archived)
+
+
+def carried_refusal(kind, name, bolt, carried, after_of):
+    """Why a merge is refused for the other units' changes its branch carries open (carried_in), naming each, and what
+    the conductor does: a unit that comes after this one (after_of, plan.13) has its work taken out of this branch,
+    since it merges later; any other merges first, its own merge archiving its change."""
+    both = lambda xs: xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+    later = [c for c in carried if comes_after(after_of, c, name)]
+    first = [c for c in carried if c not in later]
+    return (f"{kind} {name} does not merge while {kind}/{name} holds the change" + ("" if len(carried) == 1 else "s")
+            + f" of {both(carried)} open, which "
+            f"bolt/{bolt} does not hold archived: no unit's change reaches a bolt inside another's merge; "
+            + "; ".join(([f"{both(later)} " + ("comes" if len(later) == 1 else "come") + f" after {name}: take that work "
+                          f"out of {kind}/{name} (crew {kind} run {name} code \"<what to take out>\")"] if later else [])
+                        + ([f"merge {both(first)} first, each one's own merge archiving its change (crew unit run <unit> merge)"
+                            if len(first) > 1 else f"merge {first[0]} first, its own merge archiving its change (crew unit run {first[0]} merge)"]
+                           if first else [])))
 
 
 def run_kind_refusal(kind, chore, name, stage):
@@ -4039,6 +4076,7 @@ def chore_check(fleet, a, label, plan, c):
         not loose or fail(f"chore {a.unit} merges only once every commit of its own beyond bolt/{bolt} carries `Chore: {a.unit}`, and "
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
                           + f" not: run its code again to add the trailer (crew chore run {a.unit} code)")
+        merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "chore", a.unit)
         merge = merge_command(bolt)
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENTRY="",
