@@ -82,10 +82,12 @@ def test_a_plan_that_cannot_be_read_removes_nothing_saying_why_on_one_line():
 
 
 class TestSlotStage:
-    PLAN = plan_of({"t": "swb-1", "other": "swb-2"}, {"a": "t", "c": "t", "moved": "other"})
-    KIT = {"ok": True, "main": {"landed-one"}, "bolts": {"t": {"changes": ["merged-one"]}},
+    PLAN = plan_of({"t": "swb-1", "other": "swb-2"}, {"a": "t", "c": "t", "moved": "other", "carried": "t", "carried-gone": "t"})
+    KIT = {"ok": True, "main": {"landed-one"},
+           "bolts": {"t": {"changes": ["merged-one", "carried"], "archived": ["merged-one"], "open": {"carried": [3, 3], "carried-gone": [2, 3]}}},
            "places": {"merged-one": {"bolt": "t"}, "a": {"bolt": "t", "tasks": (1, 4), "planning": True, "head": "h"},
-                      "c": {"bolt": "t", "tasks": None, "planning": False, "head": "h"}},
+                      "c": {"bolt": "t", "tasks": None, "planning": False, "head": "h"},
+                      "carried": {"bolt": "t", "tasks": (3, 3), "planning": True, "head": "h", "open": []}},
            "fixes": [{"fix": "fix/t/done", "merged": True, "bolt": "t"}, {"fix": "fix/gone/y", "merged": False, "bolt": "gone"},
                      {"fix": "fix/t/y", "merged": False, "bolt": "t"}]}
 
@@ -99,6 +101,13 @@ class TestSlotStage:
 
     def test_a_unit_in_code_counts_its_tasks(self):
         assert self.stage("unit", "a") == ("code", "1/4")
+
+    def test_a_unit_whose_change_the_bolt_holds_open_has_not_merged_and_is_said_carried(self):
+        # wldn, swb-4, 2026-10-13: carried onto its bolt inside another unit's merge (teams.17, signal 45f551aa/01).
+        assert self.stage("unit", "carried") == ("verify", "3/3", True)
+
+    def test_one_whose_place_is_gone_reads_its_stage_from_the_change_on_the_bolt(self):
+        assert self.stage("unit", "carried-gone") == ("code", "2/3", True)
 
     @pytest.mark.parametrize("name, stage", [("fix/t/done", "merged"), ("fix/gone/y", "dropped"), ("fix/t/y", "fix"), ("fix/t/z", "none")])
     def test_a_fixs(self, name, stage):

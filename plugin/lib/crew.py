@@ -1342,11 +1342,20 @@ def context_of(lines, window):
 
 def holds_said(s, line):
     """What crew status says a slot holds: from slot_stages' answer for it (s), its unit or fix and that work's stage,
-    with its tasks done and total in code or verify; from the slots file's line alone, its work and that its stage is
-    unknown; "" for a free slot."""
+    with its tasks done and total in code or verify, and a unit carried onto its bolt inside another unit's merge named
+    so, its merge owed (teams.17); from the slots file's line alone, its work and that its stage is unknown; "" for a
+    free slot."""
     if s:
-        return f"{s['name']}  {s['stage']}" + (f" {s['counts']}" if s.get("counts") and s["stage"] in ("code", "verify") else "")
+        return (f"{s['name']}  {s['stage']}" + (f" {s['counts']}" if s.get("counts") and s["stage"] in ("code", "verify") else "")
+                + ("  carried by another's merge, its own merge owed" if s.get("carried") else ""))
     return f"{line[2]}  unknown" if line and len(line) > 2 else ""
+
+
+def carried_said(unit, bolt, stage):
+    """What crew status says of a unit carried onto its bolt inside another unit's merge that no slot holds: its change
+    is open on the bolt and it has not merged, its own merge owed, which archives the change from its place (teams.17)."""
+    return (f"{unit} is carried onto bolt/{bolt} inside another unit's merge, its change open there: it is in {stage}, "
+            f"its own merge owed (crew unit run {unit} merge)")
 
 
 def status_row(*cells):

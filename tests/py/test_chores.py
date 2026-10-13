@@ -170,6 +170,19 @@ class TestStage:
     def test_a_chores_stage_is_read_from_its_kit(self, k, stage):
         assert stages(k).of("bump")["stage"] == stage
 
+    @pytest.mark.parametrize("bolt, places, stage, carried", [
+        ({"changes": ["a"], "archived": ["a"]}, {}, "merged", False),
+        ({"changes": ["a"], "archived": [], "open": {"a": [2, 2]}}, {"a": {"path": "/kit/places/a", "tasks": [2, 2], "planning": True, "open": [], "head": "h"}}, "verify", True),
+        ({"changes": ["a"], "archived": [], "open": {"a": [1, 2]}}, {}, "code", True)],
+        ids=["archived on the bolt", "open on it, its place kept", "open on it, its place gone"])
+    def test_a_unit_has_merged_only_once_its_bolt_holds_its_change_archived(self, bolt, places, stage, carried):
+        # teams.17: a unit carried onto its bolt inside another unit's merge reads at its own stage, its merge owed.
+        k = kit()
+        k["bolts"][TE].update(bolt)
+        k["places"] = places
+        s = stages(k).of("a")
+        assert (s["stage"], bool(s.get("carried"))) == (stage, carried)
+
     def test_a_place_that_tracks_no_bolt_is_unknown(self):
         s = stages(kit(places={"bump": place(None)})).of("bump")
         assert (s["stage"], s["why"]) == ("unknown", "chore bump's place /kit/places/chore-bump tracks no bolt crew can read")
