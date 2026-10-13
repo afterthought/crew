@@ -1,7 +1,7 @@
 ---
 number: 24
 title: An agent runs its kit's tools through the kit's shell per command, and the host is the container
-status: proposed
+status: accepted
 date: 2026-10-12
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # An agent runs its kit's tools through the kit's shell per command, and the host is the container
 
-Status: proposed to the user on 2026-10-12, in the elaboration session; accepted only on their yes.
+Status: accepted by the user on 2026-10-13, in the elaboration session ("Yes, accept"), on the words quoted under *Decision outcome*.
 
 Deciders: the user, in the elaboration session of 2026-10-12, whose words below are the decision; written by the elaboration session. It closes the first point record 0023 held for an elaboration.
 Amends: record 0023, its first held point; `tests.7` and `tests.1`; the ask of signal `2026-10-08-swancloud-planner-0ca5793d/01`, withdrawn by the user below; the `dev-shell` spec, through the unit that builds this (`docs.4`).
@@ -42,7 +42,7 @@ Not decided here: a kit-neutral per-command runner in crew, which this deliberat
 
 ### Consequences
 
-- `tests.7` says the above; `tests.1` has `tests/run` enter the shell itself. Both are amended in this commit, marked proposed until the user's yes.
+- `tests.7` says the above; `tests.1` has `tests/run` enter the shell itself. Both are amended with this record and stand accepted.
 - One unit in crew: the hook, its settings entry, its test and its spec go; `tests/suite` and `tests/run` enter the shell themselves; CLAUDE.md's Tests section says how an agent runs crew's tools, and the briefs say nothing of it. The affected end-to-end tests and `tests/t-merge-gate.sh` follow.
 - One unit in swancloud, for its design agent to queue: its generated SessionStart hook goes; `~/.bun/bin` and any other application tool leave an agent session's path; `testing.4` ("entering a worktree enters it") is read against this record.
 - A kit's CLAUDE.md names its per-command form; switchboard's and breadboard's already do.
