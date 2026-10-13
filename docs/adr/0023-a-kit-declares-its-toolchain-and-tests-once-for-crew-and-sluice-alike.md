@@ -73,7 +73,7 @@ switchboard is the one kit with a `crew-prepare`, and each of its suite scripts 
 6. **`SLUICE_AGENT`** is set for every agent crew starts, the same as `CREW_AGENT`: crew-role sets it, and the session-start hook gives it back on a resume (`teams.6`).
 
 Held for an elaboration, and not decided here:
-- **How crew's agents come to work inside their kit's toolchain.** The user: "i'm not sure about this. seems like it's wrong. but i am probably missing something. i'd want an elaboration session to understand this". `openspec/explorations/agents-in-the-toolchain/reading.md` sets out what it needs.
+- **How crew's agents come to work inside their kit's toolchain.** The user: "i'm not sure about this. seems like it's wrong. but i am probably missing something. i'd want an elaboration session to understand this". `openspec/explorations/agents-in-the-toolchain/reading.md` sets out what it needs. Closed 2026-10-13 by record 0024: no session is entered into the shell at its start; an agent runs the kit's tools through the shell per command, and the host carries no application tool.
 - **A bolt's branch when sluice moves it.** A branch sluice moves while a worktree holds it leaves that worktree behind its HEAD, and sluice's protection refuses crew's own moves of it. The user was not persuaded by the designed answer, a checkout on `land/<bolt>` ("isn't it just reversing the decision that bolts don't have branches?"; "won't this just be sluice doing the verification?"). `openspec/explorations/bolt-branches-under-sluice/reading.md` frames it by which kits merge through sluice, and when; the change `no-worktree-holds-a-bolts-branch` is one option there, designed and not decided.
 
 ### Consequences
