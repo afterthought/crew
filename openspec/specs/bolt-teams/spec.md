@@ -473,3 +473,14 @@ A bolt SHALL be proven by its verification alone: sluice's verdict on its last l
 #### Scenario: Not yet green
 - **WHEN** every unit of a bolt has merged and its head is no landing of sluice's
 - **THEN** the bolt is not offered for landing, and `crew bolts` says what its verification is
+
+### Requirement: Every agent crew starts carries its name for sluice
+Every agent crew starts SHALL have `SLUICE_AGENT` in its environment, the same as its `CREW_AGENT`, from its start and again when herdr resumes it.
+
+#### Scenario: A stage's agent starts
+- **WHEN** crew starts `swb-1-unit-2` for a code stage
+- **THEN** its environment holds `CREW_AGENT=swb-1-unit-2` and `SLUICE_AGENT=swb-1-unit-2`
+
+#### Scenario: herdr resumes an agent
+- **WHEN** herdr resumes the conductor's session without crew's environment
+- **THEN** its commands see `SLUICE_AGENT` back, the same as its `CREW_AGENT`

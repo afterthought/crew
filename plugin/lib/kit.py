@@ -24,8 +24,6 @@ RUNNERS = ("moon", "command")
 # What of the host's environment a step sees, with every LC_* variable: sluice's list (35). Nothing of a session's,
 # another checkout's shell, git's, moon's or crew's own reaches a kit's toolchain.
 KEEP = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "TERM", "PROTO_HOME", "MOON_HOME")
-# The oldest moon the moon runner sets up: sluice's moon profile's floor.
-MOON_FLOOR = (2, 6)
 
 
 def declared(text, where=DECLARATION):
@@ -61,7 +59,7 @@ def in_toolchain(script, argv):
 def readying(decl, script):
     """The steps that make a worktree ready through its kit's declaration (plan.17), in order, each (what, argv, out):
     the declared toolchain, its output kept in script (out); then, for the moon runner, moon's version, which
-    moon_floor judges, and `moon setup`, inside that toolchain. A command runner needs no setup, and a kit that
+    moon_said reads, and `moon setup`, inside that toolchain. A command runner needs no setup, and a kit that
     declares nothing has no steps."""
     if not decl:
         return []
@@ -75,16 +73,13 @@ def readying(decl, script):
     return steps
 
 
-def moon_floor(version):
-    """Why `moon --version`'s output is not a moon the moon runner sets up, or None: a version below MOON_FLOOR, or
-    output that names none."""
-    m = re.search(r"\bmoon (\d+)\.(\d+)\.(\d+)", version or "")
-    if not m:
-        return f"moon --version printed no version crew can read: {(version or '').strip()[:80] or 'nothing'}"
-    have = (int(m.group(1)), int(m.group(2)))
-    if have < MOON_FLOOR:
-        return f"the kit's toolchain runs moon {'.'.join(m.groups())}, below the moon runner's floor, {'.'.join(map(str, MOON_FLOOR))}"
-    return None
+def moon_said(version):
+    """Why the moon runner's setup does not go on, or None: only output of `moon --version` that names no version crew
+    can read (read.1). crew enforces no moon floor (plan.17): any version read goes on to `moon setup`, and a kit's moon
+    is its own but for sluice's moon runner, which refuses one below 2.6 at its own run."""
+    if re.search(r"\bmoon \d+\.\d+\.\d+", version or ""):
+        return None
+    return f"moon --version printed no version crew can read: {(version or '').strip()[:80] or 'nothing'}"
 
 
 def place_said(out):
