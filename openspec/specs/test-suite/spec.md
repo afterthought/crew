@@ -2,13 +2,13 @@
 
 ## Purpose
 
-How crew's own tests are run: one task per test file, side by side, a test whose inputs already passed replayed instead of run again, the tasks kept in step with the test files, and which tests an agent runs while it works, leaving the whole suite to the merge gate.
+How crew's own tests are run: one task per test file, side by side, a test whose inputs already passed replayed instead of run again, the tasks kept in step with the test files, and which tests an agent runs while it works, leaving the whole suite to sluice's run of each submission.
 
 ## Requirements
 
 ### Requirement: The suite runs as one task per test file, in parallel
 
-crew's suite SHALL run as one moon task per `tests/t-*.sh`, each running that one test through `tests/run`, with the tasks run side by side. One command SHALL run every task, the tasks named, or only the tasks a change affects, and the merge gate and the bolt's verification SHALL run the suite through it. The live test SHALL NOT be a task.
+crew's suite SHALL run as one moon task per `tests/t-*.sh`, each running that one test through `tests/run`, with the tasks run side by side. One command SHALL run every task, the tasks named, or only the tasks a change affects, and sluice SHALL run the same tasks, by their `check-full` tag, on every submission to a bolt or to main. The live test SHALL NOT be a task.
 
 #### Scenario: Every test runs, side by side
 - **WHEN** the whole suite is run on a tree no run has passed
@@ -25,30 +25,6 @@ The command SHALL run every selected task even when one fails. It SHALL print on
 #### Scenario: One failure does not stop the others
 - **WHEN** one test fails
 - **THEN** every other selected test still runs, the failing test is named on a `FAIL  <name>` line with its output, and the command exits non-zero
-
-### Requirement: A test whose inputs already passed is replayed
-
-A task SHALL be replayed from moon's cache, without running the test, when its inputs are identical to those of a run of the same task that passed on the same host, in any worktree of crew, the main checkout, or the bolt's verification copy. A run that failed SHALL never be replayed. The command SHALL run every selected task without the cache when asked to.
-
-#### Scenario: The gate replays the coder's run
-- **WHEN** a coder's run passed every test on a unit's tree, and its merge's rebase leaves that tree unchanged
-- **THEN** the merge gate replays every test, and the merge lands in about the time moon takes to check the cache
-
-#### Scenario: The bolt's verification replays the gate
-- **WHEN** a merge into a bolt passed its gate, and the bolt's verification starts on the revision that merge landed
-- **THEN** the verification replays every test and reads green
-
-#### Scenario: A test-only edit reruns one test
-- **WHEN** only `tests/t-merge.sh` changed since a run that passed
-- **THEN** only `t-merge` runs, and every other test is replayed
-
-#### Scenario: A change to plugin/ reruns everything
-- **WHEN** a file under `plugin/` changed since a run that passed
-- **THEN** every test runs
-
-#### Scenario: A failure is not replayed
-- **WHEN** a test failed on a tree, and the suite runs again on the same tree
-- **THEN** that test runs again
 
 ### Requirement: A task's inputs are everything its test reads
 
@@ -80,19 +56,19 @@ Every test SHALL pass when the whole suite runs in parallel exactly as when it r
 
 ### Requirement: An agent runs only the tests its change affects
 
-A coder building or fixing a change, and a verify checking one, SHALL run only the tests its change affects, or tests it names, and never the whole suite by hand; the whole suite SHALL be run by the merge gate at each merge and by the bolt's verification after it. CLAUDE.md and the coder's, verify's and construct's briefs SHALL say so, and a change's tasks SHALL end with the tests it affects green, not the whole suite.
+A coder building or fixing a change, and a verify checking one, SHALL run only the tests its change affects, or tests it names, and never the whole suite by hand; the whole suite SHALL be run by sluice on each submission. CLAUDE.md and the coder's, verify's and construct's briefs SHALL say so, and a change's tasks SHALL end with the tests it affects green, not the whole suite.
 
 #### Scenario: A coder checks its work
 - **WHEN** a coder in a unit's place wants to know its change is green
-- **THEN** CLAUDE.md tells it to run the suite for the tests its change affects, with uncommitted edits counted, and that the merge gate runs the rest
+- **THEN** CLAUDE.md tells it to run the suite for the tests its change affects, with uncommitted edits counted, and that sluice runs the rest
 
 #### Scenario: A change touching only one test
 - **WHEN** a coder's change edits only `tests/t-merge.sh`, on a bolt that holds nothing main doesn't, and it runs the affected tests
 - **THEN** only `t-merge` runs
 
 #### Scenario: A bolt that already holds other work
-- **WHEN** the bolt already holds a merged change to `plugin/`, its verification passed, and a coder's change edits only `tests/t-merge.sh`
-- **THEN** the affected tests are every test, `t-merge` runs, and every other test is replayed from the bolt's verification
+- **WHEN** the bolt already holds a merged change to `plugin/` whose tests passed in a worktree on the host, and a coder's change edits only `tests/t-merge.sh`
+- **THEN** the affected tests are every test, `t-merge` runs, and every other test is replayed from that run
 
 ### Requirement: Every suite on a host shares the host's test slots
 Every crew test on a host, whichever worktree, team or suite runs it, SHALL take one of the host's test slots before it runs and hold it until it ends, killed or not, and a test that finds none free SHALL wait its turn. A host SHALL have `CREW_TEST_SLOTS` slots, else its cores less two and at least two; a count that is not a number SHALL be refused. A test started inside another's slot SHALL run in that slot.
@@ -152,3 +128,27 @@ A crew checkout SHALL carry an `.envrc` that enters crew's devenv shell, for a p
 #### Scenario: The checkout is checked
 - **WHEN** crew's suite runs
 - **THEN** it fails unless `.envrc` holds `use devenv` and `.gitignore` holds `.devenv/`, `.direnv/`, `tests/.venv/` and `!.envrc`
+
+### Requirement: A test whose inputs already passed on the host is replayed
+
+A task SHALL be replayed from moon's cache, without running the test, when its inputs are identical to those of a run of the same task that passed on the same host, in any worktree of crew or the main checkout. A run that failed SHALL never be replayed. The command SHALL run every selected task without the cache when asked to, and sluice's run of a submission to a bolt or to main SHALL replay nothing.
+
+#### Scenario: A worktree replays another's run
+- **WHEN** a coder's run passed every test on a unit's tree, and another worktree of crew on the host runs the suite on the same inputs
+- **THEN** every test is replayed
+
+#### Scenario: A submission replays nothing
+- **WHEN** a unit is submitted to its bolt, or a bolt to main
+- **THEN** sluice runs every test afresh, since crew's policy accepts no replay
+
+#### Scenario: A test-only edit reruns one test
+- **WHEN** only `tests/t-merge.sh` changed since a run that passed
+- **THEN** only `t-merge` runs, and every other test is replayed
+
+#### Scenario: A change to plugin/ reruns everything
+- **WHEN** a file under `plugin/` changed since a run that passed
+- **THEN** every test runs
+
+#### Scenario: A failure is not replayed
+- **WHEN** a test failed on a tree, and the suite runs again on the same tree
+- **THEN** that test runs again

@@ -17,7 +17,7 @@ Each rail row SHALL have one card key, derived from the row's state: `proposal/<
 - **THEN** the rail has one row for batch 2, keyed `batch/2-2`, holding its units as before, and the planner may not post `batch/2`
 
 #### Scenario: A bolt proven again on a new head
-- **WHEN** bolt `y` was ready to land at head `abc1234`, its landing failed, and a fix moved its head to `def5678` and ops proved it again
+- **WHEN** bolt `y` was ready to land at head `abc1234`, a note on its landing card named a defect, and a fix landed on the bolt at `def5678` with its verification green
 - **THEN** its landing row's key is `land/y/def5678`, its conductor posts a new landing card under that key, and a card keyed `land/y/abc1234` belongs to no row
 
 #### Scenario: A unit built again
@@ -29,7 +29,7 @@ Each rail row SHALL have one card key, derived from the row's state: `proposal/<
 - **THEN** the rail has no row for it, and a card keyed `verify/u/20261013-1200` belongs to no row
 
 ### Requirement: The owner of a row posts its card
-When an agent crew started has Pending You's tools, it SHALL post one card for each row it owns: the planner for each proposal it opens and for each review batch, and a conductor for its bolt once the bolt is proven, or proven but for steps only the user can take. It SHALL post no second card for a row that has one open to it; a card lost to it is not, and is posted again as *A row's card lost to its owner is posted again* says. A team's cards SHALL be its conductor's: its ops and every stage agent SHALL post no card, and no crew agent SHALL post a card that is not a row's. No card SHALL be posted for a verify report, which is no row.
+When an agent crew started has Pending You's tools, it SHALL post one card for each row it owns: the planner for each proposal it opens and for each review batch, and a conductor for its bolt once every unit and chore has merged and its verification is green. It SHALL post no second card for a row that has one open to it; a card lost to it is not, and is posted again as *A row's card lost to its owner is posted again* says. A team's cards SHALL be its conductor's: its ops and every stage agent SHALL post no card, and no crew agent SHALL post a card that is not a row's. No card SHALL be posted for a verify report, which is no row.
 
 #### Scenario: A proposal opened
 - **WHEN** the planner opens proposal 4 in a session with Pending You's tools
@@ -40,7 +40,7 @@ When an agent crew started has Pending You's tools, it SHALL post one card for e
 - **THEN** one card keyed `batch/3` is open, asked by the planner, and no conductor posts one
 
 #### Scenario: No Pending You
-- **WHEN** a conductor's session has no Pending You tools and its bolt is proven
+- **WHEN** a conductor's session has no Pending You tools and its bolt's verification is green with every unit merged
 - **THEN** no card is posted, the rail row is as before, and the conductor tells the operator agents it waits on the user
 
 #### Scenario: A verify report saved
@@ -48,8 +48,8 @@ When an agent crew started has Pending You's tools, it SHALL post one card for e
 - **THEN** its conductor posts no card and asks the user nothing, and runs code once more with the report's path
 
 #### Scenario: A proof leaves the user a check
-- **WHEN** brd-2's ops finishes its proof with every item green but one check only the user can make on their Mac
-- **THEN** ops writes that check in its proof file and posts no card, and the user gets one card for it, the conductor's landing card for the bolt
+- **WHEN** a bolt's changes leave a check only the user can make on their Mac
+- **THEN** no proof asks it and ops posts no card: it is an after-deploy step on a deploy's card, and the bolt's landing card asks only for the landing
 
 ### Requirement: A card says whose it is and where it belongs
 A card SHALL be asked in the agent's crew name, with its host as the session's machine and its worktree as the session's folder. It SHALL be filed in the area of its kit, found by the kit's git remote, in the group named for its partition. An agent that finds no area for its kit SHALL create it with the key `create-area:<owner>/<kit>`, the kit's repository, and with no other key. Its title SHALL name what it asks and its bolt. An agent SHALL never create a group.
@@ -232,11 +232,15 @@ A unit's review card, keyed `review/<unit>/<head>`, SHALL be an approval (`appro
 - **THEN** the conductor runs construct again on `u` with "keep the old flag", and the unit comes back to review
 
 ### Requirement: A landing's card is a high-stakes approval
-A bolt's landing card, keyed `land/<bolt>/<head>`, SHALL be an approval (`approve`) marked high stakes, with no options, whose yes has the conductor tell main-level ops to land the bolt. It MAY carry steps the bolt's proof leaves the user, and no step SHALL name the landing itself.
+A bolt's landing card, keyed `land/<bolt>/<head>`, SHALL be an approval (`approve`) marked high stakes, with no options and no steps, whose yes has the conductor tell main-level ops to land the bolt.
 
 #### Scenario: A landing card
 - **WHEN** the conductor posts the landing card for bolt `y` at head `abc1234`
-- **THEN** the card is an approval marked high stakes, offers no Done button and no command to land, and is approved only by holding the button in the Pending You app
+- **THEN** the card is an approval marked high stakes, offers no Done button, no step and no command to land, and is approved only by holding the button in the Pending You app
+
+#### Scenario: A landing card with a step
+- **WHEN** the conductor posts the landing card for `y` with a step for the user
+- **THEN** crew refuses it, saying the card has steps for the user to take
 
 #### Scenario: A landing approved
 - **WHEN** the user approves the landing card for bolt `y`
@@ -281,28 +285,6 @@ crew SHALL check only sessions it started: any card in a session crew did not st
 #### Scenario: The user's own session
 - **WHEN** the user, in a session crew did not start, posts any card under any key
 - **THEN** crew checks nothing and lets it through
-
-### Requirement: ops writes a proof's steps for the user in its proof file
-When a bolt's proof leaves steps only the user can take or check, ops SHALL write each in its proof file as a step the user can do from a card: where, what to do or paste, and what they will see when it worked. ops SHALL post no card for them.
-
-#### Scenario: One check left for the user
-- **WHEN** ops's proof of bolt `y` is clean but for a gateway check on the user's Mac
-- **THEN** the proof file holds that check as a step for the user, marked as waiting on the user, and ops posts no card
-
-### Requirement: The landing card asks the proof's steps before approval
-The conductor SHALL post the bolt's landing card once the proof is clean, or clean but for the user's steps, with those steps on it ahead of the approval. Approving it SHALL mean the user took them, they worked, and the bolt may land. A step the user says failed SHALL be a defect fixed on the bolt before the landing is asked again.
-
-#### Scenario: Landing with one check left
-- **WHEN** ops's proof of bolt `y` is clean but for a gateway check on the user's Mac
-- **THEN** the conductor posts one high-stakes card keyed `land/y/<head>` whose first words and steps are that check, and an approval on it tells main-level ops to land `y`
-
-#### Scenario: The check fails
-- **WHEN** the user answers the landing card for `y` with a note that the gateway check is red
-- **THEN** the conductor does not ask main-level ops to land `y`, closes the card with that outcome, and runs a fix on the bolt
-
-#### Scenario: A clean proof
-- **WHEN** ops's proof of bolt `y` leaves nothing for the user
-- **THEN** the landing card for `y` asks only for approval, as before
 
 ### Requirement: crew refuses a crew agent's card under any key but a row's of its own
 Before a Pending You card is posted from a session crew started, crew SHALL refuse it unless its idempotency key is the card key of a rail row the agent owns: for the planner, `proposal/<n>` for an open proposal of its partition; for a conductor, `review/<unit>/<head>` for a unit of the bolt its team holds, or `land/<bolt>/<head>` for that bolt; `verify/<unit>/<stamp>` is no agent's. Every other crew agent SHALL own no key. A refused card SHALL NOT reach Pending You, and its refusal SHALL name the keys to use.
@@ -413,3 +395,14 @@ A call Pending You refuses SHALL be refused in Pending You's own words and recor
 #### Scenario: The host is not signed in
 - **WHEN** the host has no Pending You sign-in and an agent runs `crew card post`
 - **THEN** the command refuses, saying this computer is not signed in to Pending You, and nothing is posted
+
+### Requirement: The landing card is posted once the bolt's verification is green
+The conductor SHALL post a bolt's landing card once every unit and chore of the bolt has merged and its verification is green, and the card SHALL ask only for the landing. A step only the user can take or check SHALL be an after-deploy step on a deploy's card, never a question on the landing card. A note on the landing card that names a defect SHALL be a fix on the bolt, and the landing SHALL be asked again only once the verification is green again.
+
+#### Scenario: A green bolt
+- **WHEN** every unit of bolt `y` has merged and its verification is green at head `abc1234`
+- **THEN** the conductor posts one high-stakes card keyed `land/y/abc1234` that asks only for the landing
+
+#### Scenario: A defect noted on the card
+- **WHEN** the user answers the landing card for `y` with a note naming a defect
+- **THEN** the conductor does not ask main-level ops to land `y`, closes the card with that outcome, and runs a fix on the bolt

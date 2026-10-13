@@ -1,7 +1,7 @@
 # bolt-teams Specification
 
 ## Purpose
-A bolt team builds one bolt at a time: a standing conductor and ops, and units built stage by stage by fresh agents. The bolt is deployed and tested from its branch before it lands on main.
+A bolt team builds one bolt at a time: a standing conductor and ops, and units built stage by stage by fresh agents. The bolt is a branch that moves only through sluice, and lands on main once its verification is green.
 
 ## Requirements
 
@@ -40,19 +40,30 @@ A team SHALL have at most `units` units in flight, each held by a slot named `<t
 - construct: `/opsx:propose` with the unit's intent and sources;
 - code: `/opsx:apply`;
 - verify: `/opsx:verify`;
-- merge: rebase and merge into the bolt.
+- settle: the coder's brief, with the forecast or amendment that reached a unit waiting to merge;
+- merge: a submission to the bolt, `wt submit bolt/<bolt> --no-remove`, which sluice lands only when the checks the kit's policy requires of its bolt branches pass on the bolt with the unit merged.
+
+Code SHALL start as soon as the unit's change is committed, with no review between.
 
 #### Scenario: Construct
 - **WHEN** `crew unit run a-tenant-creates-its-environments construct` runs
 - **THEN** a fresh agent in `places/a-tenant-creates-its-environments` writes the unit's OpenSpec change from its intent and sources, commits it, and stops
 
 #### Scenario: Code before review
-- **WHEN** `crew unit run <unit> code` runs on a unit in `review`
-- **THEN** it is refused until the user approves the unit
+- **WHEN** `crew unit run <unit> code` runs on a unit whose stage is `planned`, whose change no batch has yet held
+- **THEN** a fresh code agent starts, and nobody was asked to approve the change
+
+#### Scenario: Code before construct has committed
+- **WHEN** `crew unit run <unit> code` runs on a unit in `construct`
+- **THEN** it is refused until its change is committed
 
 #### Scenario: Verify before the tasks are done
 - **WHEN** `crew unit run <unit> verify` runs on a unit in `code`
 - **THEN** it is refused, naming the tasks still open
+
+#### Scenario: Merging
+- **WHEN** a verified unit's merge stage runs
+- **THEN** its agent is told to run `wt submit bolt/<bolt> --no-remove` in the unit's place, and sluice's verdict decides whether the unit lands on the bolt
 
 ### Requirement: The user reviews every unit before it is coded
 When a unit's construct stage finishes, the conductor SHALL tell the user the unit is ready for review: which unit, the folder its change is in, and in two or three plain sentences what it would make true. It SHALL ask for the answer in words and stop. It SHALL NOT open the change in plannotator or any other viewer, and SHALL NOT recite a command for the user to answer with: the user opens the whole change when they choose to read it. Code SHALL wait for `crew unit approve`, which the user runs or asks an agent to run. What the user wants changed SHALL go back to a fresh construct stage.
@@ -70,18 +81,26 @@ When a unit's construct stage finishes, the conductor SHALL tell the user the un
 - **THEN** the conductor runs construct again with the user's words, and the unit returns to review
 
 ### Requirement: Work happens in fixed places
-A bolt SHALL be built on `bolt/<bolt>`, branched from main, in the worktree `<kit>/bolts/<bolt>`. A unit SHALL be built on `unit/<unit>`, branched from its bolt, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt with the kit's merge hooks. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over.
+A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.
+
+#### Scenario: A bolt is given
+- **WHEN** `crew bolt give swb-1` gives swb-1 the bolt `b`
+- **THEN** `bolt/b` is made from the kit's main on swb-1's host, no worktree is made for it, and swb-1's conductor and ops start in the kit's main checkout
 
 #### Scenario: A unit merges
-- **WHEN** the merge stage of a verified unit finishes
-- **THEN** `bolt/<bolt>` holds the unit's change, `places/<unit>` is gone, and the unit's slot is free
+- **WHEN** the merge stage of a verified unit submits it and sluice lands it
+- **THEN** `bolt/<bolt>` holds the unit's change in a merge commit sluice made, `places/<unit>` is gone, and the unit's slot is free
+
+#### Scenario: A kit with a crew-prepare script
+- **WHEN** crew makes a unit's place in a kit whose main checkout's devenv profile holds a `crew-prepare` script
+- **THEN** the script does not run
 
 ### Requirement: Fixes during a bolt are built beside its units
-`crew fix <team> <name> "<what is wrong>"` SHALL make `fix/<bolt>/<name>` from the team's bolt at `<kit>/places/fix-<bolt>--<name>`. It SHALL start a fresh code agent there in a free slot with the words given. A new fix whose branch or place already exists SHALL be refused, naming the place, and a fix's agent SHALL start only in a worktree on that fix's own branch, made from the team's bolt. `crew fix <team> <name> --merge` SHALL start its merge stage, and the fix SHALL merge into the bolt like a unit, unless the fix carries the bolt onto main, when crew SHALL make the fix's head the bolt's head instead. A fix SHALL have no OpenSpec change and no plan record.
+`crew fix <team> <name> "<what is wrong>"` SHALL make `fix/<bolt>/<name>` from the team's bolt at `<kit>/places/fix-<bolt>--<name>`. It SHALL start a fresh code agent there in a free slot with the words given. A new fix whose branch or place already exists SHALL be refused, naming the place, and a fix's agent SHALL start only in a worktree on that fix's own branch, made from the team's bolt. `crew fix <team> <name> --merge` SHALL start its merge stage, and the fix SHALL merge into the bolt like a unit, by a submission. A fix SHALL have no OpenSpec change and no plan record. A landing that conflicts with main SHALL be taken by a fix whose agent merges main into its place, resolving the conflict, and which merges into the bolt like any fix; nothing of crew's SHALL move the bolt's branch.
 
 #### Scenario: A red suite on the bolt
-- **WHEN** the bolt's verification is red after a merge
-- **THEN** the conductor starts a fix on the bolt, before any other unit's code
+- **WHEN** a unit's or fix's submission to the bolt fails a check the kit's policy requires
+- **THEN** nothing lands, the bolt is where it was, and the agent fixes the cause in its own place and submits again
 
 #### Scenario: Two teams name a fix the same
 - **WHEN** two teams that build in one kit checkout each start a fix named `bolt-takes-main` on their own bolts
@@ -100,35 +119,31 @@ A bolt SHALL be built on `bolt/<bolt>`, branched from main, in the worktree `<ki
 - **THEN** crew refuses to start the fix's agent there, naming the place and the branch or bolt it is on
 
 #### Scenario: A fix that adds commits merges
-- **WHEN** a fix's branch holds the bolt's commits and a commit of its own beyond them, and the conductor runs `crew fix <team> <name> --merge`
-- **THEN** crew starts the fix's merge stage, as for a unit
+- **WHEN** a fix's branch holds a commit of its own beyond the bolt, and the conductor runs `crew fix <team> <name> --merge`
+- **THEN** crew starts the fix's merge stage, as for a unit, and its agent submits it to the bolt
 
-### Requirement: A bolt is deployed and tested from its branch
-The team's ops SHALL deploy and test from `<kit>/bolts/<bolt>`, into the one shared environment. It SHALL work the *Proof in dev* lists of the bolt's merged units there. A failure SHALL become a fix on the bolt.
-
-#### Scenario: Proof before landing
-- **WHEN** every unit of a bolt has merged
-- **THEN** ops deploys the bolt and works each unit's proof list, and the conductor tells the user whether the bolt is ready to land
+#### Scenario: A fix takes main into the bolt
+- **WHEN** a bolt's landing conflicted with main on `README.md`, a fix's agent merged main into the fix's place resolving it, and the conductor runs `crew fix <team> <name> --merge`
+- **THEN** crew starts the fix's merge stage, its agent submits it to the bolt, and once sluice lands it the bolt holds main and the landing can be submitted again
 
 ### Requirement: A bolt lands on main on the user's word
-A proven bolt SHALL be landed by the partition's main-level ops, on the user's approval of its landing card, by one
-procedure: it merges `bolt/<bolt>` into main through the kit's merge hooks, pushes main without force, and then runs
-`crew bolt land`; it deploys nothing. The bolt's worktree SHALL then be removed, unless it has uncommitted changes, and
-the team SHALL hold no bolt. A worktree that is kept SHALL NOT stop the landing. When the landing's rebase conflicts,
-main-level ops SHALL abort it so that nothing lands, and tell the bolt's conductor the commit that conflicted and the
-files, for the team to carry the bolt onto main by a fix.
+A bolt whose verification is green SHALL be landed by the partition's main-level ops, on the user's approval of its landing card, by one procedure: `crew bolt submit <bolt>` submits `bolt/<bolt>` to main through sluice and waits for its outcome, main-level ops pushes main without force, and then runs `crew bolt land`; it deploys nothing. `crew bolt submit` SHALL be refused while the kit's main on its host is behind GitHub's, SHALL submit from a short-lived worktree on the bolt's branch at `<kit>/places/land-<bolt>` on the team's host, in the name of whoever asked, SHALL remove that worktree after, and SHALL bring the kit's main checkout level with what landed. The bolt's branch SHALL then be removed, and the team SHALL hold no bolt. A worktree that is kept SHALL NOT stop the landing. When the submission conflicts with main or fails main's checks, nothing SHALL land and nothing SHALL move, and main-level ops SHALL tell the bolt's conductor sluice's words, for the team to take main into the bolt by a fix.
 
 #### Scenario: The bolt lands
-- **WHEN** the user approves swb-1's landing card
-- **THEN** main holds every unit's change, GitHub's main holds it too, the bolt's records are gone from the plan, and swb-1 can be given its next bolt
+- **WHEN** the user approves swb-1's landing card and main-level ops runs `crew bolt submit <bolt>`
+- **THEN** sluice lands the bolt on main as a merge commit, the landing's worktree is gone, the kit's main checkout holds what landed with nothing modified, and after the push and `crew bolt land` GitHub's main holds it too, the bolt's records are gone from the plan, and swb-1 can be given its next bolt
 
-#### Scenario: The bolt's worktree has uncommitted changes
-- **WHEN** `crew bolt land` runs on a bolt whose worktree has a modified file
-- **THEN** the bolt lands and the team holds no bolt, and crew says the worktree is kept with its branch because it has uncommitted changes
+#### Scenario: Main is behind GitHub's
+- **WHEN** `crew bolt submit` runs while the kit's main on the team's host lacks a commit GitHub's main has
+- **THEN** it is refused, saying how far behind main is, and nothing is submitted
 
 #### Scenario: The landing's rebase conflicts
-- **WHEN** main-level ops merges a bolt into main and the rebase stops on a conflict
-- **THEN** the rebase is aborted, main and the bolt's branch are where they were, and the conductor is told the conflicting commit and files and starts a fix that carries the bolt onto main
+- **WHEN** the bolt and main changed the same lines and `crew bolt submit` runs
+- **THEN** the command fails with sluice's words, main and the bolt's branch are where they were, the landing's worktree is gone, and the conductor is told to take main into the bolt by a fix
+
+#### Scenario: The bolt's worktree has uncommitted changes
+- **WHEN** `crew bolt land` runs on a bolt given before bolts were branches, whose worktree has a modified file
+- **THEN** the bolt lands and the team holds no bolt, and crew says the worktree is kept with its branch because it has uncommitted changes
 
 ### Requirement: A team's next bolt needs no edit and no deploy
 Giving a team its next bolt SHALL be `crew bolt give <team>`. A team's base branch SHALL come from the bolt it holds, never from the teams file.
@@ -157,7 +172,7 @@ A session SHALL hold any number of teams.
 - **THEN** the session has the workspaces `swb-1`, `swb-2`, and a units workspace for each team with work in flight
 
 ### Requirement: The conductor waits for a stage through crew
-After starting a unit's stage, a fix or ops's proof, the conductor SHALL wait for it through crew (`crew unit wait <unit>`, `crew fix <team> <name> --wait`, `crew prove <team> --wait`), run as a background command, and SHALL NOT wait on an agent with herdr directly or read a pane to learn an outcome. The wait SHALL run on the team's host and return when the stage has ended, is stuck, or its timeout passes, and say which.
+After starting a unit's stage or a fix, the conductor SHALL wait for it through crew (`crew unit wait <unit>`, `crew chore wait <chore>`, `crew fix <team> <name> --wait`), run as a background command, and SHALL NOT wait on an agent with herdr directly or read a pane to learn an outcome. The wait SHALL run on the team's host and return when the stage has ended, is stuck, or its timeout passes, and say which.
 
 #### Scenario: A stage settles
 - **WHEN** a conductor has `crew unit wait <unit>` running, and the unit's verify agent has saved its report and settled
@@ -191,15 +206,19 @@ After starting a unit's stage, a fix or ops's proof, the conductor SHALL wait fo
 - **THEN** it is refused; a defect is a fix, and a new need is a new unit
 
 ### Requirement: A worktree goes when its work is over
-crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once it has merged into its bolt or landed, or no plan has it; a fix's once it has merged into its bolt, or no plan has its bolt. It SHALL do this each time it reads a team, for the team's kit checkout, and at once after `crew bolt drop`, `crew unit drop` or `crew bolt land`.
+crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once it has merged into its bolt or landed, or no plan has it; a fix's once it has merged into its bolt, or no plan has its bolt. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, and at once after `crew bolt drop`, `crew unit drop` or `crew bolt land`.
 
 #### Scenario: A dropped bolt
 - **WHEN** the planner drops a bolt that swb-2 holds
-- **THEN** `bolts/<bolt>` and `bolt/<bolt>` are gone from swb-2's host, and so are the places, branches and slots of the bolt's units and fixes
+- **THEN** `bolt/<bolt>` is gone from swb-2's host, and so are the places, branches and slots of the bolt's units and fixes
 
 #### Scenario: A leftover from before
 - **WHEN** a kit checkout has the worktree of a bolt that no plan has, and a place of a unit that has merged, which no slot holds
 - **THEN** the next `crew status` of a team building in that checkout removes both, with their branches
+
+#### Scenario: A bolt branch crew did not make
+- **WHEN** a kit checkout has a `bolt/` branch with no mark of crew's, of a bolt no plan has
+- **THEN** crew leaves it as it is
 
 #### Scenario: The host does not answer
 - **WHEN** a bolt is dropped while its team's host cannot be reached
@@ -225,14 +244,14 @@ A worktree whose work is over SHALL be kept, with its branch, while it has uncom
 - **THEN** the place is removed with them
 
 ### Requirement: crew removes only its own worktrees
-crew SHALL remove only worktrees directly under `<kit>/bolts/` or `<kit>/places/` that are on a `bolt/`, `unit/` or `fix/` branch. It SHALL never remove the main checkout, a worktree elsewhere, one on another branch or on none, or a locked one, which it names as kept. It SHALL remove nothing when it cannot read every plan the kit's work goes in.
+crew SHALL remove only worktrees directly under `<kit>/places/` on a `unit/`, `chore/` or `fix/` branch, and the worktree a bolt given before bolts were branches still has, directly under `<kit>/bolts/` on its `bolt/` branch, and only bolt branches it marked as its own. It SHALL never remove the main checkout, a worktree elsewhere, one on another branch or on none, or a locked one, which it names as kept. It SHALL remove nothing when it cannot read every plan the kit's work goes in.
 
 #### Scenario: A worktree made by hand
 - **WHEN** a kit checkout has a worktree beside `main` that the user made, on a branch of their own
 - **THEN** crew leaves it as it is
 
 #### Scenario: A merge partway through its rebase
-- **WHEN** a place is on no branch because its merge stopped partway through a rebase
+- **WHEN** a place is on no branch because a rebase stopped partway
 - **THEN** crew leaves it as it is
 
 #### Scenario: A plan that can't be read
@@ -285,11 +304,11 @@ Each stage SHALL have one deliverable, read in the kit or on the team's host and
 - **THEN** the stage ends once the agent stops working, so the next stage never starts over a working agent
 
 ### Requirement: The deliverable of each stage
-The deliverables SHALL be: construct, the unit's change committed since the stage began, its planning complete; code, a commit since the stage began with every task ticked at the branch's head; verify, a report for the unit saved in the team's reports folder since the stage began; merge, the bolt holding the unit's change archived, or the fix's commits; a fix's code, a commit on its branch since it began; ops's proof, a proof file for the bolt saved in the team's reports folder since it began.
+The deliverables SHALL be: construct, the unit's change committed since the stage began, its planning complete; code, a commit since the stage began with every task ticked at the branch's head; verify, a report for the unit saved in the team's reports folder since the stage began; merge, the bolt holding the unit's change archived, or the fix's commits; a fix's code, a commit on its branch since it began. A line a proof of ops's left in a team's stages file from before SHALL be dropped, owed nothing.
 
 #### Scenario: Construct
 - **WHEN** a construct agent commits its change with its planning complete and stops working
-- **THEN** the wait returns saying the change is ready for review, naming the branch's head
+- **THEN** the wait returns saying the change is committed, naming the branch's head
 
 #### Scenario: Code with tasks still open
 - **WHEN** a code agent stops working with one task of four still open at its branch's head, and has said nothing it needs
@@ -304,12 +323,16 @@ The deliverables SHALL be: construct, the unit's change committed since the stag
 - **THEN** that older report is not this run's deliverable, and the stage ends at the report this run saves
 
 #### Scenario: Merge
-- **WHEN** a merge agent archives the unit's change, its merge lands the unit on its bolt, and the agent stops working
+- **WHEN** a merge agent archives the unit's change, its submission lands the unit on its bolt, and the agent stops working
 - **THEN** the wait returns naming the bolt's head that holds the unit
 
 #### Scenario: A change merged open
 - **WHEN** a merge agent lands the unit on its bolt with its change not archived
 - **THEN** the stage has not ended, and the wait says the bolt holds the change open
+
+#### Scenario: A proof from before
+- **WHEN** a team's stages file holds a proof line ops's proof left before this change
+- **THEN** the team's next read drops it, records no end for it, and owes nothing
 
 ### Requirement: A stage's agent says what it needs through crew
 A stage's agent that cannot finish without something only someone else can give SHALL say so with `crew needs "<what it needs>"`, which ends its stage short. crew SHALL carry the agent's words to the conductor: in the answer of a wait running on the stage, otherwise in a tell marked as from that agent. crew SHALL refuse `crew needs` from anyone but the agent of a stage crew owes an end, and with no words.
@@ -340,47 +363,6 @@ A wait SHALL report a stage stuck, naming the stage and its agent, when the agen
 #### Scenario: The agent is gone
 - **WHEN** the stage's agent is no longer running and nothing was delivered or said
 - **THEN** the wait returns at once saying so, and records nothing
-
-### Requirement: Ops's proof of a bolt is a stage crew starts and waits on
-`crew prove <team> ["<words>"]` SHALL ask the team's ops to deploy the bolt and work the *Proof in dev* list of each of its units, in a tell marked as from the caller, and SHALL record the proof's start and owe its end like a stage. Ops SHALL write its results once, whole, to `proof-<bolt>-<YYYYMMDD-HHMM>.md` in the team's reports folder; that file is the proof's deliverable. `crew prove` SHALL be refused when the team holds no bolt or its ops is not up.
-
-#### Scenario: Proof before landing
-- **WHEN** every unit of a bolt has merged, the conductor runs `crew prove swb-1` and then `crew prove swb-1 --wait`
-- **THEN** ops is asked to prove the bolt, and the wait returns with the proof file's path once ops has written it and stopped working
-
-#### Scenario: Ops needs the user's word
-- **WHEN** ops, during a proof, runs `crew needs "the user's word to deploy over swb-2's bolt"`
-- **THEN** the proof ends short, and the conductor learns it with ops's words
-
-### Requirement: A fix that carries the bolt onto main becomes its head
-A fix SHALL carry the bolt when the bolt's head is not an ancestor of the fix, the fix's commits beyond the kit's main are each paired by `git range-diff` with one of the bolt's commits beyond main, in the same order, equal or changed, and neither side holds a commit left unpaired. On `--merge`, crew SHALL then move `bolt/<bolt>` to the fix's head in the bolt's worktree, end the fix's agent, record the move, and say the bolt's old and new heads; no merge or submission SHALL run.
-
-#### Scenario: A fix replays the bolt onto main
-- **WHEN** a landing's rebase conflicted, the fix's agent replayed the bolt's three commits onto main resolving one of them, and the conductor runs `crew fix <team> <name> --merge`
-- **THEN** `bolt/<bolt>` is at the fix's head, the fix reads as merged, its slot and place are freed as after a merge, and crew's output names the bolt's old head and new head
-
-#### Scenario: A fix that drops one of the bolt's commits does not carry it
-- **WHEN** the fix's branch, on main, pairs two of the bolt's three commits and lacks the third
-- **THEN** crew does not move the bolt, starts the fix's merge stage, and says which of the bolt's commits found no pair
-
-#### Scenario: A bolt's worktree that is not clean is not moved
-- **WHEN** the fix carries the bolt and the bolt's worktree has modified or untracked files git does not ignore, or a rebase or merge in progress
-- **THEN** crew moves nothing, starts no merge, names what keeps the worktree from moving, and the refusal is recorded
-
-### Requirement: A carried bolt is checked and proven again
-After crew moves a bolt to a fix that carries it, crew SHALL run the kit's post-merge hooks in the bolt's worktree with the bolt as the target, as a merge into the bolt would, and SHALL say that the bolt must be proven again before it lands. The conductor SHALL ask ops for a new proof and post the bolt's landing card only once that proof is clean.
-
-#### Scenario: The bolt's checks run on the new head
-- **WHEN** crew has moved `bolt/<bolt>` to the fix's head in a kit whose post-merge hook verifies the bolt
-- **THEN** that hook runs on the new head, and the bolt's verification reads that head
-
-#### Scenario: The kit refuses the checks
-- **WHEN** the kit's post-merge hooks are not approved on the host
-- **THEN** the bolt is still moved, and crew says the checks did not start, with worktrunk's own words, so ops can run the bolt's verification again
-
-#### Scenario: A proof before the move does not land the bolt
-- **WHEN** a bolt that ops had proven is carried onto main by a fix
-- **THEN** the conductor asks ops to prove it again, and the landing card is posted only after that proof is clean
 
 ### Requirement: A worktree goes through the kit's remove hooks
 crew SHALL remove each worktree it removes through the kit's own worktree tool, run from the kit's main checkout, so the kit's remove hooks run: those before removal with the worktree's files still there, those after it once it is gone. crew SHALL NOT skip the kit's hooks, nor approve them for the user. A kit with no remove hooks SHALL see its worktrees go as before, with no approval asked.
@@ -480,3 +462,14 @@ A unit's merge stage SHALL archive its change, `openspec archive <unit> --yes` i
 #### Scenario: An archive openspec refuses
 - **WHEN** `openspec archive u --yes` refuses a delta that modifies a requirement a sibling unit adds and has not merged
 - **THEN** the merge agent stops, saying so with openspec's words, and nothing is merged
+
+### Requirement: A bolt's proof is its verification
+A bolt SHALL be proven by its verification alone: sluice's verdict on its last landing, green at its head. Nobody SHALL deploy the bolt or work a list from its changes to prove it; ops SHALL prove and deploy nothing. The conductor SHALL offer the bolt for landing once every unit and chore has merged and its verification is green.
+
+#### Scenario: Ready to land
+- **WHEN** every unit of a bolt has merged and `crew bolts` shows its verification green
+- **THEN** the conductor tells the user the bolt is ready to land and posts its landing card, and no one is asked to prove it
+
+#### Scenario: Not yet green
+- **WHEN** every unit of a bolt has merged and its head is no landing of sluice's
+- **THEN** the bolt is not offered for landing, and `crew bolts` says what its verification is

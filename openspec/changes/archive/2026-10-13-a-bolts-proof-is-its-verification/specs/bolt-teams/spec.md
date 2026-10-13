@@ -29,7 +29,7 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 - **THEN** the command returns saying the stage is still running, and whether its agent is working or waiting on work of its own, and no `stage.end` entry is written
 
 ### Requirement: The deliverable of each stage
-The deliverables SHALL be: construct, the unit's change committed since the stage began, its planning complete; code, a commit since the stage began with every task ticked at the branch's head; verify, a report for the unit saved in the team's reports folder since the stage began; settle, a commit on the unit's branch since it began; merge, the bolt holding the unit's change, the chore's trailer or the fix's commits; a fix's code, and a chore's, a commit on its branch since it began. A line a proof of ops's left in a team's stages file from before SHALL be dropped, owed nothing.
+The deliverables SHALL be: construct, the unit's change committed since the stage began, its planning complete; code, a commit since the stage began with every task ticked at the branch's head; verify, a report for the unit saved in the team's reports folder since the stage began; merge, the bolt holding the unit's change archived, or the fix's commits; a fix's code, a commit on its branch since it began. A line a proof of ops's left in a team's stages file from before SHALL be dropped, owed nothing.
 
 #### Scenario: Construct
 - **WHEN** a construct agent commits its change with its planning complete and stops working
@@ -40,7 +40,7 @@ The deliverables SHALL be: construct, the unit's change committed since the stag
 - **THEN** the stage has not ended
 
 #### Scenario: Code run again on a ticked change
-- **WHEN** code is run with findings from a verify on a unit whose tasks were all ticked before it began
+- **WHEN** code is run with a verify report's path, its one round of fixes, on a unit whose tasks were all ticked before it began
 - **THEN** the stage ends only once a commit has been made since it began
 
 #### Scenario: A verify run again
@@ -48,8 +48,12 @@ The deliverables SHALL be: construct, the unit's change committed since the stag
 - **THEN** that older report is not this run's deliverable, and the stage ends at the report this run saves
 
 #### Scenario: Merge
-- **WHEN** a merge agent's `wt submit` lands the unit on its bolt and the agent stops working
+- **WHEN** a merge agent archives the unit's change, its submission lands the unit on its bolt, and the agent stops working
 - **THEN** the wait returns naming the bolt's head that holds the unit
+
+#### Scenario: A change merged open
+- **WHEN** a merge agent lands the unit on its bolt with its change not archived
+- **THEN** the stage has not ended, and the wait says the bolt holds the change open
 
 #### Scenario: A proof from before
 - **WHEN** a team's stages file holds a proof line ops's proof left before this change
