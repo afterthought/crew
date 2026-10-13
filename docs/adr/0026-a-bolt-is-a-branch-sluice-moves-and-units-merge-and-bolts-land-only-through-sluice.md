@@ -1,7 +1,7 @@
 ---
 number: 26
 title: A bolt is a branch sluice moves, and units merge and bolts land only through sluice
-status: proposed
+status: accepted
 date: 2026-10-13
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # A bolt is a branch sluice moves, and units merge and bolts land only through sluice
 
-Status: proposed to the user on 2026-10-13, in the elaboration session; accepted only on their yes.
+Status: accepted by the user on 2026-10-13, in the elaboration session ("Yes, accept"), on the words quoted under *Decision outcome*.
 
 Deciders: the user, in the elaboration session of 2026-10-13, whose words below are the decision; written by the elaboration session. It closes the second point record 0023 held for an elaboration.
 Amends: `teams.5`, `plan.8`, `plan.9`, `plan.16` and `tests.5`, with `code.6`'s details; record 0014, D7; record 0023, its second held point. Supersedes record 0015. Drops the held change `no-worktree-holds-a-bolts-branch`.
@@ -46,7 +46,7 @@ The user: a bolt is a branch only, "#1. but why still support wt merge? why not 
 
 ### Consequences
 
-- `teams.5`, `plan.8`, `plan.9`, `plan.16` and `tests.5` say the above, with `code.6`'s details; amended in this commit, marked proposed until the user's yes. Record 0015 is marked superseded; record 0014's D7 and record 0023's second held point name this record.
+- `teams.5`, `plan.8`, `plan.9`, `plan.16` and `tests.5` say the above, with `code.6`'s details; amended with this record and standing accepted. Record 0015 is marked superseded; record 0014's D7 and record 0023's second held point name this record.
 - One unit in crew, `units-merge-and-bolts-land-only-through-sluice`: `merge_command` and the merge stage sluice-only; the flag and `gather.sluice` gone; `bolt give` makes a branch and no worktree; `bolt_place` starts the conductor and ops in the kit's main checkout; the landing procedure in `main-ops.md` as a submission; `carry`, `carry_move`, `fix_run`'s carry judgment and their tests gone; the tidy; crew's `.config/wt.toml` post-merge verification, `bolt-verify.sh` and `bolt-status.sh` gone; `.config/sluice.toml` gaining crew's branch policies; README, CLAUDE.md, the skill and the briefs; the `bolt-teams`, `bolt-plan`, `merge-gate`, `kit-toolchain` and `main-level` specs through deltas. It is built once sluice has what the list above names, and until it lands no team merges or lands.
 - The held change `no-worktree-holds-a-bolts-branch` on main is removed in the user's name; its reading stays.
 - The user's sluice session is told the list above.
