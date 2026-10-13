@@ -49,8 +49,13 @@ in
   #
   # proto's and moon's homes are crew's own, in the git common dir, so every worktree shares one install: moon puts
   # both homes' bin first on every task's PATH, and a user's own installs there (an older moon among them) must never
-  # run in a task. Entering the shell installs what .prototools pins, when it is missing and can be, then activates
-  # it. A checkout that is no git repository gets neither link nor homes of its own.
+  # run in a task. Entering the shell installs what .prototools pins when a pin is missing from the proto home and can
+  # be installed, then activates it. A checkout that is no git repository gets neither link nor homes of its own.
+  #
+  # proto's install runs only for a missing pin, read from .prototools against proto's layout (tools/<tool>/<version>
+  # under its home, proto 0.63.1): one that finds every pin installed still took 2.8 of a warm entry's 3.2 seconds
+  # (median of ten, mac-studio at a load of 15, 2026-10-13), and an agent enters the shell for every command it runs
+  # through it (record 0024); without it a warm entry took 0.37 seconds.
   enterShell = ''
     if _crew_common="$(git -C "${config.devenv.root}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
       _moon_cache="${config.devenv.root}/.moon/cache"
@@ -63,7 +68,16 @@ in
       export PROTO_HOME="$_crew_common/proto" MOON_HOME="$_crew_common/moon-home"
     fi
     unset _crew_common _moon_cache
-    ${proto}/bin/proto install --config-mode upwards >/dev/null 2>&1 || true
+    if [ -f "${config.devenv.root}/.prototools" ]; then
+      while read -r _tool _eq _version _; do
+        case $_tool in "" | \#*) continue ;; \[*) break ;; esac
+        if [ ! -d "''${PROTO_HOME:-$HOME/.proto}/tools/$_tool/''${_version//\"/}" ]; then
+          ${proto}/bin/proto install --config-mode upwards >/dev/null 2>&1 || true
+          break
+        fi
+      done < "${config.devenv.root}/.prototools"
+    fi
+    unset _tool _eq _version
     eval "$(${proto}/bin/proto activate bash --export --no-bin --config-mode upwards 2>/dev/null)"
   '';
 }
