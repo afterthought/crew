@@ -15,8 +15,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
                                              the moves where the partition's blueprints repos have them
   crew bolts [<bolt>] [--label L] [--json]   every bolt, unit and chore of the plans, each one's stage read from its kit
-  crew rail [--label L]                      what waits on the user: open proposals, review batches, verify reports
-                                             and bolts to land, each with when it began to wait, what answers it and
+  crew rail [--label L]                      what waits on the user: open proposals, review batches and bolts to
+                                             land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
@@ -670,13 +670,10 @@ def holdings(plan):
 
 
 def lost_rows(before, after):
-    """The rail rows each team lost in a write, {team: rows}: verify/<unit> for each unit no longer in a bolt it holds,
-    and land/<bolt> for each bolt it no longer holds. A landing, a drop and a move all lose rows."""
-    (bolts0, units0), (bolts1, units1) = before, after
+    """The rail rows each team lost in a write, {team: rows}: land/<bolt> for each bolt it no longer holds. A landing, a
+    drop and a move all lose rows."""
+    (bolts0, _), (bolts1, _) = before, after
     out = {}
-    for u, t in units0.items():
-        if units1.get(u) != t:
-            out.setdefault(t, []).append(f"verify/{u}")
     for b, t in bolts0.items():
         if bolts1.get(b) != t:
             out.setdefault(t, []).append(f"land/{b}")
@@ -888,8 +885,8 @@ def survey(fleet, held, sites=False, board=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)]. The answer is
     per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
     the host's running portless routes too; board implies sites and adds each team's slots and the explorations on
-    each kit's main, for the board. Each kit is asked for the verify reports, and with board the slots, of every team
-    that builds it on that host. A kit the command has already read is not asked again, and what a host answers is
+    each kit's main, for the board. With board, each kit is asked for the slots of every team that builds it on that
+    host. A kit the command has already read is not asked again, and what a host answers is
     kept for the command's later steps; a sites survey is neither served nor kept."""
     sites = sites or board
     hosts = {}
@@ -899,7 +896,6 @@ def survey(fleet, held, sites=False, board=False):
             continue
         mates = sorted(o["name"] for o in fleet["teams"].values() if o["machine"] == t["machine"] and o["kit"]["main"] == t["kit"]["main"])
         k = hosts.setdefault(t["machine"], {}).setdefault(t["kit"]["main"], {"main": t["kit"]["main"], "dir": t["kit"]["dir"], "bolts": [],
-            "reports": [f"~/.local/state/{o}-team/reports" for o in mates],
             **({"slots": {o: f"~/.local/state/{o}-team/slots" for o in mates}} if board else {})})
         if bolt and bolt not in k["bolts"]:
             k["bolts"].append(bolt)
@@ -1798,8 +1794,6 @@ def op_unit_amend(ctx, a):
     bolt = plan.unit(a.unit).get("Bolt")
     team = ctx.fleet["teams"].get(plan.bolt(bolt).get("Team")) if bolt else None
     mark = (f"proposal/{ctx.n}" if not ctx.direct else "intent") if s["worktree"] else None
-    # The verify row the unit held before the amendment: its card is named when the construct cannot start.
-    row = f"verify/{a.unit}" if s["stage"] == "verify" else None
 
     def change(w):
         u = w.of(a)
@@ -1826,7 +1820,7 @@ def op_unit_amend(ctx, a):
             why = (crew.unanswered(team["machine"], r)
                    or ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].rstrip("."))
             print(f"construct did not start on unit {a.unit}: {why}")
-            text, unsaid = amend_told(a.unit, by, None, why, row)
+            text, unsaid = amend_told(a.unit, by, None, why)
         if not crew.tell(ctx.fleet, conductor, text):
             print(f"{conductor} is not up: {unsaid}")
     return Op(label, change, f"plan({bolt or 'queue'}): amend {a.unit}", "unit.amend", on=[f"unit/{a.unit}"], after=after)
@@ -1839,16 +1833,15 @@ def construct_again(unit, stage):
     return ["unit", "run", unit, "construct"] + (["--force"] if stage != "construct" else [])
 
 
-def amend_told(unit, by, slot, why=None, row=None):
+def amend_told(unit, by, slot, why=None):
     """What an amendment tells the conductor of the unit's team, and what crew says when the conductor is not up
-    (plan.15): construct runs again in the slot that started it, or did not start, why, and the card of the verify row
-    the amendment ended."""
+    (plan.15): construct runs again in the slot that started it, or did not start, and why."""
     if slot:
         return (f"Unit {unit}'s intent was amended by {by}, and construct runs again on it in {slot}: wait for it "
                 f"(crew unit wait {unit}); once it has committed, the unit goes on from its tasks.",
                 f"construct runs again on unit {unit} in {slot}")
     return (f"Unit {unit}'s intent was amended by {by}, and construct did not start: {why}. Run it once it can "
-            f"(crew unit run {unit} construct); once it has committed, the unit goes on from its tasks." + (f" {close_card(row)}" if row else ""),
+            f"(crew unit run {unit} construct); once it has committed, the unit goes on from its tasks.",
             f"unit {unit} waits, amended, for construct to be run again")
 
 
@@ -3715,13 +3708,15 @@ def local_entries(label, days=30):
 
 
 def verified(label, unit, entries=None):
-    """Whether a unit has delivered its verify since it was last constructed or coded, from the run record of the host
-    its stages run on: a delivered verify end later than every construct or code start of it."""
+    """Whether a unit or chore has delivered its verify since it was last constructed, from the run record of the host
+    its stages run on: a delivered verify end later than every construct start of it. Its one round of fixes after the
+    verify, a code stage, needs no verify again (teams.17); a chore has no construct, so any verify it delivered
+    counts."""
     done = None
     for e in entries if entries is not None else local_entries(label):
         if e.get("Refused"):
             continue
-        if e.get("Act") == "stage.start" and any(o in e["On"] for o in (f"stage/{unit}/construct", f"stage/{unit}/code")):
+        if e.get("Act") == "stage.start" and f"stage/{unit}/construct" in e["On"]:
             done = False
         elif e.get("Act") == "stage.end" and f"stage/{unit}/verify" in e["On"] and e.get("Ended") == "delivered":
             done = True
@@ -3838,7 +3833,7 @@ def merge_command(t, k, bolt):
 
 def run_check(fleet, a):
     """Whether a unit's stage may start, its place (made for construct), and the prompt the stage is sent, as facts for
-    the stage's start (run_unit_stage): PLACE, BOLT, PROMPT, AMENDED, ENDS, ENTRY, FORECAST and TOOK. Construct
+    the stage's start (run_unit_stage): PLACE, BOLT, PROMPT, AMENDED, ENTRY, FORECAST and TOOK. Construct
     starts once each After unit has finished construct, never waiting on a merge (plan.13), and is run again at any
     stage before merge; on a unit whose change is committed, or one already amended, it first marks the unit amended in
     the plan at its head. Where that write is what marks the unit, only the conductor of the team holding its bolt, or
@@ -3893,11 +3888,8 @@ def run_check(fleet, a):
     # What reached the unit while no stage of it ran: forecasts, carried in this stage's prompt and named on its start.
     ids, said = carried_forecasts(fleet, t, plan, st_all, bolt, a.unit)
     prompt = stage_prompt(a.stage, a.unit, a.words, carried=said, **facts)
-    # The card of the row the stage ends is named once the stage has started (stage_ended_row), since starting it can
-    # still be refused.
-    ends = ends_row(a.unit, a.stage, st, mark, place_stage(s["place"]) if s.get("place") else None)
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
-    return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENDS=ends, ENTRY=entry, FORECAST=" ".join(ids),
+    return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENTRY=entry, FORECAST=" ".join(ids),
                 TOOK=took if a.stage == "construct" else "")
 
 
@@ -3939,17 +3931,17 @@ def chore_check(fleet, a, label, plan, c):
                           + f" not: run its code again to add the trailer (crew chore run {a.unit} code)")
         merge = merge_command(t, st_all.kit(plan.bolt(bolt))[0], bolt)
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
-    return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENDS=ends_row(a.unit, a.stage, st, None, None), ENTRY="",
+    return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENTRY="",
                 FORECAST="", TOOK=took)
 
 
 def chore_refusal(name, bolt, stage, st, after, delivered_verify):
     """Why a chore's stage may not start, or None when it may (plan.11, plan.13, teams.5): stage is the one asked, st
-    the chore's stage read from its kit, after each After unit's or chore's (kind, stage), delivered_verify whether a
-    verify has delivered since its last code began. None runs on merged or landed work; code waits until each it comes
-    after has something committed to build on, never a merge (built_on), and runs on a ready, coding or verified chore;
-    verify once its place holds a commit of its own; merge once verify has delivered since its last code and each it
-    comes after has merged."""
+    the chore's stage read from its kit, after each After unit's or chore's (kind, stage), delivered_verify whether its
+    verify has delivered (verified). None runs on merged or landed work; code waits until each it comes after has
+    something committed to build on, never a merge (built_on), and runs on a ready, coding or verified chore; verify
+    once its place holds a commit of its own; merge once its verify has delivered, a fix round after it calling for no
+    other (teams.17), and each it comes after has merged."""
     if stage not in ("code", "verify", "merge"):
         return f"a chore has no {stage}: its stages are code, verify and merge (crew chore run {name} code)"
     if st in ("merged", "landed"):
@@ -3965,9 +3957,9 @@ def chore_refusal(name, bolt, stage, st, after, delivered_verify):
         return f"chore {name} has not been coded yet: crew chore run {name} code"
     if st != "verify":
         return (f"chore {name} has nothing committed beyond bolt/{bolt} yet: "
-                + ("verify waits for its code" if stage == "verify" else "it merges once its code is committed and verify has run"))
+                + ("verify waits for its code" if stage == "verify" else "it merges once its code is committed and its verify has delivered"))
     if stage == "merge" and not delivered_verify:
-        return f"chore {name} merges once verify has run on its code since it was last coded: crew chore run {name} verify"
+        return f"chore {name} merges once its verify has delivered: crew chore run {name} verify"
     ahead = [d for d, (_, x) in after.items() if stage == "merge" and x not in ("merged", "landed")]
     return f"chore {name} merges after " + ", ".join(ahead) + f", not yet merged into bolt/{bolt}" if ahead else None
 
@@ -4043,15 +4035,6 @@ def stage_prompt(stage, unit, words="", intent="", sources=(), again="", overlap
     return prompt + "".join(" " + x for x in carried)
 
 
-def ends_row(unit, stage, st, mark, was):
-    """The rail row a stage ends, whose card the conductor closes once it has started: the unit's verify report, acted
-    on by construct, code or merge on a unit in verify; for construct on a unit whose intent was amended, the verify row
-    its place read before the mark (was), which the amendment ended. "" when it ends none."""
-    if stage == "construct" and amended(mark):
-        return f"verify/{unit}" if was == "verify" else ""
-    return f"verify/{unit}" if stage in ("construct", "code", "merge") and st == "verify" else ""
-
-
 def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, delivered_verify, has_words, chores=()):
     """Why a unit's stage may not start, or None when it may (plan.6, plan.13, teams.5): stage is the one asked, st the
     unit's stage read from its place, mark its Amended mark, after each After unit's stage, caller the asker's (kind,
@@ -4099,16 +4082,6 @@ def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, 
         return f"unit {unit} is in {st}: it merges once every task is ticked and verify has run"
     ahead = [d for d, x in after.items() if x not in ("merged", "landed")]
     return f"unit {unit} merges after " + ", ".join(ahead) + f", not yet merged into bolt/{bolt}" if ahead else None
-
-
-def stage_ended_row(fleet, a):
-    """A started stage that ended a rail row names the row's card to the conductor that owns it: shown to the
-    conductor when it ran the stage, told to it otherwise."""
-    conductor = f"{crew.team_of(fleet, a.team)['name']}-conductor"
-    if agent() == conductor:
-        print(close_card(a.row))
-    else:
-        crew.tell(fleet, conductor, f"{agent()} ran {a.stage} on {'chore' if a.chore else 'unit'} {a.unit}. {close_card(a.row)}")
 
 
 def amended_units(fleet, t):
@@ -4798,11 +4771,11 @@ def deliverable(fleet, t, o, place=None):
 
 def deliverable_facts(fleet, t, o, place=None):
     """What delivered judges an owed stage by, read on the team's host, only what its stage asks: the newest proof or
-    report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it and its head; for a
-    chore's code, its own newest commit and when it was committed; else the branch's head and when it was committed, a
-    code stage's ticks at that head, and, for a construct with a commit since it began, whether its planning is
-    complete. The head is read once and the rest read at that commit, never at the branch again: an agent that commits
-    between the reads would pair one commit's time or ticks with another's sha."""
+    report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it, a unit's change
+    archived too, and its head; for a chore's code, its own newest commit and when it was committed; else the branch's
+    head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since it
+    began, whether its planning is complete. The head is read once and the rest read at that commit, never at the branch
+    again: an agent that commits between the reads would pair one commit's time or ticks with another's sha."""
     main, f = t["kit"]["main"], {}
     if o.start is None:
         return f
@@ -4815,6 +4788,8 @@ def deliverable_facts(fleet, t, o, place=None):
             f["holds"] = (gather.fix_merged(main, o.name, f["bolt"]) if o.fix else
                           o.name in gather.chores(main, f"refs/heads/bolt/{f['bolt']}") if o.chore else
                           o.name in gather.changes(main, f"bolt/{f['bolt']}"))
+            if not (o.fix or o.chore):
+                f["archived"] = o.name in gather.archived(main, f"bolt/{f['bolt']}")
             f["bolt_head"] = short_head(main, f"refs/heads/bolt/{f['bolt']}")
         return f
     if o.chore:  # its own newest commit: what its place took of what it comes after is not its code (plan.13)
@@ -4847,12 +4822,13 @@ def deliverable_facts(fleet, t, o, place=None):
 
 
 def delivered(o, f):
-    """What an owed stage has delivered, judged from deliverable_facts (teams.4): (its object, what the wait says of it),
-    or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning complete;
-    code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since the start;
-    settle: a commit on the unit's branch since the start (teams.14); merge: the bolt holding the unit's change, the
-    chore's trailer or the fix's commits; a fix, and a chore's code: a commit on its branch since the start (record
-    0007); the proof: a proof file for the bolt saved since the start. A start crew can't read delivers nothing."""
+    """What an owed stage has delivered, judged from deliverable_facts (teams.4): (its object, what the wait says of
+    it), or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning
+    complete; code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since
+    the start; settle: a commit on the unit's branch since the start (teams.14); merge: the bolt holding the unit's
+    change archived, which its merge does first (teams.17), the chore's trailer or the fix's commits; a fix, and a
+    chore's code: a commit on its branch since the start (record 0007); the proof: a proof file for the bolt saved since
+    the start. A start crew can't read delivers nothing."""
     if o.start is None:
         return None, f"no start crew can read in its entry {o.eid}"
     if o.proof:
@@ -4865,6 +4841,8 @@ def delivered(o, f):
         bolt, head = f.get("bolt"), f.get("bolt_head")
         if not bolt:
             return None, "no bolt crew can read for it"
+        if f.get("holds") and f.get("archived") is False:
+            return None, f"bolt/{bolt} holds its change open: its merge did not archive it first"
         return (f"bolt/{bolt}@{head}", f"bolt/{bolt} holds it at {head}") if f.get("holds") and head else (None, f"bolt/{bolt} not yet holding it")
     head, at = f.get("head"), f.get("at")
     fresh = bool(head) and at is not None and at >= o.start
@@ -5782,8 +5760,7 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
     agent works unless forced, each before the plan can be written, so an amended unit whose construct can't start keeps
     its mark and reads amended. The team's read frees first what is over, and a slot another team of this host holds the
     unit in. Whether the stage may start, the place and the stage's prompt are run_check's, a chore's chore_check's,
-    its start run_stage's; a stage that ended a rail row then names the row's card (stage_ended_row). It stops
-    (Stopped), or is refused (Refusal), having said and recorded why."""
+    its start run_stage's. It stops (Stopped), or is refused (Refusal), having said and recorded why."""
     t, label = team.t, team.label
     on = [f"stage/{unit}/{stage}", f"{kind}/{unit}"]
     if team.down():
@@ -5817,11 +5794,6 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
     extra.update(Forecast=facts["FORECAST"], Took=facts["TOOK"])
     run_stage(fleet, team, slot, stage, facts["PROMPT"], "stage.start", unit, f"{kind}/{unit}", on + [f"agent/{agent}"], **extra)
     print(f"{agent} has " + ("chore " if kind == "chore" else "") + f"{unit}: {stage}, in {facts['PLACE']}")
-    if facts["ENDS"]:
-        try:
-            stage_ended_row(fleet, argparse.Namespace(team=t["name"], unit=unit, stage=stage, row=facts["ENDS"], chore=kind == "chore"))
-        except Refusal as e:
-            print(e, file=sys.stderr)
 
 
 def unit_run(fleet, a):
@@ -6630,7 +6602,7 @@ def review_wait(fleet, a):
 
 # ------------------------------------------------------------------------------------------------ crew rail
 
-RAIL = ("proposals", "batches", "verify", "land", "operations")
+RAIL = ("proposals", "batches", "land", "operations")
 
 
 def utc(iso):
@@ -6741,16 +6713,16 @@ def record_reading(l, entries, plan, fresh, missing=None):
 
 
 def rail_rows(fleet, found, sv, props, times, held=None):
-    """What waits on the user in the plans read, from the open proposals and when each was proposed, the batches the
-    run record holds (held, as rail_record reads it), and the kits as surveyed: each row's group, its partition, its
-    card key, the time it began to wait (shown as a date alone when that is all that is known), what it is, its
-    commands, and the document its card asks the user to read: ("page", label, n) for a proposal, ("batch", label, n)
-    for a batch card, whose units, their teams and the commits the batch read them at the row holds too, (host, path)
-    for a verify report, None for a landing. A batch is one row, keyed batch/<n>, holding every unit, until its card
-    closes; a batch posted as cards of five before a batch was one card is a row for each card posted, keyed
-    batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row, offered for landing only once
-    every unit's latest change has been in a batch: until then the row names the units that have not, and offers
-    nothing (briefs.12)."""
+    """What waits on the user in the plans read, from the open proposals and when each was proposed, the batches the run
+    record holds (held, as rail_record reads it), and the kits as surveyed: each row's group, its partition, its card
+    key, the time it began to wait (shown as a date alone when that is all that is known), what it is, its commands, and
+    the document its card asks the user to read: ("page", label, n) for a proposal, ("batch", label, n) for a batch
+    card, whose units, their teams and the commits the batch read them at the row holds too, None for a landing. A
+    verify report is no row: its findings are fixed in one round with no card (teams.17). A batch is one row, keyed
+    batch/<n>, holding every unit, until its card closes; a batch posted as cards of five before a batch was one card is
+    a row for each card posted, keyed batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row,
+    offered for landing only once every unit's latest change has been in a batch: until then the row names the units
+    that have not, and offers nothing (briefs.12)."""
     rows, here, held = [], crew.this_host(), held or {}
     for d in props:
         l, n = d["label"], d["proposal"]
@@ -6790,18 +6762,6 @@ def rail_rows(fleet, found, sv, props, times, held=None):
                 continue
             team, host = k["team"]["name"], k["host"]
             units = plan.work_of(b.name())
-            for u in units:
-                s, pl = st.of(u.name())["stage"], (k.get("chore_places", {}) if is_chore(u) else k["places"]).get(u.name())
-                if not pl:
-                    continue
-                report = k.get("reports", {}).get(u.name())
-                if s == "verify" and report and pl.get("head_at") and utc(report["at"]) > utc(pl["head_at"]):
-                    stamp = re.fullmatch(r"verify-.+-(\d{8}-\d{4})\.md", os.path.basename(report["path"]))
-                    rows.append(dict(group="verify", label=l, key=f"verify/{u.name()}/{stamp.group(1) if stamp else ''}", at=utc(report["at"]),
-                                     what=[f"{kind_of(u)} {u.name()} ({l}), {team} on {host}: report {shlex.quote(report['path'])}"],
-                                     doc=(host, report["path"]),
-                                     cmds=[("open", opener(fleet, host, here, report["path"])),
-                                           ("answer", f'crew tell {team}-conductor "On {u.name()}\'s verify report: "')]))
             stages = [st.of(u.name())["stage"] for u in units]
             at, head = k["bolts"].get(b.name(), {}).get("head_at"), k["bolts"].get(b.name(), {}).get("head")
             if stages and at and head and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
@@ -6834,7 +6794,8 @@ def record_cards(sv, cards, unread):
 def stray_cards(fleet, found, sv, rows, cards, unread):
     """The open cards that match no row, oldest first, but a decision record's (record_cards). A card is left out when
     whether it has a row can't be known: its own host's record did not answer, so its close may not have been read, or
-    it is a verify or land card of a unit or bolt whose team's host did not answer."""
+    it is a land card of a bolt whose team's host did not answer. A verify report's card, posted before its row went
+    (teams.17), matches none."""
     plans_, rowed, out = {l: p for l, _, _, p in found if p}, {(r["label"], r["key"]) for r in rows}, []
     for c in cards:
         if (c["label"], c["key"]) in rowed or re.fullmatch(RECORD_KEY, c["key"] or ""):
@@ -6842,11 +6803,9 @@ def stray_cards(fleet, found, sv, rows, cards, unread):
         down = {h for h, v in sv.items() if not v["ok"]} | set(unread.get(c["label"], {}))
         if c["host"] in down:
             continue
-        m = re.match(r"(verify|land)/([a-z0-9][a-z0-9-]*)", c["key"] or "")
+        m = re.match(r"land/([a-z0-9][a-z0-9-]*)", c["key"] or "")
         if m:
-            plan, kind, name = plans_[c["label"]], m.group(1), m.group(2)
-            u = plan.item(name) if kind != "land" else None
-            b = plan.bolt(name if kind == "land" else u.get("Bolt") if u else None)
+            b = plans_[c["label"]].bolt(m.group(1))
             t = fleet["teams"].get(b.get("Team")) if b else None
             if t and t["machine"] in down:
                 continue
@@ -6858,19 +6817,16 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     """End the card sessions crew started whose card is closed or whose row is gone, on every host of each partition
     whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
     as live every row key less each the record holds as closed with no card open under it (batched, what the batches
-    hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge,
-    verify/<unit>/ for each unit of a bolt whose team's kit was not read and batch/ while the record did not answer
-    whole, when no key is taken out for being closed either (read.1). A host the survey found not answering is not
-    asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why "its row is gone" or "its
-    card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
+    hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge, batch/
+    while the record did not answer whole, when no key is taken out for being closed either (read.1). A host the survey
+    found not answering is not asked again. Returns what the sweeps did, each {label, host, key, unit, why, said}, why
+    "its row is gone" or "its card is closed", and the hosts not checked, each {label, host, why} (read.3)."""
     ended, unchecked = [], []
     for l, _, _, plan in found:
         if not plan:
             continue
         rowed = {r["key"] for r in rows if r["label"] == l}
-        st = Stages(fleet, plan, sv)
-        unread_units = [u.name() for b in plan.bolts() if b.get("Team") and not st.kit(b)[0] for u in plan.work_of(b.name())]
-        judged = json.dumps(sweep_judgment(l, rowed, cards, unread.get(l), batched.get(l, {}), unread_units))
+        judged = json.dumps(sweep_judgment(l, rowed, cards, unread.get(l), batched.get(l, {})))
         for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
             if h in sv and not sv[h]["ok"]:
                 unchecked.append(dict(label=l, host=h, why=f"did not answer ({sv[h]['error']})"))
@@ -6897,13 +6853,12 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     return ended, unchecked
 
 
-def sweep_judgment(label, rowed, cards, unread, batched, unread_units):
+def sweep_judgment(label, rowed, cards, unread, batched):
     """The rail's judgment a card sweep acts on (read.1): live, every row key of the partition less each the run record
-    holds as closed with no card open under it; blind, the key prefixes it can't judge, verify/<unit>/ for each unit
-    whose team's kit was not read, and batch/ while the record did not answer whole, when no key is taken out for being
-    closed either."""
+    holds as closed with no card open under it; blind, the key prefixes it can't judge, batch/ while the record did not
+    answer whole, when no key is taken out for being closed either."""
     closed = set() if unread else batched.get("closed", set()) - {c["key"] for c in cards if c["label"] == label}
-    blind = (["batch/"] if unread else []) + [f"verify/{u}/" for u in unread_units]
+    blind = ["batch/"] if unread else []
     return {"live": sorted(rowed - closed), "blind": sorted(blind)}
 
 
@@ -7001,7 +6956,9 @@ def rail_view(fleet, a):
 # started, its document the files plannotator was given joined by ", "), and plannotator's result.json once the user
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
-# The rail's card keys, as crew's card hook reads them.
+# The rail's card keys, as crew's card hook reads them, and a verify report's, verify/<unit>/<stamp>, which no row has
+# had since its findings were fixed in one round (teams.17): a card posted under it before is closed and its session
+# ended as any whose row is gone, and none is posted.
 CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}",
              r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
 # A decision record's card key, the design agent's: the kit, the record's number and the commit that proposed the record
@@ -7057,8 +7014,7 @@ def card_refusal(fleet, name, label, tool, key, reads=None):
     idempotency key: None to let the call through, else the refusal's words, naming the key to use (briefs.11). A card's
     key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
     from proposals.rec, or batch/<n> for one of its batches whose row is open, read from the run record; a
-    conductor's land/<bolt>/<head> for the bolt its team holds, or verify/<unit>/<stamp> for a unit of it, read from the
-    plan. The design agent's is a decision record's, record/<kit>/<number>/<commit> for a kit of any team of its
+    conductor's land/<bolt>/<head> for the bolt its team holds, read from the plan. The design agent's is a decision record's, record/<kit>/<number>/<commit> for a kit of any team of its
     partition, read from the teams file (briefs.15). Every other agent owns no key. An area's key is
     create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
     partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
@@ -7091,17 +7047,13 @@ def card_refusal(fleet, name, label, tool, key, reads=None):
     if kind == "conductor":
         plan = reads.plan()
         bolts = sorted(b for b, t in holdings(plan)[0].items() if t == of) if plan else []
-        units = [u.name() for b in bolts for u in plan.work_of(b)]
         row, _, rest = key.partition("/")
-        if any(re.fullmatch(k, key) for k in CARD_KEYS) and (
-                (row == "land" and rest.split("/")[0] in bolts) or (row == "verify" and rest.split("/")[0] in units)):
+        if any(re.fullmatch(k, key) for k in CARD_KEYS) and row == "land" and rest.split("/")[0] in bolts:
             return None
         if not bolts:
             return f"{said}: {name} posts a card only under a rail row's key of its own, and {of} holds no bolt, so none is."
-        mine = [f"land/{b}/<head>" for b in bolts] + (
-            [f"verify/<unit>/<stamp> for unit {either(units)}"] if units else [])
-        return (f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, "
-                f"the head{' or stamp' if units else ''} {rail}.")
+        mine = [f"land/{b}/<head>" for b in bolts]
+        return f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, the head {rail}."
     if kind == "main-ops":
         p = crew.partition_of(fleet, label)
         if p["machine"] != reads.here():
@@ -7140,7 +7092,7 @@ def card_of(fleet, a, unit_needed=True):
     whole batch, a batch/<n>-<k> key with no unit where one is needed, and a unit with any other key."""
     label = default_label(fleet, a) or fail("crew card runs as the card's partition: run it as a crew agent, or add --label")
     any(re.fullmatch(k, a.key) for k in CARD_KEYS) or fail(
-        f"{a.key} is not a card key: proposal/<n>, batch/<n>, verify/<unit>/<stamp> or land/<bolt>/<head>")
+        f"{a.key} is not a card key: proposal/<n>, batch/<n> or land/<bolt>/<head>")
     old = old_batch(a.key)
     if old:
         a.unit or not unit_needed or fail(f"a batch card posted as cards of five has a session for each of its units: "
@@ -7234,16 +7186,11 @@ def card_result(d):
 
 def card_row(fleet, label, key):
     """The rail row of one partition with that card key, read as crew rail reads its rows: only the proposals for a
-    proposal's key, only the run record's batches for a batch card's, only the host of the unit's team for a verify
-    report's."""
+    proposal's key, and only the run record's batches for a batch card's."""
     found = plans(fleet, [label])
     plan = found[0][3]
-    kind, name = key.split("/")[:2]
-    held = []
-    if kind not in ("proposal", "batch") and plan and plan.item(name):
-        b = plan.bolt(plan.item(name).get("Bolt"))
-        held = [(b.get("Team"), b.name())] if b and b.get("Team") else []
-    sv = survey(fleet, held)
+    kind = key.split("/")[0]
+    sv = survey(fleet, [])
     props = open_proposals(fleet, [label], found) if kind == "proposal" and plan else []
     batched = {}
     if kind == "batch" and plan:
@@ -7275,8 +7222,8 @@ def card_session(fleet, a):
     the card does not hold. While the session crew started for the key still runs, its link is printed again and
     nothing is started or written. One the user approved or annotated before it ended is kept for crew card wait, its
     link printed again with a line saying so; one that ended with no decision is forgotten, and one the user closed
-    undecided is moved aside, so a new one starts. Refused for a landing's key, a key with no row, a document on another
-    host or that crew can't read whole, and a link that would open only on this host."""
+    undecided is moved aside, so a new one starts. Refused for a landing's key, a key with no row, a document crew can't
+    read whole, and a link that would open only on this host."""
     label, d = card_of(fleet, a)
     here = crew.this_host()
     why = session_refusal(a.key, label, fleet["partitions"][label]["machine"], here)
@@ -7288,12 +7235,9 @@ def card_session(fleet, a):
         t = fleet["teams"].get(row["teams"][a.unit]) or fail(f"{a.unit}'s team {row['teams'][a.unit]} is not in the teams file")
         if t["machine"] != here:
             return forward_card(fleet, t, a, label)
-        where, doc, name = here, ("change", change_folder(fleet, t, a.unit)), f"{a.key}'s session of {a.unit}"
-    elif row["doc"][0] in ("page", "batch"):
-        where, doc, name = here, row["doc"], f"{a.key}'s session"
+        doc, name = ("change", change_folder(fleet, t, a.unit)), f"{a.key}'s session of {a.unit}"
     else:
-        where, doc, name = row["doc"][0], ("file", row["doc"][1]), f"{a.key}'s session"
-    where == here or fail(f"{a.key}'s document is on {where}, not {here}: its session starts there, from its owner")
+        doc, name = row["doc"], f"{a.key}'s session"
     d.mkdir(parents=True, exist_ok=True)
     with open(d / ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -7321,10 +7265,8 @@ def card_session(fleet, a):
             files = [str(f)]
         elif doc[0] == "batch":
             files = batch_folder_write(fleet, label, doc[2], row)
-        elif doc[0] == "change":
-            files = change_files(doc[1]) or fail(f"{a.unit}'s change {doc[1]} on {here} holds no Markdown file to read")
         else:
-            files = [doc[1]]
+            files = change_files(doc[1]) or fail(f"{a.unit}'s change {doc[1]} on {here} holds no Markdown file to read")
         files = [os.path.realpath(f) for f in files]
         gone = [f for f in files if not os.path.isfile(f)]
         not gone or fail(f"{a.key}'s document {gone[0]} is not on {here}")

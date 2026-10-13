@@ -1,6 +1,6 @@
 """Conflicts forecast and amendments reaching a unit (teams.12, teams.13, teams.14, plan.13): plan.forecasts_due for
 what a conductor's wait forecasts, a dependent from the head its place took (plan.took_heads), plan.reach_way for how
-a forecast or an amendment reaches the later unit, plan.amended_afters for each After unit constructed again since its
+a forecast or an amendment reaches the later unit, plan.verified for whether it waits to merge, plan.amended_afters for each After unit constructed again since its
 dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent
 whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
 amendment_words for what it is told. That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
@@ -117,6 +117,29 @@ def start(unit, minutes, took="", eid=None, forecast=""):
 def end(unit, minutes, head):
     return {"Act": "stage.end", "On": [f"stage/{unit}/construct", f"unit/{unit}"], "Ended": "delivered", "At": at(minutes),
             "Id": f"e{minutes}", "Delivered": f"unit/{unit}@{head}"}
+
+
+def began(stage, unit="a"):
+    return {"Act": "stage.start", "On": [f"stage/{unit}/{stage}", f"unit/{unit}"]}
+
+
+def ended(stage, unit="a", how="delivered"):
+    return {"Act": "stage.end", "On": [f"stage/{unit}/{stage}", f"unit/{unit}"], "Ended": how}
+
+
+class TestVerified:
+    """A unit that has delivered its verify waits to merge, through its one round of fixes after it, so a forecast
+    reaches it as a settle (teams.14, teams.17); a chore's merge reads the same."""
+
+    def test_a_delivered_verify_stands_through_the_fix_round_after_it(self):
+        assert plan.verified("wldn", "a", [began("code"), ended("code"), began("verify"), ended("verify"), began("code"), ended("code")])
+
+    def test_construct_run_again_undoes_it(self):
+        assert not plan.verified("wldn", "a", [began("verify"), ended("verify"), began("construct")])
+
+    def test_a_verify_that_stopped_short_or_was_refused_is_none(self):
+        assert not plan.verified("wldn", "a", [began("verify"), ended("verify", how="stopped")])
+        assert not plan.verified("wldn", "a", [began("code"), dict(ended("verify"), Refused="x")])
 
 
 class TestAmendedAfters:

@@ -29,12 +29,12 @@ for want in "tell wldn-design" "signal" "never by hand" "Don't create tracking f
   has "$out" "$want"
 done
 lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
-for want in "open nothing, and recite no command" "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
+for want in "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" "never run \`plannotator\` yourself" \
-  "carrying the link to the plannotator session on the report, not the report as a file" "it has nothing to read, so it carries no link"; do
+  "it has nothing to read, so it carries no link"; do
   has "$out" "$want"
 done
-ok "a conductor's verify card links the session crew starts on the report, and it opens nothing"
+ok "a conductor opens nothing, its landing card carries no link, and the card discipline says how a session is started"
 # The words a row's card posted again carries, after its link and its bolt, so the user tells the live copy from the
 # dead one (ADR 0005, "A card belongs to the host's sign-in").
 lost_card='"An older copy of this card is dead: it can no longer be answered, so dismiss it in the app. Answer this one."'
@@ -56,26 +56,25 @@ cards_say() {  # the card discipline the planner's and the conductor's briefs sh
   lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"; lacks "$out" "leave the card's artifacts empty"
 }
 cards_say
-for want in "its words each finding the report raised in a line, with what you would do about it" \
-  "it names the bolt, and it has nothing to read, so it carries no link and no path"; do
-  has "$out" "$want"
-done
+has "$out" "it names the bolt, and it has nothing to read, so it carries no link and no path"
 lacks "$out" "two or three plain sentences"; lacks "$out" "post its review card"
 ok "a conductor's cards say the document's own words, the link and the bolt first, and no path"
-for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`verify/<unit>/<stamp>\`" \
-  "keyed \`land/<bolt>/<head>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." "post its verify card" \
+for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" \
+  "keyed \`land/<bolt>/<head>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." \
   "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." \
   "A row's key changes when what it asks changes" "Pending You gives that card back" \
   "close a landing card you have open with what the fix changed" "under the key the rail then shows"; do
   has "$out" "$want"
 done
-for want in "it is a \`choice\` card, or a \`multi\` when the user may pick several findings, whose options are what you would do" \
-  "an \`approve\` card with \`highStakes\` true" "never an \`action\` and never a step or command for the user to land it" \
+for want in "an \`approve\` card with \`highStakes\` true" "never an \`action\` and never a step or command for the user to land it" \
   "since its yes has you tell \`wldn-ops\` to land"; do
   has "$out" "$want"
 done
 lacks "$out" "offering approval"; lacks "$out" "Looks good"; lacks "$out" "Needs changes"; lacks "$out" "\`review\` card"
-ok "the conductor's verify card is a choice of its options, its landing card a high-stakes approval and never a step to land"
+for gone in "verify/<unit>/<stamp>" "post its verify card" "a \`multi\` when the user may pick several findings" "An answer on a verify card"; do
+  lacks "$out" "$gone"
+done
+ok "the conductor posts no verify card, and its landing card is a high-stakes approval and never a step to land"
 ok "the conductor keeps its units moving, asks the design agent, records signals, and writes the plan only through crew"
 
 for role in design planner dispatcher main-ops; do
@@ -369,6 +368,33 @@ for want in "Settle <unit>: <what reached it>" "keeping both changes' intents" "
 done
 lacks "$out" "the user reviewed and approved it"
 expect_ok crewpy brief swb-1 verify; has "$out" "\"changed and not declared\""
+# A verify is one round with no card (teams.17, record 0027): its report marks each finding fix, leave or amend; the
+# conductor takes the marks as they stand, runs one fresh coder on what is marked fix and sends an amend to the planner;
+# the coder fixes those alone, and a unit's merge archives its change first.
+expect_ok crewpy brief swb-1 conductor
+for want in "run verify, once" "Its recommendations are taken as they stand: post no card for it, ask the user nothing about it, and choose no findings yourself" \
+  "unit run <unit> code \"Fix every finding the verify report at <path> marks fix.\"" "Once that delivers, the unit goes on to merge, with no verify again" \
+  "A finding marked leave is left" "hold that unit's merge until the planner tells you the user's answer" \
+  "A fix round that stops short, is stuck or is no longer running is a stuck stage" "Its merge stage archives the unit's change first" \
+  "a chore's report marking each finding fix or leave"; do
+  has "$out" "$want"
+done
+lacks "$out" "the user decides with you what is fixed"
+expect_ok crewpy brief swb-1 verify
+for want in "\`## What to do\`" "starting **fix**, **leave** or **amend**" "A CRITICAL finding is never left." "\"Nothing to do.\"" \
+  "nothing verifies the fixes again" "each finding fix or leave, since a chore has no intent to amend"; do
+  has "$out" "$want"
+done
+lacks "$out" "decides with the user"
+expect_ok crewpy brief swb-1 coder
+for want in "you are the unit's one round of fixes after its verify" "marks fix, and only those" "No verify runs after you" \
+  "\`openspec archive <unit> --yes\`" "crew reads the merge as delivered only once the bolt holds the change archived" \
+  "A chore or a fix has no change to archive"; do
+  has "$out" "$want"
+done
+lacks "$out" "When the prompt carries findings from a verify"
+expect_ok crewpy brief wldn planner; has "$out" "holds that unit's merge for your proposal"
+ok "a verify is one round with no card: the report marks each finding, one fresh coder fixes what it marks fix, an amend goes to the planner, and the merge archives the change first"
 expect_ok crewpy brief wldn reviewer
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/reviewer.md left ${BASH_REMATCH[0]} unfilled"
 for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but this file" "at the commit the prompt names" \
@@ -424,7 +450,7 @@ for want in "## A chore" "\`Verify chore <name>: <its words>\`" "\`git log @{ups
 expect_ok crewpy brief swb-1 conductor
 for want in "A bolt may also hold **chores**" "with no construct, no change and no review" "chore run <chore> code" "chore run <chore> verify" \
   "chore run <chore> merge" "chore wait <chore>" "chore order" "chore after" "A chore takes its turn in the plan's order with the units" \
-  "has no construct and no batch" "until verify has run since its last code, every commit of its own carries its trailer and everything it comes after has merged" \
+  "has no construct and no batch" "until its verify has delivered, every commit of its own carries its trailer and everything it comes after has merged" \
   "A unit that comes after a chore is constructed once the chore's code has delivered" "never waiting on a merge: its place takes their work as it stands" "each holding one unit, chore or fix in flight"; do
   has "$out" "$want"
 done

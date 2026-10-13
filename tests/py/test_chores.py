@@ -222,8 +222,8 @@ class TestRun:
         ("merge", "verify", {"a": ("unit", "verify"), "pin": ("chore", "verify")}, True, f"chore bump merges after a, pin, not yet merged into bolt/{TE}"),
         ("verify", "code", {}, False, f"chore bump has nothing committed beyond bolt/{TE} yet: verify waits for its code"),
         ("verify", "ready", {}, False, "chore bump has not been coded yet: crew chore run bump code"),
-        ("merge", "code", {}, False, f"chore bump has nothing committed beyond bolt/{TE} yet: it merges once its code is committed and verify has run"),
-        ("merge", "verify", {}, False, "chore bump merges once verify has run on its code since it was last coded: crew chore run bump verify"),
+        ("merge", "code", {}, False, f"chore bump has nothing committed beyond bolt/{TE} yet: it merges once its code is committed and its verify has delivered"),
+        ("merge", "verify", {}, False, "chore bump merges once its verify has delivered: crew chore run bump verify"),
         ("code", "merged", {}, False, "chore bump has merged into its bolt: a defect in it is a fix (crew fix), and new maintenance a new chore"),
         ("construct", "ready", {}, False, "a chore has no construct: its stages are code, verify and merge (crew chore run bump code)")])
     def test_chore_refusal(self, stage, st, after, verified, said):

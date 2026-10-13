@@ -62,8 +62,8 @@ def key(name, k, tool="post_request", label="wldn", **reads):
     return plan.card_refusal(FLEET, name, label, tool, k, Reads(**reads))
 
 
-ROWS = ("land/tenant-environments/<head> or verify/<unit>/<stamp> for unit x or checked, the head or stamp from the `card:` line "
-        f"under its row in `{crew.HOME}/plugin/bin/crew rail --label wldn`")
+ROWS = ("land/tenant-environments/<head>, the head from the `card:` line under its row in "
+        f"`{crew.HOME}/plugin/bin/crew rail --label wldn`")
 
 
 class TestKeys:
@@ -78,10 +78,9 @@ class TestKeys:
         assert "in your proof file, under Left for the user" in key("swb-1-ops", "x")
         assert f"{crew.HOME}/plugin/bin/crew needs" in key("swb-1-unit-2", "verify/x/20261007-1412")
 
-    def test_a_conductor_posts_under_its_own_bolts_landing_and_its_units_verify_rows(self):
+    def test_a_conductor_posts_under_its_own_bolts_landing_row_and_never_a_verify_reports(self):
         assert key("swb-1-conductor", "land/tenant-environments/abc1234") is None
-        assert key("swb-1-conductor", "verify/checked/20261007-1412") is None
-        for k in ("gateway-check", "verify/z/20261007-1412", "land/console-pages/abc1234", "review/x/abc1234", "land/tenant-environments"):
+        for k in ("gateway-check", "verify/checked/20261007-1412", "verify/z/20261007-1412", "land/console-pages/abc1234", "review/x/abc1234", "land/tenant-environments"):
             assert key("swb-1-conductor", k) == f"crew refuses a card under {k}: swb-1-conductor posts a card only under a rail row's key of its own: {ROWS}."
         assert key("brd-1-conductor", "land/x/abc1234").endswith("brd-1 holds no bolt, so none is.")
 
@@ -161,9 +160,8 @@ class TestForms:
         assert "This card has options." in form("land/b/abc1234", dict(LANDING, **TWO))
         assert "has a step that lands the bolt" in form("land/b/abc1234", dict(LANDING, action={"steps": [{"text": "Merge with wt merge main"}]}))
 
-    def test_a_verify_card_is_a_choice_with_options(self):
-        assert form("verify/x/20261007-1412", dict(kind="choice", **TWO)) is None and form("verify/x/20261007-1412", dict(kind="multi", **TWO)) is None
-        assert 'This card is an "approve", and has no options.' in form("verify/x/20261007-1412", {"kind": "approve"})
+    def test_a_verify_reports_card_has_no_form_since_none_is_posted_and_one_posted_before_changes_unchecked(self):
+        assert not cards.formed("verify/x/20261007-1412") and cards.formed("land/b/abc1234")
 
     def test_a_record_card_is_a_low_risk_reversible_approval(self):
         accept = {"kind": "approve", "approve": {"action": "Accept record 0021", "risk": "low", "reversible": True}}
@@ -190,7 +188,7 @@ class TestForms:
         assert "links more than one session; a batch has one reading session" in form("batch/2", three, units=units)
 
     def test_no_rows_card_asks_a_question_in_words(self):
-        said = form("verify/x/20261007-1412", dict(kind="choice", text={"placeholder": "Anything else?"}, **TWO))
+        said = form("land/b/abc1234", dict(LANDING, text={"placeholder": "Anything else?"}))
         assert "This card asks a question in words, which Pending You makes required. The card's note is where the user's words go." in said
 
     def test_a_change_is_checked_for_what_it_changes(self):

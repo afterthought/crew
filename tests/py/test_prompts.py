@@ -1,7 +1,6 @@
-"""What a unit's stage is sent, and what starting it ends (teams.5, teams.12, plan.15): plan.stage_prompt on the stage's
-facts, plan.again_words on an amended intent's mark, plan.ends_row for the rail row whose card its conductor closes,
-plan.merge_command for how a unit merges, plan.unit_team for the team that runs its stages, and the effort each stage
-starts at, from its role's definition. That a started stage is sent its prompt in a fresh agent is the journey's
+"""What a unit's stage is sent (teams.5, teams.12, plan.15): plan.stage_prompt on the stage's facts, plan.again_words
+on an amended intent's mark, plan.merge_command for how a unit merges, plan.unit_team for the team that runs its
+stages, and the effort each stage starts at, from its role's definition. That a started stage is sent its prompt in a fresh agent is the journey's
 (t-journey-units and its parts)."""
 import pytest
 
@@ -86,20 +85,6 @@ class TestMerge:
 def test_what_reached_the_unit_is_carried_last():
     assert plan.stage_prompt("code", "d", carried=["Your branch is forecast to conflict."]) == (
         "/opsx:apply d Your branch is forecast to conflict.")
-
-
-class TestEndsRow:
-    @pytest.mark.parametrize("stage", ["construct", "code", "merge"])
-    def test_acting_on_a_verified_unit_ends_its_verify_row(self, stage):
-        assert plan.ends_row("e", stage, "verify", None, "verify") == "verify/e"
-
-    @pytest.mark.parametrize("stage, st", [("verify", "verify"), ("settle", "verify"), ("construct", "planned"), ("code", "code")])
-    def test_any_other_start_ends_none(self, stage, st):
-        assert plan.ends_row("e", stage, st, None, st) == ""
-
-    def test_construct_on_an_amended_intent_ends_the_verify_row_it_held_before(self):
-        assert plan.ends_row("m", "construct", "amended", "intent", "verify") == "verify/m"
-        assert plan.ends_row("m", "construct", "amended", "proposal/4", "code") == ""
 
 
 class TestTeam:

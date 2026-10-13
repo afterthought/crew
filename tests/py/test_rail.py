@@ -44,8 +44,6 @@ def place(unit, tasks, ago, planning=True):
 def survey(ok=True, merged=True):
     kit = {"ok": True, "main": [], "fixes": [],
            "places": {"early": place("early", (0, 2), 180), "checked": place("checked", (2, 2), 120), "stale": place("stale", (2, 2), 50)},
-           "reports": {"checked": {"path": "/r/verify-checked-20261012-1200.md", "at": iso(100)},
-                       "stale": {"path": "/r/verify-stale-20261012-1250.md", "at": iso(70)}},
            "bolts": {"apex-zones": {"head": "abc1234" + "0" * 33, "head_at": iso(30), "changes": ["zone-one"] if merged else []},
                      "tenant-environments": {"head": "d" * 40, "head_at": iso(200), "changes": []}}}
     return {BOX: {"ok": True, "kits": {"/kit/main": kit}}} if ok else {BOX: {"ok": False, "error": "ssh: connect to host timed out"}}
@@ -74,18 +72,9 @@ class TestRows:
     def test_a_unit_whose_change_is_committed_waits_on_nobody(self):
         assert not [r for r in rows() if "early" in r["key"]]
 
-    def test_a_unit_in_verify_waits_with_its_newest_report_while_that_is_newer_than_its_last_commit(self):
-        verify = [r for r in rows() if r["group"] == "verify"]
-        assert [r["key"] for r in verify] == ["verify/checked/20261012-1200"]
-        r = verify[0]
-        assert r["what"] == [f"unit checked (wldn), swb-1 on {BOX}: report /r/verify-checked-20261012-1200.md"]
-        assert r["cmds"] == [("open", f"ssh -t {BOX} plannotator-tui /r/verify-checked-20261012-1200.md"),
-                             ("answer", "crew tell swb-1-conductor \"On checked's verify report: \"")]
-        assert r["doc"] == (BOX, "/r/verify-checked-20261012-1200.md")
-
-    def test_on_its_host_the_report_opens_beside_the_rail(self, monkeypatch):
-        monkeypatch.setattr(crew, "this_host", lambda: BOX)
-        assert ("open", "plannotator-tui herdr open /r/verify-checked-20261012-1200.md") in [r for r in rows() if r["group"] == "verify"][0]["cmds"]
+    def test_a_unit_in_verify_waits_on_nobody_since_its_report_is_fixed_in_one_round_with_no_card(self):
+        assert not [r for r in rows() if "checked" in r["key"] or "stale" in r["key"]]
+        assert {r["group"] for r in rows()} <= set(plan.RAIL) and "verify" not in plan.RAIL
 
     def test_a_bolt_whose_every_unit_merged_waits_to_land_timed_by_its_last_merge(self):
         land, = [r for r in rows() if r["group"] == "land"]
@@ -129,14 +118,13 @@ class TestRows:
 class TestText:
     def test_with_nothing_waiting_each_group_says_none_in_order(self):
         out = text([])
-        assert [l for l in out.splitlines() if l.isalpha()] == ["proposals", "batches", "verify", "land", "operations"]
-        assert out.count("\n  none") == 5 and "card:" not in out and "open cards with no row" not in out
+        assert [l for l in out.splitlines() if l.isalpha()] == ["proposals", "batches", "land", "operations"]
+        assert out.count("\n  none") == 4 and "card:" not in out and "open cards with no row" not in out
 
     def test_each_row_names_its_card_key_and_whether_a_card_is_open_whose_and_its_id(self):
         rs = rows([proposal(1)])
         out = text(rs, cards=[dict(label="wldn", card="req_prop-1", key="proposal/1", by="wldn-planner", host="mac-studio", at=NOW)])
         assert "    card:   proposal/1, open, asked by wldn-planner (req_prop-1)" in out
-        assert "    card:   verify/checked/20261012-1200, none open" in out
         assert "    card:   land/apex-zones/abc1234, none open" in out
 
     def test_an_open_card_whose_row_is_gone_is_listed_with_the_tell_to_close_it(self):
@@ -155,7 +143,7 @@ class TestText:
 
     def test_a_host_that_does_not_answer_is_named_and_a_stray_card_of_its_teams_is_not_listed(self):
         sv = survey(ok=False)
-        card = dict(label="wldn", card="req_v-1", key="verify/checked/20260101-0000", by="swb-1-conductor", host="mac-studio", at=NOW)
+        card = dict(label="wldn", card="req_l-1", key="land/apex-zones/abc1234", by="swb-2-conductor", host="mac-studio", at=NOW)
         out = text(rows(sv=sv), cards=[card], sv=sv)
         assert f"{BOX} did not answer (ssh: connect to host timed out): its units and bolts may also wait on you" in out
         assert "open cards with no row" not in out
@@ -208,12 +196,12 @@ class TestRecord:
 class TestSweep:
     def test_every_row_is_live_but_one_the_record_holds_closed_with_no_card_open(self):
         cards = [dict(label="wldn", key="proposal/1")]
-        assert plan.sweep_judgment("wldn", {"proposal/1", "verify/v2/x", "batch/1"}, cards, None,
-                                   {"closed": {"proposal/1", "verify/v2/x", "batch/1"}}, []) == {"live": ["proposal/1"], "blind": []}
+        assert plan.sweep_judgment("wldn", {"proposal/1", "land/b/abc1234", "batch/1"}, cards, None,
+                                   {"closed": {"proposal/1", "land/b/abc1234", "batch/1"}}) == {"live": ["proposal/1"], "blind": []}
 
     def test_what_the_rail_cannot_judge_is_blind_and_nothing_is_taken_for_closed(self):
-        assert plan.sweep_judgment("wldn", {"batch/1"}, [], {"mac-studio": "x"}, {"closed": {"batch/1"}}, ["v3"]) == (
-            {"live": ["batch/1"], "blind": ["batch/", "verify/v3/"]})
+        assert plan.sweep_judgment("wldn", {"batch/1"}, [], {"mac-studio": "x"}, {"closed": {"batch/1"}}) == (
+            {"live": ["batch/1"], "blind": ["batch/"]})
 
 
 class TestBolts:

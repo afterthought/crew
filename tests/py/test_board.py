@@ -251,7 +251,7 @@ class TestMore:
         assert sorted(p) == ["attention", "bolt_plan", "construction", "environments", "hosts", "inception", "label", "operation", "plan", "teams"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
         assert sorted(te) == ["bolt", "fixes", "goal", "host", "markers", "repo", "state", "team", "teams", "units", "url"]
-        assert sorted(te["units"][0]) == ["kind", "markers", "slot", "stage", "tasks", "unit", "url", "worktree"]
+        assert sorted(te["units"][0]) == ["kind", "slot", "stage", "tasks", "unit", "url", "worktree"]
         assert sorted(te["fixes"][0]) == ["fix", "merged", "slot", "url", "worktree"]
 
     def test_half_a_frame_or_one_with_no_time_reads_as_none(self, tmp_path, monkeypatch):
@@ -279,10 +279,9 @@ class TestViews:
         assert view("swb-1-conductor") == ["  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
                                            "    fix/tenant-environments/edge  fix  unit-4", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
 
-    def test_a_unit_waiting_on_the_users_answer_has_its_marker_and_its_card(self):
-        rows = [{"label": "wldn", "group": "verify", "key": "verify/a", "at": NOW}]
-        card = dict(label="wldn", card="req_2", key="verify/a", by="swb-1-conductor", host="mac-studio", at=NOW)
-        assert view("swb-1-conductor", rows=rows, cards=[card])[1] == "✎   ◑  a  code 1/2  unit-1  card open, asked by swb-1-conductor"
+    def test_a_unit_waits_on_no_answer_so_it_has_no_marker_even_with_an_old_verify_card_open(self):
+        card = dict(label="wldn", card="req_2", key="verify/a/20261012-1200", by="swb-1-conductor", host="mac-studio", at=NOW)
+        assert view("swb-1-conductor", cards=[card])[1] == "    ◑  a  code 1/2  unit-1"
 
     def test_a_team_holding_no_bolt_says_so_and_what_is_planned_for_its_kit(self):
         assert view("swb-2-conductor") == ["  swb-2 holds no bolt", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]

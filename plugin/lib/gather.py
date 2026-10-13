@@ -4,22 +4,21 @@
   python3 gather.py '<request>'      or, sent over ssh:  python3 - '<request>' < gather.py
 
 The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
-"reports": [<a team's verify reports folder, ~ allowed>, ...], "slots": {<team>: <its slots file, ~ allowed>}}],
+"slots": {<team>: <its slots file, ~ allowed>}}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
 "board": <true to also read each team's slots file and the explorations on the kit's main>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 whether bolt/<bolt> exists, the changes and chores it holds, its worktree, its head and the head's time; each place under
 <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
-paths its proposal declares it touches; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
-head, head's time and how many commits of its own it holds beyond the bolt; each fix branched from a bolt;
-each unit's newest verify report in the reports folders, with its path and time; and whether the kit merges through
+paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
+head, head's time and how many commits of its own it holds beyond the bolt; each fix branched from a bolt; and whether the kit merges through
 sluice, by the flag in its main checkout's .config/crew.toml. With sites, each worktree's devurl names and the host's
 portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
 folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
 system, devurl and portless and, for a change whose workflow it does not read itself, openspec, and changes nothing.
 It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
-import datetime, json, os, re, subprocess, sys
+import json, os, re, subprocess, sys
 
 
 def run(args, cwd):
@@ -44,6 +43,18 @@ def changes(main, ref):
                 rest = rest[11:]
         names.add(rest)
     return sorted(names)
+
+
+# The prefix openspec archive gives a change's folder: the day it was archived.
+DATED = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}-")
+
+
+def archived(main, ref):
+    """The OpenSpec changes a branch holds archived, by name, without the archive's YYYY-MM-DD- prefix: what a unit's
+    merge has delivered once the bolt holds its change so (teams.17)."""
+    out = run(["git", "ls-tree", "-d", "--name-only", ref, "openspec/changes/archive/"], main) or ""
+    return sorted({n[11:] for n in (l[len("openspec/changes/archive/"):] for l in out.splitlines())
+                   if len(n) > 11 and DATED.fullmatch(n[:11])})
 
 
 # A chore's name, as a commit's `Chore:` trailer gives it (plan.11).
@@ -139,30 +150,6 @@ def head_at(cwd, ref):
 REPORT = re.compile(r"^verify-(.+)-(\d{8}-\d{4})\.md$")
 # Ops's proof of a bolt, saved once, whole, in the same folder.
 PROOF = re.compile(r"^proof-(.+)-(\d{8}-\d{4})\.md$")
-
-
-def reports(folders):
-    """Each unit's newest verify report across the folders: {unit: {"path": its absolute path, "at": its file's
-    time, in UTC}}. A folder that isn't there gives nothing."""
-    out = {}
-    for d in folders:
-        d = os.path.abspath(os.path.expanduser(d))
-        try:
-            names = os.listdir(d)
-        except OSError:
-            continue
-        for n in names:
-            m = REPORT.match(n)
-            if not m:
-                continue
-            f = os.path.join(d, n)
-            try:
-                t = os.path.getmtime(f)
-            except OSError:
-                continue
-            if m.group(1) not in out or t > out[m.group(1)][0]:
-                out[m.group(1)] = (t, f)
-    return {u: {"path": f, "at": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).isoformat()} for u, (t, f) in out.items()}
 
 
 # A change's tasks and whether its planning is complete, read from its files by openspec 1.14.1's own rules for its
@@ -305,10 +292,15 @@ def touches(text):
 def place(path, unit):
     """A unit's place: its head and the head's time, its change's tasks, whether its planning is complete, the open
     tasks, and what its proposal declares it touches. The tasks and the planning are read from the change's files, or
-    through openspec when planned() hands the change to it."""
+    through openspec when planned() hands the change to it. A change its merge archived in the place, as a unit's merge
+    stage does first (teams.17), is read from the archive, its planning complete, and the place says it is archived."""
     info = {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None,
-            "head_at": head_at(path, "HEAD"), "tasks": None, "planning": False, "open": []}
-    change = os.path.join(path, "openspec", "changes", unit)
+            "head_at": head_at(path, "HEAD"), "tasks": None, "planning": False, "open": [], "archived": False}
+    change, archive = os.path.join(path, "openspec", "changes", unit), os.path.join(path, "openspec", "changes", "archive")
+    if not os.path.isdir(change) and os.path.isdir(archive):
+        gone = sorted(d for d in os.listdir(archive) if d[11:] == unit and DATED.fullmatch(d[:11]))
+        if gone:
+            change, info["archived"] = os.path.join(archive, gone[-1]), True
     try:
         with open(os.path.join(change, "proposal.md"), encoding="utf-8", errors="replace", newline="") as f:
             info["touches"] = touches(f.read())
@@ -316,6 +308,9 @@ def place(path, unit):
         info["touches"] = touches(None)
     tasks = change_tasks(change)
     info["open"] = [d for done, d in tasks if not done]
+    if info["archived"]:
+        info["tasks"], info["planning"] = [sum(done for done, _ in tasks), len(tasks)], True
+        return info
     planning = planned(change, path)
     if planning is not None:
         info["planning"] = planning
@@ -395,7 +390,7 @@ def kit(req, sites=False, running=None, board=False):
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
     out = {"ok": True, "main": changes(main, "main"), "chores": chores(main, "refs/heads/main"), "bolts": {}, "places": {},
-           "chore_places": {}, "fixes": [], "reports": reports(req.get("reports", []))}
+           "chore_places": {}, "fixes": []}
     out["sluice"], out["sluice_error"] = sluice(main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
     # asked for, or tracked by a place, that has no branch is marked missing.

@@ -22,9 +22,9 @@ def close(card, by="swb-1-conductor", **more):
 # --------------------------------------------------------------------------------------- the card a key names
 
 def test_the_card_a_key_names_is_the_agents_newest_post_under_it():
-    entries = [post("verify/v1/20261012-1000", "swb-1-conductor", "req_a"),
-               post("verify/v1/20261012-1000", "swb-1-conductor", "req_b")]
-    assert cards.card_under(entries, "verify/v1/20261012-1000", "swb-1-conductor") == "req_b"
+    entries = [post("land/b1/abc1234", "swb-1-conductor", "req_a"),
+               post("land/b1/abc1234", "swb-1-conductor", "req_b")]
+    assert cards.card_under(entries, "land/b1/abc1234", "swb-1-conductor") == "req_b"
 
 
 def test_a_closed_card_is_no_longer_held():
@@ -33,8 +33,8 @@ def test_a_closed_card_is_no_longer_held():
 
 
 def test_another_agents_card_under_the_same_key_is_not_this_ones():
-    entries = [post("verify/v1/20261012-1000", "swb-2-conductor", "req_a")]
-    assert cards.card_under(entries, "verify/v1/20261012-1000", "swb-1-conductor") is None
+    entries = [post("land/b1/abc1234", "swb-2-conductor", "req_a")]
+    assert cards.card_under(entries, "land/b1/abc1234", "swb-1-conductor") is None
 
 
 def test_a_refused_post_or_close_holds_nothing_and_closes_nothing():
@@ -75,8 +75,8 @@ def test_a_change_that_sets_the_version_is_refused():
 
 def test_crew_sets_the_key_the_session_and_the_area():
     card = {"kind": "choice", "title": "Which fix for v1?", "options": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}]}
-    got = cards.post_args(card, "verify/v1/20261012-1000", "swb-1-conductor", "chuck-herdr-alpha", "/w/places/v1", "prj_kit")
-    assert got == dict(card, idempotencyKey="verify/v1/20261012-1000", areaId="prj_kit",
+    got = cards.post_args(card, "land/b1/abc1234", "swb-1-conductor", "chuck-herdr-alpha", "/w/places/v1", "prj_kit")
+    assert got == dict(card, idempotencyKey="land/b1/abc1234", areaId="prj_kit",
                        session={"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/w/places/v1"})
 
 
@@ -193,15 +193,15 @@ def test_a_lost_card_is_posted_again_under_its_key():
 
 def test_a_card_waiting_on_the_user():
     got = {"requestId": "req_1", "status": "pending", "turn": "you", "version": 1, "url": "https://www.pendingyou.com/app/r/req_1"}
-    assert cards.answer_lines("verify/v1/s", "req_1", got) == [
-        "card verify/v1/s: req_1, pending, waiting on the user", "  https://www.pendingyou.com/app/r/req_1"]
+    assert cards.answer_lines("land/b1/abc1234", "req_1", got) == [
+        "card land/b1/abc1234: req_1, pending, waiting on the user", "  https://www.pendingyou.com/app/r/req_1"]
 
 
 def test_an_answer_with_the_users_words():
     got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["fix"], "note": {"text": "Both, please.", "via": "voice"}},
            "messages": [{"from": "you", "body": "And add a test."}, {"from": "you"}, "not a message"]}
-    assert cards.answer_lines("verify/v1/s", "req_1", got) == [
-        "card verify/v1/s: req_1, answered, your turn: the user has answered", "  picked: fix", "  note: Both, please.",
+    assert cards.answer_lines("land/b1/abc1234", "req_1", got) == [
+        "card land/b1/abc1234: req_1, answered, your turn: the user has answered", "  picked: fix", "  note: Both, please.",
         "  you: And add a test."]
 
 
@@ -213,7 +213,7 @@ def test_an_approval_and_a_grouped_answer():
 
 def test_an_answer_is_shown_only_on_the_agents_turn():
     got = {"status": "pending", "turn": "you", "answer": {"choiceIds": ["fix"]}}
-    assert cards.answer_lines("verify/v1/s", "req_1", got) == ["card verify/v1/s: req_1, pending, waiting on the user"]
+    assert cards.answer_lines("land/b1/abc1234", "req_1", got) == ["card land/b1/abc1234: req_1, pending, waiting on the user"]
 
 
 def test_what_the_reply_leaves_out_is_left_out():

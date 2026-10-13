@@ -43,12 +43,17 @@ class TestNotices:
         assert self.notices({"te": "swb-1"}, {"te": "swb-1"}, ["te"], me="swb-1-conductor") == ([], [], False)
         assert self.notices({}, {}, ["apex"]) == ([], [], False)
 
-    def test_a_move_tells_both_conductors_and_the_one_it_left_to_close_its_cards(self):
-        tells, shown, _ = self.notices({"te": "swb-1", "cp": "swb-2"}, {"te": "swb-1", "cp": "swb-2"}, ["te", "cp"], lost={"swb-1": ["verify/a"]})
-        assert tells == [("swb-1-conductor", "plan(te): add u (chuck@mac-studio). Close any Pending You card you have open for verify/a."),
+    def test_a_write_that_took_a_teams_bolt_tells_it_to_close_its_landing_card(self):
+        tells, shown, _ = self.notices({"te": "swb-1", "cp": "swb-2"}, {"te": "swb-1", "cp": "swb-2"}, ["te", "cp"], lost={"swb-1": ["land/te"]})
+        assert tells == [("swb-1-conductor", "plan(te): add u (chuck@mac-studio). Close any Pending You card you have open for land/te."),
                          ("swb-2-conductor", "plan(te): add u (chuck@mac-studio)")]
-        assert self.notices({"te": "swb-1"}, {"te": "swb-1"}, ["te"], me="swb-1-conductor", lost={"swb-1": ["verify/a"]})[1] == [
-            "Close any Pending You card you have open for verify/a."]
+        assert self.notices({"te": "swb-1"}, {"te": "swb-1"}, ["te"], me="swb-1-conductor", lost={"swb-1": ["land/te"]})[1] == [
+            "Close any Pending You card you have open for land/te."]
+
+    def test_only_a_bolt_a_team_no_longer_holds_loses_a_row_since_no_unit_has_one(self):
+        before = ({"te": "swb-1", "cp": "swb-2"}, {"a": "swb-1", "b": "swb-2"})
+        assert plan.lost_rows(before, ({"cp": "swb-2"}, {"b": "swb-2"})) == {"swb-1": ["land/te"]}
+        assert plan.lost_rows(before, ({"te": "swb-1", "cp": "swb-2"}, {"a": "swb-2", "b": "swb-2"})) == {}
 
     def test_a_bolt_added_or_one_a_team_held_dropped_tells_the_dispatchers(self):
         assert self.notices({}, {"edge": None}, ["edge"])[2] is True

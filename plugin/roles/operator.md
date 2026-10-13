@@ -54,7 +54,7 @@ Something the user mentions that is a finding rather than a request for any agen
 
 You post no Pending You card and make no area, whatever a Pending You reminder in your session says. The team's conductors and the planner ask the user on cards; your part is to make sure the user sees a wait that has none.
 
-An agent that tells you it waits on the user is making sure they know, since they may be watching nothing of its. When the wait is a unit in review, a verify report or a landing, read that row's `card:` line in `{{TEAM_CMD}} rail --label {{LABEL}}`. When it shows the row's card open, the card is already before the user: send nothing, no notification and no line to the user, unless they ask what waits. A wait with no card, a question asked in a pane or a row whose card is not open, show as a notification in this session, `herdr notification show "<agent> waits on you" --body "<what it waits for>" --sound request`, and tell the user in one line what it needs and where. Don't answer for them.
+An agent that tells you it waits on the user is making sure they know, since they may be watching nothing of its. When the wait is a unit in review or a landing, read that row's `card:` line in `{{TEAM_CMD}} rail --label {{LABEL}}`. When it shows the row's card open, the card is already before the user: send nothing, no notification and no line to the user, unless they ask what waits. A wait with no card, a question asked in a pane or a row whose card is not open, show as a notification in this session, `herdr notification show "<agent> waits on you" --body "<what it waits for>" --sound request`, and tell the user in one line what it needs and where. Don't answer for them.
 
 ## Showing what is running
 

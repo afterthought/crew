@@ -2,9 +2,9 @@
 # batch due, told to the planner once; crew review starts the reviewer and its summary ends the batch; crew rail lists
 # what waits, with each row's card; crew's card hook records a card's post and close and refuses one under a key not
 # the agent's own; a batch card's one reading session is written from every team's host and started on the main
-# level's, an old batch card's on its unit's team's host, a verify report's on its own; a wait returns the user's
-# words, a close ends the session, and a rail read sweeps what is dead; and writes and tells reach the agents they
-# should, never one waiting on a question. Which changes are due, what each row and card says, whose key a card may
+# level's, an old batch card's on its unit's team's host, and none for a verify report, which no row has; a wait
+# returns the user's words, a close ends the session, and a rail read sweeps what is dead; and writes and tells reach
+# the agents they should, never one waiting on a question. Which changes are due, what each row and card says, whose key a card may
 # take and in what form, and what a session does are logic cases (tests/py/test_batches.py, test_rail.py,
 # test_cards.py, test_review.py); each step here checks a command's wiring once.
 # Reads: plugin/hooks/
@@ -94,7 +94,7 @@ eq "$(entries $box review.batch | jq -r '[.Batch, (.On | join(" "))] | join(" ")
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops"
 ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, and closes its tab"
 
-# v1 waits in verify, its report newer than its last commit.
+# v1 is in verify, its report newer than its last commit, and waits on nobody (teams.17).
 pv=$(place "$k" b1 v1); change "$pv" v1 2 2; commit_at 60 "$pv" "feat(v1): done"
 reports=$(home_of $box)/.local/state/swb-1-team/reports; mkdir -p "$reports"
 stamp=$(shown 50 %Y%m%d-%H%M); report=$reports/verify-v1-$stamp.md
@@ -103,12 +103,11 @@ records() { cat "$(home_of mac-studio)"/.local/state/crew/wldn/runs/*/*.rec "$(h
 tip=$(git --git-dir "$ws" rev-parse wldn/main) n=$(records)
 expect_ok crew rail --label wldn; r=$out
 eq "$(git --git-dir "$ws" rev-parse wldn/main) $(records)" "$tip $n"
-eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches verify land operations "
+eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches land operations "
 has "$r" "batch 1 (wldn): x1 (swb-1), z1 (atl-1)"
 has "$r" "    card:   batch/1, none open"
-has "$r" "unit v1 (wldn), swb-1 on $box: report $report"
-has "$r" "    card:   verify/v1/$stamp, none open"
-ok "crew rail lists a batch as one row and a verify report waiting, each with its card key, and writes nothing"
+lacks "$r" "v1"
+ok "crew rail lists a batch as one row with its card key, no verify report waits, and it writes nothing"
 
 # The planner's card for batch 1: refused under a key not its own, recorded once posted.
 deny=$(jq -nc '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",
@@ -157,17 +156,13 @@ hook $box wldn-planner ack_answer '{"name": "wldn-planner", "requestId": "req_ba
 gone "$p3"
 ok "an old batch card's session of a unit is started on that unit's team's host, on its change's files, and the card's close ends it there"
 
-# The conductor's verify card: a session on its report, on the team's host, ended by crew card end.
-hook $box swb-1-conductor post_request "{\"name\": \"swb-1-conductor\", \"idempotencyKey\": \"verify/v1/$stamp\"}" '{"structuredContent": {"requestId": "req_ver-1"}}'
-HOST=$box CREW_AGENT=swb-1-conductor expect_ok crew card session "verify/v1/$stamp"; p4=$(rec $box "verify/v1/$stamp" .pid)
-eq "$(stub $box "$p4" .target)" "$(real "$reports")/verify-v1-$stamp.md"
-eq "$(stub $box "$p4" '.argv[2:] | join(" ")')" "--gate --json --result-file $(real "$(home_of $box)")/$cards/verify/v1/$stamp/result.json"
-eq "$(stub $box "$p4" '[.skip_browser, .remote] | map(tostring) | join(" ")')" "true true"
-CREW_AGENT=swb-1-conductor expect_fail "is on chuck-herdr-alpha, not mac-studio" crew card session "verify/v1/$stamp"
-HOST=$box CREW_AGENT=swb-1-conductor expect_ok crew card end "verify/v1/$stamp"
-eq "$out" "ended verify/v1/$stamp's session, plannotator pid $p4"
-gone "$p4"
-ok "a verify card's session is on its report, on its team's host only, and crew card end ends it"
+# A verify report's card, whose row went with record 0027: crew refuses the conductor's post, and its key starts no session.
+deny=$(jq -nc --arg k "verify/v1/$stamp" '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",
+  tool_input: {name: "swb-1-conductor", title: "Verify v1", idempotencyKey: $k}}' | CREW_AGENT=swb-1-conductor as $box python3 "$CREW/plugin/hooks/cards" --before)
+eq "$(jq -r '.hookSpecificOutput.permissionDecision' <<<"$deny")" "deny"
+has "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$deny")" "swb-1-conductor posts a card only under a rail row's key of its own: land/b1/<head>"
+HOST=$box CREW_AGENT=swb-1-conductor expect_fail "no row of wldn's rail has the card key verify/v1/$stamp" crew card session "verify/v1/$stamp"
+ok "a verify report's card is refused before it is posted, and its key starts no session, since no row has it"
 
 # A proposal's page opened, its session started, and its row gone once approved: the next rail read sweeps it.
 printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-pages "The console lists them." --repo switchboard-kit' > "$T/p.rec"

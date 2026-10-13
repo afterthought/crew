@@ -147,7 +147,7 @@ body[data-view="flow"] .team,body[data-view="deploys"] .team{display:none}
 .marks{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .mark{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 6px;background:var(--surface2)}
 .mark .mk-t{font-weight:500}
-.mark.approve{color:var(--accent);border-color:var(--accent)} .mark.answer{color:var(--crit);border-color:var(--crit)} .mark.attention{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.mark.approve{color:var(--accent);border-color:var(--accent)} .mark.attention{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
 /* long names and addresses break rather than run past the edge */
 .sh-title,.sh-meta,.sh-foot,.sl-n,.sl-to,.lg-name,.lg-un,.lg-at,.lg-mach,.rc-name,.rc-env,.quote,.xp,.counter,.mark{overflow-wrap:anywhere}
 
@@ -378,9 +378,9 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     return x;
   }
 
-  // Each marker on its object: ✓ an approval, ✎ an answer, with whether its card is open and who asked it; ! for
-  // attention. Nothing here answers anything.
-  var MARK = { "✓": "approve", "✎": "answer" };
+  // Each marker on its object: ✓ an approval, with whether its card is open and who asked it; ! for attention.
+  // Nothing here answers anything.
+  var MARK = { "✓": "approve" };
   function marks(x, ms, attention) {
     var row = el("div", "marks");
     (ms || []).forEach(function (k) {
@@ -413,7 +413,6 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
         var at = [u.slot, u.url].filter(Boolean).join(" · ");
         if (at) link.append(el("span", "lg-at", at));
       }
-      marks(link, u.markers);
       c.append(link);
     });
     x.append(c);

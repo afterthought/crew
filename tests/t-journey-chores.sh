@@ -3,7 +3,7 @@
 # places/chore-<name> on chore/<name> from the bolt and is sent the chore's words; its wait ends at a commit; a unit that
 # comes after the chore waits for that commit and then builds on it, its place taking the chore's head, never waiting on
 # its merge (plan.13); verify ends at its report; a merge is refused while a commit lacks the chore's trailer, and merges
-# once none does, its wait ending once the bolt holds the trailer and rebasing the dependent onto the bolt; crew bolts
+# once its one round of fixes after its verify adds it, with no verify again (teams.5, teams.17), its wait ending once the bolt holds the trailer and rebasing the dependent onto the bolt; crew bolts
 # reads each stage from the kit; the team's read frees the slot and removes the place; crew unit run on a chore is
 # refused naming its kind; and crew trace finds it by its bare name.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
@@ -62,10 +62,12 @@ ok "code ends at a commit on the chore's branch; verify is sent its words and en
 
 expect_fail "chore bump merges only once every commit of its own beyond bolt/tenant-environments carries \`Chore: bump\`" crew chore run bump merge
 has "$out" "$(short chore/bump) (chore: biome follows the shell) does not"
+crew chore run bump code "Fix every finding the verify report at $report marks fix." >/dev/null
 git -C "$cp" commit -q --amend --no-edit --trailer "Chore: bump"
+crew chore wait bump >/dev/null
 expect_ok crew chore run bump merge
 eq "$(prompt_to swb-1-unit-1)" "'Merge bump into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
-has "$out" "Close your Pending You card for verify/bump, if one is open, with what was done."
+lacks "$out" "Pending You card"
 (cd "$cp" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge of the chore failed"
 expect_ok crew chore wait bump
 has "$out" "swb-1-unit-1 delivered merge on chore bump: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
@@ -73,7 +75,7 @@ eq "$(stage_of)" "chore merged"
 has "$out" "b is rebased onto bolt/tenant-environments, now that bump merged"
 git -C "$k" merge-base --is-ancestor bolt/tenant-environments unit/b || fail "b was not rebased onto the bolt"
 eq "$(field $box unit.rebase From unit/b)" "chore/bump"
-ok "a merge is refused while a commit lacks the chore's trailer; once none does it merges through worktrunk, and its wait ends once the bolt holds the trailer"
+ok "a merge is refused while a commit lacks the chore's trailer; once its one round of fixes adds it, it merges with no verify again, through worktrunk, and its wait ends once the bolt holds the trailer"
 
 expect_ok crew status swb-1
 has "$out" "swb-1-unit-1 is free: bump has merged into its bolt"

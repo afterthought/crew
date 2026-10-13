@@ -56,7 +56,7 @@ git -C "$k" merge -q --ff-only bolt/tenant-environments
 expect_ok crew bolt land tenant-environments
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
 has "$out" "$bolt and bolt/tenant-environments are removed; the branch was at"
-grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for verify/a or land/tenant-environments.'" \
+grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for land/tenant-environments.'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"

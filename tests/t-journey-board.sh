@@ -22,14 +22,14 @@ commit_at() { git -C "$2" add -A && GIT_COMMITTER_DATE="@$((now - $1 * 60)) +000
 tip() { git --git-dir "$ws" rev-parse wldn/main; }
 j() { jq -r "$1" <<<"$json"; }
 # lane <board> <heading>: the lines of one lane, up to the next heading; line_of <text> <words>: the lines holding them
-lane() { awk -v g="$2" '$0 == g {on = 1; next} /^[^ !✓✎]/ {on = 0} on' <<<"$1"; }
+lane() { awk -v g="$2" '$0 == g {on = 1; next} /^[^ !✓]/ {on = 0} on' <<<"$1"; }
 line_of() { grep -F -- "$2" <<<"$1" || true; }
 st() { jq -r --arg u "$1" '[.partitions[].plans[].bolts[].units[] | select(.unit == $u) | .stage] | first' <<<"$json"; }
 records() { cat "$(home_of mac-studio)"/.local/state/crew/wldn/runs/*/*.rec "$(home_of $box)"/.local/state/crew/wldn/runs/*/*.rec 2>/dev/null | wc -l; }
 
 # The flow: a signal captured from a meeting and an exploration on the kit's main; apex-zones planned and a unit
 # queued; swb-1 holding tenant-environments on the box, with a in code in a slot and its dev server running, b at
-# construct, c with a verify report and its card open, and a fix; atl-1 holding atlas-maps on mac-studio, its unit's
+# construct, c in verify with its report and a verify card posted before that row went (teams.17), and a fix; atl-1 holding atlas-maps on mac-studio, its unit's
 # server running there.
 w=$T/bp; clone WilldanGroup/willdan-blueprints "$w"; cap=2026-10-01-planning; mkdir -p "$w/signals/$cap"
 printf -- '---\ncapture: %s\nsource: meeting\ncaptured_by: wldn-planner\nevent_date: 2026-10-01\nsignals: 1\n---\n' "$cap" > "$w/signals/$cap/capture.md"
@@ -95,7 +95,7 @@ has "$(lane "$b" Inception)" "exploration  switchboard-kit command-cost"
 eq "$(line_of "$(lane "$b" "Bolt plan")" "zone-one")" "    zone-one  ready"
 con=$(lane "$b" Construction)
 eq "$(line_of "$con" "  a  ")" "    a  code 1/2  unit-1  https://unit-a--switchboard-kit--$box.dev.swancloud.net"
-eq "$(line_of "$con" "  c  ")" "✎   c  verify 2/2  unit-3  card open, asked by swb-1-conductor"
+eq "$(line_of "$con" "  c  ")" "    c  verify 2/2  unit-3"
 lacks "$b" $'\033'
 CREW_LABEL= expect_ok crew board
 eq "$(grep -oE '^[a-z]+ board, as of' <<<"$out" | tr '\n' '|')" "wldn board, as of|madswan board, as of|swancloud board, as of|"

@@ -71,15 +71,14 @@ class TestTold:
             "(crew unit wait coding); once it has committed, the unit goes on from its tasks.",
             "construct runs again on unit coding in swb-1-unit-1")
 
-    def test_one_that_did_not_start_says_why_and_the_card_it_ended(self):
-        text, unsaid = plan.amend_told("in-verify", "proposal 1", None, "chuck-herdr-alpha did not answer (ssh: timed out)", "verify/in-verify")
+    def test_one_that_did_not_start_says_why_and_names_no_card(self):
+        text, unsaid = plan.amend_told("in-verify", "proposal 1", None, "chuck-herdr-alpha did not answer (ssh: timed out)")
         assert text == ("Unit in-verify's intent was amended by proposal 1, and construct did not start: chuck-herdr-alpha did "
                         "not answer (ssh: timed out). Run it once it can (crew unit run in-verify construct); once it has "
-                        "committed, the unit goes on from its tasks. Close your Pending You card for verify/in-verify, if one "
-                        "is open, with what was done.")
+                        "committed, the unit goes on from its tasks.")
         assert unsaid == "unit in-verify waits, amended, for construct to be run again"
 
-    def test_a_team_taken_down_is_said_with_no_card_when_the_unit_held_none(self):
+    def test_a_team_taken_down_is_said(self):
         assert plan.amend_told("c", "the user", None, "swb-1 is down; crew up swb-1 brings it back")[0].endswith(
             "construct did not start: swb-1 is down; crew up swb-1 brings it back. Run it once it can (crew unit run c "
             "construct); once it has committed, the unit goes on from its tasks.")

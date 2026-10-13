@@ -28,9 +28,9 @@ sys.path.insert(0, str(LIB))
 import crew, ops, plan, record, sites  # noqa: E402
 from crew import Refusal, fail  # noqa: E402
 
-# Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button, or an answer
-# in the user's own words. An operation's card, a deploy's word or a step marked done or declined, is held too.
-GLYPH = {"proposals": "✓", "land": "✓", "verify": "✎", "operations": "✓"}
+# Flywheel Next's glyph for the decision a rail row asks (S17): an approval, held on the card's button. An operation's
+# card, a deploy's word or a step marked done or declined, is held too.
+GLYPH = {"proposals": "✓", "land": "✓", "operations": "✓"}
 ATTENTION = "!"
 # A unit's stage as one pip, filling as it goes: not begun, being designed, coded, every task ticked, merged; a stage
 # crew could not read is "?". A bolt is its units' pips in the plan's order.
@@ -269,8 +269,7 @@ def board_data(fleet, labels, read, now):
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
                                             "slot": slot(plan.kind_of(u), u.name()),
-                                            "worktree": s["worktree"], "url": url(s["worktree"]),
-                                            "markers": markers(rows, cards, l, "verify", u.name())})
+                                            "worktree": s["worktree"], "url": url(s["worktree"])})
                 ledger["fixes"] = [{"fix": f["fix"], "merged": f["merged"], "slot": slot("fix", f["fix"]), "worktree": f["path"], "url": url(f["path"])}
                                    for f in k.get("fixes", []) if f["bolt"] == b.name()]
                 construction.append(ledger)
@@ -428,7 +427,7 @@ def board_text(data, width=None, color=False, stale=None):
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
                         "" if b["state"] == "active" else b["state"]), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
             for u in b["units"]:
-                line(fields(u["unit"], stage_of(u), u["slot"] or "", u["url"] or ""), gutter(u["markers"]), 2, u["markers"])
+                line(fields(u["unit"], stage_of(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
                 line(fields(f["fix"], "fix merged" if f["merged"] else "fix", f["slot"] or "", f["url"] or ""), " ", 2)
             if b["url"]:
@@ -491,10 +490,9 @@ def bolt_row(b, team=None):
 
 
 def ledger_rows(b):
-    """A held bolt as its conductor reads it: the bolt, then a unit to a line, its pip, stage and slot and its marker,
-    then each fix."""
+    """A held bolt as its conductor reads it: the bolt, then a unit to a line, its pip, stage and slot, then each fix."""
     return ([bolt_row(b)]
-            + [row(fields(PIP.get(u["stage"], "?"), u["unit"], stage_of(u), u["slot"] or ""), gutter(u["markers"]), 2, u["markers"]) for u in b["units"]]
+            + [row(fields(PIP.get(u["stage"], "?"), u["unit"], stage_of(u), u["slot"] or ""), " ", 2) for u in b["units"]]
             + [row(fields(f["fix"], "fix merged" if f["merged"] else "fix", f["slot"] or ""), " ", 2) for f in b["fixes"]])
 
 
@@ -585,12 +583,11 @@ def environment_row(e):
 
 def operator_view(p):
     """An operator's: the partition's board in brief, a line to each lane with each team's bolt under Construction and
-    each environment with a deploy or an operation waiting under Operation, the rail's rows waiting on the user counted
-    by kind, and what needs attention."""
+    each environment with a deploy or an operation waiting under Operation, the rail's rows waiting on the user counted,
+    and what needs attention."""
     inc, bp, lands, envs = p["inception"], p["bolt_plan"], p["operation"], [e for e in p.get("environments", []) if e["deploys"] or e["waiting"]]
     approve = (sum(len(d["markers"]) for d in bp["proposals"]) + sum(len(b["markers"]) for b in p["construction"])
                + sum(len(x["markers"]) for e in envs for x in e["deploys"] + e["waiting"]))
-    answer = sum(len(u["markers"]) for b in p["construction"] for u in b["units"])
     last = f"the last {lands[0]['bolt']}, {plan.utc(lands[0]['at']).astimezone():%a %H:%M}" if lands else ""
     return ([row(fields((f"{p['label']} board", "bold"), f"read from {', '.join(h for h, v in p['hosts'].items() if v is True) or 'no host'}")),
              row(fields(("Inception", "bold"), many(len(inc["signals"]), "signal not moved", "signals not moved"),
@@ -601,8 +598,7 @@ def operator_view(p):
             + team_rows(p)
             + [row(fields(("Operation", "bold"), f"{len(lands)} landed in seven days", last))]
             + [environment_row(e) for e in envs]
-            + ([row(fields(("waits on the user", "bold"), f"✓ {approve} to approve" if approve else "", f"✎ {answer} to answer" if answer else ""))]
-               if approve or answer else [])
+            + ([row(fields(("waits on the user", "bold"), f"✓ {approve} to approve"))] if approve else [])
             + attention_rows(p))
 
 

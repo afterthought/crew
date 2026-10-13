@@ -82,6 +82,25 @@ def test_a_place_names_its_bolt_by_its_upstream_and_its_tasks_and_planning_from_
     assert got["constructing"]["head"] == repo.git("rev-parse", "bolt/te") != got["coding"]["head"]
 
 
+def test_a_place_whose_merge_archived_its_change_reads_it_from_the_archive_and_the_bolt_then_holds_it_archived(repo, tmp_path):
+    """Stages and the merge's deliverable: a unit's merge archives its change first (teams.17, record 0006), so its
+    place reads the archived change's tasks and Touches, still waiting to merge, and gather.archived names the change
+    once the bolt holds it so, and not while the bolt holds it open."""
+    k = Kit(repo, tmp_path)
+    p = k.place("merging")
+    change(p, "merging", 2, 2)
+    k.commit(p, "feat(merging)")
+    os.makedirs(p / "openspec" / "changes" / "archive")
+    repo.git("-C", str(p), "mv", "openspec/changes/merging", "openspec/changes/archive/2026-10-13-merging")
+    k.commit(p, "docs(openspec): archive merging")
+    got = k.read()["places"]["merging"]
+    assert (got["tasks"], got["planning"], got["archived"], got["open"]) == ([2, 2], True, True, [])
+    assert got["touches"] == {"entries": ["src/merging/**"]}
+    assert gather.archived(str(repo.path), "bolt/te") == []
+    repo.git("-C", str(k.dir / "bolts" / "te"), "merge", "-q", "--no-ff", "-m", "merge", "unit/merging")
+    assert gather.archived(str(repo.path), "bolt/te") == ["merging"] and "merging" in gather.changes(str(repo.path), "bolt/te")
+
+
 def test_a_fix_is_listed_with_its_bolt_and_reads_merged_only_once_it_moved_and_the_bolt_holds_it(repo, tmp_path):
     """crew bolts and the board: a fix's line; carry and tidy: a fix born at the bolt's head has not merged."""
     k = Kit(repo, tmp_path)

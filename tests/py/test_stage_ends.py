@@ -53,6 +53,20 @@ class TestVerify:
         assert plan.delivered(owed("verify"), {"saved": None}) == (None, "no report saved")
 
 
+class TestMerge:
+    def test_a_units_merge_ends_once_the_bolt_holds_its_change_archived(self):
+        assert plan.delivered(owed("merge"), {"bolt": "b", "holds": True, "archived": True, "bolt_head": "1234567"}) == (
+            "bolt/b@1234567", "bolt/b holds it at 1234567")
+
+    def test_a_change_merged_open_is_not_its_deliverable_since_the_merge_archives_it_first(self):
+        assert plan.delivered(owed("merge"), {"bolt": "b", "holds": True, "archived": False, "bolt_head": "1234567"}) == (
+            None, "bolt/b holds its change open: its merge did not archive it first")
+
+    def test_a_bolt_not_yet_holding_it(self):
+        assert plan.delivered(owed("merge"), {"bolt": "b", "holds": False, "archived": False, "bolt_head": "1234567"}) == (
+            None, "bolt/b not yet holding it")
+
+
 def test_a_commit_between_the_reads_never_pairs_its_ticks_or_time_with_the_earlier_head(monkeypatch):
     # Under load the unit's agent commits its last tick between crew's reads (t-journey-units, 2026-10-12: "every task
     # is ticked (2/2) at 3138801" while the branch was at 7402611). The head is read once; its time and ticks are read

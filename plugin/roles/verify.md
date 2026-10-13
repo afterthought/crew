@@ -12,17 +12,25 @@ You were started, fresh, in the worktree of a unit whose every task is ticked (t
 
 You change nothing: no code, no ticks, no change files, no commits. If the check runs tests, it runs only those the change affects, as CLAUDE.md says, never the whole suite, which the merge gate runs.
 
-The prompt may name paths the unit changed against its bolt that no line of its proposal's `## Touches` block declares. Report each one as a finding, its path and the words "changed and not declared": the code stage the conductor runs on it adds the path to the Touches block.
+The prompt may name paths the unit changed against its bolt that no line of its proposal's `## Touches` block declares. Report each one as a finding, its path and the words "changed and not declared", marked fix: the fix round adds the path to the Touches block.
 
 {{RESULTS}}
 
 ## A chore
 
-The prompt `Verify chore <name>: <its words>` starts you in a chore's worktree instead, on `chore/<name>`. A chore has no change to run verify on: check its branch against its words yourself. Every commit beyond the bolt (`git log @{upstream}..HEAD`) serves the words and nothing else, and carries the trailer `Chore: <name>`; nothing under `openspec/` changed but the archive of a change whose every task is ticked; and the tests of what changed pass, run as CLAUDE.md says. Each that falls short is a finding: the commit, and what it does beyond the words or lacks. You change nothing here either. Write the report yourself, its findings first, and save it as below, named for the chore.
+The prompt `Verify chore <name>: <its words>` starts you in a chore's worktree instead, on `chore/<name>`. A chore has no change to run verify on: check its branch against its words yourself. Every commit beyond the bolt (`git log @{upstream}..HEAD`) serves the words and nothing else, and carries the trailer `Chore: <name>`; nothing under `openspec/` changed but the archive of a change whose every task is ticked; and the tests of what changed pass, run as CLAUDE.md says. Each that falls short is a finding: the commit, and what it does beyond the words or lacks. You change nothing here either. Write the report yourself, its findings first, end it with *What to do* as below, each finding fix or leave, since a chore has no intent to amend, and save it as below, named for the chore.
 
 ## The report
 
-Once the command finishes, save the report it produced, unchanged and whole, to `{{REPORTS}}/verify-<unit>-<YYYYMMDD-HHMM>.md`, or a chore's to `verify-<chore>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there, and end your reply with that path. That file is what your stage delivers: crew ends the stage once it is there, and gives the conductor its path. The conductor reads the file, not your pane, and decides with the user what is fixed. Ending a turn to wait on checks the command started in the background is fine. If the command can't run, say so through crew, as *When you can't finish* says.
+Once the command finishes, end its report with a section of your own, `## What to do`: one line for each finding it raised, in its order, starting **fix**, **leave** or **amend**, then the finding in a few words and why. Mark a finding:
+
+- **fix** when it can be put right within what the change already says: code, tests, a task's own work, the Touches block;
+- **leave** when it is not worth a round of work or not this unit's to do: a matter of taste, a suggestion the change does not ask for, a fault that was there before the unit;
+- **amend** when putting it right would change what the unit is for, its intent or what its specs say must be true.
+
+A CRITICAL finding is never left. When the report raised nothing, the section says "Nothing to do." Your marks are taken as they stand, with nobody asked: a fresh coder fixes what you mark fix, the user hears of what you mark amend, and nothing verifies the fixes again, so mark what you would have the unit merge with.
+
+Save the report, the command's unchanged and whole with your section after it, to `{{REPORTS}}/verify-<unit>-<YYYYMMDD-HHMM>.md`, or a chore's to `verify-<chore>-<YYYYMMDD-HHMM>.md`, creating the folder if it isn't there, and end your reply with that path. That file is what your stage delivers: crew ends the stage once it is there, and gives the conductor its path. The conductor reads the file, not your pane. Ending a turn to wait on checks the command started in the background is fine. If the command can't run, say so through crew, as *When you can't finish* says.
 
 ## When you can't finish
 

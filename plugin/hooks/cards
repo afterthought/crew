@@ -63,7 +63,8 @@ KEYED = ("post_request", "create_area")
 FORMED = ("post_request", "update_request")
 ACTS = {"post_request": "card.post", "update_request": "card.update", "cancel_request": "card.close", "ack_answer": "card.close"}
 REQUEST_ID = re.compile(r"^req_[A-Za-z0-9-]{1,40}$")
-# The rail's row keys and a decision record's key, and the object of each.
+# The rail's row keys and a decision record's key, and the object of each, with a verify report's, which no row has
+# had since its findings were fixed in one round (teams.17), so a card posted under it before is recorded closing.
 KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
         (re.compile(r"^batch/(\d+)(?:-\d+)?$"), "batch/{}"),
         (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
@@ -77,9 +78,6 @@ FORMS = {
     "proposal": dict(kinds=("approve",), high=False, options=False, steps=False,
                      says="a proposal's card is posted as `crew plan card <n>` prints it, and a change to it changes "
                           "only its words: no questions, options or steps"),
-    "verify": dict(kinds=("choice", "multi"), high=False, options=True, steps=False,
-                   says="a verify report's card is a choice, kind \"choice\", or \"multi\" when the user may pick "
-                        "several findings, whose options are what you would do about them, and no steps"),
     "land": dict(kinds=("approve",), high=True, options=False, steps=True,
                  says="a landing's card is an approval, kind \"approve\", marked high stakes with highStakes true, "
                       "whose yes has you tell main-level ops to land; it has no options, and no step or command for "

@@ -209,8 +209,8 @@ eq "$(plan -t Unit -e "Unit = 'in-verify'" -P Amended)" "$(git -C "$k" rev-parse
 has "$(prompt_to swb-1-unit-2)" "s intent was amended by proposal $n; revise the existing change to it. The planner"
 eq "$(field $box stage.start By stage/in-verify/construct)" "wldn-planner"
 has "$(prompts swb-1)" "intent was amended by proposal $n, and construct runs again on it in swb-1-unit-2: wait for it (crew unit wait in-verify)"
-has "$(prompts swb-1)" "wldn-planner ran construct on unit in-verify. Close your Pending You card for verify/in-verify, if one is open, with what was done."
-ok "an approved amendment marks each unit and runs its construct again in the approver's name, with the planner's case, and the conductor is told to wait and which card it ended"
+lacks "$(prompts swb-1)" "Close your Pending You card"
+ok "an approved amendment marks each unit and runs its construct again in the approver's name, with the planner's case, and the conductor is told to wait"
 
 # With its team taken down, an amendment stands and every stage is refused before anything is written.
 unset CREW_AGENT

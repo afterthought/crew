@@ -35,10 +35,12 @@
 #                                      committed its own, its new place taking their work, made ready through the
 #                                      kit's .config/sluice.toml (its toolchain, then its runner's setup); code
 #                                      builds it as soon as it is committed, its prompt naming an overlap of
-#                                      Touches; verify checks it, naming the paths it changed and did not declare;
-#                                      settle takes what reached a verified unit; merge merges it into the bolt
-#                                      once each unit it
-#                                      comes after has merged, with wt merge, or wt submit where the kit opts into
+#                                      Touches; verify checks it once, naming the paths it changed and did not
+#                                      declare, its report marking each finding fix, leave or amend; code run again
+#                                      with the report's path is its one round of fixes; settle takes what reached
+#                                      a verified unit; merge archives its change and merges it into the bolt once
+#                                      each unit it comes after has merged, delivered once the bolt holds the change
+#                                      archived, with wt merge, or wt submit where the kit opts into
 #                                      sluice. Construct run again on a planned unit marks it amended: code waits
 #                                      until that construct has committed. An amendment to a unit's intent runs
 #                                      its construct itself, and anyone may start construct on a unit that waits
@@ -51,7 +53,7 @@
 #                                      each commit carrying its Chore: trailer; verify checks the commits against them;
 #                                      merge merges it into the bolt as a unit's merge does. Code starts once what it
 #                                      comes after has something committed to build on, its place taking their heads;
-#                                      verify needs a commit of its own; merge needs verify run since its code, the
+#                                      verify needs a commit of its own; merge needs its verify delivered once, the
 #                                      trailer on every commit of its own, and what it comes after merged. A chore has no
 #                                      construct and no review; a unit after a chore is constructed once its code has
 #                                      delivered
@@ -61,7 +63,7 @@
 #                                      rebase dependents whose unit merged, and count the partition's changes due for
 #                                      a batch; then wait for the unit's stage to end at what it delivers (construct's
 #                                      change, code's ticked tasks, verify's report, settle's commit, merge's commit
-#                                      on the bolt), or at its agent saying what it needs; the stage's end is
+#                                      on the bolt, a unit's change archived in it), or at its agent saying what it needs; the stage's end is
 #                                      recorded. It returns sooner when
 #                                      the agent has been quiet past --stuck (15 minutes) with nothing of its own
 #                                      running, or is gone, or the timeout (an hour) passes, and says which
@@ -101,7 +103,7 @@
 #                                      card prints a proposal's Pending You card and draws its picture, which link no
 #                                      session; approve --clear leaves out the new units the user cleared; answer
 #                                      records the card's answers and applies the approval once it holds them all
-#   crew rail  [--label L]             what waits on the user: proposals, review batches, verify reports and bolts to land,
+#   crew rail  [--label L]             what waits on the user: proposals, review batches and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
 #                                      You card; then the decision records waiting on you, each the design agent's
 #                                      open card for one; then any open card whose row is gone. It ends, on every

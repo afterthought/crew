@@ -1,10 +1,10 @@
-# A verified unit settled and merged, through the crew command on the stubs (tests.11, record 0022), a part of the units
-# journey (t-journey-units): a forecast against the bolt starts a verified unit's settle stage; a dependent holding
-# that unit's work as its place took it is not forecast against the unit for the settle's revision of it; the unit
-# merges through worktrunk; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it,
-# and undoes a rebase that conflicts; the next read frees the merged unit's slot and removes its place; and the
-# dependent whose rebase conflicted is told how to make that rebase's upstream again, its older forecast against the
-# bolt dropped.
+# A verified unit fixed in its one round, settled and merged, through the crew command on the stubs (tests.11, record
+# 0022), a part of the units journey (t-journey-units): a forecast against the bolt starts the settle stage of a unit
+# verified and then fixed once (teams.14, teams.17); a dependent holding that unit's work as its place took it is not
+# forecast against the unit for the settle's revision of it; the unit merges through worktrunk once its change is
+# archived; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it, and undoes a
+# rebase that conflicts; the next read frees the merged unit's slot and removes its place; and the dependent whose
+# rebase conflicted is told how to make that rebase's upstream again, its older forecast against the bolt dropped.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -18,10 +18,12 @@ change "$kd/places/a" a 3 3; commit_all "$kd/places/a" "feat(a): its change, don
 crew unit wait a >/dev/null; crew unit run a verify >/dev/null
 mkdir -p "$reports"; echo "the report" > "$reports/verify-a-20261008-1412.md"; crew unit wait a >/dev/null
 crew unit run b construct >/dev/null; change "$kd/places/b" b 0 2; commit_all "$kd/places/b" "docs(b): the change"; crew unit wait b >/dev/null
-printf 'one\ntwo, as a has it\nthree\n' > "$kd/places/a/shared.txt"; commit_all "$kd/places/a" "feat(a): its line"
+crew unit run a code "Fix every finding the verify report at $reports/verify-a-20261008-1412.md marks fix." >/dev/null
+printf 'one\ntwo, as a has it\nthree\n' > "$kd/places/a/shared.txt"; commit_all "$kd/places/a" "fix(a): its line, as its report marked"
+crew unit wait a >/dev/null
 crew unit run c construct >/dev/null; change "$kd/places/c" c 0 2
 printf 'one\ntwo, as c has it\nthree\n' > "$kd/places/c/shared.txt"; commit_all "$kd/places/c" "docs(c): the change"; crew unit wait c >/dev/null
-# The bolt takes a line of shared.txt that a, verified and waiting to merge, also changed: the next wait forecasts it,
+# The bolt takes a line of shared.txt that a, verified, fixed and waiting to merge, also changed: the next wait forecasts it,
 # and starts a's settle stage.
 printf 'one\ntwo, as the bolt has it\nthree\n' > "$bolt/shared.txt"; commit_all "$bolt" "feat: the bolt's own line"
 : > "$CREW_TEST_LOG"
@@ -44,7 +46,9 @@ has "$out" "swb-1-unit-1 delivered settle on a: its branch is at $(short unit/a)
 eq "$(field $box forecast Heads unit/b unit/a)" ""
 expect_ok crew unit run a merge
 eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt merge bolt/tenant-environments --no-squash --no-remove'"
-has "$out" "Close your Pending You card for verify/a, if one is open, with what was done."
+lacks "$out" "Pending You card"
+mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
+git -C "$kd/places/a" commit -qm "docs(openspec): archive a"
 (cd "$kd/places/a" && wt merge bolt/tenant-environments --no-squash --no-remove >/dev/null 2>&1) || fail "wt merge failed"
 b_before=$(git -C "$k" rev-parse unit/b) c_before=$(git -C "$k" rev-parse unit/c)
 expect_ok crew unit wait a
@@ -60,7 +64,7 @@ eq "$(field $box unit.rebase From unit/b)" "unit/a"
 # c's own line meets a's settled one: its rebase, which left out a's work as c's place took it, conflicts there.
 c_took=$(field $box stage.start Took stage/c/construct); c_took=${c_took#a@}
 eq "$(field $box forecast Took unit/c bolt/tenant-environments)" "a@$c_took"
-ok "a forecast against the bolt starts a verified unit's settle stage, a dependent is forecast nothing for the unit's own work its place took, and the unit merges, each a fresh agent ended at its deliverable; the merge names the verify row's card, and its wait rebases a dependent onto the bolt, leaving out the unit's work as it took it, and undoes a rebase that conflicts"
+ok "a forecast against the bolt starts the settle stage of a unit verified and fixed once, a dependent is forecast nothing for the unit's own work its place took, and the unit merges with its change archived, each a fresh agent ended at its deliverable; no card is named, and the merge's wait rebases a dependent onto the bolt, leaving out the unit's work as it took it, and undoes a rebase that conflicts"
 
 expect_ok crew status swb-1
 has "$out" "swb-1-unit-1 is free: a has merged into its bolt"
