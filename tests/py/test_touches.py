@@ -1,12 +1,12 @@
 """A unit's Touches (teams.12): gather.touches reads the list from its proposal, plan.declared refuses code without
 one, plan.matches and plan.overlaps compare entries, plan.overlapping words what a unit's code is told of the units
-ahead of it, and plan.not_declared what its verify is told it changed and did not declare. That git's first-parent log
+ahead of it in the bolt's merge order (plan.ahead), and plan.not_declared what its verify is told it changed and did not declare. That git's first-parent log
 leaves a sibling's merged work out is a contract case (tests/contract/test_git.py)."""
 import pytest
 
 import gather
 import plan
-from facts import plan_of
+from facts import plan_of, plan_text
 
 
 def proposal(*touches, fence="```"):
@@ -76,6 +76,32 @@ class TestOverlapping:
 
     def test_a_unit_ahead_that_has_merged_is_not_named(self):
         assert plan.overlapping(self.PLAN, Stages(a="merged"), self.K, "b", ["plugin/lib/plan.py"]) == []
+
+
+class TestAheadFollowsAfter:
+    """The dependent d is listed first in the file and comes after s (teams.12, plan.13): s is ahead of d, never d of s,
+    so s's code is told nothing of d, and d's is told of s (wldn, swb-4, 2026-10-13, signal 51c2c852/01)."""
+    PLAN = plan.Plan(plan_text(bolts=[("t", "switchboard-kit", "swb-1")],
+                               units=[("d", "switchboard-kit", "t", ["s"]), ("s", "switchboard-kit", "t", [])]))
+    K = {"places": {"d": {"path": "/kit/places/d", "touches": {"entries": ["src/boundary.ts"]}},
+                    "s": {"path": "/kit/places/s", "touches": {"entries": ["src/boundary.ts"]}}}}
+
+    def test_a_dependency_is_told_nothing_of_its_dependent_listed_before_it(self):
+        assert plan.overlapping(self.PLAN, Stages(), self.K, "s", ["src/boundary.ts"]) == []
+
+    def test_the_dependent_is_told_of_the_unit_it_comes_after(self):
+        assert plan.overlapping(self.PLAN, Stages(), self.K, "d", ["src/boundary.ts"]) == [
+            "Its Touches overlap those of s, ahead of it in the bolt and not merged, on src/boundary.ts; s's change is "
+            "/kit/places/s/openspec/changes/s/."]
+
+    @pytest.mark.parametrize("a, b, is_ahead", [
+        ("s", "d", True), ("d", "s", False),  # After first
+        ("x", "y", True), ("y", "x", False),  # the file's order among units neither comes after
+        ("c", "a", False), ("a", "c", True)])  # at any depth: c after b after a, c listed first
+    def test_ahead_is_after_first_then_the_files_order(self, a, b, is_ahead):
+        order = ["d", "s", "x", "y", "c", "a", "b"]
+        after_of = {"d": ["s"], "c": ["b"], "b": ["a"]}
+        assert plan.ahead(order, after_of, a, b) is is_ahead
 
 
 class TestNotDeclared:

@@ -5,7 +5,8 @@
 # A team builds one bolt at a time:
 #   crew list                          the teams that are defined
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
-#                                      slot with the unit or fix it holds and its stage. It first frees each slot
+#                                      slot with the unit or fix it holds and its stage, a unit carried onto its
+#                                      bolt inside another's merge named so, with its merge owed. It first frees each slot
 #                                      whose work has merged, been dropped or left the team's bolt, once its agent
 #                                      is not working, and removes, through the kit's wt remove, the worktrees in
 #                                      the team's kit checkout whose work is over, naming one kept for uncommitted
@@ -39,8 +40,10 @@
 #                                      declare, its report marking each finding fix or leave; code run again
 #                                      with the report's path is its one round of fixes; settle takes what reached
 #                                      a verified unit; merge archives its change and submits it to the bolt
-#                                      through sluice, wt submit, once each unit it comes after has merged,
-#                                      delivered once the bolt holds the change archived. Construct run again on a
+#                                      through sluice, wt submit, once each unit it comes after has merged and
+#                                      while its branch holds no other unit's change open that the bolt does not
+#                                      hold archived, its place made again from the bolt when it was carried there
+#                                      and its place is gone, delivered once the bolt holds the change archived. Construct run again on a
 #                                      planned unit marks it amended: code waits
 #                                      until that construct has committed. An amendment to a unit's intent runs
 #                                      its construct itself, and anyone may start construct on a unit that waits

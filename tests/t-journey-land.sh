@@ -13,10 +13,12 @@
 . "$TESTS/units.sh"
 units_world '[unit(u, "tenant-environments") for u in "abe"]; unit("c", "console-pages")
 p.insert(plan.Rec("Bolt", [("Bolt", "console-pages"), ("Repo", "switchboard-kit"), ("Goal", "The console lists them.")]))'
-# a's change merged into the bolt by its submission, as its merge stage runs it, its place and branch gone; b built in a
-# slot; c placed in console-pages. The bolt and main each change the title.
+# a's change archived and merged into the bolt by its submission, as its merge stage runs it, its place and branch
+# gone; b built in a slot; c placed in console-pages. The bolt and main each change the title.
 pa=$(place "$k" tenant-environments a); change "$pa" a 1 1; commit_all "$pa" "feat(a): its change, done"
 echo "# switchboard-kit, the bolt's" > "$pa/README.md"; commit_all "$pa" "docs(a): the bolt's title"
+mkdir -p "$pa/openspec/changes/archive"; git -C "$pa" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
+git -C "$pa" commit -qm "docs(openspec): archive a"
 (cd "$pa" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "a's submission failed"
 git -C "$k" worktree remove "$pa"; git -C "$k" branch -qD unit/a
 CREW_AGENT=swb-1-conductor crew unit run b construct >/dev/null

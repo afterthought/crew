@@ -131,6 +131,14 @@ class TestStatus:
         assert crew.holds_said({"name": "a", "stage": "verify", "counts": "3/3"}, ["unit-1", "unit", "a", "/p/a"]) == "a  verify 3/3"
         assert crew.holds_said({"name": "b", "stage": "construct", "counts": "0/2"}, ["unit-2", "unit", "b", "/p/b"]) == "b  construct"
 
+    def test_a_unit_carried_onto_its_bolt_inside_another_merge_is_named_so_its_merge_owed(self):
+        # teams.17: wldn, swb-4, 2026-10-13, signal 45f551aa/01.
+        assert crew.holds_said({"name": "d", "stage": "verify", "counts": "4/4", "carried": True}, ["unit-1", "unit", "d", "/p/d"]) == (
+            "d  verify 4/4  carried by another's merge, its own merge owed")
+        assert crew.carried_said("d", "b1", "verify") == (
+            "d is carried onto bolt/b1 inside another unit's merge, its change open there: it is in verify, its own merge "
+            "owed (crew unit run d merge)")
+
     def test_work_held_whose_stage_was_not_read_is_unknown_and_a_free_slot_holds_nothing(self):
         assert crew.holds_said(None, ["unit-1", "unit", "a", "/p/a"]) == "a  unknown"
         assert crew.holds_said(None, None) == ""

@@ -73,31 +73,39 @@ Agents SHALL write the plan only through `crew bolt …` and `crew unit …`. Ea
 crew SHALL derive each unit's stage from its kit on the team's host. The first rule that holds is the unit's stage:
 
 - `landed`: main holds the unit's OpenSpec change, open or archived;
-- `merged`: `bolt/<bolt>` holds it;
+- `merged`: `bolt/<bolt>` holds it archived, as the unit's own merge leaves it;
 - `amended`: the plan marks the unit amended, and construct has not been run again;
 - `construct`: construct has been run again on an amended unit, and has not yet committed;
-- `review`: an amended unit's construct has committed, and the user has not approved it again;
 - `verify`: every task is ticked;
 - `code`: some task is ticked;
-- `approved`: the change's planning is complete, and a review has been approved since the bolt;
-- `review`: the change's planning is complete, with no approval;
+- `planned`: the change's planning is complete;
 - `construct`: the unit's worktree exists;
-- `ready` or `waiting`: neither, depending on its `After` units;
+- `ready` or `waiting`: neither, depending on whether each of its `After` units has finished construct;
 - `queued`: the unit has no bolt.
+
+A unit whose change `bolt/<bolt>` holds open, carried there inside another unit's merge, has not merged: it reads at its own stage, from its worktree, or, once that is gone, from its change as the bolt holds it, its planning complete.
 
 A task, a ticked task and a complete planning mean what OpenSpec means by them. crew SHALL read them from the change's files without the `openspec` command line when the change uses OpenSpec's own spec-driven workflow, and through `openspec` otherwise; on the same worktree both readings SHALL agree.
 
-#### Scenario: An amended unit with ticked tasks
-- **WHEN** a unit in code is marked amended and construct has been run again and has committed
-- **THEN** its stage is `review`, though some of its tasks are ticked
-
 #### Scenario: A squashed merge
-- **WHEN** a unit was merged into its bolt with `wt merge`, and its worktree and branch were removed
-- **THEN** its stage is still `merged`, read from the change folder on `bolt/<bolt>`
+- **WHEN** a unit's commits reached its bolt inside another unit's merge, its change open there with every task ticked, and its worktree and branch were removed
+- **THEN** its stage is `verify`, read from the change on `bolt/<bolt>`, and not `merged`
+
+#### Scenario: Merged by its own merge
+- **WHEN** a unit's merge archived its change and the bolt holds it archived
+- **THEN** its stage is `merged`
 
 #### Scenario: Nothing kept by hand
 - **WHEN** a coder ticks the last task of a unit's change
 - **THEN** `crew bolts` shows the unit in `verify`, and no file was edited to say so
+
+#### Scenario: An amended unit with ticked tasks
+- **WHEN** a unit in code is marked amended and construct has been run again and has committed
+- **THEN** its stage is `code`, read from its tasks, and no approval is asked
+
+#### Scenario: A constructed unit
+- **WHEN** a unit's construct has committed a change whose planning is complete, and no task is ticked
+- **THEN** its stage is `planned`, and its code may start
 
 #### Scenario: A task OpenSpec counts is counted
 - **WHEN** a unit's `tasks.md` holds an indented sub-task `  - [ ] 1.1.1 …`, a numbered `1. [ ] …` or a `- [~] …`
@@ -109,7 +117,7 @@ A task, a ticked task and a complete planning mean what OpenSpec means by them. 
 
 #### Scenario: Planning complete without specs
 - **WHEN** a unit's change declares `skip_specs: true` in its `.openspec.yaml` and has its proposal, design and tasks
-- **THEN** its planning is complete, as `openspec status` says, and the unit is in `review`
+- **THEN** its planning is complete, as `openspec status` says, and the unit is in `planned`
 
 #### Scenario: Another workflow
 - **WHEN** a unit's change names a workflow other than spec-driven, or its kit redefines spec-driven

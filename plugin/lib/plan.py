@@ -933,6 +933,12 @@ def place_stage(pl, mark=None):
     return "verify" if total and done == total else "code" if done else "planned" if pl["planning"] else "construct"
 
 
+def carried_place(tasks):
+    """A place read from a unit's change its bolt holds open, carried there inside another unit's merge, for a unit
+    whose own place is gone: its tasks as the bolt holds them, its planning complete (teams.17)."""
+    return {"tasks": tasks, "planning": True, "open": [], "head": None}
+
+
 # The stages at which a unit has finished construct: its change is committed, and a unit after it may be constructed.
 CONSTRUCTED = ("planned", "code", "verify", "merged", "landed")
 
@@ -974,10 +980,12 @@ def chore_stage(name, bolt, k, pl):
 
 class Stages:
     """Each unit's and chore's stage, read from its kit on its team's host. The first rule that holds is a unit's stage:
-    landed, merged, then amended or construct for a unit the plan marks amended whose construct has not committed again,
-    then verify, code, planned, construct, then ready or waiting by whether its After is met (after_met); a chore's is
-    chore_stage's, then ready or waiting the same way. Work with no bolt is queued, and work whose host does not answer
-    is unknown."""
+    landed, merged once its bolt holds its change archived (teams.17), then amended or construct for a unit the plan
+    marks amended whose construct has not committed again, then verify, code, planned, construct, then ready or waiting
+    by whether its After is met (after_met); a chore's is chore_stage's, then ready or waiting the same way. A unit
+    whose change its bolt holds open, carried there inside another unit's merge, is marked carried and reads its stage
+    from its place, or with none from the change on the bolt, its merge owed (carried_place). Work with no bolt is
+    queued, and work whose host does not answer is unknown."""
 
     def __init__(self, fleet, plan, survey):
         self.fleet, self.plan, self.survey, self.memo = fleet, plan, survey, {}
@@ -1020,10 +1028,13 @@ class Stages:
             elif name in k["main"]:
                 res["stage"] = "landed"
                 return res
-            elif name in k["bolts"].get(b, {}).get("changes", []):
+            elif name in k["bolts"].get(b, {}).get("archived", []):
                 res["stage"] = "merged"
                 return res
-            elif pl or u.get("Amended"):
+            elif pl or u.get("Amended") or name in k["bolts"].get(b, {}).get("open", {}):
+                if name in k["bolts"].get(b, {}).get("open", {}):
+                    res["carried"] = True
+                    pl = pl or carried_place(k["bolts"][b]["open"][name])
                 if pl:
                     res.update(tasks=pl["tasks"], open=pl["open"])
                 res["stage"] = place_stage(pl, u.get("Amended"))
@@ -3828,13 +3839,42 @@ def declared(k, unit, why):
     return got["entries"]
 
 
+def comes_after(after_of, a, b):
+    """Whether a comes after b through After at any depth (plan.13): after_of is each unit's or chore's After names."""
+    seen, todo = set(), list(after_of.get(a, ()))
+    while todo:
+        x = todo.pop()
+        if x == b:
+            return True
+        if x not in seen:
+            seen.add(x)
+            todo += after_of.get(x, ())
+    return False
+
+
+def ahead(order, after_of, a, b):
+    """Whether a is ahead of b in their bolt's merge order (teams.12, plan.13): b comes after a, at any depth; else,
+    unless a comes after b, a is earlier in the plan's order (order, the work's names as the file lists them). A unit's
+    dependents are never ahead of it, however the file lists them."""
+    if comes_after(after_of, b, a):
+        return True
+    return not comes_after(after_of, a, b) and order.index(a) < order.index(b)
+
+
+def bolt_order(plan, bolt):
+    """A bolt's work as ahead reads it: its names in the plan's order, and each one's After names."""
+    work = plan.work_of(bolt)
+    return [w.name() for w in work], {w.name(): w.all("After") for w in work}
+
+
 def overlapping(plan, st_all, k, unit, mine):
-    """What a unit's Touches overlap among the unmerged units ahead of it in its bolt that have a place: the prompt's
-    words for each, naming the entries and the other unit's change."""
-    out = []
-    for o in plan.units_of(plan.unit(unit).get("Bolt")):
-        if o.name() == unit:
-            break
+    """What a unit's Touches overlap among the unmerged units ahead of it in its bolt's merge order that have a place
+    (ahead): the prompt's words for each, naming the entries and the other unit's change."""
+    out, bolt = [], plan.unit(unit).get("Bolt")
+    order, after_of = bolt_order(plan, bolt)
+    for o in plan.units_of(bolt):
+        if o.name() == unit or not ahead(order, after_of, o.name(), unit):
+            continue
         pl = k["places"].get(o.name())
         if not pl or st_all.of(o.name())["stage"] in ("merged", "landed") or "entries" not in (pl.get("touches") or {}):
             continue
@@ -3906,8 +3946,10 @@ def run_check(fleet, a):
     the user, makes it; on a unit whose intent was amended, which the user approved, anyone starts its construct, and
     the prompt carries the amendment's words, read from the mark. Code starts once the change is committed, with no
     review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits until each After
-    unit has merged (teams.5); settle runs only for a unit that has delivered its verify. crew chore run asks with
-    --chore, and a chore's stages are chore_check's; a stage asked of the other kind is refused naming it (plan.11)."""
+    unit has merged (teams.5), and a unit carried onto its bolt inside another's merge, whose place is gone, has its
+    place made again from the bolt for its merge (teams.17); settle runs only for a unit that has delivered its verify.
+    crew chore run asks with --chore, and a chore's stages are chore_check's; a stage asked of the other kind is refused
+    naming it (plan.11)."""
     label, repo, tip, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a), "chore" if a.chore else "unit")
     u = plan.item(a.unit)
     CONTEXT["kind"] = kind_of(u)  # a refusal is recorded on the chore's objects, or the unit's
@@ -3948,6 +3990,9 @@ def run_check(fleet, a):
         got = (k["places"].get(a.unit) or {}).get("touches") or {}
         facts = dict(loose=undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After")), touches=got)
     elif a.stage == "merge":
+        if not s.get("worktree"):  # carried onto the bolt inside another's merge, its place gone: made again from the bolt
+            make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "unit", a.unit)
         facts = dict(bolt=bolt, merge=merge_command(bolt))
     else:
         facts = {}
@@ -3957,6 +4002,42 @@ def run_check(fleet, a):
     # A construct that marked the unit amended: the plan's commit, and the entry it names, which the stage's start is.
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED=amended_at, ENTRY=entry, FORECAST=" ".join(ids),
                 TOOK=took if a.stage == "construct" else "")
+
+
+def merge_carries(fleet, t, plan, k, bolt, kind, name):
+    """A unit's or chore's merge refused before its submission while its branch holds another unit's change open that
+    its bolt does not hold archived (teams.17): read on the team's host, the branch's open changes in git and the bolt's
+    archived ones as gathered (k), decided by carried_in and worded by carried_refusal. Refused when either can't be
+    read (read.1)."""
+    k or fail(f"can't tell what {kind}/{name} carries into bolt/{bolt}: its kit on {t['machine']} was not read")
+    _, out = kit_git(fleet, t, t["kit"]["main"], "ls-tree", "-d", "--name-only", f"refs/heads/{kind}/{name}", "openspec/changes/")
+    opened = [l[len("openspec/changes/"):] for l in out.splitlines() if l.startswith("openspec/changes/")]
+    carried = carried_in(name, {u.name() for u in plan.units()}, opened, k["bolts"].get(bolt, {}).get("archived", []))
+    not carried or fail(carried_refusal(kind, name, bolt, carried, bolt_order(plan, bolt)[1]))
+
+
+def carried_in(name, units, opened, archived):
+    """The changes a unit's or chore's branch holds open (opened) that are another unit's of the plan (units) and that
+    its bolt does not hold archived (archived): what its merge would carry onto the bolt inside its own, which no merge
+    may (teams.17). A change that is no unit's, as one main has held open since before archives, is not counted."""
+    return sorted(c for c in opened if c != name and c in units and c not in archived)
+
+
+def carried_refusal(kind, name, bolt, carried, after_of):
+    """Why a merge is refused for the other units' changes its branch carries open (carried_in), naming each, and what
+    the conductor does: a unit that comes after this one (after_of, plan.13) has its work taken out of this branch,
+    since it merges later; any other merges first, its own merge archiving its change."""
+    both = lambda xs: xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+    later = [c for c in carried if comes_after(after_of, c, name)]
+    first = [c for c in carried if c not in later]
+    return (f"{kind} {name} does not merge while {kind}/{name} holds the change" + ("" if len(carried) == 1 else "s")
+            + f" of {both(carried)} open, which "
+            f"bolt/{bolt} does not hold archived: no unit's change reaches a bolt inside another's merge; "
+            + "; ".join(([f"{both(later)} " + ("comes" if len(later) == 1 else "come") + f" after {name}: take that work "
+                          f"out of {kind}/{name} (crew {kind} run {name} code \"<what to take out>\")"] if later else [])
+                        + ([f"merge {both(first)} first, each one's own merge archiving its change (crew unit run <unit> merge)"
+                            if len(first) > 1 else f"merge {first[0]} first, its own merge archiving its change (crew unit run {first[0]} merge)"]
+                           if first else [])))
 
 
 def run_kind_refusal(kind, chore, name, stage):
@@ -3995,6 +4076,7 @@ def chore_check(fleet, a, label, plan, c):
         not loose or fail(f"chore {a.unit} merges only once every commit of its own beyond bolt/{bolt} carries `Chore: {a.unit}`, and "
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
                           + f" not: run its code again to add the trailer (crew chore run {a.unit} code)")
+        merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "chore", a.unit)
         merge = merge_command(bolt)
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENTRY="",
@@ -4331,7 +4413,7 @@ def slot_stages(fleet, t):
     plan = plan_of(fleet, t["label"])
     marks = {u.name(): u.get("Amended") for u in plan.units() if u.get("Amended")} if plan else {}
     bolts = {b.name() for b in held_by(plan, t["name"])} if plan else set()
-    return [dict(slot=slot, kind=kind, name=name, place=place, **dict(zip(("stage", "counts"), slot_stage(kind, name, kit, plan, bolts, marks))))
+    return [dict(slot=slot, kind=kind, name=name, place=place, **dict(zip(("stage", "counts", "carried"), slot_stage(kind, name, kit, plan, bolts, marks))))
             for slot, kind, name, place in held]
 
 
@@ -4340,7 +4422,9 @@ def slot_stage(kind, name, kit, plan, bolts, marks):
     read from the kit as gathered (kit, unread unless ok) and the plan (None when it could not be read), bolts the
     names of those the team holds, marks the plan's Amended marks. A fix has merged, been dropped with its bolt, or is
     in flight; a unit or a chore has landed, merged into its bolt, been dropped from the plan, left the team's bolts,
-    or reads its stage from its place."""
+    or reads its stage from its place. A unit has merged once its bolt holds its change archived; one whose change the
+    bolt holds open, carried there inside another unit's merge, reads its stage from its place, or the bolt's change
+    when its place is gone, with a third value, True, for carried (teams.17)."""
     if not kit.get("ok"):
         return "unknown", None
     if kind == "fix":
@@ -4361,14 +4445,17 @@ def slot_stage(kind, name, kit, plan, bolts, marks):
     pl = kit["places"].get(name)
     if name in kit["main"]:
         return "landed", None
-    if pl and pl["bolt"] and name in kit["bolts"].get(pl["bolt"], {}).get("changes", []):
+    bolt = (pl or {}).get("bolt") or (plan.unit(name).get("Bolt") if plan and plan.unit(name) else None)
+    if bolt and name in kit["bolts"].get(bolt, {}).get("archived", []):
         return "merged", None
     if plan and not plan.unit(name):
         return "dropped", None
     if plan and plan.unit(name).get("Bolt") not in bolts:
         return "left", None
+    carried = kit["bolts"].get(bolt, {}).get("open", {}) if bolt else {}
+    pl = pl or (carried_place(carried[name]) if name in carried else None)
     if pl:
-        return place_stage(pl, marks.get(name)), "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None
+        return (place_stage(pl, marks.get(name)), "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None) + ((True,) if name in carried else ())
     return "none", None
 
 
@@ -4433,7 +4520,7 @@ def tidy(fleet, a):
     for w in trees:
         path, branch = w["path"], w.get("branch") or ""
         crews = tidy_over(path, branch, kdir, ups.get(branch, ""), bolts, units, on_main,
-                          lambda bolt: gather.changes(main, f"bolt/{bolt}"), lambda fix, bolt: gather.fix_merged(main, fix, bolt),
+                          lambda bolt: gather.archived(main, f"bolt/{bolt}"), lambda fix, bolt: gather.fix_merged(main, fix, bolt),
                           chores, chores_of)
         if crews is None:
             continue
@@ -4489,13 +4576,14 @@ def bolt_branch_over(bolt, bolts, worktree):
     return None if bolt in bolts or worktree else f"bolt {bolt} is in no plan"
 
 
-def tidy_over(path, branch, kdir, up, bolts, units, on_main, changes_of, fix_merged, chores=(), chores_of=None):
+def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_merged, chores=(), chores_of=None):
     """Whether a worktree is one crew made, and whether its work is over (plan.9): None for one crew did not make; else
     (the name a slot holds its work by, why its work is over or None while it goes on). crew made it when it is
     directly in <kit>/bolts/ on bolt/<its folder>, or directly in <kit>/places/ on unit/<its folder>, on
     chore/<name> in chore-<name>, or on a fix/ branch made from a bolt (up, its upstream). A bolt's is over once no plan
-    has the bolt (bolts); a unit's once it has landed on main (on_main), merged into its bolt (changes_of(bolt)) or no
-    plan has it (units); a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
+    has the bolt (bolts); a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)) or no
+    plan has it (units), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while
+    the bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
     it (chores); a fix's once it has merged into its bolt (fix_merged(branch, bolt)) or no plan has its bolt."""
     folder, bolt = os.path.basename(path), up[5:] if up.startswith("bolt/") else None
     if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch == f"bolt/{folder}":
@@ -4507,7 +4595,7 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, changes_of, fix_mer
                       None if name in chores else f"chore {name} is in no plan")
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch == f"unit/{folder}":
         return folder, (f"unit {folder} has landed on main" if folder in on_main else
-                        f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in changes_of(bolt) else
+                        f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in archived_of(bolt) else
                         None if folder in units else f"unit {folder} is in no plan")
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("fix/") and bolt:
         return branch, (f"{branch} has merged into bolt/{bolt}" if fix_merged(branch, bolt) else
@@ -5214,7 +5302,7 @@ def reach(fleet, t):
                 and st.of(u.name())["stage"] not in ("merged", "landed", "unknown")]
         took = {name: took_heads(name, entries) for name, _, _ in live}
         due, unread = forecasts_due(live, b.name(), k["bolts"].get(b.name(), {}).get("head"),
-                                    lambda o, h, base: merge_tree(main, o, h, base), done, took)
+                                    lambda o, h, base: merge_tree(main, o, h, base), done, took, bolt_order(plan, b.name())[1])
         for name, other in unread:
             print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
         for name, other, paths, heads, after in due:
@@ -5238,19 +5326,24 @@ def reach(fleet, t):
                 done.add(heads)
 
 
-def forecasts_due(live, bolt, bolt_head, conflicts, done, took):
+def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
     """The forecasts a conductor's wait makes for a bolt (teams.12): live is each unmerged unit with a place, in the
     plan's order, as (name, head, its After units); conflicts(theirs, ours, base) the paths git merge-tree forecasts in
     conflict when theirs is merged into ours, from base or, when it is None, their merge base, [] for none, None when
-    git can't tell. Each unit is forecast against the bolt, then against each unit ahead of it once it is clean with the
-    bolt, the later unit taking the forecast; one already made for the same heads (done) is not made again. A unit is
-    forecast against one it comes after only on what it adds beyond that unit's head its place took (took, {unit:
-    {after unit: head}}), so the other's own work it carries, rewritten since by a rebase or a settle, is no conflict
-    of its; with no head taken, from their merge base (plan.13). Returns the forecasts as (unit, other, paths, heads,
-    whether the unit is to be put after the other), and the pairs git could not read."""
+    git can't tell. Each unit is forecast against the bolt, then against each unit ahead of it in the bolt's merge order
+    (ahead, through after_of, the bolt's work's After names, the live units' own when none is given) once it is clean
+    with the bolt, the later unit taking the forecast, so a unit is never forecast against one that comes after it; one
+    already made for the same heads (done) is not made again. A unit is forecast against one it comes after only on
+    what it adds beyond that unit's head its place took (took, {unit: {after unit: head}}), so the other's own work it
+    carries, rewritten since by a rebase or a settle, is no conflict of its; with no head taken, from their merge base
+    (plan.13). Returns the forecasts as (unit, other, paths, heads, whether the unit is to be put after the other, which
+    it is unless it already comes after it), and the pairs git could not read."""
     due, unread = [], []
-    for i, (name, head, after) in enumerate(live):
-        others = ([(f"bolt/{bolt}", bolt_head)] if bolt_head else []) + [(o, h) for o, h, _ in live[:i]]
+    order = [name for name, _, _ in live]
+    after_of = after_of if after_of is not None else {name: after for name, _, after in live}
+    for name, head, after in live:
+        others = ([(f"bolt/{bolt}", bolt_head)] if bolt_head else []) + [
+            (o, h) for o, h, _ in live if o != name and ahead(order, after_of, o, name)]
         for other, ohead in others:
             paths = conflicts(ohead, head, took.get(name, {}).get(other) if other in after else None)
             if paths is None:
@@ -5260,7 +5353,7 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took):
                 continue
             heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
             if heads not in done:
-                due.append((name, other, paths, heads, not other.startswith("bolt/") and other not in after))
+                due.append((name, other, paths, heads, not other.startswith("bolt/") and not comes_after(after_of, name, other)))
             if other.startswith("bolt/"):
                 break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
     return due, unread
@@ -5731,8 +5824,9 @@ def fix_run(fleet, a):
 
 def team_status(fleet, a):
     """crew status <team>, on the team's host: the team's read (reap); then its conductor and ops, each with its pane,
-    its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of); and
-    each slot with its pane, its agent's state and what it holds (crew.holds_said)."""
+    its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of);
+    each slot with its pane, its agent's state and what it holds (crew.holds_said); and each unit of the team's bolt
+    carried onto it inside another unit's merge that no slot holds, its merge owed (carried_units, teams.17)."""
     t = crew.team_of(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     reap(fleet, team)
@@ -5760,6 +5854,21 @@ def team_status(fleet, a):
         holds = crew.holds_said(held.get(slot), team.held(slot))
         print(crew.status_row(team.agent_of(slot), team.pane(slot) or "-", (team.status(slot) or "not up") if holds else "free",
                               "-", "-", "-", "-", holds))
+    try:
+        for unit, bolt, stage in carried_units(fleet, t, {s["name"] for s in held.values()}):
+            print(crew.carried_said(unit, bolt, stage))
+    except Refusal as e:
+        print(e, file=sys.stderr)
+
+
+def carried_units(fleet, t, slotted):
+    """Each unit of the bolts the team holds whose change its bolt holds open, carried there inside another unit's
+    merge, that no slot holds (slotted, the names the slots hold): (unit, bolt, stage), its merge owed (teams.17)."""
+    plan = plan_of(fleet, t["label"])
+    bolts = held_by(plan, t["name"]) if plan else []
+    st = stages_for(fleet, plan, bolts) if bolts else None
+    return [(u.name(), b.name(), st.of(u.name())["stage"]) for b in bolts for u in plan.units_of(b.name())
+            if st.of(u.name()).get("carried") and u.name() not in slotted]
 
 
 def team_tidy(fleet, a):

@@ -45,6 +45,7 @@ def survey(ok=True, merged=True):
     kit = {"ok": True, "main": [], "fixes": [],
            "places": {"early": place("early", (0, 2), 180), "checked": place("checked", (2, 2), 120), "stale": place("stale", (2, 2), 50)},
            "bolts": {"apex-zones": {"exists": True, "head": "abc1234" + "0" * 33, "head_at": iso(30), "changes": ["zone-one"] if merged else [],
+                                    "archived": ["zone-one"] if merged else [],
                                     "verdict": "passed (3 run, 1 replayed)"},
                      "tenant-environments": {"head": "d" * 40, "head_at": iso(200), "changes": []}}}
     return {BOX: {"ok": True, "kits": {"/kit/main": kit}}} if ok else {BOX: {"ok": False, "error": "ssh: connect to host timed out"}}

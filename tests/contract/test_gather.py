@@ -101,6 +101,31 @@ def test_a_place_whose_merge_archived_its_change_reads_it_from_the_archive_and_t
     assert gather.archived(str(repo.path), "bolt/te") == ["merging"] and "merging" in gather.changes(str(repo.path), "bolt/te")
 
 
+def test_a_change_carried_onto_the_bolt_inside_another_units_merge_is_read_open_with_its_tasks(repo, tmp_path):
+    """Stages, the slots and the tidy: a unit has merged only once its bolt holds its change archived (teams.17), so the
+    bolt's read gives the changes it holds archived apart from those it holds open, with each open one's tasks as the
+    bolt holds them, but a change main already holds; and the unit branch's open changes, which a merge is refused for
+    carrying (gather.opened)."""
+    k = Kit(repo, tmp_path)
+    change(repo.path, "on-main", 1, 1)
+    k.commit(repo.path, "feat: a change open on main")
+    repo.git("-C", str(k.dir / "bolts" / "te"), "merge", "-q", "main")
+    d = k.place("d")
+    change(d, "d", 1, 2)
+    k.commit(d, "feat(d)")
+    s = k.place("s")
+    change(s, "s", 2, 2)
+    k.commit(s, "feat(s)")
+    repo.git("-C", str(s), "merge", "-q", "--no-ff", "-m", "merge d", "unit/d")
+    assert gather.opened(str(repo.path), "unit/s") == ["d", "on-main", "s"]
+    os.makedirs(s / "openspec" / "changes" / "archive", exist_ok=True)
+    repo.git("-C", str(s), "mv", "openspec/changes/s", "openspec/changes/archive/2026-10-13-s")
+    k.commit(s, "docs(openspec): archive s")
+    repo.git("-C", str(k.dir / "bolts" / "te"), "merge", "-q", "--no-ff", "-m", "merge s", "unit/s")
+    bolt = k.read()["bolts"]["te"]
+    assert (bolt["archived"], bolt["open"]) == (["s"], {"d": [1, 2]})
+
+
 def test_a_fix_is_listed_with_its_bolt_and_reads_merged_only_once_it_moved_and_the_bolt_holds_it(repo, tmp_path):
     """crew bolts and the board: a fix's line; carry and tidy: a fix born at the bolt's head has not merged."""
     k = Kit(repo, tmp_path)

@@ -46,6 +46,17 @@ class TestDue:
     def test_units_clean_with_each_other_have_none(self):
         assert due([("a", A, []), ("b", B, []), ("c", C, [])]) == ([], [])
 
+    def test_a_dependent_listed_first_is_forecast_against_the_unit_it_comes_after_never_the_other_way(self):
+        # wldn, swb-4, 2026-10-13: d comes after s and the file lists d first; s was told d was ahead (signal 51c2c852/01).
+        assert due([("d", B, ["s"]), ("s", A, [])], clash=[(A, B), (B, A)]) == (
+            [("d", "s", ["shared.txt"], f"d@{B[:7]} s@{A[:7]}", False)], [])
+
+    def test_one_that_comes_after_at_any_depth_is_not_put_after_it_again(self):
+        # c comes after b, which comes after a: c's forecast against a gives c no After, and a is never forecast against c.
+        got = plan.forecasts_due([("c", C, ["b"]), ("a", A, [])], "t", None,
+                                 lambda o, h, base: ["shared.txt"] if {o, h} == {A, C} else [], set(), {}, {"c": ["b"], "b": ["a"]})
+        assert got == ([("c", "a", ["shared.txt"], f"c@{C[:7]} a@{A[:7]}", False)], [])
+
 
 class TestDependent:
     """A dependent b holds a's work as its place took it, a@1111111; a was since rebased onto the bolt and settled, its

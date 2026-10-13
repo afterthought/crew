@@ -9,7 +9,8 @@ The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's
 "board": <true to also read each team's slots file and the explorations on the kit's main>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
-whether bolt/<bolt> exists, the changes and chores it holds, its worktree, its head and the head's time; each place under
+whether bolt/<bolt> exists, the changes and chores it holds, those it holds archived, the tasks of each it holds open
+that main does not hold, its worktree, its head and the head's time; each place under
 <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
 paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
 head, head's time and how many commits of its own it holds beyond the bolt; each fix branched from a bolt; the kit's
@@ -56,6 +57,23 @@ def archived(main, ref):
     out = run(["git", "ls-tree", "-d", "--name-only", ref, "openspec/changes/archive/"], main) or ""
     return sorted({n[11:] for n in (l[len("openspec/changes/archive/"):] for l in out.splitlines())
                    if len(n) > 11 and DATED.fullmatch(n[:11])})
+
+
+def opened(main, ref):
+    """The OpenSpec changes a branch holds open, by name: each folder directly under openspec/changes/ but the archive."""
+    out = run(["git", "ls-tree", "-d", "--name-only", ref, "openspec/changes/"], main) or ""
+    return sorted(n for n in (l[len("openspec/changes/"):] for l in out.splitlines()) if n and n != "archive")
+
+
+def carried(main, ref, held):
+    """The tasks, [done, total], of each change a bolt holds open that main does not hold (held, main's changes): a
+    unit's change carried there open inside another unit's merge, since a unit's own merge archives it (teams.17)."""
+    out = {}
+    for name in opened(main, ref):
+        if name not in held:
+            tasks = tasks_of(run(["git", "show", f"{ref}:openspec/changes/{name}/tasks.md"], main) or "")
+            out[name] = [sum(done for done, _ in tasks), len(tasks)]
+    return out
 
 
 # A chore's name, as a commit's `Chore:` trailer gives it (plan.11).
@@ -380,6 +398,8 @@ def kit(req, sites=False, running=None, board=False):
         exists = b in have
         wt = os.path.join(kdir, "bolts", b)
         out["bolts"][b] = {"exists": exists, "changes": changes(main, f"bolt/{b}") if exists else [],
+                           "archived": archived(main, f"bolt/{b}") if exists else [],
+                           "open": carried(main, f"refs/heads/bolt/{b}", out["main"]) if exists else {},
                            "chores": chores(main, f"refs/heads/bolt/{b}") if exists else [],
                            "worktree": wt if at.get(wt) == f"bolt/{b}" else None,
                            "head": (run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}^{{commit}}"], main) or "").strip() or None if exists else None,

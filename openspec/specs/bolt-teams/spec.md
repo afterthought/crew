@@ -206,7 +206,7 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 - **THEN** it is refused; a defect is a fix, and a new need is a new unit
 
 ### Requirement: A worktree goes when its work is over
-crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once it has merged into its bolt or landed, or no plan has it; a fix's once it has merged into its bolt, or no plan has its bolt. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, and at once after `crew bolt drop`, `crew unit drop` or `crew bolt land`.
+crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once its bolt holds its change archived or it has landed, or no plan has it, never while the bolt holds its change open; a fix's once it has merged into its bolt, or no plan has its bolt. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, and at once after `crew bolt drop`, `crew unit drop` or `crew bolt land`.
 
 #### Scenario: A dropped bolt
 - **WHEN** the planner drops a bolt that swb-2 holds
@@ -227,6 +227,10 @@ crew SHALL remove each worktree it made, with its branch, once its work is over 
 #### Scenario: Work dropped with commits of its own
 - **WHEN** a removed branch holds commits that neither main nor its bolt has
 - **THEN** crew says the commit the branch was at
+
+#### Scenario: A unit carried onto its bolt
+- **WHEN** a unit's change is open on its bolt, carried there inside another unit's merge, and the team is read
+- **THEN** its worktree, its branch and its slot are kept
 
 ### Requirement: Uncommitted changes keep a worktree
 A worktree whose work is over SHALL be kept, with its branch, while it has uncommitted changes: modified tracked files, or untracked files git does not ignore. Each read of the team SHALL name it, what its work was and that its changes are the user's to keep or discard, until it is clean, when crew removes it, or gone. Files git ignores SHALL NOT keep a worktree, and go with it.
@@ -484,3 +488,52 @@ Every agent crew starts SHALL have `SLUICE_AGENT` in its environment, the same a
 #### Scenario: herdr resumes an agent
 - **WHEN** herdr resumes the conductor's session without crew's environment
 - **THEN** its commands see `SLUICE_AGENT` back, the same as its `CREW_AGENT`
+
+### Requirement: Ahead in a bolt is its merge order
+Where crew tells a unit of the units ahead of it in its bolt, in a code stage's note of overlapping Touches and in the forecasts on a conductor's wait, a unit `a` SHALL be ahead of `b` when `b` comes after `a` through `After` at any depth, or, when neither comes after the other, when the plan lists `a` first. A unit's dependent SHALL never be named ahead of it, nor a unit forecast against one that comes after it.
+
+#### Scenario: A dependent listed first
+- **WHEN** unit `d` comes after unit `s`, the plan lists `d` before `s`, and their Touches overlap
+- **THEN** `s`'s code is told nothing of `d`, and `d`'s code is told that `s` is ahead of it and not merged
+
+#### Scenario: A forecast between them
+- **WHEN** the conductor's wait finds `d`'s and `s`'s heads in conflict
+- **THEN** the forecast reaches `d`, against `s`, and no `After` is written, since `d` already comes after `s`
+
+#### Scenario: At any depth
+- **WHEN** `c` comes after `b`, which comes after `a`, and the plan lists `c` first
+- **THEN** `a` is ahead of `c`, and a forecast between them reaches `c` with no `After` written
+
+#### Scenario: Units neither comes after
+- **WHEN** units `x` and `y` share no `After`, and the plan lists `x` first
+- **THEN** `x` is ahead of `y`
+
+### Requirement: A unit carried onto its bolt keeps its own merge
+A unit whose change its bolt holds open, carried there inside another unit's merge, SHALL NOT read merged: `crew status` SHALL name it carried by another's merge, its own merge owed, on its slot's line or a line of its own. Its merge stage SHALL make its place again from the bolt when it is gone, and the merge SHALL archive its change there and deliver once the bolt holds it archived.
+
+#### Scenario: Named in the team's status
+- **WHEN** unit `d`'s change is open on its bolt, carried there in `s`'s merge, every task ticked, and its slot holds it
+- **THEN** `crew status` shows `d  verify 2/2  carried by another's merge, its own merge owed`
+
+#### Scenario: Its place gone
+- **WHEN** `d`'s place and branch were removed, and the conductor runs `crew unit run d merge`
+- **THEN** `d`'s place is made again on `unit/d` from the bolt, its merge archives the change there and submits, and the stage delivers once the bolt holds the change archived
+
+### Requirement: A merge carries no other unit's open change
+crew SHALL refuse a unit's or chore's merge before it starts while its branch holds another unit's change of the plan open that its bolt does not hold archived, naming each such change, and saying to take out of the branch the work of a unit that comes after the merging one and to merge any other first. The merging unit's own change, a change the bolt holds archived and a change no unit of the plan has SHALL NOT count.
+
+#### Scenario: A dependency holding its dependent's work
+- **WHEN** unit `s`'s branch holds unit `d`'s change open, `d` comes after `s`, and the bolt does not hold `d`'s change archived
+- **THEN** `crew unit run s merge` is refused, naming `d` and saying to take its work out of `unit/s`
+
+#### Scenario: A unit it does not come after
+- **WHEN** a chore's branch holds unit `x`'s change open, and the bolt does not hold it archived
+- **THEN** `crew chore run <chore> merge` is refused, saying to merge `x` first
+
+#### Scenario: A dependent's place holding what it took
+- **WHEN** unit `d`'s place took `s`'s work, and `s` has since merged with its change archived on the bolt
+- **THEN** `d`'s merge is not refused for it
+
+#### Scenario: A change main has long held open
+- **WHEN** every branch holds a change open that main has held since before archives, which no unit of the plan has
+- **THEN** no merge is refused for it

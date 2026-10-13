@@ -1,5 +1,6 @@
-"""Whether a unit's stage may start (plan.6, plan.13, teams.5): plan.stage_refusal, on the unit's stage, its Amended
-mark, its After units' stages and who asks. What a started stage is sent, and the place it runs in, are
+"""Whether a unit's stage may start (plan.6, plan.13, teams.5, teams.17): plan.stage_refusal, on the unit's stage, its
+Amended mark, its After units' stages and who asks; plan.carried_in and plan.carried_refusal for a merge whose branch
+carries another unit's open change. What a started stage is sent, and the place it runs in, are
 t-unit-run's."""
 import pytest
 
@@ -96,3 +97,31 @@ class TestMerge:
 
     def test_waits_for_verify(self):
         assert refusal("merge", "code") == "unit a is in code: it merges once every task is ticked and verify has run"
+
+
+class TestCarried:
+    """A unit's or chore's merge carries no other unit's open change (teams.17): wldn, swb-4, 2026-10-13, the
+    dependency s merged its dependent d's branch, as an overlap note asked, and d's change reached the bolt open inside
+    s's merge (signals 51c2c852/01 and 45f551aa/01)."""
+    UNITS = {"s", "d", "x", "y"}
+
+    def test_another_units_change_the_bolt_does_not_hold_archived_is_carried(self):
+        assert plan.carried_in("s", self.UNITS, ["d", "s"], []) == ["d"]
+
+    def test_its_own_one_the_bolt_holds_archived_and_one_no_unit_has_are_not(self):
+        # a dependent's place took the dependency's work, which the bolt holds archived once its own merge did;
+        # a change main has held open since before archives is no unit's of the plan.
+        assert plan.carried_in("d", self.UNITS, ["d", "s", "every-crew-card-goes-through-crew"], ["s"]) == []
+
+    def test_its_refusal_says_to_take_out_a_later_units_work_and_merge_any_other_first(self):
+        assert plan.carried_refusal("unit", "s", "te", ["d", "x"], {"d": ["s"]}) == (
+            "unit s does not merge while unit/s holds the changes of d and x open, which bolt/te does not hold archived: "
+            "no unit's change reaches a bolt inside another's merge; d comes after s: take that work out of unit/s "
+            "(crew unit run s code \"<what to take out>\"); merge x first, its own merge archiving its change "
+            "(crew unit run x merge)")
+
+    def test_a_chores_says_so_with_its_own_command(self):
+        assert plan.carried_refusal("chore", "bump", "te", ["x", "y"], {}) == (
+            "chore bump does not merge while chore/bump holds the changes of x and y open, which bolt/te does not hold "
+            "archived: no unit's change reaches a bolt inside another's merge; merge x and y first, each one's own merge "
+            "archiving its change (crew unit run <unit> merge)")
