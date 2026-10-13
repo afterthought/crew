@@ -272,8 +272,9 @@ ok "the conductor waits for every stage through crew and never reads a pane for 
 # main; the bolt's proof is its verification (record 0025), and ops proves and deploys nothing.
 expect_ok crewpy brief wldn main-ops
 for want in "tell the bolt's conductor and the user sluice's words" "its landing comes back to the user on a new card" \
-  "never merge, rebase, reset or fast-forward main or a bolt's branch by git" "When main is behind GitHub's, stop and tell the user" \
-  "shows every unit merged and the bolt's verification green"; do
+  "never merge, rebase, reset or fast-forward main or a bolt's branch by git" "When main is behind GitHub's, crew refuses the landing and names how far: stop and tell the user" \
+  "shows every unit merged and the bolt's verification green" "git read-tree -m -u <main's commit before> main" \
+  "the checkout is stale after every landing until it is levelled" "nothing of yours or crew's catches it up to GitHub's"; do
   has "$out" "$want"
 done
 lacks "$out" "git rebase --abort"; lacks "$out" "proof in dev"
@@ -429,7 +430,9 @@ for want in "Every decision record you write, and every amendment you make to on
   "post a new card for the new version, under the new commit's key" \
   "set \`status: rejected\` with the user's words, and take out each rule drawn from it" \
   "The record's card is the one card you post" "\`record/<kit>/<number>/<commit>\`" "one of atlas-kit, breadboard-kit, switchboard-kit" \
-  "the kit's main commit that proposed the record or the amendment" \
+  "the commit that proposed the record or the amendment, which reaches the kit's main through sluice" \
+  "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "wt submit main --no-remove" \
+  "read-tree -m -u <main's commit before you submitted> main" "Post the card once that commit has landed on main" \
   '"risk": "low", "reversible": true}`, no options, no steps and `blocking` false' \
   "Accept decision record <number> in <kit>: <the record's title>?" "kind \`code\` with lang \`markdown\`" \
   "No card carries a path" "links no plannotator session" \

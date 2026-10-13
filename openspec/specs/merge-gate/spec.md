@@ -6,7 +6,7 @@ Every merge into a bolt and every landing on main is a submission sluice tests o
 ## Requirements
 
 ### Requirement: Every merge into a bolt or onto main is a submission sluice gates
-Every merge into a bolt, a unit's, a chore's or a fix's, and every landing of a bolt on main SHALL be a submission to sluice, which lands it as a merge commit only when the checks the kit's policy requires of the target branch pass on the target with the submission merged, and otherwise lands nothing and leaves the target where it was. crew SHALL run no merge gate or verification of its own, and nothing of crew's SHALL move a bolt's branch or main by git.
+Every merge into a bolt, every landing on main, and every commit that reaches a kit's main, the user's and the design agent's among them, SHALL be a submission to sluice from a branch, landed as a merge commit only when the checks the kit's policy requires of the target pass with it merged, and otherwise landing nothing. Nothing of crew's SHALL move a bolt's branch or main by git, or run a merge gate or verification of its own.
 
 #### Scenario: A red check refuses a unit's merge
 - **WHEN** a unit's place holds a change under which a required check fails, and its merge stage runs `wt submit bolt/<bolt> --no-remove`
@@ -15,6 +15,10 @@ Every merge into a bolt, a unit's, a chore's or a fix's, and every landing of a 
 #### Scenario: A green submission lands
 - **WHEN** every required check passes on the bolt with the unit merged
 - **THEN** `bolt/<bolt>` is a merge commit sluice made, holding the unit's commits
+
+#### Scenario: The design agent's record
+- **WHEN** the design agent writes a decision record for a kit
+- **THEN** it commits the record on a branch in a worktree of its own and submits it with `wt submit main`, and the kit's main holds it only once sluice lands it
 
 #### Scenario: A landing is gated the same way
 - **WHEN** main-level ops runs `crew bolt submit <bolt>` and a required check of main fails on main with the bolt merged
@@ -32,8 +36,8 @@ A bolt's verification SHALL be read from the `Sluice-Result` trailer of the merg
 - **THEN** its verification reads none, and the bolt is not offered for landing
 
 ### Requirement: crew's own policy gates its bolts and main on its whole suite
-crew's `.config/sluice.toml` SHALL require the `check-full` tasks of every `bolt/*` branch and of `main`, run open on the host, and SHALL accept a replayed task for a bolt and none for main, so a landing runs every test afresh. The live test SHALL be no task.
+crew's `.config/sluice.toml` SHALL require the `check-full` tasks of every `bolt/*` branch and of `main`, run open on the host, and SHALL accept no replayed task for either, so every submission runs every test afresh. The live test SHALL be no task.
 
 #### Scenario: crew's policy
 - **WHEN** crew's `.config/sluice.toml` is read
-- **THEN** `[branches."bolt/*"]` and `[branches.main]` each require `#check-full`, the bolt's trust holds `cache` and main's does not
+- **THEN** `[branches."bolt/*"]` and `[branches.main]` each require `#check-full` and trust `open` alone, and its executor is `open`

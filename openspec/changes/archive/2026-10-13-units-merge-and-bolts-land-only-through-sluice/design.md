@@ -44,7 +44,7 @@ A landing that conflicts lands nothing and moves nothing. The conductor starts a
 
 ### crew's own policy
 
-`[executor] kind = "open"`, since crew's tests write the host's test slots and moon's archives outside the checkout sluice's sandbox confines writes to; `[branches."bolt/*"]` requires `#check-full` and trusts `open` and `cache`; `[branches.main]` requires `#check-full` and trusts `open` alone, so a landing replays nothing (`tests.10`). sluice's default trust is `confined`, which no executor on one Mac gives, so both tables state it.
+`[executor] kind = "open"`, since crew's tests write the host's test slots and moon's archives outside the checkout sluice's sandbox confines writes to (the user, 2026-10-13: "On the host for now"); `[branches."bolt/*"]` and `[branches.main]` each require `#check-full` and trust `open` alone, so every submission runs every test afresh (`tests.10`). sluice's default trust is `confined`, which no executor on one Mac gives, so both tables state it.
 
 ### Tests
 
@@ -52,7 +52,8 @@ A stub `wt-submit` lands as sluice was read to land, with no queue and no checks
 
 ## Risks / Trade-offs
 
-- [No host has sluice on an agent's path] → no team merges or lands until swancloud installs it; `_open.md` says so.
-- [sluice's guard refuses direct commits on main once installed in a kit] → the design agent's records under `state.3` and the user's own commits on main are refused; a question for the user, held in `_open.md`.
+- [No host has sluice on an agent's path] → no team merges or lands until the fleet's setup installs it at the user's next deploy; `crew bolt submit` refuses, naming `wt-submit`, and `_open.md` says so.
+- [sluice's guard refuses direct commits on main once installed in a kit] → main moves only through sluice (`state.3`, the user: "Yes, through sluice"): the design agent's records and the user's own commits are made on a branch and submitted with `wt submit main`.
+- [A kit's main behind GitHub's] → sluice's guard refuses crew's fast-forward, and meeting the remote is sluice's to build; until then the landing is refused and main-level ops tells the user.
 - [The last landing by `wt merge main`] → worktrunk reads hooks from the merging worktree, and this branch removes them, so that merge runs no gate: the suite is run by hand first.
 - [Open changes that describe the old merge] → `units-build-at-once-and-are-reviewed-in-batches`, `a-kit-declares-its-toolchain-and-tests` and `a-stages-prompt-is-taken-or-sent-again` are rewritten here (`docs.3`); `a-carrying-fix-is-judged-by-its-commits` describes only the carry and is left for the user to remove.

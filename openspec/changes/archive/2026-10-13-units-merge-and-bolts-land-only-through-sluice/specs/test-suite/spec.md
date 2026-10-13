@@ -2,15 +2,15 @@
 
 ### Requirement: A test whose inputs already passed on the host is replayed
 
-A task SHALL be replayed from moon's cache, without running the test, when its inputs are identical to those of a run of the same task that passed on the same host, in any worktree of crew or the main checkout. A run that failed SHALL never be replayed. The command SHALL run every selected task without the cache when asked to, and a landing on main SHALL replay nothing.
+A task SHALL be replayed from moon's cache, without running the test, when its inputs are identical to those of a run of the same task that passed on the same host, in any worktree of crew or the main checkout. A run that failed SHALL never be replayed. The command SHALL run every selected task without the cache when asked to, and sluice's run of a submission to a bolt or to main SHALL replay nothing.
 
-#### Scenario: A submission to a bolt replays the coder's run
-- **WHEN** a coder's run passed every test on a unit's tree, and the bolt with the unit merged holds the same inputs
-- **THEN** sluice's run of the submission replays every test, and the unit lands in about the time moon takes to check the cache
+#### Scenario: A worktree replays another's run
+- **WHEN** a coder's run passed every test on a unit's tree, and another worktree of crew on the host runs the suite on the same inputs
+- **THEN** every test is replayed
 
-#### Scenario: A landing replays nothing
-- **WHEN** a bolt is submitted to main
-- **THEN** every test runs afresh, since main's policy accepts no replay
+#### Scenario: A submission replays nothing
+- **WHEN** a unit is submitted to its bolt, or a bolt to main
+- **THEN** sluice runs every test afresh, since crew's policy accepts no replay
 
 #### Scenario: A test-only edit reruns one test
 - **WHEN** only `tests/t-merge.sh` changed since a run that passed
@@ -51,8 +51,8 @@ A coder building or fixing a change, and a verify checking one, SHALL run only t
 - **THEN** only `t-merge` runs
 
 #### Scenario: A bolt that already holds other work
-- **WHEN** the bolt already holds a merged change to `plugin/` that sluice's run passed, and a coder's change edits only `tests/t-merge.sh`
-- **THEN** the affected tests are every test, `t-merge` runs, and every other test is replayed from sluice's run on the host
+- **WHEN** the bolt already holds a merged change to `plugin/` whose tests passed in a worktree on the host, and a coder's change edits only `tests/t-merge.sh`
+- **THEN** the affected tests are every test, `t-merge` runs, and every other test is replayed from that run
 
 ## REMOVED Requirements
 

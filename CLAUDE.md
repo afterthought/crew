@@ -14,7 +14,7 @@ What a crew team building crew needs to know. **The record**, in this order: `do
 
 ## This checkout is live
 
-On every host, the `crew` command and the plugin every Claude session loads run from that host's checkout of crew's `main`: mac-studio's is `~/Code/github_afterthought/crew/main`, the box's `/workspace/crew/main`. A commit on `main` there is live at once for every agent on that host, and a host gets crew's `main` by `git pull`, not a deploy. So work is built in a worktree of its own, never in `main`, and a bolt lands only on the user's word, through sluice.
+On every host, the `crew` command and the plugin every Claude session loads run from that host's checkout of crew's `main`: mac-studio's is `~/Code/github_afterthought/crew/main`, the box's `/workspace/crew/main`. A commit on `main` there is live at once for every agent on that host, and a host gets crew's `main` by `git pull`, not a deploy. So work is built in a worktree of its own, never in `main`, and a bolt lands only on the user's word, through sluice. `main` moves only through sluice (`state.3`): a commit of anyone's, the user's own and the design agent's records among them, is made on a branch in a worktree of its own and submitted with `wt submit main` from there, and the main checkout is then brought level with `git -C <main> read-tree -m -u <old> main`, since sluice moves the branch and not the checkout's files.
 
 ## Tests
 
@@ -26,7 +26,7 @@ On every host, the `crew` command and the plugin every Claude session loads run 
 - Run end-to-end tests only through `tests/suite` or `tests/run`, from the worktree's root. Never run a `tests/t-*.sh` file with bash: `tests/run` is what puts stub herdr, ssh, claude and hostname first on the path and gives each test a scratch HOME and bare remotes. A test run outside it reaches the real agents, the real plan on GitHub and the real repos. Every test stops on its first line when `TESTS` is unset; a new test keeps that line.
 - `tests/suite` and `tests/run` exit non-zero when any test fails, and print a summary line; only "0 failed" passes.
 - Inside devenv's shell `sed` is GNU sed. A test edits a fixture in place with `rewrite` from `tests/lib.sh`, never `sed -i ''`.
-- Every merge in crew, a unit's, a chore's or a fix's into its bolt and a bolt's onto main, is a submission to sluice, `wt submit <target>`: sluice runs every `check-full` task on the target with the work merged, as `.config/sluice.toml` requires of `bolt/*` and `main`, in about two minutes with nothing replayed, less when it replays, and lands it as a merge commit only when all pass, nothing landed otherwise; onto main it replays nothing (`tests.5`, `tests.10`). Nothing else moves a bolt's branch or main: no `wt merge`, `git merge`, `reset` or fast-forward there. An agent runs the submission in the background and waits for it to end.
+- Every merge in crew, a unit's, a chore's or a fix's into its bolt and a bolt's onto main, is a submission to sluice, `wt submit <target>`: sluice runs every `check-full` task on the target with the work merged, open on the host and none replayed, as `.config/sluice.toml` requires of `bolt/*` and `main`, in about two minutes, and lands it as a merge commit only when all pass, nothing landed otherwise (`tests.5`, `tests.10`). Nothing else moves a bolt's branch or main: no `wt merge`, `git merge`, `reset` or fast-forward there. An agent runs the submission in the background and waits for it to end.
 
 ## Proving and landing a bolt
 
