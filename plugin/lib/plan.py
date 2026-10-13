@@ -4326,12 +4326,23 @@ def leftover(fix, place, team, place_there, branch_there):
     return None
 
 
-def own_place(place, on, up, branch, base):
+def own_place(place, on, up, branch, base, does="starts a fix"):
     """Why a fix's place is not its own, or None (teams.3): it must be on the fix's branch (on: the one it is on, or is
-    rebasing when a merge stopped partway through its rebase) made from the team's bolt (up: that branch's upstream)."""
+    rebasing when a merge stopped partway through its rebase) made from the team's bolt (up: that branch's upstream).
+    does is what crew does only in a fix's own place: starts or drops a fix."""
     if on == branch and up == base:
         return None
-    return f"{place} is on {on or 'no branch'}, made from {up or 'no bolt'}, not {branch} from {base}: crew starts a fix only in its own place"
+    return f"{place} is on {on or 'no branch'}, made from {up or 'no bolt'}, not {branch} from {base}: crew {does} only in its own place"
+
+
+def fix_drop_why(fix, bolt, team, slot, place_there, branch_there, merged):
+    """Why crew fix <name> --drop is refused, or None (teams.3, record 0028): the fix has merged into its bolt, so what
+    it changed is the bolt's and a new fix undoes it; or no slot, place or branch of the team holds it."""
+    if merged:
+        return f"{fix} has merged into bolt/{bolt}, so it is not dropped: what it changed is the bolt's, and a new fix undoes it"
+    if not (slot or place_there or branch_there):
+        return f"{team} has no fix {fix}: no slot, place or branch holds it"
+    return None
 
 
 def place_branch(fleet, t, place):
@@ -4351,11 +4362,13 @@ def place_branch(fleet, t, place):
 
 
 def fix_cmd(fleet, a):
-    """What crew fix decides before its stage, a.mode start, merge or wait: the bolt the team holds (BOLT), the fix
-    (FIX), its place (PLACE) and the slot holding it, if any (SLOT); for a merge, how it merges into the bolt (MERGE),
-    by a submission to sluice as a unit's does. A name crew does not mint, a team holding no bolt, and a fix not in
-    flight are refused; a new fix whose branch or place is already there (fix.start) and a merge from a place not the
-    fix's own (fix.merge) are refused and recorded (teams.3, teams.5)."""
+    """What crew fix decides before its stage, a.mode start, merge, drop or wait: the bolt the team holds (BOLT), the
+    fix (FIX), its place (PLACE) and the slot holding it, if any (SLOT); for a merge, how it merges into the bolt
+    (MERGE), by a submission to sluice as a unit's does; for a drop, its branch when it is there (BRANCH). A name crew
+    does not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
+    already there (fix.start), a merge from a place not the fix's own (fix.merge), and a drop of a merged fix, of one
+    nothing holds or of a place not the fix's own (fix.drop) are refused and recorded (teams.3, teams.5, record
+    0028)."""
     t = crew.team_of(fleet, a.team)
     crew.NAME.match(a.name) or fail("a fix is named with lowercase words and dashes")
     CONTEXT["label"] = t["label"]
@@ -4365,9 +4378,9 @@ def fix_cmd(fleet, a):
     f = team_state(t) / "slots"
     slot, fix, place = fix_in_slot([l.split() for l in (f.read_text().splitlines() if f.exists() else []) if l.strip()],
                                    bolt, a.name, t["kit"]["dir"])
-    a.mode == "start" or slot or fail(f"{t['name']} has no fix {a.name} in flight")
+    a.mode in ("start", "drop") or slot or fail(f"{t['name']} has no fix {a.name} in flight")
     said = dict(BOLT=bolt, FIX=fix, PLACE=place, SLOT=slot or "")
-    act = {"start": "fix.start", "merge": "fix.merge"}.get(a.mode)
+    act = {"start": "fix.start", "merge": "fix.merge", "drop": "fix.drop"}.get(a.mode)
     try:
         if a.mode == "start" and not slot:
             why = leftover(fix, place, t["name"], os.path.exists(place),
@@ -4377,6 +4390,14 @@ def fix_cmd(fleet, a):
             why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
             not why or fail(why)
             said["MERGE"] = merge_command(bolt)
+        elif a.mode == "drop":
+            main, there = t["kit"]["main"], os.path.exists(place)
+            branch = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"refs/heads/{fix}", ok=(0, 1))[0] == 0
+            why = fix_drop_why(fix, bolt, t["name"], slot, there, branch, branch and gather.fix_merged(main, fix, bolt))
+            not why or fail(why)
+            why = there and own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}", "drops a fix")
+            not why or fail(why)
+            said["BRANCH"] = fix if branch else ""
     except Refusal as e:
         if act:
             record.emit(t["label"], act, [f"fix/{bolt}/{a.name}", f"bolt/{bolt}"], refused=str(e))
@@ -4525,6 +4546,7 @@ def tidy(fleet, a):
     units = {u.name() for *_, p in found for u in p.units() if u.get("Repo") == kit}
     chores = {u.name() for *_, p in found for u in p.chores() if u.get("Repo") == kit}
     ups, on_main = gather.upstreams(main), set(gather.changes(main, "main"))
+    dropped = fixes_dropped(main)
     chores_on = {}  # each branch's chores, read once each and only for a chore's place
 
     def chores_of(ref):
@@ -4535,7 +4557,7 @@ def tidy(fleet, a):
         path, branch = w["path"], w.get("branch") or ""
         crews = tidy_over(path, branch, kdir, ups.get(branch, ""), bolts, units, on_main,
                           lambda bolt: gather.archived(main, f"bolt/{bolt}"), lambda fix, bolt: gather.fix_merged(main, fix, bolt),
-                          chores, chores_of)
+                          chores, chores_of, dropped)
         if crews is None:
             continue
         name, over = crews
@@ -4566,12 +4588,17 @@ def tidy(fleet, a):
         if not wt_left_branch(r.stdout, path):
             print(f"{path} is removed, and {branch} is kept: crew could not read what wt remove said of the branch")
             continue
+        if branch in dropped:
+            print(fix_branch_gone(main, branch, ups.get(branch, ""), path))
+            continue
         r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
         print(f"{path} and {branch} are removed; the branch was at {sha}" if r.returncode == 0 else
               f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
     # A bolt is a branch with no worktree (record 0026): each one crew made, by its mark, goes once no plan has the bolt
     # and no worktree holds it; a deletion sluice's guard refuses, while a submission to it waits, is kept and named.
     worked = {w.get("branch") for w in trees}
+    for branch in sorted(dropped - worked - held):  # a dropped fix's branch no worktree holds, its place gone already
+        print(fix_branch_gone(main, branch, ups.get(branch, "")))
     for line in (gather.run(["git", "config", "--get-regexp", r"^branch\.bolt/.*\.crew$"], main) or "").splitlines():
         name = line.split()[0][len("branch.bolt/"):-len(".crew")]
         over = bolt_branch_over(name, bolts, f"bolt/{name}" in worked)
@@ -4584,13 +4611,51 @@ def tidy(fleet, a):
               f"bolt/{name} is kept: {over}, and git refused to remove it: {' '.join(r.stderr.split())}")
 
 
+def fixes_dropped(main):
+    """The fix branches of a kit checkout their conductor dropped (record 0028), by the mark crew fix --drop sets in
+    the kit's git config, branch.<fix>.crew dropped, which git drops with the branch."""
+    out = gather.run(["git", "config", "--get-regexp", r"^branch\.fix/.*\.crew$"], main) or ""
+    return {k[len("branch."):-len(".crew")] for k, _, v in (l.partition(" ") for l in out.splitlines()) if v == "dropped"}
+
+
+def fix_branch_kept(up, cherry):
+    """Why a dropped fix's branch is kept when its place goes (plan.10, record 0028), or None when it goes: it holds
+    commits whose patch its bolt (up, the branch it tracks) lacks, as git cherry (exit, output, error) against the bolt
+    says, or it can't be compared with one."""
+    if not up:
+        return "it tracks no bolt to compare it with"
+    code, out, err = cherry
+    if code:
+        return f"git cannot compare it with {up}: {' '.join(err.split()) or f'exit {code}'}"
+    n = sum(1 for l in out.splitlines() if l.startswith("+"))
+    return f"it holds {n} commit{'' if n == 1 else 's'} whose patch {up} lacks (git cherry), the user's to keep or delete" if n else None
+
+
+def fix_branch_gone(main, branch, up, path=None):
+    """A dropped fix's branch once no worktree is on it, its place (path) removed now or before: deleted when it holds
+    nothing beyond its bolt, else kept, named and its mark unset, so the user's from then on (fix_branch_kept); what
+    crew says of it."""
+    git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
+    sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
+    r = git("cherry", up, branch) if up else None
+    why = fix_branch_kept(up, r and (r.returncode, r.stdout, r.stderr))
+    lead = f"{path} is removed, and {branch}" if path else branch
+    if why:
+        git("config", "--unset", f"branch.{branch}.crew")
+        return f"{lead} is kept at {sha}: it was dropped, and {why}"
+    r = git("branch", "-q", "-D", branch)
+    if r.returncode:
+        return f"{lead} is kept: {r.stderr.strip()}"
+    return f"{path} and {branch} are removed; the branch was at {sha}" if path else f"{branch} is removed: it was dropped; it was at {sha}"
+
+
 def bolt_branch_over(bolt, bolts, worktree):
     """Why a bolt's branch crew made, and holds no worktree of, is over (plan.9, record 0026): no plan has the bolt and
     no worktree holds the branch; else None, while the bolt is planned or held, or a worktree is on its branch."""
     return None if bolt in bolts or worktree else f"bolt {bolt} is in no plan"
 
 
-def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_merged, chores=(), chores_of=None):
+def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_merged, chores=(), chores_of=None, dropped=()):
     """Whether a worktree is one crew made, and whether its work is over (plan.9): None for one crew did not make; else
     (the name a slot holds its work by, why its work is over or None while it goes on). crew made it when it is
     directly in <kit>/bolts/ on bolt/<its folder>, or directly in <kit>/places/ on unit/<its folder>, on
@@ -4598,7 +4663,8 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_me
     has the bolt (bolts); a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)) or no
     plan has it (units), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while
     the bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
-    it (chores); a fix's once it has merged into its bolt (fix_merged(branch, bolt)) or no plan has its bolt."""
+    it (chores); a fix's once it has merged into its bolt (fix_merged(branch, bolt)), its conductor dropped it (its
+    branch in dropped, record 0028) or no plan has its bolt."""
     folder, bolt = os.path.basename(path), up[5:] if up.startswith("bolt/") else None
     if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch == f"bolt/{folder}":
         return None, None if folder in bolts else f"bolt {folder} is in no plan"
@@ -4613,6 +4679,7 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_me
                         None if folder in units else f"unit {folder} is in no plan")
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("fix/") and bolt:
         return branch, (f"{branch} has merged into bolt/{bolt}" if fix_merged(branch, bolt) else
+                        f"{branch} was dropped" if branch in dropped else
                         None if bolt in bolts else f"bolt {bolt}, which {branch} was made from, is in no plan")
     return None
 
@@ -5797,14 +5864,15 @@ def unit_wait(fleet, a):
 
 
 def fix_run(fleet, a):
-    """crew fix <team> <name> "<what is wrong>" | --merge | --wait, on the team's host (teams.3, teams.5, plan.8): the
-    team's read first, but for a wait; then what fix_cmd decides. A new fix takes a slot, is refused and recorded when
+    """crew fix <team> <name> "<what is wrong>" | --merge | --drop | --wait, on the team's host (teams.3, teams.5,
+    plan.8): the team's read first, but for a wait or a drop, which reads the team last (fix_drop); then what fix_cmd
+    decides. A new fix takes a slot, is refused and recorded when
     every slot is in flight or its place is not its own, and starts as a code stage, in a place that could not be made
     ready as in one that could, its agent told what failed (record 0028); a merge starts as a merge stage,
     a submission of the fix to the bolt through sluice; a wait waits on the stage the fix's slot owes (stage_wait)."""
     t = crew.team_of(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
-    if a.mode != "wait":
+    if a.mode not in ("wait", "drop"):
         reap(fleet, team)
     said = fix_cmd(fleet, argparse.Namespace(team=t["name"], name=a.name, mode=a.mode))
     slot, fix, place, bolt = said["SLOT"], said["FIX"], said["PLACE"], said["BOLT"]
@@ -5812,6 +5880,8 @@ def fix_run(fleet, a):
     on = [obj, f"bolt/{bolt}"]
     if a.mode == "wait":
         return stage_wait(fleet, argparse.Namespace(team=t["name"], slot=slot, timeout=a.timeout, stuck=a.stuck))
+    if a.mode == "drop":
+        return fix_drop(fleet, team, said, on)
     unready = None
     if a.mode == "start":
         taken = False
@@ -5838,6 +5908,24 @@ def fix_run(fleet, a):
             print(f"{unready.splitlines()[0].rstrip(':')}; {agent} starts on the fix all the same, told what failed")
         run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"])
         print(f"{agent} has {fix}: code, in {place}")
+
+
+def fix_drop(fleet, team, said, on):
+    """crew fix <team> <name> --drop, once fix_cmd let it (teams.3, record 0028): the fix's slot freed, its agent ended
+    when one is up, a working one only with --force (teams.2); its branch marked dropped in the kit's git config
+    (fixes_dropped); the drop recorded; then the team's read, whose tidy removes its place and its branch as a dropped
+    unit's go, keeping a branch with commits beyond the bolt, named (plan.9, plan.10)."""
+    t, slot, fix = team.t, said["SLOT"], said["FIX"]
+    if slot:
+        agent = team.agent_of(slot)
+        on = on + [f"agent/{agent}"]
+        why = team.free(slot, ending(fleet, t))
+        not why or stopped(team.label, "fix.drop", on, why)
+        print(f"{agent} is free: {fix} is dropped")
+    if said["BRANCH"]:
+        kit_git(fleet, t, t["kit"]["main"], "config", f"branch.{fix}.crew", "dropped")
+    record.emit(team.label, "fix.drop", on)
+    reap(fleet, team)
 
 
 def team_status(fleet, a):
@@ -7949,7 +8037,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("_fix-run")
     x.add_argument("team")
     x.add_argument("name")
-    x.add_argument("mode", choices=("start", "merge", "wait"))
+    x.add_argument("mode", choices=("start", "merge", "drop", "wait"))
     x.add_argument("words", nargs="?", default="")
     x.add_argument("--timeout", type=int, default=3600000)
     x.add_argument("--stuck", type=int, default=900000)
