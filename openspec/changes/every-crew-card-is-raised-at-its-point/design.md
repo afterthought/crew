@@ -28,7 +28,7 @@ The command that makes or reads the event calls the builder and posts through `c
 | rewritten | `crew plan propose --replaces <m>` | change the chain's card; the rail's row for `n` carries it |
 | a conductor agrees | `crew plan agree` | change ("no longer waits on …") |
 | applied, dropped | `crew plan approve`, `crew plan drop` | close with the outcome, or withdraw with the user's reason |
-| a batch due | `crew review` | post `batch/<n>` after starting its session |
+| a batch's summary delivered | `crew review --wait`, when the reviewer's file is there | start the batch's session, post `batch/<n>` |
 | the tap, or the session sent | `crew card wait batch/<n>` | print the notes; close |
 | a bolt reads proven | the merge's end (`crew unit wait`, `crew chore wait`) and `crew rail` | post `land/<bolt>` |
 | the head moves while open | the merge's end | change ("head is now …") |
@@ -73,7 +73,7 @@ crew starts a plannotator session only for a batch (on the batch's folder, the s
 
 ### 9. The rail and the board
 
-`crew rail` prints a fifth group, questions, each open question card with its asker, its title and its age, and under every row its card's id and state; after the groups it lists what the sweep did. `board.agent_views` gives each agent its open cards, questions among them, and `status.js` draws them (`code.8`); `tests/py/test_board.py` pins the keys the mod reads.
+`crew rail` prints under every row its card's id and state, and after its groups the open question cards, each with its asker, its title and its age, the open record cards apart as today, and what the sweep did. `board.agent_views` gives each agent its open cards, questions among them, and `status.js` draws them (`code.8`); `tests/py/test_board.py` pins the keys the mod reads.
 
 ## Risks / Trade-offs
 

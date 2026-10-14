@@ -8,7 +8,7 @@
 ## 2. Raised, changed and closed at the event
 
 - [ ] 2.1 `crew plan propose`, `--replaces`, `agree`, `approve` and `drop` post, change and close the proposal's card under `proposal/<n>` of the chain; a refused post is recorded and the rail shows it. Logic: `tests/py/test_proposal_life.py`, the chain's key and which act each step makes. Journey: `tests/t-cards.sh` on the stub pendingyou (`plan.4`, `briefs.11`).
-- [ ] 2.2 `crew review` posts the batch's card after starting its session; `crew card wait batch/<n>` prints the notes and closes it on the tap or the session's send. Logic: `tests/py/test_batches.py`. Journey: `tests/t-cards.sh` (`briefs.12`).
+- [ ] 2.2 `crew review --wait` starts the batch's session and posts its card when the reviewer's summary is delivered; `crew card wait batch/<n>` prints the notes and closes the card on the tap or the session's send. Logic: `tests/py/test_batches.py`. Journey: `tests/t-cards.sh` (`briefs.12`).
 - [ ] 2.3 The merge's end and the rail read post the landing card when the bolt reads proven, change it when the head moves, `crew fix` withdraws it on a defect, `crew bolt land` closes it. Logic: `tests/py/test_landing.py` and `tests/py/test_rail.py` `TestRows`, when a bolt reads proven and which act follows. Journey: `tests/t-journey-land.sh` (`plan.16`, record 0025).
 - [ ] 2.4 `crew ops offer` posts or changes the deploy's card and tells main-level ops its id; `crew ops record --act end` closes it with the outcome; `crew ops step` posts a user's or a held step's card and closes it on done or declined. Logic: `tests/py/test_ops.py` `TestRows`, the held step's row and words. Journey: `tests/t-journey-ops.sh` (`plan.14`).
 - [ ] 2.5 `crew record <kit> <n> --proposed|--accepted|--rejected [--settled-in-pane]` records the status, raises the card unless settled in the pane, closes it on accepted or rejected, and refuses a status the file does not hold. Logic: `tests/py/test_cards.py`, the record builder and the refusal. Journey: `tests/t-cards.sh` (`briefs.15`).
@@ -32,7 +32,7 @@
 
 ## 7. The rail and the board
 
-- [ ] 7.1 `crew rail` prints the questions group, each row's card id and state, and what the sweep did; `board.agent_views` gives each agent its open cards and `status.js` draws them. Logic: `tests/py/test_rail.py` `TestText`, `tests/py/test_board.py`. Mod: `plugin/tests/` through `tests/mod`. Journey: `tests/t-journey-board.sh` (`code.8`).
+- [ ] 7.1 `crew rail` prints each row's card id and state, the open questions after its groups, and what the sweep did; `board.agent_views` gives each agent its open cards and `status.js` draws them. Logic: `tests/py/test_rail.py` `TestText`, `tests/py/test_board.py`. Mod: `plugin/tests/` through `tests/mod`. Journey: `tests/t-journey-board.sh` (`code.8`).
 
 ## 8. Commands and docs
 

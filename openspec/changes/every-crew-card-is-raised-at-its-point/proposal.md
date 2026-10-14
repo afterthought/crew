@@ -6,7 +6,7 @@ Record 0031 (accepted 2026-10-14, the card elaboration session) settles crew's c
 
 ## What Changes
 
-- **crew builds and raises six cards itself**, each from the facts of its event, by the command that makes or reads the event, under the host's Pending You sign-in and in the role's name: a **record**'s when `crew record <kit> <n> --proposed` runs for a record not settled in the pane; a **proposal**'s when `crew plan propose` accepts it; a **batch**'s when `crew review` finds one due; a **landing**'s when the merge that completes a bolt is recorded, or the rail is read, and the bolt reads proven; a **deploy**'s when `crew ops offer` runs; a **step**'s when `crew ops step` records a step whose doer is the user or that is held for the user's word. No agent writes, posts or closes a row's card; `crew plan card` and `crew card post|change|close` go.
+- **crew builds and raises six cards itself**, each from the facts of its event, by the command that makes or reads the event, under the host's Pending You sign-in and in the role's name: a **record**'s when `crew record <kit> <n> --proposed` runs for a record not settled in the pane; a **proposal**'s when `crew plan propose` accepts it; a **batch**'s when the reviewer delivers the summary of a batch cut at the batch clock and the planner's `crew review --wait` returns; a **landing**'s when the merge that completes a bolt is recorded, or the rail is read, and the bolt reads proven; a **deploy**'s when `crew ops offer` runs; a **step**'s when `crew ops step` records a step whose doer is the user or that is held for the user's word. No agent writes, posts or closes a row's card; `crew plan card` and `crew card post|change|close` go.
 - **One card per thing, changed in place.** A proposal rewritten with `--replaces`, a landing or a deploy whose head moved, a record revised: crew changes the one card with a change note. Keys are the thing's: `proposal/<n>` of the chain's first proposal, `batch/<n>`, `land/<bolt>`, `deploy/<env>`, `op/<env>/<n>`, `record/<kit>/<number>`.
 - **crew closes each card at the event that ends it**, with its outcome: an approval applied or a proposal dropped, a record accepted or rejected, a batch tapped or its session sent, a bolt landed or held for a fix, a deploy ended or failed, a step done or skipped or done by its agent; a decline is closed with the user's words when the owner reads it. crew withdraws a row's card whose row is gone, and posts an open row's card again after the host signs in anew, the older copy named dead.
 - **A question is the asker's.** A conductor, the planner, main-level ops and the design agent ask through Pending You's own tools in their sessions, under a key of their own. crew's hook refuses a post, change or close under a row's key and from any other role, lets the rest through, and records each on the rail; on each rail read crew withdraws a question whose asker's session has ended. A stage agent asks through `crew needs`.
@@ -25,9 +25,8 @@ None.
 - `rail-cards`: the six cards raised, changed, closed and re-posted by crew; the question's checks and record; the words rule; the hook's scope.
 - `card-sessions`: a session for a batch and a long proposal alone, started by crew with the card, ended by crew's close.
 - `plan-proposals`: a proposal's card raised by `crew plan propose`, changed in place by `--replaces`, closed by approve and drop.
-- `review-batches`: a batch's card raised by crew when the batch is due, closed on the tap or the session's send.
+- `review-batches`: a batch's card raised by crew when the reviewer delivers its summary, closed on the tap or the session's send.
 - `main-level`: the deploy's and the step's cards crew's, the held step; `crew record`.
-- `crew-rail`: a fifth group, questions; every open card with its owner; the sweep withdraws.
 
 ## Impact
 
