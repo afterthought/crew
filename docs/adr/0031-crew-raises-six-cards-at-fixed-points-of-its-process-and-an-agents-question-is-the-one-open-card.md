@@ -1,7 +1,7 @@
 ---
 number: 31
 title: crew raises six cards at fixed points of its process, and an agent's question is the one open card
-status: proposed
+status: accepted
 date: 2026-10-14
 decision-makers:
 - Chuck Swanberg
@@ -9,9 +9,9 @@ decision-makers:
 
 # crew raises six cards at fixed points of its process, and an agent's question is the one open card
 
-Status: proposed to the user on 2026-10-14, in the card elaboration session; accepted only on their yes.
+Status: accepted by the user on 2026-10-14, in the card elaboration session: "qyes. approved".
 
-Deciders: the user, in the card elaboration session of 2026-10-14, whose words are quoted at each decision they settled; the rest is the elaboration agent's and stands only on their yes.
+Deciders: the user, in the card elaboration session of 2026-10-14, whose words are quoted at each decision they settled, and whose yes on the whole record is above; written by the elaboration agent.
 Supersedes: record 0005's card clauses, all of them, restated whole below so that what stands is read here and not from 0005's amendments; record 0018's card is kept as decision 5 says.
 Amends: `briefs.9`, `briefs.11`, `briefs.13`, `briefs.15`, `briefs.16`, `plan.14`, `plan.16`.
 Sources: `openspec/explorations/cards/reading.md` (the numbers, the sign-in, the strands) and `mockups.md` (the process walk and one mockup per card), both read and annotated by the user on 2026-10-14; Pending You's MCP tool schemas (`post_request`, `update_request`, `ack_answer`, `cancel_request`), read 2026-10-14; the fleet's `lib/pending-you.nix`, the `pendingyou` CLI 0.28.0 (`dist/api.js`, `dist/remote.js`), `~/.config/pendingyou/`, the sessions' MCP logs on mac-studio; the run records of all three partitions, 2026-10-08 to 14; the briefs and `plugin/hooks/cards` as they stand on main at fe8e7f8.
@@ -116,7 +116,7 @@ The landing card's link to a running environment for the bolt: "eventually this 
 ### Consequences
 
 - One change in crew, `every-crew-card-is-raised-at-its-point` (`openspec/changes/`): the six builders as functions of facts, each raised and closed at its event; the hook narrowed to the three checks and the record; the question's sweep; `crew record`; the briefs' *Cards* sections rewritten to this record; the rail showing every card with its owner; the specs' deltas.
-- The rules amended in this commit: `briefs.9`, `briefs.11`, `briefs.13`, `briefs.15`, `briefs.16`, `plan.14`, `plan.16`, each marked proposed until the user's yes.
+- The rules amended in this commit: `briefs.9`, `briefs.11`, `briefs.13`, `briefs.15`, `briefs.16`, `plan.14`, `plan.16`, accepted with it.
 - The design agent's brief loses its own card posting and gains `crew record`; a conductor's brief loses the landing card's shape and keeps the tell to ops on its yes; the planner's loses `crew plan card` and the posting of a proposal's card; main-level ops's loses the deploy and step cards' shapes.
 - A partition without Pending You loses pings, not decisions: the rail stays complete (record 0005).
 
