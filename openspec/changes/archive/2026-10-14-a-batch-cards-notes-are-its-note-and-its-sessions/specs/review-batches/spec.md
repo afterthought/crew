@@ -33,9 +33,13 @@ A batch card SHALL be a notice that asks nothing, which the user sends back with
 - **WHEN** the user sends a batch card of six units back with one tap and no note, having sent nothing from the session
 - **THEN** the card is answered, no unit is constructed again, and the user picked and typed nothing
 
-#### Scenario: Notes written in the session
+#### Scenario: Notes written in a session
 - **WHEN** the user annotates `x1`'s design and `z1`'s tasks in the batch's session and sends the annotations
 - **THEN** the planner sends each unit's annotations to its conductor at once, and the card stays open for the user
+
+#### Scenario: Two fine, one with notes
+- **WHEN** the user writes notes for one unit of three in the card's note, naming it, and sends the card back
+- **THEN** only that unit is constructed again, with the notes, and the other two are fine
 
 #### Scenario: The session approved
 - **WHEN** the user approves the batch's session without annotations
