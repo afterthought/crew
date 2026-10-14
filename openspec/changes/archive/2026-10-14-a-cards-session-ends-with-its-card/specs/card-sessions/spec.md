@@ -3,20 +3,20 @@
 ### Requirement: A session whose card is closed or whose row is gone is ended on every rail read
 Each time `crew rail` runs, and each time the rail tab refreshes, crew SHALL end, on every host of each partition read, each session it started for a card key whose row is gone, or whose card the run record holds as closed with no card open under the key. It SHALL end only sessions it recorded, and only a process plannotator lists as serving the recorded document.
 
-#### Scenario: A landed unit's verify session
-- **WHEN** unit `x` has landed, and the session crew started for `verify/x/20261009-1412` still runs on chuck-herdr-alpha
-- **THEN** the next `crew rail`, run on mac-studio, ends that session, and its link no longer opens
+#### Scenario: A verify card's session from before
+- **WHEN** the session crew started for `verify/x/20261009-1412`, before a verify report had no row, still runs on chuck-herdr-alpha
+- **THEN** the next `crew rail`, run on mac-studio, ends that session, since no row has its key, and its link no longer opens
 
 #### Scenario: A proposal approved in the app
 - **WHEN** the user approves proposal 4 on its card, the planner runs `crew plan approve 4` but its session lost Pending You's tools before it closed the card
 - **THEN** the next rail read ends the session for `proposal/4`, since its row is gone
 
 #### Scenario: A card closed while its row stays
-- **WHEN** the conductor closed card `verify/x/20261009-1412` with `ack_answer`, its hook could not end the session, and the report is still the newest
+- **WHEN** the planner closed card `proposal/4` with `ack_answer`, its hook could not end the session, and proposal 4 is still open
 - **THEN** the next rail read ends that session
 
 #### Scenario: A row with no card yet
-- **WHEN** the conductor started the session for `verify/x/20261009-1412` and has not yet posted its card
+- **WHEN** the planner started the session for `proposal/4` and has not yet posted its card
 - **THEN** a rail read leaves the session running
 
 #### Scenario: A session crew did not start
@@ -31,7 +31,7 @@ Each time `crew rail` runs, and each time the rail tab refreshes, crew SHALL end
 After its groups and its open cards with no row, `crew rail` SHALL list each session it ended on that read, with its card key, the unit for a batch card's, its partition, its host and whether its card was closed or its row gone, and SHALL name each host whose sessions it could not check, with why. When it ended nothing and checked every host, it SHALL print nothing about sessions.
 
 #### Scenario: Two sessions ended
-- **WHEN** a rail read ends the sessions of `proposal/4` and `verify/x/20261009-1412`
+- **WHEN** a rail read ends the sessions of `proposal/4` and `batch/3`
 - **THEN** the rail lists both, each with its host and why it was ended
 
 #### Scenario: Nothing to end
@@ -39,18 +39,18 @@ After its groups and its open cards with no row, `crew rail` SHALL list each ses
 - **THEN** the rail says nothing about sessions
 
 ### Requirement: A session crew can't judge is kept
-A rail read SHALL end no session whose row or card it cannot tell: none on a host that does not answer, which it names; no `verify/<unit>/…` session of a unit whose team's host did not answer; no session for a card closed, and no batch card's, while a host of the partition's run record did not answer; and no session started less than two minutes before its host is checked, which a later read judges.
+A rail read SHALL end no session whose row or card it cannot tell: none on a host that does not answer, which it names; no session for a card closed, and no batch card's, while a host of the partition's run record did not answer; and no session started less than two minutes before its host is checked, which a later read judges.
 
 #### Scenario: The team's host is asleep
 - **WHEN** chuck-herdr-alpha does not answer
-- **THEN** the rail ends no session there and none for its units' verify keys, names chuck-herdr-alpha as not checked, and ends what it can judge elsewhere
+- **THEN** the rail ends no session there, names chuck-herdr-alpha as not checked, and ends what it can judge elsewhere
 
 #### Scenario: The record is read in part
 - **WHEN** a host of the partition's run record does not answer
-- **THEN** the rail ends no session for a card closed and no batch card's session, and still ends a session whose proposal or verify row is gone
+- **THEN** the rail ends no session for a card closed and no batch card's session, and still ends a session whose proposal's row is gone
 
 #### Scenario: A session just started
-- **WHEN** the conductor starts a session for a report written after the rail's read of its kit began
+- **WHEN** the planner starts a session for a proposal opened after the rail's read began
 - **THEN** that read leaves it running
 
 ## MODIFIED Requirements
