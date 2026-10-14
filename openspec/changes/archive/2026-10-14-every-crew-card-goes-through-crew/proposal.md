@@ -1,5 +1,7 @@
 # Every crew card goes through crew
 
+> Superseded, never built: archived on 2026-10-14 with its specs untouched. Record 0031, accepted by the user that day, replaces it with `every-crew-card-is-raised-at-its-point`, where crew raises its own six cards at their events and an agent's question goes through Pending You's own tools.
+
 ## Why
 
 The user ruled on 2026-10-12 that crew's own commands are the one way crew's agents handle Pending You cards (`briefs.16`, ADR 0005 as amended that day). `a-card-reaches-the-user-when-the-tools-drop` builds the commands. Until this change the briefs still have agents call Pending You's tools, so three things stay true:
