@@ -8,8 +8,8 @@ A card Pending You answers "not found" to the agent that posted it is lost to th
 - **THEN** the planner posts a new approval card under `proposal/17`, whose summary, after its link, says an older copy of this card is dead, to dismiss it in the app, and to answer this one
 
 #### Scenario: A close that finds nothing
-- **WHEN** a conductor closes its verify card for unit `x` after acting on the user's word in the pane, and Pending You answers "not found"
-- **THEN** the conductor posts no card for it, since the row no longer waits, and goes on
+- **WHEN** the planner closes its card for proposal 9 after applying the user's approval given in its pane, and Pending You answers "not found"
+- **THEN** the planner posts no card for it, since the row no longer waits, and goes on
 
 #### Scenario: A lost landing card
 - **WHEN** bolt `y` waits to land at `def5678` and the conductor's card `land/y/def5678` reads "not found" when it updates the card
@@ -23,25 +23,10 @@ A card Pending You answers "not found" to the agent that posted it is lost to th
 A row's owner SHALL ask Pending You for each card the rail shows open under its rows, by the card's id, at its start and whenever Pending You has it call `whoami` again, and SHALL take any card of its own that a Pending You tool answers "not found" as lost.
 
 #### Scenario: Started afresh after the host signed in again
-- **WHEN** a conductor starts and the rail shows its card `req_1` open under `verify/x/20261011-1400`
+- **WHEN** a conductor starts and the rail shows its card `req_1` open under `land/y/def5678`
 - **THEN** the conductor asks Pending You for `req_1`, and when it reads "not found" posts the row's card again
 
 ## MODIFIED Requirements
-
-### Requirement: The owner of a row posts its card
-When an agent crew started has Pending You's tools, it SHALL post one card for each row it owns: the planner for each proposal it opens, a conductor for each of its team's units in review, for each verify report its team's units wait on the user for, and for its bolt once the bolt is proven, or proven but for steps only the user can take. It SHALL post no second card for a row that has one open to it; a card lost to it is not, and is posted again as *A row's card lost to its owner is posted again* says. A team's cards SHALL be its conductor's: its ops and every stage agent SHALL post no card, and no crew agent SHALL post a card that is not a row's.
-
-#### Scenario: A proposal opened
-- **WHEN** the planner opens proposal 4 in a session with Pending You's tools
-- **THEN** one card keyed `proposal/4` is open, asked by the planner
-
-#### Scenario: No Pending You
-- **WHEN** a conductor's session has no Pending You tools and a unit reaches review
-- **THEN** no card is posted, the unit's rail row is as before, and the conductor tells the operator agents it waits on the user
-
-#### Scenario: A proof leaves the user a check
-- **WHEN** brd-2's ops finishes its proof with every item green but one check only the user can make on their Mac
-- **THEN** ops writes that check in its proof file and posts no card, and the user gets one card for it, the conductor's landing card for the bolt
 
 ### Requirement: The rail shows each row's card
 `crew rail` SHALL print, under each row, the row's card key and whether a card with that key is open, whose it is, and the open card's id. A card is open from its `card.post` entry until a `card.close` entry for the same card, or until a later `card.post` entry by the same owner under the same key names another card, which is then the row's card while the older is taken as lost.
