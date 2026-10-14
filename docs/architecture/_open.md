@@ -15,6 +15,7 @@ What is still open now that every page is written. A working file: an item leave
 
 ## Accepted, not built
 
+- `teams.18`, record 0030 (the user's wldn record 0069): a unit stage's integration proof is a submission to sluice that tests and does not land (`a-unit-stages-proof-is-a-submission-to-sluice`), which waits on sluice having such a run, the user's own sluice work; until then crew's stand-in count, at most three unit stages whose proof seeds at once on a machine across every team on it (`at-most-three-seeding-stages-run-at-once-on-a-machine`), whose placing waits on the user's word since crew's test load is held; today a stage's agent seeds in its place and nothing counts them.
 Each is a queued or placed unit; the rule stands and the code catches up.
 
 - Record 0026, as built: sluice and its `wt-submit` reach every host through the fleet's setup at the user's next deploy, which swancloud-design queues (the user, 2026-10-13: "swancloud only, at a deploy"); crew assumes them on the host's path, as it does `wt`, and until then nothing merges or lands through sluice, and `crew bolt submit` refuses, naming `wt-submit`. A kit's `.config/sluice.toml` names its bolt branches' checks before crew gives it a bolt: switchboard-kit and swancloud have none yet. `wt submit --help` exits 0, which `wt-submit` takes as landed and removes the worktree it ran in (sluice d7fdc39).
