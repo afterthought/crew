@@ -65,21 +65,6 @@ Code SHALL start as soon as the unit's change is committed, with no review betwe
 - **WHEN** a verified unit's merge stage runs
 - **THEN** its agent is told to run `wt submit bolt/<bolt> --no-remove` in the unit's place, and sluice's verdict decides whether the unit lands on the bolt
 
-### Requirement: The user reviews every unit before it is coded
-When a unit's construct stage finishes, the conductor SHALL tell the user the unit is ready for review: which unit, the folder its change is in, and in two or three plain sentences what it would make true. It SHALL ask for the answer in words and stop. It SHALL NOT open the change in plannotator or any other viewer, and SHALL NOT recite a command for the user to answer with: the user opens the whole change when they choose to read it. Code SHALL wait for `crew unit approve`, which the user runs or asks an agent to run. What the user wants changed SHALL go back to a fresh construct stage.
-
-#### Scenario: A unit is ready for review
-- **WHEN** a unit's construct agent has committed its change
-- **THEN** the conductor tells the user the unit is ready, where its change is and what it would make true, asks them to approve it or say what to change, and opens nothing
-
-#### Scenario: The user approves in words
-- **WHEN** the user tells the conductor to approve a unit in review
-- **THEN** the conductor runs `crew unit approve` for it, and code may start
-
-#### Scenario: Changes asked for
-- **WHEN** the user asks for a change to a unit in review
-- **THEN** the conductor runs construct again with the user's words, and the unit returns to review
-
 ### Requirement: Work happens in fixed places
 A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.
 
@@ -207,15 +192,15 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 - **THEN** the command returns saying the stage is still running, and whether its agent is working or waiting on work of its own, and no `stage.end` entry is written
 
 ### Requirement: A unit in flight goes back through construct and review
-`crew unit run <unit> construct "<words>"` SHALL be accepted at any stage before the unit has merged into its bolt. Run on a unit that is approved, in code or in verify, it SHALL mark the unit amended in the plan before the stage starts. While a unit is marked amended, `crew unit run <unit> code`, `verify` and `merge` SHALL be refused, saying the unit waits for the user's review.
+`crew unit run <unit> construct "<words>"` SHALL be accepted at any stage before the unit has merged into its bolt. Run on a unit that is in code or in verify, it SHALL mark the unit amended in the plan before the stage starts. While construct runs again, `crew unit run <unit> code`, `verify` and `merge` SHALL be refused; once it has committed, the unit SHALL go on from its tasks with no approval asked, and its revised change SHALL be due for the next batch.
 
 #### Scenario: The user wants a change to a unit in code
 - **WHEN** the conductor runs `crew unit run <unit> construct "<the user's words>"` on a unit in code
-- **THEN** the unit is marked amended, a fresh construct agent rewrites the change in the unit's slot and place, and when it commits the unit's stage is `review`
+- **THEN** the unit is marked amended, a fresh construct agent rewrites the change in the unit's slot and place, and when it commits the unit's stage is read from its tasks
 
 #### Scenario: Code on an amended unit
-- **WHEN** `crew unit run <unit> code` runs on a unit that is marked amended
-- **THEN** it is refused until the user has approved the unit again
+- **WHEN** `crew unit run <unit> code` runs on a unit marked amended whose construct has not committed again
+- **THEN** it is refused until that construct has committed
 
 #### Scenario: An amended intent arrives from an approved proposal
 - **WHEN** an approved proposal amends the intent of a unit in flight
@@ -561,3 +546,116 @@ crew SHALL refuse a unit's or chore's merge before it starts while its branch ho
 #### Scenario: A change main has long held open
 - **WHEN** every branch holds a change open that main has held since before archives, which no unit of the plan has
 - **THEN** no merge is refused for it
+
+### Requirement: A bolt's units are constructed in waves
+Once a team holds a bolt, the conductor SHALL run construct, as slots allow and in the file's order, for every unit whose `After` units have all finished construct. A unit's construct SHALL NOT wait on the user, on another unit's merge, or on another unit's Touches. Changes are so written in waves: the units with no `After` first, then each unit as soon as the changes it builds on are committed.
+
+#### Scenario: A bolt is given
+- **WHEN** a team with four slots is given a bolt of three units, C with `After: A`
+- **THEN** A's and B's constructs run at once, and C's starts as soon as A's change is committed
+
+#### Scenario: More units than slots
+- **WHEN** a team with two slots holds a bolt of five units with no `After`
+- **THEN** two constructs run, and the next unit in the file's order is constructed as each slot frees
+
+### Requirement: A dependent builds on its After units' work as it stands
+When a unit's place is made, crew SHALL bring into `unit/<unit>` the head of each of its `After` units that has not merged, as that head stands. When an `After` unit merges into the bolt, crew SHALL rebase the dependent's place onto the bolt, leaving out that unit's work as the place took it, only while the dependent's agent is not working and its place has no uncommitted changes. A rebase that conflicts SHALL be undone and handed to the dependent as a conflict is.
+
+#### Scenario: Construct on a constructed dependency
+- **WHEN** B has `After: A`, A's change is committed and A is in code, and B's construct starts
+- **THEN** B's place holds A's commits as they stood when B's place was made
+
+#### Scenario: The dependency merges
+- **WHEN** A merges into the bolt while B's agent is idle
+- **THEN** B's place is rebased onto the bolt, and holds no commit of A's that the bolt already holds
+
+#### Scenario: The dependency settled before it merged
+- **WHEN** A's settle rewrote A's change, which B's place holds as it took it, and A merges into the bolt while B's agent is idle
+- **THEN** B's place is rebased onto the bolt with only B's own commits replayed, and nothing conflicts on A's files
+
+#### Scenario: The dependent's own line meets the dependency's settled one
+- **WHEN** B's own commit changed the line A's settle rewrote, and A merges into the bolt while B's agent is idle
+- **THEN** B's rebase conflicts on that line and is undone, and B is told the conflicting paths with a command that rebases it the way crew's rebase did, leaving out A's work as B's place took it
+
+#### Scenario: The dependent is working
+- **WHEN** A merges into the bolt while B's agent is working
+- **THEN** B's place is not touched until the agent is idle
+
+### Requirement: A dependent is told when its After unit is amended
+When an `After` unit is amended after its dependent's code has started, the dependent SHALL NOT be held. crew SHALL tell the dependent of the amendment, with the path of the revised change, the way a forecast reaches it.
+
+#### Scenario: The dependency is amended
+- **WHEN** B has `After: A`, B is in code, and A is constructed again with the user's notes
+- **THEN** B's code goes on, and B is told that A's change was revised, with its path
+
+### Requirement: Touches is a list crew reads
+A unit's `proposal.md` SHALL end with a `## Touches` heading holding one fenced block of repository paths or globs, one to a line. crew SHALL read it before the unit's code starts, and SHALL refuse code when the heading or the block is missing or empty.
+
+#### Scenario: No Touches
+- **WHEN** a unit's proposal has no `## Touches` block
+- **THEN** its code is refused, saying the change must declare what it touches
+
+### Requirement: Overlapping Touches are told before code
+When a unit's code is about to start and its Touches overlap those of an unmerged unit ahead of it in the bolt, crew SHALL tell the later unit which entries overlap and where the other unit's change is. Overlap SHALL NOT hold the unit's code.
+
+#### Scenario: Two units declare the same file
+- **WHEN** units A and B, A first in the file, both list `plugin/lib/plan.py`, and B's code is about to start
+- **THEN** B's code starts, and its prompt names the overlap with A on `plugin/lib/plan.py` and the path of A's change
+
+### Requirement: Verify names what a unit changed and did not declare
+At verify, every path `git diff --name-only bolt/<bolt>...unit/<unit>` names that no entry of the unit's Touches matches SHALL be a finding of the verify report. The code stage that acts on the finding SHALL correct the Touches block of `proposal.md`, and change nothing else of the change.
+
+#### Scenario: A path not declared
+- **WHEN** a unit changed `README.md` against its bolt and its Touches do not match it
+- **THEN** the verify report names `README.md` as changed and not declared, and the code stage run on the finding adds it to the Touches block
+
+### Requirement: A conflict is forecast on the conductor's waits
+Each time the conductor waits on a stage or a proof through crew, crew SHALL dry-run, with `git merge-tree`, the merge of each unmerged unit's head with `bolt/<bolt>` and with the head of each unmerged unit ahead of it in the bolt's merge order, writing no ref. A dependent SHALL be compared with a unit it comes after only on what it adds beyond the head of that unit its place took.
+
+#### Scenario: The dry run moves nothing
+- **WHEN** the conductor's wait forecasts the merges of three unmerged units
+- **THEN** no branch of the kit has moved
+
+#### Scenario: A dependent carries its After unit's rewritten work
+- **WHEN** B, after A, holds A's work as its place took it, A is rebased onto the bolt and its settle revises A's own file, and the conductor's wait runs
+- **THEN** B is forecast nothing against A for that file, and a line B's own commit changed that A's settle also changed is forecast
+
+### Requirement: A forecast reaches the later unit once
+A predicted conflict SHALL reach the later unit once for the same two heads, with the conflicting paths and the other unit's OpenSpec change: told to its agent once the agent is not working, when its stage is running; carried in the prompt of its next stage, when no agent of it is running; or as a settle stage, when it has delivered and waits to merge. Overlap SHALL order merging only, and SHALL NOT hold any unit's construct, code or verify.
+
+#### Scenario: Two units will conflict while one codes
+- **WHEN** A and B, A first, both edit the same lines of `plugin/lib/plan.py`, B's code agent is running, and the conductor's wait runs
+- **THEN** B's agent is told, when idle, that its merge after A is forecast to conflict on `plugin/lib/plan.py`, with A's change, and A is told nothing
+
+#### Scenario: No agent running
+- **WHEN** a conflict is forecast for a unit in `planned` with no agent in its slot
+- **THEN** its code stage's prompt carries the forecast
+
+#### Scenario: Nothing new
+- **WHEN** the conductor's wait runs again and neither head has moved
+- **THEN** nothing is told again
+
+#### Scenario: A newer forecast against the bolt
+- **WHEN** a unit with no agent running was forecast to conflict with the bolt, the bolt moved, and a newer forecast against the bolt was made for it
+- **THEN** its next stage's prompt carries only the newer one
+
+### Requirement: A forecast conflict between two units orders them
+When a conflict is forecast between two units that have both not merged, the later unit SHALL gain `After` on the earlier one and merge after it, and the later unit's agent SHALL take the earlier unit's work into its place and resolve the conflict there.
+
+#### Scenario: Two unmerged units
+- **WHEN** a conflict is forecast between A and B, A first, neither merged
+- **THEN** B gains `After: A`, B's agent takes A's work into B's place and resolves the conflict there, and B's merge waits for A's
+
+### Requirement: A unit waiting to merge settles
+A unit that has delivered its verify and waits to merge, and that a forecast conflict or an amended `After` unit reaches, SHALL be given a settle stage: a fresh agent in its slot, with the coder's brief, prompted with the forecast or the amendment. The stage's deliverable SHALL be a commit on `unit/<unit>` made since the stage began; when nothing needs to change, its agent SHALL stop short saying so, and the unit goes on to merge.
+
+#### Scenario: A verified unit is forecast to conflict
+- **WHEN** B is verified and waits to merge, and a conflict with the bolt is forecast for it
+- **THEN** a settle stage starts in B's slot with the forecast, and ends at the commit that resolves it
+
+### Requirement: A conflict is resolved by the later unit's agent
+A conflict between two units, forecast, met at a rebase or met at merge, SHALL be resolved in the later unit's place by the later unit's agent, which SHALL be given the other unit's OpenSpec change and the conflicting paths, and SHALL keep both changes' intents. The earlier unit SHALL NOT be changed for it.
+
+#### Scenario: A merge conflicts
+- **WHEN** B's merge into the bolt conflicts with A, which merged first
+- **THEN** B's agent resolves it in B's place with A's change in hand, and B merges again

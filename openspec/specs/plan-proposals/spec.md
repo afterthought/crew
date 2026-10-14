@@ -179,11 +179,11 @@ Writing, agreeing, approving and dropping a proposal SHALL each leave a run-reco
 - **THEN** it shows the proposal written, any agreement, the approval, and the unit's add, in order
 
 ### Requirement: An amendment is read as before and after
-For a `unit amend` command, `crew plan proposed <n>` SHALL show the unit's intent as it stands and as it would be, the unit's bolt, team and stage, and what approval sets in motion: for a unit with a worktree, that its conductor runs construct again and the unit returns to the user's review.
+For a `unit amend` command, `crew plan proposed <n>` SHALL show the unit's intent as it stands and as it would be, the unit's bolt, team and stage, and what approval sets in motion: for a unit with a worktree, that its conductor runs construct again and the unit goes on from its tasks once that construct has committed, its revised change due for the next batch, with no approval asked.
 
 #### Scenario: An amendment to a unit in code
 - **WHEN** proposal N amends the intent of a unit in code in the bolt swb-2 holds
-- **THEN** its page shows both intents, that the unit is in code under swb-2, that swb-2's conductor has or has not agreed, and that on approval the unit goes back to construct and review
+- **THEN** its page shows both intents, that the unit is in code under swb-2, that swb-2's conductor has or has not agreed, and that on approval the unit goes back to construct and then on from its tasks, its revised change in the next batch
 
 ### Requirement: A proposal is put before the user whole
 Any agent that puts one of the planner's proposals before the user, the planner, a conductor or the operator agent, SHALL show what `crew plan proposed <n>` prints, in its own pane or opened beside it, and SHALL NOT name the proposal by its number alone; the number SHALL follow the words, as a reference. The agent SHALL ask for the user's answer in words, SHALL NOT recite a command for the user to answer with, and SHALL run the answering command only on the user's word.

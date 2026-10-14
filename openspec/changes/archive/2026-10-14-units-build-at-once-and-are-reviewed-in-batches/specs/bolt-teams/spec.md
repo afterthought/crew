@@ -65,7 +65,7 @@ At verify, every path `git diff --name-only bolt/<bolt>...unit/<unit>` names tha
 - **THEN** the verify report names `README.md` as changed and not declared, and the code stage run on the finding adds it to the Touches block
 
 ### Requirement: A conflict is forecast on the conductor's waits
-Each time the conductor waits on a stage or a proof through crew, crew SHALL dry-run, with `git merge-tree`, the merge of each unmerged unit's head with `bolt/<bolt>` and with the head of each unmerged unit ahead of it in the file's order, writing no ref. A dependent SHALL be compared with a unit it comes after only on what it adds beyond the head of that unit its place took.
+Each time the conductor waits on a stage or a proof through crew, crew SHALL dry-run, with `git merge-tree`, the merge of each unmerged unit's head with `bolt/<bolt>` and with the head of each unmerged unit ahead of it in the bolt's merge order, writing no ref. A dependent SHALL be compared with a unit it comes after only on what it adds beyond the head of that unit its place took.
 
 #### Scenario: The dry run moves nothing
 - **WHEN** the conductor's wait forecasts the merges of three unmerged units

@@ -33,10 +33,10 @@ A card that asks the user to read something links a plannotator session on that 
 - **THEN** it is refused, saying no row of the rail has that key, and no session is started
 
 ### Requirement: A session is started only where its link can be answered
-`crew card session` SHALL refuse, naming why and leaving no session running: a key that matches no rail row of the caller's partition, a `land/<bolt>/<head>` key, a document that is not on this host, and a session whose link names the host only for itself (`localhost` or a loopback address).
+`crew card session` SHALL refuse, naming why and leaving no session running: a key that matches no rail row of the caller's partition, a `batch/<n>-<k>` key without a unit, a `land/<bolt>/<head>` key, a document that is not on the host the session would run on, and a session whose link names the host only for itself (`localhost` or a loopback address).
 
 #### Scenario: A key whose row is gone
-- **WHEN** the conductor runs `crew card session review/x/abc1234` after construct ran again and `x` is in review at `def5678`
+- **WHEN** the planner runs `crew card session batch/3-1 x` after every card of batch 3 was closed
 - **THEN** it is refused as a key with no row, and no session is started
 
 #### Scenario: A landing card
@@ -48,11 +48,11 @@ A card that asks the user to read something links a plannotator session on that 
 - **THEN** crew ends that session, refuses, and says the link would open only on this host
 
 ### Requirement: One session per card key
-While a session started for a key is running, `crew card session <key>` SHALL start nothing and print that session's link again.
+While a session started for a key, and for a batch key a unit, is running, `crew card session` with that key and unit SHALL start nothing and print that session's link again.
 
 #### Scenario: Run again after a restart
-- **WHEN** the conductor restarts and runs `crew card session review/x/abc1234` while the session it started before is still running
-- **THEN** the command prints the same link, and one session runs for that key
+- **WHEN** the planner restarts and runs `crew card session batch/3-1 x` while the session it started before is still running
+- **THEN** the command prints the same link, and one session runs for `x` on that card
 
 ### Requirement: The session's decision reaches the owner as the card's answer
 `crew card wait <key>` SHALL return when the session for that key has a decision from the user, or has ended without one, and print which: approved, with any notes the user gave; annotated, with the feedback and every annotation the user wrote, word for word; closed by the user with no decision; or ended with no decision. A decision reached while nobody waited SHALL be returned by the next wait for that key. A wait for a key with no session started SHALL be refused.
