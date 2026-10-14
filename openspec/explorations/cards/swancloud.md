@@ -1,0 +1,22 @@
+# swancloud's part of the card design
+
+A note for swancloud's planner, from crew's card elaboration of 2026-10-14 (crew's record 0031, accepted 2026-10-14; `reading.md` §4 and `mockups.md` §4 beside this file). crew's change `every-crew-card-is-raised-at-its-point` builds crew's side; these four things are the fleet's. Nothing here is a crew rule for swancloud (`briefs.3`): the planner shapes them as swancloud's own units.
+
+## What the files say
+
+The fleet's design works and worked: `pendingyou-signin` signs the host in as a connection that may ask, writes `~/.config/pendingyou/credentials.json`, and every session the fleet starts gets the `pendingyou` server with the headers helper `pendingyou-mcp-headers`, which hands the session a token from that file. The sessions' MCP logs on mac-studio show the helper succeeding 338 times from 2026-10-08 to 10-10. Then, in order: 10-10 04:57Z the helper judged the sign-in stale, Pending You refusing to refresh it (`~/.config/pendingyou/helper.json`); 09:05Z the `pendingyou` CLI erased the credential file, as its `dist/api.js` does on a second refused refresh (the file is `{"version":1,"origins":{}}` since); 11:55Z on, every session's log says "headersHelper for MCP server 'pendingyou' did not return a valid value" and falls back to Claude Code's own OAuth login of its account folder, made by the user on 10-08 when one session's token was refused for a moment. Those logins hid the dead host sign-in for two days and put cards on connections that cannot see each other (a card is "not found" from another connection; crew's record 0005, 10-11).
+
+## The four things
+
+1. **The host's sign-in is the one connection**, for crew's own posts (`pendingyou mcp --app claude-code` under the host's credential) and for every session. The user signs each host in once with `pendingyou-signin`: mac-studio at a quiet moment, chuck-herdr-alpha when wldn's teams return. That is the user's step and stays theirs; what the fleet can do is make its absence loud (3) and visible (4). Your planned unit `crew-sessions-hear-their-cards-answers` is this, plus the sessions' permission to the server's tools (`agents.1`): keep it.
+
+2. **The account folders' Claude Code logins go.** Each of the eleven `~/.claude*` folders may hold a Pending You OAuth login in the keychain (none is recorded in its `.claude.json`). With the host signed in, a session never needs one; with the host signed out, one hides the failure. A unit that removes them (the way Claude Code stores them, per folder) and a line in the fleet's Pending You gotcha that the user never logs a session in through Claude Code's `/mcp`, since the host's sign-in is the sessions'.
+
+3. **A helper failure is loud.** Today a session whose helper fails carries on silently on whatever login it has, or with no tools. The fleet's part: the headers helper, or the session's wiring, fails the server visibly when the host has no sign-in (the session's Pending You shows as needing the host's sign-in, naming `pendingyou-signin`), rather than Claude Code's browser login being offered. Also from the logs: the helper waits at most 7 s for a refresh, and under a load of 386 (10-11) that was not always enough; worth a look.
+
+4. **The doctor shows the host's sign-in**: which kind the host holds (asking connection, hear-only login, none), its age, and `pendingyou-signin` as the fix. Your planned unit `the-doctor-shows-the-hosts-pending-you-sign-in` is this: keep it. With it, the morning of 10-10 would have been seen that morning.
+
+## Also from the design, for the deployer
+
+- crew raises the deploy card itself when the deployer runs `crew ops offer`, and changes it in place when a newer head is offered; the deployer's part is unchanged. The step's card is raised by `crew ops step` for a step whose doer is the user, and now also for a step an agent can do but that the change marks **held** for the user's word (now, when quiet, or skip). The shape of that mark is swancloud's `openspec/config.yaml`'s to give after-deploy steps, beside `doer`, `when`, `environments` and `why`; crew reads it from the deployer's `crew ops step` call. The user, 2026-10-14: "Some were also going to be things an agent can do, but the agent might not do them automatically on its own immediately. Instead they would be put in front of me and I could decide when to handle it."
+- The first real test of crew's ops cards is the deployer's offer reaching the phone after the host signs in again.
