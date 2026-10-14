@@ -7,7 +7,6 @@ What is still open now that every page is written. A working file: an item leave
 - **Where meeting signals live** (daily-pass-through-crew, decision D7): the blueprints, or the flywheel's branch with an agent's signals.
 - **Who is told about a finding outside a bolt**: the conductor and main-ops briefs say the planner, the ops brief the conductor, the planner brief the design agent; curation-and-agenda, approved and placed, settles it as "a noticing agent captures and tells nobody" when it lands.
 - **`docs.7`, proposed 2026-10-11 on the user's card**: the design pages have one writer and a unit never edits them; eight landings since the 9th conflicted on an open-items page, two of them swancloud's. Once accepted: `a-unit-never-edits-the-design-pages`.
-- **`read.5`, proposed 2026-10-11, record 0029 on the user's card since 2026-10-14**: the run record is read from the branch alone, every entry pushed as it is written, so a laptop off the tailnet hides only its own work; today a host's entries wait in a local file until its next write, and a landing's guard reaches every host over ssh for them. Once accepted: `the-run-record-reaches-the-branch-as-it-is-written`.
 - **ADR 0020, proposed 2026-10-11 on the user's card**: a team is free for its next bolt once its current one is proven, every unit merged and the proof green, the landing holding no slot; the emergency ssh bolt, approved, waited an hour on swc-1's unrelated landing. Once accepted: `teams.16`, `a-team-is-free-once-its-bolt-is-proven`.
 - **`gitenv()` for every git call**: used for the cache and the tidy, not for `stage_ends` or `gather.py`.
 
@@ -15,6 +14,7 @@ What is still open now that every page is written. A working file: an item leave
 
 ## Accepted, not built
 
+- `read.5`, record 0029 (accepted 2026-10-14): the run record is read from the flywheel's branch alone, every entry pushed as it is written, so a host that does not answer hides only its own work (`the-run-record-reaches-the-branch-as-it-is-written`); today a host's entries wait in a local file until its next write, and a landing's guard, the batch clock and a review reach every host of the partition over ssh for them, so wldn's reviews stall while macbook-pro sleeps. `plan.2`'s carry clause goes with the build.
 - `teams.18`, record 0030 (the user's wldn record 0069): a unit stage's integration proof is a submission to sluice that tests and does not land (`a-unit-stages-proof-is-a-submission-to-sluice`), which waits on sluice having such a run, the user's own sluice work; until then crew's stand-in count, at most three unit stages whose proof seeds at once on a machine across every team on it (`at-most-three-seeding-stages-run-at-once-on-a-machine`), whose placing waits on the user's word since crew's test load is held; today a stage's agent seeds in its place and nothing counts them.
 Each is a queued or placed unit; the rule stands and the code catches up.
 
