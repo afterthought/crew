@@ -1,7 +1,7 @@
 ---
 number: 29
 title: The run record is read from the flywheel's branch alone
-status: proposed
+status: accepted
 date: 2026-10-14
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # The run record is read from the flywheel's branch alone
 
-Status: proposed by swancloud-design on 2026-10-14, carrying rule `read.5` as proposed on 2026-10-11 (00a0569); accepted only on the user's yes on its card (`briefs.15`).
+Status: accepted by the user on 2026-10-14 on the record's card (req_ff5d13bda68149289b6b, approved 20:07Z), as `briefs.15` has it. Proposed by swancloud-design the same day, carrying rule `read.5` as proposed on 2026-10-11 (00a0569).
 
 Deciders: the user. Written by swancloud-design.
 Amends: `read.5`, from proposed to accepted; at acceptance, `plan.2`'s carry (a flywheel-branch commit carries the host's uncarried run record), which has nothing left to carry, and the reading over ssh in `read.5`'s details.
@@ -36,7 +36,7 @@ The user, 2026-10-11: "Hmm this seems like a design issue that we need to talk a
 
 Plainly: every note crew takes about a run goes to Git the moment it is written, so nothing crew decides needs to call another computer, and a computer that is off hides only its own unfinished work.
 
-Once accepted, `the-run-record-reaches-the-branch-as-it-is-written` is queued in crew, and `plan.2`'s carry clause goes with its build.
+`the-run-record-reaches-the-branch-as-it-is-written` is queued in crew on the acceptance, and `plan.2`'s carry clause goes with its build.
 
 ## Consequences
 
