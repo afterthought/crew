@@ -33,11 +33,19 @@ A card that asks the user to read something links a plannotator session on that 
 - **THEN** it is refused, saying no row of the rail has that key, and no session is started
 
 ### Requirement: A session is started only where its link can be answered
-`crew card session` SHALL refuse, naming why and leaving no session running: a key that matches no rail row of the caller's partition, a `land/<bolt>/<head>` key, a document that is not on this host, and a session whose link names the host only for itself (`localhost` or a loopback address).
+`crew card session` SHALL refuse, naming why and leaving no session running: a key that matches no rail row of the caller's partition, a `batch/<n>-<k>` key without a unit, a `batch/<n>` key with one, a `batch/<n>` key on any host but the main level's, a `land/<bolt>/<head>` key, a document that is not on the host the session would run on or that crew cannot read whole, and a session whose link names the host only for itself (`localhost` or a loopback address).
 
 #### Scenario: A key whose row is gone
-- **WHEN** the conductor runs `crew card session review/x/abc1234` after construct ran again and `x` is in review at `def5678`
+- **WHEN** the planner runs `crew card session batch/3` after batch 3's card was closed
 - **THEN** it is refused as a key with no row, and no session is started
+
+#### Scenario: A batch's session on another host
+- **WHEN** a conductor on the box runs `crew card session batch/3 --label wldn`, and the partition's main level is on mac-studio
+- **THEN** it is refused, naming mac-studio, and no session is started
+
+#### Scenario: A unit's change crew cannot read
+- **WHEN** the planner runs `crew card session batch/3`, and the host of `z`'s team does not answer
+- **THEN** it is refused, naming `z` and its host, and no session is started on the rest of the batch
 
 #### Scenario: A landing card
 - **WHEN** the conductor runs `crew card session land/y/abc1234`
@@ -48,22 +56,26 @@ A card that asks the user to read something links a plannotator session on that 
 - **THEN** crew ends that session, refuses, and says the link would open only on this host
 
 ### Requirement: One session per card key
-While a session started for a key is running, `crew card session <key>` SHALL start nothing and print that session's link again.
+While a session started for a key, and for an old batch key a unit, is running, `crew card session` with that key and unit SHALL start nothing and print that session's link again.
 
 #### Scenario: Run again after a restart
-- **WHEN** the conductor restarts and runs `crew card session review/x/abc1234` while the session it started before is still running
-- **THEN** the command prints the same link, and one session runs for that key
+- **WHEN** the planner restarts and runs `crew card session batch/3` while the session it started before is still running
+- **THEN** the command prints the same link, one session runs for batch 3, and the batch's folder is not written again
 
 ### Requirement: The session's decision reaches the owner as the card's answer
-`crew card wait <key>` SHALL return when the session for that key has a decision from the user, or has ended without one, and print which: approved, with any notes the user gave; annotated, with the feedback and every annotation the user wrote, word for word; closed by the user with no decision; or ended with no decision. A decision reached while nobody waited SHALL be returned by the next wait for that key. A wait for a key with no session started SHALL be refused.
+`crew card wait <key>` SHALL return when the session for that key has a decision from the user, or has ended without one, and print which: approved, with any notes the user gave; annotated, with the feedback and every annotation the user wrote, word for word; closed by the user with no decision; or ended with no decision. A decision reached while nobody waited SHALL be returned by the next wait for that key. A wait for a key with no session started SHALL be refused. A batch card's session SHALL hold the batch's notes and SHALL NOT be the card's answer: the card stays open after it.
 
 #### Scenario: Approved in the session
-- **WHEN** the user opens the review card's link on the phone and presses Approve
-- **THEN** the conductor's `crew card wait review/x/abc1234` returns `approved`, and the conductor acts on it as an approval on the card
+- **WHEN** the user opens the link on the card of a proposal of more than fifteen new units on the phone and presses Approve
+- **THEN** the planner's `crew card wait proposal/4` returns `approved`, and the planner acts on it as an approval on the card
 
 #### Scenario: Annotated in the session
-- **WHEN** the user annotates two passages of the design and sends them as feedback
-- **THEN** the wait returns `annotated` with both annotations and the user's words, and the conductor runs construct again with them
+- **WHEN** the user annotates two passages of a proposal's page and sends them as feedback
+- **THEN** the wait returns `annotated` with both annotations and the user's words
+
+#### Scenario: Annotated in a batch's session
+- **WHEN** the user annotates a passage of `x`'s design in batch 3's session and sends it
+- **THEN** the planner's `crew card wait batch/3` returns `annotated` with the annotation word for word, and batch 3's card is still open
 
 #### Scenario: Decided while the owner was down
 - **WHEN** the user approves in the session while the conductor is restarting, and the restarted conductor runs `crew card wait` for that key
@@ -74,7 +86,7 @@ While a session started for a key is running, `crew card session <key>` SHALL st
 - **THEN** the wait returns that the session was closed with no decision, and the card is still the user's to answer
 
 ### Requirement: The session ends when its card closes
-When a crew agent closes or withdraws a card keyed with a row key, the session started for that key on that host SHALL be ended. `crew card end <key>` SHALL end it as well. crew SHALL end only a plannotator process it started for that key, and only while plannotator lists that process as serving that document; a key with no session ends nothing and is not an error.
+When a crew agent closes or withdraws a card keyed with a row key, the session started for that key on that host SHALL be ended. `crew card end <key>` SHALL end it as well. crew SHALL end only a plannotator process it started for that key, and only while plannotator lists that process as serving that document; a key with no session ends nothing and is not an error. When plannotator's list of sessions cannot be read, crew SHALL end nothing, SHALL keep the key's session as recorded, and SHALL say so, so a later rail read ends it.
 
 #### Scenario: A review card closed after approval
 - **WHEN** the conductor approves unit `x` on the card's answer and closes card `review/x/abc1234` with `ack_answer`
@@ -87,3 +99,78 @@ When a crew agent closes or withdraws a card keyed with a row key, the session s
 #### Scenario: A process that is not crew's
 - **WHEN** the process recorded for a key is no longer a plannotator session on that key's document
 - **THEN** crew kills nothing and forgets the key's session
+
+#### Scenario: plannotator's list can't be read
+- **WHEN** the planner withdraws card `proposal/4` and `plannotator sessions --json` fails on its host
+- **THEN** crew ends nothing, says it could not read plannotator's sessions, and keeps `proposal/4`'s session, which the next rail read ends
+
+### Requirement: A batch's session opens its summary and every change whole, as one review
+A `batch/<n>` card's session SHALL be one plannotator review of several files, in this order: the reviewer's summary, then for each unit in the batch's order its proposal, design, specs and tasks and any other Markdown file of its change, as read at the commit the batch read it at. Each file SHALL be opened whole, as its own path, never through a folder whose files the user must open one by one, and each file's name SHALL carry its unit.
+
+#### Scenario: Two units from two teams
+- **WHEN** batch 3 holds `x` of swb-1, on the box, and `z` of atl-1, on mac-studio, and the planner starts its session on mac-studio
+- **THEN** the batch's folder holds `00-summary.md`, then `01-x-proposal.md` and the rest of `x`'s change, then `02-z-proposal.md` and the rest of `z`'s, each as it stood at the commit batch 3 read it at, and plannotator was given those files in that order
+
+#### Scenario: A change's metadata
+- **WHEN** a unit's change folder holds `.openspec.yaml` beside its Markdown files
+- **THEN** the batch's folder and its session hold the Markdown files only
+
+### Requirement: A batch's session is written on the main level's host
+crew SHALL write a batch's session's files into the batch's own folder on the main level's host before it starts the session, and SHALL patch nothing of plannotator's.
+
+#### Scenario: Written before the session starts
+- **WHEN** the planner starts batch 3's session on mac-studio
+- **THEN** every file plannotator is given is in batch 3's folder on mac-studio before plannotator starts
+
+### Requirement: A session whose card is closed or whose row is gone is ended on every rail read
+Each time `crew rail` runs, and each time the rail tab refreshes, crew SHALL end, on every host of each partition read, each session it started for a card key whose row is gone, or whose card the run record holds as closed with no card open under the key. It SHALL end only sessions it recorded, and only a process plannotator lists as serving the recorded document.
+
+#### Scenario: A verify card's session from before
+- **WHEN** the session crew started for `verify/x/20261009-1412`, before a verify report had no row, still runs on chuck-herdr-alpha
+- **THEN** the next `crew rail`, run on mac-studio, ends that session, since no row has its key, and its link no longer opens
+
+#### Scenario: A proposal approved in the app
+- **WHEN** the user approves proposal 4 on its card, the planner runs `crew plan approve 4` but its session lost Pending You's tools before it closed the card
+- **THEN** the next rail read ends the session for `proposal/4`, since its row is gone
+
+#### Scenario: A card closed while its row stays
+- **WHEN** the planner closed card `proposal/4` with `ack_answer`, its hook could not end the session, and proposal 4 is still open
+- **THEN** the next rail read ends that session
+
+#### Scenario: A row with no card yet
+- **WHEN** the planner started the session for `proposal/4` and has not yet posted its card
+- **THEN** a rail read leaves the session running
+
+#### Scenario: A session crew did not start
+- **WHEN** the user runs plannotator by hand on a closed proposal's page on mac-studio
+- **THEN** no rail read ends it
+
+#### Scenario: A batch card's sessions on another host
+- **WHEN** the planner closed card `batch/3-1` on mac-studio, and the session for its unit `y` still runs on chuck-herdr-alpha
+- **THEN** the next rail read ends `y`'s session there
+
+### Requirement: The rail says which sessions it ended
+After its groups and its open cards with no row, `crew rail` SHALL list each session it ended on that read, with its card key, the unit for a batch card's, its partition, its host and whether its card was closed or its row gone, and SHALL name each host whose sessions it could not check, with why. When it ended nothing and checked every host, it SHALL print nothing about sessions.
+
+#### Scenario: Two sessions ended
+- **WHEN** a rail read ends the sessions of `proposal/4` and `batch/3`
+- **THEN** the rail lists both, each with its host and why it was ended
+
+#### Scenario: Nothing to end
+- **WHEN** every recorded session's row and card are open
+- **THEN** the rail says nothing about sessions
+
+### Requirement: A session crew can't judge is kept
+A rail read SHALL end no session whose row or card it cannot tell: none on a host that does not answer, which it names; no session for a card closed, and no batch card's, while a host of the partition's run record did not answer; and no session started less than two minutes before its host is checked, which a later read judges.
+
+#### Scenario: The team's host is asleep
+- **WHEN** chuck-herdr-alpha does not answer
+- **THEN** the rail ends no session there, names chuck-herdr-alpha as not checked, and ends what it can judge elsewhere
+
+#### Scenario: The record is read in part
+- **WHEN** a host of the partition's run record does not answer
+- **THEN** the rail ends no session for a card closed and no batch card's session, and still ends a session whose proposal's row is gone
+
+#### Scenario: A session just started
+- **WHEN** the planner starts a session for a proposal opened after the rail's read began
+- **THEN** that read leaves it running

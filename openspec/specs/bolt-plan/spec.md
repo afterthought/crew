@@ -6,11 +6,19 @@ Keeps what a partition means to build, its bolts and their units, in one plain-t
 ## Requirements
 
 ### Requirement: The file's order and dependencies are the plan
-A bolt's units SHALL be built in the order they appear in the file, and bolts SHALL be given out in the order they appear. A unit's `After` SHALL name units of the same bolt, and the unit SHALL NOT start until each of them has merged into the bolt. A unit with no `Bolt` SHALL be queued work.
+A bolt's units SHALL be ordered by the file: bolts SHALL be given out in the order they appear, and a unit is ahead of every unit after it in its bolt. A unit's `After` SHALL name units of the same bolt that it builds on, or that a forecast conflict has put it after. The unit's construct SHALL NOT start until each of them has finished construct, its OpenSpec change committed, and SHALL NOT wait for any of them to merge. The unit SHALL NOT merge into the bolt until each of them has merged. A unit with no `Bolt` SHALL be queued work.
+
+#### Scenario: A dependency still in construct
+- **WHEN** unit B has `After: A`, and A's construct has not committed
+- **THEN** B's stage is `waiting`, and crew refuses to start B's construct
+
+#### Scenario: A dependency constructed
+- **WHEN** unit B has `After: A`, and A's change is committed while A is in code
+- **THEN** crew accepts B's construct
 
 #### Scenario: A dependency not yet merged
-- **WHEN** unit B has `After: A` and A is in code
-- **THEN** B's stage is `waiting`, and crew refuses to start B
+- **WHEN** unit B has `After: A`, B is verified and A has not merged into the bolt
+- **THEN** crew refuses B's merge, naming A
 
 #### Scenario: Queued work
 - **WHEN** a unit is added with no bolt
@@ -126,21 +134,6 @@ A task, a ticked task and a complete planning mean what OpenSpec means by them. 
 #### Scenario: The readings are held together
 - **WHEN** the suite runs
 - **THEN** a test reads a set of changes covering every case above both ways, on the same worktrees, and fails on any difference
-
-### Requirement: The user's approval is a commit
-`crew unit approve <unit>` SHALL record the review as an empty commit on `unit/<unit>` with a `Reviewed-by:` trailer naming the user. It SHALL refuse a unit whose change's planning is not complete. Approving a unit that is marked amended SHALL also clear the mark in the plan, after which the unit's stage is read from its tasks again.
-
-#### Scenario: The approval travels with the work
-- **WHEN** an approved unit is rebased onto a newer bolt tip
-- **THEN** its approval commit comes with it, and its stage stays `approved`
-
-#### Scenario: An amended unit is approved again
-- **WHEN** the user approves an amended unit whose rewritten change is in review
-- **THEN** a new approval commit is on `unit/<unit>`, the plan no longer marks the unit amended, and its stage is `code` if any task is ticked, else `approved`
-
-#### Scenario: Approving before construct has run again
-- **WHEN** `crew unit approve` names a unit whose stage is `amended`
-- **THEN** it is refused, saying construct has not been run again
 
 ### Requirement: What is in flight can be read from anywhere
 `crew bolts [<bolt>] [--json]` SHALL list each of the partition's bolts with its repo, team, host and state, each unit's stage and worktree, any `fix/*` worktrees branched from the bolt, and the queue. Bolts that are not active, and queued work, SHALL be listed without reaching any host. Each host holding active bolts SHALL be read once.
