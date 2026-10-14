@@ -9,7 +9,7 @@ decision-makers:
 
 # A unit stage's proof is a submission to sluice, and crew caps seeding stages until sluice has that run
 
-Status: accepted. The decision is the user's, made in wldn's record 0069 (WilldanGroup/switchboard-kit `docs/adr/0069`, c5e449715, "A heavy run on a machine is started by, or leased from, the machine's sluice", accepted 2026-10-14, "Approved"), whose outcomes 1 and 4 name crew's change; written into crew's records by swancloud-design the same day from wldn's design's signal.
+Status: accepted. The decision is the user's, made in wldn's record 0069 (WilldanGroup/switchboard-kit `docs/adr/0069`, c5e449715, "A heavy run on a machine is started by, or leased from, the machine's sluice", accepted 2026-10-14, "Approved"), whose outcome 1 names crew's change; written into crew's records by swancloud-design the same day from wldn's design's signal. Outcome 4 of that record, crew's stand-in count until sluice has the run, the user declined for crew the same evening through the recovery session ("sluice should handle this going forward. new sluice updates will let us run heavy tests through sluice"): crew holds no cap of its own.
 
 Deciders: the user. Written by swancloud-design.
 Adds: `teams.18`.
@@ -31,19 +31,18 @@ On the night of 2026-10-13 several agents' worktrees on chuck-herdr-alpha each r
 Record 0069's outcomes 1 and 4, as they fall to crew:
 
 1. **A unit stage's integration proof is sluice's run.** The stage submits the unit's branch for a run that tests it against its bolt and lands nothing, reads the outcome, and starts no seed of its own in the place. sluice's bound is then the one cap on the machine and its executor the hold.
-2. **Until sluice has that run, crew holds the count.** crew starts at most N unit stages whose proof seeds at once on a machine, counted across every team on it, N the planner's from a reading of one seed's and one full run's peak memory on the box, three as the stand-in; a stage past the count waits its turn and says what holds it. The machine refuses nothing itself: a semaphore of crew's own is what sluice's record 0012 refused.
+2. **crew holds no count of its own.** Every heavy run on a machine is sluice's to start or to lease, and crew caps nothing: the stand-in count record 0069's outcome 4 gave crew until sluice has the run is not built, on the user's word; until sluice has the run, a stage's seed runs in its place as it does today, under the bound sluice's policy gets from wldn-ops's reading.
 3. **A seed that is no check**, one a person or an agent runs to look at something, is sluice's heavy slot on the place (record 0069 outcome 2) and nothing of crew's.
 
 ## Consequences
 
 - crew's unit stages change: the proof is a submission, not a seed (`a-unit-stages-proof-is-a-submission-to-sluice`), once sluice has a run that tests and does not land, which the user designs with sluice.
-- The stand-in count is crew's (`at-most-three-seeding-stages-run-at-once-on-a-machine`), and goes when the first lands; its placing waits on the user's word, since crew's test load is held (the user, 2026-10-11).
-- A kit says which of a unit's stages seed, so crew can count them; how it says so is the construct's, in the kit's declaration beside its toolchain.
+- No stand-in count of crew's: `at-most-three-seeding-stages-run-at-once-on-a-machine`, queued 2026-10-14, is dropped by proposal 136 on the user's word.
 - `tests.9` stays as it is for crew's own suite.
 
 ## Considered options
 
 - **Route the checks to sluice, lease the rest.** Chosen in record 0069: the checks are sluice's runs, the rest takes a heavy slot of the place.
 - **Lease alone: the run stays the agent's and takes a heavy slot first.** Rejected there for checks: it recounts beside sluice's own count, and holds no memory.
-- **Crew caps seeding stages on a machine, and nothing more.** Rejected as the end state, since crew's count holds nothing and sees only its own teams; kept as the stand-in until sluice offers the run.
+- **Crew caps seeding stages on a machine, and nothing more.** Rejected, since crew's count holds nothing and sees only its own teams; record 0069 kept it as a stand-in until sluice offers the run, and the user declined even that for crew.
 - **A team's or a kit's cap.** Rejected: eight teams share the box, and a team sees only its own slots, a kit only its own places.
