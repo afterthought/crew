@@ -10,6 +10,8 @@ decision-makers:
 
 # The rail is answered through Pending You cards
 
+Superseded in part 2026-10-14 by record 0031, proposed in the card elaboration session: every card clause of the decision outcome below, from "One card per rail row, by its owner" to "A pane's badge is the card's", and the two rulings under *What it needs outside crew*, are restated whole in record 0031, and what stands of each is what that record says; the decision that the rail is answered through Pending You cards stands.
+
 Deciders: the user ("yes, let's do it in a subsequent bolt so we can release the rail first"); swancloud-design.
 Sources: `docs/adr/0002` (the rail); recordplane/herdr-pendingyou (the Herdr plugin, 0.2.0) and the `pendingyou` CLI (0.27.0) with the Pending You skill at pendingyou.com/docs/skill, read on 2026-10-07.
 

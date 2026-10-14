@@ -1,0 +1,137 @@
+---
+number: 31
+title: crew raises six cards at fixed points of its process, and an agent's question is the one open card
+status: proposed
+date: 2026-10-14
+decision-makers:
+- Chuck Swanberg
+---
+
+# crew raises six cards at fixed points of its process, and an agent's question is the one open card
+
+Status: proposed to the user on 2026-10-14, in the card elaboration session; accepted only on their yes.
+
+Deciders: the user, in the card elaboration session of 2026-10-14, whose words are quoted at each decision they settled; the rest is the elaboration agent's and stands only on their yes.
+Supersedes: record 0005's card clauses, all of them, restated whole below so that what stands is read here and not from 0005's amendments; record 0018's card is kept as decision 5 says.
+Amends: `briefs.9`, `briefs.11`, `briefs.13`, `briefs.15`, `briefs.16`, `plan.14`, `plan.16`.
+Sources: `openspec/explorations/cards/reading.md` (the numbers, the sign-in, the strands) and `mockups.md` (the process walk and one mockup per card), both read and annotated by the user on 2026-10-14; Pending You's MCP tool schemas (`post_request`, `update_request`, `ack_answer`, `cancel_request`), read 2026-10-14; the fleet's `lib/pending-you.nix`, the `pendingyou` CLI 0.28.0 (`dist/api.js`, `dist/remote.js`), `~/.config/pendingyou/`, the sessions' MCP logs on mac-studio; the run records of all three partitions, 2026-10-08 to 14; the briefs and `plugin/hooks/cards` as they stand on main at fe8e7f8.
+
+## Context and problem statement
+
+Pending You cards are how crew reaches the user when they are not watching a pane. Record 0005 ruled them in on 2026-10-07 and was amended twenty-three times in a week as each kind of card met the user; by 2026-10-14 the rulings were spread over those amendments, five built changes that never archived, an open change with no unit, a half-built unit in crw-3's bolt and two planned units in swancloud's, and the user could not tell which of them stood. Meanwhile 281 cards went out in six days, up to 98 in a day, 121 of them of kinds the design has since removed, 40 with no key; no landing card has been able to post since 2026-10-11; agents built every card by hand from Pending You's guide and crew's hook refused the ones that drifted; and the host's Pending You sign-in has been gone since 2026-10-10 without anyone seeing it, so cards split across connections and read "not found" to each other.
+
+The user asked for one design: "we need an elaboration that defines the different deterministic points: where I get the cards, what they should look like, and how and if they should use Planitator or other services like that", and "we program the cards into the Python code and then we need to define exactly what that list of cards is and what we think the contents of the card should be". With a constraint stated three times and not to be narrowed: "I'm actually worried about getting too many cards. I don't want to tell agents not to send me cards because the whole point should be that agents that should send cards do so if they want to ask me something" (2026-10-14); "My goal isn't to only have cards for the review. Fuck twisting everything I say. I don't want to have to jump into pane constantly" (2026-10-11); and on the reading, "I don't think I've ever said this and in fact I've more than once tried to tell you the opposite. My goal isn't to prevent agents from also using pendingyou."
+
+## Decision drivers
+
+- Every point in crew's process where the user's word is needed is known in advance, so the card for it can be crew's own, built the same way every time: "Obviously we should have templates and/or common functions in Crew that generate cards consistently" (the user, 2026-10-14).
+- A question an agent has for the user is not known in advance and is never refused by ruling; what crew settles is who asks and after whom: "We might want a chain of command in which a coding agent does not reach out to me directly but instead sends something back to the conductor. Maybe the conductor can talk to ops or the designer and answer the question without me and it probably ultimately should be one of those team members who decides if it's appropriate to ask me" (the user, 2026-10-14).
+- Each card is designed for the decision it asks, not to one rule for all: "depending on the card type, we should design it well. We want to minimize cognitive overload. We don't need a person to have to read a book to make a decision but at the same time we want to make it easy to drill into detail if necessary"; "I don't think we need to be using absolutes everywhere like this" (the user, 2026-10-14).
+- Volume comes down by mechanism, never by telling agents not to ask: one card per thing, changed in place; cards closed by crew at the event that ends them; four voices, each its own; batches.
+- One sign-in per host, shared by crew and every session, so a card is seen, woken and closed from wherever it was posted.
+- The commands agents see are consistent or there is a reason: "One of the commands is `crew plan card` and this command is `crew card post record`. We need consistency, don't we, unless there's a justification?" (the user, 2026-10-14).
+
+## Considered options
+
+1. Every card built by crew at its point, agents' questions included, through one `crew card ask` command.
+2. Six cards built by crew at their points; an agent's question through Pending You's own tools in the asker's session, with crew recording it and settling who may ask.
+3. Today's path: agents build every card from Pending You's guide and crew's hook checks a copy of the form.
+
+## Decision outcome
+
+Option 2.
+
+### 1. Six cards are crew's own, raised at fixed points
+
+crew's process, from an idea to a machine running it, needs the user's word at six points and nowhere else; `mockups.md` §1 walks all eighteen points. At each of the six, crew itself builds and posts the card, in the name of the role whose row it is, from the facts of the event; no agent writes, shapes or posts a row's card. Each is one card per thing, keyed by the thing, not by its version.
+
+| Card | Raised when | In whose name | Key | Changed in place when | Closed by crew when, with its outcome |
+|---|---|---|---|---|---|
+| **record** | the design agent's record or amendment, committed as proposed, has landed on main and was not settled with the user in the pane | the design agent | `record/<kit>/<number>` | the record is revised after a note (the new commit named) | accepted or rejected, the commit named |
+| **proposal** | the planner's proposal is accepted into the plan | the planner | `proposal/<n>` of the first proposal in its chain | rewritten after a note (`--replaces`), or a conductor agrees | applied, with what was added, dropped and left out; or dropped, with the user's reason |
+| **batch** | crew finds a batch due at the batch clock | the planner | `batch/<n>` | never | the user's tap, or the reading session's send, whichever first |
+| **landing** | crew reads the bolt proven: every unit and chore merged, every change batched, sluice green at the head | the bolt's conductor | `land/<bolt>` | the head moves while it is open | landed, with the merge and the hosts brought level; held for a fix, on a note naming a defect; or declined, with the user's words |
+| **deploy** | the kit's deployer offers a `manual` environment a deploy | main-level ops | `deploy/<env>` | a newer head is offered | the deploy ends, with each step's outcome, or fails, with the step and its log; or declined |
+| **step** | a deploy ends and an after-deploy step is the user's, or is an agent's held for the user's word | main-level ops | `op/<env>/<n>` | never | done or skipped by the user; done by the agent, when the user said now or quiet |
+
+The step's two shapes are the user's: "some steps would be things only I could do. Some were also going to be things an agent can do, but the agent might not do them automatically on its own immediately. Instead they would be put in front of me and I could decide when to handle it" (2026-10-14). A change marks such a step held, with the agent as its doer, in the shape its kit's `openspec/config.yaml` gives after-deploy steps (`docs.6`, `briefs.3`).
+
+A card is raised by the crew command that makes or reads the event, in the session that runs it or by the deployer, under the row's key as its idempotency key, so two readers of the same event make one card. The owner's session adopts the card to be woken by its answer, with the id crew prints; when the event runs outside a session, the deployer's offer, crew tells the owner the card's id. An answer reaches the owner as its wake, and at its breakpoints from the rail; the owner runs the act the yes calls for, a landing's tell to ops, an approval's apply, and crew closes the card when the act's event is recorded, under the host's connection, so no card waits on an agent remembering to close it.
+
+### 2. An agent's question is the one open card, by a chain of command
+
+Any question an agent has for the user that no record settles reaches them on a card. Four roles ask, each in its own name: a **conductor**, the **planner**, **main-level ops** and the **design agent**. A stage agent, a coder, a construct, a verify, a reviewer, and a team's ops never post: they stop short to their conductor (`crew needs`), which answers from the bolt and the records or asks the design agent, main-level ops or the planner before it asks the user. The dispatcher asks through the planner. The operator agent asks nothing, since the user is in its pane.
+
+The test for what is the user's is Pending You's own, which every session's guide already carries: what only they can decide, know or do, in their name, their money, their plans, public or hard to undo; not what is cheap to change later. Plus crew's: the records do not settle it, and the choices lead to noticeably different products (`conductor.md`, `design.md`). An asker that can decide "what a careful product designer would" decides, and says so.
+
+The question is asked through Pending You's own tools in the asker's session, shaped by the asker: title, summary, options with a recommendation, a fallback when it is not blocking, artifacts as Pending You allows. The user, on the command the reading proposed instead: "I was assuming that we would be letting agents use MCP to do it. I feel like we might actually still need to do that because this seems limiting. It would prevent the agent from having the flexibility to customize the card how they want using the MCP tool." crew's part is three checks and a record: it refuses a question card from any role but the four, refuses a crew agent's post, change or close under a row's key (those cards are crew's), takes a second post under an open key of the asker's as the same card (Pending You's idempotency), and records every post, change and close on the rail; and on every rail read it withdraws a question whose asker's session has ended, naming the asker, so nothing waits on a session that is gone. Nothing else is refused by ruling.
+
+### 3. One card per thing, changed in place; no heads-up cards
+
+A proposal rewritten after a note, a landing whose head moved, a deploy whose head moved, a record revised: each changes its one card in place with a change note the user sees, never a second card under a new key. Something that happened with nothing to decide, a landing done, a deploy done or failed, is the outcome written on the card that asked, and otherwise the board's; crew raises no card to tell. A failed deploy in particular: "For now things like this would come back in as signals and captures, go through purification, and show up on my board as a proposal" (the user, 2026-10-14; crew's name for the step is curation, `signals.7`).
+
+### 4. Chores change no card, and this design does not wait on them
+
+The user asked whether chores (`plan.11`, record 0001) must be finished first "in case the concept of a chore changes cards". They do not: a chore meets the user on the proposal's card, as a new row they can leave out exactly as a unit (`chores` spec, "A proposal carries chores the user takes row by row", built), and on the landing card among what lands; it is never constructed or reviewed, so it is in no batch (`plan.11`). The proposal and landing cards name chores as chores; nothing else changes.
+
+### 5. What each card holds
+
+Each card is designed for its decision (`mockups.md` §2 draws each). The common ground: a title that is the question, read cold; a summary of one or two sentences; the decision's substance in prose the phone wraps, as short paragraphs, with nothing depending on Markdown rendering, since "text shown … when we try to send it up as Markdown or format it, just doesn't format. It's very much like unformatted text and it's hard to read sometimes. We need good/clean summaries" (the user, 2026-10-14); the detail folded under it, never in the way of the decision; no path the user cannot open. Then, by card:
+
+- **record**: an approval of low risk, reversible, holding the record whole; no reading session.
+- **proposal**: as record 0018 settled it, kept: the counts in the title, the case as bullets, the change as text and as a picture, an approval, and a choice per new unit or chore to leave it out; what it waits on; a reading session only when it holds more than fifteen new units.
+- **batch**: a one-tap notice that says first what it is, names every unit with its team and its reviewer's opening paragraph as prose, says where notes go, and links one plannotator session on the batch's folder, the summary whole and every change as one review; the fuller summary rides the card folded so the session is for the changes themselves. Never split, never a required question.
+- **landing**: an approval of risk high, not reversible, with why; what lands, in units and chores; sluice's verdict and when; how far main has moved; what follows. Nothing to read.
+- **deploy**: an approval of risk high, not reversible, with why; the landings since the environment's last deploy by subject; which environments go before and after; the after-deploy steps with their doers.
+- **step**: when the user is the doer, a `do` with the step's words, where, each command whole with a copy button, what is seen when it worked, and Done, Skip, Later; when an agent is, a choice between now, when the host is quiet (recommended) and skip, each with its consequence.
+- **question**: its asker's, as Pending You allows.
+
+Plannotator is linked by the batch and the long proposal alone; the link is slow over the tailnet today (8 to 15 s), which the batch card's folded summary answers rather than the link's removal.
+
+### 6. One sign-in per host
+
+The host's sign-in, `pendingyou-signin`, is the one connection crew's cards and every session use: the fleet's headers helper hands each session its token, and crew's own posts and closes go through `pendingyou mcp` under the same credential. No account folder holds a Pending You login of its own. The user asked whether their logging sessions in through Claude Code caused the split: it did not. The host was signed in and its sign-in served the sessions 338 times through 2026-10-10 04:57Z, when Pending You refused to refresh it; at 09:05Z the CLI erased its credential file, as its code does on a second refusal; from 11:55Z every session fell back, silently, to the Claude Code login of its account folder, made on 2026-10-08 when one session's token was refused for a moment. Those logins hid the failure for two days and put cards on connections that cannot see each other. What is done once: `pendingyou-signin` on mac-studio at a quiet moment, and on the box when wldn's teams return; the Claude Code logins removed from the account folders so a dead host sign-in fails loudly; and the doctor shows the host's sign-in. The last two are swancloud's.
+
+### 7. Commands
+
+crew's six cards have no command of their own: each is raised and closed by the command that makes or reads its event, `crew plan propose`, `--replaces`, `approve` and `drop`; `crew review`; the merge's end and the rail's read for a landing; `crew ops offer`, `record --act end` and `step`; and, new, `crew record <kit> <number> --proposed|--accepted|--rejected`, which the design agent runs at each turn of a record's status, recording it and raising or closing its card. `crew plan card` and `crew card post|change|close` go. What stays for agents is `crew card read <key>`, a card's state at a restart, and `crew rail`, every open card with its owner.
+
+### 8. Volume
+
+Expected after this design, at the pace of 2026-10-08 to 13 with the removed kinds gone: proposals three to five a day across the partitions, batches one or two, landings one or two, deploys one or two, steps and records fewer, questions as many as the four roles find theirs. About twenty a day against ninety-eight, by mechanism alone.
+
+### 9. Not settled here
+
+The landing card's link to a running environment for the bolt: "eventually this card should have links to the running integration environment for the Bolt that I'm approving. I think this might need to become a separate design concern tracked elsewhere because, for one thing, we decided that bolts no longer have work trees. Therefore I think we would need some concept that connects sluice and bolts as a way to have test environments running that we can log into to verify changes before approving the bolt" (the user, 2026-10-14). An exploration of its own for the design agent's queue, after record 0026.
+
+### 10. The strands
+
+- **crw-3's bolt** `a-crew-agents-questions-reach-the-user-on-cards`: `a-landing-cards-stakes-are-its-approvals-risk`, built and verified, lands as it is, since the landing builder's `approve` of risk high is exactly its change; `any-question-for-the-user-gets-a-card`, 6 of 14 tasks, is superseded by the change below and dropped, its branch kept (`plan.10`); the bolt closes.
+- **`every-crew-card-goes-through-crew`** (0 of 5 tasks) is superseded by the change below and archived as superseded.
+- **The five built card changes** (`a-batch-cards-notes-are-its-note-and-its-sessions`, `a-card-lost-to-its-owner-is-posted-again`, `a-cards-session-ends-with-its-card`, `a-proposals-card-shows-the-change-and-lets-new-units-be-left-out`, `an-image-on-a-card-is-uploaded`) are archived; what they built stands where this record keeps it, and the change below carries the deltas that move.
+- **swancloud's** `crew-sessions-hear-their-cards-answers` and `the-doctor-shows-the-hosts-pending-you-sign-in` stand, with two lines added: the account folders' Claude Code logins removed, and a helper failure made loud. A note for swancloud's planner is beside this record's change.
+- **The stale cards**: the ten open per the record and the eight plannotator sessions are swept once the host signs in again, by the change's sweep, nothing by hand.
+- **Record 0005**'s card clauses are restated here whole and marked superseded there; its ruling that the rail is answered through cards stands.
+
+### Consequences
+
+- One change in crew, `every-crew-card-is-raised-at-its-point` (`openspec/changes/`): the six builders as functions of facts, each raised and closed at its event; the hook narrowed to the three checks and the record; the question's sweep; `crew record`; the briefs' *Cards* sections rewritten to this record; the rail showing every card with its owner; the specs' deltas.
+- The rules amended in this commit: `briefs.9`, `briefs.11`, `briefs.13`, `briefs.15`, `briefs.16`, `plan.14`, `plan.16`, each marked proposed until the user's yes.
+- The design agent's brief loses its own card posting and gains `crew record`; a conductor's brief loses the landing card's shape and keeps the tell to ops on its yes; the planner's loses `crew plan card` and the posting of a proposal's card; main-level ops's loses the deploy and step cards' shapes.
+- A partition without Pending You loses pings, not decisions: the rail stays complete (record 0005).
+
+## Pros and cons of the options
+
+### Option 1: every card through `crew card ask`
+
+- Good, because one path, one form, one check.
+- Bad, because a question is the asker's and the command narrows it to what crew thought of; the user: "this seems limiting".
+
+### Option 2: six cards crew's own, a question the asker's
+
+- Good, because the cards that recur are built once and the same every time; the one that cannot be foreseen keeps every field Pending You offers; the drift that broke cards came from agents building rows' cards, which end.
+- Bad, because two paths to Pending You, crew's and the sessions', which share one sign-in to work; the record is what ties them.
+
+### Option 3: today's path
+
+- Bad, because the user's cards depend on each agent's reading of a guide, and the hook can only refuse what drifted.
