@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: The design agent posts a record's card under its record key
-Besides the row keys, crew SHALL let the partition's design agent post a card under `record/<kit>/<number>/<commit>`, where `<kit>` is the name of a kit one of its partition's teams builds, `<number>` the record's four digits and `<commit>` the seven hex digits of the commit that proposed the record or the amendment. No other crew agent SHALL post under a record key. A record key with a kit that is not its partition's, or in any other shape, SHALL be refused naming the record key's form. The check SHALL read nothing beyond the teams file. A record card's acts SHALL be recorded in the run record on `record/<kit>/<number>` with the card's key in `Key`, and closing one SHALL end no plannotator session.
+Besides the row keys, crew SHALL let the partition's design agent post a card under `record/<kit>/<number>/<commit>`, where `<kit>` is the name of a kit one of its partition's teams builds, `<number>` the record's four digits and `<commit>` the seven hex digits of the commit that proposed the record or the amendment. No other crew agent SHALL post under a record key. A record key with a kit that is not its partition's, or in any other shape, SHALL be refused naming the record key's form.
 
 #### Scenario: The design agent posts a record's card
 - **WHEN** wldn-design posts a card keyed `record/atlas-kit/0021/abc1234`, and atlas-kit is built by one of wldn's teams
@@ -18,6 +18,20 @@ Besides the row keys, crew SHALL let the partition's design agent post a card un
 #### Scenario: The design agent posts under any other key
 - **WHEN** wldn-design posts a card keyed `proposal/1`
 - **THEN** the call is refused, naming `record/<kit>/<number>/<commit>` as the one key the design agent posts under
+
+### Requirement: A record key is checked against the teams file alone
+crew's check of a card under a record key SHALL read nothing beyond the teams file.
+
+#### Scenario: Checked with the plan unread
+- **WHEN** wldn-design posts a card keyed `record/atlas-kit/0021/abc1234` while wldn's plan can't be read
+- **THEN** the call goes through on the teams file alone
+
+### Requirement: A record card's acts are recorded on the record
+A record card's acts SHALL be recorded in the run record on `record/<kit>/<number>` with the card's key in `Key`, and closing one SHALL end no plannotator session.
+
+#### Scenario: A record's card closed
+- **WHEN** wldn-design closes its card keyed `record/atlas-kit/0021/abc1234` once the user said yes
+- **THEN** the run record has a `card.close` entry on `record/atlas-kit/0021` with that key, and no plannotator session is ended
 
 ### Requirement: A record's card is an approval
 A card under a record key SHALL be an approval, kind `approve`, whose approve block is of low risk and reversible, with no options and no steps. crew SHALL refuse a record card in another form, or a change that takes it out of that form, before Pending You sees it, naming the form.
