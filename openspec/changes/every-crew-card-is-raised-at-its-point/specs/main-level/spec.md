@@ -1,7 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: A record's status is recorded through crew, and its card raised when it was not settled in the pane
-`crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane]` SHALL record the record's status with its commit in the run record, SHALL raise the record's card in the design agent's name on `--proposed` unless `--settled-in-pane` says the user settled it in the pane, SHALL change the card when `--proposed` is run again at a new commit, SHALL close it on `--accepted` or `--rejected` with the commit, and SHALL refuse a status the record's file does not hold at that commit.
+`crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]` SHALL record the record's status with its commit in the run record, SHALL raise the record's card in the design agent's name on `--proposed` unless `--settled-in-pane` says the user settled it in the pane, as a choice when `--alternatives` hands the Markdown of the alternatives a rule of the user's decided between, the rules and each loosened, SHALL change the card when `--proposed` is run again at a new commit, SHALL close it on `--accepted` or `--rejected` with the commit, and SHALL refuse a status the record's file does not hold at that commit.
+
+#### Scenario: A record a rule decided
+- **WHEN** the design agent runs `crew record switchboard-kit 32 --proposed --alternatives docs/adr/0032-alternatives.md`
+- **THEN** the card is a choice of loosening the rules as drafted, accepting as ruled, or sending back, with the file on its face, and the design agent is woken by the answer
 
 #### Scenario: A record settled in the pane
 - **WHEN** the design agent commits record 31 as proposed after the user settled it beside them and runs `crew record crew 31 --proposed --settled-in-pane`
@@ -18,7 +22,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: A deploy and every operation are approved and recorded through crew
-A kit's deployer SHALL ask crew for each deploy of a `manual` environment with `crew ops offer`, which SHALL raise the deploy's card in main-level ops's name, keyed `deploy/<env>`, change it when a newer head is offered, and tell main-level ops the card's id; the user's word SHALL be holding that card, recorded with `crew ops approve`. `crew ops record --act end` SHALL close the card with the deploy's outcome. `crew ops step` SHALL raise a step's card, keyed `op/<env>/<n>`, when the step's doer is the user or the step is marked held for the user's word, and SHALL close it when the step is recorded done or declined. `crew ops word` SHALL give the commit the word is for until that deploy's end is recorded. Every `crew ops` command SHALL run where the partition's main level runs.
+A kit's deployer SHALL ask crew for each deploy of a `manual` environment with `crew ops offer <env> <sha> [--notes <file>] [--steps <file>]`, the notes file the kit's release notes for the range from the environment's last deployed commit to the offered one as the kit's changelog tool writes them, the steps file the range's after-deploy steps one a line as the deployer gathers them (`step <n> <doer> <when> <environments> <why> <text>`), which SHALL raise the deploy's card in main-level ops's name, keyed `deploy/<env>`, with the notes and the steps on its face and nothing of them written by crew, change it when a newer head is offered, and tell main-level ops the card's id; the user's word SHALL be holding that card, recorded with `crew ops approve`. `crew ops record --act end` SHALL close the card with the deploy's outcome. `crew ops step` SHALL raise a step's card, keyed `op/<env>/<n>`, when the step's doer is the user or the step is marked held for the user's word, and SHALL close it when the step is recorded done or declined. `crew ops word` SHALL give the commit the word is for until that deploy's end is recorded. Every `crew ops` command SHALL run where the partition's main level runs.
 
 #### Scenario: A deploy offered and approved
 - **WHEN** the deployer offers mac-studio a deploy of main's head and the user holds its card

@@ -114,14 +114,22 @@ On each rail read crew SHALL withdraw, under the host's connection, every open q
 - **THEN** the next rail read withdraws it with "crw-3-conductor ended; ask again if it still matters"
 
 ### Requirement: A deploy's card is a high approval
-A deploy's card SHALL be an `approve` of risk high, not reversible, because irreversible, naming the environment and the commit; its words SHALL give the landings since the environment's last deploy by subject, the environments before and after it, and the after-deploy steps gathered with their doers.
+A deploy's card SHALL be an `approve` of risk high, not reversible, because irreversible, naming the environment and the commit; its summary SHALL count the landings since the environment's last deploy and name the environments before and after it; its face SHALL carry the kit's release notes for exactly that range, as the deployer hands them to `crew ops offer --notes <file>`, as inline Markdown, and the range's after-deploy steps with their doer, the user's, an agent's or held, as a text list, as the deployer hands them with `--steps <file>`; crew SHALL write no notes of its own, and an offer handed none SHALL give the landings' subjects alone. The landings' subjects SHALL be in its details. It SHALL follow the landing card that put the offered commit on main, when there is one.
 
 #### Scenario: Three landings since srv's last deploy
-- **WHEN** the deployer offers srv `c882cff` and srv runs `6aed25c`
-- **THEN** the card's approve block has risk high and reversible false, and its words name landings #16, #17 and #18, that the box follows on its own and mac-studio is offered after srv, and the two steps with their doers
+- **WHEN** the deployer offers srv `c882cff` with git-cliff's notes for `6aed25c..c882cff` and two steps, and srv runs `6aed25c`
+- **THEN** the card's approve block has risk high and reversible false, its summary counts three landings and says the box follows on its own and mac-studio is offered after srv, its face holds the notes as handed and the two steps with their doers, and its details name landings #16, #17 and #18
+
+#### Scenario: A kit that hands no notes
+- **WHEN** the deployer offers mac-studio `c882cff` with no `--notes` and no `--steps`
+- **THEN** the card's face gives the landings since mac-studio's last deploy by subject, and says the kit handed no release notes
 
 ### Requirement: A step's card is the user's do
-A step whose doer is the user SHALL be a `do` card with the step's words, where it is done, each command whole as an action step, what is seen when it worked, and the options Done, Skip and Later. A step an agent runs on its own SHALL have no card.
+A step whose doer is the user SHALL be a `do` card with the step's words, where it is done, each command whole as an action step, what is seen when it worked, and the options Done, Skip and Later. A step an agent runs on its own SHALL have no card. When a deploy ends with more than one step for a card, crew SHALL raise one card at a time: the first following the deploy's card, each next one following the one before, raised when crew closes it.
+
+#### Scenario: Two steps after one deploy
+- **WHEN** srv's deploy ends with a step that is the user's and a step held for the user's word
+- **THEN** one card is open, following the deploy's card, and the second is raised following the first when the first is closed
 
 #### Scenario: A password only the user can rotate
 - **WHEN** the deployer records a step with doer user and two commands
@@ -203,7 +211,7 @@ A proposal's card SHALL hold the proposal whole, its picture, its text and its c
 
 #### Scenario: A landing card has nothing to read
 - **WHEN** crew raises bolt `y`'s landing card
-- **THEN** it names the units and chores that land, sluice's verdict and when, and how far main has moved, and carries no link
+- **THEN** it names the units and chores that land, sluice's verdict and when, and how far main has moved, and carries no link to a reading session
 
 ### Requirement: Landing is approved only by holding the button
 A landing's card SHALL be an `approve` of risk high, not reversible, so it is approved by holding the button in the Pending You app and never with a key in Herdr's popup; it SHALL NOT carry the `highStakes` flag, which Pending You refuses on an approval.
@@ -284,7 +292,15 @@ After its groups, `crew rail` SHALL list each card its sweep withdrew or closed 
 - **THEN** the rail withdraws the card and lists it, "withdrawn: its bolt was dropped"
 
 ### Requirement: A card's words are the document's own
-A crew card's words SHALL be prose the phone wraps, in short paragraphs, cut at whole sentences to Pending You's budget, with nothing depending on Markdown rendering and no code block; where a card speaks for a document, a proposal's case, a unit's opening paragraph, a record's opening sentences, it SHALL use the document's own words, never reworded. A path SHALL appear only inside a step's command or a deploy's log name.
+A crew card's words SHALL be prose the phone wraps, in short paragraphs, cut at whole sentences to Pending You's budget, with nothing the user has to read as raw Markdown; where a card speaks for a document, a proposal's case, a unit's opening paragraph, a record's opening sentences, it SHALL use the document's own words, never reworded. A list the user scans, the units that land, a deploy's steps, a proposal's change, SHALL be an artifact on the card's face, one thing a line and no line over forty characters, never a comma run in the summary or the background; the background SHALL hold only what is read when the face is not enough. A path SHALL appear only inside a step's command or a deploy's log name.
+
+#### Scenario: Six units on a landing card
+- **WHEN** crew raises the landing card of a bolt of six units
+- **THEN** the six names are a text artifact on the face, one a line, and the background names none of them
+
+#### Scenario: A card follows the card its thing follows
+- **WHEN** crew raises srv's deploy card for a head that landing #24's card put on main
+- **THEN** the card follows landing #24's card, and the phone shows it in that card's thread
 
 #### Scenario: A review card
 - **WHEN** unit `x`'s change is read in batch 3
@@ -333,7 +349,15 @@ A card act Pending You refuses SHALL be refused in Pending You's own words and r
 - **THEN** the offer is recorded, no card posts, and the command says this computer is not signed in to Pending You
 
 ### Requirement: The landing card is posted once the bolt's verification is green
-crew SHALL raise a bolt's landing card once every unit and chore of the bolt has merged, every unit's latest change has been in a batch and sluice's verdict at its head is green, keyed `land/<bolt>`, as an `approve` of risk high, not reversible, because irreversible, naming what lands in units and chores, the verdict and when, how far main has moved, and what follows; it SHALL ask only for the landing. A note naming a defect SHALL have the conductor start a fix on the bolt, which withdraws the card, and the card SHALL be raised again once the bolt reads proven again.
+crew SHALL raise a bolt's landing card once every unit and chore of the bolt has merged, every unit's latest change has been in a batch and sluice's verdict at its head is green, keyed `land/<bolt>`, as an `approve` of risk high, not reversible, because irreversible, its summary giving the counts, the batches, the verdict and when, and how far main has moved, its face a text artifact "What lands: N units, M chores" naming each one a line, its rationale what follows, and, when sluice's submission at the head has a pull request on GitHub, that pull request as a `url` artifact and among its links; it SHALL ask only for the landing.
+
+#### Scenario: Sluice's pull request
+- **WHEN** sluice's submission at `y`'s head has pull request #23 on the kit's GitHub
+- **THEN** the card links it, titled as sluice's pull request for the landing, on its face and in its details
+
+#### Scenario: No pull request
+- **WHEN** the kit's sluice opens no pull request for a submission
+- **THEN** the card carries no link, and says nothing of one A note naming a defect SHALL have the conductor start a fix on the bolt, which withdraws the card, and the card SHALL be raised again once the bolt reads proven again.
 
 #### Scenario: A green bolt
 - **WHEN** every unit and chore of bolt `y` has merged, each unit's latest change has been in a batch and sluice is green at `abc1234`
@@ -344,7 +368,7 @@ crew SHALL raise a bolt's landing card once every unit and chore of the bolt has
 - **THEN** the card is withdrawn, "held for a fix: <the note>", and a new card is raised when `y` reads proven again
 
 ### Requirement: A batch's card is a notice naming every unit
-A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) crew raises when the reviewer delivers the batch's summary, that asks nothing: no options, no question, no approval, no steps and no attachment. Its summary SHALL say first what the card is: the partition's batch of the changes constructed or amended since the last batch, already being built, read for notes and approving nothing; then where notes go, the reading session or the card's own note, and that each reaches its unit's team as the user's words.
+A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) crew raises when the reviewer delivers the batch's summary, that asks nothing: no options, no question, no approval and no steps. Its title SHALL say what the batch is about, drawn from its units' subjects, with the batch's number after; its summary SHALL say first "N changes to read, nothing to approve", then that it is the partition's batch of the changes constructed or amended since the last batch, already being built; then where notes go, the reading session or the card's own note, and that each reaches its unit's team as the user's words. The reviewer's summary SHALL ride the face as inline Markdown, a paragraph per unit under its name and team.
 
 #### Scenario: A card of six units
 - **WHEN** crew raises the card for batch 2 holding six units
@@ -372,7 +396,7 @@ A picture a crew card needs, the proposal's drawing of each bolt once approved, 
 - **THEN** the card holds one artifact of kind `image` posted with `upload: true`, the conductor puts the image to the upload URL the post returned with its content type, and the user sees the picture on the card, with no path of the image anywhere on it
 
 ### Requirement: A card's document is inline Markdown
-A document's substance shown on a crew card beyond its words SHALL be inline Markdown, an artifact of kind `code` with lang `markdown` and the text as its lines, never an uploaded file or HTML: a record's card carries the record whole so. The only artifacts a crew card carries SHALL be such a picture, such Markdown, a proposal's change as text, and a step's commands as action steps.
+A document's substance shown on a crew card beyond its words SHALL be inline Markdown, an artifact of kind `code` with lang `markdown` and the text as its lines, never an uploaded file or HTML: a record's card carries the record whole so, a proposal's its new units' paragraphs, a batch's the reviewer's summary, a deploy's the kit's release notes. The only artifacts a crew card carries SHALL be such a picture, such Markdown, a list as text (a landing's units, a deploy's steps, a proposal's change), a link as a `url` artifact (sluice's pull request, a batch's reading), and a step's commands as action steps.
 
 #### Scenario: A document's substance on a card
 - **WHEN** crew raises record 32's card
@@ -380,7 +404,7 @@ A document's substance shown on a crew card beyond its words SHALL be inline Mar
 
 #### Scenario: A card with nothing to show
 - **WHEN** crew raises a landing card
-- **THEN** its artifacts are empty, and it carries no link
+- **THEN** its artifacts are the units that land as text and, when sluice opened one, the pull request's link, and it carries no reading session
 
 ### Requirement: A row's card lost to its owner is posted again
 A card Pending You answers "not found" to the host's connection is lost: the host signed in anew. On the next rail read, while the row still waits, crew SHALL post the row's card again under the row's key, in the row's form, its summary saying that an older copy is dead, to dismiss it in the app, and that this card is the one to answer, and SHALL take the newer card as the row's. A lost card whose row is gone SHALL be posted again by nobody.
@@ -435,15 +459,19 @@ A record card's acts SHALL be recorded in the run record on `record/<kit>/<numbe
 - **THEN** the run record has a `card.close` entry on `record/atlas-kit/0021` with that key, and no plannotator session is ended
 
 ### Requirement: A record's card is an approval
-A record's card SHALL be an `approve` of risk low, reversible, with no options and no steps, titled "Accept record <number> in <kit>: <title>?", its summary the record's opening sentences, its background the record's decision and, when the record quotes the user's words from the design talk, "Your own words, recorded as your decision:" and the quote, and one artifact, the record whole as Markdown; it SHALL link no reading session. crew builds it, so no other form arises.
-
-#### Scenario: A record card as a choice
-- **WHEN** crew raises record 21's card
-- **THEN** it is an approval, never a choice, with the record's opening sentences and the Markdown
+A record's card SHALL be an `approve` of risk low, reversible, with no options and no steps, titled "Accept record <number> in <kit>: <title>", its summary the record's opening sentences, its background the record's decision and, when the record quotes the user's words from the design talk, "Your own words, recorded as your decision:" and the quote, and one artifact, the record whole as Markdown; it SHALL link no reading session. When the design agent runs `crew record … --proposed --alternatives <file>`, because a rule of the user's decided the record between alternatives, the card SHALL instead be a choice asked once: loosen the rules as drafted and take the other path, accept the record as ruled, or send it back with a note; its face SHALL carry that file as inline Markdown, the alternatives, the rules that decided and each rule as it would read loosened, before the record whole, and the recommended option SHALL be the one the user's own quoted words point to, else accepting as ruled. crew builds both, so no other form arises.
 
 #### Scenario: A record card marked high risk
-- **WHEN** crew raises record 21's card
-- **THEN** its approve block has risk low and reversible true, since a record can be amended again
+- **WHEN** crew raises record 21's card with no alternatives file
+- **THEN** it is an approval of risk low, reversible true, with the record's opening sentences and the Markdown, and no options
+
+#### Scenario: A record card as a choice
+- **WHEN** the design agent runs `crew record switchboard-kit 32 --proposed --alternatives alternatives.md`, the file naming two ways, `ops.3` and `ops.7` as the rules that chose, and each loosened
+- **THEN** the card is a choice of loosen, as ruled, or send back, with the file's Markdown on its face before the record, and the user's answer reaches the design agent as the record's status
+
+#### Scenario: An alternatives file crew cannot read
+- **WHEN** `--alternatives` names a file that is not there
+- **THEN** the command refuses, naming the file, and raises nothing
 
 ### Requirement: The rail lists open record cards apart
 After its groups, `crew rail` SHALL list each open record card under a heading of its own, with its key, the design agent and when it was raised, and SHALL NOT list it among the cards whose row is gone.
