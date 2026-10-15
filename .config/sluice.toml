@@ -21,6 +21,15 @@ kind = "open"
 required = ["#check-full"]
 trust = ["open"]
 
+# main lives on GitHub (swancloud ADR 0027): every round fetches it from origin and forms on it, and a landing is a push
+# leased on where the round found it, as the host's [forge] app, the ruleset's only bypass. Ops's landing,
+# `crew bolt submit`, opens a pull request that joins the queue once out of draft: it waits on no review or check of
+# GitHub's, since the user's word on the bolt's landing card is the approval (plan.16). Bolts stay on the host.
 [branches.main]
+remote = "origin"
 required = ["#check-full"]
 trust = ["open"]
+
+[branches.main.pull_requests]
+reviews = 0
+checks = []
