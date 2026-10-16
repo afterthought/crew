@@ -1,30 +1,33 @@
 # crew's Pending You cards on the stub pendingyou (the rail-cards spec, briefs.16, record 0031), the journey each change
-# of the card series adds its card to. crew card post, change, close and read, each command's wiring once: a
-# conductor's card posted as the asking assistant through `pendingyou mcp`, whoami first, filed in its kit's area made
-# under the kit's key, under the card key with its session, recorded from Pending You's reply, and printed with the
-# line that adopts it; posted again, the same card; a key not the conductor's refused by the card hook's check with
-# nothing sent; Pending You's refusal and a host with no sign-in refused in their words, the first recorded; a change
-# at the version Pending You reports; the user's answer read; a close by outcome and a withdrawal by reason, each
-# recorded; and after the host signs in again, a card read as lost, and posted again under its key. Then the act that
-# sends crew's own cards, as a raise of the series calls it: a landing card raised outside its owner's turn, asked in
-# the owner's name, told to the owner with the line that adopts it, and closed by the owner's crew card read once the
-# user declines it, with their words; raised again, a new card under the key's revision, changed in place while it
-# waits, and once the user answers it, acked with the change note and followed by its new version. Then crew record,
-# as the design agent runs it at each turn of a record's status: the record read on the kit's main, its status
-# recorded with its commit and its card raised in the design agent's name
-# under record/<kit>/<number>; a status the file does not hold, an alternatives file crew can't read and another host
-# refused with nothing recorded; the card changed in place at a new commit, closed with the accepting commit, a choice
-# when a rule decided, and none raised when the user settled it in the pane. Then a batch's card, raised by crew in the
-# planner's name once the reviewer's summary is there, with its one reading session on the main level's host linked
-# from it, and, lost to its owner, raised again by the sweep's entry under its key, saying its older copy is dead, on
-# the same session; crew card session giving that link again and refusing a unit, a landing's key and a short
-# proposal's; crew card wait closing the card on the tap, with its note, and on the session's send, with every
-# annotation, each ending the session; a session whose link only the host could open ended, and the card raised all
-# the same, saying so; and a wait with neither card nor session refused. Which card a key names, what crew sets on a
-# card, the area, how a reply, a refusal and an answer read, and what the act sends and records for each are logic
-# cases (tests/py/test_card_commands.py); whose key and what form, each card's builder, a record's facts, and the
-# session's start and end in the act and what a batch's wait returns, test_cards.py; a batch card's facts,
-# test_batches.py.
+# of the card series adds its card to. crew card post, change, close and read, each command's wiring once: a conductor's
+# card posted as the asking assistant through `pendingyou mcp`, whoami first, filed in its kit's area made under the
+# kit's key, under the card key with its session, recorded from Pending You's reply, and printed with the line that
+# adopts it; posted again, the same card; a key not the conductor's refused by the card hook's check with nothing sent;
+# Pending You's refusal and a host with no sign-in refused in their words, the first recorded; a change at the version
+# Pending You reports; the user's answer read; a close by outcome and a withdrawal by reason, each recorded; and after
+# the host signs in again, a card read as lost, and posted again under its key. Then the act that sends crew's own
+# cards, as a raise of the series calls it: a landing card raised outside its owner's turn, asked in the owner's name,
+# told to the owner with the line that adopts it, and closed by the owner's crew card read once the user declines it,
+# with their words; raised again, a new card under the key's revision, changed in place while it waits, and once the
+# user answers it, acked with the change note and followed by its new version. Then crew record, as the design agent
+# runs it at each turn of a record's status: the record read on the kit's main, its status recorded with its commit and
+# its card raised in the design agent's name under record/<kit>/<number>; a status the file does not hold, an
+# alternatives file crew can't read and another host refused with nothing recorded; the card changed in place at a new
+# commit, closed with the accepting commit, a choice when a rule decided, and none raised when the user settled it in
+# the pane. Then a batch's card, raised by crew in the planner's name once the reviewer's summary is there, with its one
+# reading session on the main level's host linked from it, and, lost to its owner, raised again by the sweep's entry
+# under its key, saying its older copy is dead, on the same session; crew card session giving that link again and
+# refusing a unit, a landing's key and a short proposal's; crew card wait closing the card on the tap, with its note,
+# and on the session's send, with every annotation, each ending the session; a session whose link only the host could
+# open ended, and the card raised all the same, saying so; and a wait with neither card nor session refused. Then the
+# rail read's sweep of the box's cards: a card whose row is gone and a question whose asker ended withdrawn, a question
+# whose asker runs listed by its title, crew board acting on none; a row's card read not found recorded lost; a row
+# whose post was refused showing the refusal, left while the refusal is under ten minutes old and raised through its
+# kind's raise after; and a row of a kind with no raise left as it is. Which card a key names, what crew sets on a card,
+# the area, how a reply, a refusal and an answer read, and what the act sends and records for each are logic cases
+# (tests/py/test_card_commands.py); whose key and what form, each card's builder, a record's facts, and the session's
+# start and end in the act and what a batch's wait returns, test_cards.py; a batch card's facts, test_batches.py; what
+# the sweep judges and does, test_rail.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -472,3 +475,94 @@ eq "$(py_calls | sed -n 3p | cut -d' ' -f1)" "ack_answer"
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Applied: added p-c; 1 other change. Left out on your word: p-a."
 eq "$(entries card.close | jq -r "select(.Key == \"proposal/$n\") | [.Card, .State] | join(\" \")" | tail -1)" "$c2 closed"
 ok "the user's boxes, sent on the card, are applied as they stand, and crew closes the card with what was applied"
+
+# The rail read's sweep of the cards on the box, under its sign-in (record 0031 §1, §2, read.4). The landing cards
+# posted before the batch's sign-in were recorded lost by the planner's rail reads above, their row gone; a landing card
+# posted since, whose bolt has no row; and two questions asked through Pending You's own tools and recorded as crew's
+# card hook records them: swb-2-conductor's, whose session has ended, and swb-1-conductor's, which runs. crew board
+# reads them and acts on none.
+question() {  # question <asker>: the question's id
+  local id
+  id=$(as $box python3 - "$CREW/plugin/lib" "$1" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import cards
+who = sys.argv[2]
+with cards.Bridge(who, "") as py:
+    print(py.call("post_request", {"title": "Hold the Macs?", "summary": "Hold them.", "kind": "fyi", "idempotencyKey": f"ask/{who}/macs"})["requestId"])
+PY
+)
+  CREW_AGENT=$1 as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act card.post --on "agent/$1" --field "Card=$id" >/dev/null
+  echo "$id"
+}
+lc=$(card post land/b1/abc1900 <<<"$landing" | sed -n '1s/^card [^:]*: \([^ ]*\).*/\1/p')
+q2=$(question swb-2-conductor); q1=$(question swb-1-conductor)
+closes=$(entries card.close | wc -l)
+: > "$CREW_TEST_LOG"
+HOST=$box expect_ok crew board --label wldn
+eq "$(py_calls)" ""; eq "$(entries card.close | wc -l)" "$closes"
+HOST=$box expect_ok crew rail --label wldn; r=$out
+eq "$(sed -n '/^cards swept:$/,/^$/p' <<<"$r")" "cards swept:
+  land/b1/abc1900 (wldn), swb-1-conductor's $lc: withdrawn: its bolt no longer waits to land at abc1900
+  a question (wldn), swb-2-conductor's $q2: withdrawn: swb-2-conductor ended"
+asked=$(sed -n '/^questions waiting on you:$/,/^$/p' <<<"$r")
+has "$asked" "a question (wldn), asked by swb-1-conductor on $box ($q1)"; lacks "$asked" "$q2"
+eq "$(py_calls | sed -n 1p)" 'whoami {"name": "crew"}'
+eq "$(py_calls | awk 'NR > 1 && $1 != "get_request" {exit} NR > 1 {print $1, $2, $3}' | sort -u)" 'get_request {"name": "crew",'
+has "$(py_calls)" "cancel_request {\"name\": \"swb-1-conductor\", \"reason\": \"its bolt no longer waits to land at abc1900\", \"requestId\": \"$lc\"}"
+has "$(py_calls)" "cancel_request {\"name\": \"swb-2-conductor\", \"reason\": \"swb-2-conductor ended; ask again if it still matters\", \"requestId\": \"$q2\"}"
+eq "$(entries card.close | jq -r "select(.Card == \"req_stub-4\" or .Card == \"$lc\" or .Card == \"$q2\") | [.Card, .State, (.On | join(\" \"))] | join(\" \")" | tail -3)" \
+  "req_stub-4 lost agent/swb-1-conductor
+$lc withdrawn agent/swb-1-conductor
+$q2 withdrawn agent/swb-2-conductor"
+ok "the rail read, asking after each card in crew's own name, records lost a card whose row is gone and that Pending You no longer finds, withdraws one it finds and a question whose asker herdr no longer lists, keeps the one whose asker runs, and crew board acts on none"
+
+# A deploy offered, its card posted by main-level ops on the box; the box signs in to Pending You again, so the card
+# reads not found. No change of the series raises a deploy card here, so the read records it lost for ops to post.
+s1=$(printf 'a%.0s' $(seq 40)); d=deploy/mac-studio/${s1:0:7}
+HOST=$box expect_ok crew ops offer mac-studio --label wldn --from none --to "$s1"
+deploy='{"kind": "approve", "title": "Deploy main", "summary": "Deploy main.", "blocking": false, "urgency": "today",
+  "approve": {"action": "Deploy main", "risk": "high", "reversible": false}}'
+dc=$( (export CREW_TEST_HOST=$box CREW_AGENT=wldn-ops HOME; HOME=$(home_of $box); cd "$wd" && "$CREW/plugin/bin/crew" card post $d <<<"$deploy") | sed -n '1s/^card [^:]*: \([^ ]*\).*/\1/p')
+[[ $dc == req_stub-* ]] || fail "ops's card was not posted: $dc"
+mv "$stub/cards.json" "$stub/cards.signed-in-again.json"
+: > "$CREW_TEST_LOG"
+HOST=$box expect_ok crew rail --label wldn; r=$out
+has "$r" "  $d (wldn), wldn-ops's $dc: lost: crew raises no card for $d yet, so wldn-ops posts it again"
+has "$r" "    card:   $d, none open"
+eq "$(entries card.close | jq -r "select(.Card == \"$dc\") | [.State, .By] | join(\" \")")" "lost wldn-ops"
+ok "a row's card Pending You no longer finds is recorded lost by the rail read, and its row then shows none open"
+
+# A proposal whose card Pending You refused at its raise: the row shows the refusal, and the rail read leaves it while
+# the refusal is under ten minutes old (CARD_RETRY), so a refusal that stands is not tried at the rail tab's pace; once
+# it is older, the read raises the card through the proposal's raise, in the planner's name.
+echo "post_request Too many requests." > "$stub/refuse"
+as_planner expect_ok crew plan propose "$(proposal 'Case: The console gets a bolt of its own.' 'Do: bolt new console-two "The console, again." --repo switchboard-kit')"
+k=proposal/$(opened)
+has "$out" "card $k not posted: Pending You refused post_request: Too many requests."
+: > "$stub/refuse"
+: > "$CREW_TEST_LOG"
+HOST=$box expect_ok crew rail --label wldn
+has "$out" "    card:   $k, none open; its last post was refused: Pending You refused post_request: Too many requests."
+lacks "$(py_calls)" "post_request"
+id=$(entries card.post | jq -r "select(.Key == \"$k\" and .Refused) | .Id" | tail -1)
+old=$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=11)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $id\$/,/^\$/s/^At: .*/At: $old/"; done
+: > "$CREW_TEST_LOG"
+HOST=$box expect_ok crew rail --label wldn; r=$out
+pc=$(sed -n "s|^card $k: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
+[[ -n $pc ]] || fail "the read raised no card for $k:"$'\n'"$r"
+eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r '[.idempotencyKey, .session.label] | join(" ")')" "$k wldn-planner"
+has "$r" "  $k (wldn), wldn-planner's $pc: posted: its row had none open"
+has "$r" "    card:   $k, open, asked by wldn-planner ($pc)"
+ok "a row whose card's post was refused shows the refusal, is left by a read while the refusal is under ten minutes old, and is raised through its kind's raise by the first read after"
+
+# A step waiting on the user is a row of a kind no change of the series raises here yet: the read leaves it as it is,
+# only asking after the cards open.
+HOST=$box expect_ok crew ops step mac-studio --label wldn --key rotate-key --state waiting --doer user --note "due this week"
+: > "$CREW_TEST_LOG"
+HOST=$box expect_ok crew rail --label wldn
+op=$(grep -o 'op/mac-studio/[0-9]*' <<<"$out" | head -1); [[ -n $op ]] || fail "the step has no op/ row:"$'\n'"$out"
+has "$out" "    card:   $op, none open"
+eq "$(py_calls | cut -d' ' -f1 | sort -u | tr '\n' ' ')" "get_request whoami "
+ok "a row whose kind has no raise yet is left as it is, nothing posted"
