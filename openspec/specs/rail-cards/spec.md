@@ -149,26 +149,34 @@ Each card a crew agent posts, updates, withdraws or closes in Pending You, throu
 - **THEN** nothing is written to crew's run record
 
 ### Requirement: The rail shows each row's card
-`crew rail` SHALL print, under each row, the row's card key and whether a card with that key is open, whose it is, and the open card's id. A card is open from its `card.post` entry until a `card.close` entry for the same card, or until a later `card.post` entry by the same owner under the same key names another card, which is then the row's card while the older is taken as lost.
+`crew rail` SHALL print, under each row, the row's card key, whether a card with that key is open, its id and whose it is, and after the groups the open question cards, each with its asker, its title and its age, and the open record cards apart. A card is open from its `card.post` entry until a `card.close` entry for the same card, or until a later `card.post` under the same key names another card, which is then the row's card while the older is taken as lost.
 
 #### Scenario: A row with its card
-- **WHEN** unit `x` is in review at `abc1234` and swb-1-conductor's card `review/x/abc1234`, id `req_1`, is open
-- **THEN** the row's card line names `review/x/abc1234` as open, asked by `swb-1-conductor`, with the id `req_1`
+- **WHEN** bolt `y` reads proven and crew's card `req_l1` under `land/y` is open
+- **THEN** the row's card line names `land/y` as open, `req_l1`, the conductor's
 
 #### Scenario: A row without a card
-- **WHEN** a proposal is open and no card has been posted for it
-- **THEN** the row's card line names `proposal/<n>` with no card open
+- **WHEN** a proposal is open and its card's post was refused
+- **THEN** the row's card line names `proposal/<n>` with no card open and the refusal's words
 
 #### Scenario: A card posted again under its row's key
-- **WHEN** the planner's card `req_1` under `proposal/17` was never closed, and the planner posts `req_2` under `proposal/17`
-- **THEN** the row's card line names `req_2` as its open card, and `req_1` is neither on the row's card line nor among the open cards with no row
+- **WHEN** crew's card `req_1` under `proposal/17` read not found after the host signed in again, and the rail read posted `req_2` under `proposal/17`
+- **THEN** the row's card line names `req_2` as its open card, and `req_1` is listed as lost
+
+#### Scenario: A row with its card and a question open
+- **WHEN** `proposal/4`'s card `req_p4` is open and swb-1-conductor's question `req_q1` is open
+- **THEN** the proposal row's card line names `proposal/4`, open, `req_p4`, the planner's; and after the groups `req_q1` is listed with swb-1-conductor, its title and its age
 
 ### Requirement: The rail names an open card whose row is gone
-After its groups, `crew rail` SHALL list each open card that matches no row, with its key, its owner, when it was posted, and a pasteable `crew tell` asking the owner to close it. crew SHALL NOT close another agent's card itself.
+After its groups, `crew rail` SHALL list each card its sweep withdrew or closed on this read, with its key, its owner and why (its row is gone, its asker ended), and each card it posted again as lost.
 
 #### Scenario: A forgotten card
-- **WHEN** unit `x` was approved and swb-1-conductor's card `review/x/abc1234` was never closed
-- **THEN** the rail lists `review/x/abc1234`, owned by swb-1-conductor, with `crew tell swb-1-conductor "Close your Pending You card review/x/abc1234: its row is gone."`
+- **WHEN** proposal 4 was approved from the planner's pane and its card `proposal/4` is still open
+- **THEN** the next rail read closes it with the approval's outcome and lists it, "closed: its proposal was applied"
+
+#### Scenario: A withdrawn card
+- **WHEN** bolt `y` was dropped while `land/y`'s card was open
+- **THEN** the rail withdraws the card and lists it, "withdrawn: its bolt was dropped"
 
 ### Requirement: The conductor's tell to the operator agents is for what has no card
 A conductor with Pending You's tools SHALL NOT tell the operator agents when it waits on the user for a review or a landing, since that row's card reaches the user. It SHALL tell them when it waits on a question asked only in its pane, and for every wait when it has no Pending You tools. A verify report is no wait on the user, and is told to no one.
@@ -459,30 +467,23 @@ A proposal's card SHALL carry its change as an artifact of kind `code` with lang
 - **THEN** the card carries two artifacts, the uploaded picture and a `code` artifact of lang `text` holding the change as `crew plan card 4` prints it, and no Markdown artifact and no link
 
 ### Requirement: A row's card lost to its owner is posted again
-A card Pending You answers "not found" to the agent that posted it is lost to that agent. While its row still waits, the owner SHALL post the row's card again under the row's key, in the row's form, its summary saying after the link and the bolt that an older copy is dead, to dismiss it in the app, and that this card is the one to answer. A lost card whose row is gone SHALL be posted again by nobody.
+A card Pending You answers "not found" to the host's connection is lost: the host signed in anew. On the next rail read, while the row still waits, crew SHALL post the row's card again under the row's key, in the row's form, its summary saying that an older copy is dead, to dismiss it in the app, and that this card is the one to answer, and SHALL take the newer card as the row's. A lost card whose row is gone SHALL be posted again by nobody.
 
 #### Scenario: The host signed in again
-- **WHEN** the planner, started afresh, finds that the card the rail shows open under `proposal/17` reads "not found" in Pending You, and proposal 17 is still open
-- **THEN** the planner posts a new approval card under `proposal/17`, whose summary, after its link, says an older copy of this card is dead, to dismiss it in the app, and to answer this one
+- **WHEN** the host runs `pendingyou-signin` while `proposal/17`'s card is open, and the rail is read
+- **THEN** crew posts a new card under `proposal/17`, whose summary says an older copy of this card is dead, to dismiss it in the app, and to answer this one, and the rail shows the new card's id as the row's
 
 #### Scenario: A close that finds nothing
-- **WHEN** the planner closes its card for proposal 9 after applying the user's approval given in its pane, and Pending You answers "not found"
-- **THEN** the planner posts no card for it, since the row no longer waits, and goes on
+- **WHEN** `crew plan approve 9` closes proposal 9's card and Pending You answers "not found"
+- **THEN** crew posts no card for it, since the row no longer waits, records the close as lost, and goes on
 
 #### Scenario: A lost landing card
-- **WHEN** bolt `y` waits to land at `def5678` and the conductor's card `land/y/def5678` reads "not found" when it updates the card
-- **THEN** the conductor posts the landing card again under `land/y/def5678`, an approval of risk high naming the bolt, its summary saying the older copy is dead and this one is the one to answer
+- **WHEN** bolt `y` waits to land and `land/y`'s card reads "not found" when a fix moves the head and crew changes the card
+- **THEN** crew posts the landing card again under `land/y`, an approval of risk high naming the bolt, its summary saying the older copy is dead and this one is the one to answer
 
 #### Scenario: A lost operations card
-- **WHEN** main-level ops finds its card under `deploy/dev/abc1234` "not found" while the deploy's offer still waits
-- **THEN** ops posts the deploy's card again under `deploy/dev/abc1234`, its summary saying the older copy is dead and this one is the one to answer
-
-### Requirement: An owner checks its rows' cards when its sign-in may have changed
-A row's owner SHALL ask Pending You for each card the rail shows open under its rows, by the card's id, at its start and whenever Pending You has it call `whoami` again, and SHALL take any card of its own that a Pending You tool answers "not found" as lost.
-
-#### Scenario: Started afresh after the host signed in again
-- **WHEN** a conductor starts and the rail shows its card `req_1` open under `land/y/def5678`
-- **THEN** the conductor asks Pending You for `req_1`, and when it reads "not found" posts the row's card again
+- **WHEN** `deploy/dev`'s card reads "not found" while the deploy's offer still waits
+- **THEN** the next rail read posts the deploy's card again under `deploy/dev`, its summary saying the older copy is dead and this one is the one to answer
 
 ### Requirement: The design agent posts a record's card under its record key
 Besides the row keys, crew SHALL let the partition's design agent post a card under `record/<kit>/<number>/<commit>`, where `<kit>` is the name of a kit one of its partition's teams builds, `<number>` the record's four digits and `<commit>` the seven hex digits of the commit that proposed the record or the amendment. No other crew agent SHALL post under a record key. A record key with a kit that is not its partition's, or in any other shape, SHALL be refused naming the record key's form.
@@ -582,3 +583,10 @@ Every card crew posts under a row's key after a card of the owner's under that k
 #### Scenario: A card posted again while it is open
 - **WHEN** crew posts its card under `land/b1` again while `req_1` is open there
 - **THEN** it is posted under `land/b1`, and Pending You gives `req_1` back
+
+### Requirement: A question whose asker is gone is withdrawn
+On each rail read crew SHALL withdraw, under the host's connection, every open question card whose asker herdr no longer lists as an agent, with the reason naming the asker, and SHALL say so.
+
+#### Scenario: A conductor's question outlives it
+- **WHEN** crw-3-conductor's question card is open and crw-3's team is closed
+- **THEN** the next rail read withdraws it with "crw-3-conductor ended; ask again if it still matters"
