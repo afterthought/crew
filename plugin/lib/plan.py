@@ -3566,6 +3566,9 @@ def capture_text(fleet, name, host, v, sid, key, cap, date, now, raw, plan, by=N
 
 
 SIGNAL_FILE = re.compile(r"^[0-9]{2}-[a-z0-9][a-z0-9-]*\.md$")
+# A program's capture is named as every name crew takes (code.4), but for a version's dots, each between two digits, as a
+# release adapter names a release's capture (2026-10-15-release-pendingyou-0.35.1).
+CAPTURE_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]|(?<=[0-9])\.(?=[0-9]))*$")
 SIGNAL_LIMIT = 8 * 1024  # a signal's file larger than this copies its source; a program cuts its excerpt to fit (signals.3)
 
 
@@ -3578,14 +3581,15 @@ def raw_of(cap_text):
 def capture_refusal(cap, files, here, banked):
     """Why a program's capture does not land on the flywheel's branch (signals.6), or None. cap is its folder's name,
     files the folder's files ({name: text}, None for anything that is not a readable file), here this host and banked
-    whether the raw record its capture.md names is there on it. A capture is a name crew takes (code.4) holding
-    capture.md and its signals, NN-<slug>.md, and nothing else, since raw material stays on its host (signals.3);
+    whether the raw record its capture.md names is there on it. A capture is a name crew takes (code.4), a version's dots
+    between digits allowed (CAPTURE_NAME), holding capture.md and its signals, NN-<slug>.md, and nothing else, since raw
+    material stays on its host (signals.3);
     capture.md names itself, the program as its source, who captured it, its event's date, its raw record banked on
     this host, the host that ran the program, and is read, with as many signals as it holds, at least one; each signal
     names itself in its capture, its kind and who asserted it, says what it asserts, quotes its excerpt and is no
     larger than crew lands. The first refusal found is said, naming the file."""
-    if not crew.NAME.match(cap):
-        return f"{cap} is no capture's name crew takes: lowercase words, digits and dashes (code.4)"
+    if not CAPTURE_NAME.match(cap):
+        return f"{cap} is no capture's name crew takes: lowercase words, digits and dashes, and a version's dots between digits (code.4)"
     if files.get("capture.md") is None:
         return f"{cap} has no capture.md"
     for n in sorted(files):
@@ -8270,7 +8274,7 @@ def named(a):
         out.append(f"agent/{a.team}-{a.slot}")
     if a.cmd == "signal-move":
         out.append(f"signals/{a.signal}")
-    if a.cmd == "signal-land" and crew.NAME.match(pathlib.Path(a.dir).name):
+    if a.cmd == "signal-land" and CAPTURE_NAME.match(pathlib.Path(a.dir).name):
         out.append(f"signals/{pathlib.Path(a.dir).name}")
     if a.cmd == "state":
         out.append(f"plan/{a.label}")

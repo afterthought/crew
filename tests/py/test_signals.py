@@ -264,7 +264,6 @@ class TestLand:
         assert refusal() is None
 
     @pytest.mark.parametrize("files, cap, said", [
-        (None, "2026-10-02-release-mise-2026.10.0", "2026-10-02-release-mise-2026.10.0 is no capture's name crew takes: lowercase words, digits and dashes (code.4)"),
         ({"01-failed.md": FAILED}, DEP, f"{DEP} has no capture.md"),
         (folder(**{"machine.log": "x"}), DEP, f"{DEP}/machine.log is no signal's file, NN-<slug>.md: a capture's raw material stays on its host, outside git (signals.3)"),
         (folder(**{"capture.md": CAPTURE.replace("source: swancloud-deployer\n", "")}), DEP, f"{DEP}/capture.md names no source, the program that recorded it"),
@@ -281,6 +280,21 @@ class TestLand:
          f"{DEP}/01-failed.md is larger than 8 KiB, so it copies its source: cut its excerpt and keep the whole in the raw record")])
     def test_a_capture_that_is_not_a_programs_whole_capture_is_refused_naming_the_file(self, files, cap, said):
         assert refusal(files, cap) == said
+
+    def test_a_release_capture_named_with_its_versions_dots_lands(self):
+        """2026-10-16: swancloud's release adapter names a capture <date>-release-<tool>-<version>, and crew refused
+        pendingyou 0.35.1's for its dots (code.4)."""
+        for rel in ("2026-10-15-release-pendingyou-0.35.1", "2026-10-02-release-mise-2026.10.0", "2026-10-15-release-herdr-annotate-1.2"):
+            assert refusal({n: x.replace(DEP, rel) for n, x in folder().items()}, rel) is None
+        rel = "/home/x/release-signals/work/2026-10-15-release-pendingyou-0.35.1"
+        assert plan.named(plan.parser().parse_args(["signal-land", rel, "--label", "swancloud"])) == ["signals/2026-10-15-release-pendingyou-0.35.1"]
+        assert plan.named(plan.parser().parse_args(["signal-land", "/w/2026-10-15-release-x.y", "--label", "swancloud"])) == []
+
+    @pytest.mark.parametrize("cap", ["2026-10-15-release-x.y", "2026-10-15-release-v.1", "2026-10-15-release-x-0.", "2026-10-15-release-x-.1",
+                                     "2026-10-15-release-x-0..1", ".2026-10-15", "2026-10-15-Release-x-0.1", "-2026-10-15", "2026-10-15-release-x-0.1/y"])
+    def test_any_other_dot_or_name_crew_does_not_take_is_refused(self, cap):
+        assert refusal({n: x.replace(DEP, cap) for n, x in folder().items()}, cap) == (
+            f"{cap} is no capture's name crew takes: lowercase words, digits and dashes, and a version's dots between digits (code.4)")
 
     def test_its_raw_record_is_banked_on_the_host_that_lands_it(self):
         assert refusal(here="chuck-herdr-alpha") == (f"{DEP}/capture.md's raw record is on mac-studio, and a program's capture lands from the host "
