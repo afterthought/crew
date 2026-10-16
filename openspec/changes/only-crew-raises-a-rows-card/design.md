@@ -20,13 +20,18 @@ The name check stays whole: `name_refusal` keeps running first in `refusal`, apa
 
 ### 2. Hearing
 
-**Waits on the probe of Pending You's `hold` and webhook**, run beside the series by the recovery session: whether `pendingyou hold` from the owner's session adopts a card it did not post and is woken by its answer, whether crew can register a wake webhook per role, or whether a watcher must tell owners. The probe's finding settles how an owner hears, and this decision is rewritten to it before task 1.1 is built. Until then the design stands as follows.
+A card crew raises is posted through its bridge in no session, so nothing of the owner's is listening when the user answers. The owner adopts it:
 
-A post prints `card req_… posted; run: pendingyou hold req_…` so the owner's session adopts it; the fleet's wake mod answers `hold` itself and learns the card. For the deployer's offer, which runs under launchd, `crew ops offer` tells main-level ops the same line through `crew tell`. At a fresh start an owner runs `crew rail`, which names its open cards and their ids, and adopts each. `crew card read <key>` prints a card's state and answer, and closes a declined approval:
+- **Adoption.** After a post, crew prints `call get_request (requestId req_…, name <role>)`, never `pendingyou hold`. The owner's `get_request` under its own name reads the card the bridge posted on the host's connection, and the fleet's wake mod adopts the card from that call; it then wakes the owner's session, once idle, 20 to 60 seconds after the user's answer.
+- **Raised outside the owner's turn**, a landing found on a rail read or the deployer's offer: crew sends the owner that line with `crew tell`. A card the owner's own command raised, a proposal's in the planner's shell, is told to no one.
+- **At a fresh start** the owner runs `crew rail`, which names its open cards and their ids, and adopts each the same way.
+- **The sweep stays the catch** for a card no owner adopted: the rail names every open card with its owner at each read, and `crew card read <key>` prints a card's state and answer, and closes a declined approval:
 
 | Event | Command | Act |
 |---|---|---|
 | any approval declined | `crew card read <key>` finds the decline | close with the user's words |
+
+The line is printed by `row_card_post`, and told by it when the command raising the card is not the owner's; the briefs say to call it.
 
 ### 3. The briefs
 
@@ -40,10 +45,19 @@ A question's card is as drawn, the asker's own: "I think the last question card 
 
 `crew plan card` and `crew card post|change|close` are removed from `plugin/bin/crew`, its usage header, README and `plugin/skills/crew/SKILL.md`, with `card_model`, which only they and the hook's proposal form read; `crew card read|wait|session|end` stay. crew no longer names a card for its owner to close when a write ends a row (`close_card`, `notices`, `lost_rows`): it closes the card itself at the event. `CARD_KEYS` keeps only the rows' keys as the series made them, the verify report's and the head-keyed forms gone.
 
+## Alternatives considered for hearing
+
+From the recovery session's probe of Pending You 0.28.0 and 0.35.1, 2026-10-16 (`hearing-probe/finding.md` in the session's scratchpad; `PY` is the 0.28.0 store package, `mod` the fleet's wake mod):
+
+- **`pendingyou hold <id>` in the owner's session.** The wake mod answers `hold` only for a session that already has a Pending You server on record from an earlier named call (`mod/wake.js:240`, `register.js:440`); otherwise the CLI's `hold` runs for real, keyed by request id with no name or session, and in the foreground blocks the agent for up to four hours (`PY/dist/hold.js:80,95-100`, `args.js:3`). The owner's own `get_request` gets the same adoption with nothing that can block (`mod/wake.js:278-284`), and records the server and name as it does.
+- **`pendingyou watch` as a service on each host**, telling each answer's owner. It marks every answer on the host handed in the shared `state.json` (`PY/dist/watch.js:71,79`), which every session's per-message pickup reads and skips (`pickup.js:248`), so it would hide other sessions' answers from them.
+- **A wake webhook per role** (`set_wake_webhook`): ids only, stored per name on the connection; it needs Tailscale Funnel, a receiver and a secret on every host, and the secrets are the user's to write.
+- **Polling `list_pending`** from crew: a new bridge and MCP session for every poll, and still a watcher, which `state.4` rules out.
+
 ## Risks / Trade-offs
 
+- An answer wakes its owner only once the owner has adopted the card and its session is idle: the mod checks an adopted card every 20 seconds, every 60 once it has been quiet for 30 minutes (`mod/wake.js:5-7`, `register.js:141-147`), and forgets one unchanged for seven days or across a new session id (`wake.js:11,369`, `register.js:33,368`). A card adopted by no one, or forgotten, is the rail's to show and the owner's to read at its breakpoints and fresh start.
 - An agent may ask more questions than it did when every card was refused but a row's; volume comes down by mechanism, one card per thing changed in place, crew closing at the event, four voices each its own, and never by telling agents not to ask (record 0031, *Decision drivers*).
-- Until the probe settles hearing, an owner reads its answered cards from `crew rail` and `crew card read` at its breakpoints.
 
 ## After deploy
 

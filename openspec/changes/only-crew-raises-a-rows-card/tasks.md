@@ -2,7 +2,7 @@
 
 ## 1. Hearing
 
-- [ ] 1.1 Waits on the probe of Pending You's `hold` and webhook, and is built as its finding says. `crew card read <key>` prints a card's state and closes a declined approval with the user's words; every post prints the card's id and the hold line. Logic: `tests/py/test_card_commands.py`, the answer read and the decline's close. Journey: `tests/t-cards.sh`.
+- [ ] 1.1 Every post prints the card's id and `call get_request (requestId <id>, name <role>)`, and a card raised outside its owner's turn, a landing found on a rail read or the deployer's offer, sends the owner that line with `crew tell`; `crew card read <key>` prints a card's state and closes a declined approval with the user's words. Logic: `tests/py/test_card_commands.py`, the line, whom it is told to, the answer read and the decline's close. Journey: `tests/t-cards.sh` (`briefs.16`, `state.4`).
 
 ## 2. The hook and the question
 

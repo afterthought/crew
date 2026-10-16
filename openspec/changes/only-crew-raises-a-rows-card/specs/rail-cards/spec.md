@@ -5,7 +5,7 @@ crew SHALL build and post each rail row's card itself, from the facts of the eve
 
 #### Scenario: A proposal accepted into the plan
 - **WHEN** the planner runs `crew plan propose <file>` and the proposal is accepted as number 4
-- **THEN** one card keyed `proposal/4` is open, asked in the planner's name, built by crew from the plan and the proposal, and the command prints its id and `pendingyou hold <id>`
+- **THEN** one card keyed `proposal/4` is open, asked in the planner's name, built by crew from the plan and the proposal, and the command prints its id and `call get_request (requestId <id>, name <role>)`
 
 #### Scenario: A bolt reads proven at the merge's end
 - **WHEN** the merge of bolt `y`'s last unit is recorded, every unit's latest change has been in a batch and sluice's verdict at `y`'s head is green
@@ -24,15 +24,15 @@ crew SHALL build and post each rail row's card itself, from the facts of the eve
 - **THEN** the batch is recorded, no card posts, and the command and the rail say the host is not signed in
 
 ### Requirement: A raised card is adopted by its owner
-The command that raises a card SHALL print the card's id and the line that adopts it, `pendingyou hold <id>`, and when the event runs outside the owner's session SHALL tell the owner that line with `crew tell`.
+The command that raises a card SHALL print the card's id and the line that adopts it, `call get_request (requestId <id>, name <role>)`, and when the card is raised outside its owner's turn, a landing found on a rail read or the deployer's offer, SHALL tell the owner that line with `crew tell`.
 
 #### Scenario: A deploy offered by the deployer
 - **WHEN** the deployer runs `crew ops offer srv --to abc1234`
-- **THEN** one card keyed `deploy/srv` is open in main-level ops's name, and main-level ops is told `pendingyou hold <id>` by `crew tell`
+- **THEN** one card keyed `deploy/srv` is open in main-level ops's name, and main-level ops is told `call get_request (requestId <id>, name <role>)` by `crew tell`
 
 #### Scenario: A proposal's card in the planner's own shell
 - **WHEN** the planner's `crew plan propose` raises proposal 4's card
-- **THEN** the command prints the card's id and `pendingyou hold <id>`, and no tell is sent
+- **THEN** the command prints the card's id and `call get_request (requestId <id>, name <role>)`, and no tell is sent
 
 ### Requirement: A row's card is changed in place when its thing changes
 When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
@@ -166,7 +166,7 @@ An answer on a crew card SHALL be acted on by the role whose row it is, woken in
 - **THEN** the conductor tells main-level ops to land `y` on the user's word, main-level ops lands it, and `crew bolt land` closes the card
 
 ### Requirement: An agent never runs Pending You from npm or waits on a hold
-An agent crew started SHALL adopt a card crew posted by running the fleet's `pendingyou hold <id>` once, as crew prints it, which the fleet's wake mod answers at once, and SHALL run no `npx pendingyou` command and wait on no hold. After a fresh start it SHALL read `crew rail` for its open cards and adopt each.
+An agent crew started SHALL adopt a card crew posted by calling Pending You's `get_request` with the card's id under its own name, as the line crew prints or tells it says, from which the fleet's wake mod adopts the card and wakes the agent's session once the card is answered and the session is idle; it SHALL run no `pendingyou` command, `hold` and `watch` among them, none through `npx`, and wait on no hold. After a fresh start it SHALL read `crew rail` for its open cards and adopt each the same way.
 
 #### Scenario: Restarted with an answered card
 - **WHEN** a conductor restarts while the user has answered its landing card
