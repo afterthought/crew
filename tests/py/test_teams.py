@@ -1,6 +1,7 @@
 """Teams, the main level and their agents (teams.2, teams.6, teams.7, teams.11, plan.15): crew.greet_waits for one look of
 a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
 crew.dispatch_place and crew.operator_session for where those run, crew.last_conversation for where a role resumes,
+crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
 plan.amended_said for what a conductor brought back is told, and what crew up, restart, resume, clear and needs decide
 before they act. Starting, greeting, reviving and taking them down through the command are the teams journey's
 (t-journey-teams, t-journey-main)."""
@@ -115,6 +116,53 @@ class TestResume:
     def test_a_folder_gone_is_not_resumed(self, home):
         self.session(home, "s1", "swb-1-ops", str(home / "gone"), mtime=1)
         assert crew.last_conversation("swb-1-ops") is None
+
+
+class TestBriefBack:
+    SAVED = {"CREW_AGENT": "swb-1-conductor", "CREW_LABEL": "wldn", "CREW_CWD": "/kit", "CREW_ROLE": "conductor"}
+
+    def test_a_compaction_of_a_session_herdr_resumed_gives_its_agents_brief_back(self):
+        assert crew.brief_due("compact", False, self.SAVED) == "swb-1-conductor"
+
+    @pytest.mark.parametrize("source", ["resume", "startup", "clear", "fork", None])
+    def test_any_other_start_gives_none_a_resume_keeping_the_brief_in_its_transcript(self, source):
+        assert crew.brief_due(source, False, self.SAVED) is None
+
+    def test_a_session_crew_role_started_carries_its_brief_through_a_compaction_and_is_given_none(self):
+        assert crew.brief_due("compact", True, self.SAVED) is None
+
+    @pytest.mark.parametrize("saved", [{}, {"CREW_AGENT": ""}, {"CREW_LABEL": "wldn"}])
+    def test_a_session_no_crew_agent_is_recorded_for_is_given_none(self, saved):
+        assert crew.brief_due("compact", False, saved) is None
+
+    @pytest.mark.parametrize("name, recorded, found", [
+        ("swb-1-unit-2", "coder", ("swb-1", "coder")), ("swb-1-unit-2", "verify", ("swb-1", "verify")),
+        ("swb-1-conductor", "conductor", ("swb-1", "conductor")), ("wldn-ops", "main-ops", ("wldn", "main-ops"))])
+    def test_the_brief_is_built_from_the_definition_crew_role_recorded(self, name, recorded, found):
+        assert crew.brief_role(FLEET, name, recorded) == found
+
+    @pytest.mark.parametrize("name, found", [
+        ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("atl-1-ops", ("atl-1", "ops")),
+        ("wldn-design", ("wldn", "design")), ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "main-ops")),
+        ("wldn-reviewer", ("wldn", "reviewer")), ("wldn-dispatch-chuck-herdr-alpha", ("wldn", "dispatcher")),
+        ("wldn-operator-mac-studio", ("wldn", "operator"))])
+    def test_a_session_recorded_before_crew_role_named_its_definition_is_given_the_one_its_name_gives(self, name, found):
+        assert crew.brief_role(FLEET, name, "") == found
+        assert crew.brief_role(FLEET, name, None) == found
+
+    def test_a_unit_slots_name_gives_no_definition_since_its_stage_does(self):
+        with pytest.raises(crew.Refusal, match="swb-1-unit-2's session record names no definition"):
+            crew.brief_role(FLEET, "swb-1-unit-2", "")
+
+    def test_a_name_crew_starts_no_agent_by_is_refused(self):
+        with pytest.raises(crew.Refusal, match="no agent swb-9-conductor"):
+            crew.brief_role(FLEET, "swb-9-conductor", "conductor")
+
+    def test_the_brief_comes_back_whole_behind_a_line_saying_what_it_is_and_to_read_a_file_it_is_cut_to(self):
+        said = crew.brief_back_said("swb-1-conductor", "You are swb-1's conductor.\n\nKeep the bolt moving.")
+        first, rest = said.split("\n\n", 1)
+        assert first.startswith("[crew] This is your brief as swb-1-conductor") and "read that file whole now" in first
+        assert rest == "You are swb-1's conductor.\n\nKeep the bolt moving."
 
 
 class TestAmended:
