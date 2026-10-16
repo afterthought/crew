@@ -46,7 +46,7 @@ The reviewer SHALL read each due change whole and write one summary file holding
 - **THEN** its section names them in words, with no code block and no path
 
 ### Requirement: A batch card is read and answered in Pending You
-A batch card SHALL be a notice that asks nothing, which the user sends back with one tap. It SHALL say first, in plain words, what it is: the partition's batch of the changes constructed or amended since the last batch, already being built, read for notes and approving nothing; then that there is nothing to answer, and that notes go in the batch's reading session or in the card's own note naming the change. It SHALL carry each unit's name, team and opening paragraph as prose that wraps on a phone, never in a code block or an attachment, and one link, to one plannotator session holding the reviewer's summary whole and every unit's whole change. The batch's notes SHALL be the annotations the user sends from that session and the card's own note. A decision in the session SHALL NOT answer or withdraw the card. The session SHALL end when the card closes.
+A batch card SHALL be a notice that asks nothing, which the user sends back with one tap. Its title SHALL say what the batch is about, from its units' subjects, with the batch's number after; its summary SHALL open "N changes to read, nothing to approve", and its words SHALL say that notes go in the reading session or in the card's own note naming the change; it SHALL carry each unit's name, team and opening paragraph as inline Markdown on its face, and one link to one plannotator session holding the summary whole and every change. The batch's notes SHALL be the session's annotations and the card's own note. The card SHALL close on the tap or on the session's send, whichever is first, and the session SHALL end with it.
 
 #### Scenario: The user drills in
 - **WHEN** the user opens a batch card holding three units
@@ -54,11 +54,11 @@ A batch card SHALL be a notice that asks nothing, which the user sends back with
 
 #### Scenario: Every unit fine
 - **WHEN** the user sends a batch card of six units back with one tap and no note, having sent nothing from the session
-- **THEN** the card is answered, no unit is constructed again, and the user picked and typed nothing
+- **THEN** the card is closed, no unit is constructed again, and the user picked and typed nothing
 
 #### Scenario: Notes written in a session
 - **WHEN** the user annotates `x1`'s design and `z1`'s tasks in the batch's session and sends the annotations
-- **THEN** the planner sends each unit's annotations to its conductor at once, and the card stays open for the user
+- **THEN** the planner's wait returns them, sends each unit's annotations to its conductor at once, and the card is closed
 
 #### Scenario: Two fine, one with notes
 - **WHEN** the user writes notes for one unit of three in the card's note, naming it, and sends the card back
@@ -66,7 +66,7 @@ A batch card SHALL be a notice that asks nothing, which the user sends back with
 
 #### Scenario: The session approved
 - **WHEN** the user approves the batch's session without annotations
-- **THEN** nothing is sent for any unit, and the card stays open for the user
+- **THEN** nothing is sent for any unit, and the card is closed "Read; no notes"
 
 ### Requirement: Notes reach the unit's conductor
 The planner SHALL send the user's notes, word for word, to the conductor of the team of each unit they speak of: the session's annotations, by the file each is on or what it says, and the card's own note, by the unit it names or what it says of a unit's summary, each message naming every unit it went to. Words that speak of no unit the planner can tell SHALL go to every unit's conductor, saying so. The planner SHALL NOT split, reword or summarize the user's words. A unit of which no annotation and no note speaks SHALL be fine. The card's closing line SHALL name the units notes went to.
@@ -101,9 +101,9 @@ A bolt SHALL be offered for landing only once every unit's latest change, the co
 - **WHEN** every unit of a bolt has merged and its proof is clean, and one unit's change was constructed again after the last batch
 - **THEN** a batch holding that unit is due at once, the landing card names the unit, and the landing is refused until the batch has been posted
 
-### Requirement: The planner posts a batch as one card
-The planner SHALL post each batch as one partition card, keyed `batch/<n>`, naming every unit the batch holds, however many; a batch SHALL NOT be split across cards. A batch's answer SHALL be the user's; no agent SHALL answer a batch card.
+### Requirement: crew raises a batch's one card
+When the reviewer delivers a batch's summary and the planner's `crew review --wait` returns, crew SHALL start the batch's one reading session and raise its one card in the planner's name, keyed `batch/<n>`, as `rail-cards` says a batch's card is; the planner SHALL write nothing of it and post nothing. `crew card wait batch/<n>` SHALL give the planner the notes and close the card.
 
-#### Scenario: Seven changes due
-- **WHEN** a batch holds seven changes
-- **THEN** the planner posts one card for it, naming all seven units
+#### Scenario: A summary delivered
+- **WHEN** the reviewer delivers batch 7's summary of four changes and the planner's wait returns
+- **THEN** batch 7's session is started, and one card keyed `batch/7` is open in the planner's name

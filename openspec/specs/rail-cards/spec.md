@@ -67,23 +67,27 @@ crew SHALL ask each card in the name of the role whose row it is, with the host 
 - **THEN** the card is asked as `swb-1-conductor` on the team's host, sits in switchboard-kit's area in the `wldn` group, and its title asks whether to land bolt `y` on the kit's main
 
 ### Requirement: A card carries what the user would read and the row's answers
-A review card SHALL carry the link to the plannotator session its owner started for the card's key, on the unit's change folder. The card SHALL carry the link in place of the folder's path, and SHALL NOT be posted without it when the owner's session has plannotator. A proposal's card SHALL hold the proposal whole, its picture, its text and its case, and SHALL carry no link, but for a proposal of more than fifteen new units, whose card carries the link to the session on the proposal's page as `crew plan proposed <n>` prints it. A landing card carries no link. Each card's options SHALL be the row's answers: approve, and keep or leave out each new unit, for a proposal; approve or ask for changes for a review; and approve for a landing. A decision the user makes in the card's session SHALL be acted on by the owner as the card's answer, and the owner SHALL then close the card.
+A proposal's card SHALL hold the proposal whole, its picture, its text and its case, and SHALL carry a reading session's link only when it holds more than fifteen new units. A batch's card SHALL carry its one session's link. A landing's, a deploy's, a step's and a record's card SHALL carry no link to a session: each holds what the user decides from.
 
 #### Scenario: A review card's options
-- **WHEN** the user opens a review card
-- **THEN** it offers approval, and a note in the user's own words asks for changes
+- **WHEN** a unit's change is due for a batch
+- **THEN** no review card offers its approval; the batch's card asks nothing and its notes go to the unit's team
 
 #### Scenario: A review card's link
-- **WHEN** swb-1-conductor posts the card for unit `x` in review at `abc1234`
-- **THEN** the card carries the link `crew card session review/x/abc1234` printed, and no folder path
+- **WHEN** a unit's change is read in batch 3
+- **THEN** the batch's card carries the one link to batch 3's session, and no card carries a link to the unit alone
 
 #### Scenario: Answered in the session rather than on the card
-- **WHEN** the user annotates the change in the review card's session and sends the annotations
-- **THEN** the conductor runs construct again with them, as for a note on the card, and withdraws the card saying it was answered in its session
+- **WHEN** the user annotates a unit's change in the batch's session and sends the annotations
+- **THEN** the planner's `crew card wait batch/3` returns them, they go to the unit's conductor as the user's words, and the batch's card is closed
 
 #### Scenario: A proposal's card holds the proposal whole
-- **WHEN** the planner posts the card for proposal 4, which adds two units
-- **THEN** the card carries the picture, the text and the case, and no plannotator link
+- **WHEN** crew raises the card for proposal 4, which adds two units
+- **THEN** the card carries the picture, the text and the case, and no session link
+
+#### Scenario: A landing card has nothing to read
+- **WHEN** crew raises bolt `y`'s landing card
+- **THEN** it names the units and chores that land, sluice's verdict and when, and how far main has moved, and carries no link to a reading session
 
 ### Requirement: Landing is approved only by holding the button
 A landing's card SHALL be an `approve` of risk high, not reversible, so it is approved by holding the button in the Pending You app and never with a key in Herdr's popup; it SHALL NOT carry the `highStakes` flag, which Pending You refuses on an approval.
@@ -207,17 +211,6 @@ A crew card's words SHALL be prose the phone wraps, in short paragraphs, cut at 
 #### Scenario: A batch card's summary
 - **WHEN** crew raises batch 7's card for four units
 - **THEN** each unit's paragraph is the reviewer's opening paragraph as prose in its summary and details, with no code block in its words, the reviewer's summary rides its face as inline Markdown, and the card wraps on the phone
-
-### Requirement: A card's link and bolt come first
-A card that carries a link SHALL begin its summary with the link to its row's plannotator session, then name the bolt, within Pending You's 400 characters, and its background SHALL begin with the same link. The link SHALL be the card's entry in its links and SHALL NOT be carried as an attached artifact. A landing card, which has nothing to read, SHALL name its bolt and carry no link; a proposal's card that carries no link SHALL name its bolt in its title.
-
-#### Scenario: A review card's opening
-- **WHEN** swb-1-conductor posts the review card for unit `x` of bolt `y`, whose session's link is `http://mac-studio.ts.swancloud.net:19432`
-- **THEN** the card's summary begins with that link and names bolt `y`, its background begins with the link, its links hold it labelled "Read and annotate it in plannotator", and it has no artifact
-
-#### Scenario: A proposal's card opening
-- **WHEN** the planner posts the card for proposal 4, which changes bolt `y`
-- **THEN** its title names `y` and the counts, and its summary begins with what the proposal is
 
 ### Requirement: A row's card is closed when the row's key changes
 When a row's key changes because what it asks changed, a unit built again or a bolt's head moved by a fix, the row's owner SHALL close the card it holds under the old key with a one-line outcome, and post the row's card under the new key once the row asks again.
@@ -408,11 +401,11 @@ The conductor SHALL post a bolt's landing card once every unit and chore of the 
 - **THEN** the conductor does not ask main-level ops to land `y`, closes the card with that outcome, and runs a fix on the bolt
 
 ### Requirement: A batch's card is a notice naming every unit
-A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) that asks nothing: no options, no question, no approval, no steps and no attachment. Its summary SHALL say first what the card is: the partition's batch of the changes constructed or amended since the last batch, already being built, read for notes and approving nothing.
+A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) crew raises when the reviewer delivers the batch's summary, that asks nothing: no options, no question, no approval and no steps. Its title SHALL say what the batch is about, drawn from its units' subjects, with the batch's number after; its summary SHALL say first "N changes to read, nothing to approve", since the batch before it when there is one; its words SHALL say where notes go, the reading session or the card's own note, that each reaches its unit's team as the user's words, and that the units go on building whatever the user does with the card. The reviewer's summary SHALL ride the face as inline Markdown, a paragraph per unit under its name and team.
 
 #### Scenario: A card of six units
-- **WHEN** the planner posts the card for batch 2 holding six units
-- **THEN** the card is one `fyi` whose summary opens by saying it is batch 2 of the partition, already being built and approving nothing, whose background names all six units with their teams and paragraphs, and whose one link opens the batch's session
+- **WHEN** crew raises the card for batch 2 holding six units
+- **THEN** the card is one `fyi` titled with batch 2, whose summary opens "6 changes to read, nothing to approve", whose words say the units go on building, whose face and background name all six units with their teams and paragraphs, and whose one link opens the batch's session
 
 ### Requirement: A batch's card names every unit and links its session
 A batch's card's words SHALL name every unit of the batch with its team and hold each unit's opening paragraph from the reviewer's summary as prose, with no code block, and it SHALL have one link, to the batch's reading session, in its words first and among its links.
