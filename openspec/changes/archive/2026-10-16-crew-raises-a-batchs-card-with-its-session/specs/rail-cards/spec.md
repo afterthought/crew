@@ -24,11 +24,11 @@ A proposal's card SHALL hold the proposal whole, its picture, its text and its c
 - **THEN** it names the units and chores that land, sluice's verdict and when, and how far main has moved, and carries no link to a reading session
 
 ### Requirement: A batch's card is a notice naming every unit
-A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) crew raises when the reviewer delivers the batch's summary, that asks nothing: no options, no question, no approval and no steps. Its title SHALL say what the batch is about, drawn from its units' subjects, with the batch's number after; its summary SHALL say first "N changes to read, nothing to approve", then that it is the partition's batch of the changes constructed or amended since the last batch, already being built; then where notes go, the reading session or the card's own note, and that each reaches its unit's team as the user's words. The reviewer's summary SHALL ride the face as inline Markdown, a paragraph per unit under its name and team.
+A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) crew raises when the reviewer delivers the batch's summary, that asks nothing: no options, no question, no approval and no steps. Its title SHALL say what the batch is about, drawn from its units' subjects, with the batch's number after; its summary SHALL say first "N changes to read, nothing to approve", since the batch before it when there is one; its words SHALL say where notes go, the reading session or the card's own note, that each reaches its unit's team as the user's words, and that the units go on building whatever the user does with the card. The reviewer's summary SHALL ride the face as inline Markdown, a paragraph per unit under its name and team.
 
 #### Scenario: A card of six units
 - **WHEN** crew raises the card for batch 2 holding six units
-- **THEN** the card is one `fyi` whose summary opens by saying it is batch 2 of the partition, already being built and approving nothing, whose background names all six units with their teams and paragraphs, and whose one link opens the batch's session
+- **THEN** the card is one `fyi` titled with batch 2, whose summary opens "6 changes to read, nothing to approve", whose words say the units go on building, whose face and background name all six units with their teams and paragraphs, and whose one link opens the batch's session
 
 ## REMOVED Requirements
 

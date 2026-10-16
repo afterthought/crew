@@ -325,8 +325,9 @@ ok "ops and every stage post no card, the landing card asks only for the landing
 
 # Units build at once and are reviewed in batches (teams.12 to teams.14, briefs.1, briefs.2, briefs.4, briefs.12): the
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
-# a unit; the planner runs the reviewer and posts each batch as one notice, asking nothing, with one reading session on
-# the batch, and sends the notes from the session and the card to each unit they speak of (briefs.9, briefs.13);
+# a unit; the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
+# one reading session on the batch, posts and closes no batch card, and sends the notes the card's wait prints from the
+# session and the card to each unit they speak of (briefs.9, briefs.12, briefs.13);
 # construct writes Touches as a block crew reads;
 # the coder keeps both intents, settles, corrects only Touches, and submits to sluice; verify names what was changed
 # and not declared; the reviewer writes its summary and nothing else, as prose opening each unit with the paragraph the
@@ -342,25 +343,28 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
 done
 for gone in "build them one after the other" "When in doubt, don't" "## Review with the user"; do lacks "$out" "$gone"; done
 expect_ok crewpy brief wldn planner
-for want in "## Batches" "review wldn\`" "review wldn --wait\`" "card session batch/<n> --label wldn\`" \
-  "card wait batch/<n> --label wldn\`" "keyed \`batch/<n>\`, naming every unit of the batch with its team, however many" \
-  "a batch is never split across cards" "The card is a notice, kind \`fyi\`, intent \`heads_up\`" \
-  "\"This is batch <n> of wldn: the <count> changes written or rewritten since the last batch, already being built." \
-  "Nothing to answer and nothing to approve." "annotate the changes in the reading session and send them there" \
-  "or write them in this card's note, naming the change" "Tap once when you're done" \
-  "\"Read and annotate the whole batch, its summary and every change: <the link>\"" "the opening paragraph the reviewer wrote for it" \
-  "its one link is the session's" "It never offers a choice of units, asks a question, approves anything or attaches the summary" \
-  "go at once, word for word, to the conductor of each unit they speak of" \
-  "goes to every unit's conductor, saying it named no unit you could tell" "Neither answers or withdraws the card" \
-  "its note, if any, goes the same way" "or to every unit's conductor when it names none, saying so" \
+for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
+  "crew records the batch, starts its one reading session, the summary and every unit's whole change as one review, and raises its one card in your name, keyed \`batch/<n>\`" \
+  "naming every unit of the batch with its team and the paragraph the reviewer opened it with, however many" \
+  "a batch is never split across cards" "\`call get_request (requestId req_…, name wldn-planner)\`" \
+  "card wait batch/<n> --label wldn\`" "when the user sends the card back with a tap or sends the reading session, whichever comes first" \
+  "prints the card's note and every annotation the user sent, word for word; crew then closes the card and ends the session" \
+  "card session batch/<n> --label wldn\` prints the session's link again" \
+  "You start no session for a batch, and post, change and close no batch card: crew does." \
+  "at once, word for word, to the conductor of each unit it speaks of" \
+  "go to every unit's conductor, saying they named no unit you could tell" \
   "Never split, reword or summarize the user's words" "you never run a stage" "Never answer a batch card yourself" \
-  "one per batch, keyed \`batch/<n>\`: a notice that says what it is, names every unit, asks nothing and links the batch's one reading session" \
-  "for a batch card \`batch/<n>\`, one session on the whole batch" \
-  "A batch card's session holds the batch's notes, so a decision in it is never the card's answer"; do
+  "posted before crew raised one card per batch, is yours as it was" \
+  "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back" \
+  "A batch's card and its one reading session are crew's: crew raises them in the planner's name when the reviewer's summary is delivered, and no agent posts a batch card or starts its session." \
+  "A batch's card is answered by the card or its session, whichever the user sends first: \`$CREW/plugin/bin/crew card wait batch/<n> --label wldn\` prints the user's notes from either, and crew closes the card and ends its session"; do
   has "$out" "$want"
 done
 for gone in "of at most five units" "which need notes?" "one in words for the notes" "A unit not picked is fine" \
-  "card session batch/<n> <unit>" "card session batch/<n>-<k> <unit>" "send each picked unit's notes" "once for each of its units"; do
+  "card session batch/<n> <unit>" "card session batch/<n>-<k> <unit>" "send each picked unit's notes" "once for each of its units" \
+  "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
+  "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \
+  "a decision in it is never the card's answer" "a batch card's summary says first what it is"; do
   lacks "$out" "$gone"
 done
 lacks "$out" "the user reviews the change written for the new intent"

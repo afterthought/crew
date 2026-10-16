@@ -178,6 +178,14 @@ class TestRecord:
         r = self.read([post("req_1", "proposal/1"), post("req_1", "proposal/1", act="card.close", minutes=1)])
         assert (r["cards"], r["held"]["closed"]) == ([], {"proposal/1"})
 
+    def test_a_refused_close_leaves_its_card_open_and_a_lost_cards_close_leaves_its_row_for_its_card_posted_again(self):
+        refused = dict(post("req_1", "batch/1", act="card.close", minutes=1), Refused="Pending You refused the close: x")
+        r = self.read([post("req_1", "batch/1"), refused])
+        assert ([c["card"] for c in r["cards"]], r["held"]["closed"]) == (["req_1"], set())
+        lost = dict(post("req_1", "batch/1", act="card.close", minutes=1), State="lost")
+        r = self.read([post("req_1", "batch/1"), lost, post("req_2", "batch/1", minutes=2)])
+        assert ([c["card"] for c in r["cards"]], r["held"]["closed"]) == (["req_2"], set())
+
     def test_a_card_its_owner_posts_again_under_a_key_replaces_the_older_but_another_agents_does_not(self):
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]

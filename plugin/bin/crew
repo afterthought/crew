@@ -125,12 +125,15 @@
 #                                      and the operations waiting); each rail row a marker on its object, what needs
 #                                      attention at the foot; it answers nothing
 #   crew card  session|wait|end <key> [<unit>] [--label L]
-#                                      the plannotator session on what a rail row's card asks the user to read:
-#                                      session starts it on this host with no browser and prints its link (the
-#                                      running one's when there is one), a batch card's one on the whole batch, on
-#                                      the main level's host, and an old batch card's (batch/<n>-<k>) one per <unit>
-#                                      on that unit's team's host; wait waits for the user's decision in it and prints
-#                                      it with their words; end ends it, as the card's close does
+#                                      the plannotator session on what a rail row's card asks the user to read, which
+#                                      crew starts with a batch's card and a long proposal's: session prints its link
+#                                      (the running one's, else one started on this host with no browser), a batch
+#                                      card's one on the whole batch, on the main level's host, a proposal's only for
+#                                      one of more than fifteen new units, and an old batch card's (batch/<n>-<k>) one
+#                                      per <unit> on that unit's team's host; wait waits for the user's decision in it
+#                                      and prints it with their words, and for a batch card waits on the card too,
+#                                      printing its note and every annotation, and closes the card; end ends it, as
+#                                      the card's close does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use
@@ -162,8 +165,9 @@
 #                                      each agent up starts is greeted to read where the partition stands and carry on
 #   crew review   <label> [--wait [--timeout <ms>]]
 #                                      the partition's reviewer, started fresh for the batch of changes due, in a
-#                                      review tab beside the planner; --wait waits for its summary, records the batch
-#                                      and closes the tab
+#                                      review tab beside the planner; --wait waits for its summary, records the batch,
+#                                      raises its card with its reading session in the planner's name, and closes the
+#                                      tab
 #   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
 #                                      kit's main: the status recorded with its commit; --proposed raises the record's
