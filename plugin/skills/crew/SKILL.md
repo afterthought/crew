@@ -20,8 +20,8 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | see a team's conductor and ops (state, context use, compactions, age) and each slot's unit and stage | `crew status [team]` |
 | see every bolt, each unit's and chore's stage, each bolt's verification, and the queue | `crew bolts [--label <label>]` |
 | land a bolt on main through sluice and close it in the plan (main-level ops, on the user's word) | `crew bolt submit <bolt>`, then `crew bolt land <bolt>` |
-| see everything that waits on the user, and the command that answers each; it also ends the card sessions of closed cards and gone rows, on every host, and says which | `crew rail [--label <label>]` |
-| see whether a rail row's card is open, and its id, or a card has no row | `crew rail [--label <label>]` |
+| see everything that waits on the user, and the command that answers each; it also sweeps this host's cards, closing a card whose row is gone, withdrawing a question whose asker ended and posting again a row's card that is lost or has none, ends the card sessions of closed cards and gone rows, on every host, and says which | `crew rail [--label <label>]` |
+| see whether a rail row's card is open, and its id, or a card has no row; the questions the agents asked, each with its asker, title and age | `crew rail [--label <label>]` |
 | see the decision records waiting on the user, each the design agent's open card for one, with who asked and when | `crew rail [--label <label>]` |
 | record a decision record's status once it is on the kit's main, as the design agent does at each turn: proposed raises its card, or changes it at a new commit, unless the user settled it in the pane; accepted or rejected closes it | `crew record <kit> <number> --proposed\|--accepted\|--rejected [--settled-in-pane] [--alternatives <file>]` |
 | see the whole flow of a partition, by phase | `crew board [--label <label>]` |
