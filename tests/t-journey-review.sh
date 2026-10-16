@@ -1,10 +1,11 @@
 # What reaches the user, through the crew command on the stubs (tests.11, record 0022): constructed changes make a
-# batch due, told to the planner once; crew review starts the reviewer and its summary ends the batch; crew rail lists
-# what waits, with each row's card; crew's card hook records a card's post and close and refuses one under a key not
-# the agent's own; a batch card's one reading session is written from every team's host and started on the main
-# level's, an old batch card's on its unit's team's host, and none for a verify report, which no row has; a wait
-# returns the user's words, a close ends the session, and a rail read sweeps what is dead; and writes and tells reach
-# the agents they should, never one waiting on a question. Which changes are due, what each row and card says, whose key a card may
+# batch due, told to the planner once; crew review starts the reviewer and its summary ends the batch, raising its card
+# with its reading session in the planner's name; crew rail lists what waits, with each row's card; crew's card hook
+# records a card's post and close and refuses one under a key not the agent's own; a batch card's one reading session
+# is written from every team's host and started on the main level's, an old batch card's on its unit's team's host,
+# and none for a verify report, which no row has; a wait returns the user's words and closes the batch's card, ending
+# its session, a close ends an old card's, and a rail read sweeps what is dead; and writes and tells reach the agents
+# they should, never one waiting on a question. Which changes are due, what each row and card says, whose key a card may
 # take and in what form, and what a session does are logic cases (tests/py/test_batches.py, test_rail.py,
 # test_cards.py, test_review.py); each step here checks a command's wiring once.
 # Reads: plugin/hooks/
@@ -89,10 +90,13 @@ CREW_AGENT=wldn-planner expect_fail "batch 1's review is still running after the
 has "$(grep "agent prompt $rpane " "$CREW_TEST_LOG" | tail -1)" "z1 (atl-1, atlas-kit on mac-studio, at $(git -C "$ak" rev-parse --short unit/z1)): list its files with \`ssh -o BatchMode=yes mac-studio git -C $ak"
 mkdir -p "$(dirname "$summary")"; printf '# Batch 1\n' > "$summary"
 CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
-eq "$out" "batch summary: $summary"
+eq "$out" "card batch/1: req_stub-1 https://www.pendingyou.com/app/r/req_stub-1
+call get_request (requestId req_stub-1, name wldn-planner)
+batch summary: $summary"
 eq "$(entries $box review.batch | jq -r '[.Batch, (.On | join(" "))] | join(" ")')" "1 batch/1 unit/x1 unit/z1"
+eq "$(entries $box card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By] | join(" ")')" "batch/1 req_stub-1 batch/1 wldn-planner"
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops"
-ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, and closes its tab"
+ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name, and closes its tab"
 
 # v1 is in verify, its report newer than its last commit, and waits on nobody (teams.17).
 pv=$(place "$k" b1 v1); change "$pv" v1 2 2; commit_at 60 "$pv" "feat(v1): done"
@@ -105,27 +109,24 @@ expect_ok crew rail --label wldn; r=$out
 eq "$(git --git-dir "$ws" rev-parse wldn/main) $(records)" "$tip $n"
 eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches land operations "
 has "$r" "batch 1 (wldn): x1 (swb-1), z1 (atl-1)"
-has "$r" "    card:   batch/1, none open"
+has "$r" "    card:   batch/1, open, asked by wldn-planner (req_stub-1)"
 lacks "$r" "v1"
 ok "crew rail lists a batch as one row with its card key, no verify report waits, and it writes nothing"
 
-# The planner's card for batch 1: refused under a key not its own, recorded once posted.
+# The planner's own Pending You calls: refused under a key not its own, or one the hook can't check.
 deny=$(jq -nc '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",
   tool_input: {name: "wldn-planner", title: "Batch", idempotencyKey: "proposal/9"}}' | CREW_AGENT=wldn-planner as $box python3 "$CREW/plugin/hooks/cards" --before)
 eq "$(jq -r '.hookSpecificOutput.permissionDecision' <<<"$deny")" "deny"
 has "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$deny")" "wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, or batch/<n>"
-hook $box wldn-planner post_request '{"name": "wldn-planner", "title": "Batch ZQXTITLE", "idempotencyKey": "batch/1"}' '{"structuredContent": {"requestId": "req_bat-1"}}'
-eq "$(grep -rl ZQX "$(home_of $box)/.local/state/crew" || true)" ""
 eq "$(echo 'not json' | CREW_AGENT=wldn-planner as $box python3 "$CREW/plugin/hooks/cards" 2>&1 >/dev/null)" "crew cards: Expecting value: line 1 column 1 (char 0)"
 has "$(echo 'not json' | CREW_AGENT=wldn-planner as $box python3 "$CREW/plugin/hooks/cards" --before | jq -r .hookSpecificOutput.permissionDecisionReason)" \
   "crew could not check this card's form:"
-eq "$(entries $box card.post | jq -r '[(.On | join(" ")), .Card, .Key] | join(" ")')" "batch/1 req_bat-1 batch/1"
-has "$(crew rail --label wldn)" "    card:   batch/1, open, asked by wldn-planner (req_bat-1)"
-ok "crew's card hook refuses a card under a key not the agent's own, or one it can't check, before it is posted, records one posted, nothing written on it, and never fails the tool; the rail then shows it open"
+ok "crew's card hook refuses a card under a key not the agent's own, or one it can't check, before it is posted, and never fails the tool"
 
-# The batch card's one reading session, on the main level's host: the summary, then each unit's change as the batch
-# read it, from each team's host.
+# The batch card's one reading session, started with its card on the main level's host: the summary, then each unit's
+# change as the batch read it, from each team's host.
 HOST=$box CREW_AGENT=wldn-planner expect_ok crew card session batch/1; u1=$out
+eq "$(jq -r '.["req_stub-1"].posted.context.links[0].url' "$(home_of $box)/.stub-pendingyou/cards.json")" "$u1"
 [[ $u1 =~ ^http://chuck-herdr-alpha\.ts\.swancloud\.net:194[3-5][0-9]$ ]] || fail "not a link on the main level's host's tailnet name: $u1"
 p1=$(rec $box batch/1 .pid)
 folder=$(real "$(dirname "$summary")")/batch-wldn-1
@@ -135,26 +136,29 @@ eq "$(cat "$folder/02-z1-tasks.md")" "$(git -C "$akd/places/z1" show HEAD:opensp
 eq "$(stub $box "$p1" .skip_browser)" "true"
 HOST=$box CREW_AGENT=wldn-planner expect_ok crew card session batch/1; eq "$out" "$u1"; eq "$(listed $box)" "$p1"
 notes=$'# Annotations\n\n1. Say what z means.'
-decide $box "$p1" "$(jq -nc --arg f "$notes" '{decision: "annotated", feedback: $f}')"
+decide $box "$p1" "$(jq -nc --arg f "$notes" '{decision: "annotated", feedback: $f, annotationCount: 1}')"
 HOST=$box CREW_AGENT=wldn-planner expect_ok crew card wait batch/1
 eq "$out" "batch/1: annotated
-$notes"
-hook $box wldn-planner ack_answer '{"name": "wldn-planner", "requestId": "req_bat-1", "outcome": "noted"}' '{"structuredContent": {"status": "resolved"}}'
+$notes
+card batch/1: req_stub-1 withdrawn
+batch/1's session had ended as the user sent it, and batch/1 is forgotten"
 [[ ! -e $(home_of $box)/$cards/batch/1 ]] || fail "batch/1's session folder outlived its card"
-eq "$(entries $box card.close | jq -r '[.Card, .Key] | join(" ")')" "req_bat-1 batch/1"
-ok "a batch card's one session reads the summary and every unit's change from each team's host, the same link again while it serves; a wait returns the user's words, and the card's close through the hook forgets it"
+eq "$(entries $box card.close | jq -r '[.Card, .Key, .State, .Outcome] | join(" ")')" "req_stub-1 batch/1 withdrawn Read; 1 note sent to its team"
+ok "a batch card's one session reads the summary and every unit's change from each team's host, the link on its card and the same again while it serves; a wait returns the user's words and closes the card, which forgets the session"
 
 # A batch posted as cards of five before a batch was one card: its sessions are its units', each on its team's host.
 CREW_AGENT=wldn-reviewer as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act review.batch --on batch/2 --field Batch=2 \
   --field "Units=x1:swb-1@$(git -C "$k" rev-parse unit/x1) z1:atl-1@$(git -C "$ak" rev-parse unit/z1)" >/dev/null
-hook $box wldn-planner post_request '{"name": "wldn-planner", "idempotencyKey": "batch/2-1"}' '{"structuredContent": {"requestId": "req_bat-2"}}'
+hook $box wldn-planner post_request '{"name": "wldn-planner", "title": "Batch ZQXTITLE", "idempotencyKey": "batch/2-1"}' '{"structuredContent": {"requestId": "req_bat-2"}}'
+eq "$(grep -rl ZQX "$(home_of $box)/.local/state/crew" || true)" ""
+eq "$(entries $box card.post | jq -r 'select(.Key == "batch/2-1") | [(.On | join(" ")), .Card] | join(" ")')" "batch/2 req_bat-2"
 HOST=$box CREW_AGENT=wldn-planner expect_ok crew card session batch/2-1 z1
 p3=$(rec mac-studio batch/2-1/z1 .pid)
 c=$(real "$akd/places/z1")/openspec/changes/z1
 eq "$(stub mac-studio "$p3" '.argv | map(select(endswith(".md"))) | join(" ")')" "$c/proposal.md $c/design.md $c/specs/x/spec.md $c/tasks.md"
 hook $box wldn-planner ack_answer '{"name": "wldn-planner", "requestId": "req_bat-2", "outcome": "noted"}' '{"structuredContent": {"status": "resolved"}}'
 gone "$p3"
-ok "an old batch card's session of a unit is started on that unit's team's host, on its change's files, and the card's close ends it there"
+ok "the hook records an old batch card the planner posted, nothing written on it; its session of a unit is started on that unit's team's host, on its change's files, and the card's close ends it there"
 
 # A verify report's card, whose row went with record 0027: crew refuses the conductor's post, and its key starts no session.
 deny=$(jq -nc --arg k "verify/v1/$stamp" '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",
@@ -164,8 +168,10 @@ has "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$deny")" "swb-1-
 HOST=$box CREW_AGENT=swb-1-conductor expect_fail "no row of wldn's rail has the card key verify/v1/$stamp" crew card session "verify/v1/$stamp"
 ok "a verify report's card is refused before it is posted, and its key starts no session, since no row has it"
 
-# A proposal's page opened, its session started, and its row gone once approved: the next rail read sweeps it.
-printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-pages "The console lists them." --repo switchboard-kit' > "$T/p.rec"
+# A proposal of more than fifteen new units: its page opened, its session started, and its row gone once approved:
+# the next rail read sweeps it.
+{ printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-pages "The console lists them." --repo switchboard-kit'
+  for i in $(seq 1 16); do echo "Do: unit add page-$i \"Page $i.\" --bolt console-pages"; done; } > "$T/p.rec"
 crew plan propose "$T/p.rec" >/dev/null
 f=$(home_of mac-studio)/.local/state/crew/proposals/wldn-1.md
 : > "$CREW_TEST_LOG"

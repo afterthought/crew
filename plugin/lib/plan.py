@@ -6555,9 +6555,10 @@ def batch_check(fleet, t):
 
 def batch_due_said(label, due, why):
     """What the planner is told when a batch is due (briefs.12): the changes due, by unit and team, why, and how to start
-    and wait for its reviewer."""
+    and wait for its reviewer, whose summary raises the batch's card."""
     return (f"A batch of {label}'s changes is due: " + ", ".join(f"{u} ({team})" for u, team, *_ in due) + "; " + "; ".join(why)
-            + f". Start its reviewer with crew review {label}, wait for the summary with crew review {label} --wait, then post its cards.")
+            + f". Start its reviewer with crew review {label}, and wait for the summary with crew review {label} --wait, which "
+            "raises the batch's card and its reading session in your name.")
 
 
 def reading_command(fleet, label, team, sha, unit):
@@ -6599,7 +6600,8 @@ def review_prompt(fleet, label, n, f, due):
 def review_wait(fleet, a):
     """Wait, on the main level's host, for the summary of the batch the reviewer was last started for, written since it
     started: once it is, the batch is recorded (`review.batch`, its number and each unit at the commit its change was
-    read at) and the file's path returned. A batch already recorded is returned at once. Stopped with exit 3 when the
+    read at), its card raised with its reading session in the planner's name (raise_batch), and the file's path
+    returned. A batch already recorded is returned at once, its card raised if none was. Stopped with exit 3 when the
     timeout passes first, refused when the reviewer is gone with no summary written."""
     label = crew.partition_of(fleet, a.label)["label"]
     CONTEXT["label"] = label
@@ -6609,6 +6611,7 @@ def review_wait(fleet, a):
     s = starts[-1]
     n, f = int(s["Batch"]), batch_file(label, s["Batch"])
     if any(e.get("Act") == "review.batch" and e.get("Batch") == s["Batch"] for e in entries):
+        raise_batch(fleet, label, n)
         return f
     begun, deadline = utc(s["At"]), time.monotonic() + a.timeout / 1000
     while True:
@@ -6619,6 +6622,7 @@ def review_wait(fleet, a):
         if written:
             record.emit(label, "review.batch", [f"batch/{n}"] + [f"unit/{u}" for u, *_ in units_of_batch(s)],
                         why=f"batch({n}): reviewed", Batch=n, Units=s.get("Units"))
+            raise_batch(fleet, label, n)
             return f
         if crew.agent_status(fleet, f"{label}-reviewer") is None:
             fail(f"{label}-reviewer is no longer running, and batch {n}'s summary {f} was not written")
@@ -6626,6 +6630,93 @@ def review_wait(fleet, a):
             print(f"batch {n}'s review is still running after the wait's {a.timeout} ms: nothing is recorded yet", file=sys.stderr)
             raise Stopped(3)
         time.sleep(POLL)
+
+
+# A heading in a batch's summary: a Markdown heading, or a line that opens in bold and says little after it.
+HEADING = re.compile(r"^\s*(?:#{1,6}\s+(.+?)[\s#]*|\*\*([^*]+)\*\*(.{0,60}))$")
+
+
+def summary_paragraph(summary, unit):
+    """The paragraph the reviewer opened a unit's section of a batch's summary with, as its brief has it write one
+    section per unit headed by the unit's name and its team: the first paragraph under the first heading that names the
+    unit, a Markdown heading or a short line in bold; None when no heading names it, or a heading follows it at once."""
+    named = re.compile(rf"(?<![a-z0-9-]){re.escape(unit)}(?![a-z0-9-])")
+    out, found = [], False
+    for line in summary.splitlines():
+        head = HEADING.match(line)
+        if not found:
+            found = bool(head and named.search("".join(g or "" for g in head.groups())))
+        elif head:
+            break
+        elif line.strip():
+            out.append(line.strip())
+        elif out:
+            break
+    return "\n".join(out) or None
+
+
+def subject(goal):
+    """A bolt's goal as a batch card's title names what a unit is about: its own words, with no closing stop, the first
+    letter small but for a word in capitals."""
+    s = (goal or "").strip().rstrip(".")
+    return s[0].lower() + s[1:] if len(s) > 1 and not s[1].isupper() else s
+
+
+def batch_subjects(plan):
+    """What each unit of the plan is about, as a batch card's title says it: its bolt's goal (subject), by unit. Empty
+    when the plan could not be read, and a unit no bolt holds left out: its card names it by its name instead."""
+    out = {}
+    for u in plan.units() if plan else []:
+        b = plan.bolt(u.get("Bolt")) if u.get("Bolt") else None
+        if b and b.get("Goal"):
+            out[u.name()] = subject(b.get("Goal"))
+    return out
+
+
+def batch_facts(n, entries, summary, subjects, owner):
+    """Batch n's card's facts, as cards.batch_card takes them (record 0031 §5), from the run record's entries on the main
+    level's host, oldest first, and the reviewer's summary: n, the batch before it, and each unit in the batch's order
+    with its team, the commit the batch read it at, what it is about (subjects, else its name in words) and the
+    paragraph the reviewer opened its section with, or a line saying the summary has none. None while the batch's point
+    has not come or has passed: the run record holds no batch n, its summary is not there (None), the owner holds a
+    card of it open, or a card of it is closed."""
+    key = f"batch/{n}"
+    held = [e for e in entries if e.get("Act") == "review.batch" and not e.get("Refused") and e.get("Batch") == str(n)]
+    if not held or summary is None or cards.card_under(entries, key, owner):
+        return None
+    if any(e.get("Act") == "card.close" and not e.get("Refused") and e.get("Key") == key for e in entries):
+        return None
+    previous = max((m for m, _, _ in batches(entries) if m < n), default=None)
+    units = [dict(unit=u, team=team, commit=sha, subject=subjects.get(u) or u.replace("-", " "),
+                  paragraph=summary_paragraph(summary, u) or f"The reviewer's summary has no section for {u}.")
+             for u, team, sha in units_of_batch(held[-1])]
+    return dict(n=n, previous=previous, units=units, link=None)
+
+
+def raise_batch(fleet, label, n, acts=None):
+    """Batch n's raise (record 0031 §1, briefs.12): once the reviewer's summary is there, its one card, asked in the
+    planner's name, filed in the kit of its first unit's team, its reading session started by the act; nothing while
+    batch_facts finds its point not come or passed. Run on the main level's host, where the batch and its card are
+    recorded and its summary written. What crew can't read is said and refuses nothing, since the batch stands. The
+    card's id, or None."""
+    acts = acts or CardActs(fleet)
+    owner, f = f"{label}-planner", batch_file(label, n)
+    try:
+        summary = f.read_text()
+    except FileNotFoundError:
+        summary = None
+    except OSError as e:
+        print(f"batch {n}'s card is not raised: crew can't read its summary {f}: {e.strerror or e}", file=sys.stderr)
+        return None
+    facts = batch_facts(n, acts.entries(label), summary, batch_subjects(plan_of(fleet, label)), owner)
+    if not facts:
+        return None
+    t = next((fleet["teams"][u["team"]] for u in facts["units"] if u["team"] in fleet["teams"]), None)
+    if not t:
+        print(f"batch {n}'s card is not raised: none of its units' teams is in the teams file, so it has no kit to be filed in",
+              file=sys.stderr)
+        return None
+    return row_card_post(fleet, label, owner, cards.batch_card, facts, card_where(t["kit"]), acts)
 
 
 # ------------------------------------------------------------------------------------------------ crew rail
@@ -7139,10 +7230,11 @@ def card_of(fleet, a, unit_needed=True):
 
 
 def session_refusal(key, label, main, here):
-    """Why a card key's session is not started here, before its row is read: a landing's card has no document to read,
-    and a batch card's one session runs on the partition's main level's host (main), where its summary is written."""
+    """Why a card key's session is not started or waited on here, before its row is read: a landing's card has nothing
+    to read, and a batch card's one session runs on the partition's main level's host (main), where its summary is
+    written and its card raised."""
     if key.startswith("land/"):
-        return "a landing card has no document to read, so it has no session"
+        return "a landing card has nothing to read: it has no document to read, so it has no session"
     if key.startswith("batch/") and not old_batch(key) and main != here:
         return (f"{key}'s reading session runs on {main}, where {label}'s main level writes the batch's summary: run crew card "
                 f"session {key} there")
@@ -7201,8 +7293,8 @@ def serving(listed, s):
 
 
 def card_result(d):
-    """The user's decision in a key's session, as plannotator wrote it to result.json: (decision, feedback), feedback
-    None when it gave none; None while there is no result."""
+    """The user's decision in a key's session, as plannotator wrote it to result.json: (decision, feedback, how many
+    annotations), feedback None when it gave none and the count None when it gave none; None while there is no result."""
     f = d / "result.json"
     try:
         r = json.loads(f.read_text())
@@ -7212,8 +7304,9 @@ def card_result(d):
         fail(f"crew can't read plannotator's result {f}: {e}")
     if not isinstance(r, dict) or r.get("decision") not in ("approved", "annotated", "dismissed"):
         fail(f"plannotator's result {f} holds no decision crew knows: approved, annotated or dismissed")
-    fb = r.get("feedback")
-    return r["decision"], fb if isinstance(fb, str) and fb.strip() else None
+    fb, k = r.get("feedback"), r.get("annotationCount")
+    return (r["decision"], fb if isinstance(fb, str) and fb.strip() else None,
+            k if isinstance(k, int) and not isinstance(k, bool) and k >= 0 else None)
 
 
 def card_row(fleet, label, key):
@@ -7245,31 +7338,68 @@ def card_stop(proc):
 
 
 def card_session(fleet, a):
-    """crew card session <key> [<unit>] [--label L]: a plannotator session on the document the rail row with that card
-    key asks the user to read, started on this host with an Approve button and no browser, and its link printed. A
-    batch card's, batch/<n>, is one session on the whole batch, started on the partition's main level's host and
-    refused elsewhere, naming it: crew writes the batch's folder (batch_folder) and gives plannotator its files as one
-    review. An old batch card's, batch/<n>-<k>, is one session for each unit it holds, on that unit's whole change as
-    its Markdown files, started on the host the teams file names for the unit's team (code.3) and refused for a unit
-    the card does not hold. While the session crew started for the key still runs, its link is printed again and
-    nothing is started or written. One the user approved or annotated before it ended is kept for crew card wait, its
-    link printed again with a line saying so; one that ended with no decision is forgotten, and one the user closed
-    undecided is moved aside, so a new one starts. Refused for a landing's key, a key with no row, a document crew can't
-    read whole, and a link that would open only on this host."""
+    """crew card session <key> [<unit>] [--label L]: the plannotator session of a card that has one, on what the rail
+    row with that card key asks the user to read, started on this host with an Approve button and no browser if none
+    runs, and its link printed (session_open). A batch card's, batch/<n>, is one session on the whole batch, started on
+    the partition's main level's host and refused elsewhere, naming it: crew writes the batch's folder (batch_folder)
+    and gives plannotator its files as one review. A proposal's is on its page, for a proposal whose card links one
+    (proposal_reads), and refused for any other, whose card holds it whole. An old batch card's, batch/<n>-<k>, is one
+    session for each unit it holds, on that unit's whole change as its Markdown files, started on the host the teams
+    file names for the unit's team (code.3) and refused for a unit the card does not hold. Refused for a landing's key,
+    a key with no row, a document crew can't read whole, and a link that would open only on this host."""
     label, d = card_of(fleet, a)
     here = crew.this_host()
     why = session_refusal(a.key, label, fleet["partitions"][label]["machine"], here)
     not why or fail(why)
     row, props = card_row(fleet, label, a.key)
     row["doc"] or fail(f"{a.key}'s card has no document to read, so it has no session")
+    name = f"{a.key}'s session"
     if old_batch(a.key):
         a.unit in row["units"] or fail(f"{a.key} holds {either(row['units'])}, not {a.unit}: its sessions are its units'")
         t = fleet["teams"].get(row["teams"][a.unit]) or fail(f"{a.unit}'s team {row['teams'][a.unit]} is not in the teams file")
         if t["machine"] != here:
             return forward_card(fleet, t, a, label)
-        doc, name = ("change", change_folder(fleet, t, a.unit)), f"{a.key}'s session of {a.unit}"
+        folder, name = change_folder(fleet, t, a.unit), f"{a.key}'s session of {a.unit}"
+
+        def write():
+            return change_files(folder) or fail(f"{a.unit}'s change {folder} on {here} holds no Markdown file to read")
+    elif row["doc"][0] == "page":
+        p = next(x for x in props if x["proposal"] == row["doc"][2])
+        proposal_reads([do_args(label, c["do"]) for c in p["changes"]]) or fail(
+            f"{a.key}'s card has nothing to read: it holds the proposal whole, and only a proposal of more than "
+            f"{cards.CARD_NEW} new units has a reading session")
+
+        def write():
+            f = d / f"proposal-{p['proposal']}.md"
+            f.write_text(page(p, label))
+            return [str(f)]
     else:
-        doc, name = row["doc"], f"{a.key}'s session"
+        def write():
+            return batch_folder_write(fleet, label, row["doc"][2], [(u, row["teams"][u], row["commits"][u]) for u in row["units"]])
+    url, decided = session_open(d, name, write)
+    print(url)
+    if decided:
+        print(f"the user decided in {name} before it ended: crew card wait {a.key}{' ' + a.unit if a.unit else ''} gives "
+              "the decision", file=sys.stderr)
+
+
+def proposal_reads(argvs):
+    """Whether a proposal's card links a reading session, as cards.proposal_card decides it from the proposal's
+    commands (briefs.9): more units new to a bolt than its boxes take, or more rows than its lists hold."""
+    new = new_units(argvs)
+    rows = len(new) + sum(1 for a in argvs if a.cmd in ("unit", "chore") and a.sub in ("drop", "amend"))
+    return len(new) > cards.CARD_NEW or rows > cards.BOXES * cards.GROUPS
+
+
+def session_open(d, name, write):
+    """The plannotator session of a card key on this host, kept in its folder d, called name in what is said: the one
+    crew recorded given again while it serves its document, or kept for crew card wait when the user decided in it
+    before it ended; else started anew on the files write() writes and returns, as one review in their order, with an
+    Approve button and no browser (plannotator 0.28.6), recorded once plannotator lists it. One the user closed
+    undecided has its result moved aside, so a new one starts. Returns its link and whether the user decided in it
+    before it ended. Refused, any session it started ended, when plannotator can't be listed, is not on this host,
+    does not list it in time, ends first, or gives a link only this host could open (read.1)."""
+    import shutil
     d.mkdir(parents=True, exist_ok=True)
     with open(d / ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -7279,34 +7409,21 @@ def card_session(fleet, a):
             listed is not None or fail(f"crew can't tell whether {name} still runs: {why}")
             verdict = session_verdict(s, serving(listed, s), card_result(d))
             if verdict in ("serving", "decided"):
-                print(s["url"])
-                if verdict == "decided":
-                    print(f"the user decided in {name} before it ended: crew card wait {a.key}{' ' + a.unit if a.unit else ''} gives "
-                          "the decision", file=sys.stderr)
-                return
+                return s["url"], verdict == "decided"
             if verdict == "dismissed":
                 (d / "result.json").rename(d / f"result.{re.sub(r'[-:]', '', s['started'])}.json")
             (d / "session.json").unlink()
-        import shutil
         shutil.which("plannotator") or fail("plannotator is not on this host's path, and a card's session is a plannotator session")
-        if doc[0] == "page":
-            _, _, n = doc
-            p = next(x for x in props if x["proposal"] == n)
-            f = d / f"proposal-{n}.md"
-            f.write_text(page(p, label))
-            files = [str(f)]
-        elif doc[0] == "batch":
-            files = batch_folder_write(fleet, label, doc[2], row)
-        else:
-            files = change_files(doc[1]) or fail(f"{a.unit}'s change {doc[1]} on {here} holds no Markdown file to read")
-        files = [os.path.realpath(f) for f in files]
+        here = crew.this_host()
+        files = [os.path.realpath(f) for f in write()]
         gone = [f for f in files if not os.path.isfile(f)]
-        not gone or fail(f"{a.key}'s document {gone[0]} is not on {here}")
+        not gone or fail(f"{name}'s document {gone[0]} is not on {here}")
         doc = ", ".join(files)  # as plannotator lists a session of several files
         started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         env = dict(os.environ, PLANNOTATOR_SKIP_BROWSER_OPEN="1", PLANNOTATOR_REMOTE="1")
         with open(d / "out", "w") as out, open(d / "err", "w") as err:
             # Several files, each its own path, open as one review in that order with one decision (plannotator 0.28.6).
+            # Its own session, so it outlives the command that started it, and the shell that ran that.
             proc = subprocess.Popen(["plannotator", "annotate", *files, "--gate", "--json", "--result-file", str(d / "result.json")],
                                     stdin=subprocess.DEVNULL, stdout=out, stderr=err, env=env, start_new_session=True)
         deadline = time.monotonic() + CARD_START
@@ -7330,7 +7447,32 @@ def card_session(fleet, a):
         tmp = d / ".session.json"
         tmp.write_text(json.dumps({"pid": proc.pid, "document": doc, "url": got["url"], "started": started}) + "\n")
         tmp.replace(d / "session.json")
-    print(got["url"])
+    return got["url"], False
+
+
+def reading_open(fleet, label, key, facts):
+    """The reading session of a card crew raises with one (briefs.9), started on this host or given again while it
+    serves (session_open): a batch's, batch/<n>, on its folder, the reviewer's summary and every unit's change at the
+    commit the batch read it at (facts' units), and refused but on the partition's main level's host; a long proposal's
+    on its page, as crew plan proposed <n> prints it, a session of the key serving an older page of its chain ended
+    first. Its link; a Refusal says why it could not open."""
+    d = CARDS / label / key
+    why = session_refusal(key, label, fleet["partitions"][label]["machine"], crew.this_host())
+    not why or fail(why)
+    if key.startswith("batch/"):
+        units = [(u["unit"], u["team"], u["commit"]) for u in facts["units"]]
+        return session_open(d, f"{key}'s session", lambda: batch_folder_write(fleet, label, facts["n"], units))[0]
+    f = d / f"proposal-{facts['n']}.md"
+    s = card_recorded(d) if d.is_dir() else None
+    if s and s["document"] != os.path.realpath(f):
+        print(end_session(label, key)[0])
+
+    def write():
+        p = next((x for x in open_proposals(fleet, [label]) if str(x["proposal"]) == str(facts["n"])), None) or fail(
+            f"proposal {facts['n']} of {label} is not open, so it has no page to read")
+        f.write_text(page(p, label))
+        return [str(f)]
+    return session_open(d, f"{key}'s session", write)[0]
 
 
 def session_verdict(s, serves, decided):
@@ -7419,21 +7561,22 @@ def unread_change(t, unit, sha, code, stderr):
     return f"crew can't read {unit}'s change at {sha} in {t['kit']['main']} on {t['machine']}: {said}" if code else None
 
 
-def batch_folder_write(fleet, label, n, row):
-    """Write batch n's folder afresh, on the main level's host, from the batch the run record holds (row, its rail
-    row): 00-summary.md, the reviewer's summary as written, then for the k-th unit in the batch's order each Markdown
-    file of its change at the commit the batch read it at, named <kk>-<unit>-<its path under the change, / as ->, so
-    each file plannotator shows by its name alone names its unit. Every file is read before any is written: what crew
-    can't read refuses, naming it, and nothing is written (read.1). Returns the files' paths, in that order."""
+def batch_folder_write(fleet, label, n, units):
+    """Write batch n's folder afresh, on the main level's host, from the batch the run record holds, its units in the
+    batch's order as (unit, team, the commit the batch read it at): 00-summary.md, the reviewer's summary as written,
+    then for the k-th unit each Markdown file of its change at that commit, named <kk>-<unit>-<its path under the
+    change, / as ->, so each file plannotator shows by its name alone names its unit. Every file is read before any is
+    written: what crew can't read refuses, naming it, and nothing is written (read.1). Returns the files' paths, in that
+    order."""
     f = batch_file(label, n)
     try:
         summary = f.read_text()
     except OSError as e:
         fail(f"crew can't read batch {n}'s summary {f}: {e.strerror or e}")
     out = [("00-summary.md", summary)]
-    for k, u in enumerate(row["units"], 1):
-        t = fleet["teams"].get(row["teams"][u]) or fail(f"{u}'s team {row['teams'][u]} is not in the teams file")
-        out += [(f"{k:02d}-{u}-{p.replace('/', '-')}", text) for p, text in change_at(fleet, t, u, row["commits"][u])]
+    for k, (u, team, sha) in enumerate(units, 1):
+        t = fleet["teams"].get(team) or fail(f"{u}'s team {team} is not in the teams file")
+        out += [(f"{k:02d}-{u}-{p.replace('/', '-')}", text) for p, text in change_at(fleet, t, u, sha)]
     folder = batch_folder(label, n)
     folder.mkdir(parents=True, exist_ok=True)
     for old in folder.iterdir():
@@ -7474,9 +7617,12 @@ def card_wait(fleet, a):
     started for the key on this host, or it ends without a decision, and print which: approved or annotated with the
     user's words after it as they are, closed in plannotator with no decision, or ended with no decision; a decision
     made before the wait began is printed at once. A session crew ended, its card closed, is said so. A batch card's,
-    batch/<n>, is its one session, on the main level's host; an old batch card's, batch/<n>-<k>, takes a unit and is
-    waited on at that unit's team's host. Refused for a key with no session started."""
+    batch/<n>, waits on the card and its one session together, on the main level's host (batch_wait); an old batch
+    card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. Refused for a key with no session
+    started."""
     label, d = card_of(fleet, a)
+    if a.key.startswith("batch/") and not old_batch(a.key):
+        return batch_wait(fleet, label, a.key, d)
     if a.unit:
         t = batch_team(fleet, label, a.key, a.unit)
         if t["machine"] != crew.this_host():
@@ -7500,6 +7646,119 @@ def card_wait(fleet, a):
         time.sleep(CARD_POLL)
 
 
+CARD_READ = 30  # seconds between a batch wait's reads of its card in Pending You, the poll its post's answer asks for
+OPEN = ("pending", "snoozed", "delegated")  # a card's statuses in Pending You while it still waits on the user
+
+
+def batch_wait(fleet, label, key, d, acts=None):
+    """crew card wait batch/<n>: wait, with no timeout, on the planner's card of the batch and its one reading session
+    together, on the main level's host, until the user sends either back: the card read in Pending You every CARD_READ
+    seconds, the session's result every CARD_POLL. It prints what batch_waited gives, the card's note and every
+    annotation as the user wrote them, and closes the card with the outcome, which ends the session (row_card_close); a
+    word given while nobody waited is returned at once. A card closed outside crew is recorded closed as Pending You
+    shows it, and the session ended. A session closed or ended with no decision leaves the wait on the card, said
+    once; a card lost to its owner is recorded lost, leaving the wait on the session; a session crew ended, as its card
+    closed, ends the wait. Refused with neither a card nor a session of the batch on this host."""
+    acts = acts or CardActs(fleet)
+    here = acts.host()
+    why = session_refusal(key, label, fleet["partitions"][label]["machine"], here)
+    not why or fail(why)
+    owner = f"{label}-planner"
+    card, started = cards.card_under(acts.entries(label), key, owner), card_recorded(d)
+    card or started or fail(f"no card and no session of {key} is open on {here}: crew raises both when the reviewer's "
+                            f"summary is delivered, with crew review {label} --wait")
+    got, due, said, quiet = None, 0.0, set(), False
+
+    def once(words):
+        if words not in said:
+            said.add(words)
+            print(words, file=sys.stderr)
+    while True:
+        s, decided = card_recorded(d), card_result(d)
+        if card and time.monotonic() >= due:
+            due = time.monotonic() + CARD_READ
+            try:
+                with acts.bridge(owner, "The wait goes on.") as py:
+                    got, words = py.answer("get_request", {"requestId": card, "name": owner})
+            except Refusal as e:
+                once(f"{key}: crew can't read its card {card} now: {e}")
+            else:
+                if words is not None and cards.lost(words):
+                    card_lost(acts, label, owner, key, card, words)
+                    card, got = None, None
+                elif words is not None:
+                    once(f"{key}: Pending You refused to read its card {card}: {words}")
+        done = batch_waited(key, decided, got)
+        if done:
+            print(done[1])
+            if done[0] == "read" and card:
+                row_card_close(fleet, label, owner, key, outcome=done[2], acts=acts)
+                return
+            if done[0] == "closed":
+                acts.emit(label, "card.close", [cards.row_object(key)], by=owner, Card=card, Key=key, State=done[2],
+                          Outcome="closed outside crew")
+            print(acts.end(label, key) or f"no session was running for {key}")
+            return
+        if started and s is None:
+            print(waited(key, None, False))
+            return
+        ended = None
+        if decided and decided[0] == "dismissed":
+            ended = waited(key, decided, True)
+        elif s and not decided and not quiet:
+            listed, _ = plannotator_sessions()  # a list that can't be read says nothing: the wait goes on
+            if listed is not None and not serving(listed, s) and card_recorded(d) == s and card_result(d) is None:
+                ended = waited(key, None, True, gone=True)
+        if ended and not card:
+            print(ended)
+            return
+        if ended:
+            quiet = True
+            once(f"{ended}: the wait goes on for its card, which the user sends back with a tap; crew card session {key} "
+                 "starts its reading again")
+        if not card and not s:
+            print(f"{key}: its card is lost to {owner}, and it has no session to wait on")
+            return
+        time.sleep(CARD_POLL)
+
+
+def batch_waited(key, decided, got):
+    """What a wait on a batch's card and its session does once either has the user's word (review-batches): ("read",
+    what it prints, the card's outcome) once the card is sent back, its note after it as the user wrote it, or the
+    session sent, approved or annotated with every annotation as written, or both; ("closed", what it prints, the
+    card's status) when Pending You shows the card closed outside crew; None while neither has, the session closed or
+    ended undecided among them. decided is the session's result (card_result), got the card as get_request gives it,
+    each None when there is none."""
+    answer = got.get("answer") if isinstance(got, dict) and got.get("turn") == "agent" else None
+    answer = answer if isinstance(answer, dict) else None
+    status = got.get("status") if isinstance(got, dict) and isinstance(got.get("status"), str) else None
+    sent = decided if decided and decided[0] in ("approved", "annotated") else None
+    if answer is None and not sent:
+        if status and status not in OPEN and status != "answered":
+            return "closed", f"{key}: its card was closed outside crew; Pending You shows it {status}", status
+        return None
+    lines, notes = [], 0
+    if answer is not None:
+        note = cards.text_of(answer.get("note")) or cards.text_of(answer.get("text"))
+        lines.append(f"{key}: sent back on its card" + (f", with a note:\n{note}" if note else ", with no note"))
+        notes += 1 if note else 0
+    if sent:
+        lines.append(waited(key, sent, True))
+        k = sent[2] if len(sent) > 2 else None
+        notes = None if k is None and sent[1] else notes + (k if k is not None else 0)
+    return "read", "\n".join(lines), read_outcome(notes)
+
+
+def read_outcome(notes):
+    """A batch card's close once the user has read the batch (review-batches): with no notes, or the notes that go to
+    the units' teams, counted when crew can count them (None when it cannot)."""
+    if notes == 0:
+        return "Read; no notes"
+    if notes is None:
+        return "Read; its notes sent to their teams"
+    return f"Read; {notes} note{'' if notes == 1 else 's'} sent to {'its team' if notes == 1 else 'their teams'}"
+
+
 def waited(name, decided, recorded, gone=False):
     """What a wait on a key's session says once it ends: the user's decision, approved or annotated with their words
     after it as they are, or closed in plannotator with no decision; that crew ended the session (no longer recorded);
@@ -7519,7 +7778,8 @@ def end_session(label, key, unit=None):
     is ended and the session is kept as recorded, so a later rail read ends it (read.1). The answers crew plan answer
     gathered for a proposal's card stay, and with them their folder: they go only with the approval or the decline.
     Returns what it did, in words, and whether it sent SIGTERM. crew's card hook runs it when a crew agent closes or
-    withdraws a keyed card, and crew card sweep for each session the rail judges dead."""
+    withdraws a keyed card, the act when crew closes or withdraws one of its own (row_card_close), and crew card sweep
+    for each session the rail judges dead. A session that ended as the user sent it is forgotten, said so."""
     any(re.fullmatch(k, key) for k in CARD_KEYS) or fail(f"{key} is not a card key")
     d = CARDS / label / key / unit if unit else CARDS / label / key
     key = f"{key} {unit}" if unit else key
@@ -7529,6 +7789,10 @@ def end_session(label, key, unit=None):
         s = card_recorded(d)
     except Refusal:
         s = None
+    try:
+        decided = card_result(d)
+    except Refusal:
+        decided = None
     listed, why = plannotator_sessions() if s else (None, None)
     import shutil
     if s and listed is None:
@@ -7540,6 +7804,8 @@ def end_session(label, key, unit=None):
         if p == CARDS / label or not p.is_dir() or any(p.iterdir()):
             break
         p.rmdir()
+    if s and decided and decided[0] != "dismissed" and not serving(listed, s):
+        return f"{key}'s session had ended as the user sent it, and {key} is forgotten", False
     if not s or not serving(listed, s):
         return end_said(key, s, listed, why), False
     try:
@@ -7699,7 +7965,8 @@ def card_read(fleet, a):
 
 class CardActs:
     """What the act reaches beyond its facts: Pending You through the fleet's bridge, this host's run record, a tell,
-    a picture's upload, this host and who runs the command. A logic test hands the act a stand-in (code.7)."""
+    a picture's upload, a card's reading session started and ended, this host and who runs the command. A logic test
+    hands the act a stand-in (code.7)."""
 
     def __init__(self, fleet):
         self.fleet = fleet
@@ -7718,6 +7985,13 @@ class CardActs:
 
     def put(self, url, data, kind):
         return cards.put(url, data, kind)
+
+    def session(self, label, key, facts):
+        return reading_open(self.fleet, label, key, facts)
+
+    def end(self, label, key):
+        """The key's session ended, in words; None when crew recorded none for it on this host."""
+        return end_session(label, key)[0] if (CARDS / label / key / "session.json").exists() else None
 
     def host(self):
         return crew.this_host()
@@ -7801,16 +8075,54 @@ def card_posted(acts, label, owner, b, where, entries=None):
     return card
 
 
+# The fact a builder takes a card's reading session's link as, by the kind of card that links one (briefs.9).
+READING = {"batch": "link", "proposal": "session"}
+
+
+def reading_of(b):
+    """Whether a built card links a reading session, and of which kind: a batch's always, a proposal's when its
+    builder says it needs one, for more than fifteen new units; None for any other."""
+    kind = b["key"].split("/")[0]
+    return kind if kind == "batch" or (kind == "proposal" and b.get("session")) else None
+
+
+def unopened(b, why):
+    """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
+    its first paragraph, cut again to Pending You's budget, and its details opening with why, where the link would be."""
+    first, _, rest = b["card"]["summary"].partition("\n\n")
+    summary = cards.prose("\n\n".join(x for x in (first, "Its reading could not be opened on the tailnet.", rest) if x))
+    context = dict(b["card"]["context"], background=f"The reading could not be opened on the tailnet: {why}\n\n"
+                   + b["card"]["context"]["background"])
+    return dict(b, card=dict(b["card"], summary=summary, context=context))
+
+
+def card_built(acts, label, build, facts):
+    """A card of crew's own built from its facts, with its reading session's link among them when it links one: the
+    session started, or given again while it serves, before the card is built (reading_of); a session that could not
+    open said, and the card built without it, saying so (unopened)."""
+    b = build(facts)
+    kind = reading_of(b)
+    if not kind:
+        return b
+    try:
+        url = acts.session(label, b["key"], facts)
+    except Refusal as e:
+        print(f"card {b['key']}: its reading could not be opened on the tailnet: {e}", file=sys.stderr)
+        return unopened(b, str(e))
+    return build(dict(facts, **{READING[kind]: url}))
+
+
 def row_card_post(fleet, label, owner, build, facts, where, acts=None):
     """The act that posts a card of crew's own (briefs.16, record 0031 §1): build(facts), one of cards.py's six
     builders, posted through the fleet's `pendingyou mcp` under the host's sign-in, asked in the name of owner, the
     role whose row it is, under the row's key, from where, the kit's (checkout, remote) as card_where gives it, and
     filed in the kit's area, its picture uploaded; recorded on the row's object with the card's id and key, and
-    printed with the line that adopts it, told to the owner when the command is not the owner's. Pending You's
-    refusal, a host not signed in, no answer within a minute or a reply naming no card is said and recorded as the
-    post refused, and refuses nothing of the event it was raised for. The card's id, or None."""
+    printed with the line that adopts it, told to the owner when the command is not the owner's. A batch's card and a
+    long proposal's have their reading session started first, its link handed to the builder (card_built). Pending
+    You's refusal, a host not signed in, no answer within a minute or a reply naming no card is said and recorded as
+    the post refused, and refuses nothing of the event it was raised for. The card's id, or None."""
     acts = acts or CardActs(fleet)
-    return card_posted(acts, label, owner, build(facts), where)
+    return card_posted(acts, label, owner, card_built(acts, label, build, facts), where)
 
 
 def card_lost(acts, label, owner, key, card, words):
@@ -7826,11 +8138,11 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None):
     card the owner holds under the row's key on this host, while it waits on the user; once they have answered it,
     which Pending You changes no longer, the card acked with note as its outcome and closed, and build(facts) posted as
     a new card that follows it, under the key with its revision (post_key). Posted instead when the owner holds none,
-    and posted again, its summary saying the older copy is dead, when Pending You no longer finds it. A refusal is said
-    and recorded as the change refused, refusing nothing of the event. The card's id, the new card's when one was
-    posted, or None."""
+    and posted again, its summary saying the older copy is dead, when Pending You no longer finds it. A long proposal's
+    card is built with its reading session's link, as a post's is (card_built). A refusal is said and recorded as the
+    change refused, refusing nothing of the event. The card's id, the new card's when one was posted, or None."""
     acts = acts or CardActs(fleet)
-    b = build(facts)
+    b = card_built(acts, label, build, facts)
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
     entries = acts.entries(label)
     card = cards.card_under(entries, key, owner)
@@ -7874,9 +8186,21 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     """The act that closes a card of crew's own at the event that ends it (record 0031 §1): the card the owner holds
     under the row's key on this host, acked with the outcome once the user answered it, else withdrawn with the
     reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
-    refusal said and recorded as the close refused, neither refusing the event. The card's id, or None when none was
-    closed."""
+    refusal said and recorded as the close refused, neither refusing the event. The key's reading session on this
+    host ends with the card, closed, lost or held by nobody, and stays while a refused close leaves the card open
+    (card-sessions). The card's id, or None when none was closed."""
     acts = acts or CardActs(fleet)
+    card = card_closed(acts, label, owner, key, outcome, reason)
+    if card is not False and key.split("/")[0] in READING:
+        said = acts.end(label, key)
+        if said:
+            print(said)
+    return card or None
+
+
+def card_closed(acts, label, owner, key, outcome, reason):
+    """row_card_close's close in Pending You: the card's id once closed, None when none was held or it was lost, and
+    False when the close was refused, so the card stays open."""
     obj = cards.row_object(key) or f"agent/{owner}"
     card = cards.card_under(acts.entries(label), key, owner)
     if not card:
@@ -7894,7 +8218,7 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     except Refusal as e:
         acts.emit(label, "card.close", [obj], by=owner, refused=str(e), Card=card, Key=key)
         print(f"card {key} not closed: {e}", file=sys.stderr)
-        return None
+        return False
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return None

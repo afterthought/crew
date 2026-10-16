@@ -14,10 +14,16 @@
 # recorded with its commit and its card raised in the design agent's name
 # under record/<kit>/<number>; a status the file does not hold, an alternatives file crew can't read and another host
 # refused with nothing recorded; the card changed in place at a new commit, closed with the accepting commit, a choice
-# when a rule decided, and none raised when the user settled it in the pane. Which card a key names, what crew sets on
-# a card, the area, how a reply, a refusal and an answer read, and what the act sends and records for each are logic
-# cases (tests/py/test_card_commands.py); whose key and what form, each card's builder and a record's facts,
-# test_cards.py.
+# when a rule decided, and none raised when the user settled it in the pane. Then a batch's card, raised by crew in the
+# planner's name once the reviewer's summary is there, with its one reading session on the main level's host linked
+# from it, raised once; crew card session giving that link again and refusing a unit, a landing's key and a short
+# proposal's; crew card wait closing the card on the tap, with its note, and on the session's send, with every
+# annotation, each ending the session; a session whose link only the host could open ended, and the card raised all
+# the same, saying so; and a wait with neither card nor session refused. Which card a key names, what crew sets on a
+# card, the area, how a reply, a refusal and an answer read, and what the act sends and records for each are logic
+# cases (tests/py/test_card_commands.py); whose key and what form, each card's builder, a record's facts, and the
+# session's start and end in the act and what a batch's wait returns, test_cards.py; a batch card's facts,
+# test_batches.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -291,3 +297,102 @@ eq "$(entries card.close | jq -r 'select(.Card == "req_stub-8") | [.Key, .State]
 eq "$(entries card.post | jq -r 'select(.Card == "req_stub-9") | [(.On | join(" ")), .Key, .By] | join(" ")')" "bolt/b1 land/b1 swb-1-conductor"
 eq "$(card read land/b1 | head -1)" "card land/b1: req_stub-9, pending, waiting on the user"
 ok "a card waiting on the user is changed in place; once they answer it, it is acked with the change note and its new version posted following it, recorded under the row's key, and crew card read finds that one"
+
+# A batch's card and its one reading session, raised by crew in the planner's name once the reviewer's summary is
+# there, on the main level's host, the box: v1's change read at its commit in switchboard-kit.
+export PLANNOTATOR_URL_HOST=auto PLANNOTATOR_PORT=19432-19451
+change "$k" v1 0 2; commit_all "$k" "docs(v1): the change"; sha=$(git -C "$k" rev-parse HEAD)
+reports=$(home_of $box)/.local/state/crew/wldn-main/reports; mkdir -p "$reports"
+cards_dir=$(home_of $box)/.local/state/crew/cards/wldn
+batch() {  # batch <n>: batch n of v1 recorded on the box, and its summary written
+  CREW_AGENT=wldn-reviewer as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act review.batch --on "batch/$1" \
+    --field "Batch=$1" --field "Units=v1:swb-1@$sha" >/dev/null
+  printf '# Batch %s of wldn\n\n## v1 (swb-1)\n\nv1 gives each tenant its own zone. The user sees it in the console.\n\n**Its risks**: none.\n' "$1" \
+    > "$reports/batch-wldn-$1.md"
+}
+raise() { CREW_AGENT=wldn-planner as $box python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import crew, plan
+plan.raise_batch(crew.load(), "wldn", int(sys.argv[2]))' "$CREW/plugin/lib" "$1"; }
+planner() { (export CREW_AGENT=wldn-planner; HOST=$box crew card "$@"); }
+listed() { as $box plannotator sessions --json | jq -r '[.[].pid] | sort | map(tostring) | join(" ")'; }
+gone() { until_ok python3 -c 'import os, sys
+try:
+    os.kill(int(sys.argv[1]), 0)
+except ProcessLookupError:
+    sys.exit(0)
+sys.exit(1)' "$1"; }
+decide() { printf '%s\n' "$2" > "$(home_of $box)/.stub-plannotator/$1.decision"; gone "$1"; }
+batch 1
+expect_ok raise 9
+eq "$out" ""
+: > "$CREW_TEST_LOG"
+expect_ok raise 1
+eq "$out" "card batch/1: req_stub-6 https://www.pendingyou.com/app/r/req_stub-6
+call get_request (requestId req_stub-6, name wldn-planner)"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
+posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
+s1=$cards_dir/batch/1/session.json; u1=$(jq -r .url "$s1"); p1=$(jq -r .pid "$s1")
+[[ $u1 =~ ^http://chuck-herdr-alpha\.ts\.swancloud\.net:194[3-5][0-9]$ ]] || fail "not a link on the box's tailnet name: $u1"
+eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .title, .context.links[0].url]' <<<"$posted")" \
+  "[\"batch/1\",\"wldn-planner\",\"fyi\",\"Goal of b1 (batch 1)\",\"$u1\"]"
+has "$(jq -r .summary <<<"$posted")" "1 change to read, nothing to approve."
+has "$(jq -r '.artifacts[0].lines | join("\n")' <<<"$posted")" "**swb-1 · v1**"$'\n\n'"v1 gives each tenant its own zone."
+folder=$(cd "$reports" && pwd -P)/batch-wldn-1
+eq "$(jq -r '.argv | map(select(endswith(".md"))) | join(" ")' "$(home_of $box)/.stub-plannotator/$p1.json")" \
+  "$folder/00-summary.md $folder/01-v1-proposal.md $folder/01-v1-design.md $folder/01-v1-specs-x-spec.md $folder/01-v1-tasks.md"
+eq "$(entries card.post | jq -r 'select(.Key == "batch/1") | [(.On | join(" ")), .Card, .By] | join(" ")')" "batch/1 req_stub-6 wldn-planner"
+: > "$CREW_TEST_LOG"
+expect_ok raise 1
+eq "$out$(py_calls)" ""
+ok "a batch's card is raised once its summary is there, in the planner's name, its one reading session on the main level's host started first and linked from it, and raised once"
+
+expect_ok planner session batch/1; eq "$out" "$u1"; eq "$(listed)" "$p1"
+expect_fail "a batch has one reading session, on the whole batch: crew card session batch/1" planner session batch/1 v1
+expect_fail "a landing card has nothing to read" planner session land/b1/abc1001
+printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-pages "The console lists them." --repo switchboard-kit' > "$T/p.rec"
+crew plan propose "$T/p.rec" >/dev/null
+expect_fail "proposal/1's card has nothing to read: it holds the proposal whole" crew card session proposal/1
+ok "crew card session gives a running session's link again, and refuses a unit with a batch's key, a landing's key and a short proposal's"
+
+echo '{"answer": {"note": {"text": "v1: say what the zone is."}}}' > "$stub/answered/req_stub-6.json"
+: > "$CREW_TEST_LOG"
+expect_ok planner wait batch/1
+eq "$out" "batch/1: sent back on its card, with a note:
+v1: say what the zone is.
+card batch/1: req_stub-6 closed
+ended batch/1's session, plannotator pid $p1"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request whoami get_request ack_answer "
+eq "$(py_calls | sed -n 5p | cut -d' ' -f2- | jq -r .outcome)" "Read; 1 note sent to its team"
+gone "$p1"
+[[ ! -e $cards_dir/batch/1 ]] || fail "batch/1's session folder outlived its card"
+eq "$(entries card.close | jq -r 'select(.Key == "batch/1") | [.Card, .State, .Outcome] | join(" ")')" "req_stub-6 closed Read; 1 note sent to its team"
+ok "the card sent back while nobody waited ends the planner's wait at once with its note, and crew closes it and ends its session"
+
+batch 2
+raise 2 >/dev/null; p2=$(jq -r .pid "$cards_dir/batch/2/session.json")
+notes=$'# Annotations\n\n1. 01-v1-design.md: say why one zone.\n2. 01-v1-tasks.md: a task for the console.'
+decide "$p2" "$(jq -nc --arg f "$notes" '{decision: "annotated", feedback: $f, annotationCount: 2}')"
+: > "$CREW_TEST_LOG"
+expect_ok planner wait batch/2
+eq "$out" "batch/2: annotated
+$notes
+card batch/2: req_stub-7 withdrawn
+batch/2's session had ended as the user sent it, and batch/2 is forgotten"
+eq "$(py_calls | tail -1 | cut -d' ' -f2- | jq -r .reason)" "Read; 2 notes sent to their teams"
+ok "the session sent with its annotations ends the wait with every one as the user wrote it, and crew closes the card and forgets the session"
+
+batch 3
+: > "$CREW_TEST_LOG"
+out=$(CREW_AGENT=wldn-planner as $box env -u PLANNOTATOR_URL_HOST python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import crew, plan
+plan.raise_batch(crew.load(), "wldn", 3)' "$CREW/plugin/lib" 2>&1)
+has "$out" "card batch/3: its reading could not be opened on the tailnet: plannotator gave batch/3's session the link http://localhost:"
+has "$out" "card batch/3: req_stub-8 https://www.pendingyou.com/app/r/req_stub-8"
+posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
+has "$(jq -r .summary <<<"$posted")" "Its reading could not be opened on the tailnet."
+eq "$(jq -c '.context.links' <<<"$posted")" "[]"
+eq "$(listed)" ""
+echo '{"answer": {}}' > "$stub/answered/req_stub-8.json"
+expect_ok planner wait batch/3
+eq "$out" "batch/3: sent back on its card, with no note
+card batch/3: req_stub-8 closed"
+expect_fail "no card and no session of batch/4 is open on $box" planner wait batch/4
+ok "a session whose link only the host could open is ended and the card raised all the same, saying so, its wait on the card alone; a wait with neither is refused"

@@ -26,7 +26,8 @@ def test_the_reviewer_is_sent_each_change_due_and_how_to_read_it_at_its_commit_f
 def test_the_planner_is_told_which_changes_are_due_and_why():
     assert plan.batch_due_said("wldn", [("x1", "swb-1", "a", None), ("y1", "swb-2", "b", None)], ["2 changes are due, and a batch is every 2"]) == (
         "A batch of wldn's changes is due: x1 (swb-1), y1 (swb-2); 2 changes are due, and a batch is every 2. Start its reviewer with crew "
-        "review wldn, wait for the summary with crew review wldn --wait, then post its cards.")
+        "review wldn, and wait for the summary with crew review wldn --wait, which raises the batch's card and its reading "
+        "session in your name.")
 
 
 class TestNotices:
