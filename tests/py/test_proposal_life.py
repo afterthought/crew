@@ -4,8 +4,9 @@ agreement it waits on (plan.agreements_wanted, plan.agreement_missing), a refuse
 (plan.command_refused), its page (plan.describe drawn alone, plan.amendment_lines, plan.page, plan.code_span), its
 card's answers and the change Send applies with its boxes as they stand (plan.card_asks, card_answer, with_answer,
 answered, as_they_stand, approved_words), and its card at each step (record 0031 §1): the chain's key
-(plan.proposal_chain), which act each step makes (plan.proposal_act), and what crew raises with it (plan.raise_proposal,
-proposal_facts, named_kit) on a stand-in for the act. The commits, the tells and the approval's constructs are the
+(plan.proposal_chain, chain_open), which act each step makes (plan.proposal_act), and what crew raises with it at each
+step and at the rail's sweep (plan.raise_proposal_at, raise_proposal, proposal_facts, named_kit) on a stand-in for the
+act. The commits, the tells and the approval's constructs are the
 proposals journey's (t-journey-plan), and the card on the stub pendingyou the cards journey's (t-cards)."""
 import pytest
 
@@ -325,6 +326,7 @@ def test_a_proposal_rewritten_twice_is_one_chain_keyed_by_its_first():
     plan.open_proposal(pl, 3, "Three.", ["z"], "wldn-planner", TODAY, replaces=2, label="wldn")
     plan.open_proposal(pl, 4, "Four.", ["w"], "wldn-planner", TODAY)
     assert [plan.proposal_chain(pl, n) for n in (1, 3, 4)] == [[1], [1, 2, 3], [4]]
+    assert (plan.chain_open(pl, 1), plan.chain_open(pl, 4), plan.chain_open(pl, 2)) == (3, 4, None)
 
 
 class TestWhichAct:
@@ -336,6 +338,10 @@ class TestWhichAct:
 
     def test_a_rewrite_changes_the_chains_card_after_the_users_note(self):
         assert plan.proposal_act("replace", 5, mine=True) == ("change", "Rewritten as proposal 5 after your note")
+
+    def test_the_sweep_raises_the_planners_proposal_again_and_no_one_elses(self):
+        assert plan.proposal_act("sweep", 5, mine=True) == ("change", "Raised again as the plan stands")
+        assert plan.proposal_act("sweep", 5, mine=False) is None
 
     def test_the_users_rewrite_of_the_planners_proposal_withdraws_its_card(self):
         assert plan.proposal_act("replace", 5, mine=False, was_mine=True, by="chuck@mac-studio") == (
@@ -363,7 +369,7 @@ CARDED = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], teams
 
 
 class TestRaise:
-    """What crew raises at each step (plan.raise_proposal): the act it calls, in the planner's name, under the chain's
+    """What crew raises at each step (plan.raise_proposal_at), and at the rail's sweep (plan.raise_proposal): the act it calls, in the planner's name, under the chain's
     key, with the facts the proposal's builder takes and the kit's area; on a stand-in for the act and what it reads."""
 
     class Acts:
@@ -392,7 +398,7 @@ class TestRaise:
     def raised(self, pl, n, event, by_host="mac-studio", entries=(), **said):
         w = write()
         w.files["proposals.rec"] = pl.text()
-        return plan.raise_proposal(CARDED, "wldn", w, n, event, self.Acts(by_host, entries), **said)
+        return plan.raise_proposal_at(CARDED, "wldn", w, n, event, self.Acts(by_host, entries), **said)
 
     DOS = ['unit add a-new "A new unit." --bolt console-pages']
 
@@ -430,6 +436,28 @@ class TestRaise:
         self.raised(pl, 2, "approve", outcome="Applied: added a-new.")
         assert self.called == [("row_card_close", (CARDED, "wldn", "wldn-planner", "proposal/1"),
                                 {"outcome": "Applied: added a-new.", "reason": None, "acts": self.called[0][2]["acts"]})]
+
+    def swept(self, monkeypatch, pl, key):
+        """The sweep's raise of the row keyed so, the branch's tip holding the plan and proposals.rec (pl)."""
+        monkeypatch.setattr(plan, "fetch", lambda repo, ref: "tip")
+        monkeypatch.setattr(plan, "read", lambda repo, ref, tip: write().plan)
+        monkeypatch.setattr(plan, "show", lambda repo, tip, path: pl.text() if path == "proposals.rec" else None)
+        return plan.raise_proposal(CARDED, {"label": "wldn", "key": key, "group": "proposals"}, self.Acts())
+
+    def test_the_sweep_raises_the_chains_open_proposal_through_the_change_which_posts_a_card_missing_or_lost(self, monkeypatch):
+        pl = proposals_with(("Console first.", self.DOS))
+        plan.open_proposal(pl, 2, "Console last.", ['unit add b-new "B." --bolt console-pages'], "wldn-planner", TODAY, 1, "wldn")
+        assert self.swept(monkeypatch, pl, "proposal/1") == "req_1"
+        (name, (_, label, owner, build, facts, note, where, _), _), = self.called
+        assert (name, label, owner, facts["n"], note) == ("row_card_change", "wldn", "wldn-planner", 2, "Raised again as the plan stands")
+        assert build(facts)["key"] == "proposal/1" and where == (f"/w/{KIT}/main", f"github.com/WilldanGroup/{KIT}")
+
+    def test_the_sweep_raises_nothing_once_the_chain_is_closed_or_for_a_key_that_is_no_chains(self, monkeypatch):
+        pl = proposals_with(("Console first.", self.DOS))
+        plan.close(plan.proposal(pl, 1, "wldn"), "approved", TODAY)
+        assert self.swept(monkeypatch, pl, "proposal/1") is None
+        assert self.swept(monkeypatch, pl, "proposal/7") is None and self.swept(monkeypatch, pl, "batch/1") is None
+        assert self.called == []
 
     def test_the_users_own_proposal_raises_nothing(self):
         pl = plan.Plan(plan.PROPOSALS)

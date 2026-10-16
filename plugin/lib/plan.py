@@ -2347,7 +2347,7 @@ def tell_planner(fleet, label, text):
 def plan_propose(fleet, a):
     """crew plan propose <file> [--replaces <n>]: the planner's proposal, checked against the plan at the tip, written
     open with the next number; the conductor of each bolt in flight it touches is told. Once it is written, crew raises
-    its card in the planner's name, or, for a rewrite, changes its chain's card in place (raise_proposal)."""
+    its card in the planner's name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
     kind, of = role(fleet, os.environ.get("CREW_AGENT"))
     kind in ("planner", "user") or fail(proposer_refusal(fleet, os.environ.get("CREW_AGENT"), kind, of))
     label = of if kind == "planner" else proposal_label(fleet, a)
@@ -2383,7 +2383,7 @@ def plan_propose(fleet, a):
     print(f"proposal {n} is open, waiting on " + ", then ".join(waits) + f": crew plan proposed {n} --label {label}")
     if kind != "planner" and a.replaces and seen.get("old_by") == f"{label}-planner":
         tell_planner(fleet, label, f"Proposal {a.replaces} was replaced by proposal {n}, by {agent()}.")
-    raise_proposal(fleet, label, seen["w"], n, "replace" if a.replaces else "propose")
+    raise_proposal_at(fleet, label, seen["w"], n, "replace" if a.replaces else "propose")
 
 
 def proposer_refusal(fleet, name, kind, of):
@@ -2499,7 +2499,7 @@ def plan_agree(fleet, a):
         return []
     write(fleet, label, change, "plan: agree", act="plan.agree")
     tell_planner(fleet, label, f"{', '.join(seen['new'])} agree{'s' if len(seen['new']) == 1 else ''} to proposal {a.n}.")
-    raise_proposal(fleet, label, seen["w"], a.n, "agree", agreed=seen["new"])
+    raise_proposal_at(fleet, label, seen["w"], a.n, "agree", agreed=seen["new"])
 
 
 def plan_approve(fleet, a):
@@ -2510,7 +2510,7 @@ def plan_approve(fleet, a):
     one refuses the whole, and the proposal records each as Cleared (plan.3). With keep, the card's dropped units the
     user ticked to keep and amended ones ticked to keep their old intent, as crew plan answer hands them, each one's drop
     or amendment is not applied, and the proposal records it as Cleared too. Then crew closes the proposal's card with
-    what was applied, and the planner is told it when someone else approved (raise_proposal)."""
+    what was applied, and the planner is told it when someone else approved (raise_proposal_at)."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
     w0, _, p0, argvs = at_tip(fleet, label, a.n)
@@ -2566,12 +2566,12 @@ def plan_approve(fleet, a):
     words = approved_words(argvs, applied, cleared, keep)
     if p0.get("By") == f"{label}-planner":
         tell_planner(fleet, label, f"Proposal {a.n} was approved by {agent()}. {words}")
-    raise_proposal(fleet, label, seen["w"], a.n, "approve", outcome=words)
+    raise_proposal_at(fleet, label, seen["w"], a.n, "approve", outcome=words)
 
 
 def plan_drop(fleet, a):
     """crew plan drop <n> "<reason>": an open proposal closed unapplied, with the reason; the planner is told when
-    someone else dropped it, and crew withdraws its card with the reason (raise_proposal)."""
+    someone else dropped it, and crew withdraws its card with the reason (raise_proposal_at)."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
 
@@ -2589,7 +2589,7 @@ def plan_drop(fleet, a):
     write(fleet, label, change, "plan: drop", a.reason, act="plan.drop")
     said = f"Proposal {a.n} was dropped by {agent()}: {a.reason.strip()}"
     tell_planner(fleet, label, said + ("" if said[-1:] in ".!?" else "."))
-    raise_proposal(fleet, label, seen["w"], a.n, "drop", reason=a.reason.strip())
+    raise_proposal_at(fleet, label, seen["w"], a.n, "drop", reason=a.reason.strip())
 
 
 def signal_text(fleet, label, sig):
@@ -3181,20 +3181,33 @@ def named_kit(plan, argvs):
     return None
 
 
+def chain_open(pl, first):
+    """The open proposal of the chain whose card is keyed proposal/<first>, in proposals.rec (pl): its number, or None
+    when the chain has none open, its last one approved or dropped."""
+    return next((int(p.get("Proposal")) for p in pl.recs("Proposal") if p.get("State") == "open"
+                 and proposal_chain(pl, int(p.get("Proposal")))[0] == first), None)
+
+
+SWEPT = "Raised again as the plan stands"  # the change note of a proposal's card the rail's sweep raises
+
+
 def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=(), outcome=None, reason=None, by=None):
     """Which act proposal n's card takes at its event (record 0031 §1), from facts alone: ("post",) when it is
-    accepted, ("change", note) when it is rewritten (replace) or a conductor agrees, ("close", outcome, reason) when it
-    is approved or dropped, or None when it has no card of crew's. mine, whether the planner wrote it, the card's owner,
-    whose proposals alone crew raises a card for; was_mine, at a rewrite, whether the planner wrote the one it
-    replaces, whose card a rewrite of anyone else's withdraws. A change is made only where its card was posted, held
-    on this host, or on the planner's own (home), where it is posted when none is held: elsewhere it is ("skip",),
-    since a card is reached only from the host that posted it."""
+    accepted, ("change", note) when it is rewritten (replace), a conductor agrees, or the rail's sweep finds its card
+    missing or lost (sweep), ("close", outcome, reason) when it is approved or dropped, or None when it has no card of
+    crew's. mine, whether the planner wrote it, the card's owner, whose proposals alone crew raises a card for;
+    was_mine, at a rewrite, whether the planner wrote the one it replaces, whose card a rewrite of anyone else's
+    withdraws. A change is made only where its card was posted, held on this host, or on the planner's own (home),
+    where it is posted when none is held: elsewhere it is ("skip",), since a card is reached only from the host that
+    posted it. The sweep runs only on the planner's host."""
     if event == "replace" and not mine:
         return ("close", None, f"Rewritten by {by} as proposal {n}, which has no card") if was_mine else None
     if not mine:
         return None
     if event == "propose":
         return ("post",)
+    if event == "sweep":
+        return ("change", SWEPT)
     if event in ("replace", "agree"):
         if not held and not home:
             return ("skip",)
@@ -3203,7 +3216,25 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
     return ("close", outcome, None) if event == "approve" else ("close", None, reason)
 
 
-def raise_proposal(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None):
+def raise_proposal(fleet, row, acts=None):
+    """The rail's sweep's raise of a proposal row's card (record 0031 §1), for a row whose card is missing or lost:
+    the open proposal of the chain its key names, read at the branch's tip from the row's label and key, raised through
+    row_card_change, which posts it when none is held and posts it again, its summary saying the older copy is dead,
+    when Pending You no longer finds it. None, raising nothing, when the key is no proposal chain's or the chain has
+    no proposal open. The card's id, or None."""
+    label, m = row["label"], re.fullmatch(r"proposal/(\d+)", row.get("key") or "")
+    if not m:
+        return None
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref)
+    if not tip:
+        return None
+    w = Write(repo, label, tip, read(repo, ref, tip))
+    n = chain_open(proposals(w), int(m.group(1)))
+    return raise_proposal_at(fleet, label, w, n, "sweep", acts) if n is not None else None
+
+
+def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None):
     """Proposal n's card at its event (record 0031 §1, briefs.11), once the event's write is made (code.9), from the
     write w as it left the branch: the act proposal_act decides; the card built by the proposal's builder from
     proposal_facts, and posted, changed or closed by the act in the planner's name under its chain's key,
