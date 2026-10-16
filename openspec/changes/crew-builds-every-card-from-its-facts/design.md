@@ -2,11 +2,11 @@
 
 ## Context
 
-Record 0031 (accepted 2026-10-14; §5 amended 2026-10-15 from the card trials) rules the whole: six cards of crew's own at fixed points, one open card for a question, one card per thing changed in place, crew closing at the event, one host sign-in; `openspec/explorations/cards/mockups.md` draws each card as the trials settled it and `reading.md` has the numbers. Eight changes build it, in the order *The series* gives; this one builds what every card is made of and the one act that sends it, and raises no card at any event. It relies on `state.4` (nothing runs: a card is raised by a command, never a watcher), `code.7` (each builder is a function of facts, tested in the logic tier), `code.2` (every refusal a `Refusal`), `read.1` (a card crew cannot read is said, never guessed), `read.2`, `code.9`, `briefs.9`, `briefs.13`, `briefs.16` and `plan.14` as record 0031 amends them, `docs.4` and `docs.6`. It touches the areas of `plan.md` and `tests.md`.
+Record 0031 (accepted 2026-10-14; §5 amended 2026-10-15 from the card trials) rules the whole: six cards of crew's own at fixed points, one open card for a question, one card per thing changed in place, crew closing at the event, one host sign-in; `openspec/explorations/cards/mockups.md` draws each card as the trials settled it and `reading.md` has the numbers. Eight changes build it, in the order *The series* gives; this one builds what every card is made of, the one act that sends it and how its owner hears it, and raises no card at any event. It relies on `state.4` (nothing runs: a card is raised by a command, never a watcher), `code.7` (each builder is a function of facts, tested in the logic tier), `code.2` (every refusal a `Refusal`), `read.1` (a card crew cannot read is said, never guessed), `read.2`, `code.9`, `roles.4` (a card raised outside its owner's turn is told with `crew tell`), `briefs.9`, `briefs.13`, `briefs.16` and `plan.14` as record 0031 amends them, `docs.4` and `docs.6`. It touches the areas of `plan.md` and `tests.md`.
 
 ## Goals / Non-Goals
 
-Goals, the series': every card the user sees from crew is one of six forms, built by code, raised and closed at its event; an agent's question keeps every field Pending You offers; nothing waits on an agent remembering a card; the rail is the truth of what is open and whose. This change's: the six forms built by code from facts, in the words the trials settled, and one act that posts, changes and closes them.
+Goals, the series': every card the user sees from crew is one of six forms, built by code, raised and closed at its event; an agent's question keeps every field Pending You offers; nothing waits on an agent remembering a card; the rail is the truth of what is open and whose. This change's: the six forms built by code from facts, in the words the trials settled; one act that posts, changes and closes them; and every card heard by its owner from the moment it is crew's.
 
 Non-goals: the host's sign-in, the account folders' Claude Code logins and the doctor's row (swancloud's); a card's link to a running environment for a bolt (record 0031 §9, a design of its own); the wake mod itself (the fleet's); any change to what Pending You renders; raising any card at its event, which the changes after this one do.
 
@@ -22,13 +22,28 @@ Each builder takes the card its card follows, when there is one, and sets Pendin
 
 ### 2. One act posts, changes and closes crew's cards
 
-The command that makes or reads an event calls the builder and posts through `cards.Bridge`, the `pendingyou mcp --app claude-code` client already built, under the host's sign-in and in the role's name as the session label. Each post's `idempotencyKey` is the row's key, so the same event read twice makes one card. The act is `plan.py`'s `row_card_post`, `row_card_change` and `row_card_close` (an outcome, or a reason to withdraw), each recording its `card.post`, `card.update` or `card.close` entry on the row's object with the card's id and the key, read from Pending You's own reply, and printing the card's key and id.
+The command that makes or reads an event calls the builder and posts through `cards.Bridge`, the `pendingyou mcp --app claude-code` client already built, under the host's sign-in and in the role's name as the session label. Each post's `idempotencyKey` is the row's key, so the same event read twice makes one card. The act is `plan.py`'s `row_card_post`, `row_card_change` and `row_card_close` (an outcome, or a reason to withdraw), each recording its `card.post`, `card.update` or `card.close` entry on the row's object with the card's id and the key, read from Pending You's own reply, and printing the card's key, its id and the line that adopts it (decision 3).
 
 A post or close that Pending You refuses is a `Refusal` in Pending You's words and a `card.post` or `card.close` entry marked refused (`code.2`, as `crew card post` records today); the event itself is not refused: a proposal is in the plan whether its card posted or not, and the rail shows the row with no card and the refusal. When the host is not signed in, the command says so and goes on. A close that Pending You answers "not found" records the close as lost and goes on; a change that finds its card "not found" posts the card again under its key, its summary saying the older copy is dead.
 
 Each change of the series that raises a kind gives that kind one function, the kind's raise, handed the row: it reads the kind's facts, decides from them whether the kind's point has come, builds the card and calls the act. The raises are `raise_proposal`, `raise_batch`, `raise_land` and `raise_record` in `plan.py`, and `raise_deploy` and `raise_step` in `ops.py`. The event's command and the rail's read both call a kind's raise, so a card is built the same way whoever raises it.
 
-### 3. What each card shows, settled on the phone
+### 3. Hearing
+
+A card crew raises is posted through its bridge in no session, so nothing of the owner's is listening when the user answers. The owner adopts it, from the first card crew raises, so every card is heard from the moment it is crew's:
+
+- **Adoption.** After a post, crew prints `call get_request (requestId req_…, name <role>)`, never `pendingyou hold`. The owner's `get_request` under its own name reads the card the bridge posted on the host's connection, and the fleet's wake mod adopts the card from that call; it then wakes the owner's session, once idle, 20 to 60 seconds after the user's answer.
+- **Raised outside the owner's turn**, a landing found on a rail read or the deployer's offer: crew sends the owner that line with `crew tell`. A card the owner's own command raised, a proposal's in the planner's shell, is told to no one.
+- **At a fresh start** the owner runs `crew rail`, which names its open cards and their ids, and adopts each the same way, as the briefs already have each owner read the rail's `card:` lines at its start; the series' last change writes the rest into each role's *Cards* section.
+- **The sweep stays the catch** for a card no owner adopted: the rail names every open card with its owner at each read, and `crew card read <key>` prints a card's state and answer, and closes a declined approval:
+
+| Event | Command | Act |
+|---|---|---|
+| any approval declined | `crew card read <key>` finds the decline | close with the user's words |
+
+The line is printed by `row_card_post`, and told by it with `crew tell` when the command raising the card is not the owner's, which is a function of the owner and the caller (`code.7`); `card_read` closes a declined approval.
+
+### 4. What each card shows, settled on the phone
 
 Each kind was posted to the user as a real card on 2026-10-15, in the card trials session, and reshaped from what they said; `openspec/explorations/cards/mockups.md` draws each as settled. The builders make these forms:
 
@@ -40,7 +55,7 @@ Each kind was posted to the user as a real card on 2026-10-15, in the card trial
 - **Record.** A record settled in the pane raises no card; a plain record's card is the hold-to-accept of low risk with the record whole, as record 0031 has it. A record whose decision a rule of the user's made between alternatives is a choice instead, asked once: loosen the rules as drafted and take the other path (recommended when the user's own words point there), accept the record as ruled, or send it back with a note; the face carries the alternatives, the rules that decided and each rule as it would read loosened, as inline Markdown, then the record whole (the user, 2026-10-15: "I want the designer to let me know when there are alternatives, especially if it's choosing one alternative over the other based on my rules. I'd like the opportunity to know which rules were holding it back, whether we should alter those rules, and what those altered rules might look like. That should all be one decision: go with my plan or loosen the rules, and here's what the loosened rules would look like"; on the card: "I like the choices that worked well").
 - **Whose name.** Pending You labels a Claude Code session by the name of its latest tool call, so a session that posts under another agent's name takes that agent's answers: crew's own posts go through `pendingyou mcp` as the row's role, in no session, and an asker gives Pending You only its own name, which crew's hook holds it to on every tool (`briefs.17`). A session whose Pending You connection reconnects can come up on a new connection, from which its earlier cards read not found though the host's sign-in never changed (seen in the trials): the sweep's lost-card case covers it, keyed by the row, with no new rule.
 
-### 4. What the card trials hand the builder
+### 5. What the card trials hand the builder
 
 The trials' notes the builders take as given, in the recovery session's words:
 
@@ -49,31 +64,31 @@ The trials' notes the builders take as given, in the recovery session's words:
 - The proposal: title "Plan change to <bolt>: <counts>", with no number; one `multi` list where every row is a box set as proposed, new ticked, dropped unticked as "Keep <unit>", amended unticked as "Keep <unit>'s old intent"; groups of at most five rows; a proposal with no unit rows a low-risk approve; a Markdown paragraph for each new or dropped unit; `picture.py` at twice the density, 1560 wide.
 - Names: Pending You labels a session by its latest call's name, so crew's own posts go through `pendingyou mcp` as the role, in no session, and an asker gives only its own name. A lost card is re-raised by its row key (the sweep).
 
-### 5. The series
+### 6. The series
 
 Each change is built and landed on its own, in this order; each names in its proposal's *Touches* the functions it changes. Changes 2 to 5 and 7 follow this one alone and change different functions, so they are built side by side, each rebasing on whatever lands before it; the files they share are the journey `tests/t-cards.sh`, which each adds its own part to, `tests/py/test_cards.py`, which 3 and 5 each add their own cases to, `tests/moon.yml`, which each regenerates, and for 4 and 5 the usage header of `plugin/bin/crew`, README and `plugin/skills/crew/SKILL.md`, each its own command's lines.
 
 | # | Change | What it builds | Follows | Functions it changes |
 |---|---|---|---|---|
-| 1 | `crew-builds-every-card-from-its-facts` | the six builders, the words rule, `follows`, the picture at twice the density, the act | none | `cards.py`: new builders and `follows_of`; `picture.py` `char`, `layout`, `draw`; `plan.py`: new `row_card_post`, `row_card_change`, `row_card_close` |
+| 1 | `crew-builds-every-card-from-its-facts` | the six builders, the words rule, `follows`, the picture at twice the density, the act, how an owner hears a card | none | `cards.py`: new builders and `follows_of`; `picture.py` `char`, `layout`, `draw`; `plan.py` `card_read`, and new `row_card_post`, `row_card_change`, `row_card_close` |
 | 2 | `crew-raises-a-proposals-card` | the proposal's card raised, changed and closed by `crew plan propose`, `--replaces`, `agree`, `approve`, `drop`; Send applying the boxes | 1 | `plan.py` `plan_propose`, `plan_agree`, `plan_approve`, `plan_drop`, `plan_answer`, `card_answer`, `with_answer`, `answered`, `CardReads.open_proposals`, `rail_rows` (the proposal's row); new `proposal_chain`, `proposal_facts`, `raise_proposal` |
 | 3 | `crew-raises-a-batchs-card-with-its-session` | the batch's card and session raised by `crew review --wait`; `crew card wait` and `session` | 1 | `plan.py` `review_wait`, `row_card_post` and `row_card_close` (the session's start and end), `card_session`, `session_refusal`, `card_of`, `card_wait`, `waited`, `end_session`, `batch_folder_write`; new `batch_facts`, `raise_batch` |
 | 4 | `crew-raises-the-deploy-and-step-cards` | the deploy's and the step's cards by `crew ops offer`, `record`, `step` | 1 | `ops.py` `rows`, `environments`, `open_keys`, `offer`, `record_cmd`, `step`, `parser`, `args_refusal`; new `deploy_facts`, `raise_deploy`, `raise_step` |
 | 5 | `crew-record-raises-a-records-card` | `crew record` and the record's card | 1 | `plan.py` `RECORD_KEY`, `card_refusal` (the design agent's branch), `parser`, `main`; new `record_status`, `record_facts`, `raise_record`; the card hook's `KEYS` (the record's line); `plugin/bin/crew`'s dispatch |
 | 6 | `crew-raises-a-bolts-landing-card` | the landing's card at the merge's end and the rail's read, withdrawn by `crew fix`, closed by `crew bolt land` | 1, 7; waits on the record of who keeps which folders | `plan.py` `rail_rows` (the landing's row), `unit_wait`, `record_end`, `fix_cmd`, `bolt_land`, `CARD_KEYS` (the landing's key), `card_refusal` (the conductor's branch); new `landing_facts`, `raise_land`; the card hook's `KEYS` (the landing's line) |
 | 7 | `the-rail-shows-and-sweeps-every-card` | the rail's card lines, the sweep, the agents' open cards on the board | 1 | `plan.py` `rail_read`, `rail_text`, `record_cards`, `stray_cards`, `sweep_judgment`, `sweep_sessions`; new `sweep_cards`; `board.py` `board_data`, `agent_views` and its five views; `status.js` |
-| 8 | `only-crew-raises-a-rows-card` | the hook narrowed to the question, how an owner hears, the briefs, the old commands removed | 1 to 7 | the card hook and `hooks.json`; `plan.py` `card_refusal`, `CardReads`, `card_post`, `card_change`, `card_close`, `card_held`, `card_asker`, `card_read`, `plan_card`, `card_model`, `close_card`, `notices`, `lost_rows`, `CARD_KEYS`, `parser`, `main`, and `row_card_post`'s printed line; `crew.py` `cards_how`, `lost_card_how`; `plugin/roles/`; `plugin/bin/crew`; README; the crew skill |
+| 8 | `only-crew-raises-a-rows-card` | the hook narrowed to the question, its name check kept whole, the briefs, the old commands removed | 1 to 7 | the card hook (`name_refusal` kept) and `hooks.json`; `plan.py` `card_refusal`, `CardReads`, `card_post`, `card_change`, `card_close`, `plan_card`, `card_model`, `close_card`, `notices`, `lost_rows`, `CARD_KEYS`, `parser`, `main`; `crew.py` `cards_how`, `lost_card_how`; `plugin/roles/`; `plugin/bin/crew`; README; the crew skill |
 
-### 6. Where each part of `every-crew-card-is-raised-at-its-point` lands
+### 7. Where each part of `every-crew-card-is-raised-at-its-point` lands
 
-The series replaces that change whole. Its parts land by these rules: a requirement lands whole in the change after whose landing all of it holds, so no change's spec says more than its code does (`docs.4`); a card's form holds once this change's builder makes it, whichever later change raises the card, so a form lands here; a requirement that also says which command raises, changes or closes a card lands with that command's change; one that speaks of several kinds' events at once, of an act its brief alone sets an agent, or of how an owner hears, lands in change 8, after which all of it holds. The two requirements over 500 characters are split, each part stating one behavior, and so is one whose last sentence holds only once change 8 removes a command. Changes are numbered as in *The series*.
+The series replaces that change whole. Its parts land by these rules: a requirement lands whole in the change after whose landing all of it holds, so no change's spec says more than its code does (`docs.4`); a card's form holds once this change's builder makes it, whichever later change raises the card, so a form lands here; a requirement that also says which command raises, changes or closes a card lands with that command's change; how an owner hears a card lands here, so every card is heard from the moment it is crew's; one that speaks of several kinds' events at once, or of an act its brief alone sets an agent, lands in change 8, after which all of it holds. The two requirements over 500 characters are split, each part stating one behavior, and so is one whose last sentence holds only once change 8 removes a command. Changes are numbered as in *The series*.
 
 **Requirements**, 69, in the order the change's deltas held them:
 
 | # | Capability | Requirement | Delta | Change |
 |---|---|---|---|---|
 | 1 | `rail-cards` | crew raises a row's card at its event | added | 8 |
-| 2 | `rail-cards` | A raised card is adopted by its owner | added | 8 |
+| 2 | `rail-cards` | A raised card is adopted by its owner | added | 1 |
 | 3 | `rail-cards` | A row's card is changed in place when its thing changes | added | 8 |
 | 4 | `rail-cards` | A card is closed by crew at the event that ends it | added | 8 |
 | 5 | `rail-cards` | A question is asked by four roles in their own name | added | 8 |
@@ -87,7 +102,7 @@ The series replaces that change whole. Its parts land by these rules: a requirem
 | 13 | `rail-cards` | A card carries what the user would read and the row's answers | modified | 3 |
 | 14 | `rail-cards` | Landing is approved only by holding the button | modified | 1 |
 | 15 | `rail-cards` | An answer wakes the owner, which acts on the user's word | modified | 8 |
-| 16 | `rail-cards` | An agent never runs Pending You from npm or waits on a hold | modified | 8 |
+| 16 | `rail-cards` | An agent never runs Pending You from npm or waits on a hold | modified | 1 |
 | 17 | `rail-cards` | A crew agent's card acts are in the run record | modified | 8 |
 | 18 | `rail-cards` | The rail shows each row's card | modified | 7 |
 | 19 | `rail-cards` | The rail names an open card whose row is gone | modified | 7 |
@@ -154,14 +169,14 @@ The series replaces that change whole. Its parts land by these rules: a requirem
 | 2.3 | the landing's card at the merge's end and the rail's read | 6, 1.1 |
 | 2.4 | the deploy's and the step's cards at `crew ops offer`, `record`, `step` | 4, 1.1 |
 | 2.5 | `crew record` | 5, 1.1 |
-| 2.6 | `crew card read` and the line every post prints | 8, 1.1 |
-| 3.1 | the hook narrowed | 8, 2.1 |
+| 2.6 | `crew card read` and the line every post prints | 1, 3.1 |
+| 3.1 | the hook narrowed | 8, 1.1 |
 | 4.1 | the sweep | 7, 2.1 |
 | 5.1 | the sessions of a batch and a long proposal | 3, 2.1 |
-| 6.1 | the briefs | 8, 3.1 |
+| 6.1 | the briefs | 8, 2.1 |
 | 7.1 | the rail's card lines and the board | 7, 1.1 |
-| 8.1 | the old commands removed, the docs | 8, 4.1 |
-| 9.1 | `tests/t-cards.sh` and the suite | 1, 3.1 |
+| 8.1 | the old commands removed, the docs | 8, 3.1 |
+| 9.1 | `tests/t-cards.sh` and the suite | 1, 4.1 |
 
 Tasks the series adds, each where a part above needs one of its own: 1's 2.1, the act, which decision 2 below has and which 2.1 to 2.6 each used; 2's 1.2, Send applying the boxes as they stand, which requirement 69 says and no task built; 4's 1.2 and 5's 1.2, the docs of each change's command (`docs.2`), which 8.1 held for all; 7's 1.2, the board's design band showing the records proposed, which decision 3's sentence on it says; 7's 2.2, a row's card that has none posted by the rail's next read, which decision 2's paragraph on refusals says; and in changes 2 to 8, a last task for the suite, as 9.1 is change 1's.
 
@@ -177,13 +192,13 @@ Tasks the series adds, each where a part above needs one of its own: 1's 2.1, th
 | 2: the table's landing rows | 6 |
 | 2: the table's deploy and step rows | 4 |
 | 2: the table's record rows | 5 |
-| 2: the table's row for a declined approval | 8 |
+| 2: the table's row for a declined approval | 1 |
 | 2: its paragraph on refusals | 1; its clause that the next rail read posts a row's card that has none, 7 |
 | 2: its paragraph on when a bolt reads proven | 6 |
 | 3. `crew record` | 5; its sentence on the board's design band, 7 |
 | 4. The hook, narrowed to three checks and a record | 8 |
 | 5. The sweep withdraws | 7 |
-| 6. Hearing | 8; its sentence on `crew card wait` for a batch, 3 |
+| 6. Hearing, as settled from the hearing probe of 2026-10-16 | 1; its sentence on `crew card wait` for a batch, 3 |
 | 7. Sessions | 3 |
 | 8. The briefs | 8 |
 | 9. The rail and the board | 7 |
@@ -209,19 +224,30 @@ Tasks the series adds, each where a part above needs one of its own: 1's 2.1, th
 
 | Change | Requirements whole | Parts of a split one | Requirements in its deltas | Tasks of the change | Tasks added |
 |---|---|---|---|---|---|
-| 1 | 13 | 8, 67 | 15 | 1.1, 1.2, 1.3, 9.1 | 1 |
+| 1 | 15 | 8, 67 | 17 | 1.1, 1.2, 1.3, 2.6, 9.1 | 1 |
 | 2 | 4 | | 4 | 2.1 | 2 |
 | 3 | 10 | | 10 | 2.2, 5.1 | 1 |
 | 4 | 3 | 8 | 4 | 2.4 | 2 |
 | 5 | 5 | 60 | 8 | 2.5 | 2 |
 | 6 | 1 | | 1 | 2.3 | 1 |
 | 7 | 5 | | 5 | 4.1, 7.1 | 3 |
-| 8 | 25 | 67 | 27 | 2.6, 3.1, 6.1, 8.1 | 1 |
+| 8 | 23 | 67 | 25 | 3.1, 6.1, 8.1 | 1 |
 | | 66 | 3 | 74 | 16 | 13 |
 
 Change 8's delta also holds one requirement of its own, "A crew agent's Pending You call names only the agent itself", the spec of `briefs.17`, whose check landed on main on 2026-10-16 and which that change keeps whole while it narrows the key and form checks. The 152 scenarios land each with its requirement; the two split requirements' scenarios each with the part whose behavior it shows. Two requirements are mended as they land: the landing card's "A note naming a defect…" sentence, which had run into its *No pull request* scenario, is in the requirement's text; and the landing card's close, in requirement 4's *A bolt landed*, is the landing's outcome in the words change 6 gives it, which wait on the record of who keeps which folders.
 
+## Alternatives considered for hearing
+
+From the recovery session's probe of Pending You 0.28.0 and 0.35.1, 2026-10-16 (`hearing-probe/finding.md` in the session's scratchpad; `PY` is the 0.28.0 store package, `mod` the fleet's wake mod):
+
+- **`pendingyou hold <id>` in the owner's session.** The wake mod answers `hold` only for a session that already has a Pending You server on record from an earlier named call (`mod/wake.js:240`, `register.js:440`); otherwise the CLI's `hold` runs for real, keyed by request id with no name or session, and in the foreground blocks the agent for up to four hours (`PY/dist/hold.js:80,95-100`, `args.js:3`). The owner's own `get_request` gets the same adoption with nothing that can block (`mod/wake.js:278-284`), and records the server and name as it does.
+- **`pendingyou watch` as a service on each host**, telling each answer's owner. It marks every answer on the host handed in the shared `state.json` (`PY/dist/watch.js:71,79`), which every session's per-message pickup reads and skips (`pickup.js:248`), so it would hide other sessions' answers from them.
+- **A wake webhook per role** (`set_wake_webhook`): ids only, stored per name on the connection; it needs Tailscale Funnel, a receiver and a secret on every host, and the secrets are the user's to write.
+- **Polling `list_pending`** from crew: a new bridge and MCP session for every poll, and still a watcher, which `state.4` rules out.
+
 ## Risks / Trade-offs
+
+- An answer wakes its owner only once the owner has adopted the card and its session is idle: the mod checks an adopted card every 20 seconds, every 60 once it has been quiet for 30 minutes (`mod/wake.js:5-7`, `register.js:141-147`), and forgets one unchanged for seven days or across a new session id (`wake.js:11,369`, `register.js:33,368`). A card adopted by no one, or forgotten, is the rail's to show and the owner's to read at its breakpoints and fresh start.
 
 - Two paths to Pending You, crew's and the sessions', which must share the host's sign-in to see each other's cards. The record settles the sign-in; crew refuses nothing when it is absent but says so on every post and on the rail.
 - A card raised by a command an agent runs in its shell adds Pending You's round trip to that command; `code.9` holds, since the Bridge's call is one short MCP session and the command answers once the commit is made and the post attempted.

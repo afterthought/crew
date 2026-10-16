@@ -23,17 +23,6 @@ crew SHALL build and post each rail row's card itself, from the facts of the eve
 - **WHEN** the host has no Pending You sign-in and a batch's summary is delivered
 - **THEN** the batch is recorded, no card posts, and the command and the rail say the host is not signed in
 
-### Requirement: A raised card is adopted by its owner
-The command that raises a card SHALL print the card's id and the line that adopts it, `call get_request (requestId <id>, name <role>)`, and when the card is raised outside its owner's turn, a landing found on a rail read or the deployer's offer, SHALL tell the owner that line with `crew tell`.
-
-#### Scenario: A deploy offered by the deployer
-- **WHEN** the deployer runs `crew ops offer srv --to abc1234`
-- **THEN** one card keyed `deploy/srv` is open in main-level ops's name, and main-level ops is told `call get_request (requestId <id>, name <role>)` by `crew tell`
-
-#### Scenario: A proposal's card in the planner's own shell
-- **WHEN** the planner's `crew plan propose` raises proposal 4's card
-- **THEN** the command prints the card's id and `call get_request (requestId <id>, name <role>)`, and no tell is sent
-
 ### Requirement: A row's card is changed in place when its thing changes
 When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
 
@@ -107,7 +96,7 @@ crew SHALL refuse a post, change or close from any role but the four, naming the
 - **THEN** the call is refused, saying the landing card is crew's and is raised when the bolt reads proven
 
 ### Requirement: A crew agent's Pending You call names only the agent itself
-In a crew session, crew SHALL refuse a call to any Pending You tool that names anyone but the agent's `CREW_AGENT` as its caller, before the call runs, in words naming the agent's own name and saying the call would reroute another agent's answers to this session; a call that names no caller SHALL pass, and an area's name SHALL be taken as no caller's.
+In a crew session, crew SHALL refuse a call to any Pending You tool that names anyone but the agent's `CREW_AGENT` as its caller, before the call runs and before any check of the agent's role or the call's key, which narrows apart from it, in words naming the agent's own name and saying the call would reroute another agent's answers to this session; a call that names no caller SHALL pass, and an area's name SHALL be taken as no caller's.
 
 #### Scenario: Another agent's card read in its name
 - **WHEN** swb-1-conductor's session calls `get_request` with the name `swancloud-ops`
@@ -116,6 +105,10 @@ In a crew session, crew SHALL refuse a call to any Pending You tool that names a
 #### Scenario: A whoami under another agent's name
 - **WHEN** the planner's session calls `whoami` with `previousName` `swb-1-conductor`
 - **THEN** the call is refused, naming the planner's own name, and swb-1-conductor's cards stay with its session
+
+#### Scenario: A question in another agent's name
+- **WHEN** the planner, which may ask, calls `post_request` under a key of its own with `session.label` `swb-1-conductor`
+- **THEN** the call is refused for its name, though its role and its key would let it through
 
 #### Scenario: A call that names no caller
 - **WHEN** a conductor's session calls `list_areas`, or `create_area` with the area's name `switchboard-kit`
@@ -164,13 +157,6 @@ An answer on a crew card SHALL be acted on by the role whose row it is, woken in
 #### Scenario: Landing approved
 - **WHEN** the user approves `land/y` and the conductor's session wakes
 - **THEN** the conductor tells main-level ops to land `y` on the user's word, main-level ops lands it, and `crew bolt land` closes the card
-
-### Requirement: An agent never runs Pending You from npm or waits on a hold
-An agent crew started SHALL adopt a card crew posted by calling Pending You's `get_request` with the card's id under its own name, as the line crew prints or tells it says, from which the fleet's wake mod adopts the card and wakes the agent's session once the card is answered and the session is idle; it SHALL run no `pendingyou` command, `hold` and `watch` among them, none through `npx`, and wait on no hold. After a fresh start it SHALL read `crew rail` for its open cards and adopt each the same way.
-
-#### Scenario: Restarted with an answered card
-- **WHEN** a conductor restarts while the user has answered its landing card
-- **THEN** at its start `crew rail` names the card and its id, the conductor adopts it and acts on the answer
 
 ### Requirement: A crew agent's card acts are in the run record
 Each card crew posts, changes, withdraws or closes, and each a crew agent posts, changes or closes through Pending You's tools, SHALL be an entry in the partition's run record naming the row's object or the asker, the card's id in `Card` and the key in `Key`, crew's read from Pending You's own reply, an agent's from the tool's result; a result crew cannot read SHALL be recorded as unread and listed by the rail. An entry SHALL NOT hold a card's title, summary or other text.

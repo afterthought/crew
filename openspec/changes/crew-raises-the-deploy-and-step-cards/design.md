@@ -31,7 +31,7 @@ The card trials' note for the builder, in the recovery session's words: `crew op
 
 ### 3. One card per environment's offer
 
-The deploy's row and card key is the environment's, `deploy/<env>`, not the head's: `rows`, `environments` and `open_keys` give it, and a newer head's offer changes the one card in place, "Now offering def5678, which includes abc1234". The deployer's offer runs outside any session, so `crew ops offer` tells main-level ops the card's id with `crew tell`.
+The deploy's row and card key is the environment's, `deploy/<env>`, not the head's: `rows`, `environments` and `open_keys` give it, and a newer head's offer changes the one card in place, "Now offering def5678, which includes abc1234". The deployer's offer runs outside any session, so the act tells main-level ops the card's id, in the line that adopts it, with `crew tell`, as `crew-builds-every-card-from-its-facts`'s hearing has it.
 
 ### 4. One step card at a time
 

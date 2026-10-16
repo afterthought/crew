@@ -7,7 +7,25 @@ A deploy's card SHALL be an `approve` of risk high, not reversible, because irre
 - **WHEN** the deployer offers srv `c882cff` with git-cliff's notes for `6aed25c..c882cff` and two steps, and srv runs `6aed25c`
 - **THEN** the card's approve block has risk high and reversible false, its summary counts three landings and says the box follows on its own and mac-studio is offered after srv, its face holds the notes as handed and the two steps with their doers, and its details name landings #16, #17 and #18
 
+### Requirement: A raised card is adopted by its owner
+The command that raises a card SHALL print the card's id and the line that adopts it, `call get_request (requestId <id>, name <role>)`, and when the card is raised outside its owner's turn, a landing found on a rail read or the deployer's offer, SHALL tell the owner that line with `crew tell`.
+
+#### Scenario: A deploy offered by the deployer
+- **WHEN** the deployer runs `crew ops offer srv --to abc1234`
+- **THEN** one card keyed `deploy/srv` is open in main-level ops's name, and main-level ops is told `call get_request (requestId <id>, name <role>)` by `crew tell`
+
+#### Scenario: A proposal's card in the planner's own shell
+- **WHEN** the planner's `crew plan propose` raises proposal 4's card
+- **THEN** the command prints the card's id and `call get_request (requestId <id>, name <role>)`, and no tell is sent
+
 ## MODIFIED Requirements
+
+### Requirement: An agent never runs Pending You from npm or waits on a hold
+An agent crew started SHALL adopt a card crew posted by calling Pending You's `get_request` with the card's id under its own name, as the line crew prints or tells it says, from which the fleet's wake mod adopts the card and wakes the agent's session once the card is answered and the session is idle; it SHALL run no `pendingyou` command, `hold` and `watch` among them, none through `npx`, and wait on no hold. After a fresh start it SHALL read `crew rail` for its open cards and adopt each the same way.
+
+#### Scenario: Restarted with an answered card
+- **WHEN** a conductor restarts while the user has answered its landing card
+- **THEN** at its start `crew rail` names the card and its id, the conductor adopts it and acts on the answer
 
 ### Requirement: A card says whose it is and where it belongs
 crew SHALL ask each card in the name of the role whose row it is, with the host as the session's machine and the kit's checkout as its folder; a question's card SHALL be asked in its asker's crew name by the asker's session. A card SHALL be filed in the area of its kit, found by the kit's git remote, in the group named for its partition; crew SHALL create a kit's area that does not exist with the key `create-area:<owner>/<kit>`, and an agent SHALL create one under no other key and never a group. A card's title SHALL be the question, read cold, naming the thing.
