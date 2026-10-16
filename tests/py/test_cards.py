@@ -3,8 +3,9 @@
 (form_refusal, proposal_form) and a call in another agent's name, on any Pending You tool (name_refusal), with the
 matcher that runs it; plan.card_refusal on whose key a card or an area may take, its reads given; and the
 decisions of a card's plannotator session: plan.card_of, session_verdict, local_link, waited, card_folder,
-judged_dead and young; and the six cards crew builds from their events' facts, the words rule, what a card follows and
-the act's decisions (record 0031). Posting, closing and sweeping through the hook and the command are the review
+judged_dead and young; the six cards crew builds from their events' facts, the words rule, what a card follows and
+the act's decisions (record 0031); and crew record's: a record's facts and the status its file holds
+(plan.record_facts), its refusals made on the teams file alone (record_status) and its raise (raise_record). Posting, closing and sweeping through the hook and the command are the review
 journey's (t-journey-review)."""
 import argparse
 import datetime
@@ -97,13 +98,13 @@ class TestKeys:
         assert key("wldn-planner", "batch/1").endswith("proposal/1, batch/1-1 or batch/2, from the `card:` line under its row in "
                                                       f"`{crew.HOME}/plugin/bin/crew rail --label wldn`.")
 
-    def test_the_design_agent_posts_for_a_decision_record_of_a_kit_its_partition_builds(self):
-        assert key("wldn-design", "record/atlas-kit/0021/abc1234") is None
-        said = ("wldn-design posts a card only for a decision record, under record/<kit>/<number>/<commit> for a kit of wldn's, "
-                "atlas-kit, breadboard-kit or switchboard-kit, the commit the one that proposed the record or its amendment.")
-        for k in ("record/flywheel-next/0003/abc1234", "proposal/1", "record/atlas-kit/21/abc1234", "record/atlas-kit/0021/ABC1234"):
+    def test_the_design_agent_posts_for_a_decision_record_of_a_kit_its_partition_builds_under_the_records_key(self):
+        assert key("wldn-design", "record/atlas-kit/0021") is None
+        said = ("wldn-design posts a card only for a decision record, under record/<kit>/<number> for a kit of wldn's, "
+                "atlas-kit, breadboard-kit or switchboard-kit, the number the record's four digits.")
+        for k in ("record/flywheel-next/0003", "proposal/1", "record/atlas-kit/21", "record/atlas-kit/0021/abc1234"):
             assert key("wldn-design", k) == f"crew refuses a card under {k}: {said}"
-        assert key("madswan-design", "record/flywheel-next/0003/abc1234", label="madswan") is None
+        assert key("madswan-design", "record/flywheel-next/0003", label="madswan") is None
 
     def test_main_level_ops_posts_its_operations_cards_where_they_are_kept(self):
         assert key("wldn-ops", "op/dev/1", ops=["op/dev/1"]) is None
@@ -136,7 +137,8 @@ class TestResult:
 
     @pytest.mark.parametrize("k, row", [
         ("verify/x/20261007-1400", "unit/x"), ("land/tenant-environments/abc1234", "bolt/tenant-environments"), ("proposal/4", "proposal/4"),
-        ("batch/3", "batch/3"), ("batch/3-2", "batch/3"), ("record/atlas-kit/0021/abc1234", "record/atlas-kit/0021"),
+        ("batch/3", "batch/3"), ("batch/3-2", "batch/3"), ("record/atlas-kit/0021", "record/atlas-kit/0021"),
+        ("record/atlas-kit/0021/abc1234", None),
         ("my own key", None), ("land/tenant-environments", None), ("review/x/abc1234", None)])
     def test_a_card_is_on_its_rows_object_and_any_other_on_its_agent(self, k, row):
         assert cards.keyed(k)[1] == row
@@ -258,10 +260,10 @@ class TestForms:
 
     def test_a_record_card_is_a_low_risk_reversible_approval(self):
         accept = {"kind": "approve", "approve": {"action": "Accept record 0021", "risk": "low", "reversible": True}}
-        assert form("record/atlas-kit/0021/abc1234", accept) is None
-        assert 'This card is a "choice", has options, and has no approve block.' in form("record/atlas-kit/0021/abc1234", dict(kind="choice", **TWO))
-        assert 'This card has risk "high".' in form("record/atlas-kit/0021/abc1234", {**accept, "approve": {**accept["approve"], "risk": "high"}})
-        assert "This card is not reversible." in form("record/atlas-kit/0021/abc1234", {**accept, "approve": {**accept["approve"], "reversible": False}})
+        assert form("record/atlas-kit/0021", accept) is None
+        assert 'This card is a "choice", has options, and has no approve block.' in form("record/atlas-kit/0021", dict(kind="choice", **TWO))
+        assert 'This card has risk "high".' in form("record/atlas-kit/0021", {**accept, "approve": {**accept["approve"], "risk": "high"}})
+        assert "This card is not reversible." in form("record/atlas-kit/0021", {**accept, "approve": {**accept["approve"], "reversible": False}})
 
     BATCH = {"kind": "fyi", "summary": "This is batch 2 of wldn.",
              "context": {"background": "Read the whole batch.\n\nx1 (swb-1)\nWhat x1 does.\n\nx2 (swb-1)\nWhat x2 does.\n\nz1 (swb-2)\nWhat z1 does.",
@@ -291,7 +293,7 @@ class TestForms:
             "its high stakes. Change the card without it.")
         assert form("land/b/abc1234", {"title": "Land it"}, update=True) is None
         assert "This change gives it options." in form("proposal/1", TWO, update=True)
-        assert 'This change gives it risk "medium".' in form("record/atlas-kit/0021/abc1234", {"approve": {"risk": "medium", "reversible": True}}, update=True)
+        assert 'This change gives it risk "medium".' in form("record/atlas-kit/0021", {"approve": {"risk": "medium", "reversible": True}}, update=True)
 
     def test_an_old_batch_cards_form_is_read_as_it_was_posted(self):
         assert cards.formed("batch/2") and cards.formed("proposal/1") and not cards.formed("batch/1-1") and not cards.formed("agent-note")
@@ -613,6 +615,127 @@ class TestRecord:
         assert (c["kind"], c["intent"], c["recommendedIds"]) == ("choice", "decide", ["loosen"])
         assert [o["id"] for o in c["options"]] == ["loosen", "accept", "back"] and c["options"][0]["label"] == "Loosen ops.3 and ops.7 as drafted"
         assert [a["title"] for a in c["artifacts"]] == ["Where your rules decided, and the rules loosened", "Record 0032"]
+
+
+# crew record (briefs.15, record 0031 §1): the record's facts read from its Markdown at a commit, whether the file holds
+# the status recorded, the alternatives a rule decided between, the refusals made before anything is read, and the raise
+# on the act's stand-in.
+MADR = """---
+number: 32
+title: switchboard runs GitHub's workflows itself
+status: proposed
+date: 2026-10-16
+---
+
+# switchboard runs GitHub's workflows itself
+
+Status: proposed to the user on 2026-10-16, as `briefs.15` has it; accepted only on their yes.
+
+Deciders: the user, in the design talk (“I don't want a fleet”); wldn-design.
+
+## Context and problem statement
+
+The runners cost. A fleet costs more.
+
+## Decision outcome
+
+Switchboard runs them.
+"""
+ACCEPTED = (MADR.replace("status: proposed", "status: accepted")
+            .replace("Status: proposed to the user on 2026-10-16, as `briefs.15` has it; accepted only on their yes.",
+                     "Status: accepted by the user on 2026-10-17, on their card."))
+AMENDED = ACCEPTED + "\n- **Rented.** The runners are rented by the hour. Status: proposed to the user on 2026-10-18, as `briefs.15` has it; accepted only on their yes.\n"
+ALTERNATIVES = """---
+rules: ops.3, ops.7
+other: switchboard runs the workflows itself
+recommended: loosen
+---
+
+## Where your rules decided
+
+ops.3 (prefer managed services) chose a CodeBuild fleet.
+"""
+
+
+def recorded(text, status, before=None, alternatives=None):
+    return plan.record_facts("switchboard-kit", 32, text, status, before, alternatives)
+
+
+class TestRecordCommand:
+    def test_a_record_proposed_is_put_on_its_card_in_its_own_words_with_the_users_own(self):
+        f = recorded(MADR, "proposed")
+        assert (f["title"], f["opening"], f["quoted"]) == ("switchboard runs GitHub's workflows itself", "The runners cost. A fleet costs more.",
+                                                           ["I don't want a fleet"])
+        assert f["text"].startswith("# switchboard runs GitHub's workflows itself") and "status: proposed" not in f["text"]
+        b = built.record_card(f)
+        assert b["key"] == "record/switchboard-kit/0032" and re.fullmatch(plan.RECORD_KEY, b["key"])
+        assert (b["card"]["kind"], b["card"]["approve"]["risk"], b["card"]["approve"]["reversible"]) == ("approve", "low", True)
+        assert b["card"]["summary"] == "The runners cost. A fleet costs more.\n\nYour own words, recorded as your decision: “I don't want a fleet”"
+
+    def test_a_record_a_rule_decided_is_a_choice_its_alternatives_file_on_its_face_before_the_record(self):
+        f = recorded(MADR, "proposed", alternatives=ALTERNATIVES)
+        assert f["alternatives"] == {"rules": ["ops.3", "ops.7"], "other": "switchboard runs the workflows itself", "recommended": "loosen",
+                                     "text": "## Where your rules decided\n\nops.3 (prefer managed services) chose a CodeBuild fleet."}
+        c = built.record_card(f)["card"]
+        assert (c["kind"], c["recommendedIds"], [o["id"] for o in c["options"]]) == ("choice", ["loosen"], ["loosen", "accept", "back"])
+        assert [a["lines"][0] for a in c["artifacts"]] == ["## Where your rules decided", "# switchboard runs GitHub's workflows itself"]
+        unrecommended = recorded(MADR, "proposed", alternatives=ALTERNATIVES.replace("recommended: loosen\n", ""))
+        assert built.record_card(unrecommended)["card"]["recommendedIds"] == ["accept"]
+
+    def test_a_status_the_file_does_not_hold_is_refused_naming_what_it_holds(self):
+        with pytest.raises(crew.Refusal, match="crew refuses record 0032 in switchboard-kit as accepted: its file on main says proposed"):
+            recorded(MADR, "accepted")
+        with pytest.raises(crew.Refusal, match="as proposed: its file on main says accepted. Commit it proposed"):
+            recorded(ACCEPTED, "proposed")
+        with pytest.raises(crew.Refusal, match="as rejected: its file on main says no status in its frontmatter"):
+            recorded(MADR.split("---\n", 2)[2], "rejected")
+        assert recorded(ACCEPTED, "accepted", before=MADR)["opening"] == "The runners cost. A fleet costs more."
+
+    def test_an_amendment_is_proposed_while_marked_and_accepted_or_rejected_once_its_mark_is_gone(self):
+        f = recorded(AMENDED, "proposed", before=ACCEPTED)
+        assert f["opening"] == "- **Rented.** The runners are rented by the hour."
+        with pytest.raises(crew.Refusal, match="its file on main says accepted, with an amendment still marked proposed"):
+            recorded(AMENDED, "accepted", before=ACCEPTED)
+        taken = AMENDED.replace(" Status: proposed to the user on 2026-10-18, as `briefs.15` has it; accepted only on their yes.", "")
+        assert recorded(taken, "accepted", before=AMENDED) and recorded(ACCEPTED, "rejected", before=AMENDED)
+        with pytest.raises(crew.Refusal, match="as rejected: its file on main says accepted"):
+            recorded(ACCEPTED, "rejected", before=MADR)
+
+    @pytest.mark.parametrize("alternatives, said", [
+        ("## Where\n\nops.3", "their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>"),
+        ("---\nrules: ops.3\n---\n\n## Where", "their frontmatter names no other path, as other: <the path the rules ruled out>"),
+        ("---\nrules: ops.3\nother: x\nrecommended: both\n---\n\n## Where", "their frontmatter recommends both, where it takes loosen or accept"),
+        ("---\nrules: ops.3\nother: x\n---\n", "the file holds nothing under its frontmatter for the card")])
+    def test_alternatives_crew_cannot_put_on_the_card_are_refused_and_nothing_raised(self, alternatives, said):
+        with pytest.raises(crew.Refusal) as e:
+            recorded(MADR, "proposed", alternatives=alternatives)
+        assert str(e.value) == f"crew refuses the alternatives for record 0032 in switchboard-kit: {said}. Nothing is raised."
+
+    @pytest.mark.parametrize("kit, n, status, more, said", [
+        ("flywheel-next", 32, "proposed", {}, "crew record takes a kit of wldn's, atlas-kit, breadboard-kit or switchboard-kit, not flywheel-next."),
+        ("atlas-kit", 0, "proposed", {}, "a record's number is its one to four digits, not 0"),
+        ("atlas-kit", 21, "accepted", {"settled_in_pane": True}, "--settled-in-pane and --alternatives go with --proposed"),
+        ("atlas-kit", 21, "rejected", {"alternatives": "a.md"}, "--settled-in-pane and --alternatives go with --proposed"),
+        ("atlas-kit", 21, "proposed", {"settled_in_pane": True, "alternatives": "a.md"}, "a record settled in the pane raises no card")])
+    def test_a_kit_not_the_partitions_or_flags_that_do_not_go_together_are_refused_on_the_teams_file_alone(self, kit, n, status, more, said):
+        a = argparse.Namespace(**dict(dict(kit=kit, number=n, status=status, settled_in_pane=False, alternatives=None, label="wldn"), **more))
+        with pytest.raises(crew.Refusal, match=re.escape(said)):
+            plan.record_status(FLEET, a)
+
+    def test_the_records_card_is_raised_in_the_design_agents_name_and_changed_in_place_at_a_new_commit(self, capsys):
+        from test_card_commands import Acts, MATCHED, POSTED
+        where, f = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), recorded(MADR, "proposed")
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
+        assert plan.raise_record(None, "wldn", f, where, "Revised at abc1234: x", acts) == "req_c1"
+        sent = acts.calls[1][1]
+        assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032", "wldn-design")
+        assert acts.emitted[0]["On"] == ["record/switchboard-kit/0032"] and acts.told == []
+        held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
+        acts = Acts({"get_request": ({"status": "answered", "version": 2}, None), "update_request": ({"version": 3}, None)}, entries=held,
+                    caller="wldn-design")
+        assert plan.raise_record(None, "wldn", f, where, "Revised at def5678: ops.3 loosened", acts) == "req_c1"
+        assert acts.calls[1][0] == "update_request" and acts.calls[1][1]["changeNote"] == "Revised at def5678: ops.3 loosened"
+        assert capsys.readouterr().out.splitlines()[-1] == "card record/switchboard-kit/0032: req_c1 changed, now version 3"
 
 
 class TestBatch:

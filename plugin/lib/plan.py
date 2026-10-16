@@ -19,6 +19,10 @@ five times. A write that changes several files is one commit, and it carries the
                                              land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone
+  crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
+                                             the design agent's record at each turn of its status, read on the kit's
+                                             main, raising its card unless settled in the pane, a choice when a rule
+                                             decided, changing it on a revision and closing it on accepted or rejected
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
@@ -6989,9 +6993,10 @@ CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # ended as any whose row is gone, and none is posted.
 CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}", r"land/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}",
              r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
-# A decision record's card key, the design agent's: the kit, the record's number and the commit that proposed the record
-# or its amendment (briefs.15). It is no rail row's: the rail lists its open cards apart.
-RECORD_KEY = r"record/([a-z0-9][a-z0-9-]*)/(\d{4})/([0-9a-f]{7})"
+# A decision record's card key, the design agent's: the kit and the record's four digits, one card per record however
+# often it is revised (briefs.15, record 0031 §1), raised by crew record. It is no rail row's: the rail lists its open
+# cards apart.
+RECORD_KEY = r"record/([a-z0-9][a-z0-9-]*)/(\d{4})"
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
 CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
@@ -7042,7 +7047,7 @@ def card_refusal(fleet, name, label, tool, key, reads=None):
     idempotency key: None to let the call through, else the refusal's words, naming the key to use (briefs.11). A card's
     key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
     from proposals.rec, or batch/<n> for one of its batches whose row is open, read from the run record; a
-    conductor's land/<bolt>/<head> for the bolt its team holds, read from the plan. The design agent's is a decision record's, record/<kit>/<number>/<commit> for a kit of any team of its
+    conductor's land/<bolt>/<head> for the bolt its team holds, read from the plan. The design agent's is a decision record's, record/<kit>/<number> for a kit of any team of its
     partition, read from the teams file (briefs.15). Every other agent owns no key. An area's key is
     create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
     partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
@@ -7100,9 +7105,9 @@ def card_refusal(fleet, name, label, tool, key, reads=None):
         m = re.fullmatch(RECORD_KEY, key)
         if m and m.group(1) in kits:
             return None
-        return (f"{said}: {name} posts a card only for a decision record, under record/<kit>/<number>/<commit> "
+        return (f"{said}: {name} posts a card only for a decision record, under record/<kit>/<number> "
                 + (f"for a kit of {of}'s, {either(kits)}, " if kits else f"for a kit of {of}'s, and no team of {of} builds one, ")
-                + "the commit the one that proposed the record or its amendment.")
+                + "the number the record's four digits.")
     return (f"{said}: {name} owns no card key, since only the planner, the conductors, main-level ops and, for a decision "
             "record, the design agent post cards. Tell the partition's operator agents what you wait on, as your brief says.")
 
@@ -7880,6 +7885,122 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     return card
 
 
+# ------------------------------------------------------------------------------------------------ crew record
+
+def record_facts(kit, number, text, status, before=None, alternatives=None):
+    """A decision record's facts as its card is built from them (cards.record_card), from its Markdown at a commit, and
+    whether the file holds the status the design agent records (briefs.15): its title, its frontmatter's or else its
+    heading's; its opening, the first paragraph of its body that is neither a heading nor a `Name:` line, or, for an
+    amendment, the paragraph its proposed mark stands in; the user's words its deciders line quotes; its body whole;
+    and the alternatives a rule of the user's decided between, from the Markdown --alternatives hands, whose
+    frontmatter names the rules that decided (`rules:`, separated by commas), the other path (`other:`) and, when the
+    user's own words point there, `recommended: loosen`, else accepting as ruled is. A file holds its frontmatter's
+    status, but proposed while an amendment to an accepted record is still marked proposed ("Status: proposed" past
+    the record's own status line), and accepted or rejected alike once the mark the text before (before, the record at
+    the commit before) held is gone, the amendment taken in or out. Refused naming what the file holds when it holds no
+    such status, and refused when what the card is built from can't be read (read.1)."""
+    n = f"{number:04d}"
+
+    def split(md):  # its frontmatter's fields, its body and the body's paragraphs
+        m = re.match(r"---\n(.*?)\n---\n", md, re.S)
+        fields = dict(l.split(":", 1) for l in m.group(1).splitlines() if re.match(r"[a-z][\w-]*:", l)) if m else {}
+        body = (md[m.end():] if m else md).strip()
+        return {k: v.strip().strip("'\"") for k, v in fields.items()}, body, [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+
+    def held(md):  # its status, and the paragraphs that mark an amendment proposed
+        fields, _, paras = split(md)
+        own = next((i for i, p in enumerate(paras) if p.startswith("Status:")), None)
+        return fields.get("status", "").lower(), [p for i, p in enumerate(paras) if i != own and "Status: proposed" in p]
+    fields, body, paras = split(text)
+    now, marked = held(text)
+    then, was = held(before) if before else ("", [])
+    holds = ["proposed"] if now == "accepted" and marked else ["accepted", "rejected"] if now == "accepted" and then == "accepted" and was else [now]
+    says = "accepted, with an amendment still marked proposed" if marked and now == "accepted" else now or "no status in its frontmatter"
+    status in holds or fail(f"crew refuses record {n} in {kit} as {status}: its file on main says {says}. Commit it {status} "
+                            f"and land it on main, then run crew record again.")
+    head = next((p for p in paras if p.startswith("# ")), "")
+    title = fields.get("title") or re.sub(r"^#\s+(\d+\.\s+)?", "", head)
+    if marked and now == "accepted":
+        opening = re.sub(r"\s*Status: proposed\b.*?(?:\.(?=\s|$)|$)", "", marked[0], flags=re.S).strip()
+    else:
+        opening = next((p for p in paras if not p.startswith("#") and not re.match(r"[A-Z][\w -]*:\s", p)), "")
+    title and opening or fail(f"crew can't read record {n} in {kit} for its card: it has no "
+                              + ("title" if not title else "opening paragraph") + ". Nothing is raised.")
+    deciders = next((p for p in paras if p.startswith("Deciders:")), "")
+    quoted = [a or b for a, b in re.findall(r"“([^”]+)”|\"([^\"]+)\"", deciders)]
+    alt = None
+    if alternatives is not None:
+        afields, abody, _ = split(alternatives)
+        rules = [r.strip() for r in afields.get("rules", "").split(",") if r.strip()]
+        other, rec = afields.get("other", ""), afields.get("recommended", "accept")
+        why = ("their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>" if not rules else
+               "their frontmatter names no other path, as other: <the path the rules ruled out>" if not other else
+               f"their frontmatter recommends {rec}, where it takes loosen or accept" if rec not in ("loosen", "accept") else
+               "the file holds nothing under its frontmatter for the card" if not abody else None)
+        not why or fail(f"crew refuses the alternatives for record {n} in {kit}: {why}. Nothing is raised.")
+        alt = {"rules": rules, "other": other, "text": abody, "recommended": rec}
+    return {"kit": kit, "number": number, "title": title, "opening": opening, "quoted": quoted, "text": body, "alternatives": alt}
+
+
+def raise_record(fleet, label, facts, where, note, acts=None):
+    """A decision record's card raised in its design agent's name (record 0031 §1, briefs.15), record/<kit>/<number>,
+    from the record's facts (record_facts), from where, the kit's checkout on this host and its remote: posted the
+    first time, and changed in place with note, naming the new commit, while the design agent holds it open. A
+    refusal is said and recorded and refuses nothing of the status, already recorded. The card's id, or None."""
+    return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts)
+
+
+def record_status(fleet, a):
+    """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
+    [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031 §1). The kit is one of
+    the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
+    its main, as this host's checkout of the kit holds it, at the last commit that changed it, read where the
+    partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
+    alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
+    record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
+    changes the one it holds in place, naming the commit, unless --settled-in-pane says the user said yes in the pane,
+    which is recorded and raises nothing; --alternatives makes the card the choice a rule decided; and --accepted or
+    --rejected closes the card with the commit."""
+    label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
+    p = crew.partition_of(fleet, label)
+    kits = {fleet["teams"][t]["kit"]["name"]: fleet["teams"][t]["kit"] for t in p["teams"]}
+    a.kit in kits or fail(f"crew record takes a kit of {label}'s, " + (f"{either(sorted(kits))}, not {a.kit}." if kits else
+                                                                      f"and no team of {label} builds one."))
+    0 < a.number < 10000 or fail(f"a record's number is its one to four digits, not {a.number}")
+    a.status == "proposed" or not (a.settled_in_pane or a.alternatives) or fail(
+        f"--settled-in-pane and --alternatives go with --proposed: a record {a.status} closes its card")
+    not (a.settled_in_pane and a.alternatives) or fail(
+        "a record settled in the pane raises no card, so it takes no alternatives: give --settled-in-pane or --alternatives")
+    here, k, n = crew.this_host(), kits[a.kit], f"{a.number:04d}"
+    p["machine"] == here or fail(f"crew record runs on {p['machine']}, where {label}'s design agent holds its records' cards")
+    checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
+    alternatives = None
+    if a.alternatives:
+        try:
+            alternatives = pathlib.Path(a.alternatives).read_text()
+        except (OSError, UnicodeDecodeError) as e:
+            fail(f"crew can't read the alternatives file {a.alternatives}: {getattr(e, 'strerror', None) or e}. Nothing is raised.")
+
+    def git(*args):
+        r = subprocess.run(["git", "-C", checkout, *args], capture_output=True, text=True)
+        r.returncode == 0 or fail(f"git {args[0]} in {checkout} failed: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
+        return r.stdout
+    files = [f for f in git("ls-tree", "--name-only", "main", "docs/adr/").splitlines() if re.fullmatch(rf"docs/adr/{n}-[^/]*\.md", f)]
+    len(files) == 1 or fail(f"{a.kit}'s main holds " + (f"no record {n} in docs/adr/" if not files else
+                                                           f"{len(files)} records numbered {n}: {', '.join(files)}") + ", so crew records nothing.")
+    commits = [l.split("\t", 1) for l in git("log", "-2", "--format=%H\t%s", "main", "--", files[0]).splitlines()]
+    sha, subject = commits[0]
+    facts = record_facts(a.kit, a.number, git("show", f"{sha}:{files[0]}"), a.status,
+                         git("show", f"{commits[1][0]}:{files[0]}") if len(commits) > 1 else None, alternatives)
+    key, settled = f"record/{a.kit}/{n}", a.status == "proposed" and a.settled_in_pane
+    record.emit(label, f"record.{a.status}", [key], commit=[f"{k['repo']}@{sha}"], State="settled in the pane" if settled else None)
+    print(f"record {n} in {a.kit}: {a.status} at {sha[:7]}" + (", the user's yes given in the pane; no card is raised" if settled else ""))
+    if a.status != "proposed":
+        row_card_close(fleet, label, f"{label}-design", key, outcome=f"{a.status.capitalize()} at {sha[:7]}")
+    elif not settled:
+        raise_record(fleet, label, facts, card_where(dict(k, main=checkout)), f"Revised at {sha[:7]}: {subject}")
+
+
 def card_folder(rel):
     """The card key and unit (None but for an old batch card's, batch/<n>-<k>) whose session a folder under
     ~/.local/state/crew/cards/<label>/ keeps, from its path there: batch/<n> is a key's own folder, as a proposal's;
@@ -8024,6 +8145,15 @@ def parser(cls=argparse.ArgumentParser, only=None):
     how = x.add_mutually_exclusive_group(required=True)
     how.add_argument("--outcome")
     how.add_argument("--reason")
+    x = sub.add_parser("record")
+    x.add_argument("kit")
+    x.add_argument("number", type=int)
+    g = x.add_mutually_exclusive_group(required=True)
+    for status in ("proposed", "accepted", "rejected"):
+        g.add_argument(f"--{status}", dest="status", action="store_const", const=status)
+    x.add_argument("--settled-in-pane", action="store_true")
+    x.add_argument("--alternatives", metavar="FILE")
+    x.add_argument("--label")
 
     bo = sub.add_parser("bolt").add_subparsers(dest="sub", required=True)
     x = bo.add_parser("new")
@@ -8253,6 +8383,7 @@ COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
     ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
     ("card", "post"): card_post, ("card", "change"): card_change, ("card", "close"): card_close, ("card", "read"): card_read,
+    ("record", None): record_status,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit,
     ("unit", "add"): direct(("unit", "add")), ("unit", "split"): direct(("unit", "split")), ("unit", "amend"): direct(("unit", "amend")),

@@ -23,6 +23,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | see everything that waits on the user, and the command that answers each; it also ends the card sessions of closed cards and gone rows, on every host, and says which | `crew rail [--label <label>]` |
 | see whether a rail row's card is open, and its id, or a card has no row | `crew rail [--label <label>]` |
 | see the decision records waiting on the user, each the design agent's open card for one, with who asked and when | `crew rail [--label <label>]` |
+| record a decision record's status once it is on the kit's main, as the design agent does at each turn: proposed raises its card, or changes it at a new commit, unless the user settled it in the pane; accepted or rejected closes it | `crew record <kit> <number> --proposed\|--accepted\|--rejected [--settled-in-pane] [--alternatives <file>]` |
 | see the whole flow of a partition, by phase | `crew board [--label <label>]` |
 | start the plannotator session a card links, on what its row asks the user to read, and print its link; a batch card's one, on the whole batch, on the main level's host, and `<unit>` only for a batch card posted before a batch was one card (`batch/<n>-<k>`) | `crew card session <key> [<unit>]` |
 | wait for the user's decision in a card's session, or end the session by hand | `crew card wait <key> [<unit>]`, `crew card end <key> [<unit>]` |
