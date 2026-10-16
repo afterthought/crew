@@ -105,10 +105,12 @@ eq "$(j '.partitions[0].plan')" "$before"
 eq "$(tip) $(records)" "$before $n"; eq "$(git -C "$k" status --porcelain)" ""
 ok "crew board draws the lanes from the plan, the signals, the kits, their servers and the cards, one board per partition outside any agent, and writes nothing"
 
-# The board tab and the rail tab's refresh: a proposal's card session, started ten minutes ago, whose row went when
-# the proposal was dropped. crew board leaves it; the refresh, one fetch of the state branch and one read of each
-# host's kits, prints the rail as crew rail does, ends the session and writes the frame the board tab draws.
-printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-two "The console, again." --repo switchboard-kit' > "$T/p.rec"
+# The board tab and the rail tab's refresh: the card session of a proposal of more than fifteen new units, started
+# ten minutes ago, whose row went when the proposal was dropped. crew board leaves it; the refresh, one fetch of the
+# state branch and one read of each host's kits, prints the rail as crew rail does, ends the session and writes the
+# frame the board tab draws.
+{ printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-two "The console, again." --repo switchboard-kit'
+  for i in $(seq 1 16); do echo "Do: unit add page-$i \"Page $i.\" --bolt console-two"; done; } > "$T/p.rec"
 crew plan propose "$T/p.rec" >/dev/null 2>&1
 expect_ok crew card session proposal/1
 s=$(home_of mac-studio)/.local/state/crew/cards/wldn/proposal/1/session.json; pid=$(jq -r .pid "$s")
