@@ -167,9 +167,15 @@ expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
   "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" "The word to land is also the word to push main" \
   "git -C <kit>/main push origin main" "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
-  "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>/<head>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
+  "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
   "run it in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
 lacks "$out" "wt merge"
+for want in "crew raises its card in your name, with those notes and steps on its face" "you post, change and close no deploy card" \
+  "\`call get_request (requestId <id>, name wldn-ops)\`: run it" "crew closes the card at the deploy's end with its outcome" \
+  "card read deploy/<env> --label wldn" "a step an agent can do that is held for the user's word" \
+  "one at a time on an environment, each following the one before" "you post and close no step card" \
+  "ops quiet <env> --label wldn\` exits 0" "when they pick skip, run the row's \`decline\` command"; do has "$out" "$want"; done
+for gone in "Post its card under that key" "and close the card"; do lacks "$out" "$gone"; done
 for want in "$lost_card" "reads \"not found\"" "under the row's key" "posted again by nobody"; do has "$out" "$want"; done
 has "$out" $'A landing is never that word.\n\nA card of yours is lost when it reads'
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
