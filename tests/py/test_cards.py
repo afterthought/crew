@@ -1,6 +1,7 @@
-"""A crew agent's Pending You cards (the rail-cards and card-sessions specs, briefs.11 to briefs.15): crew's card hook
-(plugin/hooks/cards), loaded as a module, on the result shapes it reads, the keys it records and the forms it refuses
-(form_refusal, proposal_form); plan.card_refusal on whose key a card or an area may take, its reads given; and the
+"""A crew agent's Pending You cards (the rail-cards and card-sessions specs, briefs.11 to briefs.17): crew's card hook
+(plugin/hooks/cards), loaded as a module, on the result shapes it reads, the keys it records, the forms it refuses
+(form_refusal, proposal_form) and a call in another agent's name, on any Pending You tool (name_refusal), with the
+matcher that runs it; plan.card_refusal on whose key a card or an area may take, its reads given; and the
 decisions of a card's plannotator session: plan.card_of, session_verdict, local_link, waited, card_folder,
 judged_dead and young. Posting, closing and sweeping through the hook and the command are the review journey's
 (t-journey-review)."""
@@ -8,7 +9,9 @@ import argparse
 import datetime
 import importlib.machinery
 import importlib.util
+import json
 import pathlib
+import re
 
 import pytest
 
@@ -139,6 +142,94 @@ class TestResult:
 
     def test_pending_you_is_known_under_any_server_name(self):
         assert cards.is_pending_you("pendingyou") and cards.is_pending_you("plugin_pendingyou_pendingyou") and not cards.is_pending_you("github")
+
+
+REROUTES = ("Pending You labels a session by the name its latest call gives, so a call in another agent's name reroutes that "
+            "agent's answers to this session.")
+
+
+def hooked(tool, given, server="pendingyou"):
+    return {"session_id": None, "hook_event_name": "PreToolUse", "tool_name": f"mcp__{server}__{tool}", "tool_input": given}
+
+
+class TestNames:
+    """briefs.17: on 2026-10-15 one session read swancloud-ops's cards under its name and took its deploy approvals, and
+    another took swancloud-planner's answers so, since Pending You labels a session by the name its latest call gives."""
+
+    def test_a_whoami_in_another_agents_name_is_refused_naming_the_agents_own_and_why(self):
+        assert cards.name_refusal("swancloud-design", "whoami", {"name": "swancloud-ops"}) == (
+            f'crew refuses this whoami: it gives name "swancloud-ops", and this session is swancloud-design\'s. {REROUTES} '
+            "Call it again in your own name, swancloud-design.")
+
+    @pytest.mark.parametrize("tool, given, gives", [
+        ("get_request", {"requestId": "req_a-1", "name": "swancloud-planner"}, 'name "swancloud-planner"'),
+        ("list_pending", {"name": "swancloud-planner"}, 'name "swancloud-planner"'),
+        ("ack_answer", {"requestId": "req_a-1", "expectedVersion": 2, "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("cancel_request", {"requestId": "req_a-1", "reason": "done", "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("reply_in_thread", {"requestId": "req_a-1", "body": "x", "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("update_request", {"requestId": "req_a-1", "expectedVersion": 1, "changeNote": "new", "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("hand_back", {"requestId": "req_a-1", "found": "nothing yet", "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("answer_delegated", {"requestId": "req_a-1", "expectedVersion": 1, "why": "I read it", "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("get_attachment", {"attachmentId": "att_1", "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("set_wake_webhook", {"url": "https://x", "name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("report_setup", {"source": "claude-code", "name": "Claude"}, 'name "Claude"'),
+        ("match_area", {"cwd": "/w", "task": "swancloud-ops"}, 'task "swancloud-ops"'),
+        ("post_request", {"idempotencyKey": "x", "session": {"label": "swancloud-ops", "machine": "mac-studio"}}, 'session.label "swancloud-ops"'),
+        ("a_tool_pending_you_adds", {"name": "swancloud-ops"}, 'name "swancloud-ops"'),
+        ("whoami", {"name": "swancloud-design", "previousName": "swancloud-ops"}, 'previousName "swancloud-ops"'),
+        ("whoami", {"name": "swancloud-ops", "previousName": "swancloud-planner"}, 'name "swancloud-ops" and previousName "swancloud-planner"'),
+        ("whoami", {"name": ""}, 'name ""'),
+        ("list_pending", {"name": None}, "name null")])
+    def test_every_tool_that_names_its_caller_is_refused_in_any_name_but_the_agents_own(self, tool, given, gives):
+        said = cards.name_refusal("swancloud-design", tool, given)
+        assert said.startswith(f"crew refuses this {tool}: it gives {gives}, and this session is swancloud-design's. {REROUTES}")
+        assert said.endswith("or with no previousName." if "previousName" in gives else "Call it again in your own name, swancloud-design.")
+
+    @pytest.mark.parametrize("tool, given", [
+        ("whoami", {"name": "swancloud-design", "about": "records"}),
+        ("whoami", {"name": "swancloud-design", "previousName": "swancloud-design"}),
+        ("list_pending", {"name": "swancloud-design"}),
+        ("match_area", {"cwd": "/w", "remote": "github.com/x/y", "task": "swancloud-design"}),
+        ("post_request", {"idempotencyKey": "x", "name": "swancloud-design", "session": {"label": "swancloud-design"}})])
+    def test_a_call_in_the_agents_own_name_passes(self, tool, given):
+        assert cards.name_refusal("swancloud-design", tool, given) is None
+
+    @pytest.mark.parametrize("tool, given", [
+        ("get_request", {"requestId": "req_a-1"}), ("list_pending", {}), ("list_areas", {}), ("whoami", {"guide": True}),
+        ("match_area", {"cwd": "/w"}), ("post_request", {"idempotencyKey": "x", "session": {"machine": "mac-studio"}})])
+    def test_a_call_that_names_no_caller_passes_since_it_claims_no_agents_name(self, tool, given):
+        assert cards.name_refusal("swancloud-design", tool, given) is None
+
+    @pytest.mark.parametrize("tool", ["create_area", "rename_area", "suggest_area_name"])
+    def test_an_areas_name_is_not_the_callers(self, tool):
+        assert cards.name_refusal("swancloud-design", tool, {"areaId": "prj_1", "name": "crew"}) is None
+
+    def test_the_hook_refuses_a_crew_agents_call_in_another_name_on_any_pending_you_tool_and_nothing_else(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "swancloud-design")
+        monkeypatch.delenv("CREW_LABEL", raising=False)
+        assert cards.refusal(hooked("whoami", {"name": "swancloud-ops"})).startswith('crew refuses this whoami: it gives name "swancloud-ops"')
+        assert cards.refusal(hooked("get_request", {"requestId": "req_a-1", "name": "swancloud-planner"}, "plugin_pendingyou_pendingyou")).startswith(
+            'crew refuses this get_request: it gives name "swancloud-planner"')
+        assert cards.refusal(hooked("whoami", {"name": "swancloud-design"})) is None
+        assert cards.refusal(hooked("get_issue", {"name": "swancloud-ops"}, "github")) is None
+        with pytest.raises(ValueError, match="its input is not an object"):
+            cards.refusal(hooked("whoami", "swancloud-ops"))
+        monkeypatch.delenv("CREW_AGENT")
+        assert cards.refusal(hooked("whoami", {"name": "swancloud-ops"})) is None
+
+    def test_the_name_is_checked_before_and_apart_from_the_cards_key(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "wldn-planner")
+        monkeypatch.setenv("CREW_LABEL", "wldn")
+        given = {"idempotencyKey": "proposal/1", "session": {"label": "wldn-ops"}}
+        assert cards.refusal(hooked("post_request", given)).startswith('crew refuses this post_request: it gives session.label "wldn-ops"')
+
+    def test_the_hook_runs_before_every_pending_you_tool_under_any_server_name_and_no_other(self):
+        hooks = json.loads((HOOK.parent / "hooks.json").read_text())["hooks"]["PreToolUse"]
+        matcher = next(h["matcher"] for h in hooks if any("hooks/cards\" --before" in c["command"] for c in h["hooks"]))
+        for name in ("mcp__pendingyou__whoami", "mcp__pendingyou__get_request", "mcp__plugin_pendingyou_pendingyou__list_pending",
+                     "mcp__pendingyou__a_tool_pending_you_adds", "mcp__pendingyou__post_request"):
+            assert re.search(matcher, name), name
+        assert not re.search(matcher, "mcp__github__get_issue") and not re.search(matcher, "Bash")
 
 
 LANDING = {"kind": "approve", "highStakes": True}
