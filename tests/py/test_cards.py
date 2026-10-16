@@ -3,8 +3,9 @@
 (form_refusal, proposal_form) and a call in another agent's name, on any Pending You tool (name_refusal), with the
 matcher that runs it; plan.card_refusal on whose key a card or an area may take, its reads given; and the
 decisions of a card's plannotator session: plan.card_of, session_verdict, local_link, waited, card_folder,
-judged_dead and young. Posting, closing and sweeping through the hook and the command are the review journey's
-(t-journey-review)."""
+judged_dead and young; and the six cards crew builds from their events' facts, the words rule, what a card follows and
+the act's decisions (record 0031). Posting, closing and sweeping through the hook and the command are the review
+journey's (t-journey-review)."""
 import argparse
 import datetime
 import importlib.machinery
@@ -425,3 +426,281 @@ def test_a_proposal_opens_by_its_number_and_prints_no_json_beside_it():
     assert plan.open_refusal(None, True, False) == "--open needs a proposal's number: crew plan proposed <n> --open"
     assert plan.open_refusal(1, True, True) == "--open shows the proposal in plannotator and --json prints it: use one"
     assert plan.open_refusal(1, True, False) is None
+
+
+# ------------------------------------------------------------------- the six cards crew builds (record 0031 §5)
+# cards.py's builders, each a function of its event's facts (code.7, briefs.13): what post_request takes, in the forms
+# the card trials settled with the user. The lib's cards is `built` here, since `cards` is the hook.
+import cards as built  # noqa: E402
+
+NOTES = """## swancloud-srv-v0.3.0 (2026-10-15)
+### Fixes
+- deployer: crew reaches the boxes with the peer key (e5b8322)
+- cache: deploy a NixOS pusher's token to its machine (4749797)"""
+SIX = ["the-deployer-records-each-step", "a-failed-step-holds-its-environment", "the-doctor-names-the-failed-step",
+       "a-retry-is-offered-not-run", "the-doctor-shows-the-hosts-sign-in", "a-deploy-ends-with-its-outcome"]
+
+
+def landing(**more):
+    return built.landing_card(dict(bolt="a-deploy-holds-at-a-failure", kit="crew", units=SIX, chores=[],
+                                   batches={u: 6 if i < 4 else 7 for i, u in enumerate(SIX)}, head="4581216abcdef",
+                                   at="14:02", moved=1, pr={"number": 23, "url": "https://github.com/agentplot/crew/pull/23"},
+                                   offers=["srv"], **more))
+
+
+def deploy(**more):
+    return built.deploy_card(dict(dict(
+        env="srv", head="c882cff0123", base="6aed25c4567",
+        landings=[{"pr": 16, "subject": "The deployer holds at a failure"}, {"pr": 17, "subject": "The doctor names the step"},
+                  {"pr": 18, "subject": "A retry is offered"}],
+        notes=NOTES, release="swancloud-srv-v0.3.0",
+        steps=[{"n": 1, "text": "rotate the kanidm admin password", "doer": "user", "held": False},
+               {"n": 2, "text": "restart crew's teams on mac-studio", "doer": "swancloud-ops", "held": True}],
+        before=[], after=[{"env": "box", "policy": "auto"}, {"env": "mac-studio", "policy": "manual"}]), **more))
+
+
+BATCH_UNITS = [{"unit": f"u{i}", "team": "swb-1" if i < 4 else "swb-2", "subject": s, "paragraph": f"What u{i} does, in the reviewer's words. It does it well."}
+               for i, s in enumerate(["the deployer holds at a failure", "questions reach you", "the deployer holds at a failure",
+                                      "cards reach you", "the doctor names the step", "the rail shows its cards"], 1)]
+
+
+def words_asked(card):
+    """Whether a card asks a question in words: a text field, or a question of kind text."""
+    return "text" in card or any(q.get("kind") == "text" for q in card.get("questions") or [])
+
+
+class TestLanding:
+    def test_landing_is_approved_only_by_holding_the_button_never_marked_high_stakes(self):
+        c = landing()["card"]
+        assert (c["kind"], c["intent"], c["recommendedIds"]) == ("approve", "approve", ["approve"])
+        assert c["approve"] == {"action": "Land a-deploy-holds-at-a-failure on crew's main", "risk": "high", "reversible": False,
+                                "because": "irreversible"}
+        assert "highStakes" not in c and c["blocking"] is False
+
+    def test_six_units_on_a_landing_card_are_a_list_on_its_face_and_the_background_names_none(self):
+        b = landing()
+        c = b["card"]
+        assert b["key"] == "land/a-deploy-holds-at-a-failure" and c["title"] == "Land the bolt a-deploy-holds-at-a-failure on crew's main"
+        lands = c["artifacts"][0]
+        assert (lands["kind"], lands["lang"], lands["title"]) == ("code", "text", "What lands: 6 units, no chores")
+        assert lands["lines"] == SIX and max(len(l) for l in lands["lines"]) <= 40
+        assert not [u for u in SIX if u in c["context"]["background"] or u in c["summary"]]
+
+    def test_its_summary_gives_the_counts_the_batches_sluices_verdict_and_how_far_main_moved_and_its_rationale_what_follows(self):
+        c = landing()["card"]
+        assert c["summary"] == ("6 units land, every one merged and every unit read in a batch (6 and 7). sluice is green at "
+                                "4581216 since 14:02, its pull request #23 linked below. main has moved 1 landing since the bolt was cut.")
+        assert c["rationale"] == ("After it lands: main-level ops lands it through sluice and every host takes it; srv's deploy "
+                                  "will be offered on a card.")
+        assert c["context"]["background"].startswith("Read in its batches:\nbatch 6: 4 units\nbatch 7: 2 units\n\nA note naming a defect")
+
+    def test_sluices_pull_request_is_linked_and_a_kit_whose_sluice_opens_none_has_no_link(self):
+        c = landing()["card"]
+        assert c["artifacts"][1] == {"kind": "url", "title": "Pull request #23 on GitHub, opened by sluice",
+                                     "ref": "https://github.com/agentplot/crew/pull/23"}
+        assert c["context"]["links"] == [{"label": "Pull request #23 on GitHub, opened by sluice", "url": "https://github.com/agentplot/crew/pull/23"}]
+        bare = built.landing_card(dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=["tidy-the-logs"], batches={"v1": 3},
+                                       head="abc1234", at=None, moved=0, pr=None))["card"]
+        assert [a["kind"] for a in bare["artifacts"]] == ["code"] and bare["context"]["links"] == []
+        assert bare["artifacts"][0]["lines"] == ["v1", "tidy-the-logs (chore)"]
+        assert bare["summary"] == ("1 unit and 1 chore land, every one merged and every unit read in a batch (3). sluice is green "
+                                   "at abc1234. main has not moved since the bolt was cut.")
+
+    def test_a_card_with_nothing_to_show_carries_the_units_and_the_link_and_no_reading_session(self):
+        c = landing()["card"]
+        assert [(a["kind"], a.get("lang")) for a in c["artifacts"]] == [("code", "text"), ("url", None)]
+        assert "plannotator" not in json.dumps(c) and "session" not in c
+
+
+class TestDeploy:
+    def test_three_landings_since_srvs_last_deploy(self):
+        b = deploy()
+        c = b["card"]
+        assert b["key"] == "deploy/srv" and c["title"] == "Deploy main c882cff to srv"
+        assert c["approve"] == {"action": "Deploy c882cff to srv", "risk": "high", "reversible": False, "because": "irreversible"}
+        assert c["summary"] == ("3 landings since srv's last deploy (6aed25c). box (auto) follows on its own; mac-studio is offered "
+                                "after srv. After the deploy: 2 steps, 1 yours.")
+        notes, steps = c["artifacts"]
+        assert (notes["lang"], notes["title"], notes["lines"]) == ("markdown", "What's in it: swancloud-srv-v0.3.0", NOTES.split("\n"))
+        assert (steps["lang"], steps["title"]) == ("text", "After the deploy: 2 steps, 1 yours")
+        assert steps["lines"] == ["1  rotate the kanidm admin password", "   you", "2  restart crew's teams on mac-studio",
+                                  "   swancloud-ops, held for your word"]
+        assert c["context"]["background"] == ("Landings since srv's last deploy:\n#16 The deployer holds at a failure\n"
+                                              "#17 The doctor names the step\n#18 A retry is offered")
+
+    def test_a_kit_that_hands_no_notes_has_the_landings_subjects_on_its_face(self):
+        c = deploy(notes=None, steps=[])["card"]
+        assert [(a["lang"], a["title"]) for a in c["artifacts"]] == [("text", "What's in it: 3 landings")]
+        assert c["artifacts"][0]["lines"][0] == "#16 The deployer holds at a failure"
+
+    def test_a_card_follows_the_card_its_thing_follows(self):
+        entries = [dict(Act="card.post", Key="land/b24", Card="req_land24"), dict(Act="bolt.land", On=["bolt/b24"], Head="c882cff0123"),
+                   dict(Act="card.close", Card="req_land24", State="closed")]
+        follows = built.follows_of("deploy", {"env": "srv", "head": "c882cff"}, entries)
+        assert follows == "req_land24" and deploy(follows=follows)["card"]["follows"] == "req_land24"
+
+
+class TestFollows:
+    E = [dict(Act="card.post", Key="land/b24/abc1234", Card="req_old"), dict(Act="card.close", Card="req_old"),
+         dict(Act="card.post", Key="land/b24", Card="req_land"), dict(Act="bolt.land", On=["bolt/b24"], Head="c882cff"),
+         dict(Act="card.close", Card="req_land", State="closed"),
+         dict(Act="card.post", Key="deploy/srv", Card="req_d1")]
+
+    def test_a_deploy_of_a_newer_head_after_a_no_follows_the_declined_card(self):
+        declined = self.E + [dict(Act="card.close", Card="req_d1", State="declined")]
+        assert built.follows_of("deploy", {"env": "srv", "head": "9ab12cd"}, declined) == "req_d1"
+        assert built.follows_of("deploy", {"env": "srv", "head": "9ab12cd"}, self.E) is None
+
+    def test_a_step_follows_the_deploys_card_and_each_later_step_the_one_before(self):
+        assert built.follows_of("step", {"env": "srv", "key": "op/srv/1"}, self.E) == "req_d1"
+        more = self.E + [dict(Act="card.post", Key="op/srv/1", Card="req_s1"), dict(Act="card.close", Card="req_s1")]
+        assert built.follows_of("step", {"env": "srv", "key": "op/srv/2"}, more) == "req_s1"
+
+    def test_a_landing_raised_again_follows_the_card_its_defect_note_held_and_an_open_one_is_changed_not_followed(self):
+        held = [dict(Act="card.post", Key="land/b7", Card="req_l1"), dict(Act="card.close", Card="req_l1", State="withdrawn")]
+        assert built.follows_of("land", {"bolt": "b7"}, held) == "req_l1"
+        assert built.follows_of("land", {"bolt": "b7"}, held[:1]) is None
+
+    def test_a_lost_card_is_followed_by_none_and_a_proposal_a_batch_and_a_record_follow_nothing(self):
+        lost = [dict(Act="card.post", Key="land/b7", Card="req_l1"), dict(Act="card.close", Card="req_l1", State="lost")]
+        assert built.follows_of("land", {"bolt": "b7"}, lost) is None
+        assert [built.follows_of(k, {}, self.E) for k in ("proposal", "batch", "record")] == [None, None, None]
+
+
+class TestStep:
+    def test_the_users_step_is_a_do_with_its_commands_whole_where_and_done_when(self):
+        b = built.step_card(dict(env="srv", n=1, text="rotate the kanidm admin password", doer="user", held=False,
+                                 why="Only you can: the password is in your vault, and no check can tell it was done.",
+                                 where="a terminal on mac-studio", done="kanidm's login page takes the new password.",
+                                 commands=["clan vars generate swancloud-srv --generator kanidm-admin --regenerate",
+                                           "clan machines update swancloud-srv"], follows="req_d1"))
+        c = b["card"]
+        assert b["key"] == "op/srv/1" and (c["kind"], c["intent"], c["follows"]) == ("action", "do", "req_d1")
+        assert c["title"] == "After srv's deploy: rotate the kanidm admin password"
+        assert c["action"]["where"] == "a terminal on mac-studio" and c["action"]["done"] == "kanidm's login page takes the new password."
+        assert [s["command"] for s in c["action"]["steps"]] == ["clan vars generate swancloud-srv --generator kanidm-admin --regenerate",
+                                                                "clan machines update swancloud-srv"]
+
+    def test_a_held_step_is_a_choice_of_when_quiet_recommended(self):
+        c = built.step_card(dict(env="mac-studio", n=2, text="restart crew's teams", doer="swancloud-ops", held=True,
+                                 why="It ends swc-1's code stage mid-unit.", consequences={"now": "swc-1's stage starts again"}))["card"]
+        assert (c["kind"], c["intent"], c["recommendedIds"]) == ("choice", "decide", ["quiet"])
+        assert c["title"] == "After mac-studio's deploy: restart crew's teams, now or when the host is quiet?"
+        assert [(o["id"], o["label"]) for o in c["options"]] == [("quiet", "When the host is quiet"), ("now", "Now"), ("skip", "Skip it")]
+        assert c["options"][1]["consequence"] == "swc-1's stage starts again"
+        assert c["summary"] == "swancloud-ops can do it. It ends swc-1's code stage mid-unit. Held for your word."
+
+
+RECORD = "# 32. switchboard runs GitHub's workflows itself\n\nStatus: proposed\n\n## Context\n\nThe runners cost."
+
+
+class TestRecord:
+    def test_a_documents_substance_on_a_card_is_the_record_as_markdown_and_no_file(self):
+        b = built.record_card(dict(kit="switchboard-kit", number=32, title="switchboard runs GitHub's workflows itself",
+                                   opening="switchboard runs the workflows. A fleet costs more.", quoted=["I don't want a fleet"],
+                                   text=RECORD))
+        c = b["card"]
+        assert b["key"] == "record/switchboard-kit/0032"
+        assert c["artifacts"] == [{"kind": "code", "lang": "markdown", "title": "Record 0032", "ref": "record-0032.md", "lines": RECORD.split("\n")}]
+        assert c["approve"] == {"action": "Accept record 0032", "risk": "low", "reversible": True}
+        assert c["title"] == "Accept record 0032 in switchboard-kit: switchboard runs GitHub's workflows itself"
+        assert c["summary"] == "switchboard runs the workflows. A fleet costs more.\n\nYour own words, recorded as your decision: “I don't want a fleet”"
+
+    def test_a_record_a_rule_decided_between_alternatives_is_one_choice_loosen_accept_or_send_back(self):
+        c = built.record_card(dict(kit="switchboard-kit", number=32, title="a CodeBuild fleet runs the workflows", opening="x.",
+                                   text=RECORD, alternatives={"rules": ["ops.3", "ops.7"], "other": "switchboard runs them itself",
+                                                              "text": "## Where your rules decided\n\nops.3", "recommended": "loosen"}))["card"]
+        assert (c["kind"], c["intent"], c["recommendedIds"]) == ("choice", "decide", ["loosen"])
+        assert [o["id"] for o in c["options"]] == ["loosen", "accept", "back"] and c["options"][0]["label"] == "Loosen ops.3 and ops.7 as drafted"
+        assert [a["title"] for a in c["artifacts"]] == ["Where your rules decided, and the rules loosened", "Record 0032"]
+
+
+class TestBatch:
+    def test_six_units_named_with_their_teams_and_paragraphs_as_prose_and_one_link_to_its_session(self):
+        b = built.batch_card(dict(n=2, previous=1, units=BATCH_UNITS, link="http://mac-studio:19432"))
+        c, back = b["card"], b["card"]["context"]["background"]
+        assert b["key"] == "batch/2" and (c["kind"], c["intent"]) == ("fyi", "tell")
+        assert back.startswith("Read it all in one session: http://mac-studio:19432\n\n")
+        for u in BATCH_UNITS:
+            assert f"{u['unit']} ({u['team']})\n{u['paragraph']}" in back
+        assert "```" not in back
+        assert c["context"]["links"] == [{"label": "Read batch 2", "url": "http://mac-studio:19432"}]
+        assert [a for a in c["artifacts"] if a["kind"] == "url"] == [{"kind": "url", "title": "Read batch 2", "ref": "http://mac-studio:19432"}]
+
+    def test_its_title_is_what_the_batch_is_about_and_its_body_opens_with_what_it_asks(self):
+        c = built.batch_card(dict(n=7, previous=6, units=BATCH_UNITS[:4], link="http://mac-studio:19432"))["card"]
+        assert c["title"] == "The deployer holds at a failure, questions reach you and cards reach you (batch 7)"
+        assert c["summary"].startswith("4 changes to read, nothing to approve, since batch 6.\n\nswb-1 · u1: What u1 does")
+
+    def test_a_batch_cards_summary_holds_each_units_paragraph_as_prose_and_the_reviewers_summary_rides_the_face_as_markdown(self):
+        c = built.batch_card(dict(n=7, previous=6, units=BATCH_UNITS[:4], link="http://mac-studio:19432"))["card"]
+        md = c["artifacts"][0]
+        assert (md["kind"], md["lang"], md["title"]) == ("code", "markdown", "The reviewer's summary")
+        assert md["lines"][:3] == ["**swb-1 · u1**", "", "What u1 does, in the reviewer's words. It does it well."]
+        assert "**" not in c["summary"] and "`" not in c["summary"]
+
+    def test_a_change_too_long_for_the_summary_ends_at_the_last_whole_sentence_and_the_background_holds_every_paragraph(self):
+        long = [dict(u, paragraph=" ".join(f"Sentence {k} of {u['unit']} says a little more." for k in range(8))) for u in BATCH_UNITS]
+        c = built.batch_card(dict(n=8, previous=7, units=long, link=None))["card"]
+        assert len(c["summary"]) <= 400 and c["summary"].endswith("says a little more.")
+        assert all(u["paragraph"] in c["context"]["background"] for u in long)
+
+    def test_a_review_card_carries_the_reviewers_paragraph_in_its_words(self):
+        c = built.batch_card(dict(n=3, previous=2, units=BATCH_UNITS[:1], link=None))["card"]
+        assert BATCH_UNITS[0]["paragraph"] in c["summary"]
+
+
+class TestWords:
+    def test_prose_keeps_the_documents_words_its_paragraphs_and_cuts_at_whole_sentences(self):
+        assert built.prose("The **first** `thing`.  It  runs.\n\nA second  paragraph.") == "The first thing. It runs.\n\nA second paragraph."
+        assert built.prose("One short. Two is a longer sentence than fits.", 20) == "One short."
+        assert built.prose("A first sentence far longer than the budget it is given.", 20) == "A first sentence…"
+
+    def test_a_list_is_one_thing_a_line_of_at_most_forty_a_long_name_wrapped_at_its_hyphens(self):
+        lines = built.lines_of(["the-doctor-shows-the-hosts-pending-you-sign-in-at-last", ("1  a step", "you, after the deploy")])
+        assert lines == ["the-doctor-shows-the-hosts-pending-", "  you-sign-in-at-last", "1  a step", "   you, after the deploy"]
+        assert max(len(l) for l in lines) <= 40
+
+    def test_no_card_of_crews_asks_a_question_in_words(self):
+        cards_built = [landing()["card"], deploy()["card"], built.batch_card(dict(n=2, units=BATCH_UNITS, link=None))["card"],
+                       built.record_card(dict(kit="k", number=1, title="t", opening="o.", text="r"))["card"],
+                       built.step_card(dict(env="srv", n=1, text="do it", doer="user", held=False))["card"],
+                       built.step_card(dict(env="srv", n=2, text="do it", doer="ops", held=True))["card"]]
+        assert not [c["title"] for c in cards_built if words_asked(c)]
+        assert all(len(c["summary"]) <= 400 and 8 <= len(c["title"]) <= 140 for c in cards_built)
+
+    def test_no_card_carries_a_path_but_a_steps_command(self):
+        texts = json.dumps([landing()["card"], deploy()["card"]])
+        assert "/Users/" not in texts and "~/" not in texts
+
+
+class TestActDecisions:
+    def test_the_line_that_adopts_a_card_and_whom_it_is_told_to(self):
+        assert built.adopt_line("req_abc", "wldn-ops") == "call get_request (requestId req_abc, name wldn-ops)"
+        assert built.told_to("wldn-ops", "chuck@mac-studio") == "wldn-ops"
+        assert built.told_to("wldn-planner", "wldn-planner") is None
+
+    @pytest.mark.parametrize("key, obj", [("proposal/4", "proposal/4"), ("batch/7", "batch/7"), ("land/b1", "bolt/b1"),
+                                          ("deploy/srv", "env/srv"), ("op/srv/2", "env/srv"), ("record/crew/0031", "record/crew/0031"),
+                                          ("land/b1/abc1234", None), ("agent-note", None), ("verify/x/20261007-1412", None)])
+    def test_each_of_crews_six_keys_is_recorded_on_its_rows_object_and_a_verify_report_has_none(self, key, obj):
+        assert built.row_object(key) == obj
+
+    def test_an_approval_the_user_declined_is_read_with_their_words(self):
+        assert built.declined({"turn": "agent", "answer": {"approved": False, "note": {"text": "Not before Friday."}}}) == "Not before Friday."
+        assert built.declined({"turn": "agent", "answer": {"approved": False}}) == ""
+        assert built.declined({"turn": "agent", "answer": {"approved": True}}) is None
+        assert built.declined({"turn": "you"}) is None
+        assert built.declined_outcome("Not before Friday.") == "Declined: Not before Friday."
+
+    def test_an_answered_card_is_acked_with_the_outcome_and_a_waiting_one_withdrawn(self):
+        assert built.close_call({"status": "answered", "version": 3}, "req_a", "wldn-ops", outcome="Deployed at 14:20") == (
+            "ack_answer", {"requestId": "req_a", "name": "wldn-ops", "expectedVersion": 3, "outcome": "Deployed at 14:20"}, "closed")
+        assert built.close_call({"status": "pending", "version": 1}, "req_a", "wldn-ops", reason="A newer head") == (
+            "cancel_request", {"requestId": "req_a", "name": "wldn-ops", "reason": "A newer head"}, "withdrawn")
+
+    def test_a_change_carries_only_what_update_request_takes_and_a_card_posted_again_says_its_older_copy_is_dead(self):
+        c = landing()["card"]
+        ch = built.change_args(c, "Head is now 9ab12cd after the fix")
+        assert set(ch) == {"title", "summary", "context", "artifacts", "approve", "recommendedIds", "rationale", "urgency", "blocking", "changeNote"}
+        assert built.posted_again(c)["summary"].startswith("An older copy of this card was lost: dismiss it in the app.\n\n6 units land")

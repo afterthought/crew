@@ -84,8 +84,10 @@ import gather  # noqa: E402
 import kit  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
+import cards  # noqa: E402
+from cards import CAPTION, COUNTS, by_words, joined, new_units  # noqa: E402
 from crew import Refusal, Stopped, fail  # noqa: E402
-from picture import cut, wrap  # noqa: E402
+from picture import cut  # noqa: E402
 
 REPLAYS = 5
 # What a command found out before it wrote or was refused: the partition whose run record its entry goes in.
@@ -2799,26 +2801,12 @@ def open_refusal(n, open_, as_json):
 CARD_NEW = 15  # the most units new to a bolt a proposal's card asks about: three questions of five, beside its approval
 OPTIONS = 5  # Pending You's limit on a choice's options: a question of a proposal's card holds at most five new units
 SESSION_ROOM = 100  # what the card of more than fifteen new units leaves in its summary for the link to its session
-TEXT, SAYS = 40, 33  # the card's text, monospace lines of at most forty characters; what a block says, indented seven
-COUNTS = (("dropped", "dropped"), ("amended", "amended"), ("new", "new"), ("moved", "moved"), ("split", "amended"))
-CAPTION = "Struck and dashed: dropped, with its reason. Gold: amended, old intent struck above the new. Mint: new."
 
 
-def plural(k, word):
-    return f"{k} {word}" + ("" if k == 1 else "s")
 
 
-def joined(xs):
-    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
 
 
-def by_words(text, width):
-    """text cut by whole words to at most width characters, ending with … when it was cut."""
-    text = " ".join(text.split())
-    if len(text) <= width:
-        return text
-    head = text[:width - 1]
-    return (head.rsplit(" ", 1)[0] if " " in head else head).rstrip(" ,;:") + "…"
 
 
 def plain_words(line):
@@ -2826,12 +2814,6 @@ def plain_words(line):
     return line.replace("**", "").replace("`", "")
 
 
-def new_units(argvs):
-    """The units and chores a proposal makes new to a bolt, in its order and once each: every one a `unit add` or
-    `chore add` names, to a bolt or to the queue, which is the first the user hears of it, and every one a `unit move`
-    or `chore move` puts into a bolt. Each is the user's to keep or leave out, row by row (plan.3, signals.7)."""
-    return list(dict.fromkeys(a.unit for a in argvs if a.cmd in ("unit", "chore")
-                              and (a.sub == "add" or (a.sub == "move" and a.bolt != "queue"))))
 
 
 def concerns(a):
@@ -2875,29 +2857,10 @@ def new_work(names, chores):
     return "chores" if n == len(names) else "new units" if not n else "new units and chores"
 
 
-def chore_words(words):
-    """A chore's words as a proposal's card says them beside its name, where a unit's intent goes: marked a chore's."""
-    return f"Chore: {words}" if words else words
 
 
-def put_back(now, was):
-    """The units a group holds once approved, each it held before and no longer does put back where it stood: after
-    the unit it followed, or first."""
-    out = list(now)
-    for i, u in enumerate(was):
-        if u not in out:
-            prev = next((was[j] for j in range(i - 1, -1, -1) if was[j] in out), None)
-            out.insert(out.index(prev) + 1 if prev else 0, u)
-    return out
 
 
-def block(head, name, says):
-    """One change in the card's text: its heading padded to seven and the unit or bolt, a heading longer than six on
-    its own line with the name under it, then what it says, indented seven."""
-    names = wrap(name, SAYS)
-    if len(head) > 6:
-        return [head] + ["       " + x for x in names] + ["       " + x for x in says]
-    return [f"{head:<7}{names[0]}"] + ["       " + x for x in names[1:] + says]
 
 
 def card_model(fleet, label, w, p, after=None):
@@ -2911,136 +2874,8 @@ def card_model(fleet, label, w, p, after=None):
     argvs = [do_args(label, d) for d in p.all("Do")]
     before = w.plan
     after = after or check_ops(fleet, label, w, argvs, n, Drawn).plan
-    where = {u.name(): u.get("Bolt") for u in before.work()}
-    repo = {u.name(): u.get("Repo") for u in before.work()}
-    # A chore's words are said as its intent, marked as a chore's, on the picture and in its option (plan.11).
-    intent = {u.name(): chore_words(u.get("Intent")) if is_chore(u) else u.get("Intent") for u in before.work()}
-    kits = {b.name(): b.get("Repo") for b in before.bolts()}
-    goals = {b.name(): b.get("Goal") for b in before.bolts()}
-    dropped, out, came_from, amended, split, parts, ordered, queued = {}, {}, {}, {}, {}, {}, set(), set()
-    counts, bolt_moves, touched, order, blocks = dict.fromkeys(dict(COUNTS), 0), {}, set(), [], []
-
-    def group(u):
-        return ("bolt", where[u]) if where.get(u) else ("queue", repo[u])
-    for a in argvs:
-        key = ("unit" if a.cmd == "chore" else a.cmd, a.sub)  # a chore's command draws as the unit's
-        if a.cmd in ("unit", "chore"):
-            touched.add(a.unit)
-        if key == ("bolt", "new"):
-            kits[a.bolt], goals[a.bolt] = a.repo, a.goal
-            secs, b = [("bolt", a.bolt)], block("NEW BOLT", a.bolt, wrap(a.goal, SAYS, 3))
-        elif key == ("bolt", "order"):
-            counts["moved"] += 1
-            bolt_moves[a.bolt] = bolt_moves.get(a.bolt, 0) + 1
-            secs, b = [("bolt", a.bolt)], block("ORDER BOLT", a.bolt, wrap(f"before {a.before}" if a.before else "first" if a.first else "last", SAYS))
-        elif key == ("bolt", "drop"):
-            units = [u for u, x in where.items() if x == a.bolt]
-            secs = [("bolt", a.bolt)] + ([("queue", kits[a.bolt])] if a.requeue and units else [])
-            for u in units:
-                touched.add(u)
-                if a.requeue:
-                    out[u], where[u] = "to the queue", None
-                    queued.add(u)
-                    counts["moved"] += 1
-                else:
-                    dropped[u] = a.reason
-                    counts["dropped"] += 1
-            b = block("DROP BOLT", a.bolt, wrap(a.reason, SAYS, 3) + (["its units to the queue"] if a.requeue else []))
-        elif key == ("unit", "add"):
-            where[a.unit], repo[a.unit] = a.bolt, a.repo or kits.get(a.bolt)
-            intent[a.unit] = chore_words(a.intent) if a.cmd == "chore" else a.intent
-            counts["new"] += 1
-            secs, b = [group(a.unit)], block("CHORE" if a.cmd == "chore" else "ADD", a.unit, wrap(a.intent, SAYS, 2))
-        elif key == ("unit", "move"):
-            src, to = where.get(a.unit), None if a.bolt == "queue" else a.bolt
-            secs = ([("bolt", src)] if src else []) + [("bolt", to) if to else ("queue", repo[a.unit])]
-            if src:
-                out[a.unit] = f"to {to}" if to else "to the queue"
-                counts["moved"] += 1
-            if to:
-                came_from.setdefault(a.unit, src)
-                counts["new"] += 1
-            else:
-                queued.add(a.unit)
-            where[a.unit] = to
-            b = block("MOVE", a.unit, wrap(f"from {src or 'the queue'} to {to or 'the queue'}", SAYS))
-        elif key == ("unit", "split"):
-            counts["split"] += 1
-            split.setdefault(a.unit, intent[a.unit])
-            intent[a.unit] = a.intent
-            for m, i in a.into:
-                parts[m], where[m], repo[m], intent[m] = a.unit, where[a.unit], repo[a.unit], i
-                touched.add(m)
-            secs, b = [group(a.unit)], block("SPLIT", a.unit, wrap(a.intent, SAYS, 2) + flat(wrap(f"into {m}", SAYS) for m, _ in a.into))
-        elif key == ("unit", "amend"):
-            counts["amended"] += 1
-            amended.setdefault(a.unit, intent[a.unit])
-            intent[a.unit] = a.intent
-            secs, b = [group(a.unit)], block("AMEND", a.unit, wrap(a.intent, SAYS, 3))
-        elif key in (("unit", "order"), ("unit", "after")):
-            counts["moved"] += 1
-            ordered.add(a.unit)
-            said = (("after " + ", ".join(a.deps) if a.deps else "after nothing") if a.sub == "after" else
-                    f"before {a.before}" if a.before else "first" if a.first else "last")
-            secs, b = [group(a.unit)], block(a.sub.upper(), a.unit, wrap(said, SAYS))
-        else:  # unit drop
-            counts["dropped"] += 1
-            dropped[a.unit] = a.reason
-            secs, b = [group(a.unit)], block("DROP", a.unit, wrap(a.reason, SAYS, 3))
-        order += [s for s in secs if s not in order]
-        blocks.append((secs[0], b))
-
-    sections, lines = [], []
-    for kind, name in order:
-        if kind == "bolt":
-            was = [u.name() for u in before.work_of(name)] if before.bolt(name) else []
-            now = numbered = [u.name() for u in after.work_of(name)] if after.bolt(name) else []
-            heading = name
-            said = (f"a new bolt → {len(now)}" if not before.bolt(name) else f"{plural(len(was), 'unit')} → "
-                    + (str(len(now)) if after.bolt(name) else "dropped"))
-            line = (f"A new bolt; {plural(len(now), 'unit')} once approved" if not before.bolt(name) else
-                    f"{plural(len(was), 'unit')} now; " + (f"{len(now)} once approved" if after.bolt(name) else "dropped once approved"))
-        else:
-            was_all, numbered = [u.name() for u in before.queue(name)], [u.name() for u in after.queue(name)]
-            was, now = [u for u in was_all if u in touched], [u for u in numbered if u in touched]
-            heading, said = f"the {name} queue", f"{len(was_all)} queued → {len(numbered)}"
-            line = f"{len(was_all)} queued now; {len(numbered)} once approved"
-        rows = []
-        for u in put_back(now, was):
-            r = {"n": str(numbered.index(u) + 1) if u in now else "–", "name": u, "tag": None, "intent": intent.get(u)}
-            if u not in now and u in dropped:
-                r.update(tag="drop", under=f"Why: {dropped[u]}", struck=True, outline="dashed", colour="dropped")
-            elif u not in now:
-                r.update(tag="out", under=out.get(u, ""), struck=True, outline="dashed", colour="moved")
-            elif u not in was and u in parts:
-                r.update(tag="split", colour="amended", mark="+")
-            elif u not in was and kind == "queue" and u in queued:
-                r.update(tag="moved", colour="moved", mark="↕")
-            elif u not in was:
-                r.update(tag="new", outline="solid", colour="new", mark="+")
-            elif u in amended or u in split:
-                r.update(tag="amend" if u in amended else "split", old=amended.get(u, split.get(u)), colour="amended", mark="~")
-            elif u in ordered:
-                r.update(tag="moved", colour="moved", mark="↕")
-            rows.append(r)
-        tags = [r["tag"] for r in rows]
-        mine = {"dropped": tags.count("drop"), "amended": tags.count("amend"), "new": tags.count("new"),
-                "moved": tags.count("moved") + tags.count("out") + bolt_moves.get(name, 0) * (kind == "bolt"),
-                "split": sum(1 for r in rows if r["tag"] == "split" and r["name"] not in parts)}
-        sections.append({"kind": kind, "name": name, "heading": heading, "said": said, "line": line, "rows": rows,
-                         "counts": [(f"{mine[c]} {c}", colour) for c, colour in COUNTS if mine[c]]})
-        lines += ([""] if lines else []) + wrap(heading, TEXT) + [said, ""]
-        for sec, b in blocks:
-            if sec == (kind, name):
-                lines += b + [""]
-        lines.append("ONCE APPROVED")
-        for r in rows:
-            if r["n"] != "–":
-                first, *rest = wrap(r["name"], TEXT - 5)
-                lines += [f"{r['n']:>2} {r.get('mark', ' ')} {first}"] + ["     " + x for x in rest]
-        if kind == "bolt" and not after.bolt(name):
-            lines.append("   the bolt is dropped")
-
+    d = cards.drawn(before, after, argvs)
+    sections, counts, lines, intent, came_from, goals = (d[k] for k in ("sections", "counts", "lines", "intent", "came_from", "goals"))
     new = new_units(argvs)
     plain = not new or len(new) > CARD_NEW
     all_counts = ", ".join(f"{counts[c]} {c}" for c, _ in COUNTS if counts[c])
@@ -3127,7 +2962,7 @@ def plan_card(fleet, a):
     """crew plan card <n> [--label L]: proposal n's card, as Pending You's post_request takes it, from the flywheel's
     branch alone (plan.12): its title, summary, background, questions and artifacts, printed as JSON beside where its
     picture is and whether it links a session, which only a card of more than fifteen new units does (briefs.9). Its
-    picture, a PNG 780 pixels wide, is drawn by crew itself and written to
+    picture, a PNG 1560 pixels wide, is drawn by crew itself and written to
     ~/.local/state/crew/cards/<label>/proposal/<n>/ on this host. Writes nothing to the branch or the run record."""
     label = proposal_label(fleet, a, a.n)
     w, _, p, _ = at_tip(fleet, label, a.n)
@@ -7789,6 +7624,7 @@ def card_post(fleet, a):
     record.emit(label, "card.post", [cards.object_of(a.key) or f"agent/{who}"], Card=card_id, Key=a.key)
     url = got.get("url")
     print(f"card {a.key}: {card_id}" + (f" {url}" if isinstance(url, str) else ""))
+    print(cards.adopt_line(card_id, who))
 
 
 def card_change(fleet, a):
@@ -7833,16 +7669,215 @@ def card_close(fleet, a):
 
 def card_read(fleet, a):
     """crew card read <key> [--label L] [--json]: where the card the asker holds under the key stands, read from
-    Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words. Records nothing."""
+    Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words. An approval the
+    user declined is then closed with their words, and the close recorded (record 0031 §1); nothing else is."""
     import cards
     label, who = card_asker(fleet, a)
     card = card_held(label, who, a.key)
     with cards.Bridge(who, "Read it again later.", (a.key, card)) as py:
         got = py.call("get_request", {"requestId": card, "name": who})
+        words = cards.declined(got)
+        if words is not None:
+            tool, args, _ = cards.close_call(got, card, who, cards.declined_outcome(words))
+            py.call(tool, args)
     if a.json:
         print(json.dumps(got, indent=1, ensure_ascii=False))
     else:
         print("\n".join(cards.answer_lines(a.key, card, got)))
+    if words is not None:
+        record.emit(label, "card.close", [cards.row_object(a.key) or cards.object_of(a.key) or f"agent/{who}"], Card=card,
+                    Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
+        print(f"card {a.key}: {card} closed, as the user declined it")
+
+
+# ------------------------------------------------------------------------------- crew's own cards: the act
+
+class CardActs:
+    """What the act reaches beyond its facts: Pending You through the fleet's bridge, this host's run record, a tell,
+    a picture's upload, this host and who runs the command. A logic test hands the act a stand-in (code.7)."""
+
+    def __init__(self, fleet):
+        self.fleet = fleet
+
+    def bridge(self, name, later, held=None):
+        return cards.Bridge(name, later, held)
+
+    def emit(self, label, act, on, **fields):
+        return record.emit(label, act, on, **fields)
+
+    def entries(self, label):
+        return cards.host_entries(record, label, crew.this_host())
+
+    def tell(self, name, text):
+        return crew.tell(self.fleet, name, text)
+
+    def put(self, url, data, kind):
+        return cards.put(url, data, kind)
+
+    def host(self):
+        return crew.this_host()
+
+    def caller(self):
+        return agent()
+
+
+CARD_LATER = "The event stands, and its card is not posted."
+
+
+def card_where(kit):
+    """Where a kit's card is asked from and filed, as the act takes it: the kit's checkout, the card's folder, and its
+    git remote as Pending You files an area by it."""
+    return kit["main"], cards.remote_of(f"github.com/{kit['repo']}")
+
+
+def card_area(py, label, cwd, remote, name):
+    """The area a card of the kit at remote is filed in: the one Pending You matches to it, else the kit's, made under
+    create-area:<owner>/<kit> in the partition's group (briefs.11)."""
+    matched = py.call("match_area", {"cwd": cwd, "remote": remote, "task": name})
+    area = cards.area_of(matched)
+    if area:
+        return area
+    make = cards.create_area_args(remote, label, matched)
+    made = py.call("create_area", make)
+    area = made.get("areaId")
+    isinstance(area, str) and cards.AREA_ID.match(area) or fail(
+        f"Pending You's answer to create_area names no area: crew can't tell where the card would go. {CARD_LATER}")
+    note = made.get("groupNote")
+    if isinstance(note, str) and note.strip():
+        print(f"area {make['name']}: {note.strip()}")
+    return area
+
+
+def card_heard(acts, key, card, owner):
+    """How the owner hears a card crew posted in no session (briefs.16): the line that adopts it, printed, and told
+    to the owner when the command that raised it is not the owner's own (roles.4)."""
+    line = cards.adopt_line(card, owner)
+    print(line)
+    to = cards.told_to(owner, acts.caller())
+    if to and acts.tell(to, f"Your card {key} is up for the user: {line}, to hear their answer."):
+        print(f"told {to}: {line}")
+
+
+def card_uploaded(acts, key, b, got):
+    """A built card's picture put to the upload URL its post or change was given, or said where it did not land."""
+    if not b.get("picture"):
+        return
+    title = next(x["title"] for x in b["card"].get("artifacts") or [] if x.get("upload"))
+    url = cards.upload_of(got, title)
+    why = acts.put(url, b["picture"], "image/png") if url else "Pending You gave no upload URL for it"
+    if why:
+        print(f"card {key}: its picture did not reach the card: {why}", file=sys.stderr)
+
+
+def card_posted(acts, label, owner, b, where):
+    """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else."""
+    key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
+    cwd, remote = where
+    try:
+        with acts.bridge(owner, CARD_LATER) as py:
+            area = card_area(py, label, cwd, remote, owner)
+            got = py.call("post_request", cards.post_args(b["card"], key, owner, acts.host(), cwd, area))
+            card = cards.request_id(got, "post_request")
+            card_uploaded(acts, key, b, got)
+    except Refusal as e:
+        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
+        print(f"card {key} not posted: {e}", file=sys.stderr)
+        return None
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
+    url = got.get("url")
+    print(f"card {key}: {card}" + (f" {url}" if isinstance(url, str) else ""))
+    card_heard(acts, key, card, owner)
+    return card
+
+
+def row_card_post(fleet, label, owner, build, facts, where, acts=None):
+    """The act that posts a card of crew's own (briefs.16, record 0031 §1): build(facts), one of cards.py's six
+    builders, posted through the fleet's `pendingyou mcp` under the host's sign-in, asked in the name of owner, the
+    role whose row it is, under the row's key, from where, the kit's (checkout, remote) as card_where gives it, and
+    filed in the kit's area, its picture uploaded; recorded on the row's object with the card's id and key, and
+    printed with the line that adopts it, told to the owner when the command is not the owner's. Pending You's
+    refusal, a host not signed in, no answer within a minute or a reply naming no card is said and recorded as the
+    post refused, and refuses nothing of the event it was raised for. The card's id, or None."""
+    acts = acts or CardActs(fleet)
+    return card_posted(acts, label, owner, build(facts), where)
+
+
+def card_lost(acts, label, owner, key, card, words):
+    """A card Pending You no longer finds for its owner, recorded closed as lost so it is held no longer."""
+    acts.emit(label, "card.close", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key, State="lost",
+              Outcome=f"lost to its owner: {words}")
+    print(f"card {key}: {card} is lost to {owner} (Pending You: \"{words}\")", file=sys.stderr)
+
+
+def row_card_change(fleet, label, owner, build, facts, note, where, acts=None):
+    """The act that changes a card of crew's own in place when its thing changes (record 0031 §3): build(facts) sent
+    as update_request takes it, with note as the change note the user sees, at the version Pending You reports, to
+    the card the owner holds under the row's key on this host; posted instead when it holds none, and posted again,
+    its summary saying the older copy is dead, when Pending You no longer finds it. A refusal is said and recorded as
+    the change refused, refusing nothing of the event. The card's id, or None."""
+    acts = acts or CardActs(fleet)
+    b = build(facts)
+    key = b["key"]
+    card = cards.card_under(acts.entries(label), key, owner)
+    if not card:
+        return card_posted(acts, label, owner, b, where)
+    lost = None
+    try:
+        with acts.bridge(owner, CARD_LATER) as py:
+            got, lost = py.answer("get_request", {"requestId": card, "name": owner})
+            if lost is None:
+                change = dict(cards.change_args(b["card"], note), requestId=card, name=owner,
+                              expectedVersion=cards.version_of(got, card))
+                got, lost = py.answer("update_request", change)
+            if lost is not None and not cards.lost(lost):
+                fail(f"Pending You refused the change: {lost}")
+            if lost is None:
+                card_uploaded(acts, key, b, got)
+    except Refusal as e:
+        acts.emit(label, "card.update", [cards.row_object(key) or f"agent/{owner}"], by=owner, refused=str(e), Card=card, Key=key)
+        print(f"card {key} not changed: {e}", file=sys.stderr)
+        return None
+    if lost is not None:
+        card_lost(acts, label, owner, key, card, lost)
+        return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where)
+    acts.emit(label, "card.update", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key)
+    v = got.get("version")
+    print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
+    return card
+
+
+def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None):
+    """The act that closes a card of crew's own at the event that ends it (record 0031 §1): the card the owner holds
+    under the row's key on this host, acked with the outcome once the user answered it, else withdrawn with the
+    reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
+    refusal said and recorded as the close refused, neither refusing the event. The card's id, or None when none was
+    closed."""
+    acts = acts or CardActs(fleet)
+    obj = cards.row_object(key) or f"agent/{owner}"
+    card = cards.card_under(acts.entries(label), key, owner)
+    if not card:
+        print(f"card {key}: {owner} holds none open on this host, so none is closed")
+        return None
+    lost = None
+    try:
+        with acts.bridge(owner, "The event stands, and its card stays open.") as py:
+            got, lost = py.answer("get_request", {"requestId": card, "name": owner})
+            if lost is None:
+                tool, args, state = cards.close_call(got, card, owner, outcome, reason)
+                _, lost = py.answer(tool, args)
+            if lost is not None and not cards.lost(lost):
+                fail(f"Pending You refused the close: {lost}")
+    except Refusal as e:
+        acts.emit(label, "card.close", [obj], by=owner, refused=str(e), Card=card, Key=key)
+        print(f"card {key} not closed: {e}", file=sys.stderr)
+        return None
+    if lost is not None:
+        card_lost(acts, label, owner, key, card, lost)
+        return None
+    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
+              Outcome=outcome if outcome is not None else reason)
+    print(f"card {key}: {card} {state}")
+    return card
 
 
 def card_folder(rel):

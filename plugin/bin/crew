@@ -138,11 +138,13 @@
 #                                      post the card on standard input to the user as the asking assistant, through the
 #                                      fleet's pendingyou mcp under the host's sign-in, or change the one the asker
 #                                      holds under the key; refused as crew's card hook refuses it, crew setting the
-#                                      key, the session and the kit's area; recorded from Pending You's reply
+#                                      key, the session and the kit's area; recorded from Pending You's reply, and a
+#                                      post printing the line that adopts its card, call get_request (requestId, name)
 #   crew card  close <key> --outcome "<line>" | --reason "<line>" [--label L]
 #                                      close the asker's card once acted on, or withdraw it, and end its session
 #   crew card  read <key> [--label L] [--json]
-#                                      where the asker's card stands: its status, whose turn, the user's answer and words
+#                                      where the asker's card stands: its status, whose turn, the user's answer and words;
+#                                      an approval the user declined is closed with their words
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript

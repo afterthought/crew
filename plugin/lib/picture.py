@@ -2,7 +2,8 @@
 outlined rectangles, solid and dashed lines and text in the bitmap font font.py carries, written with zlib and struct.
 No browser and no renderer: the picture is only rectangles, lines and monospace text.
 
-draw(sections) gives the PNG's bytes, 780 pixels wide, twice a phone's width, as tall as its rows need. A section is a
+draw(sections) gives the PNG's bytes, 1560 pixels wide, as tall as its rows need: laid out in points 780 wide, twice a
+phone's width, and drawn at DENSITY pixels a point, so it is sharp on a Retina phone (record 0031 §5). A section is a
 bolt, or a kit's queue, as the proposal leaves it: {"heading": its name, "counts": [(words, colour)...], "line": its
 unit count before and after, "rows": [...]}, each row {"n": its number once approved, or "–", "name", "tag": drop,
 amend, new, moved, out, split or None, "intent": what it builds, "old": the intent an amendment replaces, "under": a
@@ -14,7 +15,8 @@ import zlib
 
 import font
 
-WIDTH = 780
+DENSITY = 2  # pixels a point: every size is drawn twice over, the user's "2x issue" (record 0031 §5)
+WIDTH = 780  # points: the PNG is WIDTH * DENSITY pixels wide
 MARGIN = 28
 PALETTE = {"background": "#102b2f", "row": "#163a3e", "rule": "#2b4a4d", "text": "#ede7da", "muted": "#a3b4ae",
            "amended": "#c9a227", "moved": "#c9a227", "new": "#8fb9ae", "dropped": "#e07b4f"}
@@ -98,27 +100,31 @@ class Canvas:
             o = (row * self.w + x0) * 3
             self.px[o:o + len(c)] = c
 
-    def outline(self, x, y, w, h, colour, dashed=False, t=2):
+    def outline(self, x, y, w, h, colour, dashed=False, t=2, dash=(14, 8)):
+        """A box's edge t pixels thick, solid or in dashes dash[1] long every dash[0] pixels."""
         if not dashed:
             for args in ((x, y, w, t), (x, y + h - t, w, t), (x, y, t, h), (x + w - t, y, t, h)):
                 self.rect(*args, colour)
             return
-        self.hline(x, y, w, colour, t, True)
-        self.hline(x, y + h - t, w, colour, t, True)
-        for yy in range(y, y + h, 14):
-            self.rect(x, yy, t, min(8, y + h - yy), colour)
-            self.rect(x + w - t, yy, t, min(8, y + h - yy), colour)
+        every, long = dash
+        self.hline(x, y, w, colour, t, True, dash)
+        self.hline(x, y + h - t, w, colour, t, True, dash)
+        for yy in range(y, y + h, every):
+            self.rect(x, yy, t, min(long, y + h - yy), colour)
+            self.rect(x + w - t, yy, t, min(long, y + h - yy), colour)
 
-    def hline(self, x, y, w, colour, t=2, dashed=False):
+    def hline(self, x, y, w, colour, t=2, dashed=False, dash=(14, 8)):
         if not dashed:
             self.rect(x, y, w, t, colour)
             return
-        for xx in range(x, x + w, 14):
-            self.rect(xx, y, min(8, x + w - xx), t, colour)
+        every, long = dash
+        for xx in range(x, x + w, every):
+            self.rect(xx, y, min(long, x + w - xx), t, colour)
 
-    def text(self, x, y, s, colour, scale=SMALL, bold=False):
-        """Draw s from x, y at scale; returns its width in pixels."""
-        for dx in ((0, 1) if bold else (0,)):
+    def text(self, x, y, s, colour, scale=SMALL, bold=False, heavy=1):
+        """Draw s from x, y at scale, pixels a font dot; bold drawn again heavy pixels to the right. Returns its width
+        in pixels."""
+        for dx in (range(heavy + 1) if bold else (0,)):
             for i, ch in enumerate(s):
                 gx = x + dx + i * font.WIDTH * scale
                 for r, bits in enumerate(font.glyph(ch)):
@@ -137,26 +143,30 @@ class Canvas:
 
 
 def char(scale):
-    return font.WIDTH * scale, font.HEIGHT * scale
+    """A character's width and height in pixels, at scale in points a font dot."""
+    return font.WIDTH * scale * DENSITY, font.HEIGHT * scale * DENSITY
 
 
 def layout(sections):
-    """What draw draws, as calls on a canvas with their places, and the height they need."""
-    ops, y = [], MARGIN
-    inner = WIDTH - 2 * MARGIN
+    """What draw draws, as calls on a canvas with their places in pixels, every size DENSITY times its points, and the
+    height they need."""
+    d = DENSITY
+    ops, y = [], MARGIN * d
+    left, inner = MARGIN * d, (WIDTH - 2 * MARGIN) * d
+    pad, number, tag = PAD * d, NUMBER * d, TAG * d
     cw, ch = char(SMALL)
     lw, lh = char(LARGE)
-    line = ch + 4
+    line = ch + 4 * d
     for k, s in enumerate(sections):
         if k:
-            y += 18
-            ops.append(("hline", MARGIN, y, inner, "rule", 2))
-            y += 20
+            y += 18 * d
+            ops.append(("hline", left, y, inner, "rule", 2 * d))
+            y += 20 * d
         for part in hyphens(s["heading"], inner // lw):
-            ops.append(("text", MARGIN, y, part, "text", LARGE, True))
-            y += lh + 6
-        y += 6
-        x = MARGIN
+            ops.append(("text", left, y, part, "text", LARGE, True))
+            y += lh + 6 * d
+        y += 6 * d
+        x = left
         for i, (words, colour) in enumerate(s["counts"]):
             if i:
                 ops.append(("text", x, y, " · ", "muted", SMALL, False))
@@ -166,23 +176,23 @@ def layout(sections):
         if s["counts"]:
             y += line
         for part in wrap(s["line"], inner // cw):
-            ops.append(("text", MARGIN, y, part, "muted", SMALL, False))
+            ops.append(("text", left, y, part, "muted", SMALL, False))
             y += line
-        y += 14
-        name_w = (inner - PAD - NUMBER - TAG - PAD) // cw
+        y += 14 * d
+        name_w = (inner - pad - number - tag - pad) // cw
         for r in s["rows"]:
-            top, x1 = y, MARGIN + PAD + NUMBER
-            body, ty = [], top + PAD
+            top, x1 = y, left + pad + number
+            body, ty = [], top + pad
             names = hyphens(r["name"], name_w)
             for part in names:
                 body.append(("text", x1, ty, part, "muted" if r.get("struck") else "text", SMALL, not r.get("struck")))
                 if r.get("struck"):
-                    body.append(("hline", x1, ty + ch // 2, len(part) * cw, r.get("colour") or "dropped", 2))
+                    body.append(("hline", x1, ty + ch // 2, len(part) * cw, r.get("colour") or "dropped", 2 * d))
                 ty += line
             if r.get("old"):
                 old = cut(r["old"], INTENT)
                 body.append(("text", x1, ty, old, "amended", SMALL, False))
-                body.append(("hline", x1, ty + ch // 2, len(old) * cw, "amended", 2))
+                body.append(("hline", x1, ty + ch // 2, len(old) * cw, "amended", 2 * d))
                 ty += line
             for part in (wrap(r["intent"], INTENT, 2) if r.get("intent") else []):
                 body.append(("text", x1, ty, part, "text" if r.get("old") else "muted", SMALL, False))
@@ -190,27 +200,29 @@ def layout(sections):
             for part in (wrap(r["under"], INTENT, 2) if r.get("under") else []):
                 body.append(("text", x1, ty, part, r.get("colour") or "dropped", SMALL, False))
                 ty += line
-            h = ty - top + PAD - 4
-            ops.append(("rect", MARGIN, top, inner, h, "row"))
+            h = ty - top + pad - 4 * d
+            ops.append(("rect", left, top, inner, h, "row"))
             if r.get("outline"):
-                ops.append(("outline", MARGIN, top, inner, h, r.get("colour") or "rule", r["outline"] == "dashed"))
-            ops.append(("text", MARGIN + PAD, top + PAD, str(r.get("n") or ""), "muted", SMALL, False))
+                ops.append(("outline", left, top, inner, h, r.get("colour") or "rule", r["outline"] == "dashed"))
+            ops.append(("text", left + pad, top + pad, str(r.get("n") or ""), "muted", SMALL, False))
             if r.get("tag"):
-                tag = r["tag"]
-                ops.append(("text", MARGIN + inner - PAD - len(tag) * cw, top + PAD, tag, r.get("colour") or "muted", SMALL, True))
+                tag_s = r["tag"]
+                ops.append(("text", left + inner - pad - len(tag_s) * cw, top + pad, tag_s, r.get("colour") or "muted", SMALL, True))
             ops += body
-            y = top + h + 10
-    return ops, y + MARGIN - 10
+            y = top + h + 10 * d
+    return ops, y + (MARGIN - 10) * d
 
 
 def draw(sections):
-    """The PNG of the sections, as bytes."""
+    """The PNG of the sections, as bytes: WIDTH * DENSITY pixels wide, its text, rules and dashes DENSITY times their
+    points."""
+    d = DENSITY
     ops, height = layout(sections)
-    c = Canvas(WIDTH, max(height, 2 * MARGIN))
+    c = Canvas(WIDTH * d, max(height, 2 * MARGIN * d))
     for op, *args in ops:
         if op == "text":
             x, y, s, colour, scale, bold = args
-            c.text(x, y, s, colour, scale, bold)
+            c.text(x, y, s, colour, scale * d, bold, d)
         elif op == "hline":
             x, y, w, colour, t = args
             c.hline(x, y, w, colour, t)
@@ -218,5 +230,5 @@ def draw(sections):
             c.rect(*args)
         elif op == "outline":
             x, y, w, h, colour, dashed = args
-            c.outline(x, y, w, h, colour, dashed)
+            c.outline(x, y, w, h, colour, dashed, 2 * d, (14 * d, 8 * d))
     return c.png()

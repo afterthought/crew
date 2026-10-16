@@ -228,19 +228,19 @@ Any agent that puts one of the planner's proposals before the user, the planner,
 - **THEN** it is refused, saying `--open` needs a proposal's number
 
 ### Requirement: A proposal's card is drawn from the plan and the proposal
-`crew plan card <n> [--label L]` SHALL read only the flywheel's branch and print, as JSON, every part of proposal n's card: its title with the counts, its summary, its background, its questions and its artifacts. It SHALL write the card's picture, a PNG 780 pixels wide, on the host it runs on, and print where. It SHALL draw the picture and the text itself, with no browser, no other program and no agent, and SHALL write nothing to the branch or the run record.
+When crew raises or changes a proposal's card it SHALL read only the flywheel's branch and build every part of the card: its title "Plan change to <bolt or queue>: <counts>", no question and no proposal number; its summary, a sentence of what the planner proposes and why from the case; a paragraph per new unit and per dropped unit as inline Markdown on its face, the intent and a "Direction" line from the proposal's `Do` line and case, a dropped unit's with its why; its background; its boxes and its artifacts; and SHALL draw the card's picture, a PNG 1560 pixels wide at twice a phone's pixel density so it is sharp on a Retina screen, itself, with no browser, no other program and no agent.
 
 #### Scenario: A proposal that drops, amends and adds
-- **WHEN** `crew plan card N` runs for a proposal that drops one unit of bolt `y`, amends one and adds two
-- **THEN** it prints a title ending "1 dropped, 1 amended, 2 new?", a summary naming the unit count before and after and `y`'s goal, and writes a PNG 780 pixels wide
+- **WHEN** crew raises the card for a proposal that drops one unit of bolt `y`, amends one and adds two
+- **THEN** its title is "Plan change to y: 1 dropped, 1 amended, 2 new", its summary says what the planner proposes in a sentence, its face holds a paragraph for each new unit and the dropped one, and its picture is a PNG 1560 pixels wide
 
 #### Scenario: Run on a host with no browser
-- **WHEN** `crew plan card N` runs on a host where no browser and no image tool is installed
-- **THEN** it writes the picture all the same
+- **WHEN** crew raises a proposal's card on a host where no browser and no image tool is installed
+- **THEN** it draws the picture all the same
 
 #### Scenario: A closed proposal
-- **WHEN** `crew plan card N` runs for a proposal that is approved or dropped
-- **THEN** it is refused, saying the proposal is closed
+- **WHEN** a proposal is approved or dropped
+- **THEN** its card is closed or withdrawn, and crew draws no card for it again
 
 ### Requirement: The picture shows each bolt once approved
 The picture SHALL show, for each bolt the proposal touches, its units in the order they would hold once approved, numbered; each dropped unit struck where it stood, with its reason; each amended unit's intent as it stands struck above its new intent; each unit new to the bolt marked new; each unit moved out struck with the bolt it goes to; and each reordered unit marked moved. A unit added to or moved to the queue SHALL be shown under its kit's queue.
@@ -257,7 +257,7 @@ The picture SHALL show, for each bolt the proposal touches, its units in the ord
 The card's text artifact SHALL be the change in monospace lines of at most forty characters: the bolt and its unit count before and after, then one block per change headed by its kind (`DROP`, `AMEND`, `ADD`, `MOVE`, `ORDER`, `SPLIT`, `AFTER`, `NEW BOLT`, `ORDER BOLT`, `DROP BOLT`) with the unit or bolt and what it says, then the order once approved with each unit marked new (`+`), amended (`~`) or moved (`↕`). A name longer than a line SHALL wrap at its hyphens.
 
 #### Scenario: The text of a proposal
-- **WHEN** `crew plan card N` prints the card for a proposal that drops `a` with a reason and adds `c`
+- **WHEN** crew raises the card for a proposal that drops `a` with a reason and adds `c`
 - **THEN** its text artifact holds a `DROP` block naming `a` with the reason, an `ADD` block naming `c` with its intent, and `ONCE APPROVED` listing `c` with `+`, and no line is longer than forty characters
 
 ### Requirement: The card's questions are the approval and the new units

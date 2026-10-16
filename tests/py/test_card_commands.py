@@ -2,7 +2,10 @@
 decisions in plugin/lib/cards.py, each on plain facts. The card a key names in the run record; what crew sets on a
 card and refuses the agent setting; a git remote as Pending You files by it; the area match_area chose, and the kit's
 area to make; a tool's reply read as Pending You's CLI reads it, its refusal in Pending You's words, and the bridge's
-own error; and what `crew card read` prints. The bridge itself, and every command's wiring, are t-card-commands'."""
+own error; and what `crew card read` prints. Then the act that sends crew's own cards, plan.row_card_post,
+row_card_change and row_card_close, on a stand-in for the bridge, the run record, a tell and an upload (record 0031):
+what each sends and records, the line that adopts a card and whom it is told to, and each failure said and recorded.
+The bridge itself, and every command's wiring, are t-cards'."""
 import json
 
 import pytest
@@ -218,3 +221,208 @@ def test_an_answer_is_shown_only_on_the_agents_turn():
 
 def test_what_the_reply_leaves_out_is_left_out():
     assert cards.answer_lines("land/b1/abc1234", "req_1", {}) == ["card land/b1/abc1234: req_1"]
+
+
+# ------------------------------------------------------------- the act that sends crew's own cards (record 0031)
+# plan.row_card_post, row_card_change and row_card_close on a stand-in for what they reach: the bridge answers as
+# Pending You would, and every emit, tell and upload is kept to be read. What each sends and records, and that a
+# refusal, a host not signed in, an unread reply and a card not found are said and recorded and refuse nothing.
+import plan  # noqa: E402
+
+WHERE = ("/kit/main", "github.com/WilldanGroup/switchboard-kit")
+FACTS = dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches={"v1": 3}, head="abc1234", at=None, moved=0, pr=None)
+
+
+class Py:
+    """A stand-in for one session with Pending You: each tool answered from answers, a (got, words) pair, a Refusal
+    raised when it is one; a session that can't open raises its refusal on entry."""
+
+    def __init__(self, acts, answers, opening=None):
+        self.acts, self.answers, self.opening = acts, answers, opening
+
+    def __enter__(self):
+        if self.opening:
+            raise crew.Refusal(self.opening)
+        return self
+
+    def __exit__(self, *exc):
+        pass
+
+    def answer(self, tool, args):
+        self.acts.calls.append((tool, args))
+        got = self.answers.get(tool, ({"ok": True}, None))
+        if isinstance(got, crew.Refusal):
+            raise got
+        return got
+
+    def call(self, tool, args):
+        got, words = self.answer(tool, args)
+        if words is not None:
+            raise crew.Refusal(f"Pending You refused {tool}: {words}")
+        return got
+
+
+class Acts:
+    def __init__(self, answers=None, entries=(), caller="swb-1-conductor", opening=None, put=None):
+        self.answers, self.held, self.who, self.opening, self.put_said = dict(answers or {}), list(entries), caller, opening, put
+        self.calls, self.emitted, self.told, self.puts, self.names = [], [], [], [], []
+
+    def bridge(self, name, later, held=None):
+        self.names.append(name)
+        return Py(self, self.answers, self.opening)
+
+    def emit(self, label, act, on, **fields):
+        self.emitted.append(dict(fields, Act=act, On=on, label=label))
+
+    def entries(self, label):
+        return self.held
+
+    def tell(self, name, text):
+        self.told.append((name, text))
+        return True
+
+    def put(self, url, data, kind):
+        self.puts.append((url, len(data), kind))
+        return self.put_said
+
+    def host(self):
+        return "chuck-herdr-alpha"
+
+    def caller(self):
+        return self.who
+
+
+MATCHED = {"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}
+POSTED = {"requestId": "req_c1", "url": "https://www.pendingyou.com/app/r/req_c1", "version": 1}
+
+
+def act_post(acts):
+    return plan.row_card_post(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, WHERE, acts)
+
+
+def test_a_card_is_posted_in_its_owners_name_under_its_rows_key_filed_in_its_kit_and_recorded_on_its_row(capsys):
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)})
+    assert act_post(acts) == "req_c1"
+    assert acts.names == ["swb-1-conductor"]
+    assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
+    sent = acts.calls[1][1]
+    assert (sent["idempotencyKey"], sent["areaId"], sent["session"]) == (
+        "land/b1", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
+    assert sent["approve"]["risk"] == "high"
+    assert acts.emitted == [dict(Act="card.post", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", label="wldn")]
+    assert capsys.readouterr().out == ("card land/b1: req_c1 https://www.pendingyou.com/app/r/req_c1\n"
+                                       "call get_request (requestId req_c1, name swb-1-conductor)\n")
+    assert acts.told == []
+
+
+def test_a_card_raised_outside_its_owners_turn_is_told_to_its_owner_with_the_line_that_adopts_it(capsys):
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="chuck@chuck-herdr-alpha")
+    act_post(acts)
+    assert acts.told == [("swb-1-conductor", "Your card land/b1 is up for the user: call get_request (requestId req_c1, "
+                                             "name swb-1-conductor), to hear their answer.")]
+    assert "told swb-1-conductor: call get_request (requestId req_c1, name swb-1-conductor)" in capsys.readouterr().out
+
+
+def test_the_first_card_in_a_kit_makes_its_area_under_the_kits_key_in_the_partitions_group():
+    acts = Acts({"match_area": ({"decision": "create", "proposedTint": "sage"}, None),
+                 "create_area": ({"areaId": "prj_new"}, None), "post_request": (POSTED, None)})
+    act_post(acts)
+    made = acts.calls[1]
+    assert made[0] == "create_area" and (made[1]["idempotencyKey"], made[1]["group"]) == ("create-area:WilldanGroup/switchboard-kit", "wldn")
+    assert acts.calls[2][1]["areaId"] == "prj_new"
+
+
+def test_pending_you_refusing_the_card_is_said_in_its_words_recorded_and_refuses_nothing_of_the_event(capsys):
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (None, "Approve requests give their risk in approve.risk.")})
+    assert act_post(acts) is None
+    assert acts.emitted == [dict(Act="card.post", On=["bolt/b1"], by="swb-1-conductor", Key="land/b1", label="wldn",
+                                 refused="Pending You refused post_request: Approve requests give their risk in approve.risk.")]
+    assert "card land/b1 not posted: Pending You refused post_request: Approve requests give their risk in approve.risk." in capsys.readouterr().err
+
+
+def test_a_host_not_signed_in_is_said_and_recorded_and_the_event_stands(capsys):
+    said = cards.bridge_said({"code": cards.SIGNED_OUT, "message": "Claude Code on this computer isn’t signed in to Pending You. Run: npx x"})
+    acts = Acts(opening=f"{said}. {plan.CARD_LATER}")
+    assert act_post(acts) is None
+    assert "this computer isn’t signed in to Pending You" in acts.emitted[0]["refused"] and acts.calls == []
+    assert "not posted: this host can't ask through Pending You" in capsys.readouterr().err
+
+
+def test_a_reply_naming_no_card_is_recorded_as_unread_never_taken_as_empty():
+    acts = Acts({"match_area": (MATCHED, None), "post_request": ({"status": "pending"}, None)})
+    assert act_post(acts) is None
+    assert acts.emitted[0]["refused"] == "Pending You's answer to post_request names no card: crew can't tell what it did"
+
+
+def test_a_cards_picture_is_put_to_the_upload_url_its_post_returned_with_its_content_type(capsys):
+    case = "One more unit."
+    facts = dict(n=4, state="open", case=case, before=plan.Plan(PLAN), after=plan.Plan(PLAN_AFTER),
+                 argvs=[plan.do_args("wldn", 'unit add g-one "One unit." --repo switchboard-kit')], waiting=[])
+    up = dict(POSTED, uploads=[{"title": "The change, once approved", "uploadUrl": "https://up.example/p", "expiresAt": "x"}])
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (up, None)}, caller="wldn-planner")
+    plan.row_card_post(None, "wldn", "wldn-planner", cards.proposal_card, facts, WHERE, acts)
+    assert acts.puts and acts.puts[0][0] == "https://up.example/p" and acts.puts[0][2] == "image/png" and acts.puts[0][1] > 1000
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-planner")
+    plan.row_card_post(None, "wldn", "wldn-planner", cards.proposal_card, facts, WHERE, acts)
+    assert "its picture did not reach the card: Pending You gave no upload URL for it" in capsys.readouterr().err
+
+
+HELD = [dict(Act="card.post", Key="land/b1", By="swb-1-conductor", Card="req_c1")]
+
+
+def test_a_change_goes_to_the_owners_card_at_the_version_pending_you_reports_with_its_note(capsys):
+    acts = Acts({"get_request": ({"status": "pending", "version": 3}, None), "update_request": ({"version": 4}, None)}, entries=HELD)
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "Head is now abc1234", WHERE, acts) == "req_c1"
+    tool, sent = acts.calls[1]
+    assert tool == "update_request" and (sent["requestId"], sent["name"], sent["expectedVersion"], sent["changeNote"]) == (
+        "req_c1", "swb-1-conductor", 3, "Head is now abc1234")
+    assert "kind" not in sent and "idempotencyKey" not in sent
+    assert acts.emitted == [dict(Act="card.update", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", label="wldn")]
+    assert capsys.readouterr().out == "card land/b1: req_c1 changed, now version 4\n"
+
+
+def test_a_change_that_finds_its_card_not_found_posts_it_again_saying_the_older_copy_is_dead():
+    acts = Acts({"get_request": (None, "Not found: request:req_c1."), "match_area": (MATCHED, None),
+                 "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=HELD)
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "x note", WHERE, acts) == "req_c2"
+    assert [(e["Act"], e.get("State"), e.get("Card")) for e in acts.emitted] == [("card.close", "lost", "req_c1"), ("card.post", None, "req_c2")]
+    assert acts.calls[-1][1]["summary"].startswith(cards.DEAD)
+
+
+def test_a_change_with_no_card_held_posts_it():
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)})
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "x note", WHERE, acts) == "req_c1"
+    assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
+
+
+def test_a_close_acks_an_answered_card_with_its_outcome_and_withdraws_a_waiting_one_with_its_reason(capsys):
+    acts = Acts({"get_request": ({"status": "answered", "version": 3}, None)}, entries=HELD)
+    assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome="Landed as #24 at 14:02", acts=acts) == "req_c1"
+    assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "swb-1-conductor", "expectedVersion": 3, "outcome": "Landed as #24 at 14:02"})
+    assert acts.emitted[0] == dict(Act="card.close", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", State="closed",
+                                   Outcome="Landed as #24 at 14:02", label="wldn")
+    acts = Acts({"get_request": ({"status": "pending", "version": 1}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="Held for a fix: the log is empty", acts=acts)
+    assert acts.calls[1] == ("cancel_request", {"requestId": "req_c1", "name": "swb-1-conductor", "reason": "Held for a fix: the log is empty"})
+    assert acts.emitted[0]["State"] == "withdrawn"
+    assert capsys.readouterr().out.splitlines()[-1] == "card land/b1: req_c1 withdrawn"
+
+
+def test_a_close_pending_you_does_not_find_is_recorded_lost_and_a_refused_one_recorded_refused():
+    acts = Acts({"get_request": (None, "Not found: request:req_c1.")}, entries=HELD)
+    assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome="x", acts=acts) is None
+    assert [(e["Act"], e["State"]) for e in acts.emitted] == [("card.close", "lost")]
+    acts = Acts({"get_request": ({"status": "pending", "version": 1}, None), "cancel_request": (None, "Too many requests.")}, entries=HELD)
+    assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="x", acts=acts) is None
+    assert acts.emitted[0]["refused"] == "Pending You refused the close: Too many requests."
+
+
+def test_a_close_with_no_card_held_closes_nothing_and_says_so(capsys):
+    acts = Acts()
+    assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome="x", acts=acts) is None
+    assert acts.calls == [] and acts.emitted == []
+    assert capsys.readouterr().out == "card land/b1: swb-1-conductor holds none open on this host, so none is closed\n"
+
+
+PLAN = "%rec: Bolt\n%key: Bolt\n\n%rec: Unit\n%key: Unit\n"
+PLAN_AFTER = PLAN + "\nUnit: g-one\nRepo: switchboard-kit\nIntent: One unit.\n"
