@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""crew's card hook, in two halves. Before a crew agent posts a Pending You card, changes one or makes an area, crew
-refuses a card or an area under a key that is not the agent's own, and a card in another form than its key's. After it
-posts, updates, withdraws or closes a card, the card is an entry in its partition's run record, so the rail knows which
-of its rows, and which decision records, have a card open, and whose.
+"""crew's card hook, in two halves. Before a crew agent calls any Pending You tool, crew refuses the call in another
+agent's name; before it posts a card, changes one or makes an area, a card or an area under a key that is not the
+agent's own, and a card in another form than its key's. After it posts, updates, withdraws or closes a card, the card is
+an entry in its partition's run record, so the rail knows which of its rows, and which decision records, have a card
+open, and whose.
 
-The PreToolUse half is the hook run as `cards --before`, before Pending You's post_request, create_area or
-update_request in a session crew started. Before a card is posted or an area made, it asks plan.card_refusal whether
+The PreToolUse half is the hook run as `cards --before`, before any Pending You tool in a session crew started. First
+it refuses a call that names its caller as anyone but the agent (name_refusal, briefs.17): Pending You labels a session
+by the name its latest call gives, so a call in another agent's name reroutes that agent's answers to this session. A
+call that names no caller passes this check. Then, before Pending You's post_request, create_area or update_request,
+and apart from the name: before a card is posted or an area made, it asks plan.card_refusal whether
 the agent may use the call's idempotencyKey: a card's must be a rail row's key the agent owns, which only the planner
 and the conductors have, or, for the design agent, a decision record's, record/<kit>/<number>/<commit> for a kit of
 its partition (briefs.15); an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key
@@ -44,8 +48,8 @@ sessions, batch/<n>-<k>'s one per unit on each unit's team's host, are ended by 
 since reaching those hosts takes longer than a hook may. A record card is given no session, so its close ends none.
 
 A session crew started has CREW_AGENT and CREW_LABEL, or, when herdr resumed it, the record session-start keeps of
-it. A session with a CREW_AGENT but no CREW_LABEL is a crew agent whose partition crew can't tell: its card or area is
-refused, naming the missing CREW_LABEL, and nothing it does is recorded. Any other session, and a tool of another
+it. A session with a CREW_AGENT but no CREW_LABEL is a crew agent whose partition crew can't tell: its name is checked,
+its card or area is refused, naming the missing CREW_LABEL, and nothing it does is recorded. Any other session, and a tool of another
 server, is neither checked nor recorded; a result that is an error writes nothing. The PostToolUse half never fails a
 tool call, whatever its input."""
 import datetime
@@ -56,8 +60,10 @@ import re
 import sys
 
 LIB = pathlib.Path(__file__).resolve().parent.parent / "lib"
-# The calls checked before they run: a card posted or an area made, for its key, and a card posted or changed, for
-# its form.
+# The tools whose `name` names an area, not the caller (Pending You 0.35.1); every other tool's `name` is the caller's.
+AREA_NAMED = ("create_area", "rename_area", "suggest_area_name")
+# The calls checked before they run, after the caller's name: a card posted or an area made, for its key, and a card
+# posted or changed, for its form.
 KEYED = ("post_request", "create_area")
 FORMED = ("post_request", "update_request")
 ACTS = {"post_request": "card.post", "update_request": "card.update", "cancel_request": "card.close", "ack_answer": "card.close"}
@@ -157,6 +163,36 @@ def identity(sid):
         return None, None
     saved = dict(line.split("=", 1) for line in record.read_text().splitlines() if "=" in line)
     return saved.get("CREW_AGENT"), saved.get("CREW_LABEL")
+
+
+def callers(tool, given):
+    """The names a Pending You call gives for its caller, [(field, value)] in the call's order: `name` on every tool but
+    those whose `name` is an area's (AREA_NAMED), whoami's previousName, which moves that name's cards and wake to this
+    session, match_area's task and post_request's session.label. A field the call leaves out is not given."""
+    named = [("name", given["name"])] if "name" in given and tool not in AREA_NAMED else []
+    for field, on in (("previousName", "whoami"), ("task", "match_area")):
+        if tool == on and field in given:
+            named.append((field, given[field]))
+    session = given.get("session")
+    if isinstance(session, dict) and "label" in session:
+        named.append(("session.label", session["label"]))
+    return named
+
+
+def name_refusal(agent, tool, given):
+    """Before any Pending You call by a crew agent: None when every name the call gives for its caller is the agent's
+    own, or it gives none, else the words that refuse it (briefs.17). Pending You labels a session by the name its
+    latest call gives, so a call in another agent's name reroutes that agent's answers to this session. A call that
+    gives no name claims none, so it passes: the session keeps the name its last named call gave, which this check
+    holds to the agent's own. A name that is not a string, or is empty, is not the agent's."""
+    wrong = [(f, v) for f, v in callers(tool, given) if v != agent]
+    if not wrong:
+        return None
+    gives = " and ".join(f"{f} {json.dumps(v)}" for f, v in wrong)
+    moved = ", or with no previousName" if any(f == "previousName" for f, _ in wrong) else ""
+    return (f"crew refuses this {tool}: it gives {gives}, and this session is {agent}'s. Pending You labels a session by "
+            f"the name its latest call gives, so a call in another agent's name reroutes that agent's answers to this "
+            f"session. Call it again in your own name, {agent}{moved}.")
 
 
 def keyed(key):
@@ -434,18 +470,28 @@ def formed(key):
 
 
 def refusal(hook):
-    """Why crew refuses a Pending You card or area before it is posted, changed or made, or None to let the call
-    through: first a key that is not the agent's own, then a row's card in another form than its row's."""
+    """Why crew refuses a Pending You call before it runs, or None to let it through: first a call in a name that is not
+    the agent's own, on any tool; then a card or an area under a key that is not the agent's own, then a row's card in
+    another form than its row's."""
     name = hook.get("tool_name")
     m = re.fullmatch(r"mcp__(.+)__([a-z_]+)", name) if isinstance(name, str) else None
     if not m or not is_pending_you(m.group(1)):
         return None
     tool = m.group(2)
+    agent, _ = identity(hook.get("session_id"))
+    if agent:
+        given = hook.get("tool_input")
+        if not isinstance(given, dict):
+            raise ValueError("its input is not an object")
+        why = name_refusal(agent, tool, given)
+        if why:
+            return why
     return (key_refusal(hook, tool) if tool in KEYED else None) or (form_check(hook, tool) if tool in FORMED else None)
 
 
 def check():
-    """The PreToolUse half: deny the call with why crew refuses its card or area, or print nothing to let it through."""
+    """The PreToolUse half: deny the call with why crew refuses its name, card or area, or print nothing to let it
+    through."""
     try:
         hook = json.load(sys.stdin)
         if not isinstance(hook, dict):

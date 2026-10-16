@@ -3,7 +3,8 @@
 
 A task for each of the logic and contract tiers (tests/py and tests/contract, record 0022), run by pytest, its
 inputs plugin/lib, plugin/roles (whose definitions name each stage's effort), the tier's folder and crew's toolchain files,
-and for the logic tier the mod it reads keys from (code.8); a task, mod, for crew's mod's own cases, run by tests/mod
+and for the logic tier the mod it reads keys from (code.8), the card hook it loads and the hooks file whose matchers it
+reads; a task, mod, for crew's mod's own cases, run by tests/mod
 under Claude Code's test kit, its inputs the mod, the files that load it, its cases and the runner; and one task per end-to-end test, tests/t-*.sh, written
 into tests/moon.yml, the live tests (t-*-live.sh) left out. Each end-to-end task runs its one test through tests/run,
 tagged check-full, and its inputs are everything the test's outcome depends on in crew's tree
@@ -37,9 +38,9 @@ CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plug
 TOOLCHAIN = ["/devenv.nix", "/devenv.lock", "/.prototools", "/.moon/toolchains.yml", "/tests/pyproject.toml", "/tests/uv.lock"]
 COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*"] + TOOLCHAIN
 # The two pytest tiers: name, folder, and what else of crew's its cases read: the logic tier reads crew's mod for the
-# keys it takes from the agents' views (code.8). Each is one task over its whole folder (tests.5, tests.11), in a
+# keys it takes from the agents' views (code.8), and loads the card hook and reads the matcher hooks.json runs it by. Each is one task over its whole folder (tests.5, tests.11), in a
 # checkout that has the folder.
-TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js"]))
+TIERS = [(n, f, x) for n, f, x in (("contract", "tests/contract", []), ("logic", "tests/py", ["/plugin/hooks/status.js", "/plugin/hooks/cards", "/plugin/hooks/hooks.json"]))
          if os.path.isdir(os.path.join(ROOT, f))]
 TIER_INPUTS = ["/plugin/lib/**/*", "/plugin/roles/**/*"] + TOOLCHAIN
 # The tiers' environment, tests/.venv, synced from tests/uv.lock by the uv moon's toolchain gives, before every run of a
