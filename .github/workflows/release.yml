@@ -55,7 +55,9 @@ jobs:
           fi
 
   # Tags the pushed commit and publishes a release with git-cliff's notes for the range. Nothing is committed back to
-  # main, and no tag is moved.
+  # main, and no tag is moved. GitHub takes a release body of at most 125,000 characters: notes longer than that (the
+  # first release's, over all of crew's history) are cut at the last whole line under 120,000 bytes, end with a line
+  # saying how many more lines there are, and go whole as notes.md attached to the release.
   release:
     if: needs.version.outputs.tag != ''
     needs: [version, conventional]
@@ -70,7 +72,16 @@ jobs:
       - run: |
           nixpkgs="github:NixOS/nixpkgs/$(jq -r '.nodes."nixpkgs-src".locked.rev' devenv.lock)"
           nix shell "$nixpkgs#git-cliff" -c git-cliff --unreleased --tag "$TAG" --strip all > notes.md
-          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+          attach=()
+          if [ "$(wc -c < notes.md)" -le 120000 ]; then
+            cp notes.md body.md
+          else
+            head -c 120000 notes.md | sed '$d' > body.md
+            more=$(( $(wc -l < notes.md) - $(wc -l < body.md) ))
+            printf '\n…and %s more lines: the whole notes are notes.md, attached to this release.\n' "$more" >> body.md
+            attach=(notes.md)
+          fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file body.md "${attach[@]}"
         env:
           TAG: ${{ needs.version.outputs.tag }}
           GH_TOKEN: ${{ github.token }}
