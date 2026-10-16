@@ -3,7 +3,7 @@
 # crew sites gives each dev server's URL as it opens from where it is asked; crew board draws the four lanes, an
 # environment's deploy among the Operation lane's, and the attention line from one read, writes nothing and ends no
 # card session; the rail tab's refresh, in one fetch and one read of each host's kits, prints the rail, sweeps a dead
-# card session and writes the board's frame, which the board tab draws; crew page writes the page whole, with the
+# card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards; crew page writes the page whole, with the
 # deploys, and nothing when the branch can't be read; every view names a host that does not answer and shows the
 # rest; and a plan a hand edit broke is refused, named by its commit. What each lane,
 # line, URL and node says are logic cases (tests/py/test_board.py, test_page.py, test_rail.py), and what the kit
@@ -149,9 +149,11 @@ eq "$(head -n "$(wc -l <<<"$rail")" <<<"$views" | tail -n +2 | mask)" "$(tail -n
 eq "$(jq -S 'del(.read_at)' "$frame")" "$(crew board --label wldn --json | jq -S 'del(.read_at)')"
 agents=$(home_of mac-studio)/.cache/crew/board/wldn.agents.json
 eq "$(jq -r '.read_at' "$agents") $(jq -r '.views | has("swb-1-conductor") and has("wldn-planner")' "$agents")" "$(jq -r '.read_at' "$frame") true"
+has "$(jq -r '.cards["swb-1-conductor"][0] | map(.[0]) | join("")' "$agents")" "  your card  verify/c/$stamp  req_ver-1  open "
+has "$rail" "verify/c/$stamp (wldn), asked by swb-1-conductor on $box"$'\n'"    left:   a rail read on $box closes it, under that host's sign-in"
 expect_ok crew _board wldn --once
 eq "$(tail -n +2 <<<"$out")" "$(crew board --label wldn | tail -n +2)"
-ok "the rail tab's refresh fetches once and reads each host's kits once, prints the rail, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view beside it from the same read"
+ok "the rail tab's refresh fetches once and reads each host's kits once, prints the rail, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view and open cards beside it from the same read"
 
 # crew page: the page written whole under the partition's state folder, its path and header printed, nothing
 # appended; a node's history on it is what crew trace prints.
