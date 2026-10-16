@@ -114,22 +114,23 @@ class TestBatchFacts:
 
     def test_the_summary_delivered_gives_every_unit_in_the_batchs_order_with_its_team_commit_subject_and_paragraph(self):
         entries = [reviewed(2, [("w1", "swb-2", "ddd1")], 0), reviewed(3, UNITS, 10)]
-        f = plan.batch_facts(3, entries, SUMMARY, {"x1": "the tenant's zone is its own"}, OWNER)
+        f = plan.batch_facts(3, entries, SUMMARY, {"x1": "the tenant's zone is its own"})
         assert (f["n"], f["previous"], f["link"]) == (3, 2, None)
         assert [(u["unit"], u["team"], u["commit"], u["subject"]) for u in f["units"]] == [
             ("x1", "swb-1", "aaa1", "the tenant's zone is its own"), ("x10", "swb-1", "bbb1", "x10"), ("z1", "atl-1", "ccc1", "z1")]
         assert f["units"][1]["paragraph"] == "The reviewer's summary has no section for x10."
-        assert plan.batch_facts(1, [reviewed(1, UNITS)], SUMMARY, {}, OWNER)["previous"] is None
+        assert plan.batch_facts(1, [reviewed(1, UNITS)], SUMMARY, {})["previous"] is None
 
     def test_no_card_is_raised_before_the_summary_is_there_or_for_a_batch_the_record_does_not_hold(self):
-        assert plan.batch_facts(3, [reviewed(3, UNITS)], None, {}, OWNER) is None
-        assert plan.batch_facts(4, [reviewed(3, UNITS)], SUMMARY, {}, OWNER) is None
-        assert plan.batch_facts(3, [dict(reviewed(3, UNITS), Refused="x")], SUMMARY, {}, OWNER) is None
+        assert plan.batch_facts(3, [reviewed(3, UNITS)], None, {}) is None
+        assert plan.batch_facts(4, [reviewed(3, UNITS)], SUMMARY, {}) is None
+        assert plan.batch_facts(3, [dict(reviewed(3, UNITS), Refused="x")], SUMMARY, {}) is None
 
-    def test_a_card_open_in_the_planners_name_or_closed_is_not_raised_again(self):
+    def test_a_closed_card_ends_the_batchs_point_and_one_held_open_does_not_since_it_may_be_lost(self):
         posted = {"Act": "card.post", "Key": "batch/3", "By": OWNER, "Card": "req_b3", "On": ["batch/3"]}
-        assert plan.batch_facts(3, [reviewed(3, UNITS), posted], SUMMARY, {}, OWNER) is None
+        assert plan.batch_facts(3, [reviewed(3, UNITS), posted], SUMMARY, {})["n"] == 3
         closed = {"Act": "card.close", "Key": "batch/3", "By": OWNER, "Card": "req_b3", "On": ["batch/3"]}
-        assert plan.batch_facts(3, [reviewed(3, UNITS), posted, closed], SUMMARY, {}, OWNER) is None
-        refused = dict(posted, Refused="Pending You refused post_request: x", Card=None)
-        assert plan.batch_facts(3, [reviewed(3, UNITS), refused], SUMMARY, {}, OWNER)["n"] == 3
+        assert plan.batch_facts(3, [reviewed(3, UNITS), posted, closed], SUMMARY, {}) is None
+        refused = dict(closed, Refused="Pending You refused the close: x")
+        assert plan.batch_facts(3, [reviewed(3, UNITS), posted, refused], SUMMARY, {})["n"] == 3
+        assert plan.batch_facts(3, [reviewed(3, UNITS), posted, dict(closed, State="lost")], SUMMARY, {})["n"] == 3

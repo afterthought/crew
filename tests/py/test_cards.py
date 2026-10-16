@@ -467,6 +467,22 @@ class TestSessions:
         (tmp_path / "result.json").write_text(json.dumps({"decision": "approved", "annotationCount": "two"}))
         assert plan.card_result(tmp_path) == ("approved", None, None)
 
+    def test_the_sweeps_raise_of_a_batch_whose_card_is_lost_posts_it_again_saying_its_older_copy_is_dead(self, monkeypatch, tmp_path):
+        (tmp_path / "batch-wldn-3.md").write_text("## x1 (swb-1)\n\nx1 gives each tenant its own zone.\n")
+        monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        held = [{"Act": "review.batch", "Batch": "3", "Units": "x1:swb-1@aaa1", "On": ["batch/3"], "At": "2026-10-12T10:00:00Z"},
+                {"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
+        acts = ReadingActs({"get_request": (None, "Not found: request:req_b3."), "match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                            "post_request": ({"requestId": "req_b4", "version": 1}, None)}, held)
+        row = {"label": "wldn", "key": "batch/3", "group": "batches"}
+        assert plan.raise_batch(FLEET, row, acts) == "req_b4"
+        assert [(e["Act"], e.get("State"), e["Card"]) for e in acts.emitted] == [("card.close", "lost", "req_b3"), ("card.post", None, "req_b4")]
+        sent = next(a for t, a in acts.calls if t == "post_request")
+        assert sent["summary"].startswith("An older copy of this card was lost: dismiss it in the app.\n\n1 change to read")
+        assert acts.sessions == [("wldn", "batch/3")]
+        assert plan.raise_batch(FLEET, dict(row, key="batch/3-1"), acts) is None
+        assert plan.raise_batch(FLEET, dict(row, key="batch/4"), acts) is None
 
 class ReadingActs:
     """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends: a session's link
@@ -474,7 +490,7 @@ class ReadingActs:
 
     def __init__(self, answers=None, entries=(), refused=None):
         self.answers, self.held, self.refused = dict(answers or {}), list(entries), refused
-        self.sessions, self.ended, self.emitted = [], [], []
+        self.sessions, self.ended, self.emitted, self.calls = [], [], [], []
 
     def session(self, label, key, facts):
         self.sessions.append((label, key))
@@ -497,7 +513,14 @@ class ReadingActs:
                 pass
 
             def answer(self, tool, args):
+                acts.calls.append((tool, args))
                 return acts.answers.get(tool, ({"ok": True}, None))
+
+            def call(self, tool, args):
+                got, words = self.answer(tool, args)
+                if words is not None:
+                    raise crew.Refusal(f"Pending You refused {tool}: {words}")
+                return got
         return Py()
 
     def emit(self, label, act, on, **fields):

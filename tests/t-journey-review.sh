@@ -95,8 +95,11 @@ call get_request (requestId req_stub-1, name wldn-planner)
 batch summary: $summary"
 eq "$(entries $box review.batch | jq -r '[.Batch, (.On | join(" "))] | join(" ")')" "1 batch/1 unit/x1 unit/z1"
 eq "$(entries $box card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By] | join(" ")')" "batch/1 req_stub-1 batch/1 wldn-planner"
+CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
+eq "$out" "batch summary: $summary"
+eq "$(entries $box card.post | jq -r .Card)" "req_stub-1"
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops"
-ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name, and closes its tab"
+ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name once, and closes its tab"
 
 # v1 is in verify, its report newer than its last commit, and waits on nobody (teams.17).
 pv=$(place "$k" b1 v1); change "$pv" v1 2 2; commit_at 60 "$pv" "feat(v1): done"

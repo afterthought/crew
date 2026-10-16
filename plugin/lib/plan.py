@@ -6601,7 +6601,8 @@ def review_wait(fleet, a):
     """Wait, on the main level's host, for the summary of the batch the reviewer was last started for, written since it
     started: once it is, the batch is recorded (`review.batch`, its number and each unit at the commit its change was
     read at), its card raised with its reading session in the planner's name (raise_batch), and the file's path
-    returned. A batch already recorded is returned at once, its card raised if none was. Stopped with exit 3 when the
+    returned. A batch already recorded is returned at once, its card raised if the planner holds none on this host,
+    so a batch's card is never changed in place. Stopped with exit 3 when the
     timeout passes first, refused when the reviewer is gone with no summary written."""
     label = crew.partition_of(fleet, a.label)["label"]
     CONTEXT["label"] = label
@@ -6611,7 +6612,8 @@ def review_wait(fleet, a):
     s = starts[-1]
     n, f = int(s["Batch"]), batch_file(label, s["Batch"])
     if any(e.get("Act") == "review.batch" and e.get("Batch") == s["Batch"] for e in entries):
-        raise_batch(fleet, label, n)
+        if not cards.card_under(cards.host_entries(record, label, crew.this_host()), f"batch/{n}", f"{label}-planner"):
+            raise_batch(fleet, {"label": label, "key": f"batch/{n}"})
         return f
     begun, deadline = utc(s["At"]), time.monotonic() + a.timeout / 1000
     while True:
@@ -6622,7 +6624,7 @@ def review_wait(fleet, a):
         if written:
             record.emit(label, "review.batch", [f"batch/{n}"] + [f"unit/{u}" for u, *_ in units_of_batch(s)],
                         why=f"batch({n}): reviewed", Batch=n, Units=s.get("Units"))
-            raise_batch(fleet, label, n)
+            raise_batch(fleet, {"label": label, "key": f"batch/{n}"})
             return f
         if crew.agent_status(fleet, f"{label}-reviewer") is None:
             fail(f"{label}-reviewer is no longer running, and batch {n}'s summary {f} was not written")
@@ -6673,18 +6675,19 @@ def batch_subjects(plan):
     return out
 
 
-def batch_facts(n, entries, summary, subjects, owner):
+def batch_facts(n, entries, summary, subjects):
     """Batch n's card's facts, as cards.batch_card takes them (record 0031 §5), from the run record's entries on the main
     level's host, oldest first, and the reviewer's summary: n, the batch before it, and each unit in the batch's order
     with its team, the commit the batch read it at, what it is about (subjects, else its name in words) and the
     paragraph the reviewer opened its section with, or a line saying the summary has none. None while the batch's point
-    has not come or has passed: the run record holds no batch n, its summary is not there (None), the owner holds a
-    card of it open, or a card of it is closed."""
+    has not come or has passed: the run record holds no batch n, its summary is not there (None), or a card of it is
+    closed, but as lost to its owner. A card of it the owner holds open is no reason: the act changes it, or posts it
+    again once lost."""
     key = f"batch/{n}"
     held = [e for e in entries if e.get("Act") == "review.batch" and not e.get("Refused") and e.get("Batch") == str(n)]
-    if not held or summary is None or cards.card_under(entries, key, owner):
+    if not held or summary is None:
         return None
-    if any(e.get("Act") == "card.close" and not e.get("Refused") and e.get("Key") == key for e in entries):
+    if any(e.get("Act") == "card.close" and not e.get("Refused") and e.get("State") != "lost" and e.get("Key") == key for e in entries):
         return None
     previous = max((m for m, _, _ in batches(entries) if m < n), default=None)
     units = [dict(unit=u, team=team, commit=sha, subject=subjects.get(u) or u.replace("-", " "),
@@ -6693,13 +6696,19 @@ def batch_facts(n, entries, summary, subjects, owner):
     return dict(n=n, previous=previous, units=units, link=None)
 
 
-def raise_batch(fleet, label, n, acts=None):
-    """Batch n's raise (record 0031 §1, briefs.12): once the reviewer's summary is there, its one card, asked in the
-    planner's name, filed in the kit of its first unit's team, its reading session started by the act; nothing while
-    batch_facts finds its point not come or passed. Run on the main level's host, where the batch and its card are
-    recorded and its summary written. What crew can't read is said and refuses nothing, since the batch stands. The
-    card's id, or None."""
-    acts = acts or CardActs(fleet)
+def raise_batch(fleet, row, acts=None):
+    """A batch's raise (record 0031 §1, briefs.12), for its rail row, of which it reads the label and the key: once the
+    reviewer's summary is there, its one card, asked in the planner's name, filed in the kit of its first unit's team,
+    its reading session started by the act, and posted through row_card_change, so a card the planner holds that
+    Pending You no longer finds is recorded lost and posted again saying its older copy is dead; nothing while
+    batch_facts finds its point not come or passed, and nothing for a key not batch/<n>, an old batch card's among
+    them. crew review --wait calls it once the batch is recorded, and the rail's sweep for a row whose card is missing
+    or lost. Run on the main level's host, where the batch and its card are recorded and its summary written. What
+    crew can't read is said and refuses nothing, since the batch stands. The card's id, or None."""
+    m = re.fullmatch(r"batch/(\d+)", row["key"] or "")
+    if not m:
+        return None
+    acts, label, n = acts or CardActs(fleet), row["label"], int(m.group(1))
     owner, f = f"{label}-planner", batch_file(label, n)
     try:
         summary = f.read_text()
@@ -6708,7 +6717,7 @@ def raise_batch(fleet, label, n, acts=None):
     except OSError as e:
         print(f"batch {n}'s card is not raised: crew can't read its summary {f}: {e.strerror or e}", file=sys.stderr)
         return None
-    facts = batch_facts(n, acts.entries(label), summary, batch_subjects(plan_of(fleet, label)), owner)
+    facts = batch_facts(n, acts.entries(label), summary, batch_subjects(plan_of(fleet, label)))
     if not facts:
         return None
     t = next((fleet["teams"][u["team"]] for u in facts["units"] if u["team"] in fleet["teams"]), None)
@@ -6716,7 +6725,8 @@ def raise_batch(fleet, label, n, acts=None):
         print(f"batch {n}'s card is not raised: none of its units' teams is in the teams file, so it has no kit to be filed in",
               file=sys.stderr)
         return None
-    return row_card_post(fleet, label, owner, cards.batch_card, facts, card_where(t["kit"]), acts)
+    return row_card_change(fleet, label, owner, cards.batch_card, facts, "Raised again: crew could not find its earlier copy",
+                           card_where(t["kit"]), acts)
 
 
 # ------------------------------------------------------------------------------------------------ crew rail
@@ -6798,7 +6808,8 @@ def record_reading(l, entries, plan, fresh, missing=None):
     """What the rail reads of one partition's run record entries, as rail_record gives it: when each proposal was
     proposed, the cards open (posted since fresh and not closed, the same owner's newer card under a key replacing its
     older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
-    None while a host of the record did not answer (missing)."""
+    None while a host of the record did not answer (missing). A close refused leaves its card open; a card's close as
+    lost to its owner ends that card but not its row, whose card is posted again under its key."""
     times, posted, closed, landings, gives = {}, {}, set(), [], {}
     for e in entries:
         act = e.get("Act")
@@ -6812,9 +6823,9 @@ def record_reading(l, entries, plan, fresh, missing=None):
                     del posted[c]
             posted.setdefault(e["Card"], dict(label=l, card=e["Card"], key=e.get("Key"), on=(e["On"] or [None])[0],
                                               by=e.get("By"), host=e.get("Host"), at=utc(e["At"])))
-        elif act == "card.close" and e.get("Card"):
+        elif act == "card.close" and e.get("Card") and not e.get("Refused"):  # a refused close leaves the card open
             posted.pop(e["Card"], None)
-            if e.get("Key"):
+            if e.get("Key") and e.get("State") != "lost":  # a lost card's row still waits, for its card posted again
                 closed.add(e["Key"])
         elif act == "bolt.land" and not e.get("Refused"):
             bolt = next((o[5:] for o in e["On"] if o.startswith("bolt/")), None)

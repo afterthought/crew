@@ -16,7 +16,8 @@
 # refused with nothing recorded; the card changed in place at a new commit, closed with the accepting commit, a choice
 # when a rule decided, and none raised when the user settled it in the pane. Then a batch's card, raised by crew in the
 # planner's name once the reviewer's summary is there, with its one reading session on the main level's host linked
-# from it, raised once; crew card session giving that link again and refusing a unit, a landing's key and a short
+# from it, and, lost to its owner, raised again by the sweep's entry under its key, saying its older copy is dead, on
+# the same session; crew card session giving that link again and refusing a unit, a landing's key and a short
 # proposal's; crew card wait closing the card on the tap, with its note, and on the session's send, with every
 # annotation, each ending the session; a session whose link only the host could open ended, and the card raised all
 # the same, saying so; and a wait with neither card nor session refused. Which card a key names, what crew sets on a
@@ -311,7 +312,7 @@ batch() {  # batch <n>: batch n of v1 recorded on the box, and its summary writt
     > "$reports/batch-wldn-$1.md"
 }
 raise() { CREW_AGENT=wldn-planner as $box python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import crew, plan
-plan.raise_batch(crew.load(), "wldn", int(sys.argv[2]))' "$CREW/plugin/lib" "$1"; }
+plan.raise_batch(crew.load(), {"label": "wldn", "key": f"batch/{sys.argv[2]}", "group": "batches"})' "$CREW/plugin/lib" "$1"; }
 planner() { (export CREW_AGENT=wldn-planner; HOST=$box crew card "$@"); }
 listed() { as $box plannotator sessions --json | jq -r '[.[].pid] | sort | map(tostring) | join(" ")'; }
 gone() { until_ok python3 -c 'import os, sys
@@ -341,9 +342,20 @@ eq "$(jq -r '.argv | map(select(endswith(".md"))) | join(" ")' "$(home_of $box)/
   "$folder/00-summary.md $folder/01-v1-proposal.md $folder/01-v1-design.md $folder/01-v1-specs-x-spec.md $folder/01-v1-tasks.md"
 eq "$(entries card.post | jq -r 'select(.Key == "batch/1") | [(.On | join(" ")), .Card, .By] | join(" ")')" "batch/1 req_stub-6 wldn-planner"
 : > "$CREW_TEST_LOG"
+ok "a batch's card is raised once its summary is there, in the planner's name, its one reading session on the main level's host started first and linked from it"
+
+# The host signs in to Pending You again: batch 1's card reads "not found" to the planner, and the sweep's raise posts
+# it again under its key, on the session that still runs.
+mv "$stub/cards.json" "$stub/cards.before-batch-sign-in.json"
 expect_ok raise 1
-eq "$out$(py_calls)" ""
-ok "a batch's card is raised once its summary is there, in the planner's name, its one reading session on the main level's host started first and linked from it, and raised once"
+has "$out" "card batch/1: req_stub-6 is lost to wldn-planner (Pending You: \"Not found: request:req_stub-6.\")"
+has "$out" "card batch/1: req_stub-7 https://www.pendingyou.com/app/r/req_stub-7"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request whoami match_area post_request "
+posted=$(py_calls | sed -n 5p | cut -d' ' -f2-)
+has "$(jq -r .summary <<<"$posted")" "An older copy of this card was lost: dismiss it in the app."
+eq "$(jq -r '.context.links[0].url' <<<"$posted")" "$u1"; eq "$(listed)" "$p1"
+eq "$(entries card.close | jq -r 'select(.Key == "batch/1") | [.Card, .State] | join(" ")')" "req_stub-6 lost"
+ok "a batch's card lost to the planner is raised again by the sweep's entry under its key, saying its older copy is dead, its link the session's that still runs"
 
 expect_ok planner session batch/1; eq "$out" "$u1"; eq "$(listed)" "$p1"
 expect_fail "a batch has one reading session, on the whole batch: crew card session batch/1" planner session batch/1 v1
@@ -353,18 +365,18 @@ crew plan propose "$T/p.rec" >/dev/null
 expect_fail "proposal/1's card has nothing to read: it holds the proposal whole" crew card session proposal/1
 ok "crew card session gives a running session's link again, and refuses a unit with a batch's key, a landing's key and a short proposal's"
 
-echo '{"answer": {"note": {"text": "v1: say what the zone is."}}}' > "$stub/answered/req_stub-6.json"
+echo '{"answer": {"note": {"text": "v1: say what the zone is."}}}' > "$stub/answered/req_stub-7.json"
 : > "$CREW_TEST_LOG"
 expect_ok planner wait batch/1
 eq "$out" "batch/1: sent back on its card, with a note:
 v1: say what the zone is.
-card batch/1: req_stub-6 closed
+card batch/1: req_stub-7 closed
 ended batch/1's session, plannotator pid $p1"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request whoami get_request ack_answer "
 eq "$(py_calls | sed -n 5p | cut -d' ' -f2- | jq -r .outcome)" "Read; 1 note sent to its team"
 gone "$p1"
 [[ ! -e $cards_dir/batch/1 ]] || fail "batch/1's session folder outlived its card"
-eq "$(entries card.close | jq -r 'select(.Key == "batch/1") | [.Card, .State, .Outcome] | join(" ")')" "req_stub-6 closed Read; 1 note sent to its team"
+eq "$(entries card.close | jq -r 'select(.Key == "batch/1" and .State == "closed") | [.Card, .Outcome] | join(" ")')" "req_stub-7 Read; 1 note sent to its team"
 ok "the card sent back while nobody waited ends the planner's wait at once with its note, and crew closes it and ends its session"
 
 batch 2
@@ -375,7 +387,7 @@ decide "$p2" "$(jq -nc --arg f "$notes" '{decision: "annotated", feedback: $f, a
 expect_ok planner wait batch/2
 eq "$out" "batch/2: annotated
 $notes
-card batch/2: req_stub-7 withdrawn
+card batch/2: req_stub-8 withdrawn
 batch/2's session had ended as the user sent it, and batch/2 is forgotten"
 eq "$(py_calls | tail -1 | cut -d' ' -f2- | jq -r .reason)" "Read; 2 notes sent to their teams"
 ok "the session sent with its annotations ends the wait with every one as the user wrote it, and crew closes the card and forgets the session"
@@ -383,16 +395,16 @@ ok "the session sent with its annotations ends the wait with every one as the us
 batch 3
 : > "$CREW_TEST_LOG"
 out=$(CREW_AGENT=wldn-planner as $box env -u PLANNOTATOR_URL_HOST python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import crew, plan
-plan.raise_batch(crew.load(), "wldn", 3)' "$CREW/plugin/lib" 2>&1)
+plan.raise_batch(crew.load(), {"label": "wldn", "key": "batch/3", "group": "batches"})' "$CREW/plugin/lib" 2>&1) || fail "batch 3's raise failed: $out"
 has "$out" "card batch/3: its reading could not be opened on the tailnet: plannotator gave batch/3's session the link http://localhost:"
-has "$out" "card batch/3: req_stub-8 https://www.pendingyou.com/app/r/req_stub-8"
+has "$out" "card batch/3: req_stub-9 https://www.pendingyou.com/app/r/req_stub-9"
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 has "$(jq -r .summary <<<"$posted")" "Its reading could not be opened on the tailnet."
 eq "$(jq -c '.context.links' <<<"$posted")" "[]"
 eq "$(listed)" ""
-echo '{"answer": {}}' > "$stub/answered/req_stub-8.json"
+echo '{"answer": {}}' > "$stub/answered/req_stub-9.json"
 expect_ok planner wait batch/3
 eq "$out" "batch/3: sent back on its card, with no note
-card batch/3: req_stub-8 closed"
+card batch/3: req_stub-9 closed"
 expect_fail "no card and no session of batch/4 is open on $box" planner wait batch/4
 ok "a session whose link only the host could open is ended and the card raised all the same, saying so, its wait on the card alone; a wait with neither is refused"
