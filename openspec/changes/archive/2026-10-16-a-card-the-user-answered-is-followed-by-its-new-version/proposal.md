@@ -19,10 +19,11 @@ None.
 ### Modified Capabilities
 
 - `rail-cards`: a card the user answered is followed by its new version, and a card posted after a closed one under the same key takes the key with its revision.
+- `main-level`: a record revised after the user's note goes on a new card that follows the one they answered. A record revised while its card waits still changes that card in place.
 
 ## Impact
 
-Lands before the rest of record 0031's series, each of which rebases onto it. `crew-record-raises-a-records-card` and `crew-raises-a-proposals-card` change a card after the user's note. `crew-raises-a-bolts-landing-card` raises a landing again after a defect held it.
+Follows `crew-record-raises-a-records-card`, landed, whose revision after a note it makes reach the user; the design agent's brief, README and crew's usage say so. The rest of record 0031's series rebases onto it: `crew-raises-a-proposals-card` changes a card after the user's note, and `crew-raises-a-bolts-landing-card` raises a landing again after a defect held it.
 
 ## Touches
 
@@ -30,7 +31,12 @@ Lands before the rest of record 0031's series, each of which rebases onto it. `c
 plugin/lib/cards.py
 plugin/lib/plan.py
 tests/py/test_card_commands.py
+tests/py/test_cards.py
 tests/t-cards.sh
+plugin/roles/design.md
+tests/t-briefs.sh
+README.md
+plugin/bin/crew
 ```
 
-`cards.py` gains `revision` and `post_key`. `plan.py` changes `card_posted` and `row_card_change`, and gains `REVISED`.
+`cards.py` gains `revision` and `post_key`. `plan.py` changes `card_posted` and `row_card_change`, gains `REVISED`, and changes the docstrings of `raise_record` and `record_status`. `design.md` changes *Decision records*' note bullet, and `tests/t-briefs.sh` its pin. README and the usage header change `crew record`'s lines.

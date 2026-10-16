@@ -7964,7 +7964,8 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
 def raise_record(fleet, label, facts, where, note, acts=None):
     """A decision record's card raised in its design agent's name (record 0031 §1, briefs.15), record/<kit>/<number>,
     from the record's facts (record_facts), from where, the kit's checkout on this host and its remote: posted the
-    first time, and changed in place with note, naming the new commit, while the design agent holds it open. A
+    first time, and while the design agent holds it open, changed in place with note, naming the new commit, or once the
+    user has answered it, closed with note and followed by a new card (row_card_change). A
     refusal is said and recorded and refuses nothing of the status, already recorded. The card's id, or None."""
     return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts)
 
@@ -7977,7 +7978,7 @@ def record_status(fleet, a):
     partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
     alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
     record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
-    changes the one it holds in place, naming the commit, unless --settled-in-pane says the user said yes in the pane,
+    changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane,
     which is recorded and raises nothing; --alternatives makes the card the choice a rule decided; and --accepted or
     --rejected closes the card with the commit."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
