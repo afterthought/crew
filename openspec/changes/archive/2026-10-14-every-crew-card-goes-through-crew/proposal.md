@@ -1,6 +1,6 @@
 # Every crew card goes through crew
 
-> Superseded, never built: archived on 2026-10-14 with its specs untouched. Record 0031, accepted by the user that day, replaces it with `every-crew-card-is-raised-at-its-point`, where crew raises its own six cards at their events and an agent's question goes through Pending You's own tools.
+> Superseded, never built: archived on 2026-10-14 with its specs untouched. Record 0031, accepted by the user that day, replaces it with the series of changes from `crew-builds-every-card-from-its-facts` to `only-crew-raises-a-rows-card`, where crew raises its own six cards at their events and an agent's question goes through Pending You's own tools.
 
 ## Why
 

@@ -1,6 +1,6 @@
 # swancloud's part of the card design
 
-A note for swancloud's planner, from crew's card elaboration of 2026-10-14 (crew's record 0031, accepted 2026-10-14; `reading.md` §4 and `mockups.md` §4 beside this file). crew's change `every-crew-card-is-raised-at-its-point` builds crew's side; these four things are the fleet's. Nothing here is a crew rule for swancloud (`briefs.3`): the planner shapes them as swancloud's own units.
+A note for swancloud's planner, from crew's card elaboration of 2026-10-14 (crew's record 0031, accepted 2026-10-14; `reading.md` §4 and `mockups.md` §4 beside this file). crew's series of changes from `crew-builds-every-card-from-its-facts` to `only-crew-raises-a-rows-card` builds crew's side; these four things are the fleet's. Nothing here is a crew rule for swancloud (`briefs.3`): the planner shapes them as swancloud's own units.
 
 ## What the files say
 
