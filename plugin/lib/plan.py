@@ -7130,14 +7130,18 @@ def question_cards(sv, cards, unread):
     return sorted((c for c in cards if card_kind(c["key"]) == "question" and not unjudged(sv, unread, c)), key=lambda c: (c["at"], c["card"]))
 
 
-def stray_cards(fleet, found, sv, rows, cards, unread):
+def stray_cards(fleet, found, sv, rows, cards, unread, logs=None):
     """The open cards under a row's key that match no row, oldest first: never a decision record's (record_cards) nor
-    a question (question_cards). A card is left out when whether it has a row can't be known: its own host's record did
-    not answer, so its close may not have been read, or it is a land card of a bolt whose team's host did not answer. A
-    verify report's card, posted before its row went (teams.17), matches none."""
+    a question (question_cards), nor a deploy's whose word stands, from each partition's entries (logs), which the
+    deploy's end closes (ops.word_stands). A card is left out when whether it has a row can't be known: its own host's
+    record did not answer, so its close may not have been read, or it is a land card of a bolt whose team's host did
+    not answer. A verify report's card, posted before its row went (teams.17), matches none."""
+    import ops  # its decision of a deploy's card alone
     plans_, rowed, out = {l: p for l, _, _, p in found if p}, {(r["label"], r["key"]) for r in rows}, []
     for c in cards:
         if (c["label"], c["key"]) in rowed or card_kind(c["key"]) != "row" or unjudged(sv, unread, c):
+            continue
+        if ops.word_stands(c["key"], (logs or {}).get(c["label"], [])):
             continue
         if c["key"] and blind_land(fleet, plans_[c["label"]], sv, c["key"]):
             continue
@@ -7218,10 +7222,12 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now):
     """What the rail's read does with one partition's cards, of those posted on this host (here), the only ones its
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
     be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
-    each row's card with its row, which Pending You is asked whether it still finds. Then each row in record 0031's
+    each row's card with its row, which Pending You is asked whether it still finds; a deploy's card whose word stands
+    left for the deploy's end to close (ops.word_stands). Then each row in record 0031's
     form with no card open on any host, whose owner runs here (owners, {row key: (owner, host)}), to post through its
     kind's raise. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is left for a
     later read. Returns {gone: [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row]}."""
+    import ops  # its decision of a deploy's card alone
     rowed = {r["key"]: r for r in rows}
     out = {"gone": [], "questions": [], "held": [], "none": []}
     for c in cards_:
@@ -7232,7 +7238,8 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now):
             out["questions"].append(c)
         elif c["key"] in rowed:
             out["held"].append((c, rowed[c["key"]]))
-        elif not (c["key"].startswith("land/") and c["key"].split("/")[1] in blind) and not refused_lately(entries, now, card=c["card"]):
+        elif (not (c["key"].startswith("land/") and c["key"].split("/")[1] in blind) and not refused_lately(entries, now, card=c["card"])
+              and not ops.word_stands(c["key"], entries)):
             out["gone"].append((c, *row_gone(c["key"], entries)))
     carded = {c["key"] for c in cards_}
     out["none"] = [r for r in rows if r["key"] not in carded and cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
@@ -7371,7 +7378,7 @@ def rail_text(fleet, labels, read, now):
         lines += ["", "decision records waiting on you:"]
     for c in records:
         lines.append(when(c) + f"{c['key']} ({c['label']}), asked by {c['by']} on {c['host']}")
-    stray = stray_cards(fleet, found, sv, rows, cards_, read["unread"])
+    stray = stray_cards(fleet, found, sv, rows, cards_, read["unread"], logs)
     if stray:
         lines += ["", "open cards whose row is gone:"]
     for c in stray:

@@ -414,6 +414,14 @@ def step_point(es, entries, key):
     return None, "its step waits on no one, or another's card comes first"
 
 
+def word_stands(key, es):
+    """Whether a row's card under key outlives its row: a deploy's, deploy/<env>, once the user's word for it is given
+    and its deploy's end not yet recorded, which closes it with the outcome (record 0031 §1), from the partition's
+    entries; the rail's sweep leaves it, and lists it as no stray."""
+    kind, _, env = (key or "").partition("/")
+    return kind == "deploy" and env in state(es)[1]
+
+
 def kept(label, env, to):
     """Where an offer keeps the files it was handed, on the main level's host, so its card is built again the same:
     never in the run record (record.3)."""

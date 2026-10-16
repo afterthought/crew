@@ -90,6 +90,8 @@ has "$out" "card deploy/mac-studio: its card asks for the deploy of ${s2:0:7}, a
 eq "$(py_calls)" ""
 expect_ok dep word mac-studio; eq "$out" "$s2"
 expect_ok crew rail --label swancloud; has "$out" "deploy mac-studio (swancloud) to ${s3:0:7}"
+lacks "$out" "open cards whose row is gone"; eq "$(py_calls | cut -d' ' -f1 | sort -u | tr '\n' ' ')" "get_request whoami "
+: > "$CREW_TEST_LOG"
 echo '[{"name":"deployer","state":"ok","detail":"","before":"warn","verdict":"better"}]' > "$T/rows.json"
 expect_ok dep record mac-studio --to "$s2" --act start --from none
 expect_ok dep record mac-studio --to "$s2" --act step --step suite --outcome ok --log /tmp/suite.log --rows "$T/rows.json"
@@ -105,7 +107,7 @@ rc=0; dep word mac-studio >/dev/null 2>&1 || rc=$?; eq "$rc" "1"
 has "$(runs)" 'Rows: [{"name":"deployer","state":"ok","detail":"","before":"warn","verdict":"better"}]'
 eq "$(runs | grep -c '^Phase: ')" "3"; eq "$(runs | grep '^Phase: ' | tr '\n' ' ')" "Phase: start Phase: step Phase: end "
 expect_ok crew rail --label swancloud; has "$out" "deploy mac-studio (swancloud) to ${s3:0:7}"
-ok "a newer offer waits beside an approved one, its card raised once that deploy ends under the key's revision; a deploy's start, step and end are recorded, and its end ends the word and closes its card with each step's outcome"
+ok "a newer offer waits beside an approved one, whose card the rail's sweep leaves open, its own card raised once that deploy ends under the key's revision; a deploy's start, step and end are recorded, and its end ends the word and closes its card with each step's outcome"
 
 : > "$CREW_TEST_LOG"
 printf 'Restart the herdr server\nonce the teams are quiet.\n- where: a terminal on mac-studio\n- command: launchctl kickstart -k gui/501/herdr\n- done: herdr answers herdr status.\n' > "$T/step.txt"
