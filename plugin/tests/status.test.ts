@@ -1,6 +1,6 @@
 // crew's mod (hooks/status.js) on the views the rail tab writes (board.py agent_views): that a crew agent's session
-// finds its own view, by its environment or its session record, and draws it above its prompt, with the stale line once
-// the views are old. Each case fails when the mod draws the wrong view. What each view says is crew's logic tier
+// finds its own view, by its environment or its session record, and draws it above its prompt, its open cards first,
+// with the stale line once the views are old. Each case fails when the mod draws the wrong view. What each view says is crew's logic tier
 // (tests/py/test_board.py, code.8). tests/suite runs these as the task mod, through tests/mod.
 import { expect, mock, test } from 'claude-code/testing'
 
@@ -54,4 +54,13 @@ test('views older than the rail tab refreshes them say when they were read', asy
 test('a session herdr resumed bare finds its agent in its session record', async ($, on) => {
   const ui = await band($, on, { record: 'CREW_AGENT=crw-1-conductor\nCREW_LABEL=swancloud\nCREW_CWD=/work\n' })
   expect(await ui.find({ type: 'Text', text: /curation-and-holds/ })).toBeDefined()
+})
+
+test("an agent's open cards are drawn above its view", async ($, on) => {
+  const card = [['  ', null], ['your question', null], ['  ', null], ['req_q1', 'dim'], ['  ', null], ['open 14m', null]]
+  const ui = await band($, on, { env: { CREW_AGENT: 'crw-1-conductor', CREW_LABEL: 'swancloud' }, views: { ...VIEWS, cards: { 'crw-1-conductor': [card] } } })
+  const lines = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
+  const at = (pattern) => lines.findIndex((l) => pattern.test(l))
+  expect(at(/^ {2}your question {2}req_q1 {2}open 14m$/)).toBeGreaterThanOrEqual(0)
+  expect(at(/curation-and-holds/)).toBeGreaterThan(at(/your question/))
 })

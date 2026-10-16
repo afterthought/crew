@@ -157,6 +157,26 @@ def keyed(rows, cards, label, key):
     return [marker(r, cards, label) for r in rows if key and r["label"] == label and r["key"] == key]
 
 
+def records_proposed(entries, cards):
+    """The decision records proposed and not yet accepted or rejected, from the record.<status> entries crew record
+    writes on record/<kit>/<number>, oldest first: each {kit, number, at, settled}, settled when the user's yes was
+    given in the pane, and its card, {by, card, at} while one is open under the record's key, as record 0031 keys it or
+    with the commit after it as it was keyed before, else None."""
+    out = {}
+    for e in entries:
+        m = re.fullmatch(r"record\.(proposed|accepted|rejected)", e.get("Act") or "")
+        obj = next((o for o in e.get("On") or [] if re.fullmatch(r"record/[a-z0-9][a-z0-9-]*/[0-9]{4}", o)), None)
+        if not m or not obj or e.get("Refused"):
+            continue
+        out.pop(obj, None)
+        if m.group(1) == "proposed":
+            out[obj] = {"kit": obj.split("/")[1], "number": obj.split("/")[2], "at": e["At"], "settled": e.get("State") == "settled in the pane"}
+    for obj, r in out.items():
+        open_ = [c for c in cards if c["key"] and (c["key"] == obj or c["key"].startswith(obj + "/"))]
+        r["card"] = {"by": open_[-1]["by"], "card": open_[-1]["card"], "at": iso(open_[-1]["at"])} if open_ else None
+    return list(out.values())
+
+
 def environments(fleet, label, teams, entries, rows, cards, since):
     """The partition's environments for the Operation lane: each one's deploys that moved since since or are still open,
     and the operations waiting on it, as ops.environments reads them from the run record (plan.14, state.4), each
@@ -172,7 +192,10 @@ def board_data(fleet, labels, read, now):
     and each object of its lanes says the teams it belongs to, which is what the page narrows by: a held bolt and a
     landing, its team; a signal, the team whose agent captured it; a proposal, the teams holding the bolts it names
     and those building the repository of a bolt no team holds, of a bolt it makes or of a queued unit; anything else,
-    every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind."""
+    every team building its repository. A ledger's units, chores and fixes are its own; each unit or chore says its kind.
+    Each partition lists too its open cards, oldest first, each with whose it is and what it is, a row's, a decision
+    record's or a question (plan.card_kind), and the decision records proposed and not yet accepted or rejected, which
+    the design agent's band shows (records_proposed)."""
     here = crew.this_host()
     rows, cards, sv = read["rows"], read["cards"], read["sv"]
     since = plan.utc(record.when(None)[1])
@@ -281,7 +304,11 @@ def board_data(fleet, labels, read, now):
                       "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
         envs = environments(fleet, l, teams, read.get("ops", {}).get(l, []), rows, cards, since)
+        mine = sorted((c for c in cards if c["label"] == l), key=lambda c: (c["at"], c["card"]))
         parts.append({"label": l, "plan": tip, "hosts": hosts, "teams": teams,
+                      "cards": [{"key": c["key"], "card": c["card"], "by": c["by"], "host": c["host"], "at": iso(c["at"]),
+                                 "kind": plan.card_kind(c["key"])} for c in mine],
+                      "records": records_proposed(read.get("logs", {}).get(l, []), mine),
                       "inception": {"signals": sorted((dict(s, teams=captured(s)) for s in sigs),
                                                       key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
                                     "explorations": explorations},
@@ -556,17 +583,29 @@ def planner_view(p):
     return [head] + team_rows(p) + [proposal_row(d) for d in bp["proposals"]] + next_rows(p) + attention_rows(p)
 
 
+def record_row(r):
+    """A decision record proposed and not yet accepted or rejected, as the design agent reads it: the kit, dim, and the
+    record's number, when it was proposed, and its card, open or none, or that the user's yes was given in the pane, so
+    it has none."""
+    ms = [] if r["settled"] else [{"glyph": "✓", "card": r["card"]}]
+    return row(fields(named(r["kit"], f"record {r['number']}"), f"proposed {local(r['at'])}", "settled in the pane" if r["settled"] else ""),
+               gutter(ms), 0, ms)
+
+
 def design_view(p):
-    """The design agent's: the signals no move has taken, counted by who captured them, and the explorations on each
-    kit's main, the first few named and the rest counted; and what keeps the signals or the plan from being read."""
-    inc, groups = p["inception"], {}
+    """The design agent's: the signals no move has taken, counted by who captured them, the decision records proposed
+    and not yet accepted or rejected with their cards, and the explorations on each kit's main, the first few named and
+    the rest counted; and what keeps the signals or the plan from being read."""
+    inc, groups, records = p["inception"], {}, p.get("records", [])
     for s in inc["signals"]:
         groups.setdefault(s["captured_by"], []).append(s)
     es = inc["explorations"]
     head = row(fields((f"{p['label']} inception", "bold"), many(len(inc["signals"]), "signal not moved", "signals not moved"),
+                      many(len(records), "record proposed", "records proposed") if records else "",
                       many(len(es), "exploration", "explorations")))
     return ([head]
             + [row(fields(f"signals captured by {who or 'no one named'}", f"{len(mine)} not moved"), " ") for who, mine in groups.items()]
+            + [record_row(r) for r in records]
             + [row(fields(named(e["kit"], e["name"]), e["first"] or ""), " ") for e in es[:SHOWN]]
             + ([row(fields(("and " + many(len(es) - SHOWN, "more exploration", "more explorations"), "dim")), " ")] if len(es) > SHOWN else [])
             + attention_rows(p, lambda a: a["what"] in ("plan", "signals")))
@@ -623,23 +662,33 @@ def ops_view(p):
     return out + attention_rows(p, lambda a: a["what"] in ("host", "plan"))
 
 
+def card_line(c, now):
+    """An open card of an agent's own, as its band shows it above its view: its question or the row's card, its key,
+    its id, dim, and how long it has been open."""
+    what = {"question": "your question", "record": "your record's card"}.get(c["kind"], "your card")
+    return row(fields(what, c["key"] or "", (c["card"], "dim"), f"open {plan.age(when(c['at']), now)}"), " ")
+
+
 def agent_views(data):
     """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
     prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
     each host's operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
-    With them, the line the mod adds once the frame is stale_after_ms old: when it was read, and that the rail tab has
-    not refreshed it since.
+    Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
+    the lines the mod draws above its view. With them, the line the mod adds once the frame is stale_after_ms old: when
+    it was read, and that the rail tab has not refreshed it since.
 
     A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows)
     changes these views and plugin/hooks/status.js with it, each with its cases (code.8)."""
-    views = {}
+    views, cards, now = {}, {}, plan.utc(data["read_at"])
     for p in data["partitions"]:
         views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
         views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p), f"{p['label']}-ops": ops_view(p)})
         views.update({f"{p['label']}-operator-{h}": operator_view(p) for h in p["hosts"]})
+        for c in p.get("cards", []):
+            cards.setdefault(c["by"], []).append(card_line(c, now))
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
             "stale": row([(f"read at {plan.utc(data['read_at']).astimezone():%H:%M}; the rail tab on {data['from']} has not refreshed it since", "dim")]),
-            "views": views}
+            "views": views, "cards": {a: lines for a, lines in cards.items() if a in views}}
 
 
 # ------------------------------------------------------------------------------------------------- the board tab

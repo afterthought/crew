@@ -61,15 +61,16 @@ def kits(ok=True):
     return {BOX: {"ok": True, "kits": {"/kit/main": swb, "/b/main": brd}}, **mac} if ok else {BOX: {"ok": False, "error": "ssh: timed out"}, **mac}
 
 
-def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, cards=(), errors=None, unread=None, pl=True, entries=()):
+def read(sv=None, signals=None, props=(), landings=(), gives=None, rows=None, cards=(), errors=None, unread=None, pl=True, entries=(), logs=()):
     """The read the board is made from; entries are the partition's run record entries the operations are read from,
-    whose rail rows join the plan's, as plan.rail_record makes them."""
+    whose rail rows join the plan's, as plan.rail_record makes them, and logs every entry it read."""
     p = the_plan() if pl else None
     found = [("wldn", "WilldanGroup/crew-state", "tip0" if pl else None, p)]
     sv = sv or kits()
     ops_rows = [dict(r, at=plan.utc(r["at"]), doc=None) for r in ops.rows(FLEET, "wldn", list(entries))]
     return dict(found=found, sv=sv, props=list(props), cards=list(cards), unread=unread or {}, errors=errors or {},
                 landings=list(landings), gives=gives or {}, signals={"wldn": (signals or [], {})}, ops={"wldn": list(entries)},
+                logs={"wldn": list(logs) or list(entries)},
                 rows=rows if rows is not None else (plan.rail_rows(FLEET, found, sv, list(props), {}, None) if p else []) + ops_rows)
 
 
@@ -255,7 +256,8 @@ class TestMore:
         d = data(signals=SIGS)
         p = d["partitions"][0]
         assert sorted(d) == ["from", "partitions", "read_at", "unread"]
-        assert sorted(p) == ["attention", "bolt_plan", "construction", "environments", "hosts", "inception", "label", "operation", "plan", "teams"]
+        assert sorted(p) == ["attention", "bolt_plan", "cards", "construction", "environments", "hosts", "inception", "label", "operation", "plan",
+                             "records", "teams"]
         te = next(b for b in p["construction"] if b["bolt"] == "tenant-environments")
         assert sorted(te) == ["bolt", "fixes", "goal", "host", "markers", "repo", "state", "team", "teams", "units", "url"]
         assert sorted(te["units"][0]) == ["kind", "slot", "stage", "tasks", "unit", "url", "worktree"]
@@ -384,14 +386,51 @@ class TestViews:
         mod reads that they lack, fails here."""
         mod = (pathlib.Path(board.__file__).resolve().parent.parent / "hooks/status.js").read_text()
         v = json.loads(json.dumps(board.agent_views(data(props=WAITS, signals=SIGS))))
-        assert set(re.findall(r"live\.frame\.(\w+)", mod)) == set(v) == {"read_at", "stale_after_ms", "stale", "views"}
-        assert "live.frame.views[live.agent]" in mod and "Date.parse(live.frame.read_at)" in mod
+        assert set(re.findall(r"live\.frame\.(\w+)", mod)) == set(v) == {"read_at", "stale_after_ms", "stale", "views", "cards"}
+        assert "live.frame.views[live.agent]" in mod and "(live.frame.cards || {})[live.agent]" in mod and "Date.parse(live.frame.read_at)" in mod
         assert re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", v["read_at"]) and isinstance(v["stale_after_ms"], int)
         assert "home + '/.cache/crew/board/' + label + '.agents.json'" in mod and board.agents_path("wldn").parts[-4:] == (".cache", "crew", "board", "wldn.agents.json")
         assert re.findall(r"style === '(\w+)'", mod) == ["bold"] and "dimColor: true" in mod
-        lines = [v["stale"]] + [l for lines in v["views"].values() for l in lines]
+        assert v["cards"] == {} and json.loads(json.dumps(board.agent_views(data(cards=[QUESTION]))))["cards"]["swb-1-conductor"]
+        lines = [v["stale"]] + [l for lines in v["views"].values() for l in lines] + [l for lines in board.agent_views(data(cards=[QUESTION]))["cards"].values() for l in lines]
         assert all(isinstance(l, list) and all(isinstance(t, str) and len(seg) == 2 and style in (None, "bold", "dim") for seg in l for t, style in [seg])
                    for l in lines)
+
+
+QUESTION = dict(label="wldn", card="req_q1", key=None, on="agent/swb-1-conductor", by="swb-1-conductor", host=BOX,
+                at=NOW - datetime.timedelta(minutes=14))
+
+
+class TestCards:
+    def test_each_agent_sees_its_open_cards_its_questions_among_them_above_its_view(self):
+        """code.8: the band crew's mod draws above an agent's prompt opens with the agent's open cards, oldest first."""
+        p2 = dict(label="wldn", card="req_p2", key="proposal/2", by="wldn-planner", host="mac-studio", at=NOW - datetime.timedelta(hours=2, minutes=5))
+        stray = dict(QUESTION, card="req_x", key="ask/wldn-reviewer/x", by="wldn-reviewer")
+        v = board.agent_views(data(props=WAITS, cards=[p2, QUESTION, stray]))
+        drawn = {a: ["".join(t for t, _ in l) for l in lines] for a, lines in v["cards"].items()}
+        assert drawn == {"wldn-planner": ["  your card  proposal/2  req_p2  open 2h 05m"], "swb-1-conductor": ["  your question  req_q1  open 14m"]}
+        assert ("req_q1", "dim") in v["cards"]["swb-1-conductor"][0]
+
+    def test_the_board_lists_each_open_card_with_what_it_is(self):
+        rec = dict(QUESTION, card="req_r1", key="record/atlas-kit/0021", by="wldn-design")
+        assert [(c["card"], c["kind"], c["by"]) for c in data(cards=[rec, QUESTION])["partitions"][0]["cards"]] == [
+            ("req_q1", "question", "swb-1-conductor"), ("req_r1", "record", "wldn-design")]
+
+    def test_the_design_agent_sees_each_record_proposed_and_not_yet_accepted_or_rejected_with_its_card(self, monkeypatch):
+        """The design band reads crew record's record.<status> entries: 0021 proposed and its card open, 0022 settled
+        in the pane, 0023 proposed and then accepted, so gone."""
+        monkeypatch.setattr(board, "SHOWN", 0)
+        logs = [dict(Act="record.proposed", On=["record/atlas-kit/0021"], At=ago(60)), dict(Act="record.proposed", On=["record/atlas-kit/0022"], At=ago(50),
+                                                                                            State="settled in the pane"),
+                dict(Act="record.proposed", On=["record/atlas-kit/0023"], At=ago(40)), dict(Act="record.accepted", On=["record/atlas-kit/0023"], At=ago(30))]
+        rec = dict(QUESTION, card="req_r1", key="record/atlas-kit/0021", by="wldn-design")
+        assert [(r["kit"], r["number"], r["settled"], r["card"] and r["card"]["card"]) for r in data(logs=logs, cards=[rec])["partitions"][0]["records"]] == [
+            ("atlas-kit", "0021", False, "req_r1"), ("atlas-kit", "0022", True, None)]
+        assert view("wldn-design", logs=logs, cards=[rec]) == [
+            "wldn inception  0 signals not moved  2 records proposed  1 exploration",
+            f"✓ atlas-kit record 0021  proposed {board.local(ago(60))}  card open, asked by wldn-design",
+            f"  atlas-kit record 0022  proposed {board.local(ago(50))}  settled in the pane", "  and 1 more exploration"]
+        assert board.agent_views(data(logs=logs, cards=[rec]))["cards"]["wldn-design"]
 
 
 def test_a_chore_is_marked_in_a_ledger_a_planned_bolt_and_the_queue(monkeypatch):
