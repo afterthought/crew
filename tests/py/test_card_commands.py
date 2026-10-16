@@ -4,7 +4,8 @@ card and refuses the agent setting; a git remote as Pending You files by it; the
 area to make; a tool's reply read as Pending You's CLI reads it, its refusal in Pending You's words, and the bridge's
 own error; and what `crew card read` prints. Then the act that sends crew's own cards, plan.row_card_post,
 row_card_change and row_card_close, on a stand-in for the bridge, the run record, a tell and an upload (record 0031):
-what each sends and records, the line that adopts a card and whom it is told to, and each failure said and recorded.
+what each sends and records, the line that adopts a card and whom it is told to, a card the user answered followed by
+its new version under the key's revision rather than changed, and each failure said and recorded.
 The bridge itself, and every command's wiring, are t-cards'."""
 import json
 
@@ -387,6 +388,57 @@ def test_a_change_that_finds_its_card_not_found_posts_it_again_saying_the_older_
     assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "x note", WHERE, acts) == "req_c2"
     assert [(e["Act"], e.get("State"), e.get("Card")) for e in acts.emitted] == [("card.close", "lost", "req_c1"), ("card.post", None, "req_c2")]
     assert acts.calls[-1][1]["summary"].startswith(cards.DEAD)
+    assert (acts.calls[-1][1]["idempotencyKey"], acts.emitted[-1]["Key"]) == ("land/b1:2", "land/b1")
+
+
+def test_a_change_to_a_card_the_user_answered_acks_it_with_the_note_and_posts_the_new_version_following_it(capsys):
+    acts = Acts({"get_request": ({"status": "answered", "turn": "agent", "version": 3}, None), "ack_answer": ({"version": 4}, None),
+                 "match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=HELD)
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "Head is now abc1234", WHERE, acts) == "req_c2"
+    assert [t for t, _ in acts.calls] == ["get_request", "ack_answer", "match_area", "post_request"]
+    assert acts.calls[1][1] == {"requestId": "req_c1", "name": "swb-1-conductor", "expectedVersion": 3, "outcome": "Head is now abc1234"}
+    sent = acts.calls[3][1]
+    assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("land/b1:2", "req_c1", "approve")
+    assert [(e["Act"], e.get("Card"), e["Key"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+        ("card.close", "req_c1", "land/b1", "closed", plan.REVISED), ("card.post", "req_c2", "land/b1", None, None)]
+    out = capsys.readouterr().out
+    assert out.startswith("card land/b1: req_c1 closed, the user having answered it, and its new version follows it\n"
+                          "card land/b1: req_c2 https://") and "call get_request (requestId req_c2, name swb-1-conductor)" in out
+    after = HELD + [dict(Act="card.close", Card="req_c1", Key="land/b1", By="swb-1-conductor", State="closed"),
+                    dict(Act="card.post", Key="land/b1", By="swb-1-conductor", Card="req_c2")]
+    assert cards.card_under(after, "land/b1", "swb-1-conductor") == "req_c2"
+
+
+def test_a_close_refused_on_a_card_the_user_answered_posts_nothing_and_is_recorded_as_the_change_refused(capsys):
+    acts = Acts({"get_request": ({"status": "answered", "version": 3}, None), "ack_answer": (None, "Your latest message asks them something.")},
+                entries=HELD)
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "x note", WHERE, acts) is None
+    assert [t for t, _ in acts.calls] == ["get_request", "ack_answer"]
+    assert acts.emitted[0]["refused"] == ("Pending You refused the close of the card the user answered: "
+                                          "Your latest message asks them something.")
+
+
+@pytest.mark.parametrize("status, how", [("pending", "change"), ("snoozed", "change"), ("answered", "follow")])
+def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_is_followed(status, how):
+    assert cards.revision({"status": status, "version": 2}) == how
+
+
+POST, CLOSE = (lambda card, by="swb-1-conductor", key="land/b1": dict(Act="card.post", Key=key, By=by, Card=card),
+               lambda card, state="closed": dict(Act="card.close", Card=card, State=state))
+
+
+@pytest.mark.parametrize("entries, asked", [
+    ([], "land/b1"),
+    ([POST("req_1")], "land/b1"),
+    ([POST("req_1"), POST("req_1")], "land/b1"),
+    ([POST("req_1"), CLOSE("req_1", "declined")], "land/b1:2"),
+    ([POST("req_1"), CLOSE("req_1"), POST("req_2")], "land/b1:2"),
+    ([POST("req_1"), CLOSE("req_1"), POST("req_2"), CLOSE("req_2", "lost")], "land/b1:3"),
+    ([POST("req_1", by="swb-2-conductor"), CLOSE("req_1")], "land/b1"),
+    ([POST("req_1", key="land/b2"), CLOSE("req_1")], "land/b1"),
+    ([dict(POST("req_1"), Refused="x"), CLOSE("req_1")], "land/b1")])
+def test_a_card_is_posted_under_its_rows_key_and_after_a_closed_one_under_the_key_with_its_revision(entries, asked):
+    assert cards.post_key(entries, "land/b1", "swb-1-conductor") == asked
 
 
 def test_a_change_with_no_card_held_posts_it():

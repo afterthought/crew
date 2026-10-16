@@ -442,7 +442,7 @@ for want in "Every decision record you write, and every amendment you make to on
   "You post and close no record card yourself: crew does both" \
   "a rule-decided choice is never settled silently" "the rules that decided and each rule as it would read loosened" \
   "\`crew record … --proposed --alternatives <file>\`" "loosen the rules as drafted and take the other path, accept the record as ruled, or send it back" \
-  "run \`crew record … --proposed\` again: the card is changed in place, naming the new commit" \
+  "run \`crew record … --proposed\` again: the card you were answered on is closed, naming the new commit, and the revised record goes on a new card that follows it" \
   "run \`crew record … --accepted\`, which closes the card" "run \`crew record … --rejected\`, which closes the card" \
   "set \`status: rejected\` with the user's words, and take out each rule drawn from it" \
   "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "wt submit main --no-remove" \

@@ -7727,6 +7727,9 @@ class CardActs:
 
 
 CARD_LATER = "The event stands, and its card is not posted."
+# A card the user answered before its thing changed, as its close is recorded: its note, the user's to read, is on the
+# card, and the run record holds crew's words alone (record.3).
+REVISED = "answered, then changed: a new card follows it"
 
 
 def card_where(kit):
@@ -7774,14 +7777,17 @@ def card_uploaded(acts, key, b, got):
         print(f"card {key}: its picture did not reach the card: {why}", file=sys.stderr)
 
 
-def card_posted(acts, label, owner, b, where):
-    """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else."""
+def card_posted(acts, label, owner, b, where, entries=None):
+    """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
+    posted under the row's key, or the key with its revision once a card of the owner's under it closed (post_key,
+    from entries, this host's run record unless given), and recorded under the row's key."""
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
     cwd, remote = where
+    asked = cards.post_key(acts.entries(label) if entries is None else entries, key, owner)
     try:
         with acts.bridge(owner, CARD_LATER) as py:
             area = card_area(py, label, cwd, remote, owner)
-            got = py.call("post_request", cards.post_args(b["card"], key, owner, acts.host(), cwd, area))
+            got = py.call("post_request", cards.post_args(b["card"], asked, owner, acts.host(), cwd, area))
             card = cards.request_id(got, "post_request")
             card_uploaded(acts, key, b, got)
     except Refusal as e:
@@ -7815,37 +7821,50 @@ def card_lost(acts, label, owner, key, card, words):
 
 
 def row_card_change(fleet, label, owner, build, facts, note, where, acts=None):
-    """The act that changes a card of crew's own in place when its thing changes (record 0031 §3): build(facts) sent
-    as update_request takes it, with note as the change note the user sees, at the version Pending You reports, to
-    the card the owner holds under the row's key on this host; posted instead when it holds none, and posted again,
-    its summary saying the older copy is dead, when Pending You no longer finds it. A refusal is said and recorded as
-    the change refused, refusing nothing of the event. The card's id, or None."""
+    """The act that changes a card of crew's own when its thing changes (record 0031 §3): build(facts) sent as
+    update_request takes it, with note as the change note the user sees, at the version Pending You reports, to the
+    card the owner holds under the row's key on this host, while it waits on the user; once they have answered it,
+    which Pending You changes no longer, the card acked with note as its outcome and closed, and build(facts) posted as
+    a new card that follows it, under the key with its revision (post_key). Posted instead when the owner holds none,
+    and posted again, its summary saying the older copy is dead, when Pending You no longer finds it. A refusal is said
+    and recorded as the change refused, refusing nothing of the event. The card's id, the new card's when one was
+    posted, or None."""
     acts = acts or CardActs(fleet)
     b = build(facts)
-    key = b["key"]
-    card = cards.card_under(acts.entries(label), key, owner)
+    key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
+    entries = acts.entries(label)
+    card = cards.card_under(entries, key, owner)
     if not card:
-        return card_posted(acts, label, owner, b, where)
-    lost = None
+        return card_posted(acts, label, owner, b, where, entries)
+    lost, how = None, "change"
     try:
         with acts.bridge(owner, CARD_LATER) as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
-            if lost is None:
+            how = cards.revision(got) if lost is None else how
+            if lost is None and how == "follow":
+                _, lost = py.answer("ack_answer", {"requestId": card, "name": owner, "expectedVersion": cards.version_of(got, card),
+                                                   "outcome": cut(note, 120)})
+            elif lost is None:
                 change = dict(cards.change_args(b["card"], note), requestId=card, name=owner,
                               expectedVersion=cards.version_of(got, card))
                 got, lost = py.answer("update_request", change)
             if lost is not None and not cards.lost(lost):
-                fail(f"Pending You refused the change: {lost}")
-            if lost is None:
+                fail(f"Pending You refused the {'close of the card the user answered' if how == 'follow' else 'change'}: {lost}")
+            if lost is None and how == "change":
                 card_uploaded(acts, key, b, got)
     except Refusal as e:
-        acts.emit(label, "card.update", [cards.row_object(key) or f"agent/{owner}"], by=owner, refused=str(e), Card=card, Key=key)
+        acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key)
         print(f"card {key} not changed: {e}", file=sys.stderr)
         return None
+    closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner)]
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
-        return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where)
-    acts.emit(label, "card.update", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key)
+        return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed)
+    if how == "follow":
+        acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State="closed", Outcome=REVISED)
+        print(f"card {key}: {card} closed, the user having answered it, and its new version follows it")
+        return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
+    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key)
     v = got.get("version")
     print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
     return card
@@ -7945,7 +7964,8 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
 def raise_record(fleet, label, facts, where, note, acts=None):
     """A decision record's card raised in its design agent's name (record 0031 §1, briefs.15), record/<kit>/<number>,
     from the record's facts (record_facts), from where, the kit's checkout on this host and its remote: posted the
-    first time, and changed in place with note, naming the new commit, while the design agent holds it open. A
+    first time, and while the design agent holds it open, changed in place with note, naming the new commit, or once the
+    user has answered it, closed with note and followed by a new card (row_card_change). A
     refusal is said and recorded and refuses nothing of the status, already recorded. The card's id, or None."""
     return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts)
 
@@ -7958,7 +7978,7 @@ def record_status(fleet, a):
     partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
     alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
     record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
-    changes the one it holds in place, naming the commit, unless --settled-in-pane says the user said yes in the pane,
+    changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane,
     which is recorded and raises nothing; --alternatives makes the card the choice a rule decided; and --accepted or
     --rejected closes the card with the commit."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")

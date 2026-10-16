@@ -212,11 +212,11 @@ Every decision record the design agent writes, and every amendment it makes to o
 - **THEN** the amendment is marked proposed in the record, the card crew raises carries the amendment's words, and the amendment is accepted only on the user's yes
 
 ### Requirement: A record the user does not accept is revised or rejected
-On a note asking for changes, the design agent SHALL revise the record, still proposed, commit it and run `crew record … --proposed` again, which changes the card in place with the new commit named. On a no, it SHALL mark the record rejected, in the user's words, take out the rules drawn from it, and run `crew record … --rejected`, which closes the card.
+On a note asking for changes, the design agent SHALL revise the record, still proposed, commit it and run `crew record … --proposed` again, which closes the card the user answered with the new commit named and puts the revised record on a new card that follows it; a record revised while its card still waits on the user changes the card in place with the new commit named. On a no, it SHALL mark the record rejected, in the user's words, take out the rules drawn from it, and run `crew record … --rejected`, which closes the card.
 
 #### Scenario: The user asks for changes
 - **WHEN** the user answers the card with a note asking for a change
-- **THEN** the design agent revises the record, commits it still proposed, and the card is changed in place, "Revised: …", naming the new commit
+- **THEN** the design agent revises the record, commits it still proposed, and the card the user answered is closed, "Revised at …", naming the new commit, with a new card for the revised record following it
 
 #### Scenario: The user says no
 - **WHEN** the user rejects the card

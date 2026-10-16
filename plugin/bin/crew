@@ -167,10 +167,11 @@
 #   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
 #                                      kit's main: the status recorded with its commit; --proposed raises the record's
-#                                      card in the design agent's name, or changes it in place at a new commit, unless
-#                                      --settled-in-pane says the user said yes in the pane; --alternatives <file> makes
-#                                      it a choice, loosen the rules as drafted, accept as ruled or send back; --accepted
-#                                      or --rejected closes it with the commit. A status the file does not hold is refused
+#                                      card in the design agent's name, or at a new commit changes it, a new card
+#                                      following it once the user has answered it, unless --settled-in-pane says the
+#                                      user said yes in the pane; --alternatives <file> makes it a choice, loosen the
+#                                      rules as drafted, accept as ruled or send back; --accepted or --rejected closes
+#                                      it with the commit. A status the file does not hold is refused
 #   crew operator up <label>           the operator agent in this host's operator session <label>, with a flow tab
 #                                      following the run record, a rail tab (crew rail above, a shell below) and a
 #                                      board tab drawn from the rail tab's read; the agent it starts is greeted the

@@ -722,7 +722,7 @@ class TestRecordCommand:
         with pytest.raises(crew.Refusal, match=re.escape(said)):
             plan.record_status(FLEET, a)
 
-    def test_the_records_card_is_raised_in_the_design_agents_name_and_changed_in_place_at_a_new_commit(self, capsys):
+    def test_the_records_card_is_raised_in_the_design_agents_name_changed_at_a_new_commit_and_followed_once_answered(self, capsys):
         from test_card_commands import Acts, MATCHED, POSTED
         where, f = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), recorded(MADR, "proposed")
         acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
@@ -731,11 +731,17 @@ class TestRecordCommand:
         assert (acts.names, sent["idempotencyKey"], sent["session"]["label"]) == (["wldn-design"], "record/switchboard-kit/0032", "wldn-design")
         assert acts.emitted[0]["On"] == ["record/switchboard-kit/0032"] and acts.told == []
         held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
-        acts = Acts({"get_request": ({"status": "answered", "version": 2}, None), "update_request": ({"version": 3}, None)}, entries=held,
+        acts = Acts({"get_request": ({"status": "pending", "version": 2}, None), "update_request": ({"version": 3}, None)}, entries=held,
                     caller="wldn-design")
         assert plan.raise_record(None, "wldn", f, where, "Revised at def5678: ops.3 loosened", acts) == "req_c1"
         assert acts.calls[1][0] == "update_request" and acts.calls[1][1]["changeNote"] == "Revised at def5678: ops.3 loosened"
         assert capsys.readouterr().out.splitlines()[-1] == "card record/switchboard-kit/0032: req_c1 changed, now version 3"
+        acts = Acts({"get_request": ({"status": "answered", "version": 3}, None), "ack_answer": ({"version": 4}, None),
+                     "match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=held, caller="wldn-design")
+        assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
+        assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
+                                                "outcome": "Revised at 9ab0123: ops.7 loosened"})
+        assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
 
 
 class TestBatch:
