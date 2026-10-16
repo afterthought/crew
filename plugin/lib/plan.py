@@ -84,8 +84,10 @@ import gather  # noqa: E402
 import kit  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
+import cards  # noqa: E402
+from cards import CAPTION, COUNTS, by_words, joined, new_units  # noqa: E402
 from crew import Refusal, Stopped, fail  # noqa: E402
-from picture import cut, wrap  # noqa: E402
+from picture import cut  # noqa: E402
 
 REPLAYS = 5
 # What a command found out before it wrote or was refused: the partition whose run record its entry goes in.
@@ -2799,26 +2801,12 @@ def open_refusal(n, open_, as_json):
 CARD_NEW = 15  # the most units new to a bolt a proposal's card asks about: three questions of five, beside its approval
 OPTIONS = 5  # Pending You's limit on a choice's options: a question of a proposal's card holds at most five new units
 SESSION_ROOM = 100  # what the card of more than fifteen new units leaves in its summary for the link to its session
-TEXT, SAYS = 40, 33  # the card's text, monospace lines of at most forty characters; what a block says, indented seven
-COUNTS = (("dropped", "dropped"), ("amended", "amended"), ("new", "new"), ("moved", "moved"), ("split", "amended"))
-CAPTION = "Struck and dashed: dropped, with its reason. Gold: amended, old intent struck above the new. Mint: new."
 
 
-def plural(k, word):
-    return f"{k} {word}" + ("" if k == 1 else "s")
 
 
-def joined(xs):
-    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
 
 
-def by_words(text, width):
-    """text cut by whole words to at most width characters, ending with … when it was cut."""
-    text = " ".join(text.split())
-    if len(text) <= width:
-        return text
-    head = text[:width - 1]
-    return (head.rsplit(" ", 1)[0] if " " in head else head).rstrip(" ,;:") + "…"
 
 
 def plain_words(line):
@@ -2826,12 +2814,6 @@ def plain_words(line):
     return line.replace("**", "").replace("`", "")
 
 
-def new_units(argvs):
-    """The units and chores a proposal makes new to a bolt, in its order and once each: every one a `unit add` or
-    `chore add` names, to a bolt or to the queue, which is the first the user hears of it, and every one a `unit move`
-    or `chore move` puts into a bolt. Each is the user's to keep or leave out, row by row (plan.3, signals.7)."""
-    return list(dict.fromkeys(a.unit for a in argvs if a.cmd in ("unit", "chore")
-                              and (a.sub == "add" or (a.sub == "move" and a.bolt != "queue"))))
 
 
 def concerns(a):
@@ -2875,29 +2857,10 @@ def new_work(names, chores):
     return "chores" if n == len(names) else "new units" if not n else "new units and chores"
 
 
-def chore_words(words):
-    """A chore's words as a proposal's card says them beside its name, where a unit's intent goes: marked a chore's."""
-    return f"Chore: {words}" if words else words
 
 
-def put_back(now, was):
-    """The units a group holds once approved, each it held before and no longer does put back where it stood: after
-    the unit it followed, or first."""
-    out = list(now)
-    for i, u in enumerate(was):
-        if u not in out:
-            prev = next((was[j] for j in range(i - 1, -1, -1) if was[j] in out), None)
-            out.insert(out.index(prev) + 1 if prev else 0, u)
-    return out
 
 
-def block(head, name, says):
-    """One change in the card's text: its heading padded to seven and the unit or bolt, a heading longer than six on
-    its own line with the name under it, then what it says, indented seven."""
-    names = wrap(name, SAYS)
-    if len(head) > 6:
-        return [head] + ["       " + x for x in names] + ["       " + x for x in says]
-    return [f"{head:<7}{names[0]}"] + ["       " + x for x in names[1:] + says]
 
 
 def card_model(fleet, label, w, p, after=None):
@@ -2911,136 +2874,8 @@ def card_model(fleet, label, w, p, after=None):
     argvs = [do_args(label, d) for d in p.all("Do")]
     before = w.plan
     after = after or check_ops(fleet, label, w, argvs, n, Drawn).plan
-    where = {u.name(): u.get("Bolt") for u in before.work()}
-    repo = {u.name(): u.get("Repo") for u in before.work()}
-    # A chore's words are said as its intent, marked as a chore's, on the picture and in its option (plan.11).
-    intent = {u.name(): chore_words(u.get("Intent")) if is_chore(u) else u.get("Intent") for u in before.work()}
-    kits = {b.name(): b.get("Repo") for b in before.bolts()}
-    goals = {b.name(): b.get("Goal") for b in before.bolts()}
-    dropped, out, came_from, amended, split, parts, ordered, queued = {}, {}, {}, {}, {}, {}, set(), set()
-    counts, bolt_moves, touched, order, blocks = dict.fromkeys(dict(COUNTS), 0), {}, set(), [], []
-
-    def group(u):
-        return ("bolt", where[u]) if where.get(u) else ("queue", repo[u])
-    for a in argvs:
-        key = ("unit" if a.cmd == "chore" else a.cmd, a.sub)  # a chore's command draws as the unit's
-        if a.cmd in ("unit", "chore"):
-            touched.add(a.unit)
-        if key == ("bolt", "new"):
-            kits[a.bolt], goals[a.bolt] = a.repo, a.goal
-            secs, b = [("bolt", a.bolt)], block("NEW BOLT", a.bolt, wrap(a.goal, SAYS, 3))
-        elif key == ("bolt", "order"):
-            counts["moved"] += 1
-            bolt_moves[a.bolt] = bolt_moves.get(a.bolt, 0) + 1
-            secs, b = [("bolt", a.bolt)], block("ORDER BOLT", a.bolt, wrap(f"before {a.before}" if a.before else "first" if a.first else "last", SAYS))
-        elif key == ("bolt", "drop"):
-            units = [u for u, x in where.items() if x == a.bolt]
-            secs = [("bolt", a.bolt)] + ([("queue", kits[a.bolt])] if a.requeue and units else [])
-            for u in units:
-                touched.add(u)
-                if a.requeue:
-                    out[u], where[u] = "to the queue", None
-                    queued.add(u)
-                    counts["moved"] += 1
-                else:
-                    dropped[u] = a.reason
-                    counts["dropped"] += 1
-            b = block("DROP BOLT", a.bolt, wrap(a.reason, SAYS, 3) + (["its units to the queue"] if a.requeue else []))
-        elif key == ("unit", "add"):
-            where[a.unit], repo[a.unit] = a.bolt, a.repo or kits.get(a.bolt)
-            intent[a.unit] = chore_words(a.intent) if a.cmd == "chore" else a.intent
-            counts["new"] += 1
-            secs, b = [group(a.unit)], block("CHORE" if a.cmd == "chore" else "ADD", a.unit, wrap(a.intent, SAYS, 2))
-        elif key == ("unit", "move"):
-            src, to = where.get(a.unit), None if a.bolt == "queue" else a.bolt
-            secs = ([("bolt", src)] if src else []) + [("bolt", to) if to else ("queue", repo[a.unit])]
-            if src:
-                out[a.unit] = f"to {to}" if to else "to the queue"
-                counts["moved"] += 1
-            if to:
-                came_from.setdefault(a.unit, src)
-                counts["new"] += 1
-            else:
-                queued.add(a.unit)
-            where[a.unit] = to
-            b = block("MOVE", a.unit, wrap(f"from {src or 'the queue'} to {to or 'the queue'}", SAYS))
-        elif key == ("unit", "split"):
-            counts["split"] += 1
-            split.setdefault(a.unit, intent[a.unit])
-            intent[a.unit] = a.intent
-            for m, i in a.into:
-                parts[m], where[m], repo[m], intent[m] = a.unit, where[a.unit], repo[a.unit], i
-                touched.add(m)
-            secs, b = [group(a.unit)], block("SPLIT", a.unit, wrap(a.intent, SAYS, 2) + flat(wrap(f"into {m}", SAYS) for m, _ in a.into))
-        elif key == ("unit", "amend"):
-            counts["amended"] += 1
-            amended.setdefault(a.unit, intent[a.unit])
-            intent[a.unit] = a.intent
-            secs, b = [group(a.unit)], block("AMEND", a.unit, wrap(a.intent, SAYS, 3))
-        elif key in (("unit", "order"), ("unit", "after")):
-            counts["moved"] += 1
-            ordered.add(a.unit)
-            said = (("after " + ", ".join(a.deps) if a.deps else "after nothing") if a.sub == "after" else
-                    f"before {a.before}" if a.before else "first" if a.first else "last")
-            secs, b = [group(a.unit)], block(a.sub.upper(), a.unit, wrap(said, SAYS))
-        else:  # unit drop
-            counts["dropped"] += 1
-            dropped[a.unit] = a.reason
-            secs, b = [group(a.unit)], block("DROP", a.unit, wrap(a.reason, SAYS, 3))
-        order += [s for s in secs if s not in order]
-        blocks.append((secs[0], b))
-
-    sections, lines = [], []
-    for kind, name in order:
-        if kind == "bolt":
-            was = [u.name() for u in before.work_of(name)] if before.bolt(name) else []
-            now = numbered = [u.name() for u in after.work_of(name)] if after.bolt(name) else []
-            heading = name
-            said = (f"a new bolt → {len(now)}" if not before.bolt(name) else f"{plural(len(was), 'unit')} → "
-                    + (str(len(now)) if after.bolt(name) else "dropped"))
-            line = (f"A new bolt; {plural(len(now), 'unit')} once approved" if not before.bolt(name) else
-                    f"{plural(len(was), 'unit')} now; " + (f"{len(now)} once approved" if after.bolt(name) else "dropped once approved"))
-        else:
-            was_all, numbered = [u.name() for u in before.queue(name)], [u.name() for u in after.queue(name)]
-            was, now = [u for u in was_all if u in touched], [u for u in numbered if u in touched]
-            heading, said = f"the {name} queue", f"{len(was_all)} queued → {len(numbered)}"
-            line = f"{len(was_all)} queued now; {len(numbered)} once approved"
-        rows = []
-        for u in put_back(now, was):
-            r = {"n": str(numbered.index(u) + 1) if u in now else "–", "name": u, "tag": None, "intent": intent.get(u)}
-            if u not in now and u in dropped:
-                r.update(tag="drop", under=f"Why: {dropped[u]}", struck=True, outline="dashed", colour="dropped")
-            elif u not in now:
-                r.update(tag="out", under=out.get(u, ""), struck=True, outline="dashed", colour="moved")
-            elif u not in was and u in parts:
-                r.update(tag="split", colour="amended", mark="+")
-            elif u not in was and kind == "queue" and u in queued:
-                r.update(tag="moved", colour="moved", mark="↕")
-            elif u not in was:
-                r.update(tag="new", outline="solid", colour="new", mark="+")
-            elif u in amended or u in split:
-                r.update(tag="amend" if u in amended else "split", old=amended.get(u, split.get(u)), colour="amended", mark="~")
-            elif u in ordered:
-                r.update(tag="moved", colour="moved", mark="↕")
-            rows.append(r)
-        tags = [r["tag"] for r in rows]
-        mine = {"dropped": tags.count("drop"), "amended": tags.count("amend"), "new": tags.count("new"),
-                "moved": tags.count("moved") + tags.count("out") + bolt_moves.get(name, 0) * (kind == "bolt"),
-                "split": sum(1 for r in rows if r["tag"] == "split" and r["name"] not in parts)}
-        sections.append({"kind": kind, "name": name, "heading": heading, "said": said, "line": line, "rows": rows,
-                         "counts": [(f"{mine[c]} {c}", colour) for c, colour in COUNTS if mine[c]]})
-        lines += ([""] if lines else []) + wrap(heading, TEXT) + [said, ""]
-        for sec, b in blocks:
-            if sec == (kind, name):
-                lines += b + [""]
-        lines.append("ONCE APPROVED")
-        for r in rows:
-            if r["n"] != "–":
-                first, *rest = wrap(r["name"], TEXT - 5)
-                lines += [f"{r['n']:>2} {r.get('mark', ' ')} {first}"] + ["     " + x for x in rest]
-        if kind == "bolt" and not after.bolt(name):
-            lines.append("   the bolt is dropped")
-
+    d = cards.drawn(before, after, argvs)
+    sections, counts, lines, intent, came_from, goals = (d[k] for k in ("sections", "counts", "lines", "intent", "came_from", "goals"))
     new = new_units(argvs)
     plain = not new or len(new) > CARD_NEW
     all_counts = ", ".join(f"{counts[c]} {c}" for c, _ in COUNTS if counts[c])
@@ -3127,7 +2962,7 @@ def plan_card(fleet, a):
     """crew plan card <n> [--label L]: proposal n's card, as Pending You's post_request takes it, from the flywheel's
     branch alone (plan.12): its title, summary, background, questions and artifacts, printed as JSON beside where its
     picture is and whether it links a session, which only a card of more than fifteen new units does (briefs.9). Its
-    picture, a PNG 780 pixels wide, is drawn by crew itself and written to
+    picture, a PNG 1560 pixels wide, is drawn by crew itself and written to
     ~/.local/state/crew/cards/<label>/proposal/<n>/ on this host. Writes nothing to the branch or the run record."""
     label = proposal_label(fleet, a, a.n)
     w, _, p, _ = at_tip(fleet, label, a.n)
