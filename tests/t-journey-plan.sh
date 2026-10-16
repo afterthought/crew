@@ -1,6 +1,7 @@
 # The plan changed through proposals, and the writes that race on its branch, through the crew command on the stubs
-# (tests.11, record 0022): the planner proposes, a held bolt's conductor is told and agrees, the user approves, leaves
-# units out on the card and answers it, a proposal is dropped and replaced, a unit from a signal is routed, an
+# (tests.11, record 0022): the planner proposes and crew raises its card, a held bolt's conductor is told and agrees,
+# the user approves, leaves units out on the card and answers it, each closing the card, a proposal is dropped and
+# replaced, its card withdrawn or changed in place, a unit from a signal is routed, an
 # approval's rebases are undone when one conflicts, amendments hand their constructs to the team's host, and two writes
 # racing on one branch, or on two branches of one repository, both land. Whether a proposal holds, whom it waits on,
 # what its page and card say and who may write the plan are logic cases (tests/py/test_proposals.py,
@@ -66,7 +67,8 @@ expect_ok crew plan propose "$(proposal \
   'Do: unit add a-plan-only-deploy-is-checked "A plan-only deploy is checked." --bolt deploy-checks' \
   'Do: unit move queued-one deploy-checks')"
 has "$out" "proposal 1 is open, waiting on the user"
-eq "$(tail -1 <<<"$out")" "Post your Pending You card for proposal/1."
+has "$out" "card proposal/1: req_stub-1 https://www.pendingyou.com/app/r/req_stub-1"
+eq "$(tail -1 <<<"$out")" "call get_request (requestId req_stub-1, name wldn-planner)"
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v "^runs/")" "proposals.rec"
 eq "$(props -t Proposal -P Proposal,State,By)" $'1\nopen\nwldn-planner'
 eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "plan(proposal 1): propose: new bolt deploy-checks, add a-plan-only-deploy-is-checked to deploy-checks, move queued-one to deploy-checks (wldn-planner)"
@@ -75,10 +77,11 @@ has "$out" "# Proposal 1 — open, by wldn-planner"
 has "$out" 'Runs: `crew unit move queued-one deploy-checks`'
 expect_ok crew plan proposed
 has "$out" "wldn 1"; has "$out" "waiting on the user"
-ok "a proposal is written open, the plan unchanged, the planner shown to post its card, and it reads as the user would read it"
+ok "a proposal is written open, the plan unchanged, crew raises its card in the planner's name with the line that adopts it, and it reads as the user would read it"
 
+# The planner and the conductor of a bolt in flight on the planner's own host, where its card is posted and changed.
 : > "$CREW_TEST_LOG"
-expect_ok crew plan propose "$(proposal 'Case: The tenant bolt cannot land until its zone exists.' \
+HOST=$box expect_ok crew plan propose "$(proposal 'Case: The tenant bolt cannot land until its zone exists.' \
   'Do: unit add zone-first "The tenant'"'"'s zone exists." --bolt tenant-environments --unblocks tenant-environments')"
 has "$out" "proposal 2 is open, waiting on swb-1-conductor, then the user"
 has "$(prompts swb-1)" "Proposal 2 would change your bolt: unit add zone-first"
@@ -87,38 +90,42 @@ expect_fail "proposal 2 waits on the agreement of swb-1-conductor" crew plan app
 : > "$CREW_TEST_LOG"
 HOST=$box CREW_AGENT=swb-1-conductor expect_ok crew plan agree 2
 eq "$(props -t Proposal -e "Proposal = 2" -P Agreed)" "swb-1"
-has "$(told_planner "swb-1 agrees to proposal 2.")" "Update your Pending You card for proposal/2: it no longer waits on swb-1-conductor."
+[[ -n $(told_planner "swb-1 agrees to proposal 2.") ]] || fail "the planner was not told of the agreement"
+has "$out" "card proposal/2: req_stub-1 changed, now version 2"
 before=$(tip); : > "$CREW_TEST_LOG"
-expect_ok crew plan approve 2
-eq "$(tail -1 <<<"$out")" "Close your Pending You card for proposal/2, if one is open, with what was done."
+HOST=$box expect_ok crew plan approve 2
+eq "$(tail -1 <<<"$out")" "card proposal/2: req_stub-1 withdrawn"
 grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was told of its own approval"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -P Unit | head -1)" "zone-first"
 eq "$(git --git-dir "$ws" diff --name-only "$before" wldn/main | grep -v '^runs/')" $'plan.rec\nproposals.rec'
 eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
-ok "a proposal touching a held bolt tells its conductor, waits for its recorded agreement, and is applied in one commit"
+ok "a proposal touching a held bolt tells its conductor, waits for its recorded agreement, changing its card, and is applied in one commit"
 
 before=$(tip); : > "$CREW_TEST_LOG"
 CREW_AGENT= expect_ok crew plan approve 1
-has "$(told_planner "Proposal 1 was approved by $me@mac-studio.")" "Close your Pending You card for proposal/1, if one is open, with what was done."
+has "$(told_planner "Proposal 1 was approved by $me@mac-studio.")" "Applied: added a-plan-only-deploy-is-checked and queued-one; 1 other change."
+has "$out" "card proposal/1: req_stub-1 withdrawn"
 eq "$(git --git-dir "$ws" rev-list --count "$before"..wldn/main)" "1"
 eq "$(plan -t Unit -e "Bolt = 'deploy-checks'" -P Unit)" $'a-plan-only-deploy-is-checked\nqueued-one'
-eq "$(field mac-studio unit.add From unit/zone-first)" "proposal/2"
-has "$(field mac-studio unit.add Commit unit/zone-first)" "WilldanGroup/crew-state@"
+eq "$(field $box unit.add From unit/zone-first)" "proposal/2"
+has "$(field $box unit.add Commit unit/zone-first)" "WilldanGroup/crew-state@"
 trace=$(crew trace unit/zone-first)
-eq "$(grep -v 'refused:' <<<"$trace" | awk '{print $3}' | head -4 | tr '\n' ' ')" "plan.propose plan.agree plan.approve unit.add "
+eq "$(grep -v 'refused:' <<<"$trace" | awk '{print $3}' | head -7 | tr '\n' ' ')" "plan.propose card.post plan.agree card.update plan.approve unit.add card.close "
 has "$trace" "refused: proposal 2 waits on the agreement of swb-1-conductor"
-ok "the user's approval tells the planner to close its card; each step is recorded, and a unit's trace shows the proposal, the agreement and the approval"
+ok "the user's approval tells the planner what was applied and closes its card; each step is recorded, and a unit's trace shows the proposal, the agreement and the approval, each with its card's act"
 
 : > "$CREW_TEST_LOG"
 crew plan propose "$(proposal 'Case: The console starts with a page.' 'Do: unit add a-page "The console has a page." --bolt console-pages')" >/dev/null
 CREW_AGENT= expect_ok crew plan drop 3 "the console waits"
 eq "$(props -t Proposal -e "Proposal = 3" -P State,Reason)" $'dropped\nthe console waits'
-has "$(told_planner "Proposal 3 was dropped by $me@mac-studio: the console waits.")" "Close your Pending You card for proposal/3"
+[[ -n $(told_planner "Proposal 3 was dropped by $me@mac-studio: the console waits.") ]] || fail "the planner was not told of the drop"
+has "$out" "card proposal/3: req_stub-2 withdrawn"
 crew plan propose "$(proposal 'Case: The zone goes later.' 'Do: unit order zone-first --last')" >/dev/null
 expect_ok crew plan propose --replaces 4 "$(proposal 'Case: Order the queue instead.' 'Do: unit order a-drop --first')"
 has "$out" "proposal 4 is dropped, replaced by proposal 5"
+has "$out" "card proposal/4: req_stub-3 changed, now version 2"
 eq "$(props -t Proposal -e "Proposal = 4" -P State,Reason)" $'dropped\nreplaced by proposal 5'
-ok "a proposal is dropped with a reason, the planner told to close its card, or replaced by another"
+ok "a proposal is dropped with a reason, the planner told and its card withdrawn, or replaced by another, its card changed in place"
 
 # A refused proposal is recorded naming its command, never the words typed in it.
 expect_fail '`unit add y "Typed ZQXA." --bolt nowhere`: no bolt nowhere in wldn/main' \
@@ -148,16 +155,12 @@ eq "$(jq -r .card.title <<<"$out")" "Approve the change to clears: 2 new?"
 pic=$(jq -r .picture <<<"$out")
 eq "$pic" "$(home_of mac-studio)/.local/state/crew/cards/wldn/proposal/$n/proposal-$n.png"
 [[ -s $pic ]] || fail "the card's picture was not written"
-before=$(tip)
-expect_ok crew plan answer "$n" plan approve
-eq "$out" "proposal $n waits on units-1: nothing is applied"
-eq "$(tip)" "$before"
-expect_ok crew plan answer "$n" units-1 f-1 --note "split f-1 in two later"
+expect_ok crew plan answer "$n" rows-1 add:f-1 --note "split f-1 in two later"
 has "$out" "proposal $n is approved and applied, without f-2"
 eq "$(tail -1 <<<"$out")" "The user's note beside the approval of proposal $n: \"split f-1 in two later\". Propose what it asks as a new proposal."
 eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit | tail -1)" "f-1"
 [[ ! -e $(home_of mac-studio)/.local/state/crew/cards/wldn/proposal/$n/answers.json ]] || fail "the answers stayed after the approval"
-ok "an approval leaves the units the user cleared out, in one commit; the card is drawn with its picture, and its answers wait for every question, then apply it"
+ok "an approval leaves the units the user cleared out, in one commit; the card is drawn with its picture, and its answers apply it with its boxes as they stand"
 
 # A unit from a signal: the route move is in the approval's commit.
 sig=2026-10-06-standup/01-plans-are-checked

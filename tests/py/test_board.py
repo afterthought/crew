@@ -156,6 +156,13 @@ class TestText:
         bp = lane(board.board_text(data(props=props, cards=[card])), "Bolt plan")
         assert bp[0] == "✓ proposal 1 by chuck@mac-studio  The console gets a bolt.  card open, asked by wldn-planner"
 
+    def test_a_rewritten_proposals_marker_is_its_chains_card(self):
+        props = [{"label": "wldn", "proposal": 2, "first": 1, "by": "wldn-planner", "opened": "2026-10-12", "case": "The console, again.",
+                  "waiting": [], "changes": [{"do": 'bolt new console-two "x" --repo switchboard-kit', "bolts": ["console-two"]}]}]
+        card = dict(label="wldn", card="req_1", key="proposal/1", by="wldn-planner", host="mac-studio", at=NOW)
+        bp = lane(board.board_text(data(props=props, cards=[card])), "Bolt plan")
+        assert bp[0] == "✓ proposal 2 by wldn-planner  The console, again.  card open, asked by wldn-planner"
+
     def test_operation_lists_a_bolt_landed_this_week_and_not_one_landed_eight_days_ago(self):
         landings = [dict(label="wldn", bolt="atlas-maps", units=["map-one"], at=NOW - datetime.timedelta(hours=1), by="chuck@mac-studio", host="mac-studio"),
                     dict(label="wldn", bolt="old-maps", units=["old"], at=NOW - datetime.timedelta(days=8), by="wldn-ops", host="mac-studio")]

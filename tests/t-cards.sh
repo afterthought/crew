@@ -409,3 +409,48 @@ eq "$out" "batch/3: sent back on its card, with no note
 card batch/3: req_stub-13 closed"
 expect_fail "no card and no session of batch/4 is open on $box" planner wait batch/4
 ok "a session whose link only the host could open is ended and the card raised all the same, saying so, its wait on the card alone; a wait with neither is refused"
+
+# A proposal's card, crew's own (plan-proposals, record 0031 §1, change crew-raises-a-proposals-card): raised by crew plan
+# propose in the planner's name on its own host, changed in place by a rewrite, answered on the card and applied with its
+# boxes as they stand, then closed with what was applied. Which act each step makes is a logic case
+# (tests/py/test_proposal_life.py); the plan's side of each step, the proposals journey's (t-journey-plan).
+as_planner() { HOST=$box CREW_AGENT=wldn-planner "$@"; }
+proposal() { printf '%s\n' "$@" > "$T/proposal.rec"; echo "$T/proposal.rec"; }
+opened() { sed -n 's/^proposal \([0-9]*\) is open,.*/\1/p' <<<"$out"; }  # the proposal crew plan propose just opened
+raised() { sed -n "s|^card proposal/$1: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$out"; }  # the card it posted under that key
+: > "$CREW_TEST_LOG"
+as_planner expect_ok crew plan propose "$(proposal 'Case: The page gets a bolt of its own.' \
+  'Do: bolt new p1 "The page is drawn." --repo switchboard-kit' 'Do: unit add p-a "A page." --bolt p1' 'Do: unit add p-b "B page." --bolt p1')"
+n=$(opened); c=$(raised "$n")
+[[ -n $c ]] || fail "no card was raised for proposal $n:"$'\n'"$out"
+eq "$(tail -1 <<<"$out")" "call get_request (requestId $c, name wldn-planner)"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
+posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
+eq "$(jq -c '[.idempotencyKey, .session.label, .title, .kind, [.options[].id], .recommendedIds]' <<<"$posted")" \
+  "[\"proposal/$n\",\"wldn-planner\",\"Plan change to p1: 2 new\",\"multi\",[\"add:p-a\",\"add:p-b\"],[\"add:p-a\",\"add:p-b\"]]"
+grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was told of the card its own command raised"
+ok "crew plan propose raises the proposal's card in the planner's name under proposal/<n>, one checkbox list every row set as proposed, and prints the line that adopts it"
+
+: > "$CREW_TEST_LOG"
+as_planner expect_ok crew plan propose --replaces "$n" "$(proposal 'Case: The page gets a bolt of its own, with c in place of b.' \
+  'Do: bolt new p2 "The page is drawn." --repo switchboard-kit' 'Do: unit add p-a "A page." --bolt p2' 'Do: unit add p-c "C page." --bolt p2')"
+m=$(opened)
+has "$out" "card proposal/$n: $c changed, now version 2"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request update_request "
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.requestId, .changeNote, .title, [.options[].id]]')" \
+  "[\"$c\",\"Rewritten as proposal $m after your note\",\"Plan change to p2: 2 new\",[\"add:p-a\",\"add:p-c\"]]"
+eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $m (wldn)" | grep 'card:' | sed 's/^ *//')" \
+  "card:   proposal/$n, open, asked by wldn-planner ($c)"
+ok "a rewrite changes the chain's one card in place with its note, and the rail's row for the successor carries the chain's key"
+
+echo '{"answer": {"choiceIds": ["add:p-a"], "note": {"text": "c later."}}}' > "$stub/answered/$c.json"
+as_planner expect_ok crew card read "proposal/$n"
+has "$out" "picked: add:p-a"
+: > "$CREW_TEST_LOG"
+as_planner expect_ok crew plan answer "$m" rows-1 add:p-a --note "c later."
+has "$out" "proposal $m is approved and applied, without p-c"
+has "$out" "card proposal/$n: $c closed"
+eq "$(py_calls | sed -n 3p | cut -d' ' -f1)" "ack_answer"
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Applied: added p-a; 1 other change. Left out on your word: p-c."
+eq "$(entries card.close | jq -r "select(.Key == \"proposal/$n\") | [.Card, .State] | join(\" \")" | tail -1)" "$c closed"
+ok "the user's boxes, sent on the card, are applied as they stand, and crew closes the card with what was applied"
