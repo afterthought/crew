@@ -42,7 +42,7 @@ Code
 - **[code.1]** crew's Python imports nothing outside the standard library and its own modules; `gather.py` imports only the standard library, since it is piped to hosts whose crew may be older; devenv declares only jq, proto and recutils; `.prototools` pins moon, Python at the minor the hosts run crew on, and uv; pytest, the tests' one dependency, is locked in `tests/uv.lock` and synced by moon.
 - **[code.2]** A refusal is a `Refusal` raised through `fail()`, turned into `sys.exit(<message>)` at each entry point, never a traceback.
 - **[code.3]** Every bash command about a team, main level or slot forwards to the host the teams file names before touching any state, carrying the asker's `CREW_AGENT`, `CREW_LABEL` and `CREW_SESSION`; every ssh crew runs passes `-o BatchMode=yes`.
-- **[code.4]** Every name crew mints or accepts matches `^[a-z0-9][a-z0-9-]*$`, but a program's capture, whose name may also hold a version's dots, each between two digits (`signals.6`).
+- **[code.4]** Every name crew mints or accepts matches `^[a-z0-9][a-z0-9-]*$`.
 - **[code.5]** crew reads `teams.json` (version 2) and `herdr-hosts.json`, checks every entry before any is used, and never writes either; no field has a default.
 - **[code.6]** Every commit is a Conventional Commit, staged by path; `git add -A`, `git stash` and `git reset` are never used.
 - **[code.7]** A decision of crew's is a function of plain facts that starts no process and calls no tool; the reads that feed it and the acts that follow it stay thin around it, and a decision in `plugin/bin/crew`'s bash moves to Python when its test is converted.
@@ -85,7 +85,7 @@ Code
 
 **[code.3]** Rules out: a team command acting on local slot files for a remote team; an ssh that can prompt. Source: `plugin/bin/crew` `there` and `one`, which forwards a command that is one Python process once that process has named the host its team's or main level's agents run on (`plan.py` `forwarded`); `crew.py` `on_machine`, `crew_argv`; `plan.py` `elsewhere`, which runs `crew _dispatch` on each host of a partition.
 
-**[code.4]** Rules out: a unit named with a slash or a capital; a dot in any name but a capture's, and in a capture's anywhere but between two digits. Not ruled out: a release's capture named with its version as upstream gives it, `2026-10-15-release-pendingyou-0.35.1` (`plan.py` `CAPTURE_NAME`). Source: `crew.py` 31, 114, 138; `plan.py` 81, 89; `tests/py/test_signals.py`. Amended 2026-10-16 in the recovery session, which asked that a release capture named with dots be taken: swancloud's release adapter names each capture `<date>-release-<tool>-<version>`, its version a plain dotted number (`packages/release-signals/release-signals.sh`, `lib/release-sources.nix`, read that day), and crew refused every one, pendingyou 0.35.1's among them.
+**[code.4]** Rules out: a unit named with a slash or a capital. Source: `crew.py` 31, 114, 138; `plan.py` 81, 89.
 
 **[code.5]** Rules out: crew editing the teams file; a version-1 file accepted. Source: `bolt-teams` spec "Teams are fixed in the teams file"; `crew.py` 100–161.
 
