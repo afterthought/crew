@@ -6,7 +6,7 @@ Record 0031 leaves an agent one card of its own, a question, asked by four roles
 
 ## What Changes
 
-- **A question is the asker's.** A conductor, the planner, main-level ops and the design agent ask through Pending You's own tools in their sessions, under a key of their own. crew's hook refuses a post, change or close under a row's key and from any other role, lets the rest through, and records each on the rail. A stage agent asks through `crew needs`.
+- **A question is the asker's.** A conductor, the planner, main-level ops and the design agent ask through Pending You's own tools in their sessions, under a key of their own. crew's hook refuses a post, change or close under a row's key and from any other role, lets the rest through, and records each on the rail; its check that every Pending You call names only the agent itself (`briefs.17`) stays as it stands, first, on every tool. A stage agent asks through `crew needs`.
 - **Hearing.** How an owner hears a card crew raised, adopting it with the fleet's `pendingyou hold <id>`, or as the probe of Pending You's `hold` and webhook finds; `crew card read <key>` gives a card's state at a restart and closes a declined approval with the user's words.
 - **The briefs** say all of it: each role's *Cards* section names what crew raises for it, how it hears, and the chain of command for a question; the stage agents' and the operator's say they post none.
 - `crew plan card` and `crew card post|change|close` go; README, the crew skill and `crew`'s usage header follow (`docs.2`).
@@ -19,7 +19,7 @@ None.
 
 ### Modified Capabilities
 
-- `rail-cards`: crew raises every row's card and no agent does; one card per thing, changed in place and closed by crew; the question's checks and record; the hook's scope; how an owner hears.
+- `rail-cards`: crew raises every row's card and no agent does; one card per thing, changed in place and closed by crew; the question's checks and record; a crew agent's call in its own name alone; the hook's scope; how an owner hears.
 - `main-level`: the design agent's record accepted and revised through `crew record`.
 - `plan-proposals`: no `crew plan card`.
 
@@ -48,4 +48,4 @@ tests/t-docs.sh
 tests/moon.yml
 ```
 
-The card hook loses `KEYS`, `FORMS`, `form_check`, `form_refusal` and `proposal_form` and changes `check`, `refusal`, `key_refusal` and `posted`; `hooks.json` matches the five tools. `plan.py` changes `card_refusal`, `CardReads`, `card_read`, `CARD_KEYS` (the old keys out), `parser` and `main`, and the line `row_card_post` prints; it loses `card_post`, `card_change`, `card_close`, `card_held`, `card_asker`, `plan_card`, `card_model`, `close_card` and the notices that name a card to close (`notices`, `lost_rows`). `crew.py` rewrites `cards_how` and loses `lost_card_how`. Every brief under `plugin/roles/` with a *Cards* section changes; `tests/moon.yml` is regenerated.
+The card hook loses `KEYS`, `FORMS`, `form_check`, `form_refusal` and `proposal_form` and changes `check`, `refusal`, `key_refusal` and `posted`, keeping `name_refusal` and `callers` as they stand and `refusal` running the name check first; `hooks.json` keeps its matcher, `mcp__.*[Pp]ending.*[Yy]ou.*__.*`. `plan.py` changes `card_refusal`, `CardReads`, `card_read`, `CARD_KEYS` (the old keys out), `parser` and `main`, and the line `row_card_post` prints; it loses `card_post`, `card_change`, `card_close`, `card_held`, `card_asker`, `plan_card`, `card_model`, `close_card` and the notices that name a card to close (`notices`, `lost_rows`). `crew.py` rewrites `cards_how` and loses `lost_card_how`. Every brief under `plugin/roles/` with a *Cards* section changes; `tests/moon.yml` is regenerated.

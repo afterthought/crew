@@ -6,7 +6,7 @@
 
 ## 2. The hook and the question
 
-- [ ] 2.1 `plugin/hooks/cards --before` refuses a post, change or close from a role other than the four, under a row's key, and an area under any key but the kit's, and lets the rest through; the after-hook records each act with its id and key, an unreadable reply as unread. `FORMS`, `form_check`, `form_refusal`, `proposal_form` and `KEYS` go; `hooks.json` matches the five tools. Logic: `tests/py/test_cards.py` `TestKeys` and `TestResult`. Journey: `tests/t-cards.sh`, a coder's post refused and a conductor's question posted and recorded (`roles.3`, `briefs.11`, `briefs.16`).
+- [ ] 2.1 `plugin/hooks/cards --before` refuses a post, change or close from a role other than the four, under a row's key, and an area under any key but the kit's, and lets the rest through; the after-hook records each act with its id and key, an unreadable reply as unread. `FORMS`, `form_check`, `form_refusal`, `proposal_form` and `KEYS` go; `hooks.json` still runs the hook before every Pending You tool, and its name check, `name_refusal` with `TestNames`, stays as it is (`briefs.17`). Logic: `tests/py/test_cards.py` `TestKeys`, `TestResult` and `TestNames`, the scenarios of "A crew agent's Pending You call names only the agent itself". Journey: `tests/t-cards.sh`, a coder's post refused and a conductor's question posted and recorded (`roles.3`, `briefs.11`, `briefs.16`).
 
 ## 3. The briefs
 

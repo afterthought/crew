@@ -106,6 +106,21 @@ crew SHALL refuse a post, change or close from any role but the four, naming the
 - **WHEN** swb-1-conductor calls `post_request` with the key `land/y`
 - **THEN** the call is refused, saying the landing card is crew's and is raised when the bolt reads proven
 
+### Requirement: A crew agent's Pending You call names only the agent itself
+In a crew session, crew SHALL refuse a call to any Pending You tool that names anyone but the agent's `CREW_AGENT` as its caller, before the call runs, in words naming the agent's own name and saying the call would reroute another agent's answers to this session; a call that names no caller SHALL pass, and an area's name SHALL be taken as no caller's.
+
+#### Scenario: Another agent's card read in its name
+- **WHEN** swb-1-conductor's session calls `get_request` with the name `swancloud-ops`
+- **THEN** the call is refused before it reaches Pending You, naming swb-1-conductor as the session's own name and saying swancloud-ops's answers would wake this session instead
+
+#### Scenario: A whoami under another agent's name
+- **WHEN** the planner's session calls `whoami` with `previousName` `swb-1-conductor`
+- **THEN** the call is refused, naming the planner's own name, and swb-1-conductor's cards stay with its session
+
+#### Scenario: A call that names no caller
+- **WHEN** a conductor's session calls `list_areas`, or `create_area` with the area's name `switchboard-kit`
+- **THEN** the name check lets it through: it names no caller
+
 ## MODIFIED Requirements
 
 ### Requirement: Each rail row has a card key
