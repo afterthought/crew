@@ -144,11 +144,11 @@ class TestText:
         assert stray[1] == '    answer: crew tell swb-1-conductor "Close your Pending You card verify/checked/20260101-0000: its row is gone."'
 
     def test_a_decision_records_open_card_is_under_a_heading_of_its_own_with_no_command(self):
-        rec = dict(label="wldn", card="req_rec-1", key="record/atlas-kit/0021/abc1234", by="wldn-design", host="mac-studio", at=NOW)
+        rec = dict(label="wldn", card="req_rec-1", key="record/atlas-kit/0021", by="wldn-design", host="mac-studio", at=NOW)
         out = text([], cards=[rec])
         heads = [l for l in out.splitlines() if l and not l.startswith(" ")]
         assert heads[-1] == "decision records waiting on you:" and "open cards with no row" not in out
-        assert out.splitlines()[-1].endswith("record/atlas-kit/0021/abc1234 (wldn), asked by wldn-design on mac-studio")
+        assert out.splitlines()[-1].endswith("record/atlas-kit/0021 (wldn), asked by wldn-design on mac-studio")
 
     def test_a_host_that_does_not_answer_is_named_and_a_stray_card_of_its_teams_is_not_listed(self):
         sv = survey(ok=False)

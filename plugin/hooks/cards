@@ -11,7 +11,7 @@ by the name its latest call gives, so a call in another agent's name reroutes th
 call that names no caller passes this check. Then, before Pending You's post_request, create_area or update_request,
 and apart from the name: before a card is posted or an area made, it asks plan.card_refusal whether
 the agent may use the call's idempotencyKey: a card's must be a rail row's key the agent owns, which only the planner
-and the conductors have, or, for the design agent, a decision record's, record/<kit>/<number>/<commit> for a kit of
+and the conductors have, or, for the design agent, a decision record's, record/<kit>/<number> for a kit of
 its partition (briefs.15); an area's must be create-area:<owner>/<kit> for a kit of its own (briefs.11). Any other key
 is refused in words naming the key to use, and so is a call crew could not check, in words saying to post it again
 later, since a card crew let through can't be taken back (read.1). A card posted under a row's key the agent owns, or
@@ -74,7 +74,7 @@ KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
         (re.compile(r"^batch/(\d+)(?:-\d+)?$"), "batch/{}"),
         (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
         (re.compile(r"^land/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "bolt/{}"),
-        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})/[0-9a-f]{7}$"), "record/{}/{}"))
+        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})$"), "record/{}/{}"))
 # The form each row's card takes, and a decision record's, in Pending You's kinds of card, by the key's shape: the kinds
 # it may be, whether it is marked high stakes, whether it must carry options (True) or may carry none (False), whether it
 # may carry steps, for a record's the risk its approval names, and the form in the briefs' words. A landing card asks

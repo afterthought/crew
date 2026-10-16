@@ -164,6 +164,13 @@
 #                                      the partition's reviewer, started fresh for the batch of changes due, in a
 #                                      review tab beside the planner; --wait waits for its summary, records the batch
 #                                      and closes the tab
+#   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
+#                                      the design agent's, at each turn of a decision record's status once it is on the
+#                                      kit's main: the status recorded with its commit; --proposed raises the record's
+#                                      card in the design agent's name, or changes it in place at a new commit, unless
+#                                      --settled-in-pane says the user said yes in the pane; --alternatives <file> makes
+#                                      it a choice, loosen the rules as drafted, accept as ruled or send back; --accepted
+#                                      or --rejected closes it with the commit. A status the file does not hold is refused
 #   crew operator up <label>           the operator agent in this host's operator session <label>, with a flow tab
 #                                      following the run record, a rail tab (crew rail above, a shell below) and a
 #                                      board tab drawn from the rail tab's read; the agent it starts is greeted the
@@ -259,7 +266,7 @@ limits() {  # limits [--timeout <ms>] [--stuck <ms>]: a wait's limits, in `limit
 
 case $cmd in
   list) teams ;;
-  bolts | bolt | signal | state | plan | rail | card) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  bolts | bolt | signal | state | plan | rail | card | record) exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   events | trace) exec python3 "$here/../lib/record.py" "${args[@]}" ;;
   page) exec python3 "$here/../lib/page.py" "${args[@]}" ;;
   sites) exec python3 "$here/../lib/sites.py" "${args[@]:1}" ;;

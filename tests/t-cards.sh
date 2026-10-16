@@ -8,9 +8,14 @@
 # recorded; and after the host signs in again, a card read as lost, and posted again under its key. Then the act that
 # sends crew's own cards, as a raise of the series calls it: a landing card raised outside its owner's turn, asked in
 # the owner's name, told to the owner with the line that adopts it, and closed by the owner's crew card read once the
-# user declines it, with their words. Which card a key names, what crew sets on a card, the area, how a reply, a
-# refusal and an answer read, and what the act sends and records for each are logic cases
-# (tests/py/test_card_commands.py); whose key and what form, and each card's builder, test_cards.py.
+# user declines it, with their words. Then crew record, as the design agent runs it at each turn of a record's status:
+# the record read on the kit's main, its status recorded with its commit and its card raised in the design agent's name
+# under record/<kit>/<number>; a status the file does not hold, an alternatives file crew can't read and another host
+# refused with nothing recorded; the card changed in place at a new commit, closed with the accepting commit, a choice
+# when a rule decided, and none raised when the user settled it in the pane. Which card a key names, what crew sets on
+# a card, the area, how a reply, a refusal and an answer read, and what the act sends and records for each are logic
+# cases (tests/py/test_card_commands.py); whose key and what form, each card's builder and a record's facts,
+# test_cards.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -171,3 +176,77 @@ eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.name, .outcome]')" '["swb
 eq "$(entries card.close | jq -r 'select(.Key == "land/b1") | [.Card, .State, .Outcome] | join(" ")')" "req_stub-5 declined Declined: Not before the box pulls."
 expect_fail "swb-1-conductor holds no open card under land/b1 on $box" card read land/b1
 ok "the owner's crew card read finds the approval the user declined and closes it with their words"
+
+# crew record (briefs.15, record 0031 §1): the design agent's record at each turn of its status, read on switchboard-kit's
+# main as this host's checkout of it holds it, raising, changing and closing the record's one card in its name.
+# adr <status> <subject> [<number>]: a record committed on the kit's main, as sluice lands the design agent's
+adr() {
+  local n=${3:-32}
+  mkdir -p "$k/docs/adr"
+  printf -- '---\nnumber: %s\ntitle: switchboard runs the workflows\nstatus: %s\n---\n\n# switchboard runs the workflows\n\nStatus: %s.\n\nDeciders: the user (“no fleet”); wldn-design.\n\n## Context and problem statement\n\nThe runners cost. %s\n' \
+    "$n" "$1" "$1" "$2" > "$k/docs/adr/00$n-switchboard-runs-the-workflows.md"
+  git -C "$k" add docs/adr; git -C "$k" commit -qm "$2"
+  sha=$(git -C "$k" rev-parse --short=7 HEAD)
+}
+# design <args...>: crew record as wldn-design on the box, in its pane's folder
+design() { (export CREW_TEST_HOST=$box CREW_AGENT=wldn-design HOME; HOME=$(home_of $box); cd "$(space $box willdan)" && "$CREW/plugin/bin/crew" record "$@"); }
+
+adr proposed "docs(adr): 0032 switchboard runs the workflows"
+: > "$CREW_TEST_LOG"
+eq "$(design switchboard-kit 32 --proposed)" "record 0032 in switchboard-kit: proposed at $sha
+card record/switchboard-kit/0032: req_stub-6 https://www.pendingyou.com/app/r/req_stub-6
+call get_request (requestId req_stub-6, name wldn-design)"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
+posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
+eq "$(jq -c '[.idempotencyKey, .session.label, .session.cwd, .kind, .approve.risk, .approve.reversible, .artifacts[0].lines[0]]' <<<"$posted")" \
+  "[\"record/switchboard-kit/0032\",\"wldn-design\",\"$k\",\"approve\",\"low\",true,\"# switchboard runs the workflows\"]"
+has "$(jq -r .summary <<<"$posted")" "Your own words, recorded as your decision: “no fleet”"
+eq "$(entries record.proposed | jq -r '[(.On | join(" ")), (.Commit | join(" ")), .By] | join(" ")')" \
+  "record/switchboard-kit/0032 WilldanGroup/switchboard-kit@$(git -C "$k" rev-parse HEAD) wldn-design"
+eq "$(entries card.post | jq -r 'select(.Key == "record/switchboard-kit/0032") | [(.On | join(" ")), .Card, .By] | join(" ")')" \
+  "record/switchboard-kit/0032 req_stub-6 wldn-design"
+ok "crew record --proposed records the status with its commit, and raises the record's card in the design agent's name under its key, the record whole and the user's own words on it"
+
+: > "$CREW_TEST_LOG"
+expect_fail "crew refuses record 0032 in switchboard-kit as accepted: its file on main says proposed" design switchboard-kit 32 --accepted
+expect_fail "crew can't read the alternatives file $T/none.md" design switchboard-kit 32 --proposed --alternatives "$T/none.md"
+expect_fail "crew record runs on chuck-herdr-alpha, where wldn's design agent holds its records' cards" \
+  as mac-studio env CREW_AGENT=wldn-design "$CREW/plugin/bin/crew" record switchboard-kit 32 --proposed
+eq "$(py_calls)" ""
+eq "$(entries record.accepted)" ""; eq "$(entries record.proposed | wc -l | tr -d ' ')" "1"
+ok "a status the record's file does not hold on main, an alternatives file crew can't read and another host than the main level's are refused, with nothing recorded or raised"
+
+adr proposed "docs(adr): 0032 says what the runners cost"
+: > "$CREW_TEST_LOG"
+eq "$(design switchboard-kit 32 --proposed)" "record 0032 in switchboard-kit: proposed at $sha
+card record/switchboard-kit/0032: req_stub-6 changed, now version 2"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request update_request "
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .changeNote)" "Revised at $sha: docs(adr): 0032 says what the runners cost"
+ok "a record revised and run again changes its one card in place, the change note naming the new commit"
+
+echo '{"answer": {"approved": true}}' > "$stub/answered/req_stub-6.json"
+adr accepted "docs(adr): 0032 accepted by the user"
+: > "$CREW_TEST_LOG"
+eq "$(design switchboard-kit 32 --accepted)" "record 0032 in switchboard-kit: accepted at $sha
+card record/switchboard-kit/0032: req_stub-6 closed"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer "
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Accepted at $sha"
+eq "$(entries card.close | jq -r 'select(.Key == "record/switchboard-kit/0032") | [(.On | join(" ")), .State, .Outcome] | join(" ")')" \
+  "record/switchboard-kit/0032 closed Accepted at $sha"
+ok "a record accepted on its card records its status and closes the card with the accepting commit"
+
+printf -- '---\nrules: ops.3, ops.7\nother: switchboard runs the workflows itself\n---\n\n## Where your rules decided\n\nops.3 chose a fleet.\n' > "$T/alternatives.md"
+adr proposed "docs(adr): 0033 a fleet runs the workflows" 33
+: > "$CREW_TEST_LOG"
+design switchboard-kit 33 --proposed --alternatives "$T/alternatives.md" >/dev/null
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .kind, .recommendedIds, [.options[].id], .artifacts[0].lines[0]]')" \
+  '["record/switchboard-kit/0033","choice",["accept"],["loosen","accept","back"],"## Where your rules decided"]'
+ok "a record a rule decided is raised as one choice, loosen the rules as drafted, accept as ruled or send back, its alternatives on its face"
+
+adr proposed "docs(adr): 0034 settled beside the user" 34
+: > "$CREW_TEST_LOG"
+eq "$(design switchboard-kit 34 --proposed --settled-in-pane)" \
+  "record 0034 in switchboard-kit: proposed at $sha, the user's yes given in the pane; no card is raised"
+eq "$(py_calls)" ""
+eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0034") | .State')" "settled in the pane"
+ok "a record settled with the user in the pane records their yes there, and no card is raised"
