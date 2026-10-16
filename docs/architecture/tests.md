@@ -2,6 +2,7 @@
 paths:
   - "tests/**"
   - "devenv.nix"
+  - "devenv.yaml"
   - ".prototools"
   - ".moon/**"
   - ".config/**"

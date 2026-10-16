@@ -1,0 +1,61 @@
+# git-cliff: the next version and the release notes, from the conventional commits since the last v* tag (code.10).
+# CI releases with it on each push to main; `devenv shell -- release-preview` shows what would be released. The
+# version lives only in the tag.
+
+[changelog]
+header = ""
+body = """
+{% if version %}\
+## {{ version }} ({{ timestamp | date(format="%Y-%m-%d") }})
+{% else %}\
+## Unreleased
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}\
+{{ commit.message | split(pat="\n") | first | trim | upper_first }} \
+([{{ commit.id | truncate(length=7, end="") }}](https://github.com/afterthought/crew/commit/{{ commit.id }}))\
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+postprocessors = [
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}](https://github.com/afterthought/crew/issues/${1}))" },
+]
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+topo_order = false
+sort_commits = "oldest"
+commit_preprocessors = [{ pattern = '(?m)^Co-Authored-By:.*$', replace = "" }]
+# What crew does comes first, then its rules and records, which bind what it does, then the changes that build it
+# and the rest. The HTML comments order the groups; the body strips them. A chore is left out, sluice's landings
+# (`chore(land): #N pull/N`) and the archives of changes among them, as are a style commit and a review's approval.
+commit_parsers = [
+  { message = "^[a-z]+(\\(.+\\))?!:", group = "<!-- 00 -->Breaking changes" },
+  { body = "BREAKING[ -]CHANGE", group = "<!-- 00 -->Breaking changes" },
+  { message = "^feat", group = "<!-- 01 -->Features" },
+  { message = "^fix", group = "<!-- 02 -->Fixes" },
+  { message = "^revert", group = "<!-- 03 -->Reverts" },
+  { message = "^perf", group = "<!-- 04 -->Performance" },
+  { message = "^docs\\([^)]*\\b(rules|architecture|core|adr|records?|open)\\b[^)]*\\)", group = "<!-- 05 -->Rules and records" },
+  { message = "^docs\\(openspec\\)", group = "<!-- 06 -->Changes and specs" },
+  { message = "^docs", group = "<!-- 07 -->Documentation" },
+  { message = "^refactor", group = "<!-- 08 -->Refactors" },
+  { message = "^test", group = "<!-- 09 -->Tests" },
+  { message = "^(build|ci)", group = "<!-- 10 -->Build" },
+  { message = "^chore", skip = true },
+  { message = ".*", skip = true },
+]
+
+[bump]
+features_always_bump_minor = true
+breaking_always_bump_major = false
+initial_tag = "v0.1.0"

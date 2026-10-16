@@ -5,3 +5,4 @@ __pycache__/
 !.envrc
 .moon/cache/
 tests/.venv/
+.pre-commit-config.yaml

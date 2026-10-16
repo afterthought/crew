@@ -1,0 +1,76 @@
+# crew on GitHub: each push to main that git-cliff finds a new version in is released, tagged v<x.y.z> with its notes
+# (cliff.toml, code.10). crew's own gate is sluice (.config/sluice.toml), which runs its suite on the host before
+# anything reaches main, so nothing here builds or tests. git-cliff and convco come from the nixpkgs crew's
+# devenv.lock pins under devenv's own (its nixpkgs-src), the builds crew's shell runs. One run at a time: a push
+# waits for the release before it, so it never reckons the version from a tag that is still being made.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # The commits since the last release are conventional (.versionrc, code.6): a commit can skip the commit-msg hook,
+  # and git-cliff releases from them. Before the first release, the commits this push brought, since older history
+  # holds commits of a type crew no longer writes. Merge commits are not checked.
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          last="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "$BEFORE")"
+          nixpkgs="github:NixOS/nixpkgs/$(jq -r '.nodes."nixpkgs-src".locked.rev' devenv.lock)"
+          nix shell "$nixpkgs#convco" -c convco check -c .versionrc "$last..HEAD"
+        env:
+          BEFORE: ${{ github.event.before }}
+
+  # The next version from the commits since the last v* tag; empty when it is already tagged.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+      - id: next
+        run: |
+          nixpkgs="github:NixOS/nixpkgs/$(jq -r '.nodes."nixpkgs-src".locked.rev' devenv.lock)"
+          tag="$(nix shell "$nixpkgs#git-cliff" -c git-cliff --bumped-version)"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag is already released"
+          else
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Tags the pushed commit and publishes a release with git-cliff's notes for the range. Nothing is committed back to
+  # main, and no tag is moved.
+  release:
+    if: needs.version.outputs.tag != ''
+    needs: [version, conventional]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+      - run: |
+          nixpkgs="github:NixOS/nixpkgs/$(jq -r '.nodes."nixpkgs-src".locked.rev' devenv.lock)"
+          nix shell "$nixpkgs#git-cliff" -c git-cliff --unreleased --tag "$TAG" --strip all > notes.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}

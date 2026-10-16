@@ -1,0 +1,10 @@
+# crew's devenv inputs: devenv's own nixpkgs, and git-hooks.nix for the commit-msg hook devenv.nix installs (code.6,
+# code.10).
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
