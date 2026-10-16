@@ -17,7 +17,7 @@
 
 #### Scenario: A proposal with three new units
 - **WHEN** the planner's proposal adding three units to a bolt is accepted as number 4
-- **THEN** its card is open with the counts, the case, the change drawn and in text, an approval and a question listing the three units ticked
+- **THEN** its card is open, titled "Plan change to <bolt>: 3 new", with the case, the change drawn and in text, a paragraph per unit, and one list of the three units ticked
 
 ### Requirement: A proposal is dropped with a reason, or replaced
 `crew plan drop <n> "<reason>"` SHALL close an open proposal as `dropped` with the reason, applying nothing, withdraw its chain's card with the reason, and tell the planner when someone else dropped it. `crew plan propose <file> --replaces <n>` SHALL drop proposal n and write its successor in one commit, the successor naming the one it replaces, and SHALL change the chain's card in place to the successor with the note "Rewritten as proposal <successor> after your note"; the chain's card SHALL stay keyed by its first proposal, and the rail's row for the successor SHALL carry it.
@@ -31,11 +31,11 @@
 - **THEN** proposal N is `dropped`, proposal N+1 is `open` and names N, agreements given to N do not carry over, and the card keyed `proposal/N` shows N+1 with the change note
 
 ### Requirement: A proposal's card is drawn from the plan and the proposal
-When crew raises or changes a proposal's card it SHALL read only the flywheel's branch and build every part of the card: its title with the counts, its summary, its background, its questions and its artifacts, and SHALL draw the card's picture, a PNG 780 pixels wide, itself, with no browser, no other program and no agent. There SHALL be no `crew plan card` command.
+When crew raises or changes a proposal's card it SHALL read only the flywheel's branch and build every part of the card: its title "Plan change to <bolt or queue>: <counts>", no question and no proposal number; its summary, a sentence of what the planner proposes and why from the case; a paragraph per new unit and per dropped unit as inline Markdown on its face, the intent and a "Direction" line from the proposal's `Do` line and case, a dropped unit's with its why; its background; its boxes and its artifacts; and SHALL draw the card's picture, a PNG 1560 pixels wide at twice a phone's pixel density so it is sharp on a Retina screen, itself, with no browser, no other program and no agent. There SHALL be no `crew plan card` command.
 
 #### Scenario: A proposal that drops, amends and adds
 - **WHEN** crew raises the card for a proposal that drops one unit of bolt `y`, amends one and adds two
-- **THEN** its title ends "1 dropped, 1 amended, 2 new?", its summary names the unit count before and after and `y`'s goal, and its picture is a PNG 780 pixels wide
+- **THEN** its title is "Plan change to y: 1 dropped, 1 amended, 2 new", its summary says what the planner proposes in a sentence, its face holds a paragraph for each new unit and the dropped one, and its picture is a PNG 1560 pixels wide
 
 #### Scenario: Run on a host with no browser
 - **WHEN** crew raises a proposal's card on a host where no browser and no image tool is installed
@@ -53,16 +53,24 @@ The card's text artifact SHALL be the change in monospace lines of at most forty
 - **THEN** its text artifact holds a `DROP` block naming `a` with the reason, an `ADD` block naming `c` with its intent, and `ONCE APPROVED` listing `c` with `+`, and no line is longer than forty characters
 
 ### Requirement: The card's questions are the approval and the new units
-When proposal n adds or moves into a bolt one to fifteen units or chores, its card SHALL ask `plan`, approving it, its detail the case as bullets and its rationale how to object (not approving, and saying why in the note), then one `units-<k>` question per group of at most five new units or chores, shared evenly, every one recommended so it arrives ticked. A lone new unit SHALL be a choice of keeping it or leaving it out. No question SHALL ask for words.
+When proposal n adds, drops or amends units or chores, its card SHALL be one `multi` list and nothing else to tap: a box per row of the change, a new unit or chore ticked, a dropped one unticked as "Keep <unit>", an amended one unticked as "Keep <unit>'s old intent", each with its intent as its detail and what ticking it does as its consequence; its intent SHALL be `approve`; Send SHALL apply the change with the boxes as they stand, a new unit unticked left out, a dropped unit ticked kept, an amendment ticked not applied, and the planner told which. No approve block SHALL sit inside the card and no question SHALL ask for words. A proposal of more than five rows SHALL be grouped into `questions` of at most five rows each, in the plan's order. A proposal with no unit rows, a move, an order or a new bolt alone, SHALL be an `approve` of risk low, reversible.
+
+#### Scenario: One dropped, three new
+- **WHEN** crew raises the card for a proposal that drops `a` and adds `b`, `c` and `d`
+- **THEN** the card is one list of four boxes, `b`, `c` and `d` ticked and "Keep a" unticked, and sending it as it stands applies the proposal whole
+
+#### Scenario: How to object to a drop
+- **WHEN** the user ticks "Keep a" and sends
+- **THEN** `a` stays in the bolt, the rest is applied, and the planner is told `a` was kept
+
+#### Scenario: One new unit
+- **WHEN** the proposal adds one unit `c` and nothing else
+- **THEN** the card is one box, `c` ticked, and Send applies it; cleared, Pending You asks for a note before it sends, which is its limit and not crew's
 
 #### Scenario: Seven new units
 - **WHEN** crew raises the card for a proposal that adds seven units
-- **THEN** the card has the question `plan` and two unit questions of four and three units, every unit recommended
+- **THEN** the card has two questions of four and three boxes, every one ticked
 
-#### Scenario: One new unit
-- **WHEN** the proposal adds one unit `c`
-- **THEN** the card's second question is a choice between keeping `c` and leaving it out, keeping `c` recommended
-
-#### Scenario: How to object to a drop
-- **WHEN** crew raises the card for a proposal that drops `a` and adds `c`
-- **THEN** the rationale of `plan` says that to keep the dropped unit the user does not approve and says why in a note, and that a note beside an approval changes nothing applied
+#### Scenario: A move alone
+- **WHEN** the proposal moves bolt `y` first and changes no unit
+- **THEN** the card is a hold-to-approve of risk low

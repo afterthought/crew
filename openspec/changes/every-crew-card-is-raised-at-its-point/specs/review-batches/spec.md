@@ -10,7 +10,7 @@ When the reviewer delivers a batch's summary and the planner's `crew review --wa
 ## MODIFIED Requirements
 
 ### Requirement: A batch card is read and answered in Pending You
-A batch card SHALL be a notice that asks nothing, which the user sends back with one tap. It SHALL say first what it is, then that there is nothing to answer and that notes go in the reading session or in the card's own note naming the change, and SHALL carry each unit's name, team and opening paragraph as prose that wraps on a phone, and one link to one plannotator session holding the summary whole and every change. The batch's notes SHALL be the session's annotations and the card's own note. The card SHALL close on the tap or on the session's send, whichever is first, and the session SHALL end with it.
+A batch card SHALL be a notice that asks nothing, which the user sends back with one tap. Its title SHALL say what the batch is about, from its units' subjects, with the batch's number after; its summary SHALL open "N changes to read, nothing to approve", say what the batch is, and say that notes go in the reading session or in the card's own note naming the change; it SHALL carry each unit's name, team and opening paragraph as inline Markdown on its face, and one link to one plannotator session holding the summary whole and every change. The batch's notes SHALL be the session's annotations and the card's own note. The card SHALL close on the tap or on the session's send, whichever is first, and the session SHALL end with it.
 
 #### Scenario: The user drills in
 - **WHEN** the user opens a batch card holding three units
