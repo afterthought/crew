@@ -6,7 +6,7 @@ Record 0031 makes the rail the truth of what is open and whose, and has crew clo
 
 ## What Changes
 
-- `crew rail` prints under each row its card key, whether a card is open, its id and whose it is; after its groups the open question cards, each with its asker, its title and its age, the open record cards apart, and what its sweep did.
+- `crew rail` prints under each row its card key, whether a card is open, its id and whose it is; after its groups the open question cards, each with its key, its asker and its age, the open record cards apart, and what its sweep did.
 - On each rail read, under the host's connection, crew closes a row's card whose row is gone, with the outcome or the reason; withdraws a question card whose asker herdr no longer lists, naming the asker; posts again, under its key, an open row's card that reads not found; and posts a row's card that has none, through the raise its kind's change gives it.
 - `board.agent_views` gives each agent its open cards, questions among them, and the design band the records proposed; the mod draws them. `crew board` stays a view that writes nothing.
 
