@@ -686,6 +686,14 @@ class TestDeploy:
         follows = built.follows_of("deploy", {"env": "srv", "head": "c882cff"}, entries)
         assert follows == "req_land24" and deploy(follows=follows)["card"]["follows"] == "req_land24"
 
+    def test_a_kit_that_hands_no_notes_is_said_to_and_landings_crew_cant_read_are_said_not_counted(self):
+        assert deploy(notes=None, steps=[])["card"]["summary"] == (
+            "3 landings since srv's last deploy (6aed25c). The kit handed no release notes. box (auto) follows on its own; "
+            "mac-studio is offered after srv.")
+        c = deploy(notes=None, steps=[], landings=[], landings_why="c882cff is no landing's commit in the record")["card"]
+        assert c["summary"].startswith("Which landings it carries since srv's last deploy (6aed25c) can't be read: c882cff is no landing's")
+        assert [(a["title"], a["lines"][0]) for a in c["artifacts"]] == [("What's in it", "c882cff is no landing's commit in the")]
+
 
 class TestFollows:
     E = [dict(Act="card.post", Key="land/b24/abc1234", Card="req_old"), dict(Act="card.close", Card="req_old"),

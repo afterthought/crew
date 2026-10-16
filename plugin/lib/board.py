@@ -386,9 +386,12 @@ def deploy_fields(env, d):
 
 
 def waiting_fields(env, w):
-    """An operation waiting on an environment: its key, who has it, and its first line or note."""
+    """An operation waiting on an environment: its key, who has it, held for the user's word or not, and its first line
+    or note."""
     said = {"handed": f"handed to {w['agent'] or w['doer']}", "failed": "failed"}.get(w["state"]) or (
-        "waits on the user" if w["doer"] == "user" else f"waits for {w['agent'] or w['doer'] or 'its doer'}")
+        "waits on the user" if w["doer"] == "user" else
+        f"held for the user's word, for {w['agent'] or w['doer'] or 'its doer'}" if w.get("held") else
+        f"waits for {w['agent'] or w['doer'] or 'its doer'}")
     return fields(env, w["key"], said, w["text"] or w["note"] or "")
 
 
@@ -656,7 +659,7 @@ def ops_view(p):
         for d in (d for env, d in pending if env == e["env"]):
             out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))
         for w in (w for env, w in steps if env == e["env"]):
-            doer = (w["doer"] or "no doer named") + (f", {w['agent']}" if w["agent"] else "")
+            doer = (w["doer"] or "no doer named") + (f", {w['agent']}" if w["agent"] else "") + (", held for the user's word" if w.get("held") else "")
             out.append(row(fields(e["env"], w["key"], (f"after {w['to'][:7]}", "dim") if w["to"] else "", w["state"], f"doer {doer}"),
                            gutter(w["markers"]), 0, w["markers"]))
     return out + attention_rows(p, lambda a: a["what"] in ("host", "plan"))

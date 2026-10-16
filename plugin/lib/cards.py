@@ -574,13 +574,18 @@ def deploy_card(f):
     """A deploy's card (record 0031 §5, plan.14): an approval of risk high naming the environment and the commit; its
     summary counting the landings since the environment's last deploy and naming the environments before and after
     it; on its face the kit's release notes as the deployer hands them, as inline Markdown, crew writing none, or the
-    landings' subjects when it hands none, and the after-deploy steps with their doers; the landings' subjects in its
-    details. f: env, head, base (what the environment runs) or None, landings ([{pr, subject}], oldest first), notes
-    (Markdown) or None, release (the notes' name) or None, steps ([{n, text, doer, held}]), before ([env]), after
-    ([{env, policy}]), follows."""
+    landings' subjects when it hands none, saying so, and the after-deploy steps with their doers; the landings'
+    subjects in its details. f: env, head, base (what the environment runs) or None, landings ([{pr, subject}], oldest
+    first), landings_why (why they can't be read) or None, notes (Markdown) or None, release (the notes' name) or None,
+    steps ([{n, text, doer, held}]), before ([env]), after ([{env, policy}]), follows."""
     env, head, landings, steps = f["env"], f["head"][:7], list(f.get("landings") or []), list(f.get("steps") or [])
-    said = [f"{plural(len(landings), 'landing')} since {env}'s last deploy ({f['base'][:7]})." if f.get("base") else
+    why = f.get("landings_why")
+    since = f"since {env}'s last deploy ({f['base'][:7]})" if f.get("base") else f"in the first deploy to {env}"
+    said = [f"Which landings it carries {since} can't be read: {why}." if why else
+            f"{plural(len(landings), 'landing')} since {env}'s last deploy ({f['base'][:7]})." if f.get("base") else
             f"{plural(len(landings), 'landing')}, the first deploy to {env}."]
+    if not f.get("notes"):
+        said.append("The kit handed no release notes.")
     if f.get("before"):
         said.append(f"It comes after {joined(list(f['before']))}.")
     after = list(f.get("after") or [])
@@ -596,7 +601,8 @@ def deploy_card(f):
         said.append(f"After the deploy: {plural(len(steps), 'step')}, {yours} yours.")
     subjects = [(f"#{l['pr']} " if l.get("pr") else "") + l["subject"] for l in landings]
     shown = ([markdown("What's in it" + (f": {f['release']}" if f.get("release") else ""), f"deploy-{env}.md", f["notes"])]
-             if f.get("notes") else [text_list(f"What's in it: {plural(len(landings), 'landing')}", f"deploy-{env}.txt", subjects)])
+             if f.get("notes") else [text_list("What's in it" + ("" if why else f": {plural(len(landings), 'landing')}"), f"deploy-{env}.txt",
+                                               subjects or ([why] if why else []))])
     if steps:
         shown.append(text_list(f"After the deploy: {plural(len(steps), 'step')}, {yours} yours", f"deploy-{env}-steps.txt",
                                [(f"{s['n']}  {s['text']}", "you" if s["doer"] == "user" else
