@@ -37,7 +37,7 @@ crew SHALL start a plannotator reading session when it raises a batch's card, on
 - **THEN** it is refused: a landing card has nothing to read, and no session is started
 
 ### Requirement: A session is started only where its link can be answered
-crew SHALL start no session, and SHALL say why, when the key is no row's or the row has nothing to read, when the batch's session would run on any host but the main level's, when the document is not on the host the session would run on or crew cannot read it whole, and when plannotator gives a link that names the host only for itself (`localhost` or a loopback address), ending that session; a card whose session could not start SHALL still be raised, saying its reading could not be opened on the tailnet.
+crew SHALL start no session, and SHALL say why, when the key is no row's or the row has nothing to read, when the batch's session would run on any host but the main level's, when the document is not on the host the session would run on or crew cannot read it whole, and when plannotator gives a link that names the host only for itself (`localhost` or a loopback address), ending that session.
 
 #### Scenario: A key whose row is gone
 - **WHEN** the planner runs `crew card session batch/3` after batch 3's card was closed
@@ -47,13 +47,16 @@ crew SHALL start no session, and SHALL say why, when the key is no row's or the 
 - **WHEN** a conductor on the box runs `crew card session batch/3 --label wldn`, and the partition's main level is on mac-studio
 - **THEN** it is refused, naming mac-studio, and no session is started
 
-#### Scenario: A unit's change crew cannot read
-- **WHEN** crew raises batch 3's card and the host of `z`'s team does not answer
-- **THEN** no session is started on the rest of the batch, and the card says `z`'s change could not be read and the reading could not be opened
-
 #### Scenario: A landing card
 - **WHEN** the conductor runs `crew card session land/y`
 - **THEN** it is refused: a landing card has no document to read
+
+### Requirement: A card whose session could not start is raised all the same
+When crew raises a batch's card or a long proposal's and its session could not start, crew SHALL raise the card all the same, saying after its summary's first paragraph that its reading could not be opened on the tailnet, and why first in its details, and SHALL say why in the command's output.
+
+#### Scenario: A unit's change crew cannot read
+- **WHEN** crew raises batch 3's card and the host of `z`'s team does not answer
+- **THEN** no session is started on the rest of the batch, and the card says `z`'s change could not be read and the reading could not be opened
 
 #### Scenario: A link only the host can open
 - **WHEN** plannotator gives batch 3's session a link on `localhost`
