@@ -7329,8 +7329,8 @@ def rail_text(fleet, labels, read, now):
     """The rail as crew rail prints it, from a read rail_read made: its groups in order, each row with when it began to
     wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it,
     whose and its id, by which its owner asks Pending You for it, or, with none open, the words of the refusal of its
-    last post, oldest first; then the questions the asking roles put to the user, each with its asker, its title as
-    Pending You gave it to the sweep, and its age; then the decision records waiting on the user, each the design
+    last post, oldest first; then the questions the asking roles put to the user, each with its key, which names it,
+    its asker and its age, since no entry holds a card's words (record.3); then the decision records waiting on the user, each the design
     agent's open card for one, with when it was asked and by whom, and no command, since the card is where it is
     answered; then any open card whose row is gone that the sweep did not close, with the host whose rail read closes
     it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, each partition it
@@ -7340,7 +7340,7 @@ def rail_text(fleet, labels, read, now):
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
     sv = {h: v for h, v in read["sv"].items() if h in holding}
-    swept = read.get("swept") or {"done": [], "titles": {}, "unswept": []}
+    swept = read.get("swept") or {"done": [], "unswept": []}
     logs = read.get("logs") or {}
     lines = [f"What waits on you ({', '.join(labels)}), as of {now.astimezone():%H:%M:%S}"]
 
@@ -7366,10 +7366,6 @@ def rail_text(fleet, labels, read, now):
         lines += ["", "questions waiting on you:"]
     for c in questions:
         lines.append(when(c) + f"{c['key'] or 'a question'} ({c['label']}), asked by {c['by']} on {c['host']} ({c['card']})")
-        title, why = swept["titles"].get(c["card"], (None, None))
-        lines.append(f"    {'title:':<8}" + (f"“{title}”" if title else f"not read: {why}" if why else
-                                            f"read by a rail read on {c['host']}, under its sign-in" if c["host"] != here else
-                                            "not read on this read"))
     records = record_cards(sv, cards_, read["unread"])
     if records:
         lines += ["", "decision records waiting on you:"]
@@ -8687,8 +8683,9 @@ def record_status(fleet, a):
 # ------------------------------------------------------------------------------- the rail's sweep of the cards
 
 # The name crew's sweep gives Pending You when it asks after cards: no agent's, so it claims no agent's answers
-# (briefs.17). Pending You refuses it another assistant's card in that assistant's words, and answers "not found" only
-# for a card this host's sign-in no longer reaches, which is all the sweep asks.
+# (briefs.17). Pending You refuses it another assistant's card as that assistant's ("This is crw-2-conductor's card;
+# leave it."), so the card is there, and answers "not found" only for a card this host's sign-in no longer reaches
+# (the recovery session, 2026-10-15 and 16), which is all the sweep asks.
 SWEEPER = "crew"
 # Each kind's raise, the function its change of the series gives it, handed a rail row (record 0031 §1): by the row
 # key's first part, a name in this module or, as ops.<name>, in ops.py. A kind whose function is not there has none yet.
@@ -8754,14 +8751,14 @@ def sweep_cards(fleet, read, acts=None):
     (sweep_judged, row_gone), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
     card that has none; a lost card of a kind with no raise is recorded lost, for its owner to post again, and a row of
-    one is left as it is. It first asks Pending You in crew's own name (SWEEPER) whether it finds each card, and a
-    question's title; a host not signed in, or a bridge that fails, changes nothing, and is said, as is a partition
+    one is left as it is. It first asks Pending You in crew's own name (SWEEPER) whether it finds each card, which
+    Pending You answers for another assistant's card by refusing it as that assistant's, and for a card this host's
+    sign-in no longer reaches with "not found"; a host not signed in, or a bridge that fails, changes nothing, and is said, as is a partition
     whose record did not answer there (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
-    card, by, did, words, new}], titles: {card: (title, why not)}, unswept: [{label, why}]}, did closed, withdrawn,
-    lost, posted or left."""
+    card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left."""
     acts = acts or SweepActs(fleet)
     here, now = acts.host(), acts.now()
-    out, judged = {"done": [], "titles": {}, "unswept": []}, []
+    out, judged = {"done": [], "unswept": []}, []
     down = {h for h, v in read["sv"].items() if not v["ok"]}
     for l, _, _, pl in read["found"]:
         if not pl:
@@ -8811,10 +8808,7 @@ def sweep_cards(fleet, read, acts=None):
             else:
                 did(l, c["key"], c["card"], c["by"], "left", "its close did not go through, as said above")
         for c in j["questions"]:
-            got, words = found[c["card"]]
-            title = got.get("title") if isinstance(got, dict) else None
-            out["titles"][c["card"]] = ((title.strip(), None) if isinstance(title, str) and title.strip() else
-                                        (None, f"Pending You answers crew “{words}”" if words else "Pending You gave none"))
+            words = found[c["card"]][1]
             if cards.lost(words):
                 card_lost(acts, l, c["by"], c["key"] or "", c["card"], words)
                 did(l, c["key"], c["card"], c["by"], "lost", "this host's sign-in no longer reaches it")

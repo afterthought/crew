@@ -159,33 +159,24 @@ class TestText:
 
     def test_a_row_with_its_card_and_a_question_open(self):
         """The rail-cards scenario: proposal/4's card is open, the planner's, and swb-1-conductor's question is listed
-        after the groups with its asker, its title and its age."""
+        after the groups with its key, its asker and its age, and no words of the card's (record.3)."""
         p4 = dict(label="wldn", card="req_p4", key="proposal/4", by="wldn-planner", host=BOX, at=NOW)
-        q1 = dict(label="wldn", card="req_q1", key=None, on="agent/swb-1-conductor", by="swb-1-conductor", host="mac-studio",
-                  at=NOW - datetime.timedelta(minutes=14))
-        out = text(rows([proposal(4)]), cards=[p4, q1], swept={"done": [], "titles": {"req_q1": ("Hold the Macs?", None)}, "unswept": []})
+        q1 = dict(label="wldn", card="req_q1", key="ask/swb-1-conductor/hold-the-macs", on="agent/swb-1-conductor", by="swb-1-conductor",
+                  host="mac-studio", at=NOW - datetime.timedelta(minutes=14))
+        bare = dict(q1, card="req_q2", key=None, at=NOW - datetime.timedelta(minutes=5))
+        out = text(rows([proposal(4)]), cards=[p4, q1, bare])
         assert "    card:   proposal/4, open, asked by wldn-planner (req_p4)" in out
         asked = out.split("questions waiting on you:\n")[1].splitlines()
-        assert asked[0].endswith("  14m      a question (wldn), asked by swb-1-conductor on mac-studio (req_q1)")
-        assert asked[1] == "    title:  “Hold the Macs?”"
-        assert "open cards whose row is gone" not in out
-
-    def test_a_question_crew_could_not_read_is_listed_with_its_key_and_asker_saying_so(self):
-        q = dict(label="wldn", card="req_q2", key="ask/wldn-ops/rotate", by="wldn-ops", host="mac-studio", at=NOW)
-        there = dict(q, card="req_q3", host=BOX)
-        out = text([], cards=[q, there], swept={"done": [], "titles": {"req_q2": (None, "Pending You answers crew “This is wldn-ops's card; leave it.”")},
-                                                "unswept": []})
-        asked = out.split("questions waiting on you:\n")[1].splitlines()
-        assert asked[0].endswith("ask/wldn-ops/rotate (wldn), asked by wldn-ops on mac-studio (req_q2)")
-        assert asked[1] == "    title:  not read: Pending You answers crew “This is wldn-ops's card; leave it.”"
-        assert asked[3] == f"    title:  read by a rail read on {BOX}, under its sign-in"
+        assert [l[18:] for l in asked] == ["  14m      ask/swb-1-conductor/hold-the-macs (wldn), asked by swb-1-conductor on mac-studio (req_q1)",
+                                           "  5m       a question (wldn), asked by swb-1-conductor on mac-studio (req_q2)"]
+        assert "title" not in out and "open cards whose row is gone" not in out
 
     def test_a_read_that_swept_lists_each_card_it_closed_withdrew_or_posted_again_and_what_it_could_not_sweep(self):
         done = [dict(label="wldn", key="proposal/4", card="req_p4", by="wldn-planner", did="closed", words="its proposal was applied", new=None),
                 dict(label="wldn", key="land/y", card="req_l1", by="swb-1-conductor", did="withdrawn", words="its bolt was dropped", new=None),
                 dict(label="wldn", key=None, card="req_q1", by="crw-3-conductor", did="withdrawn", words="crw-3-conductor ended", new=None),
                 dict(label="wldn", key="proposal/17", card="req_1", by="wldn-planner", did="lost", words="posted again as req_2", new="req_2")]
-        out = text([], swept={"done": done, "titles": {}, "unswept": [dict(label="madswan", why="this host can't ask through Pending You")]})
+        out = text([], swept={"done": done, "unswept": [dict(label="madswan", why="this host can't ask through Pending You")]})
         assert out.split("cards swept:\n")[1].split("\n\n")[0].splitlines() == [
             "  proposal/4 (wldn), wldn-planner's req_p4: closed: its proposal was applied",
             "  land/y (wldn), swb-1-conductor's req_l1: withdrawn: its bolt was dropped",
@@ -198,7 +189,7 @@ class TestText:
         line names req_2, and req_1 is listed lost."""
         old = dict(label="wldn", card="req_1", key="proposal/17", by="wldn-planner", host="mac-studio", at=NOW)
         swept = {"done": [dict(label="wldn", key="proposal/17", card="req_1", by="wldn-planner", did="lost", words="posted again as req_2",
-                               new="req_2")], "titles": {}, "unswept": []}
+                               new="req_2")], "unswept": []}
         now = plan.swept_cards([old], swept, "mac-studio", NOW)
         assert [(c["card"], c["key"], c["by"], c["host"], c["on"]) for c in now] == [("req_2", "proposal/17", "wldn-planner", "mac-studio", "proposal/17")]
         out = text(rows([proposal(17)]), cards=now, swept=swept)
@@ -464,11 +455,10 @@ class TestSweep:
                                      State="withdrawn", Outcome="crw-3-conductor ended; ask again if it still matters")]
         assert [(d["did"], d["words"]) for d in out["done"]] == [("withdrawn", "crw-3-conductor ended")]
 
-    def test_a_question_whose_asker_runs_is_kept_with_its_title_and_one_herdr_cant_answer_for_is_kept_saying_why(self):
+    def test_a_question_whose_asker_runs_is_kept_and_one_herdr_cant_answer_for_is_kept_saying_why(self):
         q, r = card(None, "req_q1", "swb-1-conductor"), card(None, "req_q2", "wldn-ops")
         out, acts = swept(cards_=[q, r], listed={"swb-1-conductor": (True, None), "wldn-ops": (None, "herdr's agent list in session wldn-3 failed: x")},
-                          answers={"get_request": lambda a: ({"title": "Hold the Macs?"}, None) if a["requestId"] == "req_q1" else (None, "This is wldn-ops's card; leave it.")})
-        assert out["titles"] == {"req_q1": ("Hold the Macs?", None), "req_q2": (None, "Pending You answers crew “This is wldn-ops's card; leave it.”")}
+                          answers={"get_request": (None, "This is wldn-ops's card; leave it.")})
         assert [(d["card"], d["did"], d["words"]) for d in out["done"]] == [
             ("req_q2", "left", "whether wldn-ops still runs can't be told: herdr's agent list in session wldn-3 failed: x")]
         assert acts.emitted == [] and {n for n, *_ in acts.calls} == {"crew"}
@@ -488,10 +478,17 @@ class TestSweep:
         assert [(e["Act"], e.get("State"), e["Card"]) for e in acts.emitted] == [("card.close", "lost", "req_d1"), ("card.post", None, "req_d2")]
         assert out["done"] == [dict(label="wldn", key="deploy/dev", card="req_d1", by="wldn-ops", did="lost", words="posted again as req_d2", new="req_d2")]
 
-    def test_a_card_found_is_left_and_a_lost_one_of_a_kind_with_no_raise_is_recorded_lost_for_its_owner_to_post(self):
+    def test_a_card_pending_you_refuses_crew_as_its_owners_is_there_and_left(self):
+        """Read in the recovery session on 2026-10-16: get_request on crw-2-conductor's card under another name, on this
+        host's connection, answers with the card's ownership, not "not found", which only a card stranded on an older
+        connection reads."""
+        c = card("proposal/4", "req_188b8b6a", "crw-2-conductor")
+        refused = "This is crw-2-conductor's card; leave it. You're \"recovery\": act only on the cards you posted."
+        out, acts = swept(rows_=[row("proposal/4")], cards_=[c], answers={"get_request": (None, refused)})
+        assert out["done"] == [] and acts.emitted == [] and [n for n, *_ in acts.calls] == ["crew"]
+
+    def test_a_lost_card_of_a_kind_with_no_raise_is_recorded_lost_for_its_owner_to_post(self):
         p4 = card("proposal/4", "req_p4", "wldn-planner")
-        out, acts = swept(rows_=[row("proposal/4")], cards_=[p4], answers={"get_request": (None, "This is wldn-planner's card; leave it.")})
-        assert out["done"] == [] and acts.emitted == []
         out, acts = swept(rows_=[row("proposal/4")], cards_=[p4], answers={"get_request": NOT_FOUND})
         assert [(e["Act"], e["State"], e["Card"]) for e in acts.emitted] == [("card.close", "lost", "req_p4")]
         assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "crew raises no card for proposal/4 yet, so wldn-planner posts it again")]
@@ -511,7 +508,7 @@ class TestSweep:
         assert [k for k, _ in seen] == ["proposal/5"] and seen[0][1] is acts
         assert out["done"] == [dict(label="wldn", key="proposal/5", card=None, by="wldn-planner", did="posted", words="its row had none open", new="req_p5")]
         out, acts = swept(rows_=[row("deploy/dev", "operations")])
-        assert out == {"done": [], "titles": {}, "unswept": []} and acts.calls == []
+        assert out == {"done": [], "unswept": []} and acts.calls == []
 
     def test_a_raise_that_refuses_is_said_and_refuses_nothing_else(self):
         def raise_proposal(fleet, r, acts=None):
@@ -522,7 +519,7 @@ class TestSweep:
     def test_a_host_not_signed_in_changes_nothing_and_says_so(self):
         said = "this host can't ask through Pending You: it is not signed in. The user signs it in with pendingyou-signin. " + plan.SWEEP_LATER
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], entries=[did("plan.approve", On=["proposal/4"])], opening=said)
-        assert out == {"done": [], "titles": {}, "unswept": [dict(label="wldn", why=said)]} and acts.emitted == []
+        assert out == {"done": [], "unswept": [dict(label="wldn", why=said)]} and acts.emitted == []
 
     def test_a_partition_whose_record_did_not_answer_on_its_branch_here_or_its_main_host_is_not_swept(self):
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"mac-studio": "x"}})

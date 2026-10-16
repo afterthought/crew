@@ -20,14 +20,14 @@
 # refusing a unit, a landing's key and a short proposal's; crew card wait closing the card on the tap, with its note,
 # and on the session's send, with every annotation, each ending the session; a session whose link only the host could
 # open ended, and the card raised all the same, saying so; and a wait with neither card nor session refused. Then the
-# rail read's sweep of the box's cards: a card whose row is gone and a question whose asker ended withdrawn, a question
-# whose asker runs listed by its title, crew board acting on none; a row's card read not found recorded lost; a row
-# whose post was refused showing the refusal, left while the refusal is under ten minutes old and raised through its
-# kind's raise after; and a row of a kind with no raise left as it is. Which card a key names, what crew sets on a card,
-# the area, how a reply, a refusal and an answer read, and what the act sends and records for each are logic cases
-# (tests/py/test_card_commands.py); whose key and what form, each card's builder, a record's facts, and the session's
-# start and end in the act and what a batch's wait returns, test_cards.py; a batch card's facts, test_batches.py; what
-# the sweep judges and does, test_rail.py.
+# rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when Pending You no longer
+# finds it, and a question whose asker ended withdrawn, a question whose asker runs listed with its asker and age, crew
+# board acting on none; a row's card read not found recorded lost; a row whose post was refused showing the refusal,
+# left while the refusal is under ten minutes old and raised through its kind's raise after; and a row of a kind with no
+# raise left as it is. Which card a key names, what crew sets on a card, the area, how a reply, a refusal and an answer
+# read, and what the act sends and records for each are logic cases (tests/py/test_card_commands.py); whose key and what
+# form, each card's builder, a record's facts, and the session's start and end in the act and what a batch's wait
+# returns, test_cards.py; a batch card's facts, test_batches.py; what the sweep judges and does, test_rail.py.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world

@@ -10,7 +10,7 @@ On each rail read crew SHALL withdraw, under the host's connection, every open q
 ## MODIFIED Requirements
 
 ### Requirement: The rail shows each row's card
-`crew rail` SHALL print, under each row, the row's card key, whether a card with that key is open, its id and whose it is, and after the groups the open question cards, each with its asker, its title and its age, and the open record cards apart. A card is open from its `card.post` entry until a `card.close` entry for the same card, or until a later `card.post` under the same key names another card, which is then the row's card while the older is taken as lost.
+`crew rail` SHALL print, under each row, the row's card key, whether a card with that key is open, its id and whose it is, and after the groups the open question cards, each with its key, which names it, its asker and its age, and the open record cards apart. A card is open from its `card.post` entry until a `card.close` entry for the same card, or until a later `card.post` under the same key names another card, which is then the row's card while the older is taken as lost.
 
 #### Scenario: A row with its card
 - **WHEN** bolt `y` reads proven and crew's card `req_l1` under `land/y` is open
@@ -26,7 +26,7 @@ On each rail read crew SHALL withdraw, under the host's connection, every open q
 
 #### Scenario: A row with its card and a question open
 - **WHEN** `proposal/4`'s card `req_p4` is open and swb-1-conductor's question `req_q1` is open
-- **THEN** the proposal row's card line names `proposal/4`, open, `req_p4`, the planner's; and after the groups `req_q1` is listed with swb-1-conductor, its title and its age
+- **THEN** the proposal row's card line names `proposal/4`, open, `req_p4`, the planner's; and after the groups `req_q1` is listed with its key, swb-1-conductor and its age
 
 ### Requirement: The rail names an open card whose row is gone
 After its groups, `crew rail` SHALL list each card its sweep withdrew or closed on this read, with its key, its owner and why (its row is gone, its asker ended), and each card it posted again as lost.
