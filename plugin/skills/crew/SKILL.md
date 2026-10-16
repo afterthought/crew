@@ -42,6 +42,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | after a restart, bring back every standing agent of this host whose pane came back empty, greeting each conductor and each agent outside a team it brings back | `crew revive` |
 | send an agent crew started a message, wherever it runs | `crew tell <agent> "<text>"` |
 | see what runs where, with the URL to open | `crew sites [<label>]` |
+| offer a `manual` environment a deploy, its card raised in main-level ops's name with the kit's changelog and after-deploy steps (the kit's deployer) | `crew ops offer <env> --to <sha> --from <sha\|none> [--notes <file>] [--steps <file>] --label L` |
 | record the user's word for a deploy the rail offers (main-level ops, on the user's yes) | `crew ops approve <env> --to <sha> --label L` |
 | record an operation done or declined | `crew ops step <env> [--to <sha>] --key <key> --state done\|declined --label L` |
 | see what crew did lately, on every host of a partition, or as it happens | `crew events [--label L] [--about <object>] [--follow]` |

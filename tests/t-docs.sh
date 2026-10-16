@@ -32,6 +32,9 @@ for doc in usage readme skill; do lacks "${!doc}" "unit approve"; lacks "${!doc}
 for doc in usage readme skill; do has "${!doc}" "crew review"; has "${!doc}" "settle"; done
 ok "none of the removed commands or roles is in the README, the skill or the usage, and each names crew review and the settle stage"
 
+for doc in usage readme skill; do has "${!doc}" "crew ops offer <env>"; has "${!doc}" "[--notes <file>] [--steps <file>]"; done
+ok "the README, the skill and the usage give crew ops offer's notes and steps"
+
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)
 [[ -z $wrapped ]] || fail "these briefs or skills name the shell's wrap, which is CLAUDE.md's to say:"$'\n'"$wrapped"
