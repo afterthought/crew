@@ -423,30 +423,41 @@ done
 ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"
 
 # A decision record is accepted only on the user's yes (briefs.15): the design agent commits every record and amendment
-# as proposed, puts it to the user on its one card, under the record key, in the record's words, records their yes,
-# note or no, and queues nothing from it before the yes; the planner and the conductors post no record card.
+# as proposed, runs crew record at each turn of its status once it is on the kit's main, which raises, changes and closes
+# the record's one card in its name, adopts the card by the line crew record prints, names a rule-decided choice in an
+# alternatives file, never settled silently, and queues nothing before the yes; it posts and closes no record card, and
+# the planner and the conductors post none.
 expect_ok crewpy brief wldn design
 for want in "Every decision record you write, and every amendment you make to one, is committed as proposed" \
-  "put to the user on one Pending You card in the record's own words" "It is accepted only on the user's yes, and the record says so" \
+  "put to the user on one Pending You card in the record's own words, which crew raises for it through \`crew record\`" \
+  "It is accepted only on the user's yes, given in this pane or on that card, and the record says so" \
   "Your own reading never accepts a record" "\`status: proposed\`" "accepted only on their yes.)" \
   "Queue no unit from a proposed record or amendment" "Only then queue the units it calls for" \
-  "the record's deciders line quotes those words as the user's decision" "Your own words, recorded as your decision:" \
-  "post a new card for the new version, under the new commit's key" \
+  "the record's deciders line quotes those words as the user's decision" \
+  "At each turn of a record's status, once the commit that holds it has landed on the kit's main, run \`$CREW/plugin/bin/crew record <kit> <number> --proposed|--accepted|--rejected\`" \
+  "the kit one of atlas-kit, breadboard-kit, switchboard-kit" "refuses a status the file there does not hold" \
+  "\`record/<kit>/<number>\`, one card however often the record is revised" \
+  "adopt it with the line the command prints, \`call get_request (requestId <id>, name wldn-design)\`" \
+  "run it with \`--settled-in-pane\`: crew records their yes as given here, and no card is raised" \
+  "You post and close no record card yourself: crew does both" \
+  "a rule-decided choice is never settled silently" "the rules that decided and each rule as it would read loosened" \
+  "\`crew record … --proposed --alternatives <file>\`" "loosen the rules as drafted and take the other path, accept the record as ruled, or send it back" \
+  "run \`crew record … --proposed\` again: the card is changed in place, naming the new commit" \
+  "run \`crew record … --accepted\`, which closes the card" "run \`crew record … --rejected\`, which closes the card" \
   "set \`status: rejected\` with the user's words, and take out each rule drawn from it" \
-  "The record's card is the one card you post" "\`record/<kit>/<number>/<commit>\`" "one of atlas-kit, breadboard-kit, switchboard-kit" \
-  "the commit that proposed the record or the amendment, which reaches the kit's main through sluice" \
   "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "wt submit main --no-remove" \
-  "read-tree -m -u <main's commit before you submitted> main" "Post the card once that commit has landed on main" \
-  '"risk": "low", "reversible": true}`, no options, no steps and `blocking` false' \
-  "Accept decision record <number> in <kit>: <the record's title>?" "kind \`code\` with lang \`markdown\`" \
-  "No card carries a path" "links no plannotator session" \
-  "Post a card for each proposed record or amendment of your kits that has none open" "create-area:<owner>/<kit>" \
+  "read-tree -m -u <main's commit before you submitted> main" \
+  "run \`crew record … --proposed\` for each proposed record or amendment on your kits' main that has none open" \
   "Never run \`npx pendingyou\` or \`pendingyou hold\`" "leave every other card alone" \
   "A record you write or amend is proposed until the user accepts it" "quotes the user's words as their decision"; do
   has "$out" "$want"
 done
+for gone in "record/<kit>/<number>/<commit>" "The record's card is the one card you post" "post a new card for the new version" \
+  "Close the card with \`ack_answer\`" "create-area:<owner>/<kit>" "Accept decision record <number>"; do
+  lacks "$out" "$gone"
+done
 for brief in "wldn planner" "swb-1 conductor"; do expect_ok crewpy brief $brief; lacks "$out" "record/<kit>"; done
-ok "the design agent proposes every record on one card under its record key, accepts it only on the user's yes, and queues nothing before; no other brief posts a record card"
+ok "the design agent runs crew record at each turn of a record's status, which raises, changes and closes its one card, names a rule-decided choice, accepts a record only on the user's yes and queues nothing before; no brief posts a record card"
 
 # A chore (plan.11): planned maintenance with no change, no construct and no review, its every commit carrying its trailer.
 expect_ok crewpy brief swb-1 coder
