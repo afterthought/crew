@@ -6,7 +6,7 @@ Record 0031 makes a deploy's card and a step's card crew's own, raised in main-l
 
 ## What Changes
 
-- `crew ops offer <env> <sha> [--notes <file>] [--steps <file>]` takes the kit's release notes for the range and the range's after-deploy steps from the deployer, raises the deploy's card in main-level ops's name, keyed `deploy/<env>`, with them on its face, following the landing card that put the commit on main, changes it when a newer head is offered, and tells main-level ops the line that adopts it, `call get_request (requestId <id>, name <role>)`.
+- `crew ops offer <env> --to <sha> --from <sha|none> [--notes <file>] [--steps <file>]` takes the kit's release notes for the range and the range's after-deploy steps from the deployer, raises the deploy's card in main-level ops's name, keyed `deploy/<env>`, with them on its face, following the landing card that put the commit on main, changes it when a newer head is offered, and tells main-level ops the line that adopts it, `call get_request (requestId <id>, name <role>)`.
 - `crew ops record --act end` closes the deploy's card with each step's outcome, or with the failed step and its log.
 - `crew ops step` raises a step's card, keyed `op/<env>/<n>`, when its doer is the user or it is held for the user's word, one card at a time, each following the one before; and closes it when the step is done or declined.
 - A held step's card is a choice of now, when quiet or skip; a step an agent runs on its own has no card.
@@ -25,21 +25,28 @@ None.
 
 ## Impact
 
-- Follows `crew-builds-every-card-from-its-facts`, whose builders, `follows_of` and act it calls. Built beside `crew-raises-a-proposals-card`, `crew-raises-a-batchs-card-with-its-session`, `crew-record-raises-a-records-card` and `the-rail-shows-and-sweeps-every-card`; it changes `ops.py` alone of crew's code, and of the files the others change only the docs' lines of its own command.
+- Follows `crew-builds-every-card-from-its-facts`, whose builders, `follows_of` and act it calls. Built beside `crew-raises-a-proposals-card`, `crew-raises-a-batchs-card-with-its-session`, `crew-record-raises-a-records-card` and `the-rail-shows-and-sweeps-every-card`; of crew's code it changes `ops.py`, `cards.py`'s `deploy_card` and `board.py`'s words for a held step, and of the files the others change only the docs' lines of its own command and one test of `deploy_card`.
 - The interface swancloud's `a-deploy-offer-hands-its-release-notes-and-after-steps` builds to.
 
 ## Touches
 
 ```
 plugin/lib/ops.py
+plugin/lib/cards.py
+plugin/lib/board.py
 plugin/bin/crew
 README.md
 plugin/skills/crew/SKILL.md
-tests/py/test_ops.py
-tests/t-journey-ops.sh
 plugin/roles/main-ops.md
+docs/architecture/plan.md
+docs/architecture/_open.md
+tests/py/test_ops.py
+tests/py/test_cards.py
+tests/py/test_board.py
+tests/t-journey-ops.sh
+tests/t-journey-board.sh
 tests/t-briefs.sh
-tests/moon.yml
+tests/t-docs.sh
 ```
 
-`ops.py` changes `rows`, `environments` and `open_keys` (the deploy's row keyed `deploy/<env>`, the held step's row), `offer`, `record_cmd`, `step`, `parser` and `args_refusal`, and gains `deploy_facts`, `raise_deploy` and `raise_step`. `plugin/bin/crew` changes only its usage header's `crew ops offer` lines, README and the crew skill only theirs; `plugin/roles/main-ops.md` changes its offer's and its user's step's paragraphs of *Deploying main*, and `tests/t-briefs.sh` their words; `tests/moon.yml` is regenerated.
+`ops.py` changes `rows`, `environments` and `open_keys` (the deploy's row keyed `deploy/<env>`, the held step's row), `offer`, `record_cmd`, `step`, `parser` and `args_refusal`, and gains `deploy_facts`, `raise_deploy` and `raise_step` with the decisions and reads they stand on (`handed_steps`, `release_of`, `deploy_move`, `deploy_outcome`, `step_words`, `step_facts`, `step_due`, `stages_working`). `cards.py` changes `deploy_card` alone: its face says when the kit handed no release notes, and it says, rather than counts, landings crew can't read. `board.py` changes `waiting_fields` and `ops_view`, which name a held step held (`code.8`). `plugin/bin/crew` changes only its usage header's `crew ops offer` and `step` lines, README and the crew skill only theirs; `plugin/roles/main-ops.md` changes its offer's and its user's step's paragraphs of *Deploying main*, and `tests/t-briefs.sh` their words; `tests/t-docs.sh` pins the offer's flags; `plan.14`'s details and `_open.md` say it is built.
