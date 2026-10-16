@@ -129,15 +129,16 @@ def new_id():
     return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{crew.this_host()}-{os.getpid()}-{n}"
 
 
-def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, **extra):
+def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, by=None, **extra):
     """Append one entry to the label's run record on this host, in one write; its id, or None when it could not be
-    written, which is said on standard error and nothing more. eid is an id made ahead with new_id."""
+    written, which is said on standard error and nothing more. eid is an id made ahead with new_id; by, the role an
+    act of crew's own is in the name of, a card of crew's asked as its row's owner (briefs.16), else who asked."""
     if not label:
         return None
     now = datetime.datetime.now(datetime.timezone.utc)
     host = crew.this_host()
     eid = eid or new_id()
-    fields = [("Id", eid), ("At", now.strftime("%Y-%m-%dT%H:%M:%SZ")), ("Host", host), ("By", who())]
+    fields = [("Id", eid), ("At", now.strftime("%Y-%m-%dT%H:%M:%SZ")), ("Host", host), ("By", by or who())]
     if session():
         fields.append(("Session", session()))
     fields.append(("Act", act))

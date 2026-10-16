@@ -1,7 +1,8 @@
 """cards.py: crew's Pending You cards. The six of crew's own, built from the facts of their events (record 0031, briefs.13):
 the proposal's, the batch's, the landing's, the deploy's, the step's and the record's, in the words rule's forms, each
 following the card its thing follows; and a crew agent's card, posted, changed, closed and read through crew
-(briefs.16, ADR 0005 as amended 2026-10-12).
+(briefs.16, ADR 0005 as amended 2026-10-12). plan.py's act, row_card_post, row_card_change and row_card_close, sends
+crew's own.
 
 crew speaks to Pending You as the asking assistant through the fleet's `pendingyou mcp --app claude-code`, a stdio MCP
 server that passes each line on to Pending You under the host's sign-in: one JSON-RPC message a line each way, with the
@@ -830,6 +831,86 @@ def follows_of(kind, thing, entries):
     return None
 
 
+# ---------------------------------------------------------------------------------------- the act's decisions
+
+ROWS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"), (re.compile(r"^batch/(\d+)$"), "batch/{}"),
+        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)$"), "bolt/{}"), (re.compile(r"^deploy/([a-z0-9][a-z0-9-]*)$"), "env/{}"),
+        (re.compile(r"^op/([a-z0-9][a-z0-9-]*)/\d+$"), "env/{}"),
+        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})$"), "record/{}/{}"))
+# What update_request takes of a card crew built: a card's kind and questions are never changed in place.
+CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "multi", "recommendedIds", "action",
+           "rationale", "urgency", "blocking")
+DEAD = "An older copy of this card was lost: dismiss it in the app."
+
+
+def row_object(key):
+    """The run record's object of one of crew's six cards' keys, the row's: a proposal's, a batch's, a bolt's for its
+    landing, an environment's for its deploy and steps, a record's; None for any other key."""
+    for pattern, obj in ROWS:
+        m = pattern.match(key)
+        if m:
+            return obj.format(*m.groups())
+    return None
+
+
+def adopt_line(card, owner):
+    """The line that adopts a card crew posted in no session (briefs.16): the owner's own get_request under its name
+    reads the card on the host's connection, and the fleet's wake mod then wakes the owner's idle session on its
+    answer."""
+    return f"call get_request (requestId {card}, name {owner})"
+
+
+def told_to(owner, caller):
+    """Whom crew tells a card's adopting line (roles.4): its owner when the command that raised it is not the owner's,
+    a landing found on another's rail read or the deployer's offer; None when it is, a proposal in the planner's own
+    shell."""
+    return owner if caller != owner else None
+
+
+def change_args(card, note):
+    """update_request's arguments for a card crew built again, but the card's id, name and version: what it takes of
+    the card, and the change note the user sees."""
+    return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
+
+
+def posted_again(card):
+    """A card posted again under its key once its first copy was lost to its owner: its summary saying so first."""
+    return dict(card, summary=prose(f"{DEAD}\n\n{card['summary']}"))
+
+
+def close_call(got, card, name, outcome=None, reason=None):
+    """How crew closes a card, from get_request's answer: one the user answered acked at its version with what was
+    done on it, the outcome, or the reason it is withdrawn; one still waiting withdrawn with the reason, or the
+    outcome. The tool, its arguments, and the close's state as the run record keeps it."""
+    if got.get("status") == "answered":
+        return ("ack_answer", {"requestId": card, "name": name, "expectedVersion": version_of(got, card),
+                               "outcome": outcome if outcome is not None else reason},
+                "closed" if outcome is not None else "withdrawn")
+    return "cancel_request", {"requestId": card, "name": name, "reason": reason if reason is not None else outcome}, "withdrawn"
+
+
+def declined(got):
+    """The user's words declining an approval, as get_request gives a card's answer: "" when they gave none; None when
+    the card is no approval they declined."""
+    answer = got.get("answer") if isinstance(got, dict) and got.get("turn") == "agent" else None
+    if not isinstance(answer, dict) or answer.get("approved") is not False:
+        return None
+    return text_of(answer.get("note")) or text_of(answer.get("text")) or ""
+
+
+def declined_outcome(words):
+    """A declined approval's close, in the user's words."""
+    return f"Declined: {words}" if words else "Declined, with no words"
+
+
+def upload_of(got, title):
+    """The upload URL Pending You gave for the artifact titled so, from a post's or a change's uploads; None when it
+    gave none."""
+    ups = [u for u in got.get("uploads") or [] if isinstance(u, dict) and isinstance(u.get("uploadUrl"), str)] if isinstance(got, dict) else []
+    hit = next((u for u in ups if u.get("title") == title), ups[0] if len(ups) == 1 else None)
+    return hit["uploadUrl"] if hit else None
+
+
 # ------------------------------------------------------------------------------------- reads and the bridge
 
 def host_entries(record, label, host):
@@ -852,6 +933,18 @@ def git_remote(cwd):
     except (OSError, subprocess.TimeoutExpired):
         return None
     return remote_of(r.stdout.splitlines()[0]) if r.returncode == 0 and r.stdout.strip() else None
+
+
+def put(url, data, kind):
+    """A file put to the upload URL Pending You gave for it, with its content type: None once it is there, else why
+    not, in the words that say so."""
+    import urllib.error, urllib.request
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": kind}),
+                                    timeout=CALL) as r:
+            return None if 200 <= r.status < 300 else f"its upload answered {r.status}"
+    except (OSError, urllib.error.URLError) as e:
+        return f"its upload failed: {getattr(e, 'reason', None) or e}"
 
 
 class Bridge:
@@ -940,15 +1033,23 @@ class Bridge:
             fail(f"{bridge_said(m['error'])}. {self.later}")
         return m.get("result")
 
+    def answer(self, tool, args):
+        """A Pending You tool's answer as an object and None, or None and Pending You's words refusing it; refused as
+        unread when it answers with no object."""
+        result = self.request("tools/call", {"name": tool, "arguments": args}, tool)
+        words = refused_by(result)
+        if words is not None:
+            return None, words
+        got = reply_object(result)
+        got is not None or fail(f"Pending You answered {tool} with nothing crew can read. {self.later}")
+        return got, None
+
     def call(self, tool, args):
         """A Pending You tool's answer, as an object; refused in Pending You's words when it refuses, or as unread
         when it answers with no object."""
-        result = self.request("tools/call", {"name": tool, "arguments": args}, tool)
-        words = refused_by(result)
+        got, words = self.answer(tool, args)
         if words is not None and self.held and lost(words):
             fail(lost_said(*self.held, words))
         if words is not None:
             fail(f"Pending You refused {tool}: {words}")
-        got = reply_object(result)
-        got is not None or fail(f"Pending You answered {tool} with nothing crew can read. {self.later}")
         return got

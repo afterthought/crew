@@ -7624,6 +7624,7 @@ def card_post(fleet, a):
     record.emit(label, "card.post", [cards.object_of(a.key) or f"agent/{who}"], Card=card_id, Key=a.key)
     url = got.get("url")
     print(f"card {a.key}: {card_id}" + (f" {url}" if isinstance(url, str) else ""))
+    print(cards.adopt_line(card_id, who))
 
 
 def card_change(fleet, a):
@@ -7668,16 +7669,215 @@ def card_close(fleet, a):
 
 def card_read(fleet, a):
     """crew card read <key> [--label L] [--json]: where the card the asker holds under the key stands, read from
-    Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words. Records nothing."""
+    Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words. An approval the
+    user declined is then closed with their words, and the close recorded (record 0031 §1); nothing else is."""
     import cards
     label, who = card_asker(fleet, a)
     card = card_held(label, who, a.key)
     with cards.Bridge(who, "Read it again later.", (a.key, card)) as py:
         got = py.call("get_request", {"requestId": card, "name": who})
+        words = cards.declined(got)
+        if words is not None:
+            tool, args, _ = cards.close_call(got, card, who, cards.declined_outcome(words))
+            py.call(tool, args)
     if a.json:
         print(json.dumps(got, indent=1, ensure_ascii=False))
     else:
         print("\n".join(cards.answer_lines(a.key, card, got)))
+    if words is not None:
+        record.emit(label, "card.close", [cards.row_object(a.key) or cards.object_of(a.key) or f"agent/{who}"], Card=card,
+                    Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
+        print(f"card {a.key}: {card} closed, as the user declined it")
+
+
+# ------------------------------------------------------------------------------- crew's own cards: the act
+
+class CardActs:
+    """What the act reaches beyond its facts: Pending You through the fleet's bridge, this host's run record, a tell,
+    a picture's upload, this host and who runs the command. A logic test hands the act a stand-in (code.7)."""
+
+    def __init__(self, fleet):
+        self.fleet = fleet
+
+    def bridge(self, name, later, held=None):
+        return cards.Bridge(name, later, held)
+
+    def emit(self, label, act, on, **fields):
+        return record.emit(label, act, on, **fields)
+
+    def entries(self, label):
+        return cards.host_entries(record, label, crew.this_host())
+
+    def tell(self, name, text):
+        return crew.tell(self.fleet, name, text)
+
+    def put(self, url, data, kind):
+        return cards.put(url, data, kind)
+
+    def host(self):
+        return crew.this_host()
+
+    def caller(self):
+        return agent()
+
+
+CARD_LATER = "The event stands, and its card is not posted."
+
+
+def card_where(kit):
+    """Where a kit's card is asked from and filed, as the act takes it: the kit's checkout, the card's folder, and its
+    git remote as Pending You files an area by it."""
+    return kit["main"], cards.remote_of(f"github.com/{kit['repo']}")
+
+
+def card_area(py, label, cwd, remote, name):
+    """The area a card of the kit at remote is filed in: the one Pending You matches to it, else the kit's, made under
+    create-area:<owner>/<kit> in the partition's group (briefs.11)."""
+    matched = py.call("match_area", {"cwd": cwd, "remote": remote, "task": name})
+    area = cards.area_of(matched)
+    if area:
+        return area
+    make = cards.create_area_args(remote, label, matched)
+    made = py.call("create_area", make)
+    area = made.get("areaId")
+    isinstance(area, str) and cards.AREA_ID.match(area) or fail(
+        f"Pending You's answer to create_area names no area: crew can't tell where the card would go. {CARD_LATER}")
+    note = made.get("groupNote")
+    if isinstance(note, str) and note.strip():
+        print(f"area {make['name']}: {note.strip()}")
+    return area
+
+
+def card_heard(acts, key, card, owner):
+    """How the owner hears a card crew posted in no session (briefs.16): the line that adopts it, printed, and told
+    to the owner when the command that raised it is not the owner's own (roles.4)."""
+    line = cards.adopt_line(card, owner)
+    print(line)
+    to = cards.told_to(owner, acts.caller())
+    if to and acts.tell(to, f"Your card {key} is up for the user: {line}, to hear their answer."):
+        print(f"told {to}: {line}")
+
+
+def card_uploaded(acts, key, b, got):
+    """A built card's picture put to the upload URL its post or change was given, or said where it did not land."""
+    if not b.get("picture"):
+        return
+    title = next(x["title"] for x in b["card"].get("artifacts") or [] if x.get("upload"))
+    url = cards.upload_of(got, title)
+    why = acts.put(url, b["picture"], "image/png") if url else "Pending You gave no upload URL for it"
+    if why:
+        print(f"card {key}: its picture did not reach the card: {why}", file=sys.stderr)
+
+
+def card_posted(acts, label, owner, b, where):
+    """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else."""
+    key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
+    cwd, remote = where
+    try:
+        with acts.bridge(owner, CARD_LATER) as py:
+            area = card_area(py, label, cwd, remote, owner)
+            got = py.call("post_request", cards.post_args(b["card"], key, owner, acts.host(), cwd, area))
+            card = cards.request_id(got, "post_request")
+            card_uploaded(acts, key, b, got)
+    except Refusal as e:
+        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
+        print(f"card {key} not posted: {e}", file=sys.stderr)
+        return None
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
+    url = got.get("url")
+    print(f"card {key}: {card}" + (f" {url}" if isinstance(url, str) else ""))
+    card_heard(acts, key, card, owner)
+    return card
+
+
+def row_card_post(fleet, label, owner, build, facts, where, acts=None):
+    """The act that posts a card of crew's own (briefs.16, record 0031 §1): build(facts), one of cards.py's six
+    builders, posted through the fleet's `pendingyou mcp` under the host's sign-in, asked in the name of owner, the
+    role whose row it is, under the row's key, from where, the kit's (checkout, remote) as card_where gives it, and
+    filed in the kit's area, its picture uploaded; recorded on the row's object with the card's id and key, and
+    printed with the line that adopts it, told to the owner when the command is not the owner's. Pending You's
+    refusal, a host not signed in, no answer within a minute or a reply naming no card is said and recorded as the
+    post refused, and refuses nothing of the event it was raised for. The card's id, or None."""
+    acts = acts or CardActs(fleet)
+    return card_posted(acts, label, owner, build(facts), where)
+
+
+def card_lost(acts, label, owner, key, card, words):
+    """A card Pending You no longer finds for its owner, recorded closed as lost so it is held no longer."""
+    acts.emit(label, "card.close", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key, State="lost",
+              Outcome=f"lost to its owner: {words}")
+    print(f"card {key}: {card} is lost to {owner} (Pending You: \"{words}\")", file=sys.stderr)
+
+
+def row_card_change(fleet, label, owner, build, facts, note, where, acts=None):
+    """The act that changes a card of crew's own in place when its thing changes (record 0031 §3): build(facts) sent
+    as update_request takes it, with note as the change note the user sees, at the version Pending You reports, to
+    the card the owner holds under the row's key on this host; posted instead when it holds none, and posted again,
+    its summary saying the older copy is dead, when Pending You no longer finds it. A refusal is said and recorded as
+    the change refused, refusing nothing of the event. The card's id, or None."""
+    acts = acts or CardActs(fleet)
+    b = build(facts)
+    key = b["key"]
+    card = cards.card_under(acts.entries(label), key, owner)
+    if not card:
+        return card_posted(acts, label, owner, b, where)
+    lost = None
+    try:
+        with acts.bridge(owner, CARD_LATER) as py:
+            got, lost = py.answer("get_request", {"requestId": card, "name": owner})
+            if lost is None:
+                change = dict(cards.change_args(b["card"], note), requestId=card, name=owner,
+                              expectedVersion=cards.version_of(got, card))
+                got, lost = py.answer("update_request", change)
+            if lost is not None and not cards.lost(lost):
+                fail(f"Pending You refused the change: {lost}")
+            if lost is None:
+                card_uploaded(acts, key, b, got)
+    except Refusal as e:
+        acts.emit(label, "card.update", [cards.row_object(key) or f"agent/{owner}"], by=owner, refused=str(e), Card=card, Key=key)
+        print(f"card {key} not changed: {e}", file=sys.stderr)
+        return None
+    if lost is not None:
+        card_lost(acts, label, owner, key, card, lost)
+        return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where)
+    acts.emit(label, "card.update", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key)
+    v = got.get("version")
+    print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
+    return card
+
+
+def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None):
+    """The act that closes a card of crew's own at the event that ends it (record 0031 §1): the card the owner holds
+    under the row's key on this host, acked with the outcome once the user answered it, else withdrawn with the
+    reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
+    refusal said and recorded as the close refused, neither refusing the event. The card's id, or None when none was
+    closed."""
+    acts = acts or CardActs(fleet)
+    obj = cards.row_object(key) or f"agent/{owner}"
+    card = cards.card_under(acts.entries(label), key, owner)
+    if not card:
+        print(f"card {key}: {owner} holds none open on this host, so none is closed")
+        return None
+    lost = None
+    try:
+        with acts.bridge(owner, "The event stands, and its card stays open.") as py:
+            got, lost = py.answer("get_request", {"requestId": card, "name": owner})
+            if lost is None:
+                tool, args, state = cards.close_call(got, card, owner, outcome, reason)
+                _, lost = py.answer(tool, args)
+            if lost is not None and not cards.lost(lost):
+                fail(f"Pending You refused the close: {lost}")
+    except Refusal as e:
+        acts.emit(label, "card.close", [obj], by=owner, refused=str(e), Card=card, Key=key)
+        print(f"card {key} not closed: {e}", file=sys.stderr)
+        return None
+    if lost is not None:
+        card_lost(acts, label, owner, key, card, lost)
+        return None
+    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
+              Outcome=outcome if outcome is not None else reason)
+    print(f"card {key}: {card} {state}")
+    return card
 
 
 def card_folder(rel):

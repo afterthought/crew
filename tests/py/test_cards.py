@@ -3,8 +3,9 @@
 (form_refusal, proposal_form) and a call in another agent's name, on any Pending You tool (name_refusal), with the
 matcher that runs it; plan.card_refusal on whose key a card or an area may take, its reads given; and the
 decisions of a card's plannotator session: plan.card_of, session_verdict, local_link, waited, card_folder,
-judged_dead and young. Posting, closing and sweeping through the hook and the command are the review journey's
-(t-journey-review)."""
+judged_dead and young; and the six cards crew builds from their events' facts, the words rule, what a card follows and
+the act's decisions (record 0031). Posting, closing and sweeping through the hook and the command are the review
+journey's (t-journey-review)."""
 import argparse
 import datetime
 import importlib.machinery
@@ -672,3 +673,34 @@ class TestWords:
         texts = json.dumps([landing()["card"], deploy()["card"]])
         assert "/Users/" not in texts and "~/" not in texts
 
+
+class TestActDecisions:
+    def test_the_line_that_adopts_a_card_and_whom_it_is_told_to(self):
+        assert built.adopt_line("req_abc", "wldn-ops") == "call get_request (requestId req_abc, name wldn-ops)"
+        assert built.told_to("wldn-ops", "chuck@mac-studio") == "wldn-ops"
+        assert built.told_to("wldn-planner", "wldn-planner") is None
+
+    @pytest.mark.parametrize("key, obj", [("proposal/4", "proposal/4"), ("batch/7", "batch/7"), ("land/b1", "bolt/b1"),
+                                          ("deploy/srv", "env/srv"), ("op/srv/2", "env/srv"), ("record/crew/0031", "record/crew/0031"),
+                                          ("land/b1/abc1234", None), ("agent-note", None), ("verify/x/20261007-1412", None)])
+    def test_each_of_crews_six_keys_is_recorded_on_its_rows_object_and_a_verify_report_has_none(self, key, obj):
+        assert built.row_object(key) == obj
+
+    def test_an_approval_the_user_declined_is_read_with_their_words(self):
+        assert built.declined({"turn": "agent", "answer": {"approved": False, "note": {"text": "Not before Friday."}}}) == "Not before Friday."
+        assert built.declined({"turn": "agent", "answer": {"approved": False}}) == ""
+        assert built.declined({"turn": "agent", "answer": {"approved": True}}) is None
+        assert built.declined({"turn": "you"}) is None
+        assert built.declined_outcome("Not before Friday.") == "Declined: Not before Friday."
+
+    def test_an_answered_card_is_acked_with_the_outcome_and_a_waiting_one_withdrawn(self):
+        assert built.close_call({"status": "answered", "version": 3}, "req_a", "wldn-ops", outcome="Deployed at 14:20") == (
+            "ack_answer", {"requestId": "req_a", "name": "wldn-ops", "expectedVersion": 3, "outcome": "Deployed at 14:20"}, "closed")
+        assert built.close_call({"status": "pending", "version": 1}, "req_a", "wldn-ops", reason="A newer head") == (
+            "cancel_request", {"requestId": "req_a", "name": "wldn-ops", "reason": "A newer head"}, "withdrawn")
+
+    def test_a_change_carries_only_what_update_request_takes_and_a_card_posted_again_says_its_older_copy_is_dead(self):
+        c = landing()["card"]
+        ch = built.change_args(c, "Head is now 9ab12cd after the fix")
+        assert set(ch) == {"title", "summary", "context", "artifacts", "approve", "recommendedIds", "rationale", "urgency", "blocking", "changeNote"}
+        assert built.posted_again(c)["summary"].startswith("An older copy of this card was lost: dismiss it in the app.\n\n6 units land")
