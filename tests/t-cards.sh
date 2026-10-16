@@ -411,8 +411,9 @@ expect_fail "no card and no session of batch/4 is open on $box" planner wait bat
 ok "a session whose link only the host could open is ended and the card raised all the same, saying so, its wait on the card alone; a wait with neither is refused"
 
 # A proposal's card, crew's own (plan-proposals, record 0031 §1, change crew-raises-a-proposals-card): raised by crew plan
-# propose in the planner's name on its own host, changed in place by a rewrite, answered on the card and applied with its
-# boxes as they stand, then closed with what was applied. Which act each step makes is a logic case
+# propose in the planner's name on its own host, changed in place by a rewrite while it waits, followed by a new version
+# when a rewrite comes after the user's note answered it, answered on the card and applied with its boxes as they stand,
+# then closed with what was applied. Which act each step makes is a logic case
 # (tests/py/test_proposal_life.py); the plan's side of each step, the proposals journey's (t-journey-plan).
 as_planner() { HOST=$box CREW_AGENT=wldn-planner "$@"; }
 proposal() { printf '%s\n' "$@" > "$T/proposal.rec"; echo "$T/proposal.rec"; }
@@ -443,14 +444,31 @@ eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $m (wldn)" | grep '
   "card:   proposal/$n, open, asked by wldn-planner ($c)"
 ok "a rewrite changes the chain's one card in place with its note, and the rail's row for the successor carries the chain's key"
 
-echo '{"answer": {"choiceIds": ["add:p-a"], "note": {"text": "c later."}}}' > "$stub/answered/$c.json"
-as_planner expect_ok crew card read "proposal/$n"
-has "$out" "picked: add:p-a"
+# The user sends the card with a note asking for a change, which answers it; the planner's rewrite follows it.
+echo '{"answer": {"choiceIds": ["add:p-a", "add:p-c"], "note": {"text": "c before a."}}}' > "$stub/answered/$c.json"
 : > "$CREW_TEST_LOG"
-as_planner expect_ok crew plan answer "$m" rows-1 add:p-a --note "c later."
-has "$out" "proposal $m is approved and applied, without p-c"
-has "$out" "card proposal/$n: $c closed"
+as_planner expect_ok crew plan propose --replaces "$m" "$(proposal 'Case: The page gets a bolt of its own, c before a.' \
+  'Do: bolt new p3 "The page is drawn." --repo switchboard-kit' 'Do: unit add p-c "C page." --bolt p3' 'Do: unit add p-a "A page." --bolt p3')"
+r=$(opened); c2=$(raised "$n")
+has "$out" "card proposal/$n: $c closed, the user having answered it, and its new version follows it"
+[[ -n $c2 && $c2 != "$c" ]] || fail "no new version of proposal/$n's card was posted:"$'\n'"$out"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer whoami match_area post_request "
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Rewritten as proposal $r after your note"
+eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows, .title, [.options[].id]]')" \
+  "[\"proposal/$n:2\",\"$c\",\"Plan change to p3: 2 new\",[\"add:p-c\",\"add:p-a\"]]"
+eq "$(entries card.post | jq -r "select(.Card == \"$c2\") | [(.On | join(\" \")), .Key, .By] | join(\" \")")" "proposal/$n proposal/$n wldn-planner"
+eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $r (wldn)" | grep 'card:' | sed 's/^ *//')" \
+  "card:   proposal/$n, open, asked by wldn-planner ($c2)"
+ok "a rewrite after the user's note, which answered the card, acks it with the note and posts the new version following it, under the row's key"
+
+echo '{"answer": {"choiceIds": ["add:p-c"], "note": {"text": "a later."}}}' > "$stub/answered/$c2.json"
+as_planner expect_ok crew card read "proposal/$n"
+has "$out" "picked: add:p-c"
+: > "$CREW_TEST_LOG"
+as_planner expect_ok crew plan answer "$r" rows-1 add:p-c --note "a later."
+has "$out" "proposal $r is approved and applied, without p-a"
+has "$out" "card proposal/$n: $c2 closed"
 eq "$(py_calls | sed -n 3p | cut -d' ' -f1)" "ack_answer"
-eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Applied: added p-a; 1 other change. Left out on your word: p-c."
-eq "$(entries card.close | jq -r "select(.Key == \"proposal/$n\") | [.Card, .State] | join(\" \")" | tail -1)" "$c closed"
+eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Applied: added p-c; 1 other change. Left out on your word: p-a."
+eq "$(entries card.close | jq -r "select(.Key == \"proposal/$n\") | [.Card, .State] | join(\" \")" | tail -1)" "$c2 closed"
 ok "the user's boxes, sent on the card, are applied as they stand, and crew closes the card with what was applied"

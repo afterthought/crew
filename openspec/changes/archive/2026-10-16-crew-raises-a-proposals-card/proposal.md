@@ -7,7 +7,7 @@ Record 0031 makes a proposal's card crew's own: raised when `crew plan propose` 
 ## What Changes
 
 - `crew plan propose` raises the proposal's card itself in the planner's name, keyed `proposal/<n>` of the chain's first proposal, built by `crew-builds-every-card-from-its-facts`'s proposal builder from the plan and the proposal, and prints the card's key and id.
-- `crew plan propose --replaces <m>` changes the chain's one card in place, "Rewritten as proposal <n> after your note"; the rail's row for the successor carries the chain's key.
+- `crew plan propose --replaces <m>` changes the chain's one card, "Rewritten as proposal <n> after your note", in place while it waits on the user, and as a new version following the card they answered once their note answered it; the rail's row for the successor carries the chain's key.
 - `crew plan agree` changes the card to say it no longer waits on that conductor.
 - `crew plan approve` closes the card with what was applied; `crew plan drop` withdraws it with the reason.
 - Send applies the boxes as they stand: a new unit unticked is left out, a dropped unit ticked "Keep" stays, an amendment ticked "Keep … old intent" is not applied, and the planner is told which.

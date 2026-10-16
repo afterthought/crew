@@ -103,7 +103,7 @@ for want in "An intent names the outcome and the records that govern it" "never 
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" \
   "crew raises a proposal's card itself, in your name, when \`$CREW/plugin/bin/crew plan propose\` accepts the proposal" \
-  "changes it in place when you rewrite the proposal with \`--replaces\`" "closes it with what was applied when the proposal is approved" \
+  "changes it when you rewrite the proposal with \`--replaces\`, in place while it waits on the user and as a new version following the one they answered" "closes it with what was applied when the proposal is approved" \
   "You post, change and close no proposal card, and never run \`$CREW/plugin/bin/crew plan card\`" \
   "call get_request (requestId req_…, name wldn-planner)" "crew raises its card in your name" \
   "a dropped one unticked as \"Keep <unit>\"" "a lone row is the choice of its two sides" \

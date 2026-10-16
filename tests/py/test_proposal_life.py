@@ -491,3 +491,26 @@ def test_a_rewritten_proposals_rail_row_and_the_planners_card_check_carry_its_ch
     monkeypatch.setattr(plan, "fetch", lambda repo, ref: "tip")
     monkeypatch.setattr(plan, "show", lambda repo, tip, path: pl.text())
     assert plan.CardReads(FLEET, "wldn").open_proposals() == ["proposal/2", "proposal/1"]
+
+
+def test_a_rewrite_after_the_users_note_acks_the_card_they_answered_and_its_new_version_follows_it(monkeypatch, capsys):
+    """The rewrite goes through the act's change (row_card_change), which follows a card the user answered, on its
+    stand-in for Pending You (test_card_commands.Acts): acked with the rewrite's note, the successor posted following it
+    under the row's key with its revision, recorded under the row's key."""
+    from test_card_commands import Acts
+    monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+    pl = proposals_with(("Console first.", TestRaise.DOS))
+    plan.open_proposal(pl, 2, "Console last.", ['unit add b-new "B." --bolt console-pages'], "wldn-planner", TODAY, 1, "wldn")
+    w = write()
+    w.files["proposals.rec"] = pl.text()
+    held = [{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": "req_p1"}]
+    acts = Acts({"get_request": ({"status": "answered", "turn": "agent", "version": 3}, None), "ack_answer": ({"version": 4}, None),
+                 "match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                 "post_request": ({"requestId": "req_p2", "version": 1}, None)}, held, caller="wldn-planner")
+    assert plan.raise_proposal_at(CARDED, "wldn", w, 2, "replace", acts) == "req_p2"
+    ack, = [a for t, a in acts.calls if t == "ack_answer"]
+    post, = [a for t, a in acts.calls if t == "post_request"]
+    assert (ack["requestId"], ack["outcome"]) == ("req_p1", "Rewritten as proposal 2 after your note")
+    assert (post["idempotencyKey"], post["follows"], [o["id"] for o in post["options"]]) == ("proposal/1:2", "req_p1", ["add:b-new", "unticked"])
+    assert [(e["Act"], e["Key"], e.get("Card")) for e in acts.emitted] == [("card.close", "proposal/1", "req_p1"), ("card.post", "proposal/1", "req_p2")]
+    assert "update_request" not in [t for t, _ in acts.calls]

@@ -177,7 +177,7 @@ Landing SHALL be part of every bolt's goal. A unit that a bolt held by a team ne
 - **THEN** no agent approves it, and it is listed as waiting on the user
 
 ### Requirement: A proposal is dropped with a reason, or replaced
-`crew plan drop <n> "<reason>"` SHALL close an open proposal as `dropped` with the reason, applying nothing, withdraw its chain's card with the reason, and tell the planner when someone else dropped it. `crew plan propose <file> --replaces <n>` SHALL drop proposal n and write its successor in one commit, the successor naming the one it replaces, and SHALL change the chain's card in place to the successor with the note "Rewritten as proposal <successor> after your note"; the chain's card SHALL stay keyed by its first proposal, and the rail's row for the successor SHALL carry it.
+`crew plan drop <n> "<reason>"` SHALL close an open proposal as `dropped` with the reason, applying nothing, withdraw its chain's card with the reason, and tell the planner when someone else dropped it. `crew plan propose <file> --replaces <n>` SHALL drop proposal n and write its successor in one commit, the successor naming the one it replaces, and SHALL change the chain's card to the successor with the note "Rewritten as proposal <successor> after your note", in place while it waits on the user, and once the user's note answered it as a new version following the card they answered; the chain's card SHALL stay keyed by its first proposal, and the rail's row for the successor SHALL carry it.
 
 #### Scenario: The user rejects a proposal
 - **WHEN** the user drops proposal N with a reason
