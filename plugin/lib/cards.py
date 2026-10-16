@@ -873,6 +873,24 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
+def revision(got):
+    """How crew puts a changed card before the user, from get_request's answer: "change", the card changed in place,
+    while it waits on them; "follow" once they have answered it, since Pending You changes a card only while it waits
+    and an answered one is followed by a new card (its guide, "Follow up with a new card")."""
+    return "follow" if isinstance(got, dict) and got.get("status") == "answered" else "change"
+
+
+def post_key(entries, key, by):
+    """The idempotency key crew posts its card under a row's key with, from the run record's entries: the row's key for
+    its first card, and for each card after one of `by`'s under it closed (answered and followed, declined, withdrawn or
+    lost), the key with that card's revision, <key>:<n>, since Pending You gives a key's card back as long as it keeps
+    it and takes one key per question. A card still open under the key keeps its own key, so posting it again gives it
+    back."""
+    mine = [e for e in entries if e.get("Act") == "card.close" or (e.get("Key") == key and e.get("By") == by)]
+    closed = {c["card"] for c in posted_cards(mine) if c["state"]}
+    return f"{key}:{len(closed) + 1}" if closed else key
+
+
 def posted_again(card):
     """A card posted again under its key once its first copy was lost to its owner: its summary saying so first."""
     return dict(card, summary=prose(f"{DEAD}\n\n{card['summary']}"))
