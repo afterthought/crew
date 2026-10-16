@@ -100,11 +100,12 @@ has "$out" "card deploy/mac-studio: req_stub-1 closed"
 eq "$(py_calls | cut -d' ' -f1 | head -3 | tr '\n' ' ')" "whoami get_request ack_answer "
 eq "$(jq -r .outcome <<<"$(py_arg ack_answer)")" "Deployed ${s2:0:7} to mac-studio: suite ok."
 eq "$(py_calls | grep -c '^post_request ')" "1"
+eq "$(jq -c '[.idempotencyKey, .title]' <<<"$(py_arg post_request)")" '["deploy/mac-studio:2","Deploy main ccccccc to mac-studio"]'
 rc=0; dep word mac-studio >/dev/null 2>&1 || rc=$?; eq "$rc" "1"
 has "$(runs)" 'Rows: [{"name":"deployer","state":"ok","detail":"","before":"warn","verdict":"better"}]'
 eq "$(runs | grep -c '^Phase: ')" "3"; eq "$(runs | grep '^Phase: ' | tr '\n' ' ')" "Phase: start Phase: step Phase: end "
 expect_ok crew rail --label swancloud; has "$out" "deploy mac-studio (swancloud) to ${s3:0:7}"
-ok "a newer offer waits beside an approved one, its card raised once that deploy ends; a deploy's start, step and end are recorded, and its end ends the word and closes its card with each step's outcome"
+ok "a newer offer waits beside an approved one, its card raised once that deploy ends under the key's revision; a deploy's start, step and end are recorded, and its end ends the word and closes its card with each step's outcome"
 
 : > "$CREW_TEST_LOG"
 printf 'Restart the herdr server\nonce the teams are quiet.\n- where: a terminal on mac-studio\n- command: launchctl kickstart -k gui/501/herdr\n- done: herdr answers herdr status.\n' > "$T/step.txt"
