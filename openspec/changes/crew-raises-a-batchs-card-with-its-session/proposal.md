@@ -33,12 +33,17 @@ None.
 
 ```
 plugin/lib/plan.py
+plugin/bin/crew
+plugin/roles/planner.md
+plugin/skills/crew/SKILL.md
+README.md
 tests/py/test_batches.py
 tests/py/test_cards.py
+tests/py/test_review.py
 tests/t-cards.sh
-plugin/roles/planner.md
+tests/t-journey-review.sh
 tests/t-briefs.sh
 tests/moon.yml
 ```
 
-`plan.py` changes `review_wait`, the act's `row_card_post` and `row_card_close` (a session started before a batch's or a long proposal's card is built, and ended when crew closes or withdraws it), `card_session`, `session_refusal`, `card_of`, `card_wait`, `waited`, `end_session` and `batch_folder_write`, and gains `batch_facts` and `raise_batch`. `plugin/roles/planner.md` changes *Batches*, steps 2 and 3 and the old batch card's paragraph, and the batch's sentences of *Cards*' opening paragraph. `tests/py/test_cards.py` gains `TestSessions`; `tests/t-cards.sh` gains the batch's and the session's journeys and `tests/t-briefs.sh` the planner's words; `tests/moon.yml` is regenerated.
+`plan.py` changes `review_wait`, `batch_due_said` (the planner told the wait raises the card), the act's `CardActs`, `row_card_post`, `row_card_change` and `row_card_close` (a session started before a batch's or a long proposal's card is built, and ended when crew closes or withdraws it), `card_session`, `session_refusal`, `card_result` (plannotator's count of annotations), `card_wait`, `end_session` and `batch_folder_write`, and gains `summary_paragraph`, `subject`, `batch_subjects`, `batch_facts`, `raise_batch`, `proposal_reads`, `session_open`, `reading_open`, `batch_wait`, `batch_waited`, `read_outcome`, `reading_of`, `unopened`, `card_built` and `card_closed`. `plugin/roles/planner.md` changes *Batches*, steps 1 to 3 and the old batch card's paragraph, and the batch's sentences of *Cards*' opening paragraph; README, `plugin/skills/crew/SKILL.md` and `plugin/bin/crew`'s usage header change `crew review --wait`'s and `crew card session` and `wait`'s words (`docs.2`). `tests/py/test_cards.py` gains cases in `TestSessions`, `tests/py/test_batches.py` `TestBatchFacts`, and `tests/py/test_review.py` the planner's new words; `tests/t-cards.sh` gains the batch's and the session's journeys, `tests/t-journey-review.sh` takes the batch's card from `crew review --wait` and a long proposal's session, and `tests/t-briefs.sh` the planner's words; `tests/moon.yml` is regenerated.
