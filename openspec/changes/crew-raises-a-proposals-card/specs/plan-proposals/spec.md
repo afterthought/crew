@@ -31,7 +31,7 @@
 - **THEN** proposal N is `dropped`, proposal N+1 is `open` and names N, agreements given to N do not carry over, and the card keyed `proposal/N` shows N+1 with the change note
 
 ### Requirement: The card's questions are the approval and the new units
-When proposal n adds, drops or amends units or chores, its card SHALL be one `multi` list and nothing else to tap: a box per row of the change, a new unit or chore ticked, a dropped one unticked as "Keep <unit>", an amended one unticked as "Keep <unit>'s old intent", each with its intent as its detail and what ticking it does as its consequence; its intent SHALL be `approve`; Send SHALL apply the change with the boxes as they stand, a new unit unticked left out, a dropped unit ticked kept, an amendment ticked not applied, and the planner told which. No approve block SHALL sit inside the card and no question SHALL ask for words. A proposal of more than five rows SHALL be grouped into `questions` of at most five rows each, in the plan's order. A proposal with no unit rows, a move, an order or a new bolt alone, SHALL be an `approve` of risk low, reversible.
+When proposal n adds, drops or amends units or chores, its card SHALL be one `multi` list and nothing else to tap: a box per row of the change, a new unit or chore ticked, a dropped one unticked as "Keep <unit>", an amended one unticked as "Keep <unit>'s old intent", each with its intent as its detail and what ticking it does as its consequence; its intent SHALL be `approve`; Send SHALL apply the change with the boxes as they stand, a new unit unticked left out, a dropped unit ticked kept, an amendment ticked not applied, and the planner told which. A proposal of one row SHALL be the choice of its two sides instead, the row as proposed recommended, since a Pending You list holds two at least. No approve block SHALL sit inside the card and no question SHALL ask for words. A proposal of more than five rows SHALL be grouped into `questions` of at most five rows each, in the plan's order. A proposal with no unit rows, a move, an order or a new bolt alone, SHALL be an `approve` of risk low, reversible.
 
 #### Scenario: One dropped, three new
 - **WHEN** crew raises the card for a proposal that drops `a` and adds `b`, `c` and `d`
@@ -43,7 +43,7 @@ When proposal n adds, drops or amends units or chores, its card SHALL be one `mu
 
 #### Scenario: One new unit
 - **WHEN** the proposal adds one unit `c` and nothing else
-- **THEN** the card is one box, `c` ticked, and Send applies it; cleared, Pending You asks for a note before it sends, which is its limit and not crew's
+- **THEN** the card is the choice of adding `c` or leaving it out, adding `c` recommended, and Send applies the side picked
 
 #### Scenario: Seven new units
 - **WHEN** crew raises the card for a proposal that adds seven units
@@ -52,3 +52,39 @@ When proposal n adds, drops or amends units or chores, its card SHALL be one `mu
 #### Scenario: A move alone
 - **WHEN** the proposal moves bolt `y` first and changes no unit
 - **THEN** the card is a hold-to-approve of risk low
+
+### Requirement: A card with no new unit, or more than fifteen, is a plain approval
+When proposal n has no unit rows, a move, an order or a new bolt alone, or makes more than fifteen units new to a bolt, its card SHALL be a hold-to-approve of low risk with no boxes, and the card of more than fifteen SHALL say it links the proposal's plannotator session.
+
+#### Scenario: No new unit
+- **WHEN** the proposal only orders a unit first
+- **THEN** the card is a hold-to-approve with no boxes, and Send applies it whole
+
+#### Scenario: Sixteen new units
+- **WHEN** the proposal adds sixteen units
+- **THEN** the card is a hold-to-approve with no boxes, and says it links the proposal's plannotator session
+
+### Requirement: A card's answers are gathered before the approval
+`crew plan answer <n> <question> <answer>...` SHALL record one question's answer of open proposal n's card on the host it runs on, checked against the card crew builds for the proposal: `rows-<k>` with the ids of the boxes the user left ticked, `rows-1` for a card of one list, and for a lone row the side picked; or, for a hold-to-approve, `plan` with `approve` or `decline`. Once it holds every question's answer, it SHALL apply the change with the boxes as they stand, each new unit unticked cleared as `crew plan approve <n> --clear` clears it, each dropped unit ticked kept in its bolt and each amendment ticked left unapplied, the approved proposal recording each of those units as cleared, and crew SHALL close the card with what was applied; until then it SHALL apply nothing and name the questions it waits on.
+
+#### Scenario: A card the user split
+- **WHEN** proposal N adds seven units, the user sends the card's first list, and the planner runs `crew plan answer N rows-1` with its four boxes
+- **THEN** nothing is applied and crew says it waits on `rows-2`; when the planner then runs `crew plan answer N rows-2` with two of its three boxes, the change is applied with the third unit left out
+
+#### Scenario: Declined
+- **WHEN** the planner runs `crew plan answer N plan decline` for a hold-to-approve
+- **THEN** nothing is applied, the gathered answers are discarded, and crew says the user's note is theirs to act on, writing the proposal again or dropping it
+
+### Requirement: An answer the card did not ask is refused
+`crew plan answer` SHALL refuse a question the card does not ask, a box its question does not hold, a lone row answered with other than one of its two sides, an answer that differs from one it already holds for that question, and a closed proposal, recording nothing.
+
+#### Scenario: The same question answered twice
+- **WHEN** `crew plan answer N rows-1 add:b` runs after `crew plan answer N rows-1 add:b add:c`
+- **THEN** it is refused, naming the answer crew already holds
+
+### Requirement: A note beside an approval goes to the planner after it
+`crew plan answer <n> <question> <answer>... --note "<text>"` SHALL NOT hold the change for the note. Once the change is applied, crew SHALL print the note to the planner as the user's word, to propose whatever it asks as a new proposal.
+
+#### Scenario: Approved with a note
+- **WHEN** the user sends proposal N's boxes with the note "split b in two later" and the planner records them with `--note`
+- **THEN** once every answer is in, the change is applied, and crew prints "split b in two later" as the user's word for the planner's next proposal
