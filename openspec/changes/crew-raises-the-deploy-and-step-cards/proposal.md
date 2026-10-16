@@ -6,10 +6,11 @@ Record 0031 makes a deploy's card and a step's card crew's own, raised in main-l
 
 ## What Changes
 
-- `crew ops offer <env> <sha> [--notes <file>] [--steps <file>]` takes the kit's release notes for the range and the range's after-deploy steps from the deployer, raises the deploy's card in main-level ops's name, keyed `deploy/<env>`, with them on its face, following the landing card that put the commit on main, changes it when a newer head is offered, and tells main-level ops the card's id.
+- `crew ops offer <env> <sha> [--notes <file>] [--steps <file>]` takes the kit's release notes for the range and the range's after-deploy steps from the deployer, raises the deploy's card in main-level ops's name, keyed `deploy/<env>`, with them on its face, following the landing card that put the commit on main, changes it when a newer head is offered, and tells main-level ops the line that adopts it, `call get_request (requestId <id>, name <role>)`.
 - `crew ops record --act end` closes the deploy's card with each step's outcome, or with the failed step and its log.
 - `crew ops step` raises a step's card, keyed `op/<env>/<n>`, when its doer is the user or it is held for the user's word, one card at a time, each following the one before; and closes it when the step is done or declined.
 - A held step's card is a choice of now, when quiet or skip; a step an agent runs on its own has no card.
+- Main-level ops's brief says crew raises the deploy's and the step's cards, how ops adopts one from the line it is told, and what it runs on the answer; it posts and closes none.
 
 ## Capabilities
 
@@ -25,7 +26,7 @@ None.
 ## Impact
 
 - Follows `crew-builds-every-card-from-its-facts`, whose builders, `follows_of` and act it calls. Built beside `crew-raises-a-proposals-card`, `crew-raises-a-batchs-card-with-its-session`, `crew-record-raises-a-records-card` and `the-rail-shows-and-sweeps-every-card`; it changes `ops.py` alone of crew's code, and of the files the others change only the docs' lines of its own command.
-- The interface swancloud's `a-deploy-offer-hands-its-release-notes-and-after-steps` builds to. Main-level ops's brief keeps its words until `only-crew-raises-a-rows-card`.
+- The interface swancloud's `a-deploy-offer-hands-its-release-notes-and-after-steps` builds to.
 
 ## Touches
 
@@ -36,7 +37,9 @@ README.md
 plugin/skills/crew/SKILL.md
 tests/py/test_ops.py
 tests/t-journey-ops.sh
+plugin/roles/main-ops.md
+tests/t-briefs.sh
 tests/moon.yml
 ```
 
-`ops.py` changes `rows`, `environments` and `open_keys` (the deploy's row keyed `deploy/<env>`, the held step's row), `offer`, `record_cmd`, `step`, `parser` and `args_refusal`, and gains `deploy_facts`, `raise_deploy` and `raise_step`. `plugin/bin/crew` changes only its usage header's `crew ops offer` lines, README and the crew skill only theirs; `tests/moon.yml` is regenerated.
+`ops.py` changes `rows`, `environments` and `open_keys` (the deploy's row keyed `deploy/<env>`, the held step's row), `offer`, `record_cmd`, `step`, `parser` and `args_refusal`, and gains `deploy_facts`, `raise_deploy` and `raise_step`. `plugin/bin/crew` changes only its usage header's `crew ops offer` lines, README and the crew skill only theirs; `plugin/roles/main-ops.md` changes its offer's and its user's step's paragraphs of *Deploying main*, and `tests/t-briefs.sh` their words; `tests/moon.yml` is regenerated.

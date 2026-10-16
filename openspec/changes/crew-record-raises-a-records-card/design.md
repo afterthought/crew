@@ -2,13 +2,13 @@
 
 ## Context
 
-Record 0031 and `crew-builds-every-card-from-its-facts` give a record's card its two forms and the act that sends it; this change adds the command at whose turns it is raised, changed and closed. It relies on `briefs.15` as record 0031 amends it (a record is accepted only on the user's yes, given in the pane or on its one card), `briefs.13`, `briefs.16`, `code.2`, `code.4`, `code.5` (the kit is checked against the teams file alone), `code.7`, `read.1`, `record.1`, `record.3` and `state.4`. It touches the areas of `plan.md`, `record.md` and `teams.md`.
+Record 0031 and `crew-builds-every-card-from-its-facts` give a record's card its two forms and the act that sends it; this change adds the command at whose turns it is raised, changed and closed. It relies on `briefs.15` as record 0031 amends it (a record is accepted only on the user's yes, given in the pane or on its one card), `briefs.13`, `briefs.16`, `code.2`, `code.4`, `code.5` (the kit is checked against the teams file alone), `code.7`, `read.1`, `record.1`, `record.3` and `state.4`. It touches the areas of `plan.md`, `record.md`, `teams.md`, `briefs.md` and `tests.md`.
 
 ## Goals / Non-Goals
 
 Goals: a record's status recorded through crew at each turn; one card per record, raised only when the record was not settled in the pane, changed in place on a revision, closed with the status; a rule-decided record put to the user as one choice.
 
-Non-goals: the record's forms, which `crew-builds-every-card-from-its-facts` builds; the design agent's brief, which `only-crew-raises-a-rows-card` rewrites; the board's design band, which `the-rail-shows-and-sweeps-every-card` draws from the entries this command writes.
+Non-goals: the record's forms, which `crew-builds-every-card-from-its-facts` builds; the board's design band, which `the-rail-shows-and-sweeps-every-card` draws from the entries this command writes.
 
 ## Decisions
 
@@ -34,6 +34,10 @@ A record's card key is the record's, `record/<kit>/<number>`, not the commit's: 
 
 The card trials' note for the builder, in the recovery session's words: `crew record <kit> <n> --proposed --alternatives <file>` makes a choice card: loosen as drafted / accept as ruled / send back. The design brief gets a rule: "a rule-decided choice is named, never settled silently".
 
-## Risks / Trade-offs
+### 4. The design agent's brief
 
-- Until `only-crew-raises-a-rows-card` rewrites the design agent's brief, it still tells the agent to post the record's card itself; the hook checks that post against `record/<kit>/<number>`, the key crew's card was raised under.
+`design.md`'s *Decision records* says the design agent runs `crew record` at each turn of a record's status, `--settled-in-pane` when the user settled it beside it; that it adopts the card with the line the command prints; that on a note it revises the record, still proposed, and runs `crew record … --proposed` again, and on a yes or a no commits the status and runs `--accepted` or `--rejected`; and that a record whose decision a rule of the user's made between alternatives names them, the rules that decided and each rule loosened, in a file `crew record --alternatives` takes, never settled silently. It posts and closes no record card. `tests/t-briefs.sh` pins the words (`tests.6`, `briefs.15`).
+
+## After deploy
+
+1. The design agent of each partition restarted at a quiet moment, by the dispatcher, since a brief loads at a fresh start and no check can make a running agent reread it; the environments are the two hosts.

@@ -6,7 +6,7 @@
 
 ## 2. The briefs
 
-- [ ] 2.1 `crew.py` `cards_how` is the question discipline and the hearing; `lost_card_how` goes; the *Cards* sections of `conductor.md`, `planner.md`, `main-ops.md` and `design.md`, and the stage roles' words on `crew needs`, say what the design's second decision says; `design.md` says a record whose decision a rule of the user's made between alternatives names them, the rules and each loosened, in a file `crew record --alternatives` takes, never settled silently; the planner's `Do` lines carry each new unit's direction for the card. Journey: `tests/t-briefs.sh` pins the words of each (`tests.6`, `briefs.11`, `briefs.15`).
+- [ ] 2.1 `crew.py` `cards_how` is the question discipline and the hearing every asker carries; `lost_card_how` goes; the stage roles' words on `crew needs` say what the design's second decision says. Journey: `tests/t-briefs.sh` pins the words of each (`tests.6`, `briefs.11`).
 
 ## 3. Commands and docs
 

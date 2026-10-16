@@ -11,6 +11,7 @@ Record 0031 makes a proposal's card crew's own: raised when `crew plan propose` 
 - `crew plan agree` changes the card to say it no longer waits on that conductor.
 - `crew plan approve` closes the card with what was applied; `crew plan drop` withdraws it with the reason.
 - Send applies the boxes as they stand: a new unit unticked is left out, a dropped unit ticked "Keep" stays, an amendment ticked "Keep … old intent" is not applied, and the planner is told which.
+- The planner's brief says crew raises the proposal's card, how the planner adopts it and applies its answers, and that its `Do` lines carry each new unit's direction; it posts, changes and closes no proposal card.
 
 ## Capabilities
 
@@ -26,7 +27,7 @@ None.
 ## Impact
 
 - Follows `crew-builds-every-card-from-its-facts`, whose builder and act it calls. Built beside `crew-raises-a-batchs-card-with-its-session`, `crew-raises-the-deploy-and-step-cards`, `crew-record-raises-a-records-card` and `the-rail-shows-and-sweeps-every-card`, none of which changes a function this one changes.
-- The planner's brief keeps its words until `only-crew-raises-a-rows-card`, which also removes `crew plan card` and the card hook's proposal form.
+- `crew plan card` and the card hook's proposal form, which no brief uses once this lands, go with `only-crew-raises-a-rows-card`. The planner's *Cards* section opens with one paragraph on its proposal and batch rows, whose proposal sentences this change rewrites and whose batch sentences `crew-raises-a-batchs-card-with-its-session` does; whichever lands second rebases on the other.
 
 ## Touches
 
@@ -35,7 +36,9 @@ plugin/lib/plan.py
 tests/py/test_proposal_life.py
 tests/py/test_proposals.py
 tests/t-cards.sh
+plugin/roles/planner.md
+tests/t-briefs.sh
 tests/moon.yml
 ```
 
-`plan.py` changes `plan_propose`, `plan_agree`, `plan_approve`, `plan_drop`, `plan_answer`, `card_answer`, `with_answer`, `answered`, `CardReads.open_proposals` and the proposal's row in `rail_rows`, and gains `proposal_chain`, `proposal_facts` (what `card_model` reads, handed to the builder) and `raise_proposal`. `tests/t-cards.sh` gains the proposal's journey; `tests/moon.yml` is regenerated.
+`plan.py` changes `plan_propose`, `plan_agree`, `plan_approve`, `plan_drop`, `plan_answer`, `card_answer`, `with_answer`, `answered`, `CardReads.open_proposals` and the proposal's row in `rail_rows`, and gains `proposal_chain`, `proposal_facts` (what `card_model` reads, handed to the builder) and `raise_proposal`. `plugin/roles/planner.md` changes step 3 of *Proposals* and the proposal's words in *Cards*: the opening paragraph's proposal sentences, how answers are gathered, and a conductor's agreement. `tests/t-cards.sh` gains the proposal's journey and `tests/t-briefs.sh` its words; `tests/moon.yml` is regenerated.

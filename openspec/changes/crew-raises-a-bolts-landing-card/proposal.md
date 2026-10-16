@@ -12,6 +12,7 @@ Record 0031 makes a bolt's landing card crew's own: raised in its conductor's na
 - The card links sluice's pull request when the submission at the head has one.
 - A fix that moves the head changes the card in place; `crew fix` started on a defect note withdraws it, "held for a fix: …", and a new card follows it once the bolt reads proven again.
 - `crew bolt land` closes the card with the landing's outcome, in the words the record of who keeps which folders settles.
+- The conductor's brief says crew raises the landing card, how the conductor adopts it, and what it does on the answer: the tell to main-level ops on a yes, a fix on a defect note; it posts and closes no landing card.
 
 ## Capabilities
 
@@ -26,7 +27,6 @@ None.
 ## Impact
 
 - Follows `crew-builds-every-card-from-its-facts`, whose landing builder, `follows_of` and act it calls, and `the-rail-shows-and-sweeps-every-card`, whose read posts a row's card that has none through the raise this change gives the landing; and waits on the record of who keeps which folders.
-- The conductor's brief keeps its words until `only-crew-raises-a-rows-card`, which stops the conductor posting the landing card.
 
 ## Touches
 
@@ -36,7 +36,9 @@ plugin/hooks/cards
 tests/py/test_landing.py
 tests/py/test_rail.py
 tests/t-journey-land.sh
+plugin/roles/conductor.md
+tests/t-briefs.sh
 tests/moon.yml
 ```
 
-`plan.py` changes the landing's row in `rail_rows` (keyed `land/<bolt>`, there once the bolt reads proven), `unit_wait` and `record_end` (the merge's end), `fix_cmd`, `bolt_land`, the landing's pattern in `CARD_KEYS` and the conductor's branch of `card_refusal`, and gains `landing_facts` and `raise_land`. The card hook changes only its `KEYS` line for a landing's key; `tests/moon.yml` is regenerated.
+`plan.py` changes the landing's row in `rail_rows` (keyed `land/<bolt>`, there once the bolt reads proven), `unit_wait` and `record_end` (the merge's end), `fix_cmd`, `bolt_land`, the landing's pattern in `CARD_KEYS` and the conductor's branch of `card_refusal`, and gains `landing_facts` and `raise_land`. The card hook changes only its `KEYS` line for a landing's key. `plugin/roles/conductor.md` changes *Cards*' landing paragraph and its answer's, step 5 of *The building loop* and *Talking to the user*'s line on the landing card, and `tests/t-briefs.sh` their words; `tests/moon.yml` is regenerated.

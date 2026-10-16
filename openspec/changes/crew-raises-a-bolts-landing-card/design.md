@@ -2,13 +2,13 @@
 
 ## Context
 
-Record 0031 and `crew-builds-every-card-from-its-facts` give the landing card its form and the act that sends it; this change raises, changes, withdraws and closes it at the bolt's own events. It relies on `plan.16` as record 0031 amends it (a bolt lands on the user's approval of the landing card crew raises in its conductor's name), record 0025 (the bolt's proof is sluice's verdict at its head), `tests.5`, `teams.3` (a fix on the bolt), `briefs.11`, `briefs.13`, `code.7`, `code.9`, `read.1` and `state.4`. It touches the areas of `plan.md` and `teams.md`.
+Record 0031 and `crew-builds-every-card-from-its-facts` give the landing card its form and the act that sends it; this change raises, changes, withdraws and closes it at the bolt's own events. It relies on `plan.16` as record 0031 amends it (a bolt lands on the user's approval of the landing card crew raises in its conductor's name), record 0025 (the bolt's proof is sluice's verdict at its head), `tests.5`, `teams.3` (a fix on the bolt), `briefs.11`, `briefs.13`, `code.7`, `code.9`, `read.1` and `state.4`. It touches the areas of `plan.md`, `teams.md`, `briefs.md` and `tests.md`.
 
 ## Goals / Non-Goals
 
 Goals: one landing card per bolt, raised by crew once the bolt reads proven, whichever read finds it first; changed when its head moves, withdrawn on a defect and raised again after the fix; closed at the landing.
 
-Non-goals: the landing's form, which `crew-builds-every-card-from-its-facts` builds; the rail's read posting a card that has none, which `the-rail-shows-and-sweeps-every-card` does through this change's raise; the conductor's brief, which `only-crew-raises-a-rows-card` rewrites; a card's link to a running environment for the bolt (record 0031 §9).
+Non-goals: the landing's form, which `crew-builds-every-card-from-its-facts` builds; the rail's read posting a card that has none, which `the-rail-shows-and-sweeps-every-card` does through this change's raise; a card's link to a running environment for the bolt (record 0031 §9).
 
 ## Decisions
 
@@ -33,6 +33,10 @@ What `crew bolt land` closes the card with, the landing's outcome, says what the
 
 Not in this change, for the design agent's queue beside record 0031 §9: the approval on the card as the act that takes the pull request out of draft so it enters sluice's queue ("pending you should be the thing that flips another check in GitHub or switches the pull request from a draft to approved so that it enters the actual Sluice queue"), and a link to the bolt's preview environment once sluice's previews exist ("Sluice can manage preview environments … being able to have a link for that").
 
-## Risks / Trade-offs
+### 4. The conductor's brief
 
-- Until `only-crew-raises-a-rows-card` rewrites the conductor's brief, it still tells the conductor to post the landing card itself, marked high stakes, which Pending You refuses on an approval; crew's card is the one the user sees.
+`conductor.md`'s *Cards* says crew raises the landing card once the bolt reads proven; that the conductor adopts it with the line its merge's end prints, or that `crew tell` brings it when a rail read raised it; and what it does on the answer: the tell to main-level ops on a yes, a fix on a defect note, which withdraws the card. *The building loop* and *Talking to the user* say the same. It posts and closes no landing card. `tests/t-briefs.sh` pins the words (`tests.6`, `plan.16`).
+
+## After deploy
+
+1. Each team's conductor restarted at a quiet moment, by the dispatcher, since a brief loads at a fresh start and no check can make a running agent reread it; the environments are the two hosts.

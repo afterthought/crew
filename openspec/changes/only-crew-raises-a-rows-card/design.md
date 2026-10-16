@@ -2,13 +2,13 @@
 
 ## Context
 
-Record 0031 rules that crew raises six cards and an agent asks the seventh; the series' earlier changes raise each of the six at its event. This change, the series' last, ends the old path: the hook narrowed to the question, the briefs rewritten to the record, and the commands agents built cards with removed. It relies on `roles.3` (the hook refuses, the brief does not merely say), `briefs.11`, `briefs.13`, `briefs.15` and `briefs.16` as record 0031 amends them, `briefs.17` (a call in another agent's name refused on every tool), `plan.16` (the conductor's tell to main-level ops on the landing's yes), `tests.6` (every brief's rule pinned by `tests/t-briefs.sh`), `docs.2`, `code.2`, `read.1` and `state.4`. It touches the areas of `briefs.md`, `teams.md`, `plan.md`, `tests.md` and `docs.md`.
+Record 0031 rules that crew raises six cards and an agent asks the seventh; the series' earlier changes raise each of the six at its event. This change, the series' last, ends the old path: the hook narrowed to the question, the question discipline every asker's brief carries, and the commands agents built cards with removed. It relies on `roles.3` (the hook refuses, the brief does not merely say), `briefs.11`, `briefs.13`, `briefs.15` and `briefs.16` as record 0031 amends them, `briefs.17` (a call in another agent's name refused on every tool), `plan.16` (the conductor's tell to main-level ops on the landing's yes), `tests.6` (every brief's rule pinned by `tests/t-briefs.sh`), `docs.2`, `code.2`, `read.1` and `state.4`. It touches the areas of `briefs.md`, `teams.md`, `plan.md`, `tests.md` and `docs.md`.
 
 ## Goals / Non-Goals
 
-Goals: no agent writes, posts or closes a row's card; an agent's question keeps every field Pending You offers; each role's brief says what crew raises for it and how it hears; nothing of the old path left to drift.
+Goals: no agent writes, posts or closes a row's card; an agent's question keeps every field Pending You offers and is asked by the chain of command; nothing of the old path left to drift.
 
-Non-goals: raising any card, which the earlier changes do; the wake mod itself (the fleet's).
+Non-goals: raising any card, and what each owner's brief says of its own card, which the earlier changes do; the wake mod itself (the fleet's).
 
 ## Decisions
 
@@ -20,9 +20,7 @@ The name check stays whole: `name_refusal` keeps running first in `refusal`, apa
 
 ### 2. The briefs
 
-`crew.py` `cards_how` becomes the question discipline every one of the four roles carries: the chain of command, Pending You's test for what is the user's, the fields a good question gives (options with a recommendation, a fallback when not blocking, what was tried), the key of its own (`ask/<agent>/<slug>`), how it hears, and that crew's six cards are crew's. `lost_card_how` goes. `conductor.md` *Cards* says crew raises the landing card and what the conductor does on its answer (the tell to ops on a yes; a fix on a defect note); `planner.md` says crew raises proposals' and batches' cards, how it reads a batch's notes (`crew card wait`) and gathers a proposal's answers (`crew plan answer`, as built); `main-ops.md` says crew raises the deploy's and the step's cards and how it adopts one; `design.md` says `crew record`; `coder.md` and the other stage roles say a question goes to the conductor by `crew needs`; `operator.md` is unchanged. `tests/t-briefs.sh` pins the words (`tests.6`).
-
-`design.md` also says a record whose decision a rule of the user's made between alternatives names them, the rules that decided and each rule loosened, in a file `crew record --alternatives` takes, never settled silently; and `planner.md` says the planner's `Do` lines carry each new unit's direction for its card.
+`crew.py` `cards_how` becomes the question discipline every one of the four roles carries: the chain of command, Pending You's test for what is the user's, the fields a good question gives (options with a recommendation, a fallback when not blocking, what was tried), the key of its own (`ask/<agent>/<slug>`), how it hears, and that crew's six cards are crew's. `lost_card_how` goes. `coder.md` and the other stage roles say a question goes to the conductor by `crew needs`, a team's `ops.md` that it tells its conductor, and `dispatcher.md` that it asks through the planner; `operator.md` is unchanged. What each owner's *Cards* section says of its own card came with that card's change. `tests/t-briefs.sh` pins the words (`tests.6`).
 
 A question's card is as drawn, the asker's own: "I think the last question card looks fine" (the user, 2026-10-15, in the card trials).
 

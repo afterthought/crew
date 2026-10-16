@@ -2,13 +2,13 @@
 
 ## Context
 
-Record 0031 and `crew-builds-every-card-from-its-facts` give a batch's card its form and the act that sends it; this change raises it when the batch's summary is delivered, starts its reading session with it, and closes both when the user is done. It relies on `briefs.9` (a card that cannot hold its document links a plannotator session crew starts), `briefs.12` (the batch, due across the partition), `briefs.13`, `state.4`, `read.1` (a session crew cannot judge is kept, and said), `read.4` (crew ends only what it started), `code.7` and `code.9`. It touches the area of `plan.md`.
+Record 0031 and `crew-builds-every-card-from-its-facts` give a batch's card its form and the act that sends it; this change raises it when the batch's summary is delivered, starts its reading session with it, and closes both when the user is done. It relies on `briefs.9` (a card that cannot hold its document links a plannotator session crew starts), `briefs.12` (the batch, due across the partition), `briefs.13`, `state.4`, `read.1` (a session crew cannot judge is kept, and said), `read.4` (crew ends only what it started), `code.7` and `code.9`. It touches the areas of `plan.md`, `briefs.md` and `tests.md`.
 
 ## Goals / Non-Goals
 
 Goals: one card per batch, raised by crew with its one session when the summary is there; a session that stays running while the card is open, ends when crew closes the card, and opens over the tailnet.
 
-Non-goals: the batch's form, which `crew-builds-every-card-from-its-facts` builds; the sweep's end of a session whose card closed elsewhere, which stands as `a-cards-session-ends-with-its-card` built it; the planner's brief, which `only-crew-raises-a-rows-card` rewrites.
+Non-goals: the batch's form, which `crew-builds-every-card-from-its-facts` builds; the sweep's end of a session whose card closed elsewhere, which stands as `a-cards-session-ends-with-its-card` built it.
 
 ## Decisions
 
@@ -29,7 +29,14 @@ crew starts a plannotator session only for a batch (on the batch's folder, the s
 
 What the user holds this card to is the session: "it stays running, it closes when it's supposed to once we're done, it's accessible", which `card-sessions` pins; access over the tailnet "has been opening pretty reliably" (the user, 2026-10-15). The card trials' note for the builder, in the recovery session's words: the batch's title comes from the units' subjects; the summary opens "N changes to read, nothing to approve"; the reviewer's summary goes on the face as Markdown; the plannotator session behind it must "1. stay running 2. close when it's supposed to once we're done 3. be accessible".
 
+### 4. The planner's brief
+
+`planner.md`'s *Batches* says crew starts the batch's session and raises its card when the reviewer's summary is delivered and `crew review --wait` returns; that the planner adopts the card with the line the wait prints; and that it reads the notes with `crew card wait batch/<n>` and sends each unit's to its conductor word for word, as today. It starts no session for a batch and posts and closes no batch card. `tests/t-briefs.sh` pins the words (`tests.6`).
+
 ## Risks / Trade-offs
 
-- Until `only-crew-raises-a-rows-card` rewrites the planner's brief, it still tells the planner to start the batch's session and post its card; crew's card and session come first under `batch/<n>`, and `crew card session batch/<n>` prints the running session's link rather than starting another.
 - A session started inside the act adds plannotator's start to `crew review --wait`, which already waits on the reviewer and takes a timeout (`code.9`).
+
+## After deploy
+
+1. The planner of each partition restarted at a quiet moment, by the dispatcher, since a brief loads at a fresh start and no check can make a running agent reread it; the environments are the two hosts.

@@ -34,7 +34,7 @@ A card crew raises is posted through its bridge in no session, so nothing of the
 
 - **Adoption.** After a post, crew prints `call get_request (requestId req_…, name <role>)`, never `pendingyou hold`. The owner's `get_request` under its own name reads the card the bridge posted on the host's connection, and the fleet's wake mod adopts the card from that call; it then wakes the owner's session, once idle, 20 to 60 seconds after the user's answer.
 - **Raised outside the owner's turn**, a landing found on a rail read or the deployer's offer: crew sends the owner that line with `crew tell`. A card the owner's own command raised, a proposal's in the planner's shell, is told to no one.
-- **At a fresh start** the owner runs `crew rail`, which names its open cards and their ids, and adopts each the same way, as the briefs already have each owner read the rail's `card:` lines at its start; the series' last change writes the rest into each role's *Cards* section.
+- **At a fresh start** the owner runs `crew rail`, which names its open cards and their ids, and adopts each the same way, as the briefs already have each owner read the rail's `card:` lines at its start; each card's change writes its owner's words of it into the owner's brief, and the series' last the question discipline.
 - **The sweep stays the catch** for a card no owner adopted: the rail names every open card with its owner at each read, and `crew card read <key>` prints a card's state and answer, and closes a declined approval:
 
 | Event | Command | Act |
@@ -66,22 +66,22 @@ The trials' notes the builders take as given, in the recovery session's words:
 
 ### 6. The series
 
-Each change is built and landed on its own, in this order; each names in its proposal's *Touches* the functions it changes. Changes 2 to 5 and 7 follow this one alone and change different functions, so they are built side by side, each rebasing on whatever lands before it; the files they share are the journey `tests/t-cards.sh`, which each adds its own part to, `tests/py/test_cards.py`, which 3 and 5 each add their own cases to, `tests/moon.yml`, which each regenerates, and for 4 and 5 the usage header of `plugin/bin/crew`, README and `plugin/skills/crew/SKILL.md`, each its own command's lines.
+Each change is built and landed on its own, in this order; each names in its proposal's *Touches* the functions it changes. Changes 2 to 5 and 7 follow this one alone and change different functions, so they are built side by side, each rebasing on whatever lands before it; the files they share are the journey `tests/t-cards.sh`, which each adds its own part to, `tests/t-briefs.sh`, which 2 to 5 each add their brief's words to, `tests/py/test_cards.py`, which 3 and 5 each add their own cases to, `tests/moon.yml`, which each regenerates, the opening paragraph of `planner.md`'s *Cards*, whose proposal sentences 2 rewrites and batch sentences 3, and for 4 and 5 the usage header of `plugin/bin/crew`, README and `plugin/skills/crew/SKILL.md`, each its own command's lines.
 
 | # | Change | What it builds | Follows | Functions it changes |
 |---|---|---|---|---|
 | 1 | `crew-builds-every-card-from-its-facts` | the six builders, the words rule, `follows`, the picture at twice the density, the act, how an owner hears a card | none | `cards.py`: new builders and `follows_of`; `picture.py` `char`, `layout`, `draw`; `plan.py` `card_read`, and new `row_card_post`, `row_card_change`, `row_card_close` |
-| 2 | `crew-raises-a-proposals-card` | the proposal's card raised, changed and closed by `crew plan propose`, `--replaces`, `agree`, `approve`, `drop`; Send applying the boxes | 1 | `plan.py` `plan_propose`, `plan_agree`, `plan_approve`, `plan_drop`, `plan_answer`, `card_answer`, `with_answer`, `answered`, `CardReads.open_proposals`, `rail_rows` (the proposal's row); new `proposal_chain`, `proposal_facts`, `raise_proposal` |
-| 3 | `crew-raises-a-batchs-card-with-its-session` | the batch's card and session raised by `crew review --wait`; `crew card wait` and `session` | 1 | `plan.py` `review_wait`, `row_card_post` and `row_card_close` (the session's start and end), `card_session`, `session_refusal`, `card_of`, `card_wait`, `waited`, `end_session`, `batch_folder_write`; new `batch_facts`, `raise_batch` |
-| 4 | `crew-raises-the-deploy-and-step-cards` | the deploy's and the step's cards by `crew ops offer`, `record`, `step` | 1 | `ops.py` `rows`, `environments`, `open_keys`, `offer`, `record_cmd`, `step`, `parser`, `args_refusal`; new `deploy_facts`, `raise_deploy`, `raise_step` |
-| 5 | `crew-record-raises-a-records-card` | `crew record` and the record's card | 1 | `plan.py` `RECORD_KEY`, `card_refusal` (the design agent's branch), `parser`, `main`; new `record_status`, `record_facts`, `raise_record`; the card hook's `KEYS` (the record's line); `plugin/bin/crew`'s dispatch |
-| 6 | `crew-raises-a-bolts-landing-card` | the landing's card at the merge's end and the rail's read, withdrawn by `crew fix`, closed by `crew bolt land` | 1, 7; waits on the record of who keeps which folders | `plan.py` `rail_rows` (the landing's row), `unit_wait`, `record_end`, `fix_cmd`, `bolt_land`, `CARD_KEYS` (the landing's key), `card_refusal` (the conductor's branch); new `landing_facts`, `raise_land`; the card hook's `KEYS` (the landing's line) |
+| 2 | `crew-raises-a-proposals-card` | the proposal's card raised, changed and closed by `crew plan propose`, `--replaces`, `agree`, `approve`, `drop`; Send applying the boxes | 1 | `plan.py` `plan_propose`, `plan_agree`, `plan_approve`, `plan_drop`, `plan_answer`, `card_answer`, `with_answer`, `answered`, `CardReads.open_proposals`, `rail_rows` (the proposal's row); new `proposal_chain`, `proposal_facts`, `raise_proposal`; `planner.md`'s proposal words |
+| 3 | `crew-raises-a-batchs-card-with-its-session` | the batch's card and session raised by `crew review --wait`; `crew card wait` and `session` | 1 | `plan.py` `review_wait`, `row_card_post` and `row_card_close` (the session's start and end), `card_session`, `session_refusal`, `card_of`, `card_wait`, `waited`, `end_session`, `batch_folder_write`; new `batch_facts`, `raise_batch`; `planner.md`'s *Batches* and batch words |
+| 4 | `crew-raises-the-deploy-and-step-cards` | the deploy's and the step's cards by `crew ops offer`, `record`, `step` | 1 | `ops.py` `rows`, `environments`, `open_keys`, `offer`, `record_cmd`, `step`, `parser`, `args_refusal`; new `deploy_facts`, `raise_deploy`, `raise_step`; `main-ops.md`'s *Deploying main* |
+| 5 | `crew-record-raises-a-records-card` | `crew record` and the record's card | 1 | `plan.py` `RECORD_KEY`, `card_refusal` (the design agent's branch), `parser`, `main`; new `record_status`, `record_facts`, `raise_record`; the card hook's `KEYS` (the record's line); `plugin/bin/crew`'s dispatch; `design.md`'s *Decision records* |
+| 6 | `crew-raises-a-bolts-landing-card` | the landing's card at the merge's end and the rail's read, withdrawn by `crew fix`, closed by `crew bolt land` | 1, 7; waits on the record of who keeps which folders | `plan.py` `rail_rows` (the landing's row), `unit_wait`, `record_end`, `fix_cmd`, `bolt_land`, `CARD_KEYS` (the landing's key), `card_refusal` (the conductor's branch); new `landing_facts`, `raise_land`; the card hook's `KEYS` (the landing's line); `conductor.md`'s landing words |
 | 7 | `the-rail-shows-and-sweeps-every-card` | the rail's card lines, the sweep, the agents' open cards on the board | 1 | `plan.py` `rail_read`, `rail_text`, `record_cards`, `stray_cards`, `sweep_judgment`, `sweep_sessions`; new `sweep_cards`; `board.py` `board_data`, `agent_views` and its five views; `status.js` |
-| 8 | `only-crew-raises-a-rows-card` | the hook narrowed to the question, its name check kept whole, the briefs, the old commands removed | 1 to 7 | the card hook (`name_refusal` kept) and `hooks.json`; `plan.py` `card_refusal`, `CardReads`, `card_post`, `card_change`, `card_close`, `plan_card`, `card_model`, `close_card`, `notices`, `lost_rows`, `CARD_KEYS`, `parser`, `main`; `crew.py` `cards_how`, `lost_card_how`; `plugin/roles/`; `plugin/bin/crew`; README; the crew skill |
+| 8 | `only-crew-raises-a-rows-card` | the hook narrowed to the question, its name check kept whole, the question discipline in the briefs, the old commands removed | 1 to 7 | the card hook (`name_refusal` kept) and `hooks.json`; `plan.py` `card_refusal`, `CardReads`, `card_post`, `card_change`, `card_close`, `plan_card`, `card_model`, `close_card`, `notices`, `lost_rows`, `CARD_KEYS`, `parser`, `main`; `crew.py` `cards_how`, `lost_card_how`; the stage roles', `ops.md`'s, `dispatcher.md`'s and `main-ops.md`'s token; `plugin/bin/crew`; README; the crew skill |
 
 ### 7. Where each part of `every-crew-card-is-raised-at-its-point` lands
 
-The series replaces that change whole. Its parts land by these rules: a requirement lands whole in the change after whose landing all of it holds, so no change's spec says more than its code does (`docs.4`); a card's form holds once this change's builder makes it, whichever later change raises the card, so a form lands here; a requirement that also says which command raises, changes or closes a card lands with that command's change; how an owner hears a card lands here, so every card is heard from the moment it is crew's; one that speaks of several kinds' events at once, or of an act its brief alone sets an agent, lands in change 8, after which all of it holds. The two requirements over 500 characters are split, each part stating one behavior, and so is one whose last sentence holds only once change 8 removes a command. Changes are numbered as in *The series*.
+The series replaces that change whole. Its parts land by these rules: a requirement lands whole in the change after whose landing all of it holds, so no change's spec says more than its code does (`docs.4`); a card's form holds once this change's builder makes it, whichever later change raises the card, so a form lands here; a requirement that also says which command raises, changes or closes a card, or what its owner does with it by its brief, lands with that card's change, which rewrites that owner's brief in the same change; how an owner hears a card lands here, so every card is heard from the moment it is crew's; one that speaks of several kinds' events at once lands in change 8, after which all of it holds. The two requirements over 500 characters are split, each part stating one behavior, and so is one whose last sentence holds only once change 8 removes a command. Changes are numbered as in *The series*.
 
 **Requirements**, 69, in the order the change's deltas held them:
 
@@ -148,8 +148,8 @@ The series replaces that change whole. Its parts land by these rules: a requirem
 | 59 | `review-batches` | The planner posts a batch as one card | removed | 3 |
 | 60 | `main-level` | A record's status is recorded through crew, and its card raised when it was not settled in the pane | added | 5, as "A record's status is recorded through crew", "A record's card is raised unless it was settled in the pane" and "A record's card is closed with its accepted or rejected status" |
 | 61 | `main-level` | A deploy and every operation are approved and recorded through crew | modified | 4 |
-| 62 | `main-level` | A decision record is accepted only on the user's yes | modified | 8 |
-| 63 | `main-level` | A record the user does not accept is revised or rejected | modified | 8 |
+| 62 | `main-level` | A decision record is accepted only on the user's yes | modified | 5 |
+| 63 | `main-level` | A record the user does not accept is revised or rejected | modified | 5 |
 | 64 | `main-level` | The user's own words are their decision | modified | 5 |
 | 65 | `plan-proposals` | A proposal is put before the user whole | modified | 2 |
 | 66 | `plan-proposals` | A proposal is dropped with a reason, or replaced | modified | 2 |
@@ -173,7 +173,7 @@ The series replaces that change whole. Its parts land by these rules: a requirem
 | 3.1 | the hook narrowed | 8, 1.1 |
 | 4.1 | the sweep | 7, 2.1 |
 | 5.1 | the sessions of a batch and a long proposal | 3, 2.1 |
-| 6.1 | the briefs | 8, 2.1 |
+| 6.1 | the briefs | each owner's words of its card with that card's change: the planner's proposal words 2, 1.3; its batch words 3, 1.2; main-level ops's 4, 1.3; the design agent's 5, 1.3; the conductor's 6, 1.2; the question discipline, `lost_card_how` and the stage roles' words 8, 2.1 |
 | 7.1 | the rail's card lines and the board | 7, 1.1 |
 | 8.1 | the old commands removed, the docs | 8, 3.1 |
 | 9.1 | `tests/t-cards.sh` and the suite | 1, 4.1 |
@@ -200,13 +200,13 @@ Tasks the series adds, each where a part above needs one of its own: 1's 2.1, th
 | 5. The sweep withdraws | 7 |
 | 6. Hearing, as settled from the hearing probe of 2026-10-16 | 1; its sentence on `crew card wait` for a batch, 3 |
 | 7. Sessions | 3 |
-| 8. The briefs | 8 |
+| 8. The briefs | each owner's *Cards* words with its card's change: `conductor.md`'s 6, `planner.md`'s proposal words and `Do` lines 2 and batch words 3, `main-ops.md`'s 4, `design.md`'s and its rule-decided choice 5; `cards_how`, `lost_card_how`, the stage roles and `operator.md` 8 |
 | 9. The rail and the board | 7 |
 | 10. What each card shows: its opening and its landing, deploy, step, proposal, batch, record and whose-name bullets | 1; the landing's "not in this change", 6; the deploy's `crew ops offer` flags and files, 4; the step's one card at a time, 4; the batch's session, 3; the record's `crew record --alternatives` and the design agent's brief, 5 |
 | 10: the question's bullet | 8 |
 | Risks / Trade-offs | 1 |
 | After deploy 1, the host's sign-in | 1 |
-| After deploy 2, the standing agents restarted | 8 |
+| After deploy 2, the standing agents restarted | 8; and in each of 2 to 6, the role whose brief it changes |
 
 **The card trials' seven notes to the builder** (the recovery session's plan, 1.3):
 
@@ -225,13 +225,13 @@ Tasks the series adds, each where a part above needs one of its own: 1's 2.1, th
 | Change | Requirements whole | Parts of a split one | Requirements in its deltas | Tasks of the change | Tasks added |
 |---|---|---|---|---|---|
 | 1 | 15 | 8, 67 | 17 | 1.1, 1.2, 1.3, 2.6, 9.1 | 1 |
-| 2 | 4 | | 4 | 2.1 | 2 |
-| 3 | 10 | | 10 | 2.2, 5.1 | 1 |
-| 4 | 3 | 8 | 4 | 2.4 | 2 |
-| 5 | 5 | 60 | 8 | 2.5 | 2 |
-| 6 | 1 | | 1 | 2.3 | 1 |
+| 2 | 4 | | 4 | 2.1, part of 6.1 | 2 |
+| 3 | 10 | | 10 | 2.2, 5.1, part of 6.1 | 1 |
+| 4 | 3 | 8 | 4 | 2.4, part of 6.1 | 2 |
+| 5 | 7 | 60 | 10 | 2.5, part of 6.1 | 2 |
+| 6 | 1 | | 1 | 2.3, part of 6.1 | 1 |
 | 7 | 5 | | 5 | 4.1, 7.1 | 3 |
-| 8 | 23 | 67 | 25 | 3.1, 6.1, 8.1 | 1 |
+| 8 | 21 | 67 | 23 | 3.1, part of 6.1, 8.1 | 1 |
 | | 66 | 3 | 74 | 16 | 13 |
 
 Change 8's delta also holds one requirement of its own, "A crew agent's Pending You call names only the agent itself", the spec of `briefs.17`, whose check landed on main on 2026-10-16 and which that change keeps whole while it narrows the key and form checks. The 152 scenarios land each with its requirement; the two split requirements' scenarios each with the part whose behavior it shows. Two requirements are mended as they land: the landing card's "A note naming a defect…" sentence, which had run into its *No pull request* scenario, is in the requirement's text; and the landing card's close, in requirement 4's *A bolt landed*, is the landing's outcome in the words change 6 gives it, which wait on the record of who keeps which folders.

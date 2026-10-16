@@ -2,13 +2,13 @@
 
 ## Context
 
-Record 0031 and `crew-builds-every-card-from-its-facts` give a proposal's card its form and the act that sends it; this change raises, changes and closes it at the proposal's own acts. It relies on `roles.1` (the planner changes the plan only by a proposal the user approves), `roles.2` (an approval runs only on the user's word), `plan.3` and `plan.4` (a proposal is numbered once and closes only as approved or dropped), `briefs.11` and `briefs.13` as record 0031 amends them, record 0018 as amended by record 0031 §5, `code.2`, `code.7` and `state.4`. It touches the area of `plan.md`.
+Record 0031 and `crew-builds-every-card-from-its-facts` give a proposal's card its form and the act that sends it; this change raises, changes and closes it at the proposal's own acts. It relies on `roles.1` (the planner changes the plan only by a proposal the user approves), `roles.2` (an approval runs only on the user's word), `plan.3` and `plan.4` (a proposal is numbered once and closes only as approved or dropped), `briefs.11` and `briefs.13` as record 0031 amends them, record 0018 as amended by record 0031 §5, `code.2`, `code.7` and `state.4`. It touches the areas of `plan.md`, `briefs.md` and `tests.md`.
 
 ## Goals / Non-Goals
 
 Goals: one card per proposal chain, raised by crew when the proposal is accepted, changed in place at each turn and closed at the act that ends it; the checkbox list applied as the user left it.
 
-Non-goals: the proposal's form, which `crew-builds-every-card-from-its-facts` builds; a long proposal's reading session, which `crew-raises-a-batchs-card-with-its-session` starts with the card; the planner's brief, `crew plan card` and the card hook's proposal form, which `only-crew-raises-a-rows-card` changes and removes.
+Non-goals: the proposal's form, which `crew-builds-every-card-from-its-facts` builds; a long proposal's reading session, which `crew-raises-a-batchs-card-with-its-session` starts with the card; `crew plan card` and the card hook's proposal form, which `only-crew-raises-a-rows-card` removes.
 
 ## Decisions
 
@@ -31,7 +31,14 @@ A proposal chain's card is its first proposal's: `proposal_chain` follows each p
 
 `crew plan answer` gathers every box of the card's one list, and `crew plan approve` applies the change with the boxes as they stand: a new unit or chore unticked is left out, as `--clear` leaves it out today; a dropped unit ticked "Keep <unit>" stays in its bolt; an amended unit ticked "Keep <unit>'s old intent" keeps its intent unamended. The approval's outcome on the card says what was applied and what was kept or left out, and the planner is told which. A hold-to-approve, a proposal with no unit rows, is applied whole.
 
+### 4. The planner's brief
+
+`planner.md` says crew raises a proposal's card when `crew plan propose` accepts it, and changes it at a rewrite and at a conductor's agreement; that the planner adopts it with the line the command prints; how it gathers a proposal's answers (`crew plan answer`, as built) and applies them as they stand with `crew plan approve`; and that its `Do` lines carry each new unit's direction for the card. It posts, changes and closes no proposal card, and no longer runs `crew plan card`. `tests/t-briefs.sh` pins the words (`tests.6`).
+
 ## Risks / Trade-offs
 
-- Until `only-crew-raises-a-rows-card` rewrites the planner's brief, it still tells the planner to post the proposal's card from `crew plan card`; crew's card is raised first, under the key the planner's card check then names, and the planner's post goes to Pending You under that same key.
-- `card_model` and `crew plan card` keep today's card until the last change removes them, so for that time two proposal forms exist in code: crew's, which the user sees, and the old one, which the hook still checks a planner's post against.
+- `card_model` and `crew plan card` keep today's card until the last change removes them, so for that time two proposal forms exist in code: crew's, which the user sees, and the old one, which no brief uses and the hook still checks a post against.
+
+## After deploy
+
+1. The planner of each partition restarted at a quiet moment, by the dispatcher, since a brief loads at a fresh start and no check can make a running agent reread it; the environments are the two hosts.

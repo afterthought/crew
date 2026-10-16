@@ -7,7 +7,7 @@ Record 0031 leaves an agent one card of its own, a question, asked by four roles
 ## What Changes
 
 - **A question is the asker's.** A conductor, the planner, main-level ops and the design agent ask through Pending You's own tools in their sessions, under a key of their own. crew's hook refuses a post, change or close under a row's key and from any other role, lets the rest through, and records each on the rail; its check that every Pending You call names only the agent itself (`briefs.17`) stays as it stands, first, on every tool. A stage agent asks through `crew needs`.
-- **The briefs** say all of it: each role's *Cards* section names what crew raises for it, how it hears, and the chain of command for a question; the stage agents' and the operator's say they post none.
+- **The briefs** carry the question discipline: the chain of command for a question, Pending You's test for what is the user's, a good question's fields and the key of its own; the stage agents' say they post none and ask their conductor by `crew needs`. What each owner's *Cards* section says of its own card came with that card's change.
 - `crew plan card` and `crew card post|change|close` go; README, the crew skill and `crew`'s usage header follow (`docs.2`).
 
 ## Capabilities
@@ -19,14 +19,13 @@ None.
 ### Modified Capabilities
 
 - `rail-cards`: crew raises every row's card and no agent does; one card per thing, changed in place and closed by crew; the question's checks and record; a crew agent's call in its own name alone; the hook's scope.
-- `main-level`: the design agent's record accepted and revised through `crew record`.
 - `plan-proposals`: no `crew plan card`.
 
 ## Impact
 
 - Follows every change of the series: `crew-builds-every-card-from-its-facts`, `crew-raises-a-proposals-card`, `crew-raises-a-batchs-card-with-its-session`, `crew-raises-the-deploy-and-step-cards`, `crew-record-raises-a-records-card`, `crew-raises-a-bolts-landing-card` and `the-rail-shows-and-sweeps-every-card`.
 - Supersedes `every-crew-card-goes-through-crew` (archived as superseded) and crw-3's unit `any-question-for-the-user-gets-a-card` (dropped, its branch kept, `plan.10`).
-- The briefs take effect at each standing agent's next fresh start. Cards open when this lands are closed by the sweep as their rows end; none is re-posted in the new form.
+- The question discipline takes effect at each standing agent's next fresh start. Cards open when this lands are closed by the sweep as their rows end; none is re-posted in the new form.
 
 ## Touches
 
@@ -35,7 +34,13 @@ plugin/hooks/cards
 plugin/hooks/hooks.json
 plugin/lib/plan.py
 plugin/lib/crew.py
-plugin/roles/
+plugin/roles/coder.md
+plugin/roles/construct.md
+plugin/roles/verify.md
+plugin/roles/reviewer.md
+plugin/roles/ops.md
+plugin/roles/dispatcher.md
+plugin/roles/main-ops.md
 plugin/bin/crew
 plugin/skills/crew/SKILL.md
 README.md
@@ -47,4 +52,4 @@ tests/t-docs.sh
 tests/moon.yml
 ```
 
-The card hook loses `KEYS`, `FORMS`, `form_check`, `form_refusal` and `proposal_form` and changes `check`, `refusal`, `key_refusal` and `posted`, keeping `name_refusal` and `callers` as they stand and `refusal` running the name check first; `hooks.json` keeps its matcher, `mcp__.*[Pp]ending.*[Yy]ou.*__.*`. `plan.py` changes `card_refusal`, `CardReads`, `CARD_KEYS` (the old keys out), `parser` and `main`; it loses `card_post`, `card_change`, `card_close`, `plan_card`, `card_model`, `close_card` and the notices that name a card to close (`notices`, `lost_rows`). `crew.py` rewrites `cards_how` and loses `lost_card_how`. Every brief under `plugin/roles/` with a *Cards* section changes; `tests/moon.yml` is regenerated.
+The card hook loses `KEYS`, `FORMS`, `form_check`, `form_refusal` and `proposal_form` and changes `check`, `refusal`, `key_refusal` and `posted`, keeping `name_refusal` and `callers` as they stand and `refusal` running the name check first; `hooks.json` keeps its matcher, `mcp__.*[Pp]ending.*[Yy]ou.*__.*`. `plan.py` changes `card_refusal`, `CardReads`, `CARD_KEYS` (the old keys out), `parser` and `main`; it loses `card_post`, `card_change`, `card_close`, `plan_card`, `card_model`, `close_card` and the notices that name a card to close (`notices`, `lost_rows`). `crew.py` rewrites `cards_how`, which every asker's *Cards* section draws in, and loses `lost_card_how`, whose `{{LOST_CARD}}` leaves `main-ops.md`; the stage roles', a team's ops's and the dispatcher's briefs say they post no card and whom they ask; `tests/moon.yml` is regenerated.
