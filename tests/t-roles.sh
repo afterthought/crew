@@ -1,6 +1,7 @@
 # Each role starts from its agent definition: the model and effort in its frontmatter, unless the teams file
 # overrides them for the team or partition, and its brief appended to Claude Code's system prompt; its name is in
-# CREW_AGENT, and in SLUICE_AGENT for sluice.
+# CREW_AGENT, and in SLUICE_AGENT for sluice, and its definition in CREW_ROLE. A session herdr resumes without crew's
+# environment is given that same brief back by crew's SessionStart hook at each compaction.
 # Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -15,9 +16,17 @@ role() {  # role <host> <scope> <role> [stage]: start it with the stub claude, p
   launch=$(python3 -c 'import json, sys
 l = json.loads(open(sys.argv[1]).read())
 a = l["argv"]; i = a.index("--append-system-prompt")
-print(" ".join(a[:i]), "| cwd", l["cwd"], "| agent", l["agent"], "| sluice", l["sluice"], "| label", l["label"], "| brief", len(a[i + 1]), "chars")' "$CREW_TEST_CLAUDE_LOG")
+print(" ".join(a[:i]), "| cwd", l["cwd"], "| agent", l["agent"], "| sluice", l["sluice"], "| label", l["label"], "| role", l["role"], "| brief", len(a[i + 1]), "chars")' "$CREW_TEST_CLAUDE_LOG")
   echo "${*:2}: $launch"
 }
+# compacted <host>: what crew's SessionStart hook gives the last role started there at a compaction once herdr has
+# resumed it, without crew's environment; brief: the brief that role was started with
+compacted() {
+  local sid; sid=$(jq -r .session "$CREW_TEST_CLAUDE_LOG")
+  as "$1" env -u CREW_AGENT -u CREW_LABEL -u CREW_ROLE python3 "$CREW/plugin/hooks/session-start" <<<"{\"session_id\":\"$sid\",\"source\":\"compact\"}" |
+    jq -r '.hookSpecificOutput | select(.hookEventName == "SessionStart") | .additionalContext'
+}
+brief() { python3 -c 'import json, sys; a = json.loads(open(sys.argv[1]).read())["argv"]; sys.stdout.write(a[a.index("--append-system-prompt") + 1])' "$CREW_TEST_CLAUDE_LOG"; }
 
 opus='--model claude-opus-5-5[1m]'; fable='--model claude-fable-5-1'
 role chuck-herdr-alpha swb-1 conductor;     has "$launch" "$opus --effort high"; has "$launch" "--name swb-1-conductor"
@@ -42,6 +51,16 @@ role chuck-herdr-alpha wldn operator;       has "$launch" "$opus --effort medium
 has "$launch" "cwd $box |"
 role mac-studio madswan planner;            has "$launch" "$fable --effort xhigh"; has "$launch" "cwd $mac/blueprints/main"
 ok "every role starts on its definition's model and effort"
+
+role chuck-herdr-alpha swb-1 unit-2 verify; has "$launch" "role verify"
+ctx=$(compacted chuck-herdr-alpha)
+has "${ctx%%$'\n\n'*}" "[crew] This is your brief as swb-1-unit-2"
+eq "${ctx#*$'\n\n'}" "$(brief)"
+role chuck-herdr-alpha wldn ops;            has "$launch" "role main-ops"
+ctx=$(compacted chuck-herdr-alpha)
+has "${ctx%%$'\n\n'*}" "[crew] This is your brief as wldn-ops"
+eq "${ctx#*$'\n\n'}" "$(brief)"
+ok "a session herdr resumed is given back at a compaction the brief its role was started with, a unit slot's its stage's"
 
 edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'max'}, 'operator': {'model': 'claude-opus-5-5'}}; $(team swb-1)['roles'] = {'coder': {'effort': 'max', 'model': 'claude-sonnet-5-5'}}"
 role chuck-herdr-alpha wldn planner;        has "$launch" "$fable --effort max"

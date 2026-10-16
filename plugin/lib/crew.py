@@ -1202,6 +1202,38 @@ def last_conversation(name):
     return None
 
 
+def brief_due(source, launched, saved):
+    """The agent whose brief crew's SessionStart hook gives a session back as context (teams.6), or None. source is the
+    hook's, launched whether CREW_AGENT is in the hook's environment, saved the session's record. Only a compaction
+    calls for it, of a crew agent's session whose process crew-role did not start: one herdr resumed with a bare
+    `claude --resume`, which keeps its brief from the transcript only until its first compaction. A resume needs none,
+    herdr's or crew's, since the transcript still holds the brief; nor does a session crew-role started, which carries
+    its brief in its arguments through every compaction."""
+    if source != "compact" or launched:
+        return None
+    return saved.get("CREW_AGENT") or None
+
+
+def brief_role(fleet, name, recorded):
+    """The scope and definition an agent's brief is built from: the definition crew-role recorded starting it from
+    (recorded), else, for a session recorded before crew-role named it, the one its name gives; a unit slot's name
+    gives none, its definition being its stage's. Refused for a name crew starts no agent by."""
+    t = team_of_agent(fleet, name)
+    scope = t["name"] if t else label_of_agent(fleet, name) or fail(f"no agent {name}: crew starts none by that name")
+    role = name[len(scope) + 1:].split("-")[0]  # conductor, ops, unit; design, planner, ops, reviewer, dispatch, operator
+    named = (role if role in ("conductor", "ops") else None) if t else {"ops": "main-ops", "dispatch": "dispatcher"}.get(role, role)
+    return scope, recorded or named or fail(f"{name}'s session record names no definition, and a unit slot's is its stage's, "
+                                            "so its brief can't be told")
+
+
+def brief_back_said(name, text):
+    """What a session is given back after a compaction: its brief whole, behind a line saying what it is. Claude Code
+    keeps to a file one longer than its cap on a hook's context, passing its path and opening words, so the line says to read it."""
+    return (f"[crew] This is your brief as {name}, which the compaction took out of your context, given back whole as crew "
+            "built it when it started you; it binds you as before. If it is cut short below, with the path of a file "
+            f"holding the whole of it, read that file whole now, before anything else.\n\n{text}")
+
+
 def resolve(fleet, scope, role, extra):
     """How a role starts, and with "resume" the session it picks up: its last conversation, in the folder that began
     it, which since a conductor moves into its bolt's worktree need not be where the role starts today."""
@@ -1211,8 +1243,8 @@ def resolve(fleet, scope, role, extra):
 
 
 def launch_shell(fleet, scope, role, extra):
-    """crew-role's start, as shell assignments: CWD, NAME, LABEL and the claude arguments in `args`. A resume with no
-    conversation to pick up starts the role fresh."""
+    """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from) and the
+    claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
@@ -1222,7 +1254,7 @@ def launch_shell(fleet, scope, role, extra):
         args += ["--resume", session]
     args += ["--append-system-prompt", brief(fleet, scope, l["defn"], l["name"])]
     return (f"CWD={shlex.quote(l['cwd'])}\nNAME={shlex.quote(l['name'])}\nLABEL={shlex.quote(l['label'])}\n"
-            f"args=({' '.join(shlex.quote(a) for a in args)})")
+            f"ROLE={shlex.quote(l['defn'])}\nargs=({' '.join(shlex.quote(a) for a in args)})")
 
 
 def here(fleet):

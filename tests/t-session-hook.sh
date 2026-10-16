@@ -1,5 +1,6 @@
 # crew's SessionStart hook records a crew agent's session; when herdr resumes that session without crew's
-# environment, the agent gets CREW_AGENT, CREW_LABEL and SLUICE_AGENT back through CLAUDE_ENV_FILE and its pane its name.
+# environment, the agent gets CREW_AGENT, CREW_LABEL and SLUICE_AGENT back through CLAUDE_ENV_FILE and its pane its name;
+# a resume, and a compaction of a session crew-role started, give no brief back (t-roles has the one a compaction gives).
 # Any other session, a subagent's, or input the hook can't read is left alone, and the hook always exits 0.
 # crew's PreToolUse hook marks a question or a plan a crew agent opens for the user, and a session's start clears it.
 # Reads: plugin/hooks/
@@ -11,18 +12,28 @@ hooks=$(jq -r '.hooks.SessionStart[0].hooks[0].command' "$CREW/plugin/hooks/hook
 has "$hooks" '${CLAUDE_PLUGIN_ROOT}/hooks/session-start'
 ok "the plugin's hooks.json runs the session-start hook"
 
-echo '{"session_id":"sid-1","source":"startup","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn hook
-eq "$(cat "$record")" $'CREW_AGENT=swb-1-conductor\nCREW_LABEL=wldn\nCREW_CWD=/work/kit/bolts/b'
-ok "a crew agent's start records its session and the folder it began in"
+echo '{"session_id":"sid-1","source":"startup","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn CREW_ROLE=conductor hook
+eq "$(cat "$record")" $'CREW_AGENT=swb-1-conductor\nCREW_LABEL=wldn\nCREW_CWD=/work/kit/bolts/b\nCREW_ROLE=conductor'
+ok "a crew agent's start records its session, the definition its brief comes from and the folder it began in"
+
+out=$(echo '{"session_id":"sid-1","source":"compact","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn CREW_ROLE=conductor hook)
+eq "$out" ""
+ok "a compaction of a session crew-role started, which carries its brief in its arguments, is given none"
 
 p=$(herdr workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
 herdr stub agent "$p"
-echo '{"session_id":"sid-1","source":"resume"}' | CLAUDE_ENV_FILE="$T/env" HERDR_ENV=1 HERDR_PANE_ID="$p" HERDR_BIN_PATH="$TESTS/stubs/herdr" hook
+out=$(echo '{"session_id":"sid-1","source":"resume"}' | CLAUDE_ENV_FILE="$T/env" HERDR_ENV=1 HERDR_PANE_ID="$p" HERDR_BIN_PATH="$TESTS/stubs/herdr" hook)
+eq "$out" ""
 eq "$(cat "$T/env")" "export CREW_AGENT=swb-1-conductor CREW_LABEL=wldn SLUICE_AGENT=swb-1-conductor"
 for _ in $(seq 6000); do [[ $(herdr agent get "$p" | jq -r .result.agent.name) == swb-1-conductor ]] && break; /bin/sleep 0.1; done
 eq "$(herdr agent get "$p" | jq -r .result.agent.name)" "swb-1-conductor"
 eq "$(env -i HOME="$HOME" PATH="$PATH" bash -c ". '$T/env'; echo \$CREW_AGENT \$CREW_LABEL \$SLUICE_AGENT")" "swb-1-conductor wldn swb-1-conductor"
-ok "a session herdr resumed gets its crew identity back and its pane renamed"
+ok "a session herdr resumed gets its crew identity back and its pane renamed, and no brief, which its transcript keeps"
+
+expect_ok bash -c "echo '{\"session_id\":\"sid-1\",\"source\":\"compact\"}' | python3 '$CREW/plugin/hooks/session-start'"
+has "$out" "crew session-start:"
+lacks "$out" "additionalContext"
+ok "a compaction whose brief can't be built, with no teams file here, says why, gives no context and still exits 0"
 
 : > "$CREW_TEST_LOG"; : > "$T/env"
 echo '{"session_id":"sid-2","source":"startup"}' | CLAUDE_ENV_FILE="$T/env" HERDR_ENV=1 HERDR_PANE_ID="$p" HERDR_BIN_PATH="$TESTS/stubs/herdr" hook

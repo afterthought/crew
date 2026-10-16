@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""crew's SessionStart hook: a crew agent that herdr resumes gets its name and its identity back.
+"""crew's SessionStart hook: a crew agent that herdr resumes gets its name, its identity and, after each compaction, its brief back.
 
-crew-role starts every role with CREW_AGENT, CREW_LABEL and SLUICE_AGENT in its environment, and crew names the role's herdr
+crew-role starts every role with CREW_AGENT, CREW_LABEL, SLUICE_AGENT and CREW_ROLE in its environment, and crew names the role's herdr
 pane after the agent. A herdr server that restarts resumes each agent with a bare `claude --resume <id>`. Claude
 Code brings back the conversation, the brief, the model, the permission mode and the added folders, but the pane
 comes back with no name, so `crew tell` and the greetings miss it, and the agent's crew commands lose who is
 writing and which partition is theirs.
 
 So at every start this records a crew agent's session in ~/.local/state/crew/sessions/<session id>, which a
-resume keeps, with the folder it began in: Claude Code finds a conversation again only from that folder, so crew
+resume keeps, with the definition its brief comes from and the folder it began in: Claude Code finds a conversation again only from that folder, so crew
 resumes a role there (crew.py last_conversation). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
 variables back, and SLUICE_AGENT, the same name for sluice, as crew-role sets them, through CLAUDE_ENV_FILE, which Claude Code applies to
-each of its Bash commands, and its pane gets its name back. Any other session costs one file lookup. At every start it also removes the session's question mark
+each of its Bash commands, and its pane gets its name back. Such a session keeps its brief from the transcript only
+until its first compaction, so at each compaction it is given its brief back as context, built by crew.py as
+crew-role builds it, from the definition the record names (crew.brief_due, crew.brief_role). Any other session costs
+one file lookup. At every start it also removes the session's question mark
 (hooks/questions), so a session resumed after its pane died with a question open carries no mark whose answer will
 never be written. The hook never fails a start."""
 import json
@@ -21,6 +24,8 @@ import re
 import shlex
 import subprocess
 import sys
+
+LIB = pathlib.Path(__file__).resolve().parent.parent / "lib"
 
 # herdr knows the agent only once it has started, after this hook: crew's own start retries its rename the same way.
 RENAME = 'for _ in $(seq 60); do "$0" agent rename "$1" "$2" >/dev/null 2>&1 && exit 0; sleep 1; done'
@@ -41,7 +46,8 @@ def main():
     if agent:
         record.parent.mkdir(parents=True, exist_ok=True)
         cwd = hook.get("cwd") if isinstance(hook.get("cwd"), str) else os.getcwd()
-        record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\nCREW_CWD={cwd}\n")
+        record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\nCREW_CWD={cwd}\n"
+                          f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\n")
         return
     if not record.is_file():
         return
@@ -59,6 +65,15 @@ def main():
         herdr = os.environ.get("HERDR_BIN_PATH") or "herdr"
         subprocess.Popen(["bash", "-c", RENAME, herdr, pane, agent], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    # A resume needs no brief: the transcript holds it. A compaction drops it, so it is given back.
+    sys.path.insert(0, str(LIB))
+    import crew
+    name = crew.brief_due(hook.get("source"), False, saved)
+    if name:
+        fleet = crew.load()
+        scope, role = crew.brief_role(fleet, name, saved.get("CREW_ROLE"))
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                                 "additionalContext": crew.brief_back_said(name, crew.brief(fleet, scope, role, name))}}))
 
 
 if __name__ == "__main__":

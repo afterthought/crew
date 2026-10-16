@@ -15,6 +15,7 @@ spec=$(python3 "$here/../lib/crew.py" launch "$scope" "$role" ${3:+"$3"}) || exi
 eval "$spec"
 cd "$CWD"
 # What the agent's own crew commands read: who is writing to the plan, and in which partition. sluice names the agent
-# behind a submission from SLUICE_AGENT, so it carries the same name.
-export CREW_AGENT=$NAME CREW_LABEL=$LABEL SLUICE_AGENT=$NAME
+# behind a submission from SLUICE_AGENT, so it carries the same name. crew's SessionStart hook records CREW_ROLE, the
+# definition the brief comes from, to give the brief back to a session herdr resumes (hooks/session-start).
+export CREW_AGENT=$NAME CREW_LABEL=$LABEL SLUICE_AGENT=$NAME CREW_ROLE=$ROLE
 exec claude "${args[@]}"
