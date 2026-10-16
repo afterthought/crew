@@ -99,9 +99,9 @@ class TestDropAmendAdd:
         img = next(a for a in self.M["card"]["artifacts"] if a["kind"] == "image")
         assert (img["title"], img["ref"], img["upload"]) == ("The change, once approved", "proposal-1.png", True)
 
-    def test_its_picture_is_a_png_780_wide_with_a_dropped_unit_and_a_new_one_each_in_its_colour(self):
+    def test_its_picture_is_a_png_1560_wide_at_twice_the_density_with_a_dropped_unit_and_a_new_one_each_in_its_colour(self):
         w, h, form, dropped, new = png(picture.draw(self.M["sections"]))
-        assert (w, form, dropped, new) == (780, (8, 2), True, True)
+        assert (w, form, dropped, new) == (1560, (8, 2), True, True)
 
 
 def test_a_proposal_that_makes_no_unit_new_is_a_plain_approval():
