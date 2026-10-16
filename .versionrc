@@ -1,0 +1,17 @@
+# convco: what a conventional commit is here (code.6). The types are convco's own and `revert`, which git-cliff gives
+# its own group (cliff.toml); git-cliff writes the notes, so a section here only names the type, and convco 0.6.3
+# reads a type that has none as no config at all, falling back to its defaults. A scope may name several parts of
+# crew, "docs(adr, architecture): ...", as sluice's .versionrc allows.
+types:
+  - { type: feat, section: Features }
+  - { type: fix, section: Fixes }
+  - { type: revert, section: Reverts }
+  - { type: perf, section: Performance }
+  - { type: refactor, section: Refactors }
+  - { type: docs, section: Documentation }
+  - { type: test, section: Tests }
+  - { type: build, section: Build }
+  - { type: ci, section: Build }
+  - { type: style, section: Other }
+  - { type: chore, section: Other }
+scopeRegex: "^[[:alnum:]]+(?:[-_/][[:alnum:]]+)*(?:, ?[[:alnum:]]+(?:[-_/][[:alnum:]]+)*)*$"

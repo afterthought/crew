@@ -34,8 +34,8 @@ MOON_YML = os.path.join(TESTS, "moon.yml")
 CORE = ["/plugin/bin/**/*", "/plugin/lib/crew.py", "/plugin/lib/plan.py", "/plugin/lib/record.py", "/plugin/lib/gather.py",
         "/plugin/lib/transcript.py", "/plugin/lib/questions.py", "/plugin/lib/ops.py", "/plugin/lib/cards.py",
         "/plugin/lib/kit.py"]
-# crew's toolchain: devenv's system tools, proto's pins, moon's toolchains and the tests' locked dependencies.
-TOOLCHAIN = ["/devenv.nix", "/devenv.lock", "/.prototools", "/.moon/toolchains.yml", "/tests/pyproject.toml", "/tests/uv.lock"]
+# crew's toolchain: devenv's system tools and inputs, proto's pins, moon's toolchains and the tests' locked dependencies.
+TOOLCHAIN = ["/devenv.nix", "/devenv.yaml", "/devenv.lock", "/.prototools", "/.moon/toolchains.yml", "/tests/pyproject.toml", "/tests/uv.lock"]
 COMMON = CORE + ["/tests/run", "/tests/slot", "/tests/lib.sh", "/tests/stubs/**/*"] + TOOLCHAIN
 # The two pytest tiers: name, folder, and what else of crew's its cases read: the logic tier reads crew's mod for the
 # keys it takes from the agents' views (code.8), and loads the card hook and reads the matcher hooks.json runs it by. Each is one task over its whole folder (tests.5, tests.11), in a
