@@ -223,17 +223,6 @@ When a row's key changes because what it asks changed, a unit built again or a b
 - **WHEN** the card `land/y/abc1234` is still open while bolt `y` waits to land at `def5678`
 - **THEN** `crew rail` shows `land/y/def5678` with no card open under the landing row, and lists `land/y/abc1234` after the groups with `crew tell <its owner> "Close your Pending You card land/y/abc1234: its row is gone."`
 
-### Requirement: A proposal's card is an approval
-A proposal's card, keyed `proposal/<n>`, SHALL be posted as `crew plan card <n>` prints it: an approval (`approve`) with no options or steps when the proposal adds or moves into a bolt no unit, or more than fifteen; otherwise a grouped card, its `about` naming the proposal, of a question `plan` of kind `approve` and one `units-<k>` question per group of at most five new units, of kind `multi`, or `choice` for a lone unit, with no text question. Its picture is an uploaded image and its text a code artifact of lang `text`. A note beside a decline carries what to change, an objection to a drop or an amendment, or the reason to drop the proposal; a note beside an approval changes nothing of what is applied.
-
-#### Scenario: A proposal card
-- **WHEN** the planner posts the card for proposal 4, which only amends a unit
-- **THEN** the card is an approval, and the user's yes has the planner approve proposal 4
-
-#### Scenario: A proposal card with new units
-- **WHEN** the planner posts the card for proposal 5, which adds three units
-- **THEN** the card asks `plan` and `units-1`, the three units all ticked, and the user's yes with one cleared has the planner record both answers with `crew plan answer 5`
-
 ### Requirement: No row's card takes another kind
 No row's card SHALL be a step for the user to take (`action`), a notice (`fyi`), a text question (`text`) or a review (`review`), and no row's card but a proposal's SHALL be a grouped card of questions. No card SHALL hold a text question.
 

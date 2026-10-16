@@ -240,7 +240,7 @@ def board_data(fleet, labels, read, now):
             kind, of = plan.role(fleet, s["captured_by"])
             return [of] if kind in ("conductor", "team") and of in p["teams"] else []
         proposals = [{"proposal": d["proposal"], "by": d["by"], "opened": d["opened"], "case": (d["case"] or "").splitlines()[0] if d["case"] else None,
-                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d["proposal"])), "teams": proposal_teams(d)}
+                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"])), "teams": proposal_teams(d)}
                      for d in read["props"] if d["label"] == l]
         planned, queue, construction = [], [], []
         if pl:
