@@ -39,6 +39,10 @@ None.
 plugin/lib/cards.py
 plugin/lib/picture.py
 plugin/lib/plan.py
+plugin/lib/record.py
+plugin/bin/crew
+plugin/skills/crew/SKILL.md
+README.md
 tests/py/test_cards.py
 tests/py/test_proposal_card.py
 tests/py/test_card_commands.py
@@ -47,4 +51,4 @@ tests/t-cards.sh
 tests/moon.yml
 ```
 
-`cards.py` gains the builders `proposal_card`, `batch_card`, `landing_card`, `deploy_card`, `step_card` and `record_card`, the words rule's `prose`, `text_list`, `markdown` and `link`, and `follows_of`; `picture.py` changes `char`, `layout` and `draw` to twice the density. `plan.py` gains the act, `row_card_post`, `row_card_change` and `row_card_close`, which prints the line that adopts a card and tells it to an owner whose turn the card was not raised in, and changes `card_read`, which closes a declined approval; it changes no other function it has: `card_model`, `crew plan card` and the card hook's `proposal_form` keep today's proposal card until the series' proposal and last changes replace them. `tests/t-card-commands.sh` is renamed `tests/t-cards.sh` with its journeys as they are; `tests/moon.yml` is regenerated.
+`cards.py` gains the builders `proposal_card`, `batch_card`, `landing_card`, `deploy_card`, `step_card` and `record_card`, the words rule's `prose`, `text_list`, `markdown` and `link`, `follows_of`, the act's decisions (`row_object`, `adopt_line`, `told_to`, `change_args`, `close_call`, `declined`), and `drawn`, the proposal's drawing, which moves to it from `card_model` with the helpers it needs; `picture.py` changes `char`, `layout` and `draw` to twice the density. `plan.py` gains the act, `row_card_post`, `row_card_change` and `row_card_close`, with `CardActs`, what it reaches, which prints the line that adopts a card and tells it to an owner whose turn the card was not raised in; changes `card_read`, which closes a declined approval, and `crew card post`, which prints the same line; and `card_model` draws through `drawn`: `card_model`, `crew plan card` and the card hook's `proposal_form` keep today's proposal card until the series' proposal and last changes replace them. `record.py`'s `emit` takes the owner a card is asked in as the entry's `By`. README, the crew skill and `plugin/bin/crew`'s usage say the line `crew card post` prints and the close `crew card read` makes (`docs.2`). `tests/t-card-commands.sh` is renamed `tests/t-cards.sh` with its journeys as they are; `tests/moon.yml` is regenerated.

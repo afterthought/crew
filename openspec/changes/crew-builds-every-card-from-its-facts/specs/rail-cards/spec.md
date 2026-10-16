@@ -78,7 +78,7 @@ A crew card's words SHALL be prose the phone wraps, in short paragraphs, cut at 
 
 #### Scenario: A batch card's summary
 - **WHEN** crew raises batch 7's card for four units
-- **THEN** each unit's paragraph is the reviewer's opening paragraph as prose, no code block or attachment carries it, and the card wraps on the phone
+- **THEN** each unit's paragraph is the reviewer's opening paragraph as prose in its summary and details, with no code block in its words, the reviewer's summary rides its face as inline Markdown, and the card wraps on the phone
 
 ### Requirement: crew's card commands refuse what they cannot do, in the words that say why
 A card act Pending You refuses SHALL be refused in Pending You's own words and recorded as the act refused, and SHALL refuse nothing of the event it was raised for. When the host is not signed in to Pending You, or Pending You cannot be reached or does not answer within 60 seconds, the act SHALL be recorded as not posted, the command SHALL say so, and the event SHALL stand. A reply that lacks the card's or the area's id SHALL be recorded as unread, never taken as empty.
