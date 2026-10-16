@@ -43,7 +43,7 @@ What the user holds this card to is the session: "it stays running, it closes wh
 
 - A session started inside the act adds plannotator's start to `crew review --wait`, which already waits on the reviewer and takes a timeout (`code.9`).
 - The batch's wait reads Pending You every thirty seconds for as long as the batch is unread, one bridge process each time.
-- The card discipline the planner's and the conductors' briefs share (`crew.py` `cards_how`) still has an agent start a batch card's session before posting it and says a session's decision never answers a batch card; `only-crew-raises-a-rows-card` rewrites it, and until then the planner's *Batches* is what it follows.
+- The card discipline the planner's and the conductors' briefs share (`crew.py` `cards_how`) is `only-crew-raises-a-rows-card`'s to rewrite; this change amends its two batch clauses only, so no brief contradicts *Batches* meanwhile: a batch's card and session are crew's and no agent posts one or starts it, and the card is answered by the card or its session, whichever comes first (the user, 2026-10-16, through the recovery session).
 
 ## After deploy
 

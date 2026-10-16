@@ -356,14 +356,15 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "Never split, reword or summarize the user's words" "you never run a stage" "Never answer a batch card yourself" \
   "posted before crew raised one card per batch, is yours as it was" \
   "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back" \
-  "for a batch card \`batch/<n>\`, one session on the whole batch" \
-  "A batch card's session holds the batch's notes, so a decision in it is never the card's answer"; do
+  "A batch's card and its one reading session are crew's: crew raises them in the planner's name when the reviewer's summary is delivered, and no agent posts a batch card or starts its session." \
+  "A batch's card is answered by the card or its session, whichever the user sends first: \`$CREW/plugin/bin/crew card wait batch/<n> --label wldn\` prints the user's notes from either, and crew closes the card and ends its session"; do
   has "$out" "$want"
 done
 for gone in "of at most five units" "which need notes?" "one in words for the notes" "A unit not picked is fine" \
   "card session batch/<n> <unit>" "card session batch/<n>-<k> <unit>" "send each picked unit's notes" "once for each of its units" \
   "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
-  "Close the card with \`ack_answer\`, its outcome naming the units"; do
+  "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \
+  "a decision in it is never the card's answer" "a batch card's summary says first what it is"; do
   lacks "$out" "$gone"
 done
 lacks "$out" "the user reviews the change written for the new intent"
