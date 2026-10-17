@@ -322,3 +322,10 @@ When proposal n has no unit rows, a move, an order or a new bolt alone, or makes
 #### Scenario: Approved with a note
 - **WHEN** the user sends proposal N's boxes with the note "split b in two later" and the planner records them with `--note`
 - **THEN** once every answer is in, the change is applied, and crew prints "split b in two later" as the user's word for the planner's next proposal
+
+### Requirement: A proposal's card has no command of its own
+There SHALL be no `crew plan card` command: a proposal's card is crew's, raised by `crew plan propose`.
+
+#### Scenario: The command asked for
+- **WHEN** an agent runs `crew plan card 4`
+- **THEN** crew says it has no such command, and proposal 4's card is the one `crew plan propose` raised when the proposal was accepted
