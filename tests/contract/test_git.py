@@ -229,14 +229,19 @@ def main_at(repo):
     return subprocess.run(["bash", "-c", plan.MAIN, "crew", str(repo.path)], capture_output=True, text=True)
 
 
-def test_a_landing_reads_the_commit_main_holds_and_how_far_it_is_from_githubs(repo, tmp_path):
-    """plan.bolt_land (plan.8, plan.14): the commit the kit's main holds, which the landing records, and how far it is
-    from GitHub's, refused while it is behind; a kit with no origin says only its commit."""
+def test_a_landing_reads_githubs_main_after_a_fetch_however_far_the_hosts_own_main_lags(repo, tmp_path):
+    """plan.bolt_land through MAIN (plan.8, plan.14, plan.18): the commit main holds now is GitHub's, origin/main after a
+    fetch, which the landing records, against a bare remote whose main is ahead of the host's own; a kit with no origin
+    says its own main's; a fetch that fails is refused, naming it (read.1)."""
     head = repo.commit("main", {"README": "r\n"})
     assert main_at(repo).stdout == f"{head}\n"
     pushed = kit_with_github(repo, tmp_path)
-    head = repo.commit("feat: local", {"local": "l\n"}); pushed("later")
-    assert main_at(repo).stdout.strip() == f"{head} 1 1"
+    repo.commit("feat: local", {"local": "l\n"}); pushed("later")
+    github = subprocess.run(["git", "-C", str(tmp_path / "other"), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    assert main_at(repo).stdout == f"{github}\n"
+    repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    r = main_at(repo)
+    assert r.returncode == 1 and r.stderr.startswith(f"cannot fetch {tmp_path.name} from GitHub, so cannot read its main:"), r.stderr
 
 
 def script(name, *args, cwd=None):
@@ -260,17 +265,61 @@ def test_a_bolt_is_a_branch_from_main_as_it_stands_marked_as_crews_and_no_worktr
     assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
 
 
+def test_a_bolt_of_a_kit_on_github_is_cut_from_githubs_main_as_the_policys_read_fetched_it(repo, tmp_path):
+    """plan.bolt_give through POLICY and BOLT_BRANCH (plan.8, plan.18): the give's one fetch is the policy's, and the
+    bolt's branch is cut from origin/main as it fetched it, ahead of the host's own main, tracking nothing."""
+    pushed = kit_with_github(repo, tmp_path)
+    pushed("from-a-mac")
+    assert script("POLICY", str(repo.path), ".config/sluice.toml").returncode == 0
+    github = repo.git("rev-parse", "origin/main")
+    assert github != repo.git("rev-parse", "main")
+    assert script("BOLT_BRANCH", str(repo.path), "b").stdout.strip() == github[:7]
+    assert repo.git("for-each-ref", "--format=%(upstream)", "refs/heads/bolt/b") == ""
+
+
 def test_a_kits_policy_is_read_from_mains_commit(repo):
     """plan.kit_policy (teams.5): the policy is what main's commit holds, as sluice reads a branch's policy, not the
     main checkout's files; a main without one says so."""
-    import base64
     import kit
     repo.commit("main", {"README": "r\n"})
-    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) is None
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == (None, "main")
     text = '[branches."bolt/*"]\nrequired = ["#check-full"]\n'
     repo.commit("chore: policy", {".config/sluice.toml": text})
     (repo.path / ".config" / "sluice.toml").write_text("not what main holds\n")
-    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == text
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == (text, "main")
+
+
+def test_a_kits_policy_is_read_from_githubs_main_ahead_of_the_hosts_own(repo, tmp_path):
+    """plan.kit_policy through POLICY (plan.18): a kit on GitHub has its policy read from origin/main after a fetch,
+    where it was written, not from the host's own main, which lags it."""
+    import kit
+    pushed = kit_with_github(repo, tmp_path)
+    o = tmp_path / "other"
+    (o / ".config").mkdir()
+    text = '[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+    (o / ".config" / "sluice.toml").write_text(text)
+    subprocess.run(["git", "-C", str(o), "add", ".config/sluice.toml"], check=True)
+    subprocess.run(["git", "-C", str(o), "commit", "-qm", "chore: policy"], check=True)
+    subprocess.run(["git", "-C", str(o), "push", "-q", "origin", "main"], check=True)
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == (text, "origin/main")
+    assert not (repo.path / ".config" / "sluice.toml").exists()
+
+
+def test_a_units_change_is_read_from_mains_commit_into_a_folder(repo, tmp_path):
+    """plan.change_folder through change_written (plan.18): a change that no place or bolt worktree holds is read as the
+    kit's main holds it at a commit, open or else archived, its Markdown written into the session's folder, not read
+    from the main checkout's files; a change main does not hold is None."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    sha = repo.commit("docs(openspec): archive a", {"openspec/changes/archive/2026-10-16-a/proposal.md": "p\n",
+                                                     "openspec/changes/archive/2026-10-16-a/specs/x/spec.md": "s\n",
+                                                     "openspec/changes/archive/2026-10-16-a/.openspec.yaml": "y\n"})
+    repo.git("checkout", "-q", "HEAD~1")
+    into = tmp_path / "card" / "change"
+    assert plan.change_written(str(repo.path), sha, "a", into) == str(into)
+    assert sorted(str(f.relative_to(into)) for f in into.rglob("*") if f.is_file()) == ["proposal.md", "specs/x/spec.md"]
+    assert (into / "proposal.md").read_text() == "p\n"
+    assert plan.change_written(str(repo.path), sha, "b", tmp_path / "none") is None
 
 
 def test_a_landings_verdict_is_its_trailer(repo):

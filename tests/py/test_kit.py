@@ -112,7 +112,7 @@ class TestBoltChecks:
         assert kit.bolt_checks(text, "k") == ["#check-full"]
 
     @pytest.mark.parametrize("text, said", [
-        (None, "has no .config/sluice.toml on its main"),
+        (None, "has no .config/sluice.toml on main"),
         ("[tests]\nrunner = \"moon\"\n", "names no checks for its bolt branches"),
         ('[branches.main]\nrequired = ["#check-full"]\n', "names no checks for its bolt branches"),
         ('[branches."bolt/*"]\nrequired = []\n', "names no checks for its bolt branches"),
@@ -123,11 +123,19 @@ class TestBoltChecks:
             kit.bolt_checks(text, "switchboard-kit")
         assert "switchboard-kit" in str(e.value) and said in str(e.value)
 
-    def test_policy_said(self):
-        assert kit.policy_said(f"POLICY={base64.b64encode(POLICY.encode()).decode()}\n") == POLICY
-        assert kit.policy_said("POLICY=-\n") is None
+    def test_the_policy_is_read_by_ref_from_main_now_and_a_refusal_names_the_ref(self):
+        """plan.18: the policy is read from GitHub's main after a fetch, origin/main, or from main for a kit with no
+        remote, as POLICY says, and a kit given no bolt is told which ref lacks it."""
+        assert kit.policy_said(f"REF=origin/main\nPOLICY={base64.b64encode(POLICY.encode()).decode()}\n") == (POLICY, "origin/main")
+        assert kit.policy_said("REF=main\nPOLICY=-\n") == (None, "main")
+        with pytest.raises(Refusal) as e:
+            kit.bolt_checks(None, "switchboard-kit", "/k/main/.config/sluice.toml", ref="origin/main")
+        assert "has no /k/main/.config/sluice.toml on origin/main" in str(e.value)
+
+    @pytest.mark.parametrize("out", ["fatal: bad\n", "POLICY=-\n", "REF=origin/main\n"])
+    def test_what_is_not_policys_words_is_refused(self, out):
         with pytest.raises(Refusal):
-            kit.policy_said("fatal: bad\n")
+            kit.policy_said(out)
 
 
 class TestVerification:

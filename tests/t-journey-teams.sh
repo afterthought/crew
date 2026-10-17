@@ -1,10 +1,10 @@
 # A team's agents through the crew command on the stubs (tests.11, record 0022): crew up starts a team's conductor and
 # ops on its host in one workspace, greeted once and recorded, and status, down, resume, restart, clear, rebuild and
-# close act on them; a bolt given to a team that is up is cut from the kit's main as it stands, with no worktree, and
+# close act on them; a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and
 # restarts them in the kit's main checkout; a role resumes where its conversation began; a conductor brought back is
-# told a unit waits amended; and a landing is refused while the kit's main is behind GitHub's. The main level's agents
-# are t-journey-main's. What each agent is greeted with, where it runs and resumes, and what a conductor brought back is
-# told are logic cases (tests/py/test_teams.py); how git makes a bolt's branch, contract cases
+# told a unit waits amended; and a landing records GitHub's main, however far the host's own lags. The main level's
+# agents are t-journey-main's. What each agent is greeted with, where it runs and resumes, and what a conductor brought
+# back is told are logic cases (tests/py/test_teams.py); how git makes a bolt's branch, contract cases
 # (tests/contract/test_git.py).
 # Reads: plugin/hooks/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -33,14 +33,14 @@ crew bolt new smoke "Prove the loop." --repo switchboard-kit >/dev/null
 pushed from-a-mac
 : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
 expect_ok crew bolt give swb-1 smoke
-eq "$(git -C "$k" rev-parse bolt/smoke)" "$(git -C "$k" rev-parse main)"
-[[ $(git -C "$k" rev-parse bolt/smoke) != "$(git -C "$other" rev-parse main)" ]] || fail "the bolt was cut from GitHub's main"
+eq "$(git -C "$k" rev-parse bolt/smoke)" "$(git -C "$other" rev-parse main)"
+[[ $(git -C "$k" rev-parse bolt/smoke) != "$(git -C "$k" rev-parse main)" ]] || fail "the bolt was cut from the host's own main"
 eq "$(launched swb-1-conductor)" "$k fresh"; eq "$(launched swb-1-ops)" "$k fresh"
 eq "$(pane_cwd conductor)" "$k"
 eq "$(greetings $box wldn-1 swb-1-conductor)" "1"
 has "$(grep "agent prompt swb-1-conductor '" "$CREW_TEST_LOG")" "Your team now holds the bolt smoke. Read where your bolt stands"
 eq "$(field $box agent.restart By agent/swb-1-ops)" "$me@mac-studio"
-ok "a bolt given to a team that is up is cut from the kit's main as it stands, with no worktree, and restarts its conductor and ops in the kit's main checkout, then greets the conductor once"
+ok "a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and restarts its conductor and ops in the kit's main checkout, then greets the conductor once"
 
 first=$(jq -r 'select(.agent == "swb-1-ops") | .session' "$CREW_TEST_CLAUDE_LOG" | tail -1)
 expect_ok crew down swb-1
@@ -99,8 +99,11 @@ expect_ok crew resume swb-2 conductor
 eq "$(grep "agent prompt swb-2-conductor '" "$CREW_TEST_LOG")" "$box wldn-1 agent prompt swb-2-conductor '[crew] Unit amended-one was amended and no construct runs on it: run construct on it now (crew unit run amended-one construct).'"
 ok "a conductor brought back is told the unit that waits amended: in its greeting by crew up, as crew's notice by crew resume"
 
-# A landing is refused while the kit's main is behind GitHub's.
+# A landing records GitHub's main, and refuses nothing for the host's own main lagging it: the unit lands on GitHub's
+# main from this host, as sluice's landing leaves the host's main, and another lands there after.
+git -C "$k" pull -q --ff-only origin main
 change "$k" amended-one 3 3; commit_all "$k" "feat: amended-one"; git -C "$k" branch -q -f bolt/later main
-pushed later-from-a-mac
-expect_fail "switchboard-kit's main on chuck-herdr-alpha is 2 commits behind GitHub's" crew bolt land later
-ok "a landing reads how far the kit's main is behind GitHub's, and is refused while it is"
+git -C "$k" push -q origin main; pushed later-from-a-mac
+expect_ok crew bolt land later
+eq "$(field mac-studio bolt.land Head bolt/later)" "$(git -C "$other" rev-parse main)"
+ok "a landing records the commit GitHub's main holds after a fetch, and refuses nothing for the host's own main lagging it"

@@ -15,7 +15,7 @@ for u in a b; do crew unit add $u "Unit $u." --bolt tenant-environments >/dev/nu
 held() { git --git-dir "$(remote WilldanGroup/crew-state)" show wldn/main:plan.rec | recsel -t Bolt -e "Bolt = 'tenant-environments'" -P Team; }
 
 git -C "$k" rm -q .config/sluice.toml; commit_all "$k" "chore: no policy"
-expect_fail "switchboard-kit merges only through sluice, and has no $k/.config/sluice.toml on its main" crew bolt give swb-1
+expect_fail "switchboard-kit merges only through sluice, and has no $k/.config/sluice.toml on main" crew bolt give swb-1
 mkdir -p "$k/.config"; printf '[branches.main]\nrequired = ["#check-full"]\n' > "$k/.config/sluice.toml"; commit_all "$k" "chore: a policy for main alone"
 expect_fail "switchboard-kit merges only through sluice, and its $k/.config/sluice.toml names no checks for its bolt branches" crew bolt give swb-1
 eq "$(held)" ""

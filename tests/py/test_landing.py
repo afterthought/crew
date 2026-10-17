@@ -46,3 +46,10 @@ def test_the_anchor_is_detached_and_the_landing_says_nothing_of_levelling_it():
     neither levels it nor says anything of it."""
     landed, words = plan.landing_said("b", "k", said(0, level="detached"))
     assert landed and "level" not in words and "read-tree" not in words
+
+
+def test_the_hosts_main_lags_githubs_and_nothing_is_refused_for_it():
+    """bolt-teams "Main is behind GitHub's" (plan.8, plan.18): the landing reads only the commit GitHub's main holds
+    after a fetch, which it records, and a host's own main lagging it refuses nothing."""
+    sha = "d" * 40
+    assert plan.main_held("k", "chuck-herdr-alpha", f"{sha}\n") == (sha, None)

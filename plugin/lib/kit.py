@@ -119,14 +119,15 @@ def unready_said(place, why, lines=15):
 VERDICT = "Sluice-Result"
 
 
-def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt"):
+def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
     """The checks a kit's policy requires of its bolt branches (teams.5, record 0026): the `required` list of the
-    [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it.
-    Refused, naming the file, when the kit has none, it is not TOML, or no table names bolt branches with a check: a
-    kit merges and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
+    [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it,
+    in the policy as the kit's main holds it now (ref, origin/main for a kit on GitHub, plan.18). Refused, naming the
+    file and the ref, when the kit has none, it is not TOML, or no table names bolt branches with a check: a kit merges
+    and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
     import fnmatch
     if text is None:
-        crew.fail(f"{kit} merges only through sluice, and has no {where} on its main: write one whose "
+        crew.fail(f"{kit} merges only through sluice, and has no {where} on {ref}: write one whose "
                   f"[branches.\"bolt/*\"] names the checks a bolt's merges must pass, then give the bolt again")
     try:
         branches = tomllib.loads(text).get("branches", {})
@@ -157,15 +158,16 @@ def verification(head, result):
 
 
 def policy_said(out):
-    """The policy text POLICY printed of a kit's main, or None when main holds none; refused when the output is not
-    POLICY's."""
+    """What POLICY printed of a kit's main now: (the policy text, or None when main holds none; the ref it was read
+    from, origin/main for a kit on GitHub or main for one with no remote, plan.18). Refused when the output is not
+    POLICY's (read.2)."""
     said = dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
-    text = said.get("POLICY")
-    if text is None:
+    text, ref = said.get("POLICY"), said.get("REF")
+    if text is None or not ref:
         crew.fail(f"crew can't read what the kit's main holds of {DECLARATION} from: {(out or '').strip()[:200] or 'nothing'}")
     if text == "-":
-        return None
+        return None, ref
     try:
-        return base64.b64decode(text).decode()
+        return base64.b64decode(text).decode(), ref
     except (binascii.Error, UnicodeDecodeError) as e:
         crew.fail(f"crew can't read the kit's {DECLARATION} as it was sent: {e}")
