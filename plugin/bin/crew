@@ -70,6 +70,8 @@
 #                                      recorded. It returns sooner when
 #                                      the agent has been quiet past --stuck (15 minutes) with nothing of its own
 #                                      running, or is gone, or the timeout (an hour) passes, and says which
+#                                      first saying, in sluice's words, each conflict or failed check sluice's
+#                                      overview shows for a submission from the stage's place
 #   crew fix     <team> <name> "<what is wrong>"
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
 #                                      built by a fresh code agent; a name already in use on the bolt is refused.

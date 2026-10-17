@@ -1,0 +1,70 @@
+{
+  "at": "2026-10-17T16:04:36Z",
+  "branches": [
+    {
+      "at": "756c316d6c3f3713a2bb5b1ee2d3ae85b10f59bb",
+      "branch": "bolt/tenant-environments",
+      "candidates": [],
+      "depth": 0,
+      "parallel": 1,
+      "recent": [
+        {
+          "at": "2026-10-17T16:04:06Z",
+          "event": "landed",
+          "ids": [
+            1
+          ],
+          "schema": "sluice/log@1",
+          "to": "be685deeffdd69cde733b9d160e38be753dfdd75"
+        },
+        {
+          "at": "2026-10-17T16:04:11Z",
+          "event": "conflict",
+          "id": 2,
+          "paths": [
+            "shared.txt"
+          ],
+          "schema": "sluice/log@1",
+          "with": []
+        },
+        {
+          "at": "2026-10-17T16:04:14Z",
+          "combination": "3d44d6b8349d63e665aed8eaed49669719e510a8",
+          "event": "blamed",
+          "id": 3,
+          "schema": "sluice/log@1"
+        },
+        {
+          "at": "2026-10-17T16:04:36Z",
+          "event": "landed",
+          "ids": [
+            4
+          ],
+          "schema": "sluice/log@1",
+          "to": "756c316d6c3f3713a2bb5b1ee2d3ae85b10f59bb"
+        },
+        {
+          "at": "2026-10-17T16:04:36Z",
+          "combination": "8598cf7b27dece6ebeef8d336eb5cf41c5cd7d26",
+          "event": "blamed",
+          "id": 5,
+          "schema": "sluice/log@1"
+        }
+      ],
+      "submissions": [],
+      "version": 29,
+      "window": 1
+    }
+  ],
+  "host": "mac-studio",
+  "previews": [],
+  "repository": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/main/.git",
+  "schema": "sluice/overview@1",
+  "sessions": [
+    {
+      "branch": "main",
+      "holds_queued_branch": "main",
+      "worktree": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/main"
+    }
+  ]
+}

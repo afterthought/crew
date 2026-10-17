@@ -3,7 +3,8 @@
 # crew makes is (plan.17), a setup that fails refusing the stage until a second run sets the place up; each stage of a
 # unit takes a slot, starts a fresh agent in the unit's place and sends its prompt; the waits end each stage at its
 # deliverable and record it; the team's read records an end nobody waited on, fetching and gathering once; verify's
-# report ends it; and code's prompt names an unmerged unit's overlapping Touches. The units journey's other parts:
+# report ends it; code's prompt names an unmerged unit's overlapping Touches; and a wait says a conflict sluice's
+# overview shows for the stage's submission, before its answer (record 0032). The units journey's other parts:
 # t-journey-slots, t-journey-merge, t-journey-prompts, t-journey-fix, t-journey-land.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
@@ -123,3 +124,22 @@ wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
 eq "$(tail -1 "$T/wait.out")" "swb-1-unit-2 delivered code on b: every task is ticked (2/2) at $(short unit/b)"
 ok "code's prompt names the Touches it overlaps of an unmerged unit ahead of it, and a wait that saw a task open sees it ticked at its next look"
 
+
+# Each look of a wait reads sluice's overview beside the refs: a conflict sluice recorded for the merge's submission
+# from a's place, out of the queue before any look saw it there, is placed by asking sluice status of it once, and said
+# to the conductor in sluice's words before the wait's answer.
+expect_ok crew unit run a merge
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+jq -n --arg at "$now" --arg repository "$(git -C "$k" rev-parse --path-format=absolute --git-common-dir)" '{at: $at,
+  branches: [{at: null, branch: "bolt/tenant-environments", candidates: [], depth: 0, parallel: 1, submissions: [], version: 3,
+    window: 1, recent: [{at: $at, event: "conflict", id: 7, paths: ["shared.txt"], schema: "sluice/log@1", with: []}]}],
+  host: "chuck-herdr-alpha", previews: [], repository: $repository, schema: "sluice/overview@1", sessions: []}' > "$T/sluice-overview.json"
+jq -n --arg at "$now" --arg path "$(cd "$kd/places/a" && pwd -P)" '{schema: "sluice/submission@1", id: 7,
+  branch: "bolt/tenant-environments", head: "0000000000000000000000000000000000000000",
+  from: {agent: "swb-1-unit-1", worktree: "unit/a", path: $path}, submitted: $at, after: [], priority: 0, attempt: 1,
+  state: "conflict", conflict: {paths: ["shared.txt"], with: []}, told: $at}' > "$T/sluice-status-7.json"
+expect_ok crew unit wait a --timeout 0
+eq "$(head -1 <<<"$out")" "merge on a: sluice says of swb-1-unit-1's submission to bolt/tenant-environments: conflict #7 on shared.txt; the wait goes on until the stage ends"
+has "$(tail -1 <<<"$out")" "merge on a is still running after the wait's 0 ms"
+eq "$(grep -c "^$box sluice status 7 --json in " "$CREW_TEST_LOG")" 1
+ok "a wait says the conflict sluice recorded for the stage's submission, placed by sluice status, before its answer"

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Stub sluice for crew's tests, answering the reads crew makes of it as sluice 0.18.0 does. `sluice overview --json`
+# prints $CREW_TEST_ROOT/sluice-overview.json while it exists, else the document sluice prints for a repository whose
+# branches have no records yet; `sluice status <id> --json` prints $CREW_TEST_ROOT/sluice-status-<id>.json while it
+# exists, else sluice's not-found error on standard output, exiting 1. Outside a git worktree it fails as sluice does,
+# exiting 3, and anything else is refused, exiting 2. Every call is logged to $CREW_TEST_LOG as `<host> sluice <args>
+# in <the directory it ran in>`.
+set -uo pipefail
+[[ -n ${CREW_TEST_LOG:-} ]] && printf '%s sluice %s in %s\n' "${CREW_TEST_HOST:-?}" "$*" "$(pwd -P)" >> "$CREW_TEST_LOG"
+common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
+  printf '{"error":{"kind":"internal","message":"opening the repository at %s: not a git repository","next":[]}}\n' "$(pwd -P)"
+  exit 3
+}
+case "$*" in
+  "overview --json")
+    if [[ -e ${CREW_TEST_ROOT:?}/sluice-overview.json ]]; then cat "$CREW_TEST_ROOT/sluice-overview.json"; exit 0; fi
+    jq -n --arg host "${CREW_TEST_HOST:-?}" --arg repository "$common" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      '{at: $at, branches: [], host: $host, previews: [], repository: $repository, schema: "sluice/overview@1", sessions: []}'
+    ;;
+  status\ *\ --json)
+    id=${2:-}
+    [[ $id =~ ^[0-9]+$ ]] || { echo "sluice stub: status $id is not stubbed" >&2; exit 2; }
+    if [[ -e ${CREW_TEST_ROOT:?}/sluice-status-$id.json ]]; then cat "$CREW_TEST_ROOT/sluice-status-$id.json"; exit 0; fi
+    printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "$id"
+    exit 1
+    ;;
+  *) echo "sluice stub: sluice $* is not stubbed" >&2; exit 2 ;;
+esac
