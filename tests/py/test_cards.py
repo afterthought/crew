@@ -1,12 +1,12 @@
-"""A crew agent's Pending You cards (the rail-cards and card-sessions specs, briefs.11 to briefs.17): crew's card hook
-(plugin/hooks/cards), loaded as a module, on the result shapes it reads, the keys it records, the forms it refuses
-(form_refusal, proposal_form) and a call in another agent's name, on any Pending You tool (name_refusal), with the
-matcher that runs it; plan.card_refusal on whose key a card or an area may take, its reads given; and the
-decisions of a card's plannotator session: plan.card_of, session_verdict, local_link, waited, card_folder,
-judged_dead and young; the six cards crew builds from their events' facts, the words rule, what a card follows and
-the act's decisions (record 0031); and crew record's: a record's facts and the status its file holds
-(plan.record_facts), its refusals made on the teams file alone (record_status) and its raise (raise_record). Posting, closing and sweeping through the hook and the command are the review
-journey's (t-journey-review)."""
+"""A crew agent's Pending You calls and crew's own cards (the rail-cards and card-sessions specs, briefs.11 to briefs.17,
+record 0031): crew's card hook (plugin/hooks/cards), loaded as a module, on the result shapes it reads, what it records
+after a call, and a call in another agent's name, on any Pending You tool (name_refusal), with the matcher that runs it;
+plan.card_refusal on who may post, change or close a card and under which key, and make an area; the decisions of a
+card's plannotator session: plan.card_of, session_verdict, local_link, waited, card_folder, judged_dead and young; the
+six cards crew builds from their events' facts, the words rule, what a card follows and the act's decisions; and crew
+record's: a record's facts and the status its file holds (plan.record_facts), its refusals made on the teams file
+alone (record_status) and its raise (raise_record). A question asked through the hook, and the commands' wiring, are
+the cards journey's (t-cards) and the review journey's (t-journey-review)."""
 import argparse
 import datetime
 import importlib.machinery
@@ -17,7 +17,7 @@ import re
 
 import pytest
 
-from facts import FLEET as BASE, FactsWrite, START, apply, plan_text
+from facts import FLEET as BASE, START
 
 import crew
 import plan
