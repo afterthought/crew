@@ -58,7 +58,7 @@ has "$out" "delivered merge of $tm: bolt/tenant-environments holds it at $(short
 unset CREW_AGENT
 git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)
 expect_ok crew bolt submit tenant-environments
-has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): push main, then crew bolt land tenant-environments."
+has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
 grep -q level <<<"$out" && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
 eq "$(git -C "$k" log -1 --format='%an %P' main)" "sluice $main_before $(git -C "$k" rev-parse bolt/tenant-environments)"
 eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchboard-kit, main's"

@@ -11,7 +11,7 @@ def said(rc, new=NEW, kept="''", level="yes"):
 
 def test_a_landing_says_where_main_is_and_what_comes_next():
     assert plan.landing_said("b", "switchboard-kit", said(0)) == (
-        True, "bolt/b landed on switchboard-kit's main at bbbbbbb: push main, then crew bolt land b.")
+        True, "bolt/b landed on switchboard-kit's main at bbbbbbb: now crew bolt land b.")
 
 
 def test_a_main_checkout_not_brought_level_is_named_with_the_command():

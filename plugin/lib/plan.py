@@ -1478,7 +1478,8 @@ printf 'RC=%s OLD=%s NEW=%s KEPT=%q LEVEL=%q\n' "$rc" "$old" "$new" "$kept" "$le
 
 def landing_said(bolt, kit, said):
     """What a landing's submission came to, from LANDING's assignments (code.7): (landed, the words crew says). Landed
-    only when sluice said so and main moved; a main checkout not brought level is named with the command that levels
+    only when sluice said so and main moved, sluice having pushed it, so what comes next is crew bolt land and no push
+    (plan.16); a main checkout not brought level is named with the command that levels
     it, and a detached one, which the fleet's timer moves, is said nothing of (plan.18); a conflict or a refusal is the
     team's to resolve by taking main into the bolt by a submission to the bolt (plan.8); words crew can't read land
     nothing (read.1)."""
@@ -1493,7 +1494,7 @@ def landing_said(bolt, kit, said):
     if f["RC"] == "0" and f["NEW"] != f["OLD"]:
         level = ("" if f.get("LEVEL") in ("yes", "detached") else
                  f" {kit}'s main checkout was not brought level ({f.get('LEVEL')}): git read-tree -m -u {f['OLD'][:7]} main there.")
-        return True, f"bolt/{bolt} landed on {kit}'s main at {f['NEW'][:7]}: push main, then crew bolt land {bolt}.{level}{kept}"
+        return True, f"bolt/{bolt} landed on {kit}'s main at {f['NEW'][:7]}: now crew bolt land {bolt}.{level}{kept}"
     why = {"1": "main's checks failed on it", "2": "sluice refused it or found a conflict", "130": "the submission was stopped"}.get(
         f["RC"], f"the submission exited {f['RC']}")
     return False, (f"bolt/{bolt} did not land: {why}, and main is where it was. Tell the bolt's conductor sluice's words above: "
