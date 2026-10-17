@@ -1446,12 +1446,14 @@ def bolt_land(fleet, a):
 
 # A landing's submission (plan.16, record 0026), on the team's host, refused there when sluice's wt-submit, which
 # worktrunk runs as `wt submit`, is not on its path: a short-lived worktree on the bolt's branch, the one place sluice
-# takes a submission from, nothing moving the branch there; `wt submit main` from it, waiting for sluice's outcome; the
-# worktree removed; and, when main moved, the kit's main checkout brought level with it, since sluice moves the branch
-# and not that checkout's files; the submission is in the name of whoever asked for it. Prints what it did as shell
-# assignments: RC, the submission's exit (sluice's: 0 landed, 1 its checks failed, 2 a conflict or a refusal, 130
-# stopped); OLD and NEW, main's commit before and after; KEPT, the worktree when git could not remove it; LEVEL, "yes",
-# "no" or why it was not tried.
+# takes a submission from, nothing moving the branch there; `wt submit main` from it, waiting for sluice's outcome,
+# whatever sluice says passed through on standard error and nothing of it stopping the landing; the worktree removed;
+# and, when main moved, the kit's main checkout brought level with it while it is on branch main, since sluice moves the
+# branch and not that checkout's files, and left as it is when it is detached, the anchor the fleet's timer moves
+# (plan.18); the submission is in the name of whoever asked for it. Prints what it did as shell assignments: RC, the
+# submission's exit (sluice's: 0 landed, 1 its checks failed, 2 a conflict or a refusal, 130 stopped); OLD and NEW,
+# main's commit before and after; KEPT, the worktree when git could not remove it; LEVEL, "yes", "no", "detached" or why
+# it was not tried.
 LANDING = r"""main=$1 path=$2 bolt=$3
 export SLUICE_AGENT=$4
 cd "$main" || exit 2
@@ -1463,7 +1465,8 @@ git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main ha
 kept=; git worktree remove "$path" >/dev/null 2>&1 || kept=$path
 new=$(git rev-parse refs/heads/main) level=no
 if [ "$new" != "$old" ]; then
-  if [ "$(git symbolic-ref -q --short HEAD)" != main ]; then level="its main checkout is not on main"
+  if ! on=$(git symbolic-ref -q --short HEAD); then level=detached
+  elif [ "$on" != main ]; then level="its main checkout is not on main"
   elif git read-tree -m -u "$old" main >&2; then level=yes
   else level="git read-tree could not bring it level"; fi
 fi
@@ -1473,8 +1476,10 @@ printf 'RC=%s OLD=%s NEW=%s KEPT=%q LEVEL=%q\n' "$rc" "$old" "$new" "$kept" "$le
 
 def landing_said(bolt, kit, said):
     """What a landing's submission came to, from LANDING's assignments (code.7): (landed, the words crew says). Landed
-    only when sluice said so and main moved; a conflict or a refusal is the team's to resolve by taking main into the
-    bolt by a submission to the bolt (plan.8); words crew can't read land nothing (read.1)."""
+    only when sluice said so and main moved; a main checkout not brought level is named with the command that levels
+    it, and a detached one, which the fleet's timer moves, is said nothing of (plan.18); a conflict or a refusal is the
+    team's to resolve by taking main into the bolt by a submission to the bolt (plan.8); words crew can't read land
+    nothing (read.1)."""
     import shlex as _shlex
     try:
         f = dict(w.split("=", 1) for w in _shlex.split(said.strip().splitlines()[-1] if said.strip() else ""))
@@ -1484,7 +1489,7 @@ def landing_said(bolt, kit, said):
         return False, f"crew can't read what the submission of bolt/{bolt} to {kit}'s main came to: {said.strip()[-200:] or 'nothing'}"
     kept = f" Its worktree {f['KEPT']} is kept: remove it once you have read why." if f.get("KEPT") else ""
     if f["RC"] == "0" and f["NEW"] != f["OLD"]:
-        level = ("" if f.get("LEVEL") == "yes" else
+        level = ("" if f.get("LEVEL") in ("yes", "detached") else
                  f" {kit}'s main checkout was not brought level ({f.get('LEVEL')}): git read-tree -m -u {f['OLD'][:7]} main there.")
         return True, f"bolt/{bolt} landed on {kit}'s main at {f['NEW'][:7]}: push main, then crew bolt land {bolt}.{level}{kept}"
     why = {"1": "main's checks failed on it", "2": "sluice refused it or found a conflict", "130": "the submission was stopped"}.get(

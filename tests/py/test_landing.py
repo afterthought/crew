@@ -39,3 +39,10 @@ def test_a_worktree_git_could_not_remove_is_named():
 def test_words_crew_cannot_read_land_nothing():
     assert plan.landing_said("b", "k", "wt: command not found\n") == (
         False, "crew can't read what the submission of bolt/b to k's main came to: wt: command not found")
+
+
+def test_the_anchor_is_detached_and_the_landing_says_nothing_of_levelling_it():
+    """bolt-teams "The anchor is detached" (plan.18): the fleet's timer moves a detached main checkout, so a landing
+    neither levels it nor says anything of it."""
+    landed, words = plan.landing_said("b", "k", said(0, level="detached"))
+    assert landed and "level" not in words and "read-tree" not in words

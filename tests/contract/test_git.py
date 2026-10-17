@@ -285,16 +285,11 @@ def test_a_landings_verdict_is_its_trailer(repo):
         "passed (9 run, 0 replayed)")
 
 
-def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(repo, tmp_path):
-    """plan.bolt_submit (plan.16, record 0026): sluice takes a submission only from a worktree on its branch, so the
-    landing makes one on bolt/<bolt>, runs `wt submit main` there, which the real worktrunk runs as wt-submit from the
-    path, removes it, and brings the kit's main checkout level with what sluice moved, keeping an untracked file there.
-    A stand-in wt-submit lands as sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout
-    on main behind its HEAD. With no wt-submit on the path the landing is refused, naming it, with nothing made."""
+def landing(repo, tmp_path):
+    """plan.LANDING as bolt_submit runs it on the team's host, for bolt b of the kit at repo, with a path holding wt
+    and the tools LANDING runs but no wt-submit; and stand_in(), which puts a stand-in wt-submit there that lands as
+    sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout on main behind its HEAD."""
     import plan
-    repo.commit("main", {"README": "r\n"})
-    repo.git("branch", "bolt/b")
-    (repo.path / "notes.txt").write_text("the user's own\n")
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
     bin_.mkdir()
@@ -303,12 +298,13 @@ def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(rep
     for tool in ("git", "bash", "sh", "env", "hostname", "mktemp", "xargs", "dirname", "cat", "printf"):
         if shutil.which(tool):
             os.symlink(shutil.which(tool), bin_ / tool)
-    land_with = lambda path: subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
-                                            capture_output=True, text=True, env=dict(os.environ, PATH=path))
-    r = land_with(str(bin_))
-    assert r.returncode == 2 and "wt submit needs sluice's wt-submit, which is not on" in r.stderr, r.stderr
-    assert not land.exists()
-    (bin_ / "wt-submit").write_text(f'''#!/bin/sh
+
+    def land_with(path):
+        return subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
+                              capture_output=True, text=True, env=dict(os.environ, PATH=path))
+
+    def stand_in():
+        (bin_ / "wt-submit").write_text(f'''#!/bin/sh
 [ "$1 $2" = "main --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
@@ -319,14 +315,49 @@ new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p 
 git update-ref refs/heads/main "$new"
 echo "landed #1"
 ''')
-    (bin_ / "wt-submit").chmod(0o755)
-    r = land_with(f"{bin_}:{os.environ['PATH']}")
+        (bin_ / "wt-submit").chmod(0o755)
+        return lambda: land_with(f"{bin_}:{os.environ['PATH']}")
+    return land, lambda: land_with(str(bin_)), stand_in
+
+
+def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(repo, tmp_path):
+    """plan.bolt_submit (plan.16, record 0026): sluice takes a submission only from a worktree on its branch, so the
+    landing makes one on bolt/<bolt>, runs `wt submit main` there, which the real worktrunk runs as wt-submit from the
+    path, removes it, and brings the kit's main checkout level with what sluice moved while it is on branch main,
+    keeping an untracked file there. With no wt-submit on the path the landing is refused, naming it, with nothing
+    made."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    (repo.path / "notes.txt").write_text("the user's own\n")
+    land, unready, stand_in = landing(repo, tmp_path)
+    r = unready()
+    assert r.returncode == 2 and "wt submit needs sluice's wt-submit, which is not on" in r.stderr, r.stderr
+    assert not land.exists()
+    r = stand_in()()
     landed, words = plan.landing_said("b", "kit", r.stdout)
     assert landed, r.stdout + r.stderr
     assert (tmp_path / "agent").read_text().strip() == "wldn-ops"
     assert not land.exists() and "land-b" not in repo.git("worktree", "list")
     assert (repo.path / "landed.txt").read_text() == "x\n"
     assert repo.git("status", "--porcelain") == "?? notes.txt"
+
+
+def test_a_landing_against_a_detached_main_checkout_leaves_it_untouched_and_says_nothing_of_levelling(repo, tmp_path):
+    """plan.bolt_submit and plan.landing_said (plan.18): a kit's main checkout detached, the anchor the fleet's timer
+    moves, is left at the commit it was at with its files as they were when sluice moves main, and the landing says
+    nothing of levelling it."""
+    import plan
+    was = repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("switch", "-q", "--detach")
+    land, _, stand_in = landing(repo, tmp_path)
+    r = stand_in()()
+    assert "LEVEL=detached" in r.stdout, r.stdout + r.stderr
+    landed, words = plan.landing_said("b", "kit", r.stdout)
+    assert landed and "level" not in words, words
+    assert repo.git("rev-parse", "HEAD") == was and repo.git("rev-parse", "main") != was
+    assert not (repo.path / "landed.txt").exists() and repo.git("status", "--porcelain") == ""
 
 
 def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):
