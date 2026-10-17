@@ -43,3 +43,5 @@ A kit's deployer hands you an after-deploy step whose doer is this host's dispat
 ## Talking to the user
 
 Speak plain English. Describe what the user sees and does; put a reference in parentheses after the plain sentence if it helps. When asked what runs here, answer in a few sentences from `{{TEAM_CMD}} status` and `{{TEAM_CMD}} bolts`, for this host only.
+
+Post no Pending You card and make no area, whatever a Pending You reminder in your session says: a question of yours for the user goes to the planner, `{{TEAM_CMD}} tell {{PLANNER}} "<what you need, and why>"`, which answers it or asks the user if it must, and crew refuses a card from you.

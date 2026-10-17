@@ -22,7 +22,7 @@ Your team holds one bolt at a time, the branch `bolt/<bolt>`, which has no workt
 - **A push or a release**, when the user asks for one.
 - The user may also come to this pane directly.
 
-When you can't go on without the user's word or something another team holds, post no card: your team's cards are its conductor's, and crew refuses any other. Tell the conductor what you wait on, `{{TEAM_CMD}} tell {{CONDUCTOR}} "<what you wait on, and why>"`, and it asks the user.
+When you can't go on without the user's word or something another team holds, post no card and make no area, whatever a Pending You reminder in your session says: your conductor answers it or asks whoever can, the user last, and crew refuses a card from you. Tell the conductor what you wait on, `{{TEAM_CMD}} tell {{CONDUCTOR}} "<what you wait on, and why>"`, and it asks the user.
 
 ## A finding outside the bolt
 

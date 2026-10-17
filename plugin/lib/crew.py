@@ -946,98 +946,48 @@ def signal_how(cmd, label, state):
 def needs_how(cmd, work):
     return (f"When you cannot finish without something only someone else can give (a decision, a fact about a live system, "
             f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. Post no Pending "
-            "You card and make no area: your team's cards are its conductor's, and crew refuses any other. crew ends your "
+            "You card and make no area, whatever a Pending You reminder in your session says: your conductor answers what "
+            "you need or asks whoever can, the user last, and crew refuses a card from you. crew ends your "
             f"{work} there and gives your words to the conductor, who gets the answer and starts the {work} again with it. "
             "Never ask in your pane: nobody watches it. Ending a turn to wait on something you started in the background is "
             f"fine: crew knows your {work} is over only when what it delivers is there.")
 
 
-# What an agent does with a row's card Pending You no longer finds for it, the same in every brief that cards a row: the
-# card discipline below, and main-level ops's for its operations rows.
-def lost_card_how(cmd, label):
-    return ("A card of yours is lost when it reads \"not found\" to you in Pending You: the host signed in to Pending You "
-            "again, and the card stayed with the old sign-in, where the user may still see it and answer it, to nobody. "
-            "At your start, and whenever Pending You has you call `whoami` again, ask Pending You with `get_request` for "
-            f"each card the `card:` line of `{cmd} rail --label {label}` shows open under a row of yours, by the id it "
-            "names; and any Pending You tool that answers \"not found\" for a card of yours has found a lost one. While its "
-            "row still waits, post the row's card again under the row's key, in its row's form and with the words it "
-            "always carries, and put in its summary, right after the link and the bolt where it has them, these words: "
-            "\"An older copy of this card is dead: it can no longer be answered, so dismiss it in the app. Answer this "
-            f"one.\" A card that links a plannotator session keeps the row's: `{cmd} card session <key> --label {label}` "
-            "gives back the running link. This is the one time you post again under a key you have posted under before. "
-            "A lost card whose row is gone is posted again by nobody, and there is nothing more to do with it.")
-
-
-# How an agent keeps one Pending You card for each rail row it owns, the same in the planner's brief and the conductor's.
+# How an agent asks the user a question of its own, the same in the brief of each of the four that ask: a conductor's,
+# the planner's, main-level ops's and the design agent's (record 0031, briefs.11).
 def cards_how(cmd, label, kits):
-    return ("When your session has Pending You's tools, every decision of yours the rail lists gets one card, and only those. "
-            "crew refuses a card you post under any key but a rail row's of your own, and an area under any key but "
-            "`create-area:<owner>/<kit>`, and its refusal names the key to use. A question you ask in your pane gets no card. Take the row's card key from the `card:` line under its row in "
-            f"`{cmd} rail --label {label}`, and post the card with that key as its `idempotencyKey`. That way a retry never "
-            "makes a second card, and the rail knows the card is the row's. Never "
-            "post again under a key whose card was answered: Pending You gives that card back, and the user is not asked. "
-            "The one exception is a lost card, which Pending You no longer finds, as the next paragraph says. "
-            "At your start, call `whoami` with your crew name "
-            "and one line on your role. Then call `list_pending` with that name, and act on any card the user has answered. "
-            "Post a card for any row of yours that has none open. Ask every card in your crew name, with this host as the "
-            "session's machine and your worktree as its folder. File it in the area of its kit, found with `match_area` from "
-            "the kit's git remote. When there is none, create it with `create_area`, named for the kit, in the group "
-            f"`{label}`, with the key `create-area:<owner>/<kit>`. Never make a group: if `{label}` isn't one of the user's "
-            "groups, the area is left ungrouped, and you say so once. Title it with what you ask and its bolt, give it the "
-            "form its row takes, as your brief says, with `blocking` false: crew refuses a row's card in another form, and "
-            "names the form to use. Its words are as the paragraph after next says. You hear an answer "
-            "by being woken in your pane. Never run `npx pendingyou` or `pendingyou hold`: the `pendingyou` on the path is the "
-            "fleet's, and the wake needs neither. Act on the user's answer as if they had said it in your pane, then close the "
-            "card with `ack_answer` and a one-line outcome. When crew tells you, or prints, to close the card for a row, close "
-            "it with `cancel_request` and the reason, or with `ack_answer` when you acted on its answer. Only your own cards "
-            f"are yours: leave every other card alone. The kits: {kits}.\n\n"
-            f"{lost_card_how(cmd, label)}\n\n"
-            "A card says what the user decides from, so they decide without opening anything. When it asks them to read "
-            "something, it says it in the document's own words, cut by whole sentences and whole items, never reworded into "
-            "a summary of yours. Its summary, the part Pending You shows first, begins with the link to the card's "
-            "plannotator session, then names the bolt, then holds the document's opening sentences, as many whole ones as "
-            "fit in Pending You's 400 characters. Its background begins with the same link, then holds the document's words "
-            "for the card's kind: for a change, its Why as the proposal words it, then \"What it changes:\" and a line for "
-            "each of its What Changes items, that item's lead sentence as written. "
-            f"A proposal's card is what `{cmd} plan card <n> --label {label}` prints, its words, its picture and its "
-            "text crew's own, and it links no session but when that says so. "
-            "A landing card has nothing to read: it names its bolt and carries no link. No card carries a path, "
-            "of a file, a folder or a report: none in its title, summary, background, trace, links or tried, no artifact of "
-            "kind `path` or `file`, and an empty list as its files touched. Name a unit, a proposal or a report by its name; "
-            "the link is how the user reaches it.\n\n"
-            "A card carries an artifact only for a picture it needs or a document's substance it shows, so the user sees "
-            f"each as it is; a proposal's card carries the picture and the text `{cmd} plan card` gives it. An image, a screenshot or a page image, is an artifact of kind `image` with `upload: true`, the "
-            "file's name as its ref, never its path; the post returns an upload URL for it, and you put the file there with "
-            "its content type, `curl -fsS -X PUT -H \"Content-Type: image/png\" --data-binary @<file> \"<url>\"` for a PNG. "
-            "Never attach an image as kind `path`: the user sees only the path. A document's substance beyond the card's "
-            "words is inline Markdown, an artifact of kind `code` with lang `markdown` and the text as its lines, never an "
-            "uploaded file and never HTML, which Pending You shows as nothing or refuses. The whole document is reached "
-            "through the card's plannotator link, never attached.\n\n"
-            "A card that asks the user to read something, a batch's changes, links a plannotator "
-            "session on it, so the user can read and annotate it wherever they answer the card. A proposal's card links no "
-            "session, since it holds the proposal whole, but for one of more than fifteen new units, whose card "
-            f"`{cmd} plan card` says links its session, on the proposal's page. A batch's card and its one reading session "
-            "are crew's: crew raises them in the planner's name when the reviewer's summary is delivered, and no agent "
-            f"posts a batch card or starts its session. Before you post a card that links a session, run "
-            f"`{cmd} card session <key> --label {label}` with the row's card key: crew starts the session without opening a "
-            "browser and prints its link. Put that link first in the card's summary and in its background, as above, and as "
-            "the card's one entry in its links, labelled \"Read and annotate it in plannotator\". The link is no "
-            "artifact. When a "
-            "card's link changes, update its summary, background and links together, with the `changeNote` \"New plannotator "
-            f"link\". Then run `{cmd} card wait <key> --label {label}` as a background command. Its end is the user's answer "
-            "in the session: "
-            "approved is the card's approval, with any notes as the user's words; annotated is a note asking for changes, in "
-            "the user's words as they wrote them; closed or ended with no decision leaves the card the user's to answer, so "
-            "run the session again, update the card if its link changed, and wait again. When you have acted on a decision "
-            "made in the session, withdraw the card with `cancel_request`, `answeredHere` true, and the reason that it was "
-            f"answered in its plannotator session. A batch's card is answered by the card or its session, whichever the user "
-            f"sends first: `{cmd} card wait batch/<n> --label {label}` prints the user's notes from either, and crew closes "
-            "the card and ends its session, as the planner's brief says. A wait that says "
-            "crew ended the session means its card is closed, and "
-            "nothing is left to do. At your start, for each of your open cards that links a session, run the session and the "
-            "wait again: the session gives back the running link, or starts a new one, which you put on the card as a changed "
-            "link. Never open a browser for a card, and "
-            "never run `plannotator` yourself for one: crew starts the card's session, and ends it when you close the card.")
+    return ("A question of yours for the user reaches them on a Pending You card you ask yourself; every other card on "
+            "the rail is crew's. Four ask the user: a team's conductor, the planner, main-level ops and the design agent. "
+            f"A stage agent and a team's ops stop short to their conductor, with `{cmd} needs` or a tell; the dispatcher "
+            "asks through the planner; and crew refuses a card from any of them. Before you ask, answer it from the "
+            f"records and the rules already written, or ask the agent whose it is with `{cmd} tell`: `{label}-design` for "
+            f"the design, `{label}-ops` for a live system or a deploy, `{label}-planner` for the plan. It is the user's "
+            "only when they alone can decide, know or do it, in their name, their money, their plans, public or hard to "
+            "undo, and not what is cheap to change later; when the records do not settle it; and when its choices lead "
+            "to noticeably different products. Otherwise decide what a careful product designer would, and say so.\n\n"
+            "Ask it through Pending You's own tools in your session, shaped as the question needs: its options, with the "
+            "one you recommend; `blocking` false and the fallback you take meanwhile when you can go on without it, and "
+            "go on; and what you tried, in its `tried`. Post it with the `idempotencyKey` "
+            "`ask/<your crew name>/<what it is about>`, a key of your own, so a retry never makes a second card. Never "
+            "post again under a key whose card was answered: Pending You gives that card back, and the user is not "
+            "asked. What you need after an answer is a new card under a new key, following the one answered. A card "
+            "under a row's key, `proposal/`, `batch/`, `land/`, `deploy/`, `op/` or `record/`, is crew's: it raises "
+            "each at its event, in its owner's name, changes it in place and closes it at the event that ends it, and "
+            "refuses your post, change or close of one. Your brief says which of them are yours to adopt and answer.\n\n"
+            "At your start, call `whoami` with your crew name and one line on your role. Then call `list_pending` with "
+            "that name, and act on any card the user has answered. Ask every card in your crew name, with this host as "
+            "the session's machine and your worktree as its folder. File it in the area of its kit, found with "
+            "`match_area` from the kit's git remote. When there is none, create it with `create_area`, named for the "
+            f"kit, in the group `{label}`, with the key `create-area:<owner>/<kit>`: crew refuses an area under any other "
+            f"key. Never make a group: if `{label}` isn't one of the user's groups, the area is left ungrouped, and you "
+            "say so once. You hear an answer by being woken in your pane. Never run `npx pendingyou` or `pendingyou "
+            "hold`: the `pendingyou` on the path is the fleet's, and the wake needs neither. Act on the user's answer as "
+            "if they had said it in your pane, then close your question's card with `ack_answer` and a one-line "
+            "outcome; withdraw one you no longer need with `cancel_request` and the reason. A card of yours Pending You "
+            "answers \"not found\" stayed with the host's sign-in before this one, where the user may still answer it, "
+            "to nobody: ask it again if it still matters, under the same key, saying in it that an older copy is dead "
+            "and to dismiss it in the app. Only your own cards are yours: leave every other card alone. The kits: "
+            f"{kits}.")
 
 
 def kits_named(kits):
@@ -1113,7 +1063,7 @@ def main_tokens(fleet, p, role, self_name):
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
         "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
         "CARDS": cards_how(cmd, label, kits_named({t["kit"]["repo"]: t["kit"] for t in teams}.values())), "RESULTS": RESULTS,
-        "LOST_CARD": lost_card_how(cmd, label), "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
+        "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}",
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "REVIEWER": f"{label}-reviewer", "REVIEWS": f"~/.local/state/crew/{label}-main/reports",
         "DISPATCHER": f"{label}-dispatch-{host}", "KITS": ", ".join(kits) or "none yet",
