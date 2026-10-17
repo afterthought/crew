@@ -31,25 +31,32 @@ None.
 
 ```
 plugin/hooks/cards
-plugin/hooks/hooks.json
 plugin/lib/plan.py
 plugin/lib/crew.py
-plugin/roles/coder.md
-plugin/roles/construct.md
-plugin/roles/verify.md
-plugin/roles/reviewer.md
+plugin/lib/cards.py
+plugin/lib/ops.py
+plugin/roles/conductor.md
+plugin/roles/planner.md
+plugin/roles/main-ops.md
+plugin/roles/design.md
 plugin/roles/ops.md
 plugin/roles/dispatcher.md
-plugin/roles/main-ops.md
 plugin/bin/crew
 plugin/skills/crew/SKILL.md
 README.md
 tests/py/test_cards.py
 tests/py/test_card_commands.py
+tests/py/test_chores.py
+tests/py/test_proposal_card.py
+tests/py/test_proposal_life.py
+tests/py/test_rail.py
+tests/py/test_review.py
 tests/t-cards.sh
 tests/t-briefs.sh
 tests/t-docs.sh
+tests/t-journey-plan.sh
+tests/t-journey-review.sh
 tests/moon.yml
 ```
 
-The card hook loses `KEYS`, `FORMS`, `form_check`, `form_refusal` and `proposal_form` and changes `check`, `refusal`, `key_refusal` and `posted`, keeping `name_refusal` and `callers` as they stand and `refusal` running the name check first; `hooks.json` keeps its matcher, `mcp__.*[Pp]ending.*[Yy]ou.*__.*`. `plan.py` changes `card_refusal`, `CardReads`, `CARD_KEYS` (the old keys out), `parser` and `main`; it loses `card_post`, `card_change`, `card_close`, `plan_card`, `card_model`, `close_card` and the notices that name a card to close (`notices`, `lost_rows`). `crew.py` rewrites `cards_how`, which every asker's *Cards* section draws in, and loses `lost_card_how`, whose `{{LOST_CARD}}` leaves `main-ops.md`; the stage roles', a team's ops's and the dispatcher's briefs say they post no card and whom they ask; `tests/moon.yml` is regenerated.
+The card hook loses `KEYS`, `FORMS`, `form_check`, `form_refusal` and `proposal_form` and changes `check`, `refusal`, `key_refusal` and `posted`, keeping `name_refusal` and `callers` as they stand and `refusal` running the name check first; `hooks.json` keeps its matcher, `mcp__.*[Pp]ending.*[Yy]ou.*__.*`. `plan.py` changes `card_refusal`, `CARD_KEYS` (the old keys out), the rail's sweep words, `parser` and `main`; it loses `CardReads`, `card_post`, `card_change`, `card_close`, `plan_card`, `card_model`, `close_card` and the notices that name a card to close (`notices`, `lost_rows`), and `cards.py` and `ops.py` what only those read. `crew.py` rewrites `cards_how`, which the conductor's and the planner's *Cards* and main-level ops's and the design agent's *Asking the user* draw in, and `needs_how`, which the stage roles draw in, and loses `lost_card_how`, whose `{{LOST_CARD}}` leaves `main-ops.md`; a team's ops's and the dispatcher's briefs say they post no card and whom they ask; `tests/moon.yml` is regenerated.

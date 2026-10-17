@@ -26,13 +26,13 @@ crew SHALL build and post each rail row's card itself, from the facts of the eve
 ### Requirement: A row's card is changed in place when its thing changes
 When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
 
-#### Scenario: A proposal rewritten after a note
-- **WHEN** the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
-- **THEN** the card keyed `proposal/4` is changed to proposal 5's title, summary, case, change and questions, with the change note "Rewritten as proposal 5 after your note", and the rail's row for proposal 5 names it as its card
+#### Scenario: A proposal rewritten while its card waits
+- **WHEN** proposal 4's card is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
+- **THEN** the card keyed `proposal/4` is changed in place to proposal 5's, with the change note "Rewritten as proposal 5 after your note", and the rail's row for proposal 5 names it as its card
 
-#### Scenario: A fix moves a bolt with an open landing card
-- **WHEN** the landing card `land/y` is open and a fix merges into `y`, moving its head to `def5678` with sluice green
-- **THEN** the same card is changed, its summary naming `def5678` and the fix, with the change note "Head is now def5678 after the fix …"
+#### Scenario: A merge moves a bolt with an open landing card
+- **WHEN** the landing card `land/y` is open and unanswered, and a merge into bolt `y` moves its head to `def5678`
+- **THEN** crew changes the card in place, "Its head is now def5678", and posts no second card
 
 #### Scenario: A newer head offered
 - **WHEN** `deploy/srv`'s card is open for `abc1234` and the deployer offers `def5678`
@@ -40,14 +40,14 @@ When what a row's card asks changes while it is open, crew SHALL change the one 
 
 #### Scenario: A conductor agrees
 - **WHEN** `proposal/4`'s card says it waits on crw-2's conductor and that conductor runs `crew plan agree 4`
-- **THEN** the card is changed to say it no longer waits on crw-2
+- **THEN** the card is changed in place, "No longer waits on crw-2-conductor"
 
 ### Requirement: A card is closed by crew at the event that ends it
 crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`.
 
 #### Scenario: A proposal approved from the phone
-- **WHEN** the user approves `proposal/4` on the phone, leaving one unit out, and the planner runs `crew plan answer` and `crew plan approve 4 --clear <unit>`
-- **THEN** the card is closed with "Applied: 2 units added, 1 left out", and the rail's proposal row is gone
+- **WHEN** the user approves `proposal/4` on the phone with its new unit `c` unticked, and the planner runs `crew plan answer 4 rows-1 b`
+- **THEN** crew applies the proposal with `c` left out and closes the card "Applied: added b. Left out on your word: c.", and the rail's proposal row is gone
 
 #### Scenario: A proposal dropped
 - **WHEN** the planner runs `crew plan drop 4 "the user: not this quarter"`
@@ -55,15 +55,15 @@ crew SHALL close each of its cards at the event that ends what it asks, with a o
 
 #### Scenario: A bolt landed
 - **WHEN** main-level ops runs `crew bolt land y` after the landing's submission
-- **THEN** `land/y`'s card is closed with the landing's outcome, in the words `crew-raises-a-bolts-landing-card` gives it
+- **THEN** `land/y`'s card is closed "landed on GitHub's main at <its commit>; every host's folder follows by swancloud's timer within minutes"
 
 #### Scenario: A deploy fails
-- **WHEN** the deployer records `crew ops record srv --act end` with a failed `guests` step
-- **THEN** `deploy/srv`'s card is closed with "Failed at guests: <its log>; the next run offers it again"
+- **WHEN** the deployer records the end of srv's deploy of `abc1234` with its `guests` step failed
+- **THEN** `deploy/srv`'s card is closed "The deploy of abc1234 to srv failed at guests; its log: <its log>."
 
 #### Scenario: A step done
 - **WHEN** the user answers `op/srv/1` Done and main-level ops runs `crew ops step srv --key <key> --state done`
-- **THEN** the card is closed "Done by you"
+- **THEN** the card is closed "Done."
 
 #### Scenario: A landing declined
 - **WHEN** the user declines `land/y` with "not before the demo" and the conductor runs `crew card read land/y`
@@ -117,19 +117,19 @@ In a crew session, crew SHALL refuse a call to any Pending You tool that names a
 ## MODIFIED Requirements
 
 ### Requirement: Each rail row has a card key
-Each rail row SHALL have one card key, the thing's and not its version's: `proposal/<n>` for a proposal chain, `n` its first proposal; `batch/<n>` for review batch n; `land/<bolt>` for a bolt proven; `deploy/<env>` for a `manual` environment's open offer; `op/<env>/<n>` for a step that waits on the user; `record/<kit>/<number>` for a record proposed. crew SHALL post the row's card with that key as its idempotency key. A question's card has no row and a key of its asker's own. There SHALL be no review row and no verify row. A batch whose cards were posted under `batch/<n>-<k>` before this change SHALL keep a row for each until its card closes.
+Each rail row SHALL have one card key, the thing's and not its version's: `proposal/<n>` for a proposal chain, `n` its first proposal; `batch/<n>` for review batch n; `land/<bolt>` for a bolt proven; `deploy/<env>` for a `manual` environment's open offer; `op/<env>/<n>` for a step that waits on the user; `record/<kit>/<number>` for a record proposed. crew SHALL post the row's card with that key as its idempotency key. A question's card has no row and a key of its asker's own. There SHALL be no review row and no verify row. A batch whose cards were posted under `batch/<n>-<k>` before one card per batch was built SHALL keep a row for each of those keys until its card closes, and SHALL have no `batch/<n>` row.
 
 #### Scenario: A batch of seven
 - **WHEN** review batch 3 holds seven changes and no card has been posted for it
 - **THEN** the rail has one batch row for it, keyed `batch/3`, holding all seven units
 
 #### Scenario: A batch posted as two cards before
-- **WHEN** the run record holds the planner's posts of batch 2's cards under `batch/2-1` and `batch/2-2` from before this change, and `batch/2-1` has closed
+- **WHEN** the run record holds the planner's posts of batch 2's cards under `batch/2-1` and `batch/2-2` from before one card per batch, and `batch/2-1` has closed
 - **THEN** the rail has one row for batch 2, keyed `batch/2-2`, holding its units as before, until its card closes
 
 #### Scenario: A bolt proven again on a new head
-- **WHEN** bolt `y` was proven at `abc1234`, a note named a defect, a fix landed on `y` at `def5678` and its verification is green
-- **THEN** its landing row's key is still `land/y`, and its card is the one posted at `abc1234`, changed in place
+- **WHEN** bolt `y` was ready to land at head `abc1234`, a note on its landing card named a defect, and a fix landed on the bolt at `def5678` with its verification green
+- **THEN** its landing row's key is still `land/y`, and crew raises a new landing card under it, following the one the fix held
 
 #### Scenario: A unit built again
 - **WHEN** unit `u` was constructed at head `abc1234`, and construct runs again and commits `def5678`
@@ -178,11 +178,15 @@ Each card crew posts, changes, withdraws or closes, and each a crew agent posts,
 - **THEN** the run record has a `card.post` entry on swb-1-conductor with that key and `req_q1`
 
 ### Requirement: The check refuses what it cannot read, and only for crew's sessions
-crew's hook SHALL run only in a session with `CREW_AGENT` set, and SHALL refuse a Pending You call when it cannot read the agent's role, the call's key or the partition's rows, naming what it could not read, never letting a call through on a guess; the user's own sessions SHALL be untouched.
+crew's hook SHALL run only in a session with `CREW_AGENT` set, and SHALL refuse a card's post, change or close, or an area's making, when it cannot read the agent's partition, the teams file, or the run record that holds the key of the card a change or close names, naming what it could not read and saying to try again later, never letting a call through on a guess. It SHALL judge a card's key by its form alone, crew's six kinds being crew's, and read no plan. The user's own sessions SHALL be untouched.
 
 #### Scenario: The plan cannot be read
-- **WHEN** the hook cannot read the partition's rows to tell whether a key is a row's
-- **THEN** the call is refused, naming what could not be read, and nothing is posted
+- **WHEN** swb-1-conductor posts a question under `ask/swb-1-conductor/hold-the-macs` while the partition's state branch cannot be fetched
+- **THEN** the call goes through: the hook reads no plan, and judges the key by its form alone
+
+#### Scenario: The run record cannot be read
+- **WHEN** swb-1-conductor calls `cancel_request` for its card `req_q1` and the hook cannot read the partition's run record on this host
+- **THEN** the call is refused, "crew could not check this card: <why>. Try it again later.", and nothing is closed
 
 #### Scenario: The user's own session
 - **WHEN** a session with no `CREW_AGENT` calls `post_request`
@@ -190,7 +194,7 @@ crew's hook SHALL run only in a session with `CREW_AGENT` set, and SHALL refuse 
 
 #### Scenario: The agent's role cannot be read
 - **WHEN** a crew session's `CREW_AGENT` names no role the teams file knows and the agent calls `post_request`
-- **THEN** the call is refused, naming the agent, and nothing is posted
+- **THEN** the call is refused, naming the agent and saying only a conductor, the planner, main-level ops and the design agent ask the user on a card, and nothing is posted
 
 ### Requirement: The design agent posts a record's card under its record key
 A record's card SHALL be raised by crew through `crew record <kit> <number> --proposed`, keyed `record/<kit>/<number>`, where `<kit>` is the name of a kit one of the partition's teams builds and `<number>` the record's four digits, in the design agent's name; the design agent SHALL post none itself, and no agent SHALL post under a record key. A kit that is not the partition's SHALL be refused naming the partition's kits.
@@ -244,4 +248,4 @@ A record's card SHALL be raised by crew through `crew record <kit> <number> --pr
 **Reason**: crew closes the card itself at the event; there is nothing to name to an owner.
 
 ### Requirement: A row's card is closed when the row's key changes
-**Reason**: a key is the thing's, not its version's; the card is changed in place.
+**Reason**: a key is the thing's, not its version's: crew changes the card in place, or follows an answered one with a new card ("A row's card is changed in place when its thing changes"); a card under an older head's key, `land/<bolt>/<head>`, belongs to no row and the rail's read closes it ("The rail names an open card whose row is gone").
