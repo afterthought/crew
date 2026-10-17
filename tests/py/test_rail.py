@@ -95,6 +95,9 @@ class TestRows:
         land, = [r for r in rows(sv=sv) if r["group"] == "land"]
         assert (land["key"], land["what"][1], land["cmds"]) == (
             "land/apex-zones", "lands once fix/apex-zones/gap has merged or been dropped", [])
+        sv[BOX]["kits"]["/kit/main"]["fixes"][0]["dropped"] = True  # dropped, its place not yet removed
+        land, = [r for r in rows(sv=sv) if r["group"] == "land"]
+        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
 
     def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
         sv = survey()
@@ -382,8 +385,9 @@ class Py:
 class Acts:
     """A stand-in for what the sweep reaches: Pending You, this host's run record, herdr's listing and the raises."""
 
-    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None):
+    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None, here="mac-studio"):
         self.answers, self.held, self.listing, self.raises, self.opening = dict(answers or {}), list(entries), listed or {}, raises or {}, opening
+        self.here = here
         self.calls, self.emitted, self.raised = [], [], []
 
     def bridge(self, name, later, held=None):
@@ -402,7 +406,7 @@ class Acts:
         return None
 
     def host(self):
-        return "mac-studio"
+        return self.here
 
     def caller(self):
         return "chuck@mac-studio"
@@ -526,6 +530,18 @@ class TestSweep:
         assert out["done"] == [dict(label="wldn", key="proposal/5", card=None, by="wldn-planner", did="posted", words="its row had none open", new="req_p5")]
         out, acts = swept(rows_=[row("deploy/dev", "operations")])
         assert out == {"done": [], "unswept": []} and acts.calls == []
+
+    def test_a_landing_row_whose_point_has_not_come_has_its_raise_asked_and_nothing_done(self):
+        """A land row stands once every unit has merged, saying why the bolt can't land yet; its card is raised only once
+        the bolt reads proven, so the sweep's raise for it, finding the point not come, posts nothing and nothing is
+        recorded."""
+        seen = []
+
+        def raise_land(fleet, r, acts=None):
+            seen.append(r["key"])
+            return None
+        out, acts = swept(rows_=[row("land/apex-zones", "land")], raises={"land": raise_land}, here=BOX)
+        assert seen == ["land/apex-zones"] and out == {"done": [], "unswept": []} and acts.emitted == []
 
     def test_a_raise_that_refuses_is_said_and_refuses_nothing_else(self):
         def raise_proposal(fleet, r, acts=None):

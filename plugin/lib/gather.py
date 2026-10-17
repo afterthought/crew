@@ -122,6 +122,13 @@ def upstreams(main):
     return out
 
 
+def fixes_dropped(main):
+    """The fix branches of a kit checkout their conductor dropped, by the mark crew fix --drop sets in the kit's git
+    config, branch.<fix>.crew dropped (record 0028)."""
+    out = run(["git", "config", "--get-regexp", r"^branch\.fix/.*\.crew$"], main) or ""
+    return {k[len("branch."):-len(".crew")] for k, _, v in (l.partition(" ") for l in out.splitlines()) if v == "dropped"}
+
+
 def fix_merged(main, branch, bolt):
     """Whether a fix has merged into its bolt: the bolt holds the fix's tip, and the fix has moved since it was made
     (its reflog's first entry)."""
@@ -425,7 +432,7 @@ def kit(req, sites=False, running=None, board=False):
                            # sluice's verdict on the bolt's last landing: its head's trailer, empty when it is no landing.
                            "verdict": (run(["git", "log", "-1", "--format=%(trailers:key=Sluice-Result,valueonly)",
                                             f"refs/heads/bolt/{b}"], main) or "").strip() if exists else None}
-    places = os.path.join(kdir, "places")
+    places, dropped = os.path.join(kdir, "places"), None
     for path, branch in at.items():
         if os.path.dirname(path) != places or not branch:
             continue
@@ -437,8 +444,10 @@ def kit(req, sites=False, running=None, board=False):
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
             out["chore_places"][branch[6:]] = dict(chore_place(path, bolt), branch=branch, bolt=bolt)
         elif branch.startswith("fix/"):
+            dropped = fixes_dropped(main) if dropped is None else dropped  # read once, and only for a kit with a fix's place
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
-            out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt)})
+            out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt),
+                                 "dropped": branch in dropped})
     if sites:
         out["sites"] = {path: devurl(path) for path, branch in at.items()
                         if os.path.dirname(path) in (places, os.path.join(kdir, "bolts")) and branch}

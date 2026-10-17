@@ -130,12 +130,21 @@ def test_a_fix_is_listed_with_its_bolt_and_reads_merged_only_once_it_moved_and_t
     """crew bolts and the board: a fix's line; carry and tidy: a fix born at the bolt's head has not merged."""
     k = Kit(repo, tmp_path)
     f = k.place("te/edge", prefix="fix")
-    assert k.read()["fixes"] == [{"fix": "fix/te/edge", "path": os.path.realpath(f), "bolt": "te", "merged": False}]
+    assert k.read()["fixes"] == [{"fix": "fix/te/edge", "path": os.path.realpath(f), "bolt": "te", "merged": False, "dropped": False}]
     (f / "edge").write_text("e\n")
     k.commit(f, "fix(te): the edge")
     assert k.read()["fixes"][0]["merged"] is False
     repo.git("-C", str(k.dir / "bolts" / "te"), "merge", "-q", "--ff-only", "fix/te/edge")
     assert k.read()["fixes"][0]["merged"] is True
+
+
+def test_a_fix_its_conductor_dropped_reads_dropped_while_its_place_still_stands(repo, tmp_path):
+    """plan.fixes_in_flight (record 0028): crew fix --drop marks the branch dropped in the kit's git config, and a fix
+    so marked holds no landing though the tidy has not yet removed its place."""
+    k = Kit(repo, tmp_path)
+    k.place("te/edge", prefix="fix")
+    repo.git("config", "branch.fix/te/edge.crew", "dropped")
+    assert k.read()["fixes"][0]["dropped"] is True
 
 
 def test_a_worktree_outside_places_or_off_a_unit_or_fix_branch_is_no_place(repo, tmp_path):
