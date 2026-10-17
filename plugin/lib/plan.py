@@ -4569,9 +4569,11 @@ def tidy(fleet, a):
     checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having failed or
     waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is kept
     and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
-    alone, the branch is kept and said. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, a bolt
-    given before record 0026, or directly in <kit>/places/ on unit/<its folder>, on chore/<name> in chore-<name>, or on
-    a fix/ branch; nothing else is touched. A bolt's branch crew marked when it gave the bolt, which no worktree holds,
+    alone, the branch is kept and said. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
+    detached there, a bolt given before record 0026, or directly in <kit>/places/ on unit/<its folder>, on
+    chore/<name> in chore-<name>, or on a fix/ branch; nothing else is touched. While its bolt lasts, a bolt's worktree
+    still on its branch is detached at the bolt's tip when it is clean, its branch then marked as crew's, and named as
+    kept on the branch while it is not (bolt_detach, plan.18). A bolt's branch crew marked, which no worktree holds,
     goes once no plan has the bolt (bolt_branch_over). The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
     makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
@@ -4610,16 +4612,26 @@ def tidy(fleet, a):
         if crews is None:
             continue
         name, over = crews
-        if not over or name in held or path in held or not os.path.isdir(path):
+        if not os.path.isdir(path):
             continue
-        st = None if w.get("locked") else subprocess.run(["git", "-C", path, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
-        why = kept_why(over, w.get("locked"), st and (st.returncode, st.stdout, st.stderr))
+
+        def status(p=path):
+            r = subprocess.run(["git", "-C", p, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
+            return r.returncode, r.stdout, r.stderr
+        detach = bolt_detach(path, branch, kdir, over, w.get("locked"), status)
+        if detach:
+            print(bolt_detached(main, path, branch) if detach[0] else f"{path} is kept on {branch}: {detach[1]}")
+            continue
+        if not over or name in held or path in held:
+            continue
+        why = kept_why(over, w.get("locked"), None if w.get("locked") else status())
+        held_too = f", and {branch} with it" if branch else ""  # a bolt's worktree the tidy detached holds no branch
         if why:
-            print(f"{path} is kept, and {branch} with it: {why}")
+            print(f"{path} is kept{held_too}: {why}")
             continue
         sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
                              capture_output=True, text=True, env=gitenv()).stdout.strip()
-        kept = f"{path} is kept, and {branch} with it: {over}, and "
+        kept = f"{path} is kept{held_too}: {over}, and "
         try:  # the clean check above is the guard, so --force; the branch is crew's, so --no-delete-branch
             r = subprocess.run(["wt", "-C", main, "remove", path, "--foreground", "--no-delete-branch", "--force", "--format", "json"],
                                capture_output=True, text=True, stdin=subprocess.DEVNULL,
@@ -4633,6 +4645,9 @@ def tidy(fleet, a):
         READ.drop_kit(t["machine"], t["kit"]["main"])  # the command's next step reads the kit again
         if os.path.isdir(path):
             print(kept + "the kit's wt remove exited 0 and left it there")
+            continue
+        if not branch:
+            print(f"{path} is removed: {over}")
             continue
         if not wt_left_branch(r.stdout, path):
             print(f"{path} is removed, and {branch} is kept: crew could not read what wt remove said of the branch")
@@ -4704,18 +4719,53 @@ def bolt_branch_over(bolt, bolts, worktree):
     return None if bolt in bolts or worktree else f"bolt {bolt} is in no plan"
 
 
+def bolt_detach(path, branch, kdir, over, locked, status):
+    """Whether the tidy detaches a bolt's worktree from before record 0026 at its bolt's tip, so that no worktree of
+    crew's holds a bolt branch (plan.9, plan.18): None for any worktree but one directly in <kit>/bolts/ on bolt/<its
+    folder> while its bolt lasts (over, None), one whose bolt is over going as any finished worktree does; else (True,
+    None) when it is clean, or (False, why it stays on the branch) when it is locked, git status (status(), read only
+    then: exit, output, error) says it has uncommitted changes, or git cannot read it, which is said on every read
+    until it is clean."""
+    if over or os.path.dirname(path) != os.path.join(kdir, "bolts") or branch != f"bolt/{os.path.basename(path)}":
+        return None
+    if locked:
+        return False, "it is locked, and crew detaches it at the bolt's tip once it is not"
+    code, out, err = status()
+    if code:
+        return False, f"git cannot read its status ({err.strip()}), so crew cannot tell it may detach it at the bolt's tip"
+    if out.strip():
+        return False, ("it has uncommitted changes, which are the user's to keep or discard, and crew detaches it at the "
+                       "bolt's tip once it is clean")
+    return True, None
+
+
+def bolt_detached(main, path, branch):
+    """A clean bolt's worktree from before record 0026 detached at its bolt's tip (bolt_detach), `git switch --detach`
+    in it, its files as they were; the bolt's branch then marked as crew's in the kit's git config, as a branch the give
+    makes is (BOLT_BRANCH), so it goes with the bolt once no worktree holds it (bolt_branch_over). What crew says of it,
+    or why git refused."""
+    git = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True, env=gitenv())
+    r = git("-C", path, "switch", "-q", "--detach")
+    if r.returncode:
+        return f"{path} is kept on {branch}: git could not detach it ({' '.join(r.stderr.split()) or f'exit {r.returncode}'})"
+    git("-C", main, "config", f"branch.{branch}.crew", "given")
+    sha = git("-C", path, "rev-parse", "--short", "HEAD").stdout.strip()
+    return f"{path} is detached at {branch}'s tip, {sha}, so no worktree holds the bolt's branch"
+
+
 def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_merged, chores=(), chores_of=None, dropped=()):
     """Whether a worktree is one crew made, and whether its work is over (plan.9): None for one crew did not make; else
     (the name a slot holds its work by, why its work is over or None while it goes on). crew made it when it is
-    directly in <kit>/bolts/ on bolt/<its folder>, or directly in <kit>/places/ on unit/<its folder>, on
-    chore/<name> in chore-<name>, or on a fix/ branch made from a bolt (up, its upstream). A bolt's is over once no plan
-    has the bolt (bolts); a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)) or no
+    directly in <kit>/bolts/ on bolt/<its folder>, or detached there, as the tidy leaves it (bolt_detach), or directly
+    in <kit>/places/ on unit/<its folder>, on chore/<name> in chore-<name>, or on a fix/ branch made from a bolt (up, its
+    upstream). A bolt's is over once no plan has the bolt (bolts); a unit's once it has landed on main (on_main), merged
+    into its bolt (archived_of(bolt)) or no
     plan has it (units), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while
     the bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
     it (chores); a fix's once it has merged into its bolt (fix_merged(branch, bolt)), its conductor dropped it (its
     branch in dropped, record 0028) or no plan has its bolt."""
     folder, bolt = os.path.basename(path), up[5:] if up.startswith("bolt/") else None
-    if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch == f"bolt/{folder}":
+    if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch in (f"bolt/{folder}", ""):
         return None, None if folder in bolts else f"bolt {folder} is in no plan"
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("chore/") and folder == f"chore-{branch[6:]}":
         name = branch[6:]
