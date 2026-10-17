@@ -1,0 +1,23 @@
+{
+  "schema": "sluice/submission@1",
+  "id": 2,
+  "branch": "bolt/tenant-environments",
+  "head": "6d034db3514fa5566f84a4db5a4b029a7d6eeb1b",
+  "from": {
+    "agent": "swb-1-unit-2",
+    "worktree": "unit/b",
+    "path": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/places/b"
+  },
+  "submitted": "2026-10-17T16:04:11Z",
+  "after": [],
+  "priority": 0,
+  "attempt": 1,
+  "state": "conflict",
+  "conflict": {
+    "paths": [
+      "shared.txt"
+    ],
+    "with": []
+  },
+  "told": "2026-10-17T16:04:11Z"
+}

@@ -20,7 +20,7 @@ Parts in build order; each part is its own unit and lands on its own. Parts 2 to
 
 ## Part 5. The overview
 
-- [ ] 5.1 `stage_wait` reads `sluice overview --json` on each poll beside the refs, skips an unchanged `version`, reports a `conflict` or `blamed` line whose `from.path` is the stage's place to the conductor in sluice's words, and goes on by refs alone, saying so once, when the overview cannot be read; every field is read by a fact checked against sluice v0.12.0. Logic: `tests/py/test_stage_wait.py` on overview fixtures recorded from sluice v0.12.0. Journey: `tests/t-journey-units.sh` with a stub sluice (`read.2`, `code.9`).
+- [x] 5.1 `stage_wait` reads `sluice overview --json` on each poll beside the refs, reads nothing more while every branch's `version` is unchanged, learns the `from.path` of each submission `submissions[]` lists, asks `sluice status <id> --json` once of a `conflict` or `blamed` line since the stage began whose `id` it has not learned, since sluice records a conflict within seconds of its submission, reports a line whose submission came from the stage's place to the conductor in sluice's words, and goes on by refs alone, saying so once, when the overview cannot be read; every field is read by a fact checked against sluice v0.18.0. Logic: `tests/py/test_stage_wait.py` on overview and status documents recorded from sluice v0.18.0. Journey: `tests/t-journey-units.sh` with a stub sluice (`read.2`, `code.9`).
 
 ## Part 6. A stray checkout is named
 

@@ -1,0 +1,87 @@
+{
+  "at": "2026-10-17T16:04:35Z",
+  "branches": [
+    {
+      "at": "be685deeffdd69cde733b9d160e38be753dfdd75",
+      "branch": "bolt/tenant-environments",
+      "candidates": [],
+      "depth": 2,
+      "parallel": 1,
+      "recent": [
+        {
+          "at": "2026-10-17T16:04:06Z",
+          "event": "landed",
+          "ids": [
+            1
+          ],
+          "schema": "sluice/log@1",
+          "to": "be685deeffdd69cde733b9d160e38be753dfdd75"
+        },
+        {
+          "at": "2026-10-17T16:04:11Z",
+          "event": "conflict",
+          "id": 2,
+          "paths": [
+            "shared.txt"
+          ],
+          "schema": "sluice/log@1",
+          "with": []
+        },
+        {
+          "at": "2026-10-17T16:04:14Z",
+          "combination": "3d44d6b8349d63e665aed8eaed49669719e510a8",
+          "event": "blamed",
+          "id": 3,
+          "schema": "sluice/log@1"
+        }
+      ],
+      "submissions": [
+        {
+          "after": [],
+          "attempt": 1,
+          "branch": "bolt/tenant-environments",
+          "from": {
+            "agent": "swb-1-unit-4",
+            "path": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/places/d",
+            "worktree": "unit/d"
+          },
+          "head": "6346c176cbc80798bb6355a2f3391c3d40719beb",
+          "id": 4,
+          "priority": 0,
+          "schema": "sluice/submission@1",
+          "state": "queued",
+          "submitted": "2026-10-17T16:04:15Z"
+        },
+        {
+          "after": [],
+          "attempt": 1,
+          "branch": "bolt/tenant-environments",
+          "from": {
+            "agent": "swb-1-unit-5",
+            "path": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/places/e",
+            "worktree": "unit/e"
+          },
+          "head": "aa10bc9cfdd5db810f6e9989ce71d5f152e1d659",
+          "id": 5,
+          "priority": 0,
+          "schema": "sluice/submission@1",
+          "state": "queued",
+          "submitted": "2026-10-17T16:04:35Z"
+        }
+      ],
+      "version": 18,
+      "window": 1
+    }
+  ],
+  "host": "mac-studio",
+  "previews": [],
+  "repository": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/main/.git",
+  "schema": "sluice/overview@1",
+  "sessions": [
+    {
+      "branch": "main",
+      "holds_queued_branch": "main",
+      "worktree": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/main"
+    }
+  ]
+}

@@ -5598,10 +5598,159 @@ def ended_words(team, agent, e):
     return f"{what} has ended: {how}"
 
 
+# What a wait reads of sluice beyond the refs (record 0032, point 4): `sluice overview --json`, and `sluice status
+# <id> --json` for a submission it names, each read by facts checked against sluice 0.18.0 (read.2). A conflict or a
+# blamed line of the overview's recent[] names its submission's id and not where it came from; the path is on the
+# submission, which the overview lists only while it is in a chain, and a conflict is recorded 0 to 3 seconds after
+# its submission (5 of 6 on mac-studio's crew, swancloud and sluice logs, 2026-10-17), inside a wait's look.
+OVERVIEW, SUBMISSION = "sluice/overview@1", "sluice/submission@1"
+OUTCOMES = ("conflict", "blamed")
+
+
+def overview_facts(doc):
+    """The facts a wait reads of `sluice overview --json`, as sluice 0.18.0 prints it: the document's schema is
+    sluice/overview@1, and each of its branches[] names its branch and its records' version, an integer that moves
+    on every write to them; its submissions[] are those still in a chain, each with its id and from.path, the absolute
+    path of the worktree it came from, absent where sluice's driver had none; its recent[] holds its last landed,
+    blamed and conflict log lines as written, a conflict naming its id and paths, a blame its id and combination, each
+    its at. Returns (each branch's version, each listed submission's path or None, each conflict and blamed line as
+    (branch, line, its at)), or None when the document is not one sluice 0.18.0 prints."""
+    if not isinstance(doc, dict) or doc.get("schema") != OVERVIEW or not isinstance(doc.get("branches"), list):
+        return None
+    versions, paths, outcomes = {}, {}, []
+    for b in doc["branches"]:
+        if not isinstance(b, dict) or not isinstance(b.get("branch"), str) or type(b.get("version")) is not int \
+                or not isinstance(b.get("submissions"), list) or not isinstance(b.get("recent"), list):
+            return None
+        versions[b["branch"]] = b["version"]
+        for s in b["submissions"]:
+            came = s.get("from") if isinstance(s, dict) else None
+            if type(s.get("id") if isinstance(s, dict) else None) is int and isinstance(came, dict):
+                paths[s["id"]] = came.get("path") if isinstance(came.get("path"), str) else None
+        for r in b["recent"]:
+            at = sluice_at(r.get("at")) if isinstance(r, dict) else None
+            if at and r.get("event") in OUTCOMES and type(r.get("id")) is int:
+                outcomes.append((b["branch"], r, at))
+    return versions, paths, outcomes
+
+
+def sluice_at(at):
+    """A time sluice writes (2026-10-17T16:04:11Z), in UTC, or None when it holds none."""
+    try:
+        return datetime.datetime.fromisoformat(at).astimezone(datetime.timezone.utc) if isinstance(at, str) else None
+    except ValueError:
+        return None
+
+
+def submission_from(doc):
+    """Where a submission came from, as `sluice status <id> --json` prints it in sluice 0.18.0 (sluice/submission@1):
+    its from.path, or None when its record names none, a pull request's or one written before sluice 0.12.0. Raises
+    ValueError, naming what it read, when the document is no submission."""
+    came = doc.get("from") if isinstance(doc, dict) and doc.get("schema") == SUBMISSION else None
+    if not isinstance(came, dict):
+        raise ValueError(f"it printed no {SUBMISSION}")
+    return came.get("path") if isinstance(came.get("path"), str) else None
+
+
+def overview_due(outcomes, place, since, paths, told):
+    """Of an overview's conflict and blamed lines (overview_facts), those that are the stage's: recorded since it began,
+    not yet told, and of a submission whose path (paths, by id, as the wait has learned them) is the stage's place.
+    Returns them as (key, branch, line), and the ids of lines since it began whose path the wait has not learned."""
+    due, ask = [], []
+    for branch, r, at in outcomes:
+        key = f"{branch} {r['event']} #{r['id']} {r['at']}"
+        if at < since or key in told:
+            continue
+        if r["id"] not in paths:
+            if r["id"] not in ask:
+                ask.append(r["id"])
+        elif paths[r["id"]] == place:
+            due.append((key, branch, r))
+    return due, ask
+
+
+def overview_look(seen, doc, why, place, since, status):
+    """One look of a wait at sluice's overview on the team's host. seen is what the wait keeps between its looks ({}
+    at its start); doc the overview as read, or None with why it could not be read; place the stage's place as git
+    names it; since when the stage began; status(id) reads `sluice status <id> --json`, (the document, None) or (None,
+    why). A look whose branches' versions are all as the last look saw them reads nothing more. Else it learns the path
+    of every submission the overview lists, asks status once of each conflict or blamed line since the stage began
+    whose path it has not learned, and returns the lines that are the stage's, as (branch, line), each once a wait,
+    with what to say on standard error: that the overview can't be read and the wait goes on by refs alone, once a
+    wait (read.1), and each submission whose place crew could not read."""
+    facts = overview_facts(doc) if doc is not None else None
+    if facts is None:
+        if seen.get("unread"):
+            return [], []
+        seen["unread"] = True
+        return [], [f"sluice's overview can't be read ({why or f'it is not the {OVERVIEW} sluice 0.18.0 prints'}): "
+                    "the wait goes on by refs alone, and says nothing of a conflict or a failed check sluice finds"]
+    versions, learned, outcomes = facts
+    if versions == seen.get("versions"):
+        return [], []
+    seen["versions"] = versions
+    paths, told, notes = seen.setdefault("paths", {}), seen.setdefault("told", set()), []
+    paths.update(learned)
+    due, ask = overview_due(outcomes, place, since, paths, told)
+    for sid in ask:
+        sub, why = status(sid)
+        try:
+            paths[sid] = None if why else submission_from(sub)
+        except ValueError as e:
+            why = str(e)
+        if why:  # never asked again: a line crew can't place is no line of the stage's
+            paths[sid] = None
+            notes.append(f"crew can't tell whether sluice's #{sid} came from this stage's place: "
+                         f"sluice status {sid} --json: {why}")
+    if ask:
+        due, _ = overview_due(outcomes, place, since, paths, told)
+    told.update(key for key, _, _ in due)
+    return [(branch, r) for _, branch, r in due], notes
+
+
+def sluice_words(r):
+    """A conflict or blamed line as sluice's own overview says it: `conflict #2 on shared.txt`, `blamed #3 on
+    3d44d6b`."""
+    if r["event"] == "conflict":
+        paths = [p for p in r.get("paths") or [] if isinstance(p, str)] if isinstance(r.get("paths"), list) else []
+        return f"conflict #{r['id']}" + (f" on {', '.join(paths)}" if paths else "")
+    combination = r.get("combination")
+    return f"blamed #{r['id']}" + (f" on {combination[:7]}" if isinstance(combination, str) and combination else "")
+
+
+def sluice_said(o, agent, branch, r):
+    """What a wait tells the conductor of a conflict or blame sluice recorded for the stage's submission."""
+    return f"{o.phrase()}: sluice says of {agent}'s submission to {branch}: {sluice_words(r)}; the wait goes on until the stage ends"
+
+
+def sluice_read(main, *args):
+    """`sluice <args> --json` run in a kit on this host: (the document, None), or (None, why it can't be read)."""
+    try:
+        r = subprocess.run(["sluice", *args, "--json"], cwd=main, capture_output=True, text=True, timeout=POLL)
+    except FileNotFoundError:
+        return None, "this host has no sluice on its path"
+    except subprocess.TimeoutExpired:
+        return None, f"it did not answer within {POLL} seconds"
+    except OSError as e:
+        return None, str(e)
+    if r.returncode != 0:  # sluice says why as {"error": {"message": ...}} under --json, clap on standard error
+        try:
+            said = json.loads(r.stdout)["error"]["message"]
+        except (ValueError, TypeError, KeyError):
+            said = next((l.strip() for l in r.stderr.splitlines() if l.strip()), "")
+        return None, f"it exited {r.returncode}" + (f": {said}" if isinstance(said, str) and said else "")
+    try:
+        return json.loads(r.stdout), None
+    except ValueError:
+        return None, "it printed no JSON"
+
+
 def stage_wait(fleet, a):
     """Wait on the stage a slot's agent, or ops, owes, until it ends at its deliverable, stops short, is stuck, its agent
     is gone, or the timeout passes, and print the one line that says which. A delivered end is recorded here; nothing
-    else is. The wait holds waits/<slot>.lock for its life, so crew needs knows a wait is there to hand its words to."""
+    else is. The wait holds waits/<slot>.lock for its life, so crew needs knows a wait is there to hand its words to.
+    Each look also reads sluice's overview, and says at once, before that line, each conflict or blame sluice records
+    for a submission from the stage's place (overview_look)."""
     t = crew.team_of(fleet, a.team)
     agent = f"{t['name']}-{a.slot}"
     (team_state(t) / "waits").mkdir(parents=True, exist_ok=True)
@@ -5630,8 +5779,16 @@ def stage_wait(fleet, a):
     deadline = time.monotonic() + a.timeout / 1000
     stuck = datetime.timedelta(milliseconds=a.stuck)
     seen_quiet = seen_working = None
+    sluice_seen, here, main = {}, os.path.realpath(place) if place else None, t["kit"]["main"]
     with READ.fresh():  # each look reads the plan and the kit afresh
         while True:
+            if here:  # what refs can't give: a conflict or a failed check sluice records for the place's submission
+                doc, why = sluice_read(main, "overview")
+                outcomes, notes = overview_look(sluice_seen, doc, why, here, o.start, lambda sid: sluice_read(main, "status", str(sid)))
+                for note in notes:
+                    print(note, file=sys.stderr)
+                for branch, r in outcomes:
+                    print(sluice_said(o, agent, branch, r), flush=True)
             with stages_file(t, shared=True) as lines:
                 words = handed(t, a.slot, o.eid)
                 owed = any(l[3:4] == [o.eid] for l in lines)

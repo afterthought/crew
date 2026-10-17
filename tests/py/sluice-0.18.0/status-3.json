@@ -1,0 +1,32 @@
+{
+  "schema": "sluice/submission@1",
+  "id": 3,
+  "branch": "bolt/tenant-environments",
+  "head": "3412f3a5913f1613167149c997a870a65fe7c0a3",
+  "from": {
+    "agent": "swb-1-unit-3",
+    "worktree": "unit/c",
+    "path": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/places/c"
+  },
+  "submitted": "2026-10-17T16:04:11Z",
+  "after": [],
+  "priority": 0,
+  "attempt": 1,
+  "state": "failed",
+  "tested": {
+    "combination": "3d44d6b8349d63e665aed8eaed49669719e510a8",
+    "on": "be685deeffdd69cde733b9d160e38be753dfdd75",
+    "submissions": [
+      3
+    ]
+  },
+  "result": "failed",
+  "failed": [
+    {
+      "task": "sh check.sh",
+      "hash": "3d44d6b8349d63e665aed8eaed49669719e510a8",
+      "log": "/private/tmp/claude-501/-Users-chuck-Code-github-afterthought/f67c15ab-693f-4617-8cfc-db07634ed12c/scratchpad/rec-0180/switchboard-kit/main/.git/sluice/.logs/bolt/tenant-environments/c2/sh check.sh.log"
+    }
+  ],
+  "told": "2026-10-17T16:04:15Z"
+}
