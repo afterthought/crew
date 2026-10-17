@@ -104,6 +104,17 @@ class TestTheLandingsPoint:
     def test_until_then_no_card_is_raised(self, work, verdict, fixes, why):
         assert self.unready(work, verdict, fixes) == why
 
+    def test_a_fix_is_in_flight_from_its_start_until_it_merges_or_is_dropped(self):
+        """The landing's point waits for no fix of the bolt in flight: a fix place of the bolt that has neither merged
+        nor been dropped; one of another bolt is not the bolt's."""
+        fixes = [{"fix": "fix/y/gap", "bolt": "y", "merged": False, "dropped": False},
+                 {"fix": "fix/y/done", "bolt": "y", "merged": True, "dropped": False},
+                 {"fix": "fix/y/gone", "bolt": "y", "merged": False, "dropped": True},
+                 {"fix": "fix/z/gap", "bolt": "z", "merged": False, "dropped": False}]
+        assert plan.fixes_in_flight(fixes, "y") == ["fix/y/gap"]
+        assert self.unready(fixes=plan.fixes_in_flight(fixes, "y")) == "fix/y/gap is in flight on it"
+        assert self.unready(fixes=plan.fixes_in_flight(fixes[1:], "y")) is None
+
     def test_its_facts_wait_for_every_units_latest_change_to_have_been_in_a_batch(self):
         pr = plan.pull_of("swb-1-unit-2 (pull/23)", "WilldanGroup/switchboard-kit")
         facts = plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", "2026-10-17T10:00:00Z", set(), {"a": 4, "b": 5}, 2, pr)

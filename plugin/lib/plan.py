@@ -1431,6 +1431,13 @@ def landing_act(event, head=None, words=None):
     return ("close", words, None)
 
 
+def fixes_in_flight(fixes, bolt):
+    """The fixes of the bolt in flight, by name, from the fixes a kit read found (gather.kit): each whose place stands,
+    that has not merged into the bolt and that its conductor did not drop (record 0028); a fix in flight holds the
+    bolt's landing (landing_unready)."""
+    return sorted(f["fix"] for f in fixes if f.get("bolt") == bolt and not f.get("merged") and not f.get("dropped"))
+
+
 def landing_unready(work, head, verdict, fixes):
     """Why a bolt does not yet read proven, from its kit alone (record 0031 §1, record 0025), or None: work is each of
     its units and chores as (name, kind, stage); head and verdict, its branch's head and sluice's Sluice-Result there;
@@ -1494,7 +1501,7 @@ def raise_land(fleet, row, acts=None):
     of = {u.name(): st.of(u.name()) for u in plan.work_of(bolt)}
     work = [(n, s.get("kind", "unit"), s["stage"]) for n, s in of.items()]
     facts = k["bolts"].get(bolt, {})
-    fixes = [f["fix"] for f in k.get("fixes", []) if f.get("bolt") == bolt and not f.get("merged")]
+    fixes = fixes_in_flight(k.get("fixes", []), bolt)
     if landing_unready(work, facts.get("head"), facts.get("verdict"), fixes):
         return None
     entries = partition_entries(fleet, label)
@@ -7517,7 +7524,7 @@ def rail_rows(fleet, found, sv, props, times, held=None):
                     what = what + [f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have")
                                    + " been in a batch, which is due for them"]
                     cmds = []
-                fixes = [f["fix"] for f in k.get("fixes", []) if f.get("bolt") == b.name() and not f.get("merged")]
+                fixes = fixes_in_flight(k.get("fixes", []), b.name())
                 if fixes and cmds:  # a fix started on the bolt holds its landing (landing_held)
                     what, cmds = what + [f"lands once {either(sorted(fixes))} has merged or been dropped"], []
                 rows.append(dict(group="land", label=l, key=f"land/{b.name()}", at=utc(at), doc=None, what=what, cmds=cmds))
