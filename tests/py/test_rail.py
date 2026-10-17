@@ -84,9 +84,17 @@ class TestRows:
 
     def test_a_bolt_whose_every_unit_merged_waits_to_land_timed_by_its_last_merge(self):
         land, = [r for r in rows() if r["group"] == "land"]
-        assert (land["key"], land["at"]) == ("land/apex-zones/abc1234", plan.utc(iso(30)))
+        assert (land["key"], land["at"]) == ("land/apex-zones", plan.utc(iso(30)))
         assert land["what"] == [f"bolt apex-zones (wldn), swb-2 on {BOX}: every unit merged; wldn-ops lands it"]
         assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+
+    def test_a_bolt_with_a_fix_in_flight_lands_once_it_has_merged_or_been_dropped(self):
+        sv = survey()
+        sv[BOX]["kits"]["/kit/main"]["fixes"] = [{"fix": "fix/apex-zones/gap", "bolt": "apex-zones", "merged": False},
+                                                {"fix": "fix/apex-zones/done", "bolt": "apex-zones", "merged": True}]
+        land, = [r for r in rows(sv=sv) if r["group"] == "land"]
+        assert (land["key"], land["what"][1], land["cmds"]) == (
+            "land/apex-zones", "lands once fix/apex-zones/gap has merged or been dropped", [])
 
     def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
         sv = survey()
@@ -138,7 +146,7 @@ class TestText:
         rs = rows([proposal(1)])
         out = text(rs, cards=[dict(label="wldn", card="req_prop-1", key="proposal/1", by="wldn-planner", host="mac-studio", at=NOW)])
         assert "    card:   proposal/1, open, asked by wldn-planner (req_prop-1)" in out
-        assert "    card:   land/apex-zones/abc1234, none open" in out
+        assert "    card:   land/apex-zones, none open" in out
 
     def test_an_open_card_whose_row_is_gone_is_listed_with_the_host_whose_rail_read_closes_it(self):
         old = dict(label="wldn", card="req_old-1", key="verify/checked/20260101-0000", by="swb-1-conductor", host=BOX, at=NOW)

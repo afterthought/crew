@@ -67,7 +67,7 @@ def key(name, k, tool="post_request", label="wldn", **reads):
     return plan.card_refusal(FLEET, name, label, tool, k, Reads(**reads))
 
 
-ROWS = ("land/tenant-environments/<head>, the head from the `card:` line under its row in "
+ROWS = ("land/tenant-environments, from the `card:` line under its row in "
         f"`{crew.HOME}/plugin/bin/crew rail --label wldn`")
 
 
@@ -83,9 +83,10 @@ class TestKeys:
         assert "Tell swb-1-conductor what you wait on with crew tell." in key("swb-1-ops", "x")
         assert f"{crew.HOME}/plugin/bin/crew needs" in key("swb-1-unit-2", "verify/x/20261007-1412")
 
-    def test_a_conductor_posts_under_its_own_bolts_landing_row_and_never_a_verify_reports(self):
-        assert key("swb-1-conductor", "land/tenant-environments/abc1234") is None
-        for k in ("gateway-check", "verify/checked/20261007-1412", "verify/z/20261007-1412", "land/console-pages/abc1234", "review/x/abc1234", "land/tenant-environments"):
+    def test_a_conductor_posts_under_its_own_bolts_landing_row_keyed_by_the_bolt_and_never_a_verify_reports(self):
+        assert key("swb-1-conductor", "land/tenant-environments") is None
+        for k in ("gateway-check", "verify/checked/20261007-1412", "verify/z/20261007-1412", "land/console-pages", "review/x/abc1234",
+                  "land/tenant-environments/abc1234"):
             assert key("swb-1-conductor", k) == f"crew refuses a card under {k}: swb-1-conductor posts a card only under a rail row's key of its own: {ROWS}."
         assert key("brd-1-conductor", "land/x/abc1234").endswith("brd-1 holds no bolt, so none is.")
 
@@ -139,7 +140,7 @@ class TestResult:
         ("verify/x/20261007-1400", "unit/x"), ("land/tenant-environments/abc1234", "bolt/tenant-environments"), ("proposal/4", "proposal/4"),
         ("batch/3", "batch/3"), ("batch/3-2", "batch/3"), ("record/atlas-kit/0021", "record/atlas-kit/0021"),
         ("record/atlas-kit/0021/abc1234", None),
-        ("my own key", None), ("land/tenant-environments", None), ("review/x/abc1234", None)])
+        ("land/tenant-environments", "bolt/tenant-environments"), ("my own key", None), ("review/x/abc1234", None)])
     def test_a_card_is_on_its_rows_object_and_any_other_on_its_agent(self, k, row):
         assert cards.keyed(k)[1] == row
 
@@ -345,7 +346,7 @@ class TestSessions:
         assert plan.card_of(BASE, self.args("batch/2-1", "x1"))[1] == plan.CARDS / "wldn" / "batch/2-1" / "x1"
 
     @pytest.mark.parametrize("k, unit, said", [
-        ("land/t", None, "land/t is not a card key"), ("verify/x/HEAD", None, "verify/x/HEAD is not a card key"),
+        ("land/t/HEAD", None, "land/t/HEAD is not a card key"), ("verify/x/HEAD", None, "verify/x/HEAD is not a card key"),
         ("batch/1", "x1", "a batch has one reading session, on the whole batch: crew card session batch/1"),
         ("batch/2-1", None, "a batch card posted as cards of five has a session for each of its units: crew card session batch/2-1 <unit>"),
         ("proposal/1", "x1", "only an old batch card's key, batch/<n>-<k>, takes a unit, and proposal/1 is not one")])

@@ -14,20 +14,20 @@ Non-goals: the landing's form, which `crew-builds-every-card-from-its-facts` bui
 
 ### 1. When a bolt reads proven
 
-The landing's point needs one rule: a bolt reads proven when every unit and chore has merged, every unit's latest change has been in a batch, and the bolt's head carries a green `Sluice-Result` (record 0025). The merge's end and the rail read both read it (`plan.py`'s landing row already does); whichever runs first posts, the other finds the card by its key in the run record and does nothing.
+The landing's point needs one rule: a bolt reads proven when every unit and chore has merged, every unit's latest change has been in a batch, the bolt's head carries a green `Sluice-Result` (record 0025), and no fix is in flight on it, since a fix started on the bolt holds its landing until the fix merges or is dropped, and the bolt would otherwise read proven again at once at the head the fix held. The merge's end and the rail read both read it (`plan.py`'s landing row already does, saying which of these it waits on); whichever runs first posts, the other finds the card by its key in the run record and does nothing.
 
 | Event | Command | Act |
 |---|---|---|
-| a bolt reads proven | the merge's end (`crew unit wait`, `crew chore wait`) and `crew rail` | post `land/<bolt>` |
+| a bolt reads proven | the merge's end (`crew unit wait`, `crew chore wait`, `crew fix --wait`) and `crew rail` | post `land/<bolt>` |
 | the head moves while open | the merge's end | change ("head is now …") |
 | landed | `crew bolt land` | close with the landing's outcome |
 | a defect noted | `crew fix` started on the bolt | withdraw ("held for a fix: …") |
 
-`raise_land`, the landing's raise, reads `landing_facts`, the bolt, its units and chores, sluice's verdict and when, how far main has moved, the batches each unit was read in, and sluice's pull request when the submission at the head has one, and calls the act; it finds the landing's point not come until the bolt reads proven. A landing raised again after a fix follows the card the defect note held, as `follows_of` reads it. The landing's row and card key is the bolt's, `land/<bolt>`, not the head's: `rail_rows`, `CARD_KEYS`, the conductor's branch of `card_refusal` and the card hook's `KEYS` line give it.
+`raise_land`, the landing's raise, runs on the team's host, where its conductor's cards are, and reads `landing_unready` from the kit first, then `landing_facts` from the partition's run record: the bolt, its units and chores, sluice's verdict and when, how far main has moved since the bolt last met it, the batches each unit was read in, and sluice's pull request when the submission at the head went through one (its `Sluice-From` trailer); it calls the act, which posts when no card is held and changes the held one in place, and does nothing, saying nothing, until the bolt reads proven. `landing_act` is which act each event takes, as facts. A fix's start withdraws each landing card the conductor holds, `landing_held`. A landing raised again after a fix follows the card the defect note held, as `follows_of` reads it. The landing's row and card key is the bolt's, `land/<bolt>`, not the head's: `rail_rows`, `CARD_KEYS`, the conductor's branch of `card_refusal` and the card hook's `KEYS` line give it.
 
-### 2. The landing's close waits on who keeps which folders
+### 2. The landing's close is record 0032's
 
-What `crew bolt land` closes the card with, the landing's outcome, says what the landing did: the merge, and what became of the hosts' folders. Which folders crew keeps level after a landing, and who keeps them, is the record of who keeps which folders, the recovery session's next design talk. This change is built once that record is accepted, and the close's words are the ones it settles.
+`crew bolt land` closes the card on its team's host, where its conductor holds it, with "landed on GitHub's main at `<sha>` (#<n>); every host's folder follows by swancloud's timer within minutes", the number sluice's submission's when main's head carries one: record 0032 settles the words, and `no-worktree-holds-main-or-a-bolt-branch` 4.2 builds the close. The write that ends the bolt no longer tells its conductor to close a card.
 
 ### 3. Not in this change
 
