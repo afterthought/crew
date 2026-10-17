@@ -31,36 +31,39 @@ for want in "tell wldn-design" "signal" "never by hand" "Don't create tracking f
 done
 lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
 for want in "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
-for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" "never run \`plannotator\` yourself" \
-  "You post, change and close no landing card"; do
-  has "$out" "$want"
-done
-ok "a conductor opens nothing, posts no landing card, and the card discipline says how a session is started"
-# The words a row's card posted again carries, after its link and its bolt, so the user tells the live copy from the
-# dead one (ADR 0005, "A card belongs to the host's sign-in").
-lost_card='"An older copy of this card is dead: it can no longer be answered, so dismiss it in the app. Answer this one."'
-cards_say() {  # the card discipline the planner's and the conductor's briefs share
-  for want in "begins with the link to the card's plannotator session, then names the bolt" "in the document's own words" \
-    "never reworded" "No card carries a path" "an empty list as its files touched" \
-    'one entry in its links, labelled "Read and annotate it in plannotator"' "The link is no artifact" \
-    "update its summary, background and links together" \
-    "give it the form its row takes, as your brief says" "crew refuses a row's card in another form, and names the form to use" \
-    'kind `image` with `upload: true`' "with its content type" 'Never attach an image as kind `path`' \
-    'kind `code` with lang `markdown`' "never an uploaded file and never HTML" "reached through the card's plannotator link" \
-    "A proposal's card is what \`$CREW/plugin/bin/crew plan card <n> --label wldn\` prints" "it links no session but when that says so" \
-    "a proposal's card carries the picture and the text" "A proposal's card links no session, since it holds the proposal whole" \
-    "but for one of more than fifteen new units" "reads \"not found\"" "whenever Pending You has you call \`whoami\` again" \
-    "$lost_card" "under the row's key" "posted again by nobody" "The one exception is a lost card"; do
+has "$out" "You post, change and close no landing card"
+for gone in "crew card session" "crew card wait" "answeredHere" "plannotator"; do lacks "$out" "$gone"; done
+ok "a conductor opens nothing, posts no landing card and starts no card's session"
+# The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
+# You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
+# row's card as crew's.
+asks_say() {
+  for want in "A question of yours for the user reaches them on a Pending You card you ask yourself; every other card on the rail is crew's." \
+    "Four ask the user: a team's conductor, the planner, main-level ops and the design agent." \
+    "the dispatcher asks through the planner; and crew refuses a card from any of them" \
+    "\`$CREW/plugin/bin/crew tell\`: \`wldn-design\` for the design, \`wldn-ops\` for a live system or a deploy, \`wldn-planner\` for the plan" \
+    "in their name, their money, their plans, public or hard to undo" "when its choices lead to noticeably different products" \
+    "decide what a careful product designer would, and say so" "its options, with the one you recommend" \
+    "\`blocking\` false and the fallback you take meanwhile" "what you tried, in its \`tried\`" \
+    "\`ask/<your crew name>/<what it is about>\`, a key of your own" "Pending You gives that card back" \
+    "a new card under a new key, following the one answered" \
+    "\`proposal/\`, \`batch/\`, \`land/\`, \`deploy/\`, \`op/\` or \`record/\`, is crew's" "refuses your post, change or close of one" \
+    "call \`whoami\` with your crew name" "\`create-area:<owner>/<kit>\`: crew refuses an area under any other key" \
+    "Never run \`npx pendingyou\` or \`pendingyou hold\`" "close your question's card with \`ack_answer\` and a one-line outcome" \
+    "ask it again if it still matters, under the same key, saying in it that an older copy is dead" "leave every other card alone"; do
     has "$out" "$want"
   done
-  lacks "$out" "something, a proposal, a batch's changes"
-  lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"; lacks "$out" "leave the card's artifacts empty"
+  for gone in "rail row's of your own" "the form its row takes" "plan card" "begins with the link to the card's plannotator session" \
+    "No card carries a path" "kind \`image\`" "An older copy of this card is dead" "posted again by nobody" \
+    "The one exception is a lost card" "card session <key>" "answeredHere" "Never open a browser for a card"; do
+    lacks "$out" "$gone"
+  done
 }
-cards_say
+asks_say
 has "$out" "which crew raises itself, in your name, once the bolt reads proven"
 lacks "$out" "two or three plain sentences"; lacks "$out" "post its review card"
-ok "a conductor's cards say the document's own words, the link and the bolt first, and no path"
-for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" \
+ok "a conductor asks the user its own questions under a key of its own, once the chain of command has not answered them"
+for want in "idempotencyKey" "create-area:" "pendingyou hold" \
   "keyed \`land/<bolt>\`, which crew raises itself" "Land bolt <bolt>. The user approved it on Pending You." \
   "crew raises its landing card, and the merge's wait that found the bolt proven prints the line that adopts it" \
   "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." "Pending You gives that card back" \
@@ -103,10 +106,10 @@ for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "wh
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
   "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
 for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
-for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" \
+for want in "crew card session" "crew card wait" \
   "crew raises a proposal's card itself, in your name, when \`$CREW/plugin/bin/crew plan propose\` accepts the proposal" \
   "changes it when you rewrite the proposal with \`--replaces\`, in place while it waits on the user and as a new version following the one they answered" "closes it with what was applied when the proposal is approved" \
-  "You post, change and close no proposal card, and never run \`$CREW/plugin/bin/crew plan card\`" \
+  "You post, change and close no proposal card." \
   "call get_request (requestId req_…, name wldn-planner)" "crew raises its card in your name" \
   "a dropped one unticked as \"Keep <unit>\"" "a lone row is the choice of its two sides" \
   "so each new unit's \`Do\` carries its direction" "crew plan answer <n> <question> <box>... --label wldn" \
@@ -118,9 +121,9 @@ for want in "crew card session" "crew card wait" "answeredHere" "Never open a br
 for gone in "Post its \`card\` as it is" "crew refuses a proposal's card in any other form" "close the old proposal's card" \
   "\`units-<k>\` and the units left ticked" "update its card to say"; do lacks "$out" "$gone"; done
 lacks "$out" "offers approval"; lacks "$out" "exactly as the user read them"; lacks "$out" "not the page as a file"
-cards_say
+asks_say
 lacks "$out" "Its words are the proposal's case and each of its changes in a line"
-for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\` of the first proposal it was rewritten from" \
+for want in "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\` of the first proposal it was rewritten from" \
   "or answers your card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
   "Pending You gives that card back"; do
   has "$out" "$want"
@@ -182,8 +185,8 @@ for want in "crew raises its card in your name, with those notes and steps on it
   "one at a time on an environment, each following the one before" "you post and close no step card" \
   "ops quiet <env> --label wldn\` exits 0" "when they pick skip, run the row's \`decline\` command"; do has "$out" "$want"; done
 for gone in "Post its card under that key" "and close the card"; do lacks "$out" "$gone"; done
-for want in "$lost_card" "reads \"not found\"" "under the row's key" "posted again by nobody"; do has "$out" "$want"; done
-has "$out" $'A landing is never that word.\n\nA card of yours is lost when it reads'
+asks_say
+has "$out" $'A landing is never that word.\n\n## Asking the user\n\nA question of yours for the user'
 expect_fail "no definition 'conductor' for a main level" crewpy brief wldn conductor
 ok "every main-level brief prints for wldn with no unfilled token"
 
@@ -275,6 +278,8 @@ done
 for gone in "If it is waiting on a question for the user, leave it for the user" "When its agent settles, merge it" "tell swb-1-ops \"Deploy"; do
   lacks "$out" "$gone"
 done
+has "$out" "a wait may also say what sluice recorded of the stage's submission: \`<stage> on <unit>: sluice says of <agent>'s submission to <branch>: conflict #<n> on <its paths>; the wait goes on until the stage ends\`"
+has "$out" "It is no answer: the stage's agent has sluice's outcome too and takes it in the stage"
 for role in construct coder verify; do
   expect_ok crewpy brief swb-1 $role
   has "$out" 'needs "<what you tried and what you need>"` and end your turn'
@@ -285,7 +290,7 @@ expect_ok crewpy brief swb-1 ops
 has "$out" 'tell swb-1-conductor "<what you wait on, and why>"`'; lacks "$out" "needs \"<what you tried"; lacks "$out" "proof-<bolt>"
 expect_ok crewpy brief swb-1 verify
 has "$out" "unchanged and whole"; has "$out" "crew ends the stage once it is there"
-ok "the conductor waits for every stage through crew and never reads a pane for its outcome; every stage stops short with crew needs, and ops tells the conductor"
+ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor"
 
 # A landing that conflicts lands nothing and goes back to the team as a fix that takes main into the bolt (plan.8,
 # teams.5, record 0026): main-ops submits the bolt with crew bolt submit and passes on sluice's words, the conductor
@@ -322,14 +327,18 @@ done
 lacks "$out" "work the Proof in dev list"; lacks "$out" "proven again"; lacks "$out" "Left for the user"
 ok "a landing's conflict becomes a fix that takes main into the bolt, submitted as any fix; the bolt's proof is its verification, and ops proves nothing"
 
-# A team's cards are its conductor's (briefs.11): ops and every stage post no card and make no area, the landing card
-# asks only for the landing once the bolt's verification is green, a step for the user being a deploy's, a note naming
-# a defect is a fix, and the card discipline the planner and the conductor share says crew refuses any other key.
+# A question goes up a chain of command (briefs.11, record 0031): every stage and a team's ops post no card and make no
+# area, their conductor answering or asking whoever can, and the dispatcher asks through the planner; the landing card
+# asks only for the landing once the bolt's verification is green, a step for the user being a deploy's, and a note
+# naming a defect is a fix.
 for role in construct coder verify; do
   expect_ok crewpy brief swb-1 $role
-  has "$out" "Post no Pending You card and make no area: your team's cards are its conductor's, and crew refuses any other."
+  has "$out" "Post no Pending You card and make no area, whatever a Pending You reminder in your session says: your conductor answers what you need or asks whoever can, the user last, and crew refuses a card from you."
 done
-expect_ok crewpy brief swb-1 ops; has "$out" "post no card: your team's cards are its conductor's, and crew refuses any other"
+expect_ok crewpy brief swb-1 ops
+has "$out" "post no card and make no area, whatever a Pending You reminder in your session says: your conductor answers it or asks whoever can, the user last, and crew refuses a card from you"
+expect_ok crewpy brief wldn dispatcher
+has "$out" "Post no Pending You card and make no area, whatever a Pending You reminder in your session says: a question of yours for the user goes to the planner, \`$CREW/plugin/bin/crew tell wldn-planner \"<what you need, and why>\"\`, which answers it or asks the user if it must, and crew refuses a card from you."
 expect_ok crewpy brief swb-1 conductor
 for want in "keyed \`land/<bolt>\`, which crew raises itself, in your name, once the bolt reads proven" \
   "It is an approval of the landing alone" "never a question on this one" \
@@ -338,11 +347,8 @@ for want in "keyed \`land/<bolt>\`, which crew raises itself, in your name, once
 done
 lacks "$out" "Left for the user"; lacks "$out" "the card asks them first"
 lacks "$out" "ops posts"; lacks "$out" "ops's card"
-for brief in "swb-1 conductor" "wldn planner"; do
-  expect_ok crewpy brief $brief
-  has "$out" "crew refuses a card you post under any key but a rail row's of your own, and an area under any key but \`create-area:<owner>/<kit>\`, and its refusal names the key to use."
-done
-ok "ops and every stage post no card, the landing card asks only for the landing once the verification is green, and the card discipline says crew refuses any other key"
+for brief in "swb-1 conductor" "wldn planner" "wldn main-ops" "wldn design"; do expect_ok crewpy brief $brief; asks_say; done
+ok "ops, every stage and the dispatcher post no card, the four that ask carry one question discipline, and the landing card asks only for the landing once the verification is green"
 
 # Units build at once and are reviewed in batches (teams.12 to teams.14, briefs.1, briefs.2, briefs.4, briefs.12): the
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
@@ -376,9 +382,7 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "go to every unit's conductor, saying they named no unit you could tell" \
   "Never split, reword or summarize the user's words" "you never run a stage" "Never answer a batch card yourself" \
   "posted before crew raised one card per batch, is yours as it was" \
-  "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back" \
-  "A batch's card and its one reading session are crew's: crew raises them in the planner's name when the reviewer's summary is delivered, and no agent posts a batch card or starts its session." \
-  "A batch's card is answered by the card or its session, whichever the user sends first: \`$CREW/plugin/bin/crew card wait batch/<n> --label wldn\` prints the user's notes from either, and crew closes the card and ends its session"; do
+  "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back"; do
   has "$out" "$want"
 done
 for gone in "of at most five units" "which need notes?" "one in words for the notes" "A unit not picked is fine" \
@@ -473,13 +477,14 @@ for want in "Every decision record you write, and every amendment you make to on
   "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "wt submit main --no-remove" \
   "<the kit's folder>/places/design-<topic> origin/main\`" "you level nothing" "then \`git merge origin/main\`" \
   "once its \`.config/sluice.toml\` names a policy for main" \
-  "run \`crew record … --proposed\` for each proposed record or amendment on your kits' main that has none open" \
+  "Run \`crew record … --proposed\` for each proposed record or amendment on your kits' main that has none open" \
+  "At your start, once you have called \`whoami\` and \`list_pending\` as *Asking the user* says, read \`$CREW/plugin/bin/crew rail --label wldn\`" \
   "Never run \`npx pendingyou\` or \`pendingyou hold\`" "leave every other card alone" \
   "A record you write or amend is proposed until the user accepts it" "quotes the user's words as their decision"; do
   has "$out" "$want"
 done
 for gone in "record/<kit>/<number>/<commit>" "The record's card is the one card you post" "post a new card for the new version" \
-  "Close the card with \`ack_answer\`" "create-area:<owner>/<kit>" "Accept decision record <number>"; do
+  "Close the card with \`ack_answer\`" "Accept decision record <number>"; do
   lacks "$out" "$gone"
 done
 for brief in "wldn planner" "swb-1 conductor"; do expect_ok crewpy brief $brief; lacks "$out" "record/<kit>"; done

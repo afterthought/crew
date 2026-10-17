@@ -1,8 +1,8 @@
 """cards.py: crew's Pending You cards. The six of crew's own, built from the facts of their events (record 0031, briefs.13):
 the proposal's, the batch's, the landing's, the deploy's, the step's and the record's, in the words rule's forms, each
-following the card its thing follows; and a crew agent's card, posted, changed, closed and read through crew
-(briefs.16, ADR 0005 as amended 2026-10-12). plan.py's act, row_card_post, row_card_change and row_card_close, sends
-crew's own.
+following the card its thing follows, and read by its owner through crew card read (briefs.16). plan.py's act,
+row_card_post, row_card_change and row_card_close, sends them; an agent's own question goes through Pending You's own
+tools in its session, and crew's card hook records it.
 
 crew speaks to Pending You as the asking assistant through the fleet's `pendingyou mcp --app claude-code`, a stdio MCP
 server that passes each line on to Pending You under the host's sign-in: one JSON-RPC message a line each way, with the
@@ -13,7 +13,7 @@ refusal is a result marked isError, whose first text block is Pending You's word
 
 Everything here but Bridge and the reads named so is a decision: a function of plain facts that starts no process
 (code.7)."""
-import importlib.machinery, importlib.util, json, os, pathlib, re, select, subprocess, time
+import json, os, re, select, subprocess, time
 
 import picture
 from crew import fail
@@ -25,55 +25,10 @@ CALL = 60  # seconds a call waits for its reply: what Claude Code's own transpor
 CLOSE = 5  # seconds the bridge is given to end once its input is closed
 SIGNED_OUT = -32001  # the bridge's code when this computer has no sign-in, or its sign-in has ended
 WORDS = 300  # the most of Pending You's words a refusal carries, as its CLI cuts them
-# What crew sets on a card, never the agent: the key is the card key, the session the agent's, the area its kit's.
-CREW_FIELDS = ("idempotencyKey", "areaId", "session")
-# What crew sets on a change, read from the run record and from Pending You.
-CHANGE_FIELDS = ("requestId", "name", "expectedVersion")
 REQUEST_ID = re.compile(r"^req_[A-Za-z0-9-]{1,40}$")
 AREA_ID = re.compile(r"^prj_[A-Za-z0-9_-]{1,80}$")
 TINTS = ("peri", "sage", "peach", "sun", "lilac", "sky", "mint", "rose")
 DAYS = 30  # how far back the run record is read for a key's card, as the card hook reads a close's post
-HOOK = pathlib.Path(__file__).resolve().parent.parent / "hooks" / "cards"
-_hook = None
-
-
-def hook():
-    """crew's card hook, loaded as a module: its key and form checks are the ones `crew card post` and `change` apply,
-    so a card refused through Pending You's tools is refused through crew alike, until every-crew-card-goes-through-crew
-    builds a row's card instead."""
-    global _hook
-    if _hook is None:
-        loader = importlib.machinery.SourceFileLoader("crew_card_hook", str(HOOK))
-        spec = importlib.util.spec_from_loader(loader.name, loader)
-        _hook = importlib.util.module_from_spec(spec)
-        loader.exec_module(_hook)
-    return _hook
-
-
-def hook_refusal(tool, given):
-    """The hook's words refusing a Pending You call it is given before it runs, or None: as Claude Code would hand it
-    the call, with no session id, so the agent is the one CREW_AGENT and CREW_LABEL name."""
-    return hook().refusal({"tool_name": f"mcp__pendingyou__{tool}", "tool_input": given, "session_id": None})
-
-
-def object_of(key):
-    """The run record's object for a card key, as the hook records it: the row's, or None for a key that is no row's."""
-    return hook().keyed(key)[1]
-
-
-# ------------------------------------------------------------------------------------------------- decisions
-
-def given(text, what, crew_fields):
-    """The card or change an agent gives on standard input, as a JSON object; refused when it is not one, or when it
-    sets a field crew sets itself."""
-    try:
-        got = json.loads(text)
-    except ValueError as e:
-        fail(f"crew could not read the {what} on standard input as JSON: {e}")
-    isinstance(got, dict) or fail(f"the {what} on standard input is not a JSON object")
-    mine = [f for f in crew_fields if f in got]
-    not mine or fail(f"the {what} gives {', '.join(mine)}, which crew sets itself: leave {'it' if len(mine) == 1 else 'them'} out")
-    return got
 
 
 def remote_of(url):
@@ -179,12 +134,14 @@ def lost(words):
 
 
 def lost_said(key, card, words):
-    """The refusal of a change, close or read of a lost card: the card is still the user's to see, but no longer its
-    owner's to reach, so the row's card is posted again under the key, the summary saying the older copy is dead."""
+    """The refusal of a read of a lost card: the card is still the user's to see, but no longer its owner's to reach. A
+    row's card, while its row still waits, the rail's next read posts again under the key, the summary saying the older
+    copy is dead; a question its asker asks again, if it still matters."""
+    again = ("While the row still waits, the rail's next read posts it again under its key, its summary saying an older "
+             "copy is dead and to dismiss it in the app" if row_object(key) else
+             "Ask it again if it still matters, saying in it that an older copy is dead and to dismiss it in the app")
     return (f"card {card} under {key} is lost to its owner (Pending You: \"{words}\"): it was posted under another "
-            "sign-in than this host's, and the user may still see it and answer it, to nobody. While the row still waits, "
-            f"post its card again with crew card post {key}, its summary saying an older copy is dead and to dismiss it in "
-            "the app")
+            f"sign-in than this host's, and the user may still see it and answer it, to nobody. {again}")
 
 
 def version_of(got, card):

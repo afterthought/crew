@@ -27,8 +27,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | see the whole flow of a partition, by phase | `crew board [--label <label>]` |
 | print the link of the plannotator session a card links, which crew starts with a batch's card and a long proposal's, starting it again when it no longer runs; a batch card's one, on the whole batch, on the main level's host, a proposal's only for one of more than fifteen new units, and `<unit>` only for a batch card posted before a batch was one card (`batch/<n>-<k>`) | `crew card session <key> [<unit>]` |
 | wait for the user's decision in a card's session, and for a batch's card on the card too, which it then closes; or end the session by hand | `crew card wait <key> [<unit>]`, `crew card end <key> [<unit>]` |
-| post a card to the user as the asking assistant, with no Pending You tools in the session, the card's JSON on standard input; or change the one held under the key | `crew card post <key>`, `crew card change <key>` |
-| close a card once its answer is acted on, or withdraw it; read where it stands and the user's answer, closing an approval they declined | `crew card close <key> --outcome "<line>"`, `--reason "<line>"`, `crew card read <key>` |
+| read where a card stands and the user's answer, closing an approval they declined | `crew card read <key>` |
 | see whether a partition's review batch is due or running, and start or wait for its reviewer as the planner does | `crew rail [--label <label>]`, `crew review <label> [--wait]` |
 | start a team that is not up | `crew up <team>` |
 | end everything a team has, close its panes, stand it up fresh | `crew rebuild <team>` |

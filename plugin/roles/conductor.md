@@ -55,6 +55,8 @@ After starting a stage, run `{{TEAM_CMD}} unit wait <unit>` as a background comm
 - **No longer running**: the agent is gone with nothing delivered. Tell the user the same way.
 - **Still running** after the wait's hour, working or waiting on work of its own: wait again.
 
+Before its answer, a wait may also say what sluice recorded of the stage's submission: `<stage> on <unit>: sluice says of <agent>'s submission to <branch>: conflict #<n> on <its paths>; the wait goes on until the stage ends`, or `blamed #<n> on <combination>` when a run of the checks failed with it. It is no answer: the stage's agent has sluice's outcome too and takes it in the stage, as its brief says, so keep waiting for the answer.
+
 The planner may drop a unit, or your team's bolt. crew then frees the slots and removes the worktrees and branches of what was dropped. A slot whose agent was working at the time is freed by the next `{{TEAM_CMD}} status {{TEAM}}` once that agent settles. A worktree with uncommitted changes is kept, of dropped work and of merged work alike, and crew names it on every read until it is clean: tell the user once which worktree it is and what its work was. The changes are the user's to keep or discard, and crew removes the worktree at its first read after they are gone. crew removes every worktree through the kit's own `wt remove`, so the kit's remove hooks tear down what it stood up for that worktree; a worktree is also kept, with its branch, when such a hook fails or waits for the user's approval on the host: tell the user once which worktree it is and what crew named. Clearing the cause, the failing hook's or the approval, is the user's: never approve or skip the kit's hooks yourself. crew removes the worktree at its first read after.
 
 ## The user's notes
@@ -69,9 +71,9 @@ The rail's row for your bolt is yours:
 
 - your bolt's landing card, keyed `land/<bolt>`, which crew raises itself, in your name, once the bolt reads proven: every unit and chore merged, every unit's latest change in a batch, the bolt's verification green and no fix in flight on it. crew changes it in place when a merge moves the bolt's head, withdraws it when you start a fix on the bolt, raises it again, following the one the fix held, once the bolt reads proven again, and closes it when the bolt lands. You post, change and close no landing card. Adopt it with the line your merge's wait prints, `call get_request (requestId <id>, name {{SELF}})`, or the one `crew tell` brings you when a rail read raised it, and you are woken by the user's answer. It is an approval of the landing alone, risk high: a step only the user can take or check is an after-deploy step on a deploy's card, never a question on this one. When the rail's row names units whose latest change has not yet been in a batch, the card waits for them: crew makes a batch due for them at once.
 
-{{CARDS}}
-
 An approval on the landing card tells `{{MAIN_OPS}}`: `{{TEAM_CMD}} tell {{MAIN_OPS}} "Land bolt <bolt>. The user approved it on Pending You."`. A note on the landing card that names a defect is never a landing: start a fix on the bolt in the note's words, which withdraws the card, held for the fix, and crew raises a new one once the fix has merged and the bolt reads proven again.
+
+{{CARDS}}
 
 ## Changing a unit in flight
 

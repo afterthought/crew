@@ -6,15 +6,15 @@ Each decision on the rail reaches the user as one Pending You card from the agen
 ## Requirements
 
 ### Requirement: Each rail row has a card key
-Each rail row SHALL have one card key, derived from the row's state: `proposal/<n>` for an open proposal, `batch/<n>` for review batch n, and `land/<bolt>` for a bolt whose every unit has merged, one key for the bolt whatever its head (record 0031). A row's owner SHALL post its card with that key as the card's idempotency key. There SHALL be no review row and no verify row, and no `review/<unit>/<head>` or `verify/<unit>/<stamp>` key. A batch whose cards were posted under `batch/<n>-<k>` before one card per batch was built SHALL keep a row for each of those keys until its card closes, and SHALL have no `batch/<n>` row.
+Each rail row SHALL have one card key, the thing's and not its version's: `proposal/<n>` for a proposal chain, `n` its first proposal; `batch/<n>` for review batch n; `land/<bolt>` for a bolt proven; `deploy/<env>` for a `manual` environment's open offer; `op/<env>/<n>` for a step that waits on the user; `record/<kit>/<number>` for a record proposed. crew SHALL post the row's card with that key as its idempotency key. A question's card has no row and a key of its asker's own. There SHALL be no review row and no verify row. A batch whose cards were posted under `batch/<n>-<k>` before one card per batch was built SHALL keep a row for each of those keys until its card closes, and SHALL have no `batch/<n>` row.
 
 #### Scenario: A batch of seven
 - **WHEN** review batch 3 holds seven changes and no card has been posted for it
 - **THEN** the rail has one batch row for it, keyed `batch/3`, holding all seven units
 
 #### Scenario: A batch posted as two cards before
-- **WHEN** the run record holds the planner's posts of batch 2's cards under `batch/2-1` and `batch/2-2`, and `batch/2-1` has closed
-- **THEN** the rail has one row for batch 2, keyed `batch/2-2`, holding its units as before, and the planner may not post `batch/2`
+- **WHEN** the run record holds the planner's posts of batch 2's cards under `batch/2-1` and `batch/2-2` from before one card per batch, and `batch/2-1` has closed
+- **THEN** the rail has one row for batch 2, keyed `batch/2-2`, holding its units as before, until its card closes
 
 #### Scenario: A bolt proven again on a new head
 - **WHEN** bolt `y` was ready to land at head `abc1234`, a note on its landing card named a defect, and a fix landed on the bolt at `def5678` with its verification green
@@ -28,28 +28,9 @@ Each rail row SHALL have one card key, derived from the row's state: `proposal/<
 - **WHEN** unit `u`'s verify saves its report `verify-u-20261013-1200.md`
 - **THEN** the rail has no row for it, and a card keyed `verify/u/20261013-1200` belongs to no row
 
-### Requirement: The owner of a row posts its card
-When an agent crew started has Pending You's tools, it SHALL post one card for each row it owns: the planner for each proposal it opens and for each review batch, and a conductor for its bolt once every unit and chore has merged and its verification is green. It SHALL post no second card for a row that has one open to it; a card lost to it is not, and is posted again as *A row's card lost to its owner is posted again* says. A team's cards SHALL be its conductor's: its ops and every stage agent SHALL post no card, and no crew agent SHALL post a card that is not a row's. No card SHALL be posted for a verify report, which is no row.
-
-#### Scenario: A proposal opened
-- **WHEN** the planner opens proposal 4 in a session with Pending You's tools
-- **THEN** one card keyed `proposal/4` is open, asked by the planner
-
-#### Scenario: A batch due
-- **WHEN** the reviewer delivers batch 3 of seven units
-- **THEN** one card keyed `batch/3` is open, asked by the planner, and no conductor posts one
-
-#### Scenario: No Pending You
-- **WHEN** a conductor's session has no Pending You tools and its bolt's verification is green with every unit merged
-- **THEN** no card is posted, the rail row is as before, and the conductor tells the operator agents it waits on the user
-
-#### Scenario: A verify report saved
-- **WHEN** a unit's verify saves its report, which marks two findings fix
-- **THEN** its conductor posts no card and asks the user nothing, and runs code once more with the report's path
-
-#### Scenario: A proof leaves the user a check
-- **WHEN** a bolt's changes leave a check only the user can make on their Mac
-- **THEN** no proof asks it and ops posts no card: it is an after-deploy step on a deploy's card, and the bolt's landing card asks only for the landing
+#### Scenario: A proposal replaced
+- **WHEN** proposal 4 is replaced by proposal 5
+- **THEN** the rail's row for proposal 5 has the key `proposal/4`, and its card is the chain's
 
 ### Requirement: A card says whose it is and where it belongs
 crew SHALL ask each card in the name of the role whose row it is, with the host as the session's machine and the kit's checkout as its folder; a question's card SHALL be asked in its asker's crew name by the asker's session. A card SHALL be filed in the area of its kit, found by the kit's git remote, in the group named for its partition; crew SHALL create a kit's area that does not exist with the key `create-area:<owner>/<kit>`, and an agent SHALL create one under no other key and never a group. A card's title SHALL be the question, read cold, naming the thing.
@@ -97,19 +78,19 @@ A landing's card SHALL be an `approve` of risk high, not reversible, so it is ap
 - **THEN** Pending You refuses it as high risk, and the bolt does not land
 
 ### Requirement: An answer wakes the owner, which acts on the user's word
-An answer on a card SHALL be acted on by the agent that posted it, when it is woken in its session, and by no other: the planner approves, replaces or drops the proposal; the conductor approves the unit or runs construct again with the user's words, or asks main-level ops to land the bolt. The agent SHALL then close the card with a one-line outcome.
+An answer on a crew card SHALL be acted on by the role whose row it is, woken in its session by the card it adopted, and by no other: the planner applies or rewrites the proposal; the conductor tells main-level ops to land, or starts a fix on a defect note; main-level ops runs the deploy's approval or the step's state; the design agent sets the record's status. crew SHALL then close the card at that act's event.
 
 #### Scenario: A proposal approved from the phone
 - **WHEN** the user approves the card for proposal 4 on the phone
-- **THEN** the planner is woken, runs `crew plan approve 4`, closes the card with what was applied, and the rail's proposal row is gone
+- **THEN** the planner is woken, runs `crew plan answer` and `crew plan approve 4`, which closes the card with what was applied, and the rail's proposal row is gone
 
 #### Scenario: Changes asked for on a review card
-- **WHEN** the user answers a review card with a note asking for changes
-- **THEN** the conductor runs construct again with the note's words and closes the card
+- **WHEN** the user writes a note on a batch's card asking for changes to unit `x`
+- **THEN** the planner's wait returns the note, the conductor runs construct again with its words, and no approval is asked
 
 #### Scenario: Landing approved
-- **WHEN** the user approves the landing card for bolt `y`
-- **THEN** the conductor tells the partition's main-level ops to land `y` on the user's word, and main-level ops lands it
+- **WHEN** the user approves `land/y` and the conductor's session wakes
+- **THEN** the conductor tells main-level ops to land `y` on the user's word, main-level ops lands it, and `crew bolt land` closes the card
 
 ### Requirement: An agent never runs Pending You from npm or waits on a hold
 An agent crew started SHALL adopt a card crew posted by calling Pending You's `get_request` with the card's id under its own name, as the line crew prints or tells it says, from which the fleet's wake mod adopts the card and wakes the agent's session once the card is answered and the session is idle; it SHALL run no `pendingyou` command, `hold` and `watch` among them, none through `npx`, and wait on no hold. After a fresh start it SHALL read `crew rail` for its open cards and adopt each the same way.
@@ -118,35 +99,28 @@ An agent crew started SHALL adopt a card crew posted by calling Pending You's `g
 - **WHEN** a conductor restarts while the user has answered its landing card
 - **THEN** at its start `crew rail` names the card and its id, the conductor adopts it and acts on the answer
 
-### Requirement: crew names the card a change ends
-When crew records a change that ends a row, it SHALL name that row's card to its owner: in the command's output when the owner made the change, and by a notice when anyone else did. That covers a proposal approved, dropped or replaced; a unit approved, built again, merged, moved off its team or dropped; and an amended intent. A bolt landed or dropped tells its conductor so, and names no card: crew closes the bolt's landing card itself.
-
-#### Scenario: The user approves a unit from the rail's shell
-- **WHEN** the user runs `crew unit approve x --label wldn`
-- **THEN** swb-1-conductor is told that unit `x` was approved and to close its card for `review/x`
-
-#### Scenario: The conductor builds a unit again
-- **WHEN** swb-1-conductor runs `crew unit run x construct "<words>"` on a unit in review
-- **THEN** the command's output names the card for `review/x` to close
-
-#### Scenario: A bolt lands
-- **WHEN** main-level ops runs `crew bolt land y`
-- **THEN** the conductor of the team that held `y` is told it landed, and crew closes its landing card on the team's host
-
 ### Requirement: A crew agent's card acts are in the run record
-Each card a crew agent posts, updates, withdraws or closes in Pending You, through Pending You's tools in its session or through `crew card`, SHALL be an entry in its partition's run record, naming the row's object, the card's id in `Card`, and the key in `Key` when it is a row's key. Through `crew card` the card's id SHALL be read from Pending You's own reply. An entry SHALL NOT hold a card's title, summary or any other text written on it.
+Each card crew posts, changes, withdraws or closes, and each a crew agent posts, changes or closes through Pending You's tools, SHALL be an entry in the partition's run record naming the row's object or the asker, the card's id in `Card` and the key in `Key`, crew's read from Pending You's own reply, an agent's from the tool's result; an agent's act whose result names no card SHALL be recorded on the agent with `State: unread`, and `crew rail` SHALL list each such act of the last 14 days with its agent, its act and its time. An entry SHALL NOT hold a card's title, summary or other text.
 
 #### Scenario: A card posted and closed
-- **WHEN** swb-1-conductor posts the card `review/x/abc1234` and later closes it
-- **THEN** the run record has a `card.post` entry on `unit/x` with that key and the card's id, and a `card.close` entry with the same id
+- **WHEN** crew raises `land/y`'s card `req_l1` and later closes it at the landing
+- **THEN** the run record has a `card.post` entry on `bolt/y` with that key and `req_l1`, and a `card.close` entry with the same id
 
 #### Scenario: A card posted through crew
-- **WHEN** swb-1-conductor runs `crew card post land/b1/<head>` and Pending You answers with the card `req_b1`
-- **THEN** the run record has a `card.post` entry on `bolt/b1` with the key `land/b1/<head>` and the card `req_b1`, and nothing written on the card
+- **WHEN** `crew ops offer srv --to abc1234` runs and Pending You answers with the card `req_d1`
+- **THEN** the run record has a `card.post` entry on `env/srv` with the key `deploy/srv` and the card `req_d1`, and nothing written on the card
 
 #### Scenario: The user's own sessions
 - **WHEN** a Claude session crew did not start posts a Pending You card
 - **THEN** nothing is written to crew's run record
+
+#### Scenario: A question posted
+- **WHEN** swb-1-conductor's `post_request` under `ask/swb-1-conductor/hold-the-macs` returns `req_q1`
+- **THEN** the run record has a `card.post` entry on swb-1-conductor with that key and `req_q1`
+
+#### Scenario: A question whose reply names no card
+- **WHEN** swb-1-conductor's `post_request` under `ask/swb-1-conductor/hold-the-macs` returns a result that names no card
+- **THEN** the run record has a `card.post` entry on swb-1-conductor with that key and `State: unread`, and `crew rail` lists it with swb-1-conductor, the act and its time
 
 ### Requirement: The rail shows each row's card
 `crew rail` SHALL print, under each row, the row's card key, whether a card with that key is open, its id and whose it is, and after the groups the open question cards, each with its key, which names it, its asker and its age, and the open record cards apart. A card is open from its `card.post` entry until a `card.close` entry for the same card, or until a later `card.post` under the same key names another card, which is then the row's card while the older is taken as lost.
@@ -220,164 +194,24 @@ A crew card's words SHALL be prose the phone wraps, in short paragraphs, cut at 
 - **WHEN** crew raises batch 7's card for four units
 - **THEN** each unit's paragraph is the reviewer's opening paragraph as prose in its summary and details, with no code block in its words, the reviewer's summary rides its face as inline Markdown, and the card wraps on the phone
 
-### Requirement: A row's card is closed when the row's key changes
-When a row's key changes because what it asks changed, a unit built again, the row's owner SHALL close the card it holds under the old key with a one-line outcome, and post the row's card under the new key once the row asks again. A landing's key is its bolt's and does not change: when a merge moves the bolt's head while its landing card is open, crew SHALL change the card in place, and a card under an older head's key, `land/<bolt>/<head>` from before, SHALL belong to no row.
-
-#### Scenario: A fix moves a bolt with an open landing card
-- **WHEN** the landing card `land/y` is open, a fix is started on bolt `y`, and the fix merges, moving its head to `def5678`
-- **THEN** the card was withdrawn when the fix started, held for it, and crew raises a new card under `land/y`, following it, once `y` reads proven at `def5678`
-
-#### Scenario: A landing card forgotten under an old head
-- **WHEN** a card keyed `land/y/abc1234`, posted before the key was the bolt's, is still open while bolt `y` waits to land
-- **THEN** `crew rail` shows `land/y` under the landing row, and the card under `land/y/abc1234` belongs to no row, for the rail's read to close
-
-#### Scenario: A merge moves a bolt with an open landing card
-- **WHEN** the landing card `land/y` is open and a merge into bolt `y` moves its head to `def5678`
-- **THEN** crew changes the card in place, "Its head is now def5678", and posts no second card
-
-### Requirement: No row's card takes another kind
-No row's card SHALL be a step for the user to take (`action`), a notice (`fyi`), a text question (`text`) or a review (`review`), and no row's card but a proposal's SHALL be a grouped card of questions. No card SHALL hold a text question.
-
-#### Scenario: A review card as a review
-- **WHEN** a conductor posts a card keyed `review/u/abc1234` as a `review` card
-- **THEN** crew refuses it, saying a review's card is an approval with a note for changes
-
-#### Scenario: A proposal card asking for words
-- **WHEN** the planner posts the card for proposal 5 with a third question of kind `text` for feedback
-- **THEN** crew refuses it, saying the note is the place for words
-
-### Requirement: crew refuses a row's card in another form
-Before Pending You's `post_request` runs in a session crew started, crew SHALL refuse a card whose key is a row's and whose form is not that row's, naming the form the row's card takes. A proposal's card SHALL be refused when its unit questions do not hold, each exactly once, the units the proposal adds or moves into a bolt. A refused call never reaches Pending You. When crew cannot check a card it would check, its own input or the proposal unreadable among the reasons, it SHALL refuse it and name what failed.
-
-#### Scenario: A landing card posted as a step
-- **WHEN** a conductor posts a card keyed `land/y` as an `action` with the landing command as its step
-- **THEN** crew refuses it before Pending You is called, saying a landing's card is an approval marked high stakes whose yes has the conductor tell main-level ops to land, and no card is posted
-
-#### Scenario: A landing card not marked high stakes
-- **WHEN** a conductor posts a card keyed `land/y` as an approval without `highStakes`
-- **THEN** crew refuses it, saying the landing card is marked high stakes
-
-#### Scenario: Input crew cannot read
-- **WHEN** the hook is given input before `post_request` that is not a JSON object
-- **THEN** crew refuses the call, saying it could not check the card's form and why, and no card is posted
-
-#### Scenario: A card in the row's form
-- **WHEN** the planner posts a card keyed `proposal/4`, a proposal that adds no unit, as an `approve` card with no options
-- **THEN** crew lets it through, and records it after it is posted, as before
-
-#### Scenario: A proposal card missing a new unit
-- **WHEN** the planner posts a card keyed `proposal/5`, which adds `b` and `c`, whose unit question lists only `b`
-- **THEN** crew refuses it, naming `c` as a new unit the card does not ask about
-
-#### Scenario: A proposal card with new units posted as a plain approval
-- **WHEN** the planner posts a card keyed `proposal/5`, which adds `b` and `c`, as an `approve` card with no questions
-- **THEN** crew refuses it, saying the card asks `plan` and a question of its new units, as `crew plan card 5` prints it
-
-### Requirement: crew refuses a change that takes a row's card out of its form
-Before `update_request` runs on a card a crew agent on this host posted under a row's key, crew SHALL refuse a change that clears a landing card's high stakes, gives options to an approval, or gives steps to any card but a landing's.
-
-#### Scenario: A landing card loses its high stakes
-- **WHEN** a conductor updates its open landing card with `highStakes` false
-- **THEN** crew refuses the update, and the card stays high stakes
-
-### Requirement: crew checks only a row's card in a crew session
-crew SHALL check only sessions it started: any card in a session crew did not start, and a tool of another server, SHALL pass unchecked. In a session crew started, every card is checked: a row's card for its form, and every key against the rows the agent owns, as the requirement on keys below says.
-
-#### Scenario: The user's own session
-- **WHEN** the user, in a session crew did not start, posts any card under any key
-- **THEN** crew checks nothing and lets it through
-
-### Requirement: crew refuses a crew agent's card under any key but a row's of its own
-Before a Pending You card is posted from a session crew started, crew SHALL refuse it unless its idempotency key is the card key of a rail row the agent owns: for the planner, `proposal/<n>` for an open proposal of its partition; for a conductor, `review/<unit>/<head>` for a unit of the bolt its team holds, or `land/<bolt>` for that bolt; `verify/<unit>/<stamp>` is no agent's. Every other crew agent SHALL own no key. A refused card SHALL NOT reach Pending You, and its refusal SHALL name the keys to use.
-
-#### Scenario: ops posts a card
-- **WHEN** brd-2-ops calls Pending You's `post_request` under any key
-- **THEN** the call is refused before it reaches Pending You, and the refusal says ops owns no key: a team's cards are its conductor's, and what is left for the user goes in the proof file
-
-#### Scenario: A conductor posts under a key of its own making
-- **WHEN** brd-2-conductor, whose team holds bolt `y`, posts a card keyed `gateway-check-y`
-- **THEN** the call is refused, and the refusal names `land/y` and the review keys of `y`'s units, read from `crew rail`
-
-#### Scenario: A conductor posts another team's row
-- **WHEN** brd-2-conductor posts a card keyed `review/z/abc1234` for a unit `z` of a bolt another team holds
-- **THEN** the call is refused, naming the keys that are brd-2-conductor's
-
-#### Scenario: The planner posts a proposal's card
-- **WHEN** wldn-planner posts a card keyed `proposal/4` while proposal 4 of `wldn` is open
-- **THEN** the call goes through, and the card is recorded as before
-
-#### Scenario: A conductor posts a verify report's card
-- **WHEN** brd-2-conductor, whose team holds bolt `y`, posts a card keyed `verify/u/20261013-1200` for a unit `u` of `y`
-- **THEN** the call is refused before it reaches Pending You, naming `land/y`
-
 ### Requirement: The check refuses what it cannot read, and only for crew's sessions
-When crew cannot read the teams file, the plan or the proposals a card's or an area's check depends on, it SHALL refuse the call and name what it could not read. A session crew did not start SHALL NOT be checked.
+crew's hook SHALL run only in a session with `CREW_AGENT` set, and SHALL refuse a card's post, change or close, or an area's making, when it cannot read the agent's partition, the teams file, or crew's record of its cards, the run record on this host that holds the key of the card a change or close names, naming what it could not read and saying to try again later, never letting a call through on a guess. It SHALL read no plan and fetch no state branch. The user's own sessions SHALL be untouched.
 
 #### Scenario: The plan cannot be read
-- **WHEN** a conductor posts a card keyed `land/y/<head>` and the partition's state branch cannot be fetched
-- **THEN** the call is refused, naming the branch that could not be read, and the conductor posts it again later
+- **WHEN** swb-1-conductor posts a question under `ask/swb-1-conductor/hold-the-macs` while the partition's state branch cannot be fetched
+- **THEN** the call goes through: the hook reads no plan, and judges the key by its form alone
+
+#### Scenario: crew's record of its cards cannot be read
+- **WHEN** swb-1-conductor calls `cancel_request` for its card `req_q1` and the hook cannot read the partition's run record on this host
+- **THEN** the call is refused, "crew could not check this card: <why>. Try it again later.", and nothing is closed
 
 #### Scenario: The user's own session
-- **WHEN** a Claude session crew did not start posts a Pending You card or creates an area under any key
-- **THEN** crew neither checks nor refuses it
+- **WHEN** a session with no `CREW_AGENT` calls `post_request`
+- **THEN** the hook does nothing, and the call goes through as Pending You ships it
 
-### Requirement: A crew agent's card is posted through crew
-`crew card post <key>` SHALL post the card given as one JSON object on its standard input as the asking assistant, through the fleet's `pendingyou mcp --app claude-code` under the host's sign-in, and SHALL print the card's id and its link. crew SHALL set the card's `idempotencyKey` to the key, its session to the agent's crew name, this host and the folder the command runs in, and its area to the one Pending You matches to the folder's git remote, or, when none matches, the kit's area made under `create-area:<owner>/<kit>`. It SHALL refuse a card that gives any of those itself. Before anything reaches Pending You it SHALL refuse a key and a form that crew's card hook refuses, in the hook's words.
-
-#### Scenario: A landing card posted
-- **WHEN** swb-1-conductor, whose team holds bolt `b1`, runs `crew card post land/b1/<head>` in its worktree with a landing card on standard input
-- **THEN** Pending You is asked, as swb-1-conductor, to post that card under the key `land/b1/<head>`, with swb-1-conductor's name, the host and the worktree as its session and the kit's area, and the command prints the card's id and link
-
-#### Scenario: A verify card posted
-- **WHEN** swb-1-conductor runs `crew card post verify/v1/<stamp>`
-- **THEN** the command refuses in the hook's words, naming `land/b1/<head>`: a verify report is no row, and Pending You is not called
-
-#### Scenario: Posted again
-- **WHEN** swb-1-conductor runs the same post a second time
-- **THEN** Pending You gives the same card back under the same key, and no second card is made
-
-#### Scenario: A key that is not the agent's
-- **WHEN** swb-1-conductor runs `crew card post proposal/9`
-- **THEN** the command refuses in the hook's words, naming the keys that are swb-1-conductor's, and Pending You is not called
-
-#### Scenario: A card in another form than its row's
-- **WHEN** swb-1-conductor posts its landing card as a choice
-- **THEN** the command refuses, naming the form a landing's card takes, and Pending You is not called
-
-#### Scenario: A card that sets crew's fields
-- **WHEN** a card on standard input gives its own `areaId`
-- **THEN** the command refuses, saying crew sets `idempotencyKey`, `areaId` and `session` itself
-
-#### Scenario: No kit's area yet
-- **WHEN** Pending You matches no area to the worktree's remote `github.com/WilldanGroup/switchboard-kit`
-- **THEN** crew makes the area under `create-area:WilldanGroup/switchboard-kit`, named `switchboard-kit`, in the partition's group, and files the card there
-
-### Requirement: A crew agent's card is changed, closed and read through crew
-`crew card change <key>` SHALL change the card the agent holds under the key with the fields given on its standard input, at the version Pending You reports, and SHALL refuse a change that takes a row's card out of its form, as the hook does. `crew card close <key>` SHALL close it with `--outcome` once the agent has acted on its answer, or withdraw it with `--reason`, and SHALL then end its plannotator session as a close through Pending You's tools does. `crew card read <key>` SHALL print the card's status, whose turn it is and, when it is the agent's, the user's answer and words, and SHALL record nothing. The card a key names SHALL be the agent's newest card posted under it on this host that no close has closed; with none, each command SHALL refuse, naming the key.
-
-#### Scenario: A change
-- **WHEN** swb-1-conductor runs `crew card change land/b1/<head>` with a new summary and a change note
-- **THEN** Pending You is asked to change that card at the version it last reported, and a `card.update` entry names it
-
-#### Scenario: An answer read
-- **WHEN** the user has approved swb-1-conductor's landing card with a note
-- **THEN** `crew card read land/b1/<head>` prints that it is the agent's turn, the approval and the note
-
-#### Scenario: Closed on its answer
-- **WHEN** swb-1-conductor runs `crew card close land/b1/<head> --outcome "Told wldn-ops to land b1."`
-- **THEN** Pending You is told the answer was acted on at the card's version, a `card.close` entry names the card, and the card's plannotator session ends
-
-#### Scenario: Withdrawn
-- **WHEN** swb-1-conductor runs `crew card close land/b1/<head> --reason "A fix moved the bolt's head"`
-- **THEN** Pending You withdraws the card with that reason, and a `card.close` entry names it
-
-#### Scenario: A card lost to its owner
-- **WHEN** the host has signed in to Pending You again, and swb-1-conductor runs `crew card read land/b1/<head>` for a card it posted before
-- **THEN** the command refuses, saying the card is lost to its owner and to post the row's card again with `crew card post land/b1/<head>`, its summary saying an older copy is dead; and once posted again, the new card is the one the key names
-
-#### Scenario: No card under the key
-- **WHEN** swb-1-conductor runs `crew card read land/b1/<head>` and has posted no card under it
-- **THEN** the command refuses, saying swb-1-conductor holds no open card under that key
+#### Scenario: The agent's role cannot be read
+- **WHEN** a crew session's `CREW_AGENT` names no role the teams file knows and the agent calls `post_request`
+- **THEN** the call is refused, naming the agent and saying only a conductor, the planner, main-level ops and the design agent ask the user on a card, and nothing is posted
 
 ### Requirement: crew's card commands refuse what they cannot do, in the words that say why
 A card act Pending You refuses SHALL be refused in Pending You's own words and recorded as the act refused, and SHALL refuse nothing of the event it was raised for. When the host is not signed in to Pending You, or Pending You cannot be reached or does not answer within 60 seconds, the act SHALL be recorded as not posted, the command SHALL say so, and the event SHALL stand. A reply that lacks the card's or the area's id SHALL be recorded as unread, never taken as empty.
@@ -431,29 +265,6 @@ A batch's card's words SHALL name every unit of the batch with its team and hold
 - **WHEN** crew raises the card for batch 2 holding six units of two teams
 - **THEN** its background names all six with their teams and paragraphs as prose, and its one link opens the batch's session
 
-### Requirement: crew refuses a batch card in another form
-Before `post_request` or `update_request` runs in a session crew started, crew SHALL refuse a card keyed `batch/<n>` that is not in the batch card's form, or a change that takes it out of that form, naming the form: anything to answer, steps, an attachment, a code block in its words, more than one link, or a background that leaves out a unit of the batch. When crew cannot read the batch's units, it SHALL refuse and name what failed.
-
-#### Scenario: A batch card with a choice of units
-- **WHEN** the planner posts a card keyed `batch/2` as a `multi` of its units
-- **THEN** crew refuses it before Pending You is called, saying a batch's card is one notice for the whole batch with nothing to answer, and no card is posted
-
-#### Scenario: A batch card with its summary as code
-- **WHEN** the planner posts a card keyed `batch/2` as an `fyi` whose background holds a fenced code block, or with the summary attached as a `code` artifact
-- **THEN** crew refuses it, saying the summary goes in the card's words as prose, since a code block scrolls sideways on the phone
-
-#### Scenario: A batch card with a link per unit
-- **WHEN** the planner posts a card keyed `batch/2` as an `fyi` with three links, one for each unit
-- **THEN** crew refuses it, saying a batch has one reading session
-
-#### Scenario: A batch card that leaves out a unit
-- **WHEN** the planner posts a card keyed `batch/2`, whose batch holds `x1`, `x2` and `z1`, with a background naming only `x1` and `x2`
-- **THEN** crew refuses it, saying it leaves out `z1`
-
-#### Scenario: A batch card in its form
-- **WHEN** the planner posts a card keyed `batch/2` as an `fyi` whose background names `x1`, `x2` and `z1`, each with its paragraph as prose, with one link
-- **THEN** crew lets it through, and records it after it is posted, as before
-
 ### Requirement: No card of crew's asks a question in words
 None of the six cards crew builds SHALL ask a question in words: no `text` field and no question of kind `text`, since Pending You makes every question required and the card's note is where the user's words go. A question card an agent asks is its asker's and may.
 
@@ -480,11 +291,11 @@ A document's substance shown on a crew card beyond its words SHALL be inline Mar
 - **THEN** its artifacts are the units that land as text and, when sluice opened one, the pull request's link, and it carries no reading session
 
 ### Requirement: A proposal's card carries its change as text
-A proposal's card SHALL carry its change as an artifact of kind `code` with lang `text`, its lines those `crew plan card <n>` prints, each at most forty characters, so it reads in monospace on a phone without wrapping.
+A proposal's card SHALL carry its change as an artifact of kind `code` with lang `text`, its lines crew's text of the change, each at most forty characters, so it reads in monospace on a phone without wrapping.
 
 #### Scenario: A proposal's change as text
-- **WHEN** the planner posts the card for proposal 4, which drops a unit and adds two
-- **THEN** the card carries two artifacts, the uploaded picture and a `code` artifact of lang `text` holding the change as `crew plan card 4` prints it, and no Markdown artifact and no link
+- **WHEN** crew raises the card for proposal 4, which drops a unit and adds two
+- **THEN** the card carries the new and dropped units' paragraphs as Markdown, the uploaded picture, and a `code` artifact of lang `text` holding the change, each line at most forty characters, and no link to a session
 
 ### Requirement: A row's card lost to its owner is posted again
 A card Pending You answers "not found" to the host's connection is lost: the host signed in anew. On the next rail read, while the row still waits, crew SHALL post the row's card again under the row's key, in the row's form, its summary saying that an older copy is dead, to dismiss it in the app, and that this card is the one to answer, and SHALL take the newer card as the row's. A lost card whose row is gone SHALL be posted again by nobody.
@@ -506,23 +317,23 @@ A card Pending You answers "not found" to the host's connection is lost: the hos
 - **THEN** the next rail read posts the deploy's card again under `deploy/dev`, its summary saying the older copy is dead and this one is the one to answer
 
 ### Requirement: The design agent posts a record's card under its record key
-Besides the row keys, crew SHALL let the partition's design agent post a card under `record/<kit>/<number>/<commit>`, where `<kit>` is the name of a kit one of its partition's teams builds, `<number>` the record's four digits and `<commit>` the seven hex digits of the commit that proposed the record or the amendment. No other crew agent SHALL post under a record key. A record key with a kit that is not its partition's, or in any other shape, SHALL be refused naming the record key's form.
+A record's card SHALL be raised by crew through `crew record <kit> <number> --proposed`, keyed `record/<kit>/<number>`, where `<kit>` is the name of a kit one of the partition's teams builds and `<number>` the record's four digits, in the design agent's name; the design agent SHALL post none itself, and no agent SHALL post under a record key. A kit that is not the partition's SHALL be refused naming the partition's kits.
 
 #### Scenario: The design agent posts a record's card
-- **WHEN** wldn-design posts a card keyed `record/atlas-kit/0021/abc1234`, and atlas-kit is built by one of wldn's teams
-- **THEN** the call goes through, and the run record has a `card.post` entry on `record/atlas-kit/0021` with that key
+- **WHEN** wldn-design runs `crew record atlas-kit 21 --proposed`, and atlas-kit is built by one of wldn's teams
+- **THEN** one card keyed `record/atlas-kit/0021` is open in wldn-design's name, and the run record has a `card.post` entry on `record/atlas-kit/0021` with that key
 
 #### Scenario: A kit outside the partition
-- **WHEN** wldn-design posts a card keyed `record/flywheel-next/0003/abc1234`, and no team of wldn builds flywheel-next
-- **THEN** the call is refused before it reaches Pending You, naming `record/<kit>/<number>/<commit>` and wldn's kits
+- **WHEN** wldn-design runs `crew record flywheel-next 3 --proposed`, and no team of wldn builds flywheel-next
+- **THEN** the command is refused, naming wldn's kits, and nothing is posted
 
 #### Scenario: Another agent posts under a record key
-- **WHEN** wldn-planner or a conductor posts a card keyed `record/atlas-kit/0021/abc1234`
-- **THEN** the call is refused as before, naming the keys that are its own
+- **WHEN** wldn-planner or a conductor calls `post_request` with a key `record/atlas-kit/0021`
+- **THEN** the call is refused before it reaches Pending You, saying a record's card is crew's
 
 #### Scenario: The design agent posts under any other key
-- **WHEN** wldn-design posts a card keyed `proposal/1`
-- **THEN** the call is refused, naming `record/<kit>/<number>/<commit>` as the one key the design agent posts under
+- **WHEN** wldn-design calls `post_request` with the key `proposal/1`
+- **THEN** the call is refused, saying a proposal's card is crew's; a key of its own for a question goes through
 
 ### Requirement: A record key is checked against the teams file alone
 `crew record`'s check of the kit SHALL read nothing beyond the teams file.
@@ -639,3 +450,124 @@ A step an agent can do that the change marked held for the user's word SHALL be 
 #### Scenario: A restart held for the user's word
 - **WHEN** the deployer records a step with doer main-ops marked held
 - **THEN** the card is a choice of now, when quiet and skip, when quiet recommended with "no stage is cut", now with the stages it cuts, and the step runs when the user picks
+
+### Requirement: crew raises a row's card at its event
+crew SHALL build and post each rail row's card itself, from the facts of the event that makes the row, by the command that makes or reads the event, through the fleet's `pendingyou mcp --app claude-code` under the host's sign-in, in the name of the role whose row it is, with the row's key as the card's idempotency key. No crew agent SHALL write, post or close a row's card.
+
+#### Scenario: A proposal accepted into the plan
+- **WHEN** the planner runs `crew plan propose <file>` and the proposal is accepted as number 4
+- **THEN** one card keyed `proposal/4` is open, asked in the planner's name, built by crew from the plan and the proposal, and the command prints its id and `call get_request (requestId <id>, name <role>)`
+
+#### Scenario: A bolt reads proven at the merge's end
+- **WHEN** the merge of bolt `y`'s last unit is recorded, every unit's latest change has been in a batch and sluice's verdict at `y`'s head is green
+- **THEN** one card keyed `land/y` is open in `y`'s conductor's name, and a rail read moments later posts nothing more
+
+#### Scenario: A batch's summary delivered
+- **WHEN** the reviewer delivers batch 7's summary and the planner's `crew review --wait` returns
+- **THEN** crew starts the batch's reading session and one card keyed `batch/7` is open in the planner's name
+
+#### Scenario: Pending You refuses the card
+- **WHEN** `crew plan propose` accepts proposal 5 and Pending You refuses its card
+- **THEN** the proposal is in the plan, the run record has a `card.post` entry on it marked refused in Pending You's words, the command says so, and the rail shows the row with no card and the refusal
+
+#### Scenario: The host is not signed in
+- **WHEN** the host has no Pending You sign-in and a batch's summary is delivered
+- **THEN** the batch is recorded, no card posts, and the command and the rail say the host is not signed in
+
+### Requirement: A row's card is changed in place when its thing changes
+When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
+
+#### Scenario: A proposal rewritten while its card waits
+- **WHEN** proposal 4's card is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
+- **THEN** the card keyed `proposal/4` is changed in place to proposal 5's, with the change note "Rewritten as proposal 5 after your note", and the rail's row for proposal 5 names it as its card
+
+#### Scenario: A merge moves a bolt with an open landing card
+- **WHEN** the landing card `land/y` is open and unanswered, and a merge into bolt `y` moves its head to `def5678`
+- **THEN** crew changes the card in place, "Its head is now def5678", and posts no second card
+
+#### Scenario: A newer head offered
+- **WHEN** `deploy/srv`'s card is open for `abc1234` and the deployer offers `def5678`
+- **THEN** the same card is changed to `def5678`, with the change note "Now offering def5678, which includes abc1234"
+
+#### Scenario: A conductor agrees
+- **WHEN** `proposal/4`'s card says it waits on crw-2's conductor and that conductor runs `crew plan agree 4`
+- **THEN** the card is changed in place, "No longer waits on crw-2-conductor"
+
+### Requirement: A card is closed by crew at the event that ends it
+crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`.
+
+#### Scenario: A proposal approved from the phone
+- **WHEN** the user approves `proposal/4` on the phone with its new unit `c` unticked, and the planner runs `crew plan answer 4 rows-1 b`
+- **THEN** crew applies the proposal with `c` left out and closes the card "Applied: added b. Left out on your word: c.", and the rail's proposal row is gone
+
+#### Scenario: A proposal dropped
+- **WHEN** the planner runs `crew plan drop 4 "the user: not this quarter"`
+- **THEN** the card is withdrawn with those words
+
+#### Scenario: A bolt landed
+- **WHEN** main-level ops runs `crew bolt land y` after the landing's submission
+- **THEN** `land/y`'s card is closed "landed on GitHub's main at <its commit>; every host's folder follows by swancloud's timer within minutes"
+
+#### Scenario: A deploy fails
+- **WHEN** the deployer records the end of srv's deploy of `abc1234` with its `guests` step failed
+- **THEN** `deploy/srv`'s card is closed "The deploy of abc1234 to srv failed at guests; its log: <its log>."
+
+#### Scenario: A step done
+- **WHEN** the user answers `op/srv/1` Done and main-level ops runs `crew ops step srv --key <key> --state done`
+- **THEN** the card is closed "Done."
+
+#### Scenario: A landing declined
+- **WHEN** the user declines `land/y` with "not before the demo" and the conductor runs `crew card read land/y`
+- **THEN** the command prints the decline and its words, and the card is closed with them
+
+#### Scenario: A row gone under an open card
+- **WHEN** `proposal/4`'s card is open and the proposal is dropped without its card closing
+- **THEN** the next rail read withdraws the card, "its proposal was dropped", and says so
+
+### Requirement: A question is asked by four roles in their own name
+A conductor, the planner, main-level ops and the design agent MAY post a card for a question of their own through Pending You's own tools in their session, under an idempotency key of their own that is no row's, shaped as they see fit. A stage agent, a team's ops, a dispatcher and the operator agent SHALL post none: a stage agent asks its conductor with `crew needs`, the dispatcher asks through the planner.
+
+#### Scenario: A conductor asks
+- **WHEN** swb-1-conductor calls `post_request` with the key `ask/swb-1-conductor/hold-the-macs` and three options
+- **THEN** the call goes through, and the run record has a `card.post` entry on the conductor with that key and the card's id
+
+#### Scenario: A question with a words answer
+- **WHEN** the design agent's question card asks for the user's words in a `text` question
+- **THEN** the call goes through: a question's form is its asker's
+
+### Requirement: crew refuses a question card from any other role or under a row's key
+crew SHALL refuse a post, change or close from any role but the four, naming the chain of command, and a crew agent's own post, change or close under a row's key or of a row's card, naming the card as crew's; it SHALL refuse nothing else of a question's form. A post's key SHALL be judged by its form alone, with or without `:<n>`; a change's or a close's, which carries a request id, by the card this host's run record holds under that id, crew's raises and the agents' own posts alike.
+
+#### Scenario: A coder asks
+- **WHEN** a coder in a crew session calls `post_request`
+- **THEN** the call is refused before it reaches Pending You, saying a stage agent asks its conductor with `crew needs`
+
+#### Scenario: A conductor posts its landing card by hand
+- **WHEN** swb-1-conductor calls `post_request` with the key `land/y`
+- **THEN** the call is refused, saying the landing card is crew's and is raised when the bolt reads proven
+
+### Requirement: The planner closes the old batch cards it posted
+The planner's close, `cancel_request` or `ack_answer`, of a card under `batch/<n>-<k>`, which it posted itself before a batch was one card and which crew never raises, SHALL pass, and its post or change there SHALL be refused.
+
+#### Scenario: The planner closes an old batch card
+- **WHEN** wldn-planner calls `cancel_request` for `req_bat-2`, which this host's run record holds as its own post under `batch/2-1`
+- **THEN** the call goes through; a `post_request` or `update_request` of the planner's under `batch/2-1` is refused, saying a batch's card is crew's
+
+### Requirement: A crew agent's Pending You call names only the agent itself
+In a crew session, crew SHALL refuse a call to any Pending You tool that names anyone but the agent's `CREW_AGENT` as its caller, before the call runs and before any check of the agent's role or the call's key, which narrows apart from it, in words naming the agent's own name and saying the call would reroute another agent's answers to this session; a call that names no caller SHALL pass, and an area's name SHALL be taken as no caller's.
+
+#### Scenario: Another agent's card read in its name
+- **WHEN** swb-1-conductor's session calls `get_request` with the name `swancloud-ops`
+- **THEN** the call is refused before it reaches Pending You, naming swb-1-conductor as the session's own name and saying swancloud-ops's answers would wake this session instead
+
+#### Scenario: A whoami under another agent's name
+- **WHEN** the planner's session calls `whoami` with `previousName` `swb-1-conductor`
+- **THEN** the call is refused, naming the planner's own name, and swb-1-conductor's cards stay with its session
+
+#### Scenario: A question in another agent's name
+- **WHEN** the planner, which may ask, calls `post_request` under a key of its own with `session.label` `swb-1-conductor`
+- **THEN** the call is refused for its name, though its role and its key would let it through
+
+#### Scenario: A call that names no caller
+- **WHEN** a conductor's session calls `list_areas`, or `create_area` with the area's name `switchboard-kit`
+- **THEN** the name check lets it through: it names no caller

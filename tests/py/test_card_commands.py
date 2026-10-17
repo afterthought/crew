@@ -1,14 +1,12 @@
-"""crew card post, change, close and read (the rail-cards spec, briefs.16, ADR 0005 as amended 2026-10-12): the
-decisions in plugin/lib/cards.py, each on plain facts. The card a key names in the run record; what crew sets on a
-card and refuses the agent setting; a git remote as Pending You files by it; the area match_area chose, and the kit's
+"""crew card read and crew's own cards (the rail-cards spec, briefs.16, record 0031): the decisions in
+plugin/lib/cards.py, each on plain facts. The card a key names in the run record; what crew sets on a card; a git
+remote as Pending You files by it; the area match_area chose, and the kit's
 area to make; a tool's reply read as Pending You's CLI reads it, its refusal in Pending You's words, and the bridge's
 own error; and what `crew card read` prints. Then the act that sends crew's own cards, plan.row_card_post,
 row_card_change and row_card_close, on a stand-in for the bridge, the run record, a tell and an upload (record 0031):
 what each sends and records, the line that adopts a card and whom it is told to, a card the user answered followed by
 its new version under the key's revision rather than changed, and each failure said and recorded.
 The bridge itself, and every command's wiring, are t-cards'."""
-import json
-
 import pytest
 
 import cards
@@ -52,29 +50,6 @@ def test_a_close_of_an_older_card_leaves_the_newer_held():
     entries = [post("land/b1/abc1234", "swb-1-conductor", "req_a"), post("land/b1/abc1234", "swb-1-conductor", "req_b"),
                close("req_a")]
     assert cards.card_under(entries, "land/b1/abc1234", "swb-1-conductor") == "req_b"
-
-
-# ------------------------------------------------------------------------------------- what the agent gives
-
-def test_a_card_is_one_json_object():
-    assert cards.given('{"kind": "choice", "title": "Which?"}', "card", cards.CREW_FIELDS) == {"kind": "choice", "title": "Which?"}
-
-
-@pytest.mark.parametrize("text, said", [("[1, 2]", "the card on standard input is not a JSON object"),
-                                         ("{kind", "crew could not read the card on standard input as JSON")])
-def test_a_card_that_is_not_an_object_is_refused(text, said):
-    with pytest.raises(crew.Refusal, match=said):
-        cards.given(text, "card", cards.CREW_FIELDS)
-
-
-def test_a_card_that_sets_crews_fields_is_refused_naming_them():
-    with pytest.raises(crew.Refusal, match="the card gives areaId, session, which crew sets itself: leave them out"):
-        cards.given(json.dumps({"title": "x", "areaId": "prj_mine", "session": {}}), "card", cards.CREW_FIELDS)
-
-
-def test_a_change_that_sets_the_version_is_refused():
-    with pytest.raises(crew.Refusal, match="the change gives expectedVersion, which crew sets itself: leave it out"):
-        cards.given('{"expectedVersion": 3, "changeNote": "x"}', "change", cards.CHANGE_FIELDS)
 
 
 def test_crew_sets_the_key_the_session_and_the_area():
@@ -186,11 +161,13 @@ def test_not_found_is_a_lost_card():
     assert not cards.lost(None)
 
 
-def test_a_lost_card_is_posted_again_under_its_key():
-    said = cards.lost_said("land/b1/abc1234", "req_old", "Not found: request:req_old.")
-    assert said.startswith("card req_old under land/b1/abc1234 is lost to its owner (Pending You: \"Not found: request:req_old.\")")
-    assert said.endswith("post its card again with crew card post land/b1/abc1234, its summary saying an older copy is "
-                         "dead and to dismiss it in the app")
+def test_a_lost_card_is_posted_again_under_its_key_by_the_rails_next_read():
+    said = cards.lost_said("land/b1", "req_old", "Not found: request:req_old.")
+    assert said.startswith("card req_old under land/b1 is lost to its owner (Pending You: \"Not found: request:req_old.\")")
+    assert said.endswith("the rail's next read posts it again under its key, its summary saying an older copy is dead and "
+                         "to dismiss it in the app")
+    assert cards.lost_said("ask/swb-1-conductor/hold", "req_q", "Not found.").endswith(
+        "Ask it again if it still matters, saying in it that an older copy is dead and to dismiss it in the app")
 
 
 # ----------------------------------------------------------------------------------------- what read prints

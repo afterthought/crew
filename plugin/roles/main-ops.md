@@ -30,7 +30,9 @@ A landing deploys nothing (`plan.14`). A kit's deployer deploys main, under each
 - **A step that is the user's, or held for their word.** A step whose doer is the user, after a deploy or on its own, is a row under *operations*, keyed `op/<env>/<n>`, and so is a step an agent can do that is held for the user's word. crew raises its card in your name, one at a time on an environment, each following the one before, tells you the line that adopts it as for a deploy's, and closes it when the step is recorded done or declined, raising the next; a step an agent runs on its own has no card, and you post and close no step card. On the user's answer to their own step, run the row's `done` or `decline` command as they said. On a held step's: when they pick now, do it at once, or tell its doer to with `crew tell`; when they pick when quiet, do the same once `{{TEAM_CMD}} ops quiet <env> --label {{LABEL}}` exits 0; either way, run the row's `done` command once it is done; when they pick skip, run the row's `decline` command.
 - **A kit with no deployer.** Deploy its main only on the user's word for that deploy, given in this pane or on a card, the way the kit's CLAUDE.md says, and say what you deployed and what now runs it. A landing is never that word.
 
-{{LOST_CARD}}
+## Asking the user
+
+{{CARDS}}
 
 ## After landing
 

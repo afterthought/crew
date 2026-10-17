@@ -508,11 +508,11 @@ class TestSweep:
         out, acts = swept(rows_=[row("proposal/4")], cards_=[c], answers={"get_request": (None, refused)})
         assert out["done"] == [] and acts.emitted == [] and [n for n, *_ in acts.calls] == ["crew"]
 
-    def test_a_lost_card_of_a_kind_with_no_raise_is_recorded_lost_for_its_owner_to_post(self):
+    def test_a_lost_card_of_a_kind_with_no_raise_is_recorded_lost_for_its_owner_to_raise_again(self):
         p4 = card("proposal/4", "req_p4", "wldn-planner")
         out, acts = swept(rows_=[row("proposal/4")], cards_=[p4], answers={"get_request": NOT_FOUND})
         assert [(e["Act"], e["State"], e["Card"]) for e in acts.emitted] == [("card.close", "lost", "req_p4")]
-        assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "crew raises no card for proposal/4 yet, so wldn-planner posts it again")]
+        assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "crew raises no card for proposal/4 on a rail read, so wldn-planner raises it again with the command that raised it")]
 
     def test_a_lost_card_whose_row_is_gone_is_posted_again_by_nobody(self):
         p4 = card("proposal/4", "req_p4", "wldn-planner")
@@ -591,3 +591,14 @@ class TestBolts:
     def test_a_plan_not_started_says_how_to_start_it(self):
         d = plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", None, None)], {}, {})
         assert plan.bolts_text(d) == "wldn/main  WilldanGroup/crew-state  not started: crew state init wldn"
+
+
+def test_a_card_act_whose_reply_named_no_card_is_listed_after_the_questions():
+    """rail-cards: a question whose reply names no card. The card hook records the act unread on its agent, and the
+    rail lists it with its agent, act and time; one older than CARD_DAYS days is not listed."""
+    fresh = dict(Act="card.post", By="swb-1-conductor", Host=BOX, At=iso(30), State="unread", Key="ask/swb-1-conductor/hold")
+    old = dict(fresh, At=(NOW - datetime.timedelta(days=plan.CARD_DAYS + 1)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    assert plan.unread_card_acts({"wldn": [old, fresh, dict(fresh, State=None, Card="req_q1")]}, NOW) == [("wldn", fresh)]
+    out = text(rows(), logs={"wldn": [fresh]})
+    assert "card acts crew could not read:" in out
+    assert f"card.post by swb-1-conductor on {BOX} (wldn), under ask/swb-1-conductor/hold: Pending You's reply named no card" in out

@@ -91,7 +91,7 @@ import kit  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
 import cards  # noqa: E402
-from cards import CAPTION, COUNTS, by_words, joined, new_units  # noqa: E402
+from cards import joined, new_units  # noqa: E402
 from crew import Refusal, Stopped, fail  # noqa: E402
 from picture import cut  # noqa: E402
 
@@ -644,11 +644,11 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
         w = Write(repo, label, tip, read(repo, ref, tip))
         in_step(w.plan)
-        before, held = w.plan.teams(), holdings(w.plan)
+        before = w.plan.teams()
         touched = change(w) or []
         check(w.plan)
         files = {"plan.rec": w.plan.text(), **w.files}
-        seen.update(before=before, after=w.plan.teams(), lost=lost_rows(held, holdings(w.plan)), touched=touched, quiet=w.quiet, label=label,
+        seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
         seen["newest"] = carried(label, repo, tip, files)
         return files, message(seen["subject"], body, seen["eid"])
@@ -661,37 +661,14 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
     return sha
 
 
-def close_card(row):
-    """What the owner of a row is told, or shown, when a change ends the row: to close its card."""
-    return f"Close your Pending You card for {row}, if one is open, with what was done."
-
-
 def either(rows):
     return rows[0] if len(rows) == 1 else ", ".join(rows[:-1]) + " or " + rows[-1]
 
 
-def holdings(plan):
-    """Which team holds each held bolt, and each unit and chore of one: the bolts and work whose rail rows its conductor
-    owns."""
-    teams = {b.name(): b.get("Team") for b in plan.bolts() if b.get("Team")}
-    return teams, {u.name(): teams[u.get("Bolt")] for u in plan.work() if teams.get(u.get("Bolt"))}
-
-
-def lost_rows(before, after):
-    """The rail rows each team lost in a write, {team: rows}: land/<bolt> for each bolt it no longer holds. A landing, a
-    drop and a move all lose rows."""
-    (bolts0, _), (bolts1, _) = before, after
-    out = {}
-    for b, t in bolts0.items():
-        if bolts1.get(b) != t:
-            out.setdefault(t, []).append(f"land/{b}")
-    return out
-
-
 def notify(fleet, seen, subject):
-    """Tell the conductor of each team holding a bolt the write touched, or a team that lost a bolt's row of the rail,
-    unless that conductor wrote it, or the write's own command greets it instead; crew closes a landing's card itself
-    (landing_cards_closed, sweep_cards). Tell the partition's dispatchers that are up of a bolt
+    """Tell the conductor of each team holding a bolt the write touched, before or after, unless that conductor wrote it,
+    or the write's own command greets it instead; crew closes a row's card itself at the event that ends it, so no
+    write names a card to close. Tell the partition's dispatchers that are up of a bolt
     added, or of one landed or dropped that frees a team, so a free team gets its next bolt, unless one of them wrote
     it."""
     tells, shown, dispatch = notices(fleet["teams"], seen, agent(), subject)
@@ -708,14 +685,13 @@ def notify(fleet, seen, subject):
 
 
 def notices(teams, seen, me, subject):
-    """Who a write tells, as facts (teams.7): each conductor of a team holding a bolt the write touched, or that lost a
-    bolt's row of the rail, unless it wrote it (me) or the write's own command greets it (seen["quiet"]), sent the
-    subject, nothing more, since crew closes a landing's card itself; and whether the dispatchers hear of it, a bolt
-    added or one a team held landed or dropped. Returns ([(conductor, text)], [lines shown], whether the dispatchers
-    are told)."""
-    before, after, touched, lost = seen["before"], seen["after"], seen["touched"], seen.get("lost", {})
+    """Who a write tells, as facts (teams.7): each conductor of a team holding a bolt the write touched, before or after
+    it, unless it wrote it (me) or the write's own command greets it (seen["quiet"]), sent the subject, nothing more,
+    since crew closes a row's card itself; and whether the dispatchers hear of it, a bolt added or one a team held
+    landed or dropped. Returns ([(conductor, text)], [lines shown], whether the dispatchers are told)."""
+    before, after, touched = seen["before"], seen["after"], seen["touched"]
     tells, shown = [], []
-    for t in sorted(x for x in {before.get(b) for b in touched} | {after.get(b) for b in touched} | set(lost)
+    for t in sorted(x for x in {before.get(b) for b in touched} | {after.get(b) for b in touched}
                     if x and x not in seen["quiet"] and x in teams):
         if f"{t}-conductor" != me:
             tells.append((f"{t}-conductor", subject))
@@ -1607,7 +1583,6 @@ def bolt_land(fleet, a):
         tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, landed))
     else:
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]}; no team held it")
-
 
 
 # A landing's submission (plan.16, record 0026), on the team's host, refused there when sluice's wt-submit, which
@@ -2991,24 +2966,6 @@ def open_refusal(n, open_, as_json):
 
 # ------------------------------------------------------------------------------------------- a proposal's card
 
-CARD_NEW = 15  # the most units new to a bolt a proposal's card asks about: three questions of five, beside its approval
-OPTIONS = 5  # Pending You's limit on a choice's options: a question of a proposal's card holds at most five new units
-SESSION_ROOM = 100  # what the card of more than fifteen new units leaves in its summary for the link to its session
-
-
-
-
-
-
-
-
-def plain_words(line):
-    """A change as `crew plan proposed` heads it, without its markdown."""
-    return line.replace("**", "").replace("`", "")
-
-
-
-
 def concerns(a):
     """The unit a proposal's command concerns, its subject, or None for a bolt's command."""
     return None if a.cmd == "bolt" else a.unit
@@ -3076,131 +3033,6 @@ def approved_words(argvs, applied, cleared, keep):
         + ([f"Kept on your word: {joined(stays)}."] if stays else []) \
         + ([f"Kept the old intent of {joined(old)}."] if old else [])
     return " ".join(said)
-
-
-def new_work(names, chores):
-    """What a question of a proposal's card calls the new work it holds (signals.7): new units, chores, or both."""
-    n = sum(1 for u in names if u in chores)
-    return "chores" if n == len(names) else "new units" if not n else "new units and chores"
-
-
-
-
-
-
-
-
-def card_model(fleet, label, w, p, after=None):
-    """Proposal p as its card shows it, from the plan at the branch's tip and the proposal alone, no kit read
-    (plan.12): its commands applied in order to a copy of the plan, as check_ops applies them, and each bolt they touch
-    and each kit's queue a unit goes to, before and after; the card's fields, its text, its picture's sections and
-    the questions it asks. Refused for a closed proposal, and for one that no longer applies, naming the command, as
-    its approval would be."""
-    n = int(p.get("Proposal"))
-    p.get("State") == "open" or fail(f"proposal {n} is {p.get('State')}: it is closed, so it has no card")
-    argvs = [do_args(label, d) for d in p.all("Do")]
-    before = w.plan
-    after = after or check_ops(fleet, label, w, argvs, n, Drawn).plan
-    d = cards.drawn(before, after, argvs)
-    sections, counts, lines, intent, came_from, goals = (d[k] for k in ("sections", "counts", "lines", "intent", "came_from", "goals"))
-    new = new_units(argvs)
-    plain = not new or len(new) > CARD_NEW
-    all_counts = ", ".join(f"{counts[c]} {c}" for c, _ in COUNTS if counts[c])
-    headings = [s["heading"] for s in sections]
-    first = sections[0]
-    if len(headings) == 1:
-        to = headings[0]
-        title = f"Approve the change to {to}" + (f": {all_counts}?" if all_counts else "?")
-    else:
-        room = 140 - len(f"Approve proposal {n} to : {all_counts}?")
-        to = next(said for k in range(len(headings), 0, -1)
-                  for said in [joined(headings[:k] + ([f"{len(headings) - k} more"] if k < len(headings) else []))]
-                  if len(said) <= room or k == 1)
-        title = f"Approve proposal {n} to {to}" + (f": {all_counts}?" if all_counts else "?")
-    replaces = f", replacing proposal {p.get('Replaces')}" if p.get("Replaces") else ""
-    mine = ", ".join(w for w, _ in first["counts"])
-    head = [f"Proposal {n}, by {p.get('By')}{replaces}", first["said"][0].upper() + first["said"][1:] + " once approved"
-            + (f": {mine}." if mine else ".")]
-    goal = next((goals.get(s["name"]) for s in sections if s["kind"] == "bolt" and goals.get(s["name"])), None)
-    room = 400 - (SESSION_ROOM if len(new) > CARD_NEW else 0) - len("\n".join(head)) - 1
-    summary = "\n".join(head + ([by_words(f"Goal: {goal}", room)] if goal and room > 10 else []))
-    d = describe(fleet, label, before, p, alone=True)
-    background = (p.get("Case").strip() + "\n\nChanges:\n" + "\n".join(plain_words(c["lines"][0]) for c in d["changes"])
-                  + (f"\n\nWaiting on {joined([f'{t}-conductor' for t in d['waiting']])} to agree." if d["waiting"] else ""))
-    card = {"title": cut(title, 140), "summary": summary,
-            "context": {"background": background, "trace": [], "filesTouched": [], "tried": [], "links": []},
-            "artifacts": [{"kind": "image", "title": "The change, once approved", "ref": f"proposal-{n}.png", "upload": True,
-                           "caption": CAPTION},
-                          {"kind": "code", "lang": "text", "title": "The change, in text", "ref": f"proposal-{n}.txt", "lines": lines}],
-            "intent": "approve"}
-    questions = {"plan": None}
-    if plain:
-        card.update(kind="approve", approve={"action": f"Apply proposal {n}", "risk": "low", "reversible": True},
-                    recommendedIds=["approve"])
-    else:
-        g = -(-len(new) // OPTIONS)
-        sizes = [len(new) // g + (1 if k < len(new) % g else 0) for k in range(g)]
-        groups = [new[sum(sizes[:k]):sum(sizes[:k + 1])] for k in range(g)]
-        bullets, detail = [x for x in re.split(r"(?<=[.!?])\s+", " ".join(p.get("Case").split())) if x], ""
-        for x in bullets:
-            more = (detail + "\n" if detail else "") + f"• {x}"
-            if len(more) > 200:
-                break
-            detail = more
-        detail = detail or by_words(f"• {bullets[0]}", 200)
-        # A note beside an approval never holds back a drop or an amendment (record 0018), so the way to object is not
-        # to approve, naming only what the proposal does.
-        objected = [w.format("s" if counts[k] > 1 else "") for w, k in
-                    (("keep the dropped unit{}", "dropped"), ("change the amendment{}", "amended")) if counts[k]]
-        aside = "A note beside an approval changes nothing applied."
-        asked = [{"id": "plan", "kind": "approve", "title": cut(f"Approve the change to {to}?", 140), "detail": detail,
-                  "rationale": (f"To {' or '.join(objected)}, don't approve: say why in a note from ⋯, and the planner "
-                                f"writes the proposal again. {aside}" if objected
-                                else f"To change it, don't approve: say how in a note from ⋯. {aside}"),
-                  "approve": {"action": f"Apply proposal {n}, with the new units you keep", "risk": "low", "reversible": True},
-                  "recommendedIds": ["approve"]}]
-
-        def consequence(u):
-            return (f"Cleared: stays in {'the queue' if came_from[u] is None else 'bolt ' + came_from[u]}; the rest still "
-                    "applies" if u in came_from else "Cleared: not added; the rest still applies")
-        if len(new) == 1:
-            u = new[0]
-            asked.append({"id": "units-1", "kind": "choice", "title": cut(f"Does {u} go in?", 140),
-                          "options": [{"id": u, "label": "Move it in" if u in came_from else "Add it", "detail": by_words(intent[u], 200)},
-                                      {"id": "leave-out", "label": "Leave it out", "consequence": consequence(u)}],
-                          "recommendedIds": [u]})
-        chores = {a.unit for a in argvs if a.cmd == "chore"}
-        for k, units in enumerate(groups if len(new) > 1 else [], 1):
-            what = new_work(units, chores)
-            asked.append({"id": f"units-{k}", "kind": "multi",
-                          "title": f"Which {what} go in? Clear one to leave it out." + (f" ({k} of {g})" if g > 1 else ""),
-                          "rationale": f"A cleared {'chore' if what == 'chores' else 'unit' if what == 'new units' else 'unit or chore'} "
-                                       "is not added; the rest of the proposal still applies.",
-                          "options": [{"id": u, "label": cut(u, 80), "detail": by_words(intent[u], 200), "consequence": consequence(u)}
-                                      for u in units],
-                          "multi": {"min": 0, "max": len(units)}, "recommendedIds": list(units)})
-        questions.update({f"units-{k}": units for k, units in enumerate(groups, 1)})
-        card.update(about={"kind": "other", "title": cut(f"Proposal {n}: {to}", 120)}, questions=asked)
-    return {"n": n, "card": card, "session": len(new) > CARD_NEW, "new": new, "questions": questions, "lone": len(new) == 1,
-            "sections": sections}
-
-
-def plan_card(fleet, a):
-    """crew plan card <n> [--label L]: proposal n's card, as Pending You's post_request takes it, from the flywheel's
-    branch alone (plan.12): its title, summary, background, questions and artifacts, printed as JSON beside where its
-    picture is and whether it links a session, which only a card of more than fifteen new units does (briefs.9). Its
-    picture, a PNG 1560 pixels wide, is drawn by crew itself and written to
-    ~/.local/state/crew/cards/<label>/proposal/<n>/ on this host. Writes nothing to the branch or the run record."""
-    label = proposal_label(fleet, a, a.n)
-    w, _, p, _ = at_tip(fleet, label, a.n)
-    m = card_model(fleet, label, w, p)
-    d = CARDS / label / "proposal" / str(a.n)
-    d.mkdir(parents=True, exist_ok=True)
-    f, tmp = d / f"proposal-{a.n}.png", d / f".proposal-{a.n}.png"
-    import picture  # only a card's picture needs it, so no other command starts it
-    tmp.write_bytes(picture.draw(m["sections"]))
-    tmp.replace(f)
-    print(json.dumps({"card": m["card"], "picture": str(f), "session": m["session"]}, indent=1, ensure_ascii=False))
 
 
 def answers_file(label, n):
@@ -6733,7 +6565,6 @@ def team_cmd(fleet, a):
         print(f"{name} is down; its panes are still there.")
 
 
-
 def needs_cmd(fleet, a):
     """crew needs "<what you need>", run by a stage's agent: its team and slot read from its own
     name (crew.stage_agent), on the team's host, where its stage ends short (stage_needs)."""
@@ -7532,13 +7363,11 @@ def rail_rows(fleet, found, sv, props, times, held=None):
 
 
 def card_kind(key):
-    """What an open card is, from its key: a row's ("row"), under one of the rail's row keys, as record 0031 keys them
-    or as they were keyed before it; a decision record's ("record"), which is no row's; or an agent's question
-    ("question"), under a key of its asker's own or none (briefs.11)."""
-    key = key or ""
-    if key.startswith("record/"):
-        return "record"
-    return "row" if cards.row_object(key) or any(re.fullmatch(k, key) for k in CARD_KEYS) else "question"
+    """What an open card is, from its key: a row's ("row"), under a key crew raises a row's card under, as record
+    0031 keys them or as they were keyed before it (crews_key); a decision record's ("record"), which is no row's; or
+    an agent's question ("question"), under a key of its asker's own or none (briefs.11)."""
+    kind = crews_key(key or "")
+    return "record" if kind == "record" else "row" if kind else "question"
 
 
 def unjudged(sv, unread, c):
@@ -7767,7 +7596,8 @@ def rail_text(fleet, labels, read, now):
     wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it,
     whose and its id, by which its owner asks Pending You for it, or, with none open, the words of the refusal of its
     last post, oldest first; then the questions the asking roles put to the user, each with its key, which names it,
-    its asker and its age, since no entry holds a card's words (record.3); then the decision records waiting on the user, each the design
+    its asker and its age, since no entry holds a card's words (record.3); then each card act of an agent's whose reply
+    crew could not read (unread_card_acts); then the decision records waiting on the user, each the design
     agent's open card for one, with when it was asked and by whom, and no command, since the card is where it is
     answered; then any open card whose row is gone that the sweep did not close, with the host whose rail read closes
     it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, each partition it
@@ -7803,6 +7633,13 @@ def rail_text(fleet, labels, read, now):
         lines += ["", "questions waiting on you:"]
     for c in questions:
         lines.append(when(c) + f"{c['key'] or 'a question'} ({c['label']}), asked by {c['by']} on {c['host']} ({c['card']})")
+    unread_acts = unread_card_acts(logs, now)
+    if unread_acts:
+        lines += ["", "card acts crew could not read:"]
+    for label, e in unread_acts:
+        lines.append(f"  {utc(e['At']).astimezone():%Y-%m-%d %H:%M}  {age(utc(e['At']), now):<7}  {e['Act']} by {e.get('By')} "
+                     f"on {e.get('Host')} ({label})" + (f", under {e['Key']}" if e.get("Key") else "")
+                     + ": Pending You's reply named no card")
     records = record_cards(sv, cards_, read["unread"])
     if records:
         lines += ["", "decision records waiting on you:"]
@@ -7829,6 +7666,14 @@ def rail_text(fleet, labels, read, now):
     return "\n".join(lines)
 
 
+def unread_card_acts(logs, now):
+    """Each card act a crew agent made through Pending You's tools whose reply named no card, recorded unread by the card
+    hook, in the last CARD_DAYS days, oldest first: (label, entry), from each partition's entries (logs)."""
+    since = now - datetime.timedelta(days=CARD_DAYS)
+    return [(l, e) for l, es in sorted(logs.items()) for e in es
+            if (e.get("Act") or "").startswith("card.") and e.get("State") == "unread" and utc(e["At"]) >= since]
+
+
 def rail_view(fleet, a):
     """crew rail [--label L]: what waits on the user, as rail_text gives it, read from the plans, the proposals, the
     kits and the run record. It sweeps the cards on this host under its sign-in (sweep_cards) and ends the card
@@ -7849,13 +7694,13 @@ def rail_view(fleet, a):
 # started, its document the files plannotator was given joined by ", "), and plannotator's result.json once the user
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
-# The rail's card keys, as crew's card hook reads them, and a verify report's, verify/<unit>/<stamp>, which no row has
-# had since its findings were fixed in one round (teams.17): a card posted under it before is closed and its session
-# ended as any whose row is gone, and none is posted. A landing's is the bolt's, land/<bolt> (record 0031); a card a
-# conductor posted under land/<bolt>/<head> before then is read, and closed, under that key.
-CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}",
-             r"land/[a-z0-9][a-z0-9-]*(?:/[0-9a-f]{7})?",
-             r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
+# The rail rows' card keys, the thing's and not its version's (record 0031): a card crew keys them by, which its
+# commands name. A card under an older form, land/<bolt>/<head> or a verify report's verify/<unit>/<stamp>, is still
+# crew's (crews_key), closed by the rail's read as one whose row is gone, and none is posted.
+CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"land/[a-z0-9][a-z0-9-]*", r"deploy/[a-z0-9][a-z0-9-]*",
+             r"op/[a-z0-9][a-z0-9-]*/\d+")
+# A verify report's key, verify/<unit>/<stamp>, whose card and session from before teams.17 a sweep still ends.
+VERIFY_KEY = r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}"
 # A decision record's card key, the design agent's: the kit and the record's four digits, one card per record however
 # often it is revised (briefs.15, record 0031 §1), raised by crew record. It is no rail row's: the rail lists its open
 # cards apart.
@@ -7865,115 +7710,69 @@ CARD_POLL = 5  # seconds between a wait's reads
 CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
 
 
-def batch_keys(fleet, label):
-    """The keys of the partition's batch cards whose row is open, as the rail reads them: batch/<n> for each batch the
-    run record holds, or each batch/<n>-<k> a card was posted under for a batch posted as cards of five before a batch
-    was one card, but those a card's close has named. Refused naming what did not answer (read.1), since a close or a
-    post it did not read may be on it."""
-    entries = partition_entries(fleet, label)
-    closed = {e["Key"] for e in entries if e.get("Act") == "card.close" and e.get("Card") and e.get("Key")}
-    posts = batch_posts(entries)
-    keys = [k for n, _, units in batches(entries) for k, _ in batch_cards(n, units, posts)]
-    return [k for k in keys if k not in closed]
+# The roles that ask the user a question of their own on a card, by the kind role() gives them (record 0031, briefs.11).
+ASKERS = ("conductor", "planner", "main-ops", "design")
+# The first part of every key crew raises a card under: a rail row's, a decision record's, and a verify report's,
+# which no row has had since teams.17. No agent's question takes one (crews_key).
+CREWS = {"proposal": "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop",
+         "batch": "a batch's card is crew's, raised with its reading session once the reviewer's summary is delivered",
+         "land": "a landing card is crew's, raised when the bolt reads proven and closed when it lands",
+         "deploy": "a deploy's card is crew's, raised by crew ops offer and closed at the deploy's end",
+         "op": "a step's card is crew's, raised by crew ops step and closed with the step's state",
+         "record": "a record's card is crew's, raised by crew record and closed at the record's status",
+         "verify": "a verify report has no card: its findings are fixed in one round"}
 
 
-class CardReads:
-    """What card_refusal reads, each only when the agent's kind needs it: the partition's open proposals' card keys,
-    each its chain's, proposal/<first>, from proposals.rec at the branch's tip, and its batch cards' open keys (the
-    planner's); its plan (a conductor's); its
-    operations' open keys, where its main level runs (main-level ops's); and this host."""
-
-    def __init__(self, fleet, label):
-        self.fleet, self.label = fleet, label
-
-    def open_proposals(self):
-        repo, ref = state_of(self.fleet, self.label)
-        tip = fetch(repo, ref)
-        text = show(repo, tip, "proposals.rec") if tip else None
-        pl = Plan(text) if text else None
-        return [f"proposal/{proposal_chain(pl, int(p.get('Proposal')))[0]}" for p in pl.recs("Proposal") if p.get("State") == "open"] if pl else []
-
-    def batch_keys(self):
-        return batch_keys(self.fleet, self.label)
-
-    def plan(self):
-        return plans(self.fleet, [self.label])[0][3]
-
-    def ops_keys(self):
-        import ops  # the partition's operations rows, read where its main level runs
-        return ops.open_keys(self.label)
-
-    def here(self):
-        return crew.this_host()
+def crews_key(key):
+    """The kind of crew's own card a key names, by its first part (CREWS), whatever follows, crew's revision of a key
+    (cards.post_key) and a key of an older form among it; None for any other key, an agent's question's."""
+    kind = key.split("/", 1)[0] if isinstance(key, str) and "/" in key else None
+    return kind if kind in CREWS else None
 
 
-def card_refusal(fleet, name, label, tool, key, reads=None):
-    """Whether the agent crew started may post a Pending You card (post_request) or make an area (create_area) under an
-    idempotency key: None to let the call through, else the refusal's words, naming the key to use (briefs.11). A card's
-    key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
-    from proposals.rec, or batch/<n> for one of its batches whose row is open, read from the run record; a
-    conductor's land/<bolt> for the bolt its team holds, read from the plan. The design agent's is a decision record's, record/<kit>/<number> for a kit of any team of its
-    partition, read from the teams file (briefs.15). Every other agent owns no key. An area's key is
+def card_refusal(fleet, name, label, tool, key):
+    """Whether a crew agent's Pending You call may go through (briefs.11, record 0031): None to let it, else the
+    refusal's words. The user's own name is never checked. A card's post, change or close is a question's, the agent's
+    own, only from a conductor, the planner, main-level ops or the design agent (ASKERS), and never under crew's own
+    key (crews_key). A post's key is its idempotencyKey, judged by its form alone, with or without :<n>, and no plan
+    read. A change or a close carries a request id and no key, so its key is the one this host's run record holds the
+    card under, crew's raises and the agents' own posts alike, read locally with no state-branch fetch, None when it
+    holds none; the hook refuses the call when that record can't be read. The planner's close of a card under
+    batch/<n>-<k>, which it posted itself before a batch was one card and crew never raises, passes, a departure from
+    briefs.11 that goes once no such card is open; its post or change there is refused. An area is made only under
     create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
-    partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
-    conductor's card; what can't be read is a Refusal naming it (read.1). The user's own name is never checked. reads
-    is what it reads (CardReads), given apart in a logic test."""
-    reads = reads or CardReads(fleet, label)
+    partition, read from the teams file. Everything else passes: a question's form, and its key but crew's, are its
+    asker's. A decision of the role, the call and the key alone (code.7)."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
     what = "an area" if tool == "create_area" else "a card"
-    if not isinstance(key, str) or not key:
-        return f"crew refuses {what} with no idempotencyKey."
-    said, cmd = f"crew refuses {what} under {key}", f"{crew.HOME}/plugin/bin/crew"
+    cmd = f"{crew.HOME}/plugin/bin/crew"
+    if kind not in ASKERS:
+        if kind == "team":
+            left = (f"Tell {of}-conductor what you wait on with `{cmd} tell`." if name == f"{of}-ops"
+                    else f"Say what you need with `{cmd} needs`, and your conductor gets it and asks if it must.")
+        elif kind == "dispatcher":
+            left = f"Ask through {of}-planner with `{cmd} tell`."
+        elif kind == "operator":
+            left = "The user is in your pane: ask them there."
+        else:
+            left = "Tell the partition's operator agents what you wait on, as your brief says."
+        return (f"crew refuses {what} from {name}: only a conductor, the planner, main-level ops and the design agent ask "
+                f"the user on a card. {left}")
     if tool == "create_area":
-        teams = [of] if kind in ("conductor", "team") else [] if kind == "other" else crew.partition_of(fleet, label)["teams"]
+        teams = [of] if kind == "conductor" else crew.partition_of(fleet, label)["teams"]
         mine = sorted({f"create-area:{fleet['teams'][t]['kit']['repo']}" for t in teams})
         if key in mine:
             return None
-        return f"{said}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine else f"no kit's area is {name}'s to make.")
-    rail = f"from the `card:` line under its row in `{cmd} rail --label {label}`"
-    if kind == "planner":
-        mine = reads.open_proposals()
-        if key in mine:
-            return None
-        mine += reads.batch_keys()
-        if key in mine:
-            return None
-        return (f"{said}: {name} posts a card only under proposal/<n> for a proposal of {label} open now, or batch/<n> "
-                f"for one of its batches open now, " + (f"{either(mine)}, {rail}." if mine else "and none is open."))
-    if kind == "conductor":
-        plan = reads.plan()
-        bolts = sorted(b for b, t in holdings(plan)[0].items() if t == of) if plan else []
-        if key in [f"land/{b}" for b in bolts]:
-            return None
-        if not bolts:
-            return f"{said}: {name} posts a card only under a rail row's key of its own, and {of} holds no bolt, so none is."
-        mine = [f"land/{b}" for b in bolts]
-        return f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, {rail}."
-    if kind == "main-ops":
-        p = crew.partition_of(fleet, label)
-        if p["machine"] != reads.here():
-            return f"{said}: {name} posts its operations' cards on {p['machine']}, where {label}'s operations are kept."
-        mine = reads.ops_keys()
-        if key in mine:
-            return None
-        return (f"{said}: {name} posts a card only under an operations row's key of {label} open now, "
-                + (f"{either(mine)}, {rail}." if mine else "and none is open."))
-    if kind == "team":
-        left = (f"Tell {of}-conductor what you wait on with crew tell." if name == f"{of}-ops"
-                else f"Say what you need with `{cmd} needs`, and the conductor gets it.")
-        return f"{said}: {name} owns no card key, since a team's cards are its conductor's. {left}"
-    if kind == "design":
-        kits = sorted({fleet["teams"][t]["kit"]["name"] for t in crew.partition_of(fleet, of)["teams"]})
-        m = re.fullmatch(RECORD_KEY, key)
-        if m and m.group(1) in kits:
-            return None
-        return (f"{said}: {name} posts a card only for a decision record, under record/<kit>/<number> "
-                + (f"for a kit of {of}'s, {either(kits)}, " if kits else f"for a kit of {of}'s, and no team of {of} builds one, ")
-                + "the number the record's four digits.")
-    return (f"{said}: {name} owns no card key, since only the planner, the conductors, main-level ops and, for a decision "
-            "record, the design agent post cards. Tell the partition's operator agents what you wait on, as your brief says.")
+        return (f"crew refuses an area under {key}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine
+                else f"no kit's area is {name}'s to make."))
+    crews = crews_key(key)
+    if crews and not (kind == "planner" and tool in ("cancel_request", "ack_answer") and old_batch(key)):
+        verb = {"post_request": "post", "update_request": "change"}.get(tool, "close")
+        return (f"crew refuses {name}'s {verb} of the card under {key}: {CREWS[crews]}. Ask a question of your own under "
+                f"a key of your own, ask/{name}/<what it is about>.")
+    return None
 
 
 def old_batch(key):
@@ -8646,9 +8445,8 @@ def card_end(fleet, a):
 
 
 def card_asker(fleet, a):
-    """The partition and the asker of a crew card post, change, close or read (briefs.16): --label, else the agent's
-    own; the asker the agent crew started, else the user at this host. An agent's label is its own, and is put where
-    the card hook reads it, so the hook's checks see the agent as Claude Code's call would."""
+    """The partition and the asker of a crew card read (briefs.16): --label, else the agent's own; the asker the agent
+    crew started, else the user at this host. An agent's label is its own."""
     agent, own = os.environ.get("CREW_AGENT"), os.environ.get("CREW_LABEL")
     not (agent and own and a.label and a.label != own) or fail(
         f"{agent}'s cards are {own}'s: crew card {a.sub} runs as the agent's own partition")
@@ -8662,82 +8460,7 @@ def card_held(label, who, key):
     """The card `who` holds under a key on this host, read from its run record; refused when there is none."""
     import cards
     return cards.card_under(cards.host_entries(record, label, crew.this_host()), key, who) or fail(
-        f"{who} holds no open card under {key} on {crew.this_host()}: post one with crew card post {key}")
-
-
-def card_post(fleet, a):
-    """crew card post <key> [--label L]: post the card on standard input as the asking assistant, through the fleet's
-    pendingyou mcp under the host's sign-in (briefs.16): refused first as the card hook refuses it, and for a field
-    crew sets itself; filed in the area Pending You matches to the folder's git remote, or the kit's made under
-    create-area:<owner>/<kit>; recorded from Pending You's reply."""
-    import cards
-    label, who = card_asker(fleet, a)
-    card = cards.given(sys.stdin.read(), "card", cards.CREW_FIELDS)
-    why = cards.hook_refusal("post_request", dict(card, idempotencyKey=a.key))
-    not why or fail(why)
-    cwd, later = os.getcwd(), "Post it again later."
-    remote = cards.git_remote(cwd) or fail(
-        f"crew files a card in its kit's area, found from the git remote of the folder it runs in, and {cwd} has none")
-    with cards.Bridge(who, later) as py:
-        matched = py.call("match_area", {"cwd": cwd, "remote": remote, "task": who})
-        area = cards.area_of(matched)
-        if not area:
-            make = cards.create_area_args(remote, label, matched)
-            why = cards.hook_refusal("create_area", {"idempotencyKey": make["idempotencyKey"]})
-            not why or fail(why)
-            made = py.call("create_area", make)
-            area = made.get("areaId")
-            isinstance(area, str) and cards.AREA_ID.match(area) or fail(
-                f"Pending You's answer to create_area names no area: crew can't tell where the card would go. {later}")
-            note = made.get("groupNote")
-            if isinstance(note, str) and note.strip():
-                print(f"area {make['name']}: {note.strip()}")
-        got = py.call("post_request", cards.post_args(card, a.key, who, crew.this_host(), cwd, area))
-    card_id = cards.request_id(got, "post_request")
-    record.emit(label, "card.post", [cards.object_of(a.key) or f"agent/{who}"], Card=card_id, Key=a.key)
-    url = got.get("url")
-    print(f"card {a.key}: {card_id}" + (f" {url}" if isinstance(url, str) else ""))
-    print(cards.adopt_line(card_id, who))
-
-
-def card_change(fleet, a):
-    """crew card change <key> [--label L]: change the card the asker holds under the key with the fields on standard
-    input, at the version Pending You reports; refused first as the card hook refuses a change out of its row's form."""
-    import cards
-    label, who = card_asker(fleet, a)
-    change = cards.given(sys.stdin.read(), "change", cards.CHANGE_FIELDS)
-    card = card_held(label, who, a.key)
-    why = cards.hook_refusal("update_request", dict(change, requestId=card))
-    not why or fail(why)
-    with cards.Bridge(who, "Change it again later.", (a.key, card)) as py:
-        version = cards.version_of(py.call("get_request", {"requestId": card, "name": who}), card)
-        got = py.call("update_request", dict(change, requestId=card, name=who, expectedVersion=version))
-    record.emit(label, "card.update", [cards.object_of(a.key) or f"agent/{who}"], Card=card, Key=a.key)
-    v = got.get("version")
-    print(f"card {a.key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
-
-
-def card_close(fleet, a):
-    """crew card close <key> --outcome <line> | --reason <line> [--label L]: close the card the asker holds under the
-    key, acked with what it did on the answer, or withdrawn with why; then its plannotator session ends, as a close
-    through Pending You's tools ends it."""
-    import cards
-    label, who = card_asker(fleet, a)
-    card = card_held(label, who, a.key)
-    with cards.Bridge(who, "Close it again later.", (a.key, card)) as py:
-        if a.outcome is not None:
-            version = cards.version_of(py.call("get_request", {"requestId": card, "name": who}), card)
-            py.call("ack_answer", {"requestId": card, "name": who, "expectedVersion": version, "outcome": a.outcome})
-        else:
-            py.call("cancel_request", {"requestId": card, "name": who, "reason": a.reason})
-    record.emit(label, "card.close", [cards.object_of(a.key) or f"agent/{who}"], Card=card, Key=a.key)
-    print(f"card {a.key}: {card} {'closed' if a.outcome is not None else 'withdrawn'}")
-    if old_batch(a.key):
-        crew_bin = pathlib.Path(__file__).resolve().parent.parent / "bin" / "crew"
-        subprocess.Popen(["bash", str(crew_bin), "card", "end", a.key, "--label", label], stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    elif any(re.fullmatch(k, a.key) for k in CARD_KEYS):
-        print(end_session(label, a.key)[0])
+        f"{who} holds no open card under {key} on {crew.this_host()}")
 
 
 def card_read(fleet, a):
@@ -8758,7 +8481,7 @@ def card_read(fleet, a):
     else:
         print("\n".join(cards.answer_lines(a.key, card, got)))
     if words is not None:
-        record.emit(label, "card.close", [cards.row_object(a.key) or cards.object_of(a.key) or f"agent/{who}"], Card=card,
+        record.emit(label, "card.close", [cards.row_object(a.key) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
         print(f"card {a.key}: {card} closed, as the user declined it")
 
@@ -9223,11 +8946,12 @@ def sweep_cards(fleet, read, acts=None):
     host, where its cards and rows are written, it closes each card of a row that is gone with why
     (sweep_judged, row_gone), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
-    card that has none; a lost card of a kind with no raise is recorded lost, for its owner to post again, and a row of
-    one is left as it is. It first asks Pending You in crew's own name (SWEEPER) whether it finds each card, which
-    Pending You answers for another assistant's card by refusing it as that assistant's, and for a card this host's
-    sign-in no longer reaches with "not found"; a host not signed in, or a bridge that fails, changes nothing, and is said, as is a partition
-    whose record did not answer there (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
+    card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
+    command that raised it, and a row of one is left as it is. It first asks Pending You in crew's own name
+    (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
+    that assistant's, and for a card this host's sign-in no longer reaches with "not found"; a host not signed in,
+    or a bridge that fails, changes nothing, and is said, as is a partition whose record did not answer there
+    (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
     card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left."""
     acts = acts or SweepActs(fleet)
     here, now = acts.host(), acts.now()
@@ -9302,7 +9026,7 @@ def sweep_cards(fleet, read, acts=None):
                 did(l, c["key"], c["card"], c["by"], "lost", f"posted again as {new}", new)
             elif kind_raises is False:
                 card_lost(acts, l, c["by"], c["key"], c["card"], words)
-                did(l, c["key"], c["card"], c["by"], "lost", f"crew raises no card for {c['key']} yet, so {c['by']} posts it again")
+                did(l, c["key"], c["card"], c["by"], "lost", f"crew raises no card for {c['key']} on a rail read, so {c['by']} raises it again with the command that raised it")
             elif kind_raises:
                 did(l, c["key"], c["card"], c["by"], "left", "Pending You no longer finds it, and its raise posted none")
         for row in j["none"]:
@@ -9318,7 +9042,7 @@ def card_folder(rel):
     ~/.local/state/crew/cards/<label>/ keeps, from its path there: batch/<n> is a key's own folder, as a proposal's;
     None when the path is no key's folder."""
     path = "/".join(rel.parts)
-    if any(re.fullmatch(k, path) for k in CARD_KEYS):
+    if any(re.fullmatch(k, path) for k in CARD_KEYS + (VERIFY_KEY,)):
         return path, None
     key = "/".join(rel.parts[:2])
     if len(rel.parts) == 3 and old_batch(key) and crew.NAME.match(rel.parts[2]):
@@ -9445,18 +9169,10 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("key", nargs="?")
     x.add_argument("unit", nargs="?")
     x.add_argument("--label")
-    for c in ("post", "change", "read"):
-        x = ca.add_parser(c)
-        x.add_argument("key")
-        x.add_argument("--label")
-        if c == "read":
-            x.add_argument("--json", action="store_true")
-    x = ca.add_parser("close")
+    x = ca.add_parser("read")
     x.add_argument("key")
     x.add_argument("--label")
-    how = x.add_mutually_exclusive_group(required=True)
-    how.add_argument("--outcome")
-    how.add_argument("--reason")
+    x.add_argument("--json", action="store_true")
     x = sub.add_parser("record")
     x.add_argument("kit")
     x.add_argument("number", type=int)
@@ -9593,9 +9309,6 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("n", type=int)
     x.add_argument("--clear", nargs="+", action="extend", default=[], metavar="UNIT")
     x.add_argument("--label")
-    x = pp.add_parser("card")
-    x.add_argument("n", type=int)
-    x.add_argument("--label")
     x = pp.add_parser("answer")
     x.add_argument("n", type=int)
     x.add_argument("question")
@@ -9696,7 +9409,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
 COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
     ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
-    ("card", "post"): card_post, ("card", "change"): card_change, ("card", "close"): card_close, ("card", "read"): card_read,
+    ("card", "read"): card_read,
     ("record", None): record_status,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit,
@@ -9714,7 +9427,7 @@ COMMANDS = {
     ("signal-show", None): signal_show, ("signal-land", None): signal_land,
     ("_needs", None): needs_cmd,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
-    ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "card"): plan_card, ("plan", "answer"): plan_answer,
+    ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "answer"): plan_answer,
 }
 # The commands on a team and on a main level, each one process on the host its agents run on.
 TEAM_COMMANDS = {(c, None) for c in ("_status", "_unit-run", "_unit-wait", "_fix-run", "_construct-again", "_tidy", "_unit-free",
@@ -9731,7 +9444,6 @@ ACTS = {
     ("_needs", None): "stage.end",
     ("plan", "propose"): "plan.propose", ("plan", "agree"): "plan.agree", ("plan", "approve"): "plan.approve",
     ("plan", "drop"): "plan.drop",
-    ("card", "post"): "card.post", ("card", "change"): "card.update", ("card", "close"): "card.close",
 }
 
 
@@ -9756,9 +9468,6 @@ def named(a):
         out.append(f"plan/{a.label}")
     if a.cmd == "plan" and getattr(a, "n", None) is not None:
         out.append(f"proposal/{a.n}")
-    if a.cmd == "card" and a.sub in ("post", "change", "close"):
-        import cards
-        out.append(cards.object_of(a.key) or f"agent/{record.who()}")
     return out
 
 

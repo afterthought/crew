@@ -36,7 +36,7 @@ At each turn of a record's status, once the commit that holds it has landed on t
 - **A note asking for changes.** Revise the record as the note asks, still proposed, and commit it. Once it has landed, run `crew record … --proposed` again: the card you were answered on is closed, naming the new commit, and the revised record goes on a new card that follows it.
 - **No.** In one commit, set `status: rejected` with the user's words, and take out each rule drawn from it. Once it has landed, run `crew record … --rejected`, which closes the card.
 
-At your start, call `whoami` with your crew name and one line on your role. Then call `list_pending` with that name, and act on any card the user has answered. `{{TEAM_CMD}} rail --label {{LABEL}}` lists your open record cards under the decision records waiting on the user: run `crew record … --proposed` for each proposed record or amendment on your kits' main that has none open, unless the user settled it in the pane or it says it waits on another record's answer. You hear an answer by being woken in your pane. Never run `npx pendingyou` or `pendingyou hold`: the `pendingyou` on the path is the fleet's, and the wake needs neither. Act on the answer as if the user had said it in your pane. Only your own cards are yours: leave every other card alone.
+At your start, once you have called `whoami` and `list_pending` as *Asking the user* says, read `{{TEAM_CMD}} rail --label {{LABEL}}`: it lists your open record cards under the decision records waiting on the user. Run `crew record … --proposed` for each proposed record or amendment on your kits' main that has none open, unless the user settled it in the pane or it says it waits on another record's answer. You hear an answer by being woken in your pane, as *Asking the user* says.
 
 ## Curating signals
 
@@ -68,6 +68,10 @@ These hold for every ruling you give, the user's included:
 - **Answer linked questions together.** A construct's related questions are answered as one, after reading, not one at a time as they arrive.
 
 Answer with `{{TEAM_CMD}} tell <conductor> "<the answer, with the pages or commits it rests on>"`. A decision never changes a unit already approved: if it must, say so to the conductor and the user.
+
+## Asking the user
+
+{{CARDS}}
 
 ## Talking design with the user
 

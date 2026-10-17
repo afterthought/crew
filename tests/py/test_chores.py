@@ -10,6 +10,7 @@ import pytest
 
 from facts import FLEET, START, FactsWrite, apply, known, owed, plan_text, units_of
 
+import cards
 import plan
 
 KIT = "switchboard-kit"
@@ -332,11 +333,13 @@ class TestBolts:
 
 
 def proposal_card(*dos):
+    """A proposal's card as crew raises it (cards.proposal_card), on the plan at the tip and the plan its commands leave."""
     pl = plan.Plan(plan.PROPOSALS)
     plan.open_proposal(pl, 1, "Upkeep.", list(dos), "wldn-planner", "2026-10-12")
     p = plan.proposal(pl, 1, "wldn")
     base = lambda: FactsWrite(plan_text(bolts=[("deploys", KIT, None)], units=[("a-first", KIT, "deploys", [])]))
-    return p, plan.card_model(FLEET, "wldn", base(), p, after=apply(base(), *dos).plan)
+    return p, cards.proposal_card(dict(n=1, state="open", case="Upkeep.", before=base().plan, after=apply(base(), *dos).plan,
+                                       argvs=[plan.do_args("wldn", d) for d in dos], waiting=[], session=None))
 
 
 class TestProposals:
@@ -344,22 +347,17 @@ class TestProposals:
            'chore add pin "Pin the lock." --bolt upkeep', 'chore add tidy "Tidy the docs." --bolt upkeep']
 
     def test_a_batch_of_chores_is_one_bolt_whose_every_chore_the_user_keeps_or_clears(self):
-        _, m = proposal_card(*self.DOS)
-        assert m["new"] == ["bump", "pin", "tidy"]
-        q = m["card"]["questions"][1]
-        assert q["title"] == "Which chores go in? Clear one to leave it out."
-        assert q["rationale"] == "A cleared chore is not added; the rest of the proposal still applies."
-        assert [o["detail"] for o in q["options"]] == ["Chore: Biome follows the shell.", "Chore: Pin the lock.", "Chore: Tidy the docs."]
-        assert "CHORE  bump" in "\n".join(m["card"]["artifacts"][1]["lines"])
+        _, b = proposal_card(*self.DOS)
+        c = b["card"]
+        assert [(o["id"], o["detail"], o["consequence"]) for o in c["options"]] == [
+            (f"add:{u}", f"Chore: {said}", "Cleared: not added; the rest still applies")
+            for u, said in (("bump", "Biome follows the shell."), ("pin", "Pin the lock."), ("tidy", "Tidy the docs."))]
+        assert c["recommendedIds"] == ["add:bump", "add:pin", "add:tidy"]
+        assert "CHORE  bump" in "\n".join(c["artifacts"][-1]["lines"])
 
     def test_the_approval_leaves_a_cleared_chore_out(self):
         argvs = [plan.do_args("wldn", d) for d in self.DOS]
         assert [plan.do_named(a) for a in plan.kept(argvs, ["pin"], 1)] == ["bolt new upkeep", "chore add bump", "chore add tidy"]
-
-    def test_new_work_says_what_a_question_holds(self):
-        assert plan.new_work(["a", "b"], set()) == "new units"
-        assert plan.new_work(["a", "b"], {"a", "b"}) == "chores"
-        assert plan.new_work(["a", "b"], {"b"}) == "new units and chores"
 
     def test_it_reads_as_chores_and_names_chore_objects(self):
         argvs = [plan.do_args("wldn", d) for d in self.DOS[:2] + ['chore move bump queue', 'chore drop bump "Not now."']]

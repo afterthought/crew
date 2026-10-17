@@ -150,17 +150,12 @@ eq "$(props -t Proposal -e "Proposal = $n" -P Cleared)" "c-clear"
 has "$(git --git-dir "$ws" log -1 --format=%b wldn/main)" "Left out: c-clear"
 crew plan propose "$(proposal 'Case: Two more units.' 'Do: unit add f-1 "One." --bolt clears' 'Do: unit add f-2 "Two." --bolt clears')" >/dev/null
 n=$(last)
-expect_ok crew plan card "$n"
-eq "$(jq -r .card.title <<<"$out")" "Approve the change to clears: 2 new?"
-pic=$(jq -r .picture <<<"$out")
-eq "$pic" "$(home_of mac-studio)/.local/state/crew/cards/wldn/proposal/$n/proposal-$n.png"
-[[ -s $pic ]] || fail "the card's picture was not written"
 expect_ok crew plan answer "$n" rows-1 add:f-1 --note "split f-1 in two later"
 has "$out" "proposal $n is approved and applied, without f-2"
 eq "$(tail -1 <<<"$out")" "The user's note beside the approval of proposal $n: \"split f-1 in two later\". Propose what it asks as a new proposal."
 eq "$(plan -t Unit -e "Bolt = 'clears'" -P Unit | tail -1)" "f-1"
 [[ ! -e $(home_of mac-studio)/.local/state/crew/cards/wldn/proposal/$n/answers.json ]] || fail "the answers stayed after the approval"
-ok "an approval leaves the units the user cleared out, in one commit; the card is drawn with its picture, and its answers apply it with its boxes as they stand"
+ok "an approval leaves the units the user cleared out, in one commit, and the card's answers apply it with its boxes as they stand"
 
 # A unit from a signal: the route move is in the approval's commit.
 sig=2026-10-06-standup/01-plans-are-checked

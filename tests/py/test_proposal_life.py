@@ -479,18 +479,12 @@ def test_a_proposals_card_is_filed_in_the_kit_of_the_first_bolt_or_unit_it_names
     assert plan.named_kit(given, args('unit add u "U." --repo breadboard-kit')) == "breadboard-kit"
 
 
-def test_a_rewritten_proposals_rail_row_and_the_planners_card_check_carry_its_chains_key(monkeypatch):
+def test_a_rewritten_proposals_rail_row_carries_its_chains_key(monkeypatch):
     monkeypatch.setattr(plan.crew, "this_host", lambda: "mac-studio")
     row, = plan.rail_rows(FLEET, [], {}, [dict(label="wldn", proposal=3, first=1, by="wldn-planner", case="Third.", waiting=[],
                                                opened=TODAY)], {})
     assert (row["key"], row["what"][0], row["cmds"][0]) == ("proposal/1", "proposal 3 (wldn), by wldn-planner: Third.",
                                                             ("read", "crew plan proposed 3 --label wldn"))
-    pl = proposals_with(("One.", ["x"]), ("Other.", ["y"]))
-    plan.open_proposal(pl, 3, "Three.", ["z"], "wldn-planner", TODAY, replaces=1, label="wldn")
-    monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("WilldanGroup/crew-state", "wldn/main"))
-    monkeypatch.setattr(plan, "fetch", lambda repo, ref: "tip")
-    monkeypatch.setattr(plan, "show", lambda repo, tip, path: pl.text())
-    assert plan.CardReads(FLEET, "wldn").open_proposals() == ["proposal/2", "proposal/1"]
 
 
 def test_a_rewrite_after_the_users_note_acks_the_card_they_answered_and_its_new_version_follows_it(monkeypatch, capsys):
