@@ -159,6 +159,11 @@ class TestMainNow:
     def test_a_kit_with_no_origin_reads_its_own_main(self):
         assert kit.main_now(mains("no", github="-"), "switchboard-kit", "h") == ("main", OWN, None)
 
+    def test_every_kit_read_takes_the_same_ref_from_the_same_fact(self):
+        """gather.now_ref, which gather.kit and the tidy read a kit's landed changes at, as this host last fetched it."""
+        import gather
+        assert (gather.now_ref(True), gather.now_ref(False)) == ("refs/remotes/origin/main", "refs/heads/main")
+
     @pytest.mark.parametrize("out, why", [
         (mains("yes", fetched="fatal: unable to access"), "cannot fetch switchboard-kit from GitHub on h, so cannot read its main now: fatal: unable to access"),
         (mains("yes", github="-"), "switchboard-kit's GitHub has no main, fetched on h"),

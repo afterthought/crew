@@ -4683,13 +4683,14 @@ def tidy(fleet, a):
     bolts = {b.name() for *_, p in found for b in p.bolts() if b.get("Repo") == kit}
     units = {u.name() for *_, p in found for u in p.units() if u.get("Repo") == kit}
     chores = {u.name() for *_, p in found for u in p.chores() if u.get("Repo") == kit}
-    ups, on_main = gather.upstreams(main), set(gather.changes(main, "main"))
+    now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as Stages reads it (plan.18)
+    ups, on_main = gather.upstreams(main), set(gather.changes(main, now))
     dropped = fixes_dropped(main)
     chores_on = {}  # each branch's chores, read once each and only for a chore's place
 
     def chores_of(ref):
         if ref not in chores_on:
-            chores_on[ref] = set(gather.chores(main, f"refs/heads/{ref}"))
+            chores_on[ref] = set(gather.chores(main, now if ref == "main" else f"refs/heads/{ref}"))
         return chores_on[ref]
     for w in trees:
         path, branch = w["path"], w.get("branch") or ""
@@ -8968,7 +8969,8 @@ def record_status(fleet, a):
     """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
     [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031 §1). The kit is one of
     the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
-    its main, as this host's checkout of the kit holds it, at the last commit that changed it, read where the
+    its main now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18), read in this host's checkout
+    of the kit, at the last commit that changed it, read where the
     partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
     alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
     record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
@@ -8999,10 +9001,15 @@ def record_status(fleet, a):
         r = subprocess.run(["git", "-C", checkout, *args], capture_output=True, text=True)
         r.returncode == 0 or fail(f"git {args[0]} in {checkout} failed: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
         return r.stdout
-    files = [f for f in git("ls-tree", "--name-only", "main", "docs/adr/").splitlines() if re.fullmatch(rf"docs/adr/{n}-[^/]*\.md", f)]
+    # The record as the kit's main holds it now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18).
+    r = subprocess.run(["bash", "-c", MAIN, "crew", checkout], capture_output=True, text=True, env=gitenv())
+    r.returncode == 0 or fail(f"{checkout} could not be read: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
+    _, now, why = kit.main_now(r.stdout, a.kit, here)
+    not why or fail(why)
+    files = [f for f in git("ls-tree", "--name-only", now, "docs/adr/").splitlines() if re.fullmatch(rf"docs/adr/{n}-[^/]*\.md", f)]
     len(files) == 1 or fail(f"{a.kit}'s main holds " + (f"no record {n} in docs/adr/" if not files else
                                                            f"{len(files)} records numbered {n}: {', '.join(files)}") + ", so crew records nothing.")
-    commits = [l.split("\t", 1) for l in git("log", "-2", "--format=%H\t%s", "main", "--", files[0]).splitlines()]
+    commits = [l.split("\t", 1) for l in git("log", "-2", "--format=%H\t%s", now, "--", files[0]).splitlines()]
     sha, subject = commits[0]
     facts = record_facts(a.kit, a.number, git("show", f"{sha}:{files[0]}"), a.status,
                          git("show", f"{commits[1][0]}:{files[0]}") if len(commits) > 1 else None, alternatives)

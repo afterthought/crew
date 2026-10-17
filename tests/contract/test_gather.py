@@ -220,3 +220,34 @@ def test_a_dependents_place_takes_a_chores_head_and_a_chores_own_work_leaves_out
     took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(b), "b", "te", "chore/pin"], capture_output=True, text=True)
     assert (took.returncode, took.stdout.split()) == (0, ["pin", repo.git("rev-parse", "--short=7", "chore/pin")])
     repo.git("-C", str(b), "merge-base", "--is-ancestor", "chore/pin", "HEAD")
+
+
+def test_a_kit_on_github_reads_what_has_landed_from_origin_main_not_the_hosts_own_main(repo, tmp_path):
+    """Stages and the tidy through gather.kit (plan.18): a kit with an origin remote reads its landed changes and chores
+    at origin/main as the host last fetched it, which a landing elsewhere moved and the host's own main lags; what
+    only the host's own main holds has not landed. A kit with no origin reads its own main."""
+    import subprocess
+    k = Kit(repo, tmp_path)
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(origin), str(other)], check=True)
+    change(other, "landed-elsewhere")
+    subprocess.run(["git", "-C", str(other), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(other), "commit", "-qm", "chore(land): #1 bolt/x"], check=True)
+    subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "main"], check=True)
+    change(repo.path, "only-here")
+    k.commit(repo.path, "feat: only on the host's own main")
+    repo.git("fetch", "-q", "origin")
+    assert k.read()["main"] == ["landed-elsewhere"]
+    repo.git("remote", "remove", "origin")
+    assert k.read()["main"] == ["only-here"]
+
+
+def test_a_kit_whose_main_now_is_missing_is_not_read(repo, tmp_path):
+    """gather.kit (read.1): a kit with an origin that has no origin/main is named unread, never read at its own main."""
+    k = Kit(repo, tmp_path)
+    repo.git("remote", "add", "origin", str(tmp_path / "never-fetched.git"))
+    got = k.read()
+    assert got["ok"] is False and "has no origin/main to read" in got["error"]

@@ -365,15 +365,29 @@ def slots(files):
     return out
 
 
-def explorations(main):
-    """Each folder under openspec/explorations/ on main, in name order, with the first non-blank line of its first .md
-    file, its leading "> " dropped; None when it has no .md file or that line can't be read."""
+def has_origin(main):
+    """Whether a kit's main checkout has an origin remote, its GitHub."""
+    return run(["git", "remote", "get-url", "origin"], main) is not None
+
+
+def now_ref(origin):
+    """The ref a kit's main is read at now (plan.18), from whether it has an origin remote: GitHub's,
+    refs/remotes/origin/main as this host last fetched it, for a kit with one, since sluice lands there and the host's
+    own main lags it on every host that did not land; its own main for a kit with none, which has no GitHub to lag. A
+    read of every kit fetches nothing: sluice's push moves origin/main on the host that landed, and the fleet's timer
+    fetches on every other within minutes; a command that must have GitHub's main at once fetches it (plan.MAINS)."""
+    return "refs/remotes/origin/main" if origin else "refs/heads/main"
+
+
+def explorations(main, ref="main"):
+    """Each folder under openspec/explorations/ on main (ref), in name order, with the first non-blank line of its first
+    .md file, its leading "> " dropped; None when it has no .md file or that line can't be read."""
     out = []
-    for path in (run(["git", "ls-tree", "-d", "--name-only", "main", "openspec/explorations/"], main) or "").splitlines():
+    for path in (run(["git", "ls-tree", "-d", "--name-only", ref, "openspec/explorations/"], main) or "").splitlines():
         name = path.rstrip("/").rsplit("/", 1)[-1]
-        files = (run(["git", "ls-tree", "--name-only", "main", f"openspec/explorations/{name}/"], main) or "").splitlines()
+        files = (run(["git", "ls-tree", "--name-only", ref, f"openspec/explorations/{name}/"], main) or "").splitlines()
         md = next((f for f in files if f.endswith(".md")), None)
-        text = run(["git", "show", f"main:{md}"], main) if md else None
+        text = run(["git", "show", f"{ref}:{md}"], main) if md else None
         first = next((l.strip() for l in (text or "").splitlines() if l.strip()), None)
         out.append({"name": name, "first": first[2:] if first and first.startswith("> ") else first})
     return out
@@ -386,10 +400,14 @@ def kit(req, sites=False, running=None, board=False):
     trees = worktrees(main)
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
-    out = {"ok": True, "main": changes(main, "main"), "chores": chores(main, "refs/heads/main"), "bolts": {}, "places": {},
+    # The kit's main now (now_ref): which changes and chores have landed, and the explorations, are read there.
+    now = now_ref(has_origin(main))
+    if run(["git", "rev-parse", "--verify", "-q", f"{now}^{{commit}}"], main) is None:
+        return {"ok": False, "error": f"{main} has no {now[len('refs/remotes/'):] if now.startswith('refs/remotes/') else 'branch main'} to read"}
+    out = {"ok": True, "main": changes(main, now), "chores": chores(main, now), "bolts": {}, "places": {},
            "chore_places": {}, "fixes": []}
     # The kit's policy, as its main holds it: what gates its bolt branches, which crew reads before it gives a bolt.
-    out["policy"] = run(["git", "show", "main:.config/sluice.toml"], main)
+    out["policy"] = run(["git", "show", f"{now}:.config/sluice.toml"], main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
     # asked for, or tracked by a place, that has no branch is marked missing.
     have = [r[len("refs/heads/bolt/"):] for r in (run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/"], main) or "").split()]
@@ -427,7 +445,7 @@ def kit(req, sites=False, running=None, board=False):
         out["routes"] = running
     if board:
         out["slots"] = slots(req.get("slots", {}))
-        out["explorations"] = explorations(main)
+        out["explorations"] = explorations(main, now)
     return out
 
 
