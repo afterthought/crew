@@ -80,7 +80,8 @@ class TestKeys:
         ("swb-1-conductor", "land/tenant-environments/abc1234", "a landing card is crew's"),
         ("wldn-planner", "proposal/4", "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop"),
         ("wldn-planner", "proposal/4:2", "a proposal's card is crew's"),
-        ("wldn-planner", "batch/2-1", "a batch's card is crew's"),
+        ("wldn-planner", "batch/3", "a batch's card is crew's"),
+        ("wldn-design", "batch/2-1", "a batch's card is crew's"),
         ("wldn-ops", "deploy/dev", "a deploy's card is crew's, raised by crew ops offer"),
         ("wldn-ops", "op/dev/1", "a step's card is crew's, raised by crew ops step"),
         ("wldn-design", "record/atlas-kit/0021", "a record's card is crew's, raised by crew record"),
@@ -91,6 +92,15 @@ class TestKeys:
             why = key(name, k, tool)
             assert why.startswith(f"crew refuses {name}'s {verb} of the card under {k}: {said}"), why
             assert why.endswith(f"Ask a question of your own under a key of your own, ask/{name}/<what it is about>.")
+
+    def test_the_planner_closes_an_old_batch_card_it_posted_and_posts_or_changes_none(self):
+        """rail-cards: the planner closes an old batch card. A card under batch/<n>-<k> was the planner's own, posted
+        before a batch was one card, which crew never raises; its close passes, its post and change are refused."""
+        for tool in ("cancel_request", "ack_answer"):
+            assert key("wldn-planner", "batch/2-1", tool) is None
+        for tool, verb in (("post_request", "post"), ("update_request", "change")):
+            assert key("wldn-planner", "batch/2-1", tool).startswith(f"crew refuses wldn-planner's {verb} of the card under batch/2-1: a batch's card is crew's")
+        assert key("wldn-planner", "batch/2", "cancel_request").startswith("crew refuses wldn-planner's close of the card under batch/2")
 
     def test_a_key_outside_crews_own_is_a_questions_whatever_it_is(self):
         for k in ("gateway-check", "review/x/abc1234", "landing-of-y", "ask/swb-1-conductor/hold"):
@@ -243,7 +253,7 @@ class TestNames:
         assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold", "kind": "text"})) is None
 
     def test_a_close_the_run_record_cannot_key_is_refused_and_a_question_reads_no_plan(self, monkeypatch):
-        """rail-cards: the run record cannot be read; the plan cannot be read."""
+        """rail-cards: crew's record of its cards cannot be read; the plan cannot be read."""
         monkeypatch.setenv("CREW_LABEL", "wldn")
         monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
         monkeypatch.setattr(plan.crew, "load", lambda: FLEET)

@@ -594,7 +594,7 @@ class TestBolts:
 
 
 def test_a_card_act_whose_reply_named_no_card_is_listed_after_the_questions():
-    """rail-cards: a crew agent's card act whose reply crew could not read is recorded unread by the card hook, and the
+    """rail-cards: a question whose reply names no card. The card hook records the act unread on its agent, and the
     rail lists it with its agent, act and time; one older than CARD_DAYS days is not listed."""
     fresh = dict(Act="card.post", By="swb-1-conductor", Host=BOX, At=iso(30), State="unread", Key="ask/swb-1-conductor/hold")
     old = dict(fresh, At=(NOW - datetime.timedelta(days=plan.CARD_DAYS + 1)).strftime("%Y-%m-%dT%H:%M:%SZ"))

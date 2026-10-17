@@ -7734,11 +7734,15 @@ def card_refusal(fleet, name, label, tool, key):
     """Whether a crew agent's Pending You call may go through (briefs.11, record 0031): None to let it, else the
     refusal's words. The user's own name is never checked. A card's post, change or close is a question's, the agent's
     own, only from a conductor, the planner, main-level ops or the design agent (ASKERS), and never under crew's own
-    key (crews_key): the post's idempotencyKey, or, for a change or a close, the key this host's run record holds the
-    card under, None when it holds none. An area is made only under create-area:<owner>/<kit> for a kit the agent's
-    team builds or, for the main level, a kit of any team of its partition, read from the teams file. Everything else
-    passes: a question's form, and its key but crew's, are its asker's. A decision of the role, the call and the key
-    alone (code.7)."""
+    key (crews_key). A post's key is its idempotencyKey, judged by its form alone, with or without :<n>, and no plan
+    read. A change or a close carries a request id and no key, so its key is the one this host's run record holds the
+    card under, crew's raises and the agents' own posts alike, read locally with no state-branch fetch, None when it
+    holds none; the hook refuses the call when that record can't be read. The planner's close of a card under
+    batch/<n>-<k>, which it posted itself before a batch was one card and crew never raises, passes, a departure from
+    briefs.11 that goes once no such card is open; its post or change there is refused. An area is made only under
+    create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
+    partition, read from the teams file. Everything else passes: a question's form, and its key but crew's, are its
+    asker's. A decision of the role, the call and the key alone (code.7)."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
@@ -7764,7 +7768,7 @@ def card_refusal(fleet, name, label, tool, key):
         return (f"crew refuses an area under {key}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine
                 else f"no kit's area is {name}'s to make."))
     crews = crews_key(key)
-    if crews:
+    if crews and not (kind == "planner" and tool in ("cancel_request", "ack_answer") and old_batch(key)):
         verb = {"post_request": "post", "update_request": "change"}.get(tool, "close")
         return (f"crew refuses {name}'s {verb} of the card under {key}: {CREWS[crews]}. Ask a question of your own under "
                 f"a key of your own, ask/{name}/<what it is about>.")
