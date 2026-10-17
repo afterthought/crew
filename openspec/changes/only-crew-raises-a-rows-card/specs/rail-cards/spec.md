@@ -226,6 +226,13 @@ A record's card SHALL be raised by crew through `crew record <kit> <number> --pr
 - **WHEN** wldn-design calls `post_request` with the key `proposal/1`
 - **THEN** the call is refused, saying a proposal's card is crew's; a key of its own for a question goes through
 
+### Requirement: A proposal's card carries its change as text
+A proposal's card SHALL carry its change as an artifact of kind `code` with lang `text`, its lines crew's text of the change, each at most forty characters, so it reads in monospace on a phone without wrapping.
+
+#### Scenario: A proposal's change as text
+- **WHEN** crew raises the card for proposal 4, which drops a unit and adds two
+- **THEN** the card carries the new and dropped units' paragraphs as Markdown, the uploaded picture, and a `code` artifact of lang `text` holding the change, each line at most forty characters, and no link to a session
+
 ## REMOVED Requirements
 
 ### Requirement: The owner of a row posts its card
