@@ -16,7 +16,7 @@ Parts in build order; each part is its own unit and lands on its own. Parts 2 to
 - [ ] 4.1 `POLICY`, `MAIN`, `main_held`, `BOLT_BRANCH`, `change_folder`, `ONTO` and `landed_at` read `origin/main` after one fetch per command; the behind-GitHub refusal goes and `main_held` refuses only a fetch that fails; the landing record's head is `origin/main`'s. Logic: `tests/py/test_landing.py` "The host's main lags GitHub's", `tests/py/test_kit.py` the policy read by ref, `tests/py/test_bolt_commands.py`. Contract: `tests/contract/test_git.py` against a bare remote whose main is ahead of the local branch (`plan.8`, `plan.18`, `read.1`).
 - [ ] 4.2 `bolt_land` closes the landing card with "landed on GitHub's main at `<sha>` (#<n>); every host's folder follows by swancloud's timer within minutes". Logic: `tests/py/test_landing.py`, the card's close. Journey: `tests/t-journey-land.sh` on the stub pendingyou (`plan.16`).
 - [x] 4.3 `main-ops.md` *Landing a bolt* loses the push, the levelling and the box's pull; `coder.md`'s fix merges `origin/main`; `design.md` and `operator.md` cut their branch from `origin/main`, blueprints included, and `design.md` loses the `read-tree` step; `conductor.md` says the bolt is read by ref. Journey: `tests/t-briefs.sh` pins the words (`briefs.11`, `state.3` as amended).
-- [ ] 4.4 README, `plugin/skills/crew/SKILL.md` and `crew`'s usage header say a landing pushes nothing and levels no host. Journey: `tests/t-docs.sh` (`docs.2`).
+- [x] 4.4 README, `plugin/skills/crew/SKILL.md` and `crew`'s usage header say a landing pushes nothing and levels no host. Journey: `tests/t-docs.sh` (`docs.2`).
 
 ## Part 5. The overview
 
