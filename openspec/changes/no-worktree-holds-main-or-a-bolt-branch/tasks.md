@@ -8,7 +8,7 @@ Parts in build order; each part is its own unit and lands on its own. Parts 2 to
 
 ## Part 3. The landing folder, the levelling step, the unit refusal
 
-- [ ] 3.1 `LANDING` keeps `places/land-<bolt>` on `bolt/<bolt>`, passes sluice's checkout warning through, levels the main checkout only while it is on branch `main` and prints nothing when it is detached; `landing_said` is unchanged. Logic: `tests/py/test_landing.py`, "The anchor is detached". Contract: `tests/contract/test_git.py`, a landing against a detached checkout leaves it untouched. Journey: `tests/t-journey-land.sh` (`plan.16`, `plan.18`).
+- [x] 3.1 `LANDING` keeps `places/land-<bolt>` on `bolt/<bolt>`, passes sluice's checkout warning through, levels the main checkout only while it is on branch `main` and prints nothing when it is detached; `landing_said` is unchanged. Logic: `tests/py/test_landing.py`, "The anchor is detached". Contract: `tests/contract/test_git.py`, a landing against a detached checkout leaves it untouched. Journey: `tests/t-journey-land.sh` (`plan.16`, `plan.18`).
 - [ ] 3.2 `unit_run` refuses a construct, code or merge start on a bolt whose landing is submitted and not yet landed or refused, naming the landing; the decision reads the land rows. Logic: `tests/py/test_bolt_commands.py`, "A unit during a queued landing". Journey: `tests/t-journey-land.sh` (`plan.8` as amended).
 
 ## Part 4. Main is read by ref
