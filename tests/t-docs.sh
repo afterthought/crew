@@ -1,7 +1,8 @@
 # README, the crew skill and crew's usage name the same commands: every command in the README is in the usage,
 # and none of the removed ones is in any of them. CLAUDE.md names how an agent runs crew's tools through the shell
-# per command, and no role brief or crew skill does (tests.7); a checkout carries the .envrc a person's direnv enters
-# the shell with, and ignores devenv's and direnv's working files and the tests' .venv.
+# per command, and no role brief or crew skill does (tests.7); a landing pushes nothing and levels no host in each of
+# them (docs.2, plan.18); a checkout carries the .envrc a person's direnv enters the shell with, and ignores devenv's
+# and direnv's working files and the tests' .venv.
 # Reads: README.md CLAUDE.md plugin/roles/ plugin/skills/ .envrc .gitignore
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -34,6 +35,11 @@ ok "none of the removed commands or roles is in the README, the skill or the usa
 
 for doc in usage readme skill; do has "${!doc}" "crew ops offer <env>"; has "${!doc}" "[--notes <file>] [--steps <file>]"; done
 ok "the README, the skill and the usage give crew ops offer's notes and steps"
+
+for doc in usage readme skill; do
+  has "${!doc}" "pushes nothing and levels no host"; has "${!doc}" "origin/main"; lacks "${!doc}" "behind GitHub's"
+done
+ok "the README, the skill and the usage say a landing pushes nothing and levels no host, and a bolt is cut from origin/main"
 
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)

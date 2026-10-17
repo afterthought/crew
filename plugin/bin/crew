@@ -98,12 +98,13 @@
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit, and
 #                                      each held bolt's verification, sluice's verdict on its last landing
 #   crew bolt  new|give|order|drop|land ...
-#                                      give makes bolt/<bolt> from the kit's main with no worktree, refused in a kit
-#                                      whose .config/sluice.toml names no checks for its bolt branches
+#                                      give makes bolt/<bolt> from GitHub's main, origin/main after a fetch, with no
+#                                      worktree, refused in a kit whose .config/sluice.toml there names no checks for
+#                                      its bolt branches
 #   crew bolt  submit <bolt> [--label L]
 #                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
-#                                      sluice from a short-lived worktree on the team's host, waiting for the outcome,
-#                                      then the kit's main checkout brought level; refused while main is behind GitHub's
+#                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
+#                                      sluice pushes it to GitHub, and the landing pushes nothing and levels no host
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
