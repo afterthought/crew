@@ -4,7 +4,7 @@ Parts in build order; each part is its own unit and lands on its own. Parts 2 to
 
 ## Part 2. Legacy bolt worktrees
 
-- [ ] 2.1 `tidy` detaches a `<kit>/bolts/<bolt>` worktree on `bolt/<bolt>` at the bolt's tip when it is clean, saying so, and names it as kept when dirty; the decision is a function of the worktree's branch and cleanliness. Logic: `tests/py/test_tidy.py`, the two scenarios of "crew removes only its own worktrees" for a legacy worktree. Contract: `tests/contract/test_wt.py`, a clean worktree detached and a dirty one left (`plan.9`, `plan.18`, `read.4`).
+- [x] 2.1 `tidy` detaches a `<kit>/bolts/<bolt>` worktree on `bolt/<bolt>` at the bolt's tip when it is clean, saying so, and names it as kept when dirty; the decision is a function of the worktree's branch and cleanliness. Logic: `tests/py/test_tidy.py`, the two scenarios of "crew removes only its own worktrees" for a legacy worktree. Contract: `tests/contract/test_wt.py`, a clean worktree detached and a dirty one left (`plan.9`, `plan.18`, `read.4`).
 
 ## Part 3. The landing folder, the levelling step, the unit refusal
 
