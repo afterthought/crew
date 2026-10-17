@@ -193,13 +193,16 @@
 #
 # Operations on a partition's environments, a deploy being one kind (plan.14), run where the partition's main level
 # runs (lib/ops.py says each in full):
-#   crew ops offer|approve <env> --label L --to <sha> [--from <sha|none>]
-#                                      a manual environment's deploy offered as a rail row; the user's word for it
+#   crew ops offer <env> --label L --to <sha> --from <sha|none> [--notes <file>] [--steps <file>]
+#                                      a manual environment's deploy offered as a rail row, its card raised in
+#                                      main-level ops's name with the kit's changelog and after-deploy steps
+#   crew ops approve <env> --label L --to <sha>
+#                                      the user's word for it
 #   crew ops word|quiet <env> --label L
 #                                      the commit the user's word is for; whether the environment's host is quiet
 #   crew ops record <env> --label L --to <sha> --act start|step|end [...]
 #                                      a deploy's start, steps and end in the run record as it runs
-#   crew ops step <env> --label L --key K --state S [--to <sha>] [...]
+#   crew ops step <env> --label L --key K --state S [--to <sha>] [--held] [...]
 #   crew ops steps <env> --label L --json
 #                                      any other operation and its state, on its own or after a deploy
 #

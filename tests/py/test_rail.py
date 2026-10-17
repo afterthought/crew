@@ -301,6 +301,15 @@ class TestSweepJudged:
     def test_why_a_rows_card_has_no_row_is_read_from_the_run_record(self, key, entries, why):
         assert plan.row_gone(key, entries) == why
 
+    def test_a_deploys_card_whose_word_stands_is_left_for_its_deploys_end_to_close_and_listed_as_no_stray(self):
+        d = card("deploy/dev", "req_d1", "wldn-ops")
+        word = [did("ops.offer", On=["env/dev"], Head="a" * 40, Base="none"), did("ops.approve", On=["env/dev"], Head="a" * 40)]
+        assert self.judged(cards_=[d], entries=word)["gone"] == []
+        assert "open cards whose row is gone" not in text(rows(), cards=[d], logs={"wldn": word})
+        ended = word + [did("ops.deploy", On=["env/dev"], Head="a" * 40, Phase="end", Outcome="ok")]
+        assert self.judged(cards_=[d], entries=ended)["gone"] == [(d, None, "its deploy no longer waits on your word")]
+        assert "deploy/dev (wldn), asked by wldn-ops on mac-studio" in text(rows(), cards=[d], logs={"wldn": ended})
+
     def test_only_the_cards_posted_on_this_host_are_judged_and_a_decision_records_never(self):
         there = card("proposal/4", "req_p4", "wldn-planner", host=BOX)
         rec = card("record/atlas-kit/0021", "req_r1", "wldn-design")

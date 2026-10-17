@@ -108,7 +108,7 @@ OPS = [entry("bolt.land", 95, bolt="atlas-maps", Repo="atlas-kit", Head=S1), ent
        entry("ops.offer", 40, Head=S2, Base=S1),
        entry("ops.step", 30, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher", Agent="wldn-dispatch-mac-studio"),
        entry("ops.step", 20, Key="rotate-key", State="waiting", Doer="user", Text="Rotate the key.")]
-DEPLOY_CARD = dict(label="wldn", card="req_9", key=f"deploy/mac-studio/{S2[:7]}", by="wldn-ops", host="mac-studio", at=NOW)
+DEPLOY_CARD = dict(label="wldn", card="req_9", key="deploy/mac-studio", by="wldn-ops", host="mac-studio", at=NOW)
 
 
 SIGS = [{"signal": "2026-10-01-planning/01-zones", "home": "blueprints", "captured_by": "wldn-planner", "at": "2026-10-01", "kind": "ask",
@@ -178,7 +178,7 @@ class TestText:
                       "✓ mac-studio  rotate-key  waits on the user  Rotate the key.  no card open"]
         env, = data(entries=OPS)["partitions"][0]["environments"]
         assert (env["env"], env["teams"], [d["row"] for d in env["deploys"]], [w["row"] for w in env["waiting"]]) == (
-            "mac-studio", ["atl-1"], [f"deploy/mac-studio/{S2[:7]}", None], [None, "op/mac-studio/2"])
+            "mac-studio", ["atl-1"], ["deploy/mac-studio", None], [None, "op/mac-studio/2"])
 
     def test_a_deploy_that_failed_says_at_which_step_and_one_whose_commit_no_landing_holds_says_so(self):
         es = [entry("ops.deploy", 30, Head=S2, Base=S1, Phase="start"), entry("ops.deploy", 20, Head=S2, Phase="step", Step="machine", Outcome="failed"),
@@ -356,6 +356,13 @@ class TestViews:
             f"  mac-studio  restart-teams/1  after {S1[:7]}  handed  doer dispatcher, wldn-dispatch-mac-studio",
             "✓ mac-studio  rotate-key  waiting  doer user  no card open",
             f"  swancloud-srv  deploy {S1[:7]}  deploying since {board.local(ago(10))}"]
+
+    def test_a_step_held_for_the_users_word_is_marked_held_and_waits_on_its_card(self):
+        held = entry("ops.step", 10, Head=S1, Key="restart-herdr/1", State="waiting", Doer="main-ops", Agent="wldn-ops", When="quiet held")
+        assert view("wldn-ops", entries=OPS + [held])[-1] == (
+            f"✓ mac-studio  restart-herdr/1  after {S1[:7]}  waiting  doer main-ops, wldn-ops, held for the user's word  no card open")
+        assert lane(board.board_text(data(entries=OPS + [held])), "Operation")[-1] == (
+            "✓ mac-studio  restart-herdr/1  held for the user's word, for wldn-ops  no card open")
 
     def test_main_level_ops_with_nothing_waiting_reads_its_head_and_no_deploy_done_or_replaced(self):
         done = [entry("ops.offer", 30, Head=S1, Base="none"), entry("ops.offer", 20, Head=S2, Base="none"), entry("ops.approve", 15, Head=S2),

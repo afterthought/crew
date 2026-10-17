@@ -22,9 +22,9 @@
 # open ended, and the card raised all the same, saying so; and a wait with neither card nor session refused. Then the
 # rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when Pending You no longer
 # finds it, and a question whose asker ended withdrawn, a question whose asker runs listed with its asker and age, crew
-# board acting on none; a row's card read not found recorded lost; a row whose post was refused showing the refusal,
-# left while the refusal is under ten minutes old and raised through its kind's raise after; and a row of a kind with no
-# raise left as it is. Which card a key names, what crew sets on a card, the area, how a reply, a refusal and an answer
+# board acting on none; a deploy's card, raised by crew ops offer, read not found, recorded lost and raised again through
+# its kind's raise; a row whose post was refused showing the refusal, left while the refusal is under ten minutes old and
+# raised through its kind's raise after, a proposal's and a step's that crew ops step raised. Which card a key names, what crew sets on a card, the area, how a reply, a refusal and an answer
 # read, and what the act sends and records for each are logic cases (tests/py/test_card_commands.py); whose key and what
 # form, each card's builder, a record's facts, and the session's start and end in the act and what a batch's wait
 # returns, test_cards.py; a batch card's facts, test_batches.py; what the sweep judges and does, test_rail.py.
@@ -517,21 +517,24 @@ $lc withdrawn agent/swb-1-conductor
 $q2 withdrawn agent/swb-2-conductor"
 ok "the rail read, asking after each card in crew's own name, records lost a card whose row is gone and that Pending You no longer finds, withdraws one it finds and a question whose asker herdr no longer lists, keeps the one whose asker runs, and crew board acts on none"
 
-# A deploy offered, its card posted by main-level ops on the box; the box signs in to Pending You again, so the card
-# reads not found. No change of the series raises a deploy card here, so the read records it lost for ops to post.
-s1=$(printf 'a%.0s' $(seq 40)); d=deploy/mac-studio/${s1:0:7}
+# A deploy offered: crew ops offer raises its card in main-level ops's name on the box; the box signs in to Pending You
+# again, so the card reads not found, and the read records it lost and raises it again through the deploy's raise,
+# saying its older copy is dead.
+s1=$(printf 'a%.0s' $(seq 40)); d=deploy/mac-studio
 HOST=$box expect_ok crew ops offer mac-studio --label wldn --from none --to "$s1"
-deploy='{"kind": "approve", "title": "Deploy main", "summary": "Deploy main.", "blocking": false, "urgency": "today",
-  "approve": {"action": "Deploy main", "risk": "high", "reversible": false}}'
-dc=$( (export CREW_TEST_HOST=$box CREW_AGENT=wldn-ops HOME; HOME=$(home_of $box); cd "$wd" && "$CREW/plugin/bin/crew" card post $d <<<"$deploy") | sed -n '1s/^card [^:]*: \([^ ]*\).*/\1/p')
-[[ $dc == req_stub-* ]] || fail "ops's card was not posted: $dc"
+dc=$(sed -n "s|^card $d: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$out")
+[[ $dc == req_stub-* ]] || fail "the deploy's card was not raised:"$'\n'"$out"
 mv "$stub/cards.json" "$stub/cards.signed-in-again.json"
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew rail --label wldn; r=$out
-has "$r" "  $d (wldn), wldn-ops's $dc: lost: crew raises no card for $d yet, so wldn-ops posts it again"
-has "$r" "    card:   $d, none open"
+nc=$(sed -n "s|^card $d: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
+[[ -n $nc && $nc != "$dc" ]] || fail "the read raised no new card for $d:"$'\n'"$r"
+has "$r" "  $d (wldn), wldn-ops's $dc: lost: posted again as $nc"
+has "$r" "    card:   $d, open, asked by wldn-ops ($nc)"
 eq "$(entries card.close | jq -r "select(.Card == \"$dc\") | [.State, .By] | join(\" \")")" "lost wldn-ops"
-ok "a row's card Pending You no longer finds is recorded lost by the rail read, and its row then shows none open"
+eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempotencyKey | startswith(\"$d\")) | .summary" | head -1)" \
+  "An older copy of this card was lost: dismiss it in the app."
+ok "a row's card Pending You no longer finds is recorded lost by the rail read and raised again through its kind's raise, saying its older copy is dead"
 
 # A proposal whose card Pending You refused at its raise: the row shows the refusal, and the rail read leaves it while
 # the refusal is under ten minutes old (CARD_RETRY), so a refusal that stands is not tried at the rail tab's pace; once
@@ -557,12 +560,20 @@ has "$r" "  $k (wldn), wldn-planner's $pc: posted: its row had none open"
 has "$r" "    card:   $k, open, asked by wldn-planner ($pc)"
 ok "a row whose card's post was refused shows the refusal, is left by a read while the refusal is under ten minutes old, and is raised through its kind's raise by the first read after"
 
-# A step waiting on the user is a row of a kind no change of the series raises here yet: the read leaves it as it is,
-# only asking after the cards open.
+# A step waiting on the user: crew ops step raises its card in main-level ops's name; refused, the row shows the
+# refusal, and once that is over ten minutes old the read raises the card through the step's raise.
+echo "post_request Too many requests." > "$stub/refuse"
 HOST=$box expect_ok crew ops step mac-studio --label wldn --key rotate-key --state waiting --doer user --note "due this week"
+op=$(grep -o 'op/mac-studio/[0-9]*' <<<"$out" | head -1); [[ -n $op ]] || fail "the step raised no op/ card:"$'\n'"$out"
+has "$out" "card $op not posted: Pending You refused post_request: Too many requests."
+: > "$stub/refuse"
+id=$(entries card.post | jq -r "select(.Key == \"$op\" and .Refused) | .Id" | tail -1)
+for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $id\$/,/^\$/s/^At: .*/At: $old/"; done
 : > "$CREW_TEST_LOG"
-HOST=$box expect_ok crew rail --label wldn
-op=$(grep -o 'op/mac-studio/[0-9]*' <<<"$out" | head -1); [[ -n $op ]] || fail "the step has no op/ row:"$'\n'"$out"
-has "$out" "    card:   $op, none open"
-eq "$(py_calls | cut -d' ' -f1 | sort -u | tr '\n' ' ')" "get_request whoami "
-ok "a row whose kind has no raise yet is left as it is, nothing posted"
+HOST=$box expect_ok crew rail --label wldn; r=$out
+sc=$(sed -n "s|^card $op: \(req_stub-[0-9]*\) https.*|\1|p" <<<"$r")
+[[ -n $sc ]] || fail "the read raised no card for $op:"$'\n'"$r"
+eq "$(py_calls | grep '^post_request' | cut -d' ' -f2- | jq -r "select(.idempotencyKey == \"$op\") | [.session.label, .kind, .intent] | join(\" \")")" "wldn-ops action do"
+has "$r" "  $op (wldn), wldn-ops's $sc: posted: its row had none open"
+has "$r" "    card:   $op, open, asked by wldn-ops ($sc)"
+ok "a step waiting on the user has its card raised by crew ops step, and one whose post was refused raised through the step's raise by the first read after ten minutes"

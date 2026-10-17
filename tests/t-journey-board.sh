@@ -88,7 +88,7 @@ s1=$(printf 'a%.0s' $(seq 40))
 expect_ok crew ops offer mac-studio --label wldn --from none --to "$s1"
 before=$(tip); n=$(records)
 expect_ok crew board --label wldn; b=$out
-eq "$(line_of "$(lane "$b" Operation)" "deploy ${s1:0:7}")" "✓ mac-studio  deploy ${s1:0:7} from nothing deployed  waits on the user's word  carrying what can't be read: ${s1:0:7} is no landing's commit in the record  no card open"
+eq "$(line_of "$(lane "$b" Operation)" "deploy ${s1:0:7}")" "✓ mac-studio  deploy ${s1:0:7} from nothing deployed  waits on the user's word  carrying what can't be read: ${s1:0:7} is no landing's commit in the record  card open, asked by wldn-ops"
 eq "$(grep -E '^[A-Za-z]' <<<"$b" | tail -n +2 | tr '\n' '|')" "Inception|Bolt plan|Construction|Operation|attention|"
 has "$(lane "$b" Inception)" "Every apex should be a zone of its own."
 has "$(lane "$b" Inception)" "exploration  switchboard-kit command-cost"
@@ -165,7 +165,7 @@ eq "$(sed -n 1p <<<"$out")" "$mine/page.html"
 [[ $(sed -n 2p <<<"$out") =~ ^as\ of\ [0-9-]{10}\ [0-9:]{5}Z\ ·\ wldn/main\ $(git --git-dir "$ws" rev-parse --short=7 wldn/main)$ ]] || fail "the header line: $out"
 json=$(block "$mine/page.html")
 eq "$(j .made.commit) $(j '[.board.construction[].bolt] | join(" ")')" "$(tip) tenant-environments atlas-maps"
-eq "$(j '.deploys[] | select(.env == "mac-studio") | .deploys[0] | "\(.to[:7]) \(.answer)"') $(j '.board.environments[0].deploys[0].row')" "${s1:0:7} waiting deploy/mac-studio/${s1:0:7}"
+eq "$(j '.deploys[] | select(.env == "mac-studio") | .deploys[0] | "\(.to[:7]) \(.answer)"') $(j '.board.environments[0].deploys[0].row')" "${s1:0:7} waiting deploy/mac-studio"
 eq "$(records)" "$n"
 expect_ok crew trace unit/a
 eq "$(j '.histories["unit/a"][] as $i | .entries[$i] | "\(.At[5:10]) \(.At[11:19]) \(.Act)"')" "$(awk '{print $1, $2, $3}' <<<"$out")"
