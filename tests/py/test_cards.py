@@ -64,8 +64,11 @@ class TestKeys:
         ("swb-1-unit-2", f"Say what you need with `{ASK} needs`, and your conductor gets it and asks if it must."),
         ("swb-1-ops", f"Tell swb-1-conductor what you wait on with `{ASK} tell`."),
         ("wldn-dispatch-mac-studio", f"Ask through wldn-planner with `{ASK} tell`."),
-        ("wldn-operator-mac-studio", "The user is in your pane: ask them there.")])
+        ("wldn-operator-mac-studio", "The user is in your pane: ask them there."),
+        ("crw-9-unit-1", "Tell the partition's operator agents what you wait on, as your brief says.")])
     def test_any_other_role_asks_nothing_on_a_card_and_is_told_whom_to_ask(self, name, words):
+        """rail-cards: a coder asks; the agent's role cannot be read, as for crw-9-unit-1, whose team the teams file
+        does not name."""
         for tool in ("post_request", "update_request", "cancel_request", "ack_answer", "create_area"):
             what = "an area" if tool == "create_area" else "a card"
             assert key(name, f"ask/{name}/x", tool) == (
@@ -238,6 +241,21 @@ class TestNames:
         assert "close of the card under land/tenant-environments" in cards.refusal(hooked("cancel_request", {"requestId": "req_l1", "reason": "x"}))
         assert cards.refusal(hooked("cancel_request", {"requestId": "req_q1", "reason": "x"})) is None
         assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold", "kind": "text"})) is None
+
+    def test_a_close_the_run_record_cannot_key_is_refused_and_a_question_reads_no_plan(self, monkeypatch):
+        """rail-cards: the run record cannot be read; the plan cannot be read."""
+        monkeypatch.setenv("CREW_LABEL", "wldn")
+        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+        monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
+
+        def unread(*a, **k):
+            raise OSError("wldn's run record on mac-studio can't be read")
+        monkeypatch.setattr(cards, "posted", unread)
+        assert cards.refusal(hooked("cancel_request", {"requestId": "req_q1", "reason": "x"})) == (
+            "crew could not check this card: wldn's run record on mac-studio can't be read. Try it again later.")
+        monkeypatch.setattr(plan, "fetch", unread)
+        monkeypatch.setattr(plan, "read", unread)
+        assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold-the-macs"})) is None
 
     def test_the_name_is_checked_before_and_apart_from_the_cards_key(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "wldn-planner")
