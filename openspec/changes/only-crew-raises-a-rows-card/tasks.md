@@ -6,7 +6,7 @@
 
 ## 2. The briefs
 
-- [ ] 2.1 `crew.py` `cards_how` is the question discipline and the hearing every asker carries; `lost_card_how` goes; the stage roles' words on `crew needs` say what the design's second decision says. Journey: `tests/t-briefs.sh` pins the words of each (`tests.6`, `briefs.11`).
+- [x] 2.1 `crew.py` `cards_how` is the question discipline and the hearing every asker carries; `lost_card_how` goes; the stage roles' words on `crew needs` say what the design's second decision says. Journey: `tests/t-briefs.sh` pins the words of each (`tests.6`, `briefs.11`).
 
 ## 3. Commands and docs
 
