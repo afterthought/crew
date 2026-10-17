@@ -54,6 +54,7 @@ tests/py/test_review.py
 tests/t-cards.sh
 tests/t-briefs.sh
 tests/t-docs.sh
+tests/t-journey-ops.sh
 tests/t-journey-plan.sh
 tests/t-journey-review.sh
 tests/moon.yml

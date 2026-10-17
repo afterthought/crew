@@ -7,11 +7,11 @@
 # it until that deploy's end is recorded, which closes the card with its outcome; a deploy's start, step and end are
 # entries as it runs; an operation's states are recorded and crew ops steps gives each one's latest, one the user is to
 # take, or an agent's held for the user's word, a rail row whose card crew raises one at a time, each following the
-# one before, and closes when it is marked; an offer on a host not signed in stands with no card; main-level ops may
-# post a card under an open operations row's key; quiet reads the host's agents and test slots; and an ops command
-# run away from the partition's main level runs there. Which offer is open, the word, each step's latest state, the
-# rows and their words, each card's facts, whether it is posted or changed and which step's card is raised are logic
-# cases (tests/py/test_ops.py); each step here checks a command's wiring once.
+# one before, and closes when it is marked; an offer on a host not signed in stands with no card; main-level ops posts
+# no card under an operations row's key, crew's, and asks under a key of its own; quiet reads the host's agents and
+# test slots; and an ops command run away from the partition's main level runs there. Which offer is open, the word,
+# each step's latest state, the rows and their words, each card's facts, whether it is posted or changed and which
+# step's card is raised are logic cases (tests/py/test_ops.py); each step here checks a command's wiring once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints afterthought/blueprints >/dev/null; blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -169,10 +169,10 @@ ok "an offer on a host not signed in to Pending You stands, its card not posted,
 
 refusal() { as mac-studio python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import crew, plan
 print(plan.card_refusal(crew.load(), sys.argv[2], "swancloud", "post_request", sys.argv[3]))' "$CREW/plugin/lib" "$@"; }
-eq "$(refusal swancloud-ops deploy/mac-studio)" "None"
-has "$(refusal swancloud-ops "deploy/mac-studio/${s1:0:7}")" "swancloud-ops posts a card only under an operations row's key of swancloud open now, deploy/mac-studio"
-has "$(refusal swancloud-ops land/x/abcdef1)" "operations row's key"
-ok "main-level ops may post a card under an open operations row's key, and no other"
+has "$(refusal swancloud-ops deploy/mac-studio)" "crew refuses swancloud-ops's post of the card under deploy/mac-studio: a deploy's card is crew's, raised by crew ops offer"
+has "$(refusal swancloud-ops op/mac-studio/1)" "a step's card is crew's, raised by crew ops step"
+eq "$(refusal swancloud-ops ask/swancloud-ops/hold-the-deploy)" "None"
+ok "main-level ops posts no card under an operations row's key, crew's, and asks under a key of its own"
 
 expect_ok dep quiet mac-studio
 slot=$(home_of mac-studio)/.cache/crew/test-slots/slot-0; mkdir -p "$(dirname "$slot")"
