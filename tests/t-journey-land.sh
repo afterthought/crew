@@ -1,10 +1,11 @@
 # A bolt landed through sluice, through the crew command on the stubs (tests.11, record 0022), a part of the units
-# journey (t-journey-units): a unit merges into the bolt by a submission, and crew bolts reads the bolt's verification
-# from sluice's verdict on it; crew bolt submit lands the bolt by a submission to main from a short-lived worktree,
-# naming a conflict for the team and moving nothing; a fix takes main into the bolt by a submission to the bolt, and
-# the landing then lands, leaving the kit's detached main checkout as it was; the bolt lands in the plan once every
-# unit has, recording the commit main holds and removing its branch, and its conductor is told which cards to close; a
-# bolt no team holds lands once its unit's change is on main; and dropping a held bolt removes its branch and places.
+# journey (t-journey-units): no unit starts on a bolt while its landing is in flight; a unit merges into the bolt by a
+# submission, and crew bolts reads the bolt's verification from sluice's verdict on it; crew bolt submit lands the
+# bolt by a submission to main from a short-lived worktree, naming a conflict for the team and moving nothing; a fix
+# takes main into the bolt by a submission to the bolt, and the landing then lands, leaving the kit's detached main
+# checkout as it was; the bolt lands in the plan once every unit has, recording the commit main holds and removing its
+# branch, and its conductor is told which cards to close; a bolt no team holds lands once its unit's change is on
+# main; and dropping a held bolt removes its branch and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -21,7 +22,19 @@ mkdir -p "$pa/openspec/changes/archive"; git -C "$pa" mv openspec/changes/a open
 git -C "$pa" commit -qm "docs(openspec): archive a"
 (cd "$pa" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "a's submission failed"
 git -C "$k" worktree remove "$pa"; git -C "$k" branch -qD unit/a
-CREW_AGENT=swb-1-conductor crew unit run b construct >/dev/null
+# While the bolt's landing is in flight, its worktree standing with LANDING's process alive in it, no unit starts on it.
+land=$kd/places/land-tenant-environments
+git -C "$k" worktree add -q "$land" bolt/tenant-environments
+echo $$ > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
+export CREW_AGENT=swb-1-conductor
+expect_fail "bolt tenant-environments's landing is queued in sluice, submitted from $land: unit b's construct starts once it has landed or been refused" \
+  crew unit run b construct
+[[ ! -e $kd/places/b ]] || fail "a place was made for b while the landing was queued"
+: > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"  # sluice's outcome is in
+crew unit run b construct >/dev/null
+unset CREW_AGENT
+git -C "$k" worktree remove "$land"
+ok "no unit starts on a bolt while its landing is in flight, and one starts once the outcome is in though the landing's worktree stands"
 crew bolt give swb-2 console-pages >/dev/null 2>&1; place "$k" console-pages c >/dev/null
 echo "# switchboard-kit, main's" > "$k/README.md"; commit_all "$k" "docs: main's title"
 expect_ok crew bolts --label wldn
@@ -34,7 +47,7 @@ by_hand 'p.remove(p.unit("e"))'
 expect_ok crew unit drop b "folded into a"
 has "$out" "swb-1-unit-1 is free: b was dropped from the plan"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1"
-main_before=$(git -C "$k" rev-parse main) land=$kd/places/land-tenant-environments
+main_before=$(git -C "$k" rev-parse main)
 : > "$CREW_TEST_LOG"
 expect_fail "bolt/tenant-environments did not land: sluice refused it or found a conflict, and main is where it was" crew bolt submit tenant-environments
 has "$out" "sluice: bolt/tenant-environments conflicts with main"

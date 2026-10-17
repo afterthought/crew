@@ -1451,7 +1451,9 @@ def bolt_land(fleet, a):
 # whatever sluice says passed through on standard error and nothing of it stopping the landing; the worktree removed;
 # and, when main moved, the kit's main checkout brought level with it while it is on branch main, since sluice moves the
 # branch and not that checkout's files, and left as it is when it is detached, the anchor the fleet's timer moves
-# (plan.18); the submission is in the name of whoever asked for it. Prints what it did as shell assignments: RC, the
+# (plan.18); the submission is in the name of whoever asked for it, and while sluice has it the worktree's git dir holds
+# this script's process id in crew-landing, emptied once sluice's outcome is in (landing_now). Prints what it did as
+# shell assignments: RC, the
 # submission's exit (sluice's: 0 landed, 1 its checks failed, 2 a conflict or a refusal, 130 stopped); OLD and NEW,
 # main's commit before and after; KEPT, the worktree when git could not remove it; LEVEL, "yes", "no", "detached" or why
 # it was not tried.
@@ -1462,7 +1464,9 @@ command -v wt-submit >/dev/null || { echo "wt submit needs sluice's wt-submit, w
 old=$(git rev-parse --verify -q refs/heads/main) || { echo "$main has no branch main" >&2; exit 2; }
 git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main has no branch bolt/$bolt" >&2; exit 2; }
 [ -d "$path" ] || git worktree add -q "$path" "bolt/$bolt" >&2 || exit 2
+mark=$(git -C "$path" rev-parse --absolute-git-dir)/crew-landing && echo $$ > "$mark" || exit 2
 (cd "$path" && wt submit main --no-remove) >&2 </dev/null; rc=$?
+: > "$mark"
 kept=; git worktree remove "$path" >/dev/null 2>&1 || kept=$path
 new=$(git rev-parse refs/heads/main) level=no
 if [ "$new" != "$old" ]; then
@@ -4031,6 +4035,8 @@ def run_check(fleet, a):
                         chores={d for d in u.all("After") if is_chore(plan.item(d))})
     if why:
         refuse(*why) if isinstance(why, tuple) else fail(why)
+    why = landing_refusal("unit", a.unit, a.stage, bolt, *landing_now(t, bolt))
+    not why or fail(why)
     if a.stage == "construct":
         marking = bool(mark) or st in ("planned", "code", "verify")
         # The amendment's words, from the mark, so whoever starts the construct sends the same prompt.
@@ -4113,6 +4119,38 @@ def run_kind_refusal(kind, chore, name, stage):
     return None
 
 
+def landing_now(t, bolt):
+    """What this host, the team's, holds of the bolt's landing (plan.8): the landing's worktree, <kit>/places/land-<bolt>
+    (bolt_submit), whether it stands on bolt/<bolt>, and whether the process LANDING wrote into its git dir's
+    crew-landing while sluice has the submission is alive. The worktree alone can outlive sluice's outcome, kept when
+    git could not remove it or when the landing was stopped; its process cannot. (path, standing, alive)."""
+    path = f"{t['kit']['dir']}/places/land-{bolt}"
+    git = lambda *a: subprocess.run(["git", "-C", path, *a], capture_output=True, text=True, env=gitenv()).stdout.strip()
+    if not os.path.isdir(path) or git("symbolic-ref", "-q", "--short", "HEAD") != f"bolt/{bolt}":
+        return path, False, False
+    try:
+        pid = int(pathlib.Path(git("rev-parse", "--absolute-git-dir"), "crew-landing").read_text().strip())
+        os.kill(pid, 0)
+    except PermissionError:  # alive, as another user's
+        return path, True, True
+    except (OSError, ValueError):
+        return path, True, False
+    return path, True, True
+
+
+def landing_refusal(kind, name, stage, bolt, path, standing, alive):
+    """Why a unit's or chore's stage does not start while its bolt's landing is in flight (plan.8, record 0032 §3), or
+    None: sluice lands the head that was submitted, so work merged into the bolt meanwhile is left out of main's
+    landing and `crew bolt land` refuses until a second submission carries it. A construct, code or merge waits while
+    the landing's worktree stands on the bolt's branch with its process alive (landing_now); a verify or settle starts,
+    since it moves nothing toward the bolt, and so does every stage once sluice's outcome is in, landed or refused, so
+    the fix that takes main into a refused bolt is never held."""
+    if stage not in ("construct", "code", "merge") or not (standing and alive):
+        return None
+    return (f"bolt {bolt}'s landing is queued in sluice, submitted from {path}: {kind} {name}'s {stage} starts once it "
+            f"has landed or been refused, since what merges into bolt/{bolt} meanwhile is left out of main's landing")
+
+
 def chore_check(fleet, a, label, plan, c):
     """Whether a chore's stage may start (chore_refusal), its place (made at its first code, on chore/<name> from the
     bolt, tracking it, and taking the head of each unmerged unit or chore it comes after, as a unit's construct's place
@@ -4127,6 +4165,8 @@ def chore_check(fleet, a, label, plan, c):
     st != "unknown" or fail(f"cannot tell chore {a.unit}'s stage: {s.get('why')}")
     after = {d: (st_all.of(d)["kind"], st_all.of(d)["stage"]) for d in c.all("After")}
     why = chore_refusal(a.unit, bolt, a.stage, st, after, a.stage == "merge" and st == "verify" and verified(label, a.unit))
+    not why or fail(why)
+    why = landing_refusal("chore", a.unit, a.stage, bolt, *landing_now(t, bolt))
     not why or fail(why)
     merge = took = ""
     if a.stage == "code":
@@ -6113,7 +6153,8 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
 def unit_run(fleet, a):
     """crew unit run <unit> construct|code|verify|settle|merge ["<words>"] [--force], or crew chore run <chore>
     code|verify|merge (--chore), on the host of the team whose bolt holds it: its stage started there (run_unit_stage),
-    refused while a construct an amendment handed there is starting (handed_state), whose wait is crew unit wait."""
+    refused while a construct an amendment handed there is starting (handed_state), whose wait is crew unit wait, and
+    a construct, code or merge refused while its bolt's landing is in flight (landing_refusal)."""
     t = team_of_unit(fleet, a)
     team = on_team_host(fleet, t, a.force)
     state, said = construct_handed_state(t, a.unit)
