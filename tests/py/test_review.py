@@ -33,8 +33,8 @@ def test_the_planner_is_told_which_changes_are_due_and_why():
 class TestNotices:
     TEAMS = {"swb-1": {}, "swb-2": {}}
 
-    def notices(self, before, after, touched, me="chuck@mac-studio", lost=None, quiet=()):
-        seen = dict(before=before, after=after, touched=touched, lost=lost or {}, quiet=set(quiet), label="wldn")
+    def notices(self, before, after, touched, me="chuck@mac-studio", quiet=()):
+        seen = dict(before=before, after=after, touched=touched, quiet=set(quiet), label="wldn")
         return plan.notices(self.TEAMS, seen, me, "plan(te): add u (chuck@mac-studio)")
 
     def test_a_write_to_a_held_bolt_tells_its_conductor_the_subject(self):
@@ -44,15 +44,10 @@ class TestNotices:
         assert self.notices({"te": "swb-1"}, {"te": "swb-1"}, ["te"], me="swb-1-conductor") == ([], [], False)
         assert self.notices({}, {}, ["apex"]) == ([], [], False)
 
-    def test_a_write_that_took_a_teams_bolt_tells_it_the_subject_alone_since_crew_closes_the_landing_card(self):
-        tells, shown, _ = self.notices({"te": "swb-1", "cp": "swb-2"}, {"te": "swb-1", "cp": "swb-2"}, ["te", "cp"], lost={"swb-1": ["land/te"]})
+    def test_a_write_that_took_a_teams_bolt_tells_it_the_subject_alone_and_names_no_card_since_crew_closes_it(self):
+        tells, shown, _ = self.notices({"te": "swb-1", "cp": "swb-2"}, {"cp": "swb-2"}, ["te", "cp"])
         assert tells == [("swb-1-conductor", "plan(te): add u (chuck@mac-studio)"), ("swb-2-conductor", "plan(te): add u (chuck@mac-studio)")]
-        assert self.notices({"te": "swb-1"}, {"te": "swb-1"}, ["te"], me="swb-1-conductor", lost={"swb-1": ["land/te"]})[:2] == ([], [])
-
-    def test_only_a_bolt_a_team_no_longer_holds_loses_a_row_since_no_unit_has_one(self):
-        before = ({"te": "swb-1", "cp": "swb-2"}, {"a": "swb-1", "b": "swb-2"})
-        assert plan.lost_rows(before, ({"cp": "swb-2"}, {"b": "swb-2"})) == {"swb-1": ["land/te"]}
-        assert plan.lost_rows(before, ({"te": "swb-1", "cp": "swb-2"}, {"a": "swb-2", "b": "swb-2"})) == {}
+        assert shown == []
 
     def test_a_bolt_added_or_one_a_team_held_dropped_tells_the_dispatchers(self):
         assert self.notices({}, {"edge": None}, ["edge"])[2] is True

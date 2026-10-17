@@ -109,11 +109,11 @@
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
 #                                      same hands, and built in its bolt by code, verify and merge
-#   crew plan  propose|proposed|agree|card|approve|answer|drop ...
-#                                      the planner's proposals: a change to the plan, applied once the user approves it;
-#                                      card prints a proposal's Pending You card and draws its picture, which link no
-#                                      session; approve --clear leaves out the new units the user cleared; answer
-#                                      records the card's answers and applies the approval once it holds them all
+#   crew plan  propose|proposed|agree|approve|answer|drop ...
+#                                      the planner's proposals: a change to the plan, applied once the user approves it,
+#                                      crew raising its Pending You card at propose; approve --clear leaves out the new
+#                                      units the user cleared; answer records the card's answers and applies the
+#                                      approval once it holds them all
 #   crew rail  [--label L]             what waits on the user: proposals, review batches and bolts to land,
 #                                      each with when it began to wait, the command that answers it and its Pending
 #                                      You card; then the questions the agents asked; then the decision records
@@ -143,14 +143,6 @@
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use
-#   crew card  post|change <key> [--label L] < <JSON>
-#                                      post the card on standard input to the user as the asking assistant, through the
-#                                      fleet's pendingyou mcp under the host's sign-in, or change the one the asker
-#                                      holds under the key; refused as crew's card hook refuses it, crew setting the
-#                                      key, the session and the kit's area; recorded from Pending You's reply, and a
-#                                      post printing the line that adopts its card, call get_request (requestId, name)
-#   crew card  close <key> --outcome "<line>" | --reason "<line>" [--label L]
-#                                      close the asker's card once acted on, or withdraw it, and end its session
 #   crew card  read <key> [--label L] [--json]
 #                                      where the asker's card stands: its status, whose turn, the user's answer and words;
 #                                      an approval the user declined is closed with their words
