@@ -4,8 +4,9 @@
 # bolt by a submission to main from a short-lived worktree, naming a conflict for the team and moving nothing; a fix
 # takes main into the bolt by a submission to the bolt, and the landing then lands, leaving the kit's detached main
 # checkout as it was; the bolt lands in the plan once every unit has, recording the commit main holds and removing its
-# branch, and its conductor is told which cards to close; a bolt no team holds lands once its unit's change is on
-# main; and dropping a held bolt removes its branch and places.
+# branch, its landing card closed on the team's host with where GitHub's main holds it, and its conductor is told
+# which cards to close; a bolt no team holds lands once its unit's change is on main; and dropping a held bolt removes
+# its branch and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -81,9 +82,25 @@ eq "$(field mac-studio bolt.submit On)" "bolt/tenant-environments"
 ok "a fix takes main into the bolt by a submission to the bolt; the landing then lands, its worktree removed and the detached main checkout left as it was"
 git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
 
+# The bolt's landing card, raised in its conductor's name on the team's host as crew raises it, and approved.
+card=$(as $box env CREW_AGENT=swb-1-conductor python3 - "$CREW/plugin/lib" "$k" <<'PY' | tail -1
+import sys
+sys.path.insert(0, sys.argv[1])
+import cards, crew, plan
+facts = dict(bolt="tenant-environments", kit="switchboard-kit", units=["a"], chores=[], batches={}, head="0000000", at=None,
+             moved=0, pr=None)
+print(plan.row_card_post(crew.load(), "wldn", "swb-1-conductor", cards.landing_card, facts,
+                         (sys.argv[2], "github.com/WilldanGroup/switchboard-kit")))
+PY
+)
+mkdir -p "$(home_of $box)/.stub-pendingyou/answered"
+echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answered/$card.json"
 : > "$CREW_TEST_LOG"
 expect_ok crew bolt land tenant-environments
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
+n=$(git -C "$k" log -1 --format='%(trailers:key=Sluice-Submission,valueonly)' main)
+has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"landed on GitHub's main at $(short main) (#$n); every host's folder follows by swancloud's timer within minutes\""
+has "$out" "card land/tenant-environments: $card closed"
 has "$out" "bolt/tenant-environments is removed: bolt tenant-environments is in no plan; it was at"
 grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for land/tenant-environments.'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
@@ -91,7 +108,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, and its conductor is told which cards to close"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, and its conductor is told which cards to close"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null

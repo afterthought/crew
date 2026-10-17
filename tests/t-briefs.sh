@@ -169,7 +169,8 @@ expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
   "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" \
   "The word to land is also the word for sluice to push main to GitHub: you push nothing, and pull and level no host's checkout" \
-  "records the commit GitHub's main holds" "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
+  "records the commit GitHub's main holds" "closes the bolt's landing card on its team's host" "Nothing waits on a host, and no agent is told main moved" \
+  "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
   "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
   "run it in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
 lacks "$out" "wt merge"; lacks "$out" "push origin main"; lacks "$out" "/workspace/crew/main"

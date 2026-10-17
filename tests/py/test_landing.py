@@ -53,3 +53,26 @@ def test_the_hosts_main_lags_githubs_and_nothing_is_refused_for_it():
     after a fetch, which it records, and a host's own main lagging it refuses nothing."""
     github, own = "d" * 40, "e" * 40
     assert plan.main_held("k", "chuck-herdr-alpha", f"ORIGIN=yes\nFETCHED=ok\nGITHUB={github}\nOWN={own}\n") == (github, None)
+
+
+class TestTheCardsClose:
+    """crew bolt land closes the bolt's landing card on its team's host (plan.16, record 0032 §3): with where GitHub's
+    main holds the landing and that every host's folder follows by the timer, under whichever landing key the conductor
+    holds one."""
+
+    def test_the_card_closes_naming_githubs_main_sluices_submission_and_the_timer(self):
+        assert plan.landed_words("c" * 40, "46") == (
+            "landed on GitHub's main at ccccccc (#46); every host's folder follows by swancloud's timer within minutes")
+
+    def test_a_head_sluice_did_not_make_is_named_without_a_number(self):
+        for n in ("", None, "46 47", "x"):
+            assert plan.landed_words("c" * 40, n) == (
+                "landed on GitHub's main at ccccccc; every host's folder follows by swancloud's timer within minutes")
+
+    def test_the_conductors_open_cards_under_the_bolts_landing_keys_old_and_new(self):
+        post = lambda key, card, by="swb-1-conductor": {"Act": "card.post", "Key": key, "Card": card, "By": by}
+        entries = [post("land/b/abc1234", "req_1"), post("land/b", "req_2"), post("land/b/abc9999", "req_3"),
+                   {"Act": "card.close", "Card": "req_3", "Key": "land/b/abc9999", "By": "swb-1-conductor"},
+                   post("land/b", "req_4", by="swb-2-conductor"), post("land/bb", "req_5"), post("proposal/1", "req_6")]
+        assert plan.landing_card_keys(entries, "b", "swb-1-conductor") == ["land/b", "land/b/abc1234"]
+        assert plan.landing_card_keys(entries, "c", "swb-1-conductor") == []

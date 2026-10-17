@@ -1234,10 +1234,14 @@ git rev-parse --short "refs/heads/bolt/$bolt"
 
 
 # What a kit's main checkout holds of its mains, on its host (MAINS), for the commit its main is at now, which a
-# landing records (plan.14).
+# landing records (plan.14), and the number of sluice's submission each main's head landed, SUBMISSION_GITHUB and
+# SUBMISSION_OWN, its Sluice-Submission trailer, empty for a head sluice did not make.
 MAIN = r"""main=$1
 cd "$main" || exit 1
-""" + MAINS
+""" + MAINS + r"""n() { git log -1 --format='%(trailers:key=Sluice-Submission,valueonly,separator=%x20)' "$1" 2>/dev/null; }
+echo "SUBMISSION_GITHUB=$(n refs/remotes/origin/main)"
+echo "SUBMISSION_OWN=$(n refs/heads/main)"
+"""
 
 
 def main_held(name, machine, said):
@@ -1248,11 +1252,14 @@ def main_held(name, machine, said):
     return sha, why
 
 
-def tidy_after(fleet, t, what):
+def tidy_after(fleet, t, what, landed=None):
     """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
-    has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did. A
-    host that does not answer leaves that to the team's next read, and the write stands."""
-    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"]))
+    has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did; and,
+    after a landing (landed, (bolt, words)), the bolt's landing card closed there with the words, where its conductor
+    holds it (landing_cards_closed). A host that does not answer leaves that to the team's next read, and the write
+    stands."""
+    more = ["--landed", landed[0], "--outcome", landed[1]] if landed else []
+    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"], *more))
     READ.drop_kit(t["machine"], t["kit"]["main"])
     said = tidied(t["name"], what, r.returncode, r.stdout, r.stderr)
     if said:
@@ -1398,9 +1405,41 @@ def unheld_refusal(bolt, units, kit, t, label):
     return None
 
 
+def landed_words(head, submission):
+    """What a bolt's landing card closes with at crew bolt land (plan.16, record 0032 §3): where GitHub's main holds the
+    landing, with sluice's submission number when its head carries one, and that every host's folder follows by the
+    fleet's timer, since nothing waits on a host."""
+    n = f" (#{submission.strip()})" if re.fullmatch(r"\d+", (submission or "").strip()) else ""
+    return f"landed on GitHub's main at {head[:7]}{n}; every host's folder follows by swancloud's timer within minutes"
+
+
+def landing_card_keys(entries, bolt, owner):
+    """The keys under which the bolt's conductor (owner) holds an open landing card, from its host's run record:
+    land/<bolt>, as crew raises it (record 0031), and land/<bolt>/<head>, as a conductor posted one before."""
+    keys = sorted({e.get("Key") for e in entries if e.get("Act") == "card.post" and e.get("By") == owner
+                   and re.fullmatch(rf"land/{re.escape(bolt)}(/[0-9a-f]{{7}})?", e.get("Key") or "")})
+    return [k for k in keys if cards.card_under(entries, k, owner)]
+
+
+def landing_cards_closed(fleet, t, bolt, outcome):
+    """At crew bolt land, on the team's host, where its conductor's cards are posted and recorded (plan.16): each card
+    the conductor holds under the bolt's landing keys (landing_card_keys) closed in its name with outcome, acked when
+    the user answered it (row_card_close), only once the partition's plan no longer holds the bolt; a plan that can't be
+    read closes none, saying so (read.1)."""
+    pl = plan_of(fleet, t["label"])
+    if pl is None or pl.bolt(bolt):
+        print(f"no landing card of bolt {bolt} is closed: " + (f"{t['label']}/main could not be read" if pl is None else
+                                                                f"{t['label']}/main still holds the bolt"))
+        return
+    owner = f"{t['name']}-conductor"
+    for key in landing_card_keys(cards.host_entries(record, t["label"], crew.this_host()), bolt, owner):
+        row_card_close(fleet, t["label"], owner, key, outcome=outcome)
+
+
 def bolt_land(fleet, a):
     """A bolt whose units and chores have all landed on its kit's main, out of the plan, the landing recording the
-    commit main holds (plan.14, plan.16). A bolt no team holds, built outside a team, is read on the host and main
+    commit main holds (plan.14, plan.16), and its landing card closed on its team's host with where GitHub's main holds
+    it (landed_words). A bolt no team holds, built outside a team, is read on the host and main
     checkout of a team of the partition building its kit, and lands the same way once main holds each of its units'
     changes and chores, on the user's word (roles.2)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
@@ -1423,8 +1462,10 @@ def bolt_land(fleet, a):
     why = land_refusal(a.bolt, units, stage_of, outside, label)
     not why or fail(why)
     # What main holds once the bolt has landed on it, GitHub's after a fetch, which the landing records (plan.14).
-    head, why = main_held(t["kit"]["name"], t["machine"], host_run(fleet, t["machine"], MAIN, t["kit"]["main"]))
+    said = host_run(fleet, t["machine"], MAIN, t["kit"]["main"])
+    ref, head, why = kit.main_now(said, t["kit"]["name"], t["machine"])
     not why or fail(why)
+    landed = landed_words(head, kit.said_of(said).get("SUBMISSION_GITHUB" if ref == "origin/main" else "SUBMISSION_OWN"))
 
     def change(w):
         w.bolt(a.bolt)
@@ -1439,7 +1480,7 @@ def bolt_land(fleet, a):
           fields=dict(Repo=t["kit"]["name"], Head=head))
     if b.get("Team"):
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]} and {t['name']} holds no bolt")
-        tidy_after(fleet, t, f"bolt {a.bolt}")
+        tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, landed))
     else:
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]}; no team held it")
 
@@ -6390,9 +6431,13 @@ def carried_units(fleet, t, slotted):
 
 
 def team_tidy(fleet, a):
-    """crew _tidy <team>, on the team's host: the team's read (reap), which a plan write that ends work asks for there,
-    and crew rebuild runs once its agents are ended."""
-    reap(fleet, on_team_host(fleet, crew.team_of(fleet, a.team), a.force))
+    """crew _tidy <team> [--landed <bolt> --outcome <words>], on the team's host: the team's read (reap), which a plan
+    write that ends work asks for there, and crew rebuild runs once its agents are ended; after a landing, its card
+    closed there with the words (landing_cards_closed)."""
+    t = crew.team_of(fleet, a.team)
+    reap(fleet, on_team_host(fleet, t, a.force))
+    if a.landed:
+        landing_cards_closed(fleet, t, a.landed, a.outcome or "")
 
 
 def unit_free(fleet, a):
@@ -9478,6 +9523,8 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("_tidy")
     x.add_argument("team")
     x.add_argument("--force", action="store_true")
+    x.add_argument("--landed")
+    x.add_argument("--outcome")
     x = sub.add_parser("_unit-free")
     x.add_argument("unit")
     x.add_argument("--team")

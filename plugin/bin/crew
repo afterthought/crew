@@ -323,9 +323,10 @@ case $cmd in
     words=${2:-}
     [[ -n ${words//[[:space:]]/} ]] || { echo "usage: crew needs \"<what you tried and what you need>\"" >&2; exit 2; }
     one _needs -- "$words" ;;
-  _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
-    # is over (a plan write that ends work asks for it on the team's host)
-    need_team "${2:-}"; one _tidy "$2" ${forced[@]+"${forced[@]}"} ;;
+  _tidy)  # crew _tidy <team> [--landed <bolt> --outcome <words>]: free the slots whose work has merged or been dropped,
+    # and remove the worktrees whose work is over (a plan write that ends work asks for it on the team's host); after a
+    # landing, close the bolt's landing card there with the words
+    need_team "${2:-}"; one _tidy "${args[@]:1}" ${forced[@]+"${forced[@]}"} ;;
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
