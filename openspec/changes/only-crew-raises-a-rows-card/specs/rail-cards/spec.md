@@ -85,7 +85,7 @@ A conductor, the planner, main-level ops and the design agent MAY post a card fo
 - **THEN** the call goes through: a question's form is its asker's
 
 ### Requirement: crew refuses a question card from any other role or under a row's key
-crew SHALL refuse a post, change or close from any role but the four, naming the chain of command, and a crew agent's own post, change or close under a row's key or of a row's card, naming the card as crew's; it SHALL refuse nothing else of a question's form.
+crew SHALL refuse a post, change or close from any role but the four, naming the chain of command, and a crew agent's own post, change or close under a row's key or of a row's card, naming the card as crew's; it SHALL refuse nothing else of a question's form. A post's key SHALL be judged by its form alone, with or without `:<n>`; a change's or a close's, which carries a request id, by the card this host's run record holds under that id, crew's raises and the agents' own posts alike.
 
 #### Scenario: A coder asks
 - **WHEN** a coder in a crew session calls `post_request`
@@ -94,6 +94,13 @@ crew SHALL refuse a post, change or close from any role but the four, naming the
 #### Scenario: A conductor posts its landing card by hand
 - **WHEN** swb-1-conductor calls `post_request` with the key `land/y`
 - **THEN** the call is refused, saying the landing card is crew's and is raised when the bolt reads proven
+
+### Requirement: The planner closes the old batch cards it posted
+The planner's close, `cancel_request` or `ack_answer`, of a card under `batch/<n>-<k>`, which it posted itself before a batch was one card and which crew never raises, SHALL pass, and its post or change there SHALL be refused.
+
+#### Scenario: The planner closes an old batch card
+- **WHEN** wldn-planner calls `cancel_request` for `req_bat-2`, which this host's run record holds as its own post under `batch/2-1`
+- **THEN** the call goes through; a `post_request` or `update_request` of the planner's under `batch/2-1` is refused, saying a batch's card is crew's
 
 ### Requirement: A crew agent's Pending You call names only the agent itself
 In a crew session, crew SHALL refuse a call to any Pending You tool that names anyone but the agent's `CREW_AGENT` as its caller, before the call runs and before any check of the agent's role or the call's key, which narrows apart from it, in words naming the agent's own name and saying the call would reroute another agent's answers to this session; a call that names no caller SHALL pass, and an area's name SHALL be taken as no caller's.
@@ -159,7 +166,7 @@ An answer on a crew card SHALL be acted on by the role whose row it is, woken in
 - **THEN** the conductor tells main-level ops to land `y` on the user's word, main-level ops lands it, and `crew bolt land` closes the card
 
 ### Requirement: A crew agent's card acts are in the run record
-Each card crew posts, changes, withdraws or closes, and each a crew agent posts, changes or closes through Pending You's tools, SHALL be an entry in the partition's run record naming the row's object or the asker, the card's id in `Card` and the key in `Key`, crew's read from Pending You's own reply, an agent's from the tool's result; a result crew cannot read SHALL be recorded as unread and listed by the rail. An entry SHALL NOT hold a card's title, summary or other text.
+Each card crew posts, changes, withdraws or closes, and each a crew agent posts, changes or closes through Pending You's tools, SHALL be an entry in the partition's run record naming the row's object or the asker, the card's id in `Card` and the key in `Key`, crew's read from Pending You's own reply, an agent's from the tool's result; an agent's act whose result names no card SHALL be recorded on the agent with `State: unread`, and `crew rail` SHALL list each such act of the last 14 days with its agent, its act and its time. An entry SHALL NOT hold a card's title, summary or other text.
 
 #### Scenario: A card posted and closed
 - **WHEN** crew raises `land/y`'s card `req_l1` and later closes it at the landing
@@ -177,14 +184,18 @@ Each card crew posts, changes, withdraws or closes, and each a crew agent posts,
 - **WHEN** swb-1-conductor's `post_request` under `ask/swb-1-conductor/hold-the-macs` returns `req_q1`
 - **THEN** the run record has a `card.post` entry on swb-1-conductor with that key and `req_q1`
 
+#### Scenario: A question whose reply names no card
+- **WHEN** swb-1-conductor's `post_request` under `ask/swb-1-conductor/hold-the-macs` returns a result that names no card
+- **THEN** the run record has a `card.post` entry on swb-1-conductor with that key and `State: unread`, and `crew rail` lists it with swb-1-conductor, the act and its time
+
 ### Requirement: The check refuses what it cannot read, and only for crew's sessions
-crew's hook SHALL run only in a session with `CREW_AGENT` set, and SHALL refuse a card's post, change or close, or an area's making, when it cannot read the agent's partition, the teams file, or the run record that holds the key of the card a change or close names, naming what it could not read and saying to try again later, never letting a call through on a guess. It SHALL judge a card's key by its form alone, crew's six kinds being crew's, and read no plan. The user's own sessions SHALL be untouched.
+crew's hook SHALL run only in a session with `CREW_AGENT` set, and SHALL refuse a card's post, change or close, or an area's making, when it cannot read the agent's partition, the teams file, or crew's record of its cards, the run record on this host that holds the key of the card a change or close names, naming what it could not read and saying to try again later, never letting a call through on a guess. It SHALL read no plan and fetch no state branch. The user's own sessions SHALL be untouched.
 
 #### Scenario: The plan cannot be read
 - **WHEN** swb-1-conductor posts a question under `ask/swb-1-conductor/hold-the-macs` while the partition's state branch cannot be fetched
 - **THEN** the call goes through: the hook reads no plan, and judges the key by its form alone
 
-#### Scenario: The run record cannot be read
+#### Scenario: crew's record of its cards cannot be read
 - **WHEN** swb-1-conductor calls `cancel_request` for its card `req_q1` and the hook cannot read the partition's run record on this host
 - **THEN** the call is refused, "crew could not check this card: <why>. Try it again later.", and nothing is closed
 
