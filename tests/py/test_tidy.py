@@ -22,6 +22,10 @@ class TestOver:
         assert over("bolts/gone", "bolt/gone") == (None, "bolt gone is in no plan")
         assert over("bolts/t", "bolt/t") == (None, None)
 
+    def test_a_bolts_worktree_the_tidy_detached_is_still_crews_and_goes_with_its_bolt(self):
+        assert over("bolts/gone", "") == (None, "bolt gone is in no plan")
+        assert over("bolts/t", "") == (None, None)
+
     def test_a_units_place_is_over_once_it_merged_landed_or_left_every_plan(self):
         assert over("places/merged-one", "unit/merged-one", "bolt/t", merged={"merged-one"}) == (
             "merged-one", "unit merged-one has merged into bolt/t")
@@ -40,6 +44,33 @@ class TestOver:
         ("places/detached", "", ""), ("places/fix-t--y", "fix/t/y", ""), ("main", "main", "")])
     def test_a_worktree_crew_did_not_make_is_never_touched(self, path, branch, up):
         assert over(path, branch, up, units=()) is None
+
+
+class TestLegacyBolt:
+    """crew removes only its own worktrees (bolt-teams): a bolt's worktree from before record 0026, still on its
+    branch, is detached at the bolt's tip by the team's read while the bolt lasts when it is clean, and named as kept on
+    the branch while it is not (plan.9, plan.18)."""
+
+    def detach(self, path="bolts/t", branch="bolt/t", over=None, locked=False, status=(0, "", "")):
+        return plan.bolt_detach(f"{KD}/{path}", branch, KD, over, locked, lambda: status)
+
+    def test_a_legacy_bolt_worktree_on_its_branch_with_nothing_modified_is_detached(self):
+        assert self.detach() == (True, None)
+
+    def test_a_legacy_bolt_worktree_with_changes_stays_on_its_branch_named_as_kept_for_them(self):
+        assert self.detach(status=(0, " M README.md\n", "")) == (False, (
+            "it has uncommitted changes, which are the user's to keep or discard, and crew detaches it at the bolt's tip "
+            "once it is clean"))
+
+    def test_a_locked_one_or_one_git_cannot_read_stays_on_its_branch(self):
+        assert self.detach(locked=True, status=None) == (False, "it is locked, and crew detaches it at the bolt's tip once it is not")
+        assert self.detach(status=(128, "", "fatal: bad index\n"))[1].startswith("git cannot read its status (fatal: bad index)")
+
+    @pytest.mark.parametrize("path, branch, over", [
+        ("bolts/t", "", None), ("bolts/t", "bolt/t", "bolt t is in no plan"), ("bolts/t", "bolt/other", None),
+        ("places/t", "bolt/t", None), ("main", "main", None)])
+    def test_nothing_else_is_detached_and_a_finished_bolts_worktree_goes_as_any(self, path, branch, over):
+        assert self.detach(path, branch, over, status=None) is None
 
 
 class TestKept:

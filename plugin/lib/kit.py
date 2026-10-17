@@ -119,14 +119,15 @@ def unready_said(place, why, lines=15):
 VERDICT = "Sluice-Result"
 
 
-def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt"):
+def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
     """The checks a kit's policy requires of its bolt branches (teams.5, record 0026): the `required` list of the
-    [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it.
-    Refused, naming the file, when the kit has none, it is not TOML, or no table names bolt branches with a check: a
-    kit merges and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
+    [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it,
+    in the policy as the kit's main holds it now (ref, origin/main for a kit on GitHub, plan.18). Refused, naming the
+    file and the ref, when the kit has none, it is not TOML, or no table names bolt branches with a check: a kit merges
+    and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
     import fnmatch
     if text is None:
-        crew.fail(f"{kit} merges only through sluice, and has no {where} on its main: write one whose "
+        crew.fail(f"{kit} merges only through sluice, and has no {where} on {ref}: write one whose "
                   f"[branches.\"bolt/*\"] names the checks a bolt's merges must pass, then give the bolt again")
     try:
         branches = tomllib.loads(text).get("branches", {})
@@ -156,16 +157,42 @@ def verification(head, result):
     return "unknown", f"its head {head[:7]} carries a verdict crew does not read as a pass: {result}"
 
 
-def policy_said(out):
-    """The policy text POLICY printed of a kit's main, or None when main holds none; refused when the output is not
-    POLICY's."""
-    said = dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
-    text = said.get("POLICY")
+def said_of(out):
+    """The KEY=value lines a script printed, as {key: value}."""
+    return dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
+
+
+def main_now(out, kit, host):
+    """Which of a kit's mains is its main now, from what MAINS read in its main checkout on its host (plan.18): (ref,
+    sha, None), or (None, None, why). A kit with an origin remote has its main on GitHub, where sluice lands every
+    branch and which the host's own main lags on every host that did not land, so main now is origin/main after the
+    command's one fetch, and a fetch that failed or an origin with no main refuses (read.1); a kit with no origin
+    remote has no GitHub to lag, so its own main is main now. What is not MAINS's words refuses too (read.2)."""
+    said = said_of(out)
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    origin, fetched, github, own = said.get("ORIGIN"), said.get("FETCHED"), said.get("GITHUB"), said.get("OWN")
+    if origin not in ("yes", "no") or not all(v == "-" or (v and sha.fullmatch(v)) for v in (github, own)):
+        return None, None, f"crew can't read what {kit}'s main on {host} holds: {(out or '').strip()[:200] or 'nothing was said'}"
+    if origin == "yes":
+        if fetched != "ok":
+            return None, None, f"cannot fetch {kit} from GitHub on {host}, so cannot read its main now: {(fetched or 'no word').strip()}"
+        return ("origin/main", github, None) if github != "-" else (None, None, f"{kit}'s GitHub has no main, fetched on {host}")
+    return ("main", own, None) if own != "-" else (None, None, f"{kit}'s main checkout on {host} has no branch main and no origin")
+
+
+def policy_said(out, kit, host):
+    """What POLICY printed of a kit's policy at its main now (main_now): (the policy text, or None when that main holds
+    none; the ref, origin/main or main; the commit). Refused when main now can't be told or the output is not POLICY's
+    (read.1, read.2)."""
+    ref, sha, why = main_now(out, kit, host)
+    if why:
+        crew.fail(why)
+    text = said_of(out).get("AT_GITHUB" if ref == "origin/main" else "AT_OWN")
     if text is None:
-        crew.fail(f"crew can't read what the kit's main holds of {DECLARATION} from: {(out or '').strip()[:200] or 'nothing'}")
+        crew.fail(f"crew can't read what {kit}'s main holds of {DECLARATION} from: {(out or '').strip()[:200] or 'nothing'}")
     if text == "-":
-        return None
+        return None, ref, sha
     try:
-        return base64.b64decode(text).decode()
+        return base64.b64decode(text).decode(), ref, sha
     except (binascii.Error, UnicodeDecodeError) as e:
-        crew.fail(f"crew can't read the kit's {DECLARATION} as it was sent: {e}")
+        crew.fail(f"crew can't read {kit}'s {DECLARATION} as it was sent: {e}")

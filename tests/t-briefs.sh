@@ -162,14 +162,18 @@ expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
 expect_ok crewpy brief wldn operator
 for want in "swancloud's main moves only through sluice (\`state.3\`), so never edit or commit in its main checkout" \
-  "wt submit main --no-remove" "read-tree -m -u <main's commit before you submitted> main"; do has "$out" "$want"; done
+  "wt submit main --no-remove" "~/Code/github_afterthought/swancloud/places/crew-teams-<team> origin/main\`" \
+  "you level and push nothing"; do has "$out" "$want"; done
+lacks "$out" "read-tree"; lacks "$out" "push swancloud's main"
 expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
-  "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" "The word to land is also the word to push main" \
-  "git -C <kit>/main push origin main" "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
+  "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" \
+  "The word to land is also the word for sluice to push main to GitHub: you push nothing, and pull and level no host's checkout" \
+  "records the commit GitHub's main holds" "closes the bolt's landing card on its team's host" "Nothing waits on a host, and no agent is told main moved" \
+  "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
   "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
   "run it in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
-lacks "$out" "wt merge"
+lacks "$out" "wt merge"; lacks "$out" "push origin main"; lacks "$out" "/workspace/crew/main"
 for want in "crew raises its card in your name, with those notes and steps on its face" "you post, change and close no deploy card" \
   "\`call get_request (requestId <id>, name wldn-ops)\`: run it" "crew closes the card at the deploy's end with its outcome" \
   "card read deploy/<env> --label wldn" "a step an agent can do that is held for the user's word" \
@@ -287,21 +291,24 @@ ok "the conductor waits for every stage through crew and never reads a pane for 
 # main; the bolt's proof is its verification (record 0025), and ops proves and deploys nothing.
 expect_ok crewpy brief wldn main-ops
 for want in "tell the bolt's conductor and the user sluice's words" "its landing comes back to the user on a new card" \
-  "never merge, rebase, reset or fast-forward main or a bolt's branch by git" "When main is behind GitHub's, crew refuses the landing and names how far: stop and tell the user" \
-  "shows every unit merged and the bolt's verification green" "git read-tree -m -u <main's commit before> main" \
-  "the checkout is stale after every landing until it is levelled" "nothing of yours or crew's catches it up to GitHub's"; do
+  "never merge, rebase, reset or fast-forward main or a bolt's branch by git" "A host's own main lagging GitHub's stops nothing" \
+  "shows every unit merged and the bolt's verification green" \
+  "every kit's main checkout is an anchor the fleet's timer moves to GitHub's main within minutes" \
+  "nothing of yours or crew's moves it or any host's checkout of it"; do
   has "$out" "$want"
 done
-lacks "$out" "git rebase --abort"; lacks "$out" "proof in dev"
+lacks "$out" "git rebase --abort"; lacks "$out" "proof in dev"; lacks "$out" "read-tree"; lacks "$out" "behind GitHub's, crew refuses"
 expect_ok crewpy brief swb-1 conductor
 for want in "Take main into the bolt" "a submission to the bolt like any other" \
   "once the bolt holds it and its verification is green, post the landing card again, under the bolt's new head" \
-  "That verification is the bolt's proof"; do
+  "That verification is the bolt's proof" \
+  "an anchor at GitHub's main that the fleet's timer moves and nobody edits in or checks a branch out in: read the bolt by ref, \`git log bolt/<bolt>\`"; do
   has "$out" "$want"
 done
 lacks "$out" "Carry the bolt onto main"; lacks "$out" "proof file"
 expect_ok crewpy brief swb-1 coder
-for want in "Take main into the bolt" "git merge main" "Never rebase the bolt's commits onto main" "keeping both intents, main's and the bolt's" \
+for want in "Take main into the bolt" "\`git fetch -q origin\`, then \`git merge origin/main\`, never the host's own \`main\`" \
+  "Never rebase the bolt's commits onto main" "keeping both intents, main's and the bolt's" \
   "under \`openspec/\` too"; do
   has "$out" "$want"
 done
@@ -433,7 +440,7 @@ expect_ok crewpy brief wldn design; has "$out" "\`wldn-reviewer\`, started fresh
 expect_ok crewpy brief swb-1 ops; has "$out" "(construct, code, verify, settle, merge)"
 expect_ok crewpy brief wldn main-ops
 for want in "plugin/bin/crew rail --label wldn\` carries its answer" \
-  "your submission in step 2, not step 4, is what puts it on main" "while a unit's latest change has been in no batch"; do
+  "your submission in step 2, not step 3, is what puts it on main" "while a unit's latest change has been in no batch"; do
   has "$out" "$want"
 done
 ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"
@@ -462,7 +469,8 @@ for want in "Every decision record you write, and every amendment you make to on
   "run \`crew record … --accepted\`, which closes the card" "run \`crew record … --rejected\`, which closes the card" \
   "set \`status: rejected\` with the user's words, and take out each rule drawn from it" \
   "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "wt submit main --no-remove" \
-  "read-tree -m -u <main's commit before you submitted> main" \
+  "<the kit's folder>/places/design-<topic> origin/main\`" "you level nothing" "then \`git merge origin/main\`" \
+  "once its \`.config/sluice.toml\` names a policy for main" \
   "run \`crew record … --proposed\` for each proposed record or amendment on your kits' main that has none open" \
   "Never run \`npx pendingyou\` or \`pendingyou hold\`" "leave every other card alone" \
   "A record you write or amend is proposed until the user accepts it" "quotes the user's words as their decision"; do

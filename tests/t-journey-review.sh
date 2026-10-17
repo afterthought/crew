@@ -113,7 +113,7 @@ eq "$(git --git-dir "$ws" rev-parse wldn/main) $(records)" "$tip $n"
 eq "$(grep -E '^[a-z]+$' <<<"$r" | tr '\n' ' ')" "proposals batches land operations "
 has "$r" "batch 1 (wldn): x1 (swb-1), z1 (atl-1)"
 has "$r" "    card:   batch/1, open, asked by wldn-planner (req_stub-1)"
-lacks "$r" "v1"
+lacks "${r//crew-test.??????/}" "v1"  # the scratch folder's random name can hold v1
 ok "crew rail lists a batch as one row with its card key, no verify report waits, and it writes nothing"
 
 # The planner's own Pending You calls: refused under a key not its own, or one the hook can't check.

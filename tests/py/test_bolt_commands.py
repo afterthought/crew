@@ -116,15 +116,14 @@ class TestLand:
         assert self.land({"a-console-page": "unknown", "a-console-filter": "landed"}) == (
             "cannot tell whether unit a-console-page has landed: its host did not answer")
 
-    def test_the_landing_records_the_commit_main_holds_and_is_refused_on_a_main_behind_githubs(self):
-        sha = "c" * 40
-        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"{sha}\n") == (sha, None)
-        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"{sha} 2 0\n") == (sha, None)
-        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"{sha} 0 1\n") == (None, (
-            "switchboard-kit's main on chuck-herdr-alpha is 1 commit behind GitHub's (with 0 of its own): rebase it onto "
-            "origin/main, check it again, then land; never push it with force"))
-        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", "") == (
-            None, "crew can't read what switchboard-kit's main on chuck-herdr-alpha holds: nothing was said")
+    def test_the_landing_records_the_commit_main_holds_now(self):
+        """plan.14, plan.18: the landing records the commit GitHub's main holds after the command's fetch, for a kit with
+        an origin, and nothing is refused for the host's own main lagging it (plan.8); what can't be read refuses."""
+        github, own = "c" * 40, "d" * 40
+        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"ORIGIN=yes\nFETCHED=ok\nGITHUB={github}\nOWN={own}\n") == (github, None)
+        for said in (f"{github} 0 1\n", "", "fatal: bad\n"):
+            assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", said) == (
+                None, f"crew can't read what switchboard-kit's main on chuck-herdr-alpha holds: {said.strip() or 'nothing was said'}")
 
     def test_a_bolt_no_team_holds_lands_once_each_units_change_is_on_its_kits_main(self):
         planned = lambda u: {"stage": "ready"}
@@ -153,3 +152,31 @@ class TestLand:
         assert self.land({"a-console-page": "landed", "a-console-filter": "landed"}, ["a-console-page", "a-console-filter"]) == (
             "bolt console-pages lands only once every unit's latest change has been in a batch, and a-console-page or "
             "a-console-filter have not: a batch is due for them (crew review wldn)")
+
+
+class TestQueuedLanding:
+    """bolt-teams "A unit during a queued landing" (plan.8, record 0032 §3): no construct, code or merge starts on a
+    bolt while its landing's worktree stands with LANDING's process alive in it, the submission in sluice's queue."""
+    PATH = "/kit/places/land-b"
+
+    def refusal(self, stage="construct", standing=True, alive=True, kind="unit"):
+        return plan.landing_refusal(kind, "u", stage, "b", self.PATH, standing, alive)
+
+    @pytest.mark.parametrize("stage", ["construct", "code", "merge"])
+    def test_a_unit_during_a_queued_landing_is_refused_naming_the_landing(self, stage):
+        assert self.refusal(stage) == (
+            f"bolt b's landing is queued in sluice, submitted from /kit/places/land-b: unit u's {stage} starts once it has "
+            "landed or been refused, since what merges into bolt/b meanwhile is left out of main's landing")
+
+    def test_a_chores_code_and_merge_wait_alike(self):
+        assert self.refusal("code", kind="chore").startswith("bolt b's landing is queued in sluice, submitted from /kit/places/land-b: chore u's code")
+
+    @pytest.mark.parametrize("stage", ["verify", "settle"])
+    def test_a_stage_that_moves_nothing_toward_the_bolt_starts(self, stage):
+        assert self.refusal(stage) is None
+
+    def test_once_sluices_outcome_is_in_a_worktree_left_standing_holds_nothing(self):
+        # A landing git could not remove, or one stopped, leaves its worktree with no process: the fix that takes main
+        # into a refused bolt starts, as does every unit.
+        assert self.refusal(alive=False) is None
+        assert self.refusal(standing=False, alive=False) is None

@@ -1,10 +1,12 @@
 # A bolt landed through sluice, through the crew command on the stubs (tests.11, record 0022), a part of the units
-# journey (t-journey-units): a unit merges into the bolt by a submission, and crew bolts reads the bolt's verification
-# from sluice's verdict on it; crew bolt submit lands the bolt by a submission to main from a short-lived worktree,
-# naming a conflict for the team and moving nothing; a fix takes main into the bolt by a submission to the bolt, and
-# the landing then lands, bringing the kit's main checkout level; the bolt lands in the plan once every unit has,
-# recording the commit main holds and removing its branch, and its conductor is told which cards to close; a bolt no
-# team holds lands once its unit's change is on main; and dropping a held bolt removes its branch and places.
+# journey (t-journey-units): no unit starts on a bolt while its landing is in flight; a unit merges into the bolt by a
+# submission, and crew bolts reads the bolt's verification from sluice's verdict on it; crew bolt submit lands the
+# bolt by a submission to main from a short-lived worktree, naming a conflict for the team and moving nothing; a fix
+# takes main into the bolt by a submission to the bolt, and the landing then lands, leaving the kit's detached main
+# checkout as it was; the bolt lands in the plan once every unit has, recording the commit main holds and removing its
+# branch, its landing card closed on the team's host with where GitHub's main holds it, and its conductor is told
+# which cards to close; a bolt no team holds lands once its unit's change is on main; and dropping a held bolt removes
+# its branch and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -21,7 +23,19 @@ mkdir -p "$pa/openspec/changes/archive"; git -C "$pa" mv openspec/changes/a open
 git -C "$pa" commit -qm "docs(openspec): archive a"
 (cd "$pa" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "a's submission failed"
 git -C "$k" worktree remove "$pa"; git -C "$k" branch -qD unit/a
-CREW_AGENT=swb-1-conductor crew unit run b construct >/dev/null
+# While the bolt's landing is in flight, its worktree standing with LANDING's process alive in it, no unit starts on it.
+land=$kd/places/land-tenant-environments
+git -C "$k" worktree add -q "$land" bolt/tenant-environments
+echo $$ > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
+export CREW_AGENT=swb-1-conductor
+expect_fail "bolt tenant-environments's landing is queued in sluice, submitted from $land: unit b's construct starts once it has landed or been refused" \
+  crew unit run b construct
+[[ ! -e $kd/places/b ]] || fail "a place was made for b while the landing was queued"
+: > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"  # sluice's outcome is in
+crew unit run b construct >/dev/null
+unset CREW_AGENT
+git -C "$k" worktree remove "$land"
+ok "no unit starts on a bolt while its landing is in flight, and one starts once the outcome is in though the landing's worktree stands"
 crew bolt give swb-2 console-pages >/dev/null 2>&1; place "$k" console-pages c >/dev/null
 echo "# switchboard-kit, main's" > "$k/README.md"; commit_all "$k" "docs: main's title"
 expect_ok crew bolts --label wldn
@@ -34,7 +48,7 @@ by_hand 'p.remove(p.unit("e"))'
 expect_ok crew unit drop b "folded into a"
 has "$out" "swb-1-unit-1 is free: b was dropped from the plan"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1"
-main_before=$(git -C "$k" rev-parse main) land=$kd/places/land-tenant-environments
+main_before=$(git -C "$k" rev-parse main)
 : > "$CREW_TEST_LOG"
 expect_fail "bolt/tenant-environments did not land: sluice refused it or found a conflict, and main is where it was" crew bolt submit tenant-environments
 has "$out" "sluice: bolt/tenant-environments conflicts with main"
@@ -56,18 +70,37 @@ expect_ok crew fix swb-1 take-main --merge
 expect_ok crew fix swb-1 take-main --wait
 has "$out" "delivered merge of $tm: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 unset CREW_AGENT
+git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)
 expect_ok crew bolt submit tenant-environments
-has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): push main, then crew bolt land tenant-environments."
+has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
+grep -q level <<<"$out" && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
 eq "$(git -C "$k" log -1 --format='%an %P' main)" "sluice $main_before $(git -C "$k" rev-parse bolt/tenant-environments)"
-eq "$(cat "$k/README.md")" "# switchboard-kit, main's and the bolt's"
+eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchboard-kit, main's"
 eq "$(git -C "$k" status --porcelain)" ""
 [[ ! -e $land ]] || fail "the landing's worktree is still there"
 eq "$(field mac-studio bolt.submit On)" "bolt/tenant-environments"
-ok "a fix takes main into the bolt by a submission to the bolt; the landing then lands, its worktree removed and the kit's main checkout brought level"
+ok "a fix takes main into the bolt by a submission to the bolt; the landing then lands, its worktree removed and the detached main checkout left as it was"
+git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
 
+# The bolt's landing card, raised in its conductor's name on the team's host as crew raises it, and approved.
+card=$(as $box env CREW_AGENT=swb-1-conductor python3 - "$CREW/plugin/lib" "$k" <<'PY' | tail -1
+import sys
+sys.path.insert(0, sys.argv[1])
+import cards, crew, plan
+facts = dict(bolt="tenant-environments", kit="switchboard-kit", units=["a"], chores=[], batches={}, head="0000000", at=None,
+             moved=0, pr=None)
+print(plan.row_card_post(crew.load(), "wldn", "swb-1-conductor", cards.landing_card, facts,
+                         (sys.argv[2], "github.com/WilldanGroup/switchboard-kit")))
+PY
+)
+mkdir -p "$(home_of $box)/.stub-pendingyou/answered"
+echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answered/$card.json"
 : > "$CREW_TEST_LOG"
 expect_ok crew bolt land tenant-environments
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
+n=$(git -C "$k" log -1 --format='%(trailers:key=Sluice-Submission,valueonly)' main)
+has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"landed on GitHub's main at $(short main) (#$n); every host's folder follows by swancloud's timer within minutes\""
+has "$out" "card land/tenant-environments: $card closed"
 has "$out" "bolt/tenant-environments is removed: bolt tenant-environments is in no plan; it was at"
 grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio). Close any Pending You card you have open for land/tenant-environments.'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told to close its cards:"$'\n'"$(calls)"
@@ -75,7 +108,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, and its conductor is told which cards to close"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, and its conductor is told which cards to close"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null

@@ -98,12 +98,13 @@
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit, and
 #                                      each held bolt's verification, sluice's verdict on its last landing
 #   crew bolt  new|give|order|drop|land ...
-#                                      give makes bolt/<bolt> from the kit's main with no worktree, refused in a kit
-#                                      whose .config/sluice.toml names no checks for its bolt branches
+#                                      give makes bolt/<bolt> from GitHub's main, origin/main after a fetch, with no
+#                                      worktree, refused in a kit whose .config/sluice.toml there names no checks for
+#                                      its bolt branches
 #   crew bolt  submit <bolt> [--label L]
 #                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
-#                                      sluice from a short-lived worktree on the team's host, waiting for the outcome,
-#                                      then the kit's main checkout brought level; refused while main is behind GitHub's
+#                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
+#                                      sluice pushes it to GitHub, and the landing pushes nothing and levels no host
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
@@ -322,9 +323,10 @@ case $cmd in
     words=${2:-}
     [[ -n ${words//[[:space:]]/} ]] || { echo "usage: crew needs \"<what you tried and what you need>\"" >&2; exit 2; }
     one _needs -- "$words" ;;
-  _tidy)  # crew _tidy <team>: free the slots whose work has merged or been dropped, and remove the worktrees whose work
-    # is over (a plan write that ends work asks for it on the team's host)
-    need_team "${2:-}"; one _tidy "$2" ${forced[@]+"${forced[@]}"} ;;
+  _tidy)  # crew _tidy <team> [--landed <bolt> --outcome <words>]: free the slots whose work has merged or been dropped,
+    # and remove the worktrees whose work is over (a plan write that ends work asks for it on the team's host); after a
+    # landing, close the bolt's landing card there with the words
+    need_team "${2:-}"; one _tidy "${args[@]:1}" ${forced[@]+"${forced[@]}"} ;;
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
