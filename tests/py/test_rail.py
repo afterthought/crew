@@ -508,11 +508,11 @@ class TestSweep:
         out, acts = swept(rows_=[row("proposal/4")], cards_=[c], answers={"get_request": (None, refused)})
         assert out["done"] == [] and acts.emitted == [] and [n for n, *_ in acts.calls] == ["crew"]
 
-    def test_a_lost_card_of_a_kind_with_no_raise_is_recorded_lost_for_its_owner_to_post(self):
+    def test_a_lost_card_of_a_kind_with_no_raise_is_recorded_lost_for_its_owner_to_raise_again(self):
         p4 = card("proposal/4", "req_p4", "wldn-planner")
         out, acts = swept(rows_=[row("proposal/4")], cards_=[p4], answers={"get_request": NOT_FOUND})
         assert [(e["Act"], e["State"], e["Card"]) for e in acts.emitted] == [("card.close", "lost", "req_p4")]
-        assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "crew raises no card for proposal/4 yet, so wldn-planner posts it again")]
+        assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "crew raises no card for proposal/4 on a rail read, so wldn-planner raises it again with the command that raised it")]
 
     def test_a_lost_card_whose_row_is_gone_is_posted_again_by_nobody(self):
         p4 = card("proposal/4", "req_p4", "wldn-planner")

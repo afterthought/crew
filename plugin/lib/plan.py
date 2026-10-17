@@ -8942,11 +8942,12 @@ def sweep_cards(fleet, read, acts=None):
     host, where its cards and rows are written, it closes each card of a row that is gone with why
     (sweep_judged, row_gone), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
-    card that has none; a lost card of a kind with no raise is recorded lost, for its owner to post again, and a row of
-    one is left as it is. It first asks Pending You in crew's own name (SWEEPER) whether it finds each card, which
-    Pending You answers for another assistant's card by refusing it as that assistant's, and for a card this host's
-    sign-in no longer reaches with "not found"; a host not signed in, or a bridge that fails, changes nothing, and is said, as is a partition
-    whose record did not answer there (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
+    card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
+    command that raised it, and a row of one is left as it is. It first asks Pending You in crew's own name
+    (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
+    that assistant's, and for a card this host's sign-in no longer reaches with "not found"; a host not signed in,
+    or a bridge that fails, changes nothing, and is said, as is a partition whose record did not answer there
+    (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
     card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left."""
     acts = acts or SweepActs(fleet)
     here, now = acts.host(), acts.now()
@@ -9021,7 +9022,7 @@ def sweep_cards(fleet, read, acts=None):
                 did(l, c["key"], c["card"], c["by"], "lost", f"posted again as {new}", new)
             elif kind_raises is False:
                 card_lost(acts, l, c["by"], c["key"], c["card"], words)
-                did(l, c["key"], c["card"], c["by"], "lost", f"crew raises no card for {c['key']} yet, so {c['by']} posts it again")
+                did(l, c["key"], c["card"], c["by"], "lost", f"crew raises no card for {c['key']} on a rail read, so {c['by']} raises it again with the command that raised it")
             elif kind_raises:
                 did(l, c["key"], c["card"], c["by"], "left", "Pending You no longer finds it, and its raise posted none")
         for row in j["none"]:
