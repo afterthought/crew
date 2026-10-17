@@ -25,7 +25,7 @@ None.
 
 ## Impact
 
-- Follows `crew-builds-every-card-from-its-facts`, whose builders, `follows_of` and act it calls. Built beside `crew-raises-a-proposals-card`, `crew-raises-a-batchs-card-with-its-session`, `crew-record-raises-a-records-card` and `the-rail-shows-and-sweeps-every-card`; of crew's code it changes `ops.py`, `cards.py`'s `deploy_card` and `board.py`'s words for a held step, and of the files the others change only the docs' lines of its own command and one test of `deploy_card`.
+- Follows `crew-builds-every-card-from-its-facts`, whose builders, `follows_of` and act it calls. Built beside `crew-raises-a-proposals-card`, `crew-raises-a-batchs-card-with-its-session`, `crew-record-raises-a-records-card` and `the-rail-shows-and-sweeps-every-card`; of crew's code it changes `ops.py`, `cards.py`'s `deploy_card`, `board.py`'s words for a held step and the rail sweep's judgement of a deploy's card, and of the files the others change only the docs' lines of its own command, one test of `deploy_card` and the sweep's deploy and step cases.
 - The interface swancloud's `a-deploy-offer-hands-its-release-notes-and-after-steps` builds to.
 
 ## Touches
@@ -34,6 +34,7 @@ None.
 plugin/lib/ops.py
 plugin/lib/cards.py
 plugin/lib/board.py
+plugin/lib/plan.py
 plugin/bin/crew
 README.md
 plugin/skills/crew/SKILL.md
@@ -43,10 +44,12 @@ docs/architecture/_open.md
 tests/py/test_ops.py
 tests/py/test_cards.py
 tests/py/test_board.py
+tests/py/test_rail.py
 tests/t-journey-ops.sh
 tests/t-journey-board.sh
+tests/t-cards.sh
 tests/t-briefs.sh
 tests/t-docs.sh
 ```
 
-`ops.py` changes `rows`, `environments` and `open_keys` (the deploy's row keyed `deploy/<env>`, the held step's row), `offer`, `record_cmd`, `step`, `parser` and `args_refusal`, and gains `deploy_facts`, `raise_deploy` and `raise_step` with the decisions and reads they stand on (`handed_steps`, `release_of`, `deploy_move`, `deploy_outcome`, `step_words`, `step_facts`, `step_due`, `stages_working`). `cards.py` changes `deploy_card` alone: its face says when the kit handed no release notes, and it says, rather than counts, landings crew can't read. `board.py` changes `waiting_fields` and `ops_view`, which name a held step held (`code.8`). `plugin/bin/crew` changes only its usage header's `crew ops offer` and `step` lines, README and the crew skill only theirs; `plugin/roles/main-ops.md` changes its offer's and its user's step's paragraphs of *Deploying main*, and `tests/t-briefs.sh` their words; `tests/t-docs.sh` pins the offer's flags; `plan.14`'s details and `_open.md` say it is built.
+`ops.py` changes `rows`, `environments` and `open_keys` (the deploy's row keyed `deploy/<env>`, the held step's row), `offer`, `record_cmd`, `step`, `parser` and `args_refusal`, and gains `deploy_facts`, `raise_deploy` and `raise_step` with the decisions and reads they stand on (`handed_steps`, `release_of`, `deploy_move`, `deploy_outcome`, `step_words`, `step_facts`, `step_due`, `stages_working`). `cards.py` changes `deploy_card` alone: its face says when the kit handed no release notes, and it says, rather than counts, landings crew can't read. `board.py` changes `waiting_fields` and `ops_view`, which name a held step held (`code.8`). `plan.py` changes `sweep_judged` and `stray_cards`, which leave a deploy's card whose word stands for its deploy's end to close (`ops.word_stands`). `plugin/bin/crew` changes only its usage header's `crew ops offer` and `step` lines, README and the crew skill only theirs; `plugin/roles/main-ops.md` changes its offer's and its user's step's paragraphs of *Deploying main*, and `tests/t-briefs.sh` their words; `tests/t-docs.sh` pins the offer's flags; `tests/t-cards.sh`'s sweep raises a deploy's lost card and a step's refused one through `raise_deploy` and `raise_step`; `plan.14`'s details and `_open.md` say it is built.

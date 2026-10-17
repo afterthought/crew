@@ -33,7 +33,7 @@ A step's card is built from what `crew ops step` is handed: `--doer`, `--agent`,
 
 ### 3. One card per environment's offer
 
-The deploy's row and card key is the environment's, `deploy/<env>`, not the head's: `rows`, `environments` and `open_keys` give it, and a newer head's offer changes the one card in place, "Now offering def5678, which includes abc1234". The deployer's offer runs outside any session, so the act tells main-level ops the line that adopts the card, `call get_request (requestId <id>, name <role>)`, with `crew tell`, as `crew-builds-every-card-from-its-facts`'s hearing has it.
+The deploy's row and card key is the environment's, `deploy/<env>`, not the head's: `rows`, `environments` and `open_keys` give it, and a newer head's offer changes the one card in place, "Now offering def5678, which includes abc1234". The deployer's offer runs outside any session, so the act tells main-level ops the line that adopts the card, `call get_request (requestId <id>, name <role>)`, with `crew tell`, as `crew-builds-every-card-from-its-facts`'s hearing has it. The row leaves the rail at the user's word, but the card stays open until the deploy's end closes it, so the rail's sweep leaves a deploy's card while the word for it stands (`ops.word_stands`).
 
 ### 4. One step card at a time
 
