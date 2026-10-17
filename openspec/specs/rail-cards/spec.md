@@ -6,7 +6,7 @@ Each decision on the rail reaches the user as one Pending You card from the agen
 ## Requirements
 
 ### Requirement: Each rail row has a card key
-Each rail row SHALL have one card key, derived from the row's state: `proposal/<n>` for an open proposal, `batch/<n>` for review batch n, and `land/<bolt>/<head>` for a bolt ready to land (the first seven characters of the bolt's branch head). A row's owner SHALL post its card with that key as the card's idempotency key. There SHALL be no review row and no verify row, and no `review/<unit>/<head>` or `verify/<unit>/<stamp>` key. A batch whose cards were posted under `batch/<n>-<k>` before one card per batch was built SHALL keep a row for each of those keys until its card closes, and SHALL have no `batch/<n>` row.
+Each rail row SHALL have one card key, derived from the row's state: `proposal/<n>` for an open proposal, `batch/<n>` for review batch n, and `land/<bolt>` for a bolt whose every unit has merged, one key for the bolt whatever its head (record 0031). A row's owner SHALL post its card with that key as the card's idempotency key. There SHALL be no review row and no verify row, and no `review/<unit>/<head>` or `verify/<unit>/<stamp>` key. A batch whose cards were posted under `batch/<n>-<k>` before one card per batch was built SHALL keep a row for each of those keys until its card closes, and SHALL have no `batch/<n>` row.
 
 #### Scenario: A batch of seven
 - **WHEN** review batch 3 holds seven changes and no card has been posted for it
@@ -18,7 +18,7 @@ Each rail row SHALL have one card key, derived from the row's state: `proposal/<
 
 #### Scenario: A bolt proven again on a new head
 - **WHEN** bolt `y` was ready to land at head `abc1234`, a note on its landing card named a defect, and a fix landed on the bolt at `def5678` with its verification green
-- **THEN** its landing row's key is `land/y/def5678`, its conductor posts a new landing card under that key, and a card keyed `land/y/abc1234` belongs to no row
+- **THEN** its landing row's key is still `land/y`, and crew raises a new landing card under it, following the one the fix held
 
 #### Scenario: A unit built again
 - **WHEN** unit `u` was constructed at head `abc1234`, and construct runs again and commits `def5678`
@@ -119,7 +119,7 @@ An agent crew started SHALL adopt a card crew posted by calling Pending You's `g
 - **THEN** at its start `crew rail` names the card and its id, the conductor adopts it and acts on the answer
 
 ### Requirement: crew names the card a change ends
-When crew records a change that ends a row, it SHALL name that row's card to its owner: in the command's output when the owner made the change, and by a notice when anyone else did. That covers a proposal approved, dropped or replaced; a unit approved, built again, merged, moved off its team or dropped; an amended intent; and a bolt landed or dropped.
+When crew records a change that ends a row, it SHALL name that row's card to its owner: in the command's output when the owner made the change, and by a notice when anyone else did. That covers a proposal approved, dropped or replaced; a unit approved, built again, merged, moved off its team or dropped; and an amended intent. A bolt landed or dropped tells its conductor so, and names no card: crew closes the bolt's landing card itself.
 
 #### Scenario: The user approves a unit from the rail's shell
 - **WHEN** the user runs `crew unit approve x --label wldn`
@@ -131,7 +131,7 @@ When crew records a change that ends a row, it SHALL name that row's card to its
 
 #### Scenario: A bolt lands
 - **WHEN** main-level ops runs `crew bolt land y`
-- **THEN** the conductor of the team that held `y` is told it landed and to close its card for `land/y`
+- **THEN** the conductor of the team that held `y` is told it landed, and crew closes its landing card on the team's host
 
 ### Requirement: A crew agent's card acts are in the run record
 Each card a crew agent posts, updates, withdraws or closes in Pending You, through Pending You's tools in its session or through `crew card`, SHALL be an entry in its partition's run record, naming the row's object, the card's id in `Card`, and the key in `Key` when it is a row's key. Through `crew card` the card's id SHALL be read from Pending You's own reply. An entry SHALL NOT hold a card's title, summary or any other text written on it.
@@ -221,15 +221,19 @@ A crew card's words SHALL be prose the phone wraps, in short paragraphs, cut at 
 - **THEN** each unit's paragraph is the reviewer's opening paragraph as prose in its summary and details, with no code block in its words, the reviewer's summary rides its face as inline Markdown, and the card wraps on the phone
 
 ### Requirement: A row's card is closed when the row's key changes
-When a row's key changes because what it asks changed, a unit built again or a bolt's head moved by a fix, the row's owner SHALL close the card it holds under the old key with a one-line outcome, and post the row's card under the new key once the row asks again.
+When a row's key changes because what it asks changed, a unit built again, the row's owner SHALL close the card it holds under the old key with a one-line outcome, and post the row's card under the new key once the row asks again. A landing's key is its bolt's and does not change: when a merge moves the bolt's head while its landing card is open, crew SHALL change the card in place, and a card under an older head's key, `land/<bolt>/<head>` from before, SHALL belong to no row.
 
 #### Scenario: A fix moves a bolt with an open landing card
-- **WHEN** the conductor's landing card `land/y/abc1234` is open and a fix merges into bolt `y`, moving its head to `def5678`
-- **THEN** the conductor closes `land/y/abc1234` saying the fix changed the bolt, and posts `land/y/def5678` once ops has proved the bolt again
+- **WHEN** the landing card `land/y` is open, a fix is started on bolt `y`, and the fix merges, moving its head to `def5678`
+- **THEN** the card was withdrawn when the fix started, held for it, and crew raises a new card under `land/y`, following it, once `y` reads proven at `def5678`
 
 #### Scenario: A landing card forgotten under an old head
-- **WHEN** the card `land/y/abc1234` is still open while bolt `y` waits to land at `def5678`
-- **THEN** `crew rail` shows `land/y/def5678` with no card open under the landing row, and lists `land/y/abc1234` after the groups with `crew tell <its owner> "Close your Pending You card land/y/abc1234: its row is gone."`
+- **WHEN** a card keyed `land/y/abc1234`, posted before the key was the bolt's, is still open while bolt `y` waits to land
+- **THEN** `crew rail` shows `land/y` under the landing row, and the card under `land/y/abc1234` belongs to no row, for the rail's read to close
+
+#### Scenario: A merge moves a bolt with an open landing card
+- **WHEN** the landing card `land/y` is open and a merge into bolt `y` moves its head to `def5678`
+- **THEN** crew changes the card in place, "Its head is now def5678", and posts no second card
 
 ### Requirement: No row's card takes another kind
 No row's card SHALL be a step for the user to take (`action`), a notice (`fyi`), a text question (`text`) or a review (`review`), and no row's card but a proposal's SHALL be a grouped card of questions. No card SHALL hold a text question.
@@ -246,11 +250,11 @@ No row's card SHALL be a step for the user to take (`action`), a notice (`fyi`),
 Before Pending You's `post_request` runs in a session crew started, crew SHALL refuse a card whose key is a row's and whose form is not that row's, naming the form the row's card takes. A proposal's card SHALL be refused when its unit questions do not hold, each exactly once, the units the proposal adds or moves into a bolt. A refused call never reaches Pending You. When crew cannot check a card it would check, its own input or the proposal unreadable among the reasons, it SHALL refuse it and name what failed.
 
 #### Scenario: A landing card posted as a step
-- **WHEN** a conductor posts a card keyed `land/y/abc1234` as an `action` with the landing command as its step
+- **WHEN** a conductor posts a card keyed `land/y` as an `action` with the landing command as its step
 - **THEN** crew refuses it before Pending You is called, saying a landing's card is an approval marked high stakes whose yes has the conductor tell main-level ops to land, and no card is posted
 
 #### Scenario: A landing card not marked high stakes
-- **WHEN** a conductor posts a card keyed `land/y/abc1234` as an approval without `highStakes`
+- **WHEN** a conductor posts a card keyed `land/y` as an approval without `highStakes`
 - **THEN** crew refuses it, saying the landing card is marked high stakes
 
 #### Scenario: Input crew cannot read
@@ -284,7 +288,7 @@ crew SHALL check only sessions it started: any card in a session crew did not st
 - **THEN** crew checks nothing and lets it through
 
 ### Requirement: crew refuses a crew agent's card under any key but a row's of its own
-Before a Pending You card is posted from a session crew started, crew SHALL refuse it unless its idempotency key is the card key of a rail row the agent owns: for the planner, `proposal/<n>` for an open proposal of its partition; for a conductor, `review/<unit>/<head>` for a unit of the bolt its team holds, or `land/<bolt>/<head>` for that bolt; `verify/<unit>/<stamp>` is no agent's. Every other crew agent SHALL own no key. A refused card SHALL NOT reach Pending You, and its refusal SHALL name the keys to use.
+Before a Pending You card is posted from a session crew started, crew SHALL refuse it unless its idempotency key is the card key of a rail row the agent owns: for the planner, `proposal/<n>` for an open proposal of its partition; for a conductor, `review/<unit>/<head>` for a unit of the bolt its team holds, or `land/<bolt>` for that bolt; `verify/<unit>/<stamp>` is no agent's. Every other crew agent SHALL own no key. A refused card SHALL NOT reach Pending You, and its refusal SHALL name the keys to use.
 
 #### Scenario: ops posts a card
 - **WHEN** brd-2-ops calls Pending You's `post_request` under any key
@@ -292,7 +296,7 @@ Before a Pending You card is posted from a session crew started, crew SHALL refu
 
 #### Scenario: A conductor posts under a key of its own making
 - **WHEN** brd-2-conductor, whose team holds bolt `y`, posts a card keyed `gateway-check-y`
-- **THEN** the call is refused, and the refusal names `land/y/<head>` and the review keys of `y`'s units, read from `crew rail`
+- **THEN** the call is refused, and the refusal names `land/y` and the review keys of `y`'s units, read from `crew rail`
 
 #### Scenario: A conductor posts another team's row
 - **WHEN** brd-2-conductor posts a card keyed `review/z/abc1234` for a unit `z` of a bolt another team holds
@@ -304,7 +308,7 @@ Before a Pending You card is posted from a session crew started, crew SHALL refu
 
 #### Scenario: A conductor posts a verify report's card
 - **WHEN** brd-2-conductor, whose team holds bolt `y`, posts a card keyed `verify/u/20261013-1200` for a unit `u` of `y`
-- **THEN** the call is refused before it reaches Pending You, naming `land/y/<head>`
+- **THEN** the call is refused before it reaches Pending You, naming `land/y`
 
 ### Requirement: The check refuses what it cannot read, and only for crew's sessions
 When crew cannot read the teams file, the plan or the proposals a card's or an area's check depends on, it SHALL refuse the call and name what it could not read. A session crew did not start SHALL NOT be checked.
@@ -387,15 +391,23 @@ A card act Pending You refuses SHALL be refused in Pending You's own words and r
 - **THEN** the offer is recorded, no card posts, and the command says this computer is not signed in to Pending You
 
 ### Requirement: The landing card is posted once the bolt's verification is green
-The conductor SHALL post a bolt's landing card once every unit and chore of the bolt has merged and its verification is green, and the card SHALL ask only for the landing. A step only the user can take or check SHALL be an after-deploy step on a deploy's card, never a question on the landing card. A note on the landing card that names a defect SHALL be a fix on the bolt, and the landing SHALL be asked again only once the verification is green again.
+crew SHALL raise a bolt's landing card once every unit and chore of the bolt has merged, every unit's latest change has been in a batch, sluice's verdict at its head is green and no fix is in flight on it, keyed `land/<bolt>`, as an `approve` of risk high, not reversible, because irreversible, its summary giving the counts, the batches, the verdict and when, and how far main has moved, its face a text artifact "What lands: N units, M chores" naming each one a line, its rationale what follows, and, when sluice's submission at the head has a pull request on GitHub, that pull request as a `url` artifact and among its links; it SHALL ask only for the landing. A note naming a defect SHALL have the conductor start a fix on the bolt, which withdraws the card, and the card SHALL be raised again once the bolt reads proven again.
+
+#### Scenario: Sluice's pull request
+- **WHEN** sluice's submission at `y`'s head has pull request #23 on the kit's GitHub
+- **THEN** the card links it, titled as sluice's pull request for the landing, on its face and in its details
+
+#### Scenario: No pull request
+- **WHEN** the kit's sluice opens no pull request for a submission
+- **THEN** the card carries no link, and says nothing of one
 
 #### Scenario: A green bolt
-- **WHEN** every unit of bolt `y` has merged and its verification is green at head `abc1234`
-- **THEN** the conductor posts one high-stakes card keyed `land/y/abc1234` that asks only for the landing
+- **WHEN** every unit and chore of bolt `y` has merged, each unit's latest change has been in a batch and sluice is green at `abc1234`
+- **THEN** one card keyed `land/y` is open, an approve of risk high, naming the units and chores and the verdict
 
 #### Scenario: A defect noted on the card
-- **WHEN** the user answers the landing card for `y` with a note naming a defect
-- **THEN** the conductor does not ask main-level ops to land `y`, closes the card with that outcome, and runs a fix on the bolt
+- **WHEN** the user answers `land/y` with a note naming a defect and the conductor runs `crew fix` on `y`
+- **THEN** the card is withdrawn, "held for a fix: <the note>", and a new card is raised when `y` reads proven again
 
 ### Requirement: A batch's card is a notice naming every unit
 A batch's card, keyed `batch/<n>`, SHALL be a Pending You notice (`fyi`) crew raises when the reviewer delivers the batch's summary, that asks nothing: no options, no question, no approval and no steps. Its title SHALL say what the batch is about, drawn from its units' subjects, with the batch's number after; its summary SHALL say first "N changes to read, nothing to approve", since the batch before it when there is one; its words SHALL say where notes go, the reading session or the card's own note, that each reaches its unit's team as the user's words, and that the units go on building whatever the user does with the card. The reviewer's summary SHALL ride the face as inline Markdown, a paragraph per unit under its name and team.

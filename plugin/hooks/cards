@@ -73,7 +73,7 @@ REQUEST_ID = re.compile(r"^req_[A-Za-z0-9-]{1,40}$")
 KEYS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"),
         (re.compile(r"^batch/(\d+)(?:-\d+)?$"), "batch/{}"),
         (re.compile(r"^verify/([a-z0-9][a-z0-9-]*)/\d{8}-\d{4}$"), "unit/{}"),
-        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)/[0-9a-f]{7}$"), "bolt/{}"),
+        (re.compile(r"^land/([a-z0-9][a-z0-9-]*)(?:/[0-9a-f]{7})?$"), "bolt/{}"),
         (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})$"), "record/{}/{}"))
 # The form each row's card takes, and a decision record's, in Pending You's kinds of card, by the key's shape: the kinds
 # it may be, whether it is marked high stakes, whether it must carry options (True) or may carry none (False), whether it

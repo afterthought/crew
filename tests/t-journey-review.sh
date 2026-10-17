@@ -167,7 +167,7 @@ ok "the hook records an old batch card the planner posted, nothing written on it
 deny=$(jq -nc --arg k "verify/v1/$stamp" '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",
   tool_input: {name: "swb-1-conductor", title: "Verify v1", idempotencyKey: $k}}' | CREW_AGENT=swb-1-conductor as $box python3 "$CREW/plugin/hooks/cards" --before)
 eq "$(jq -r '.hookSpecificOutput.permissionDecision' <<<"$deny")" "deny"
-has "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$deny")" "swb-1-conductor posts a card only under a rail row's key of its own: land/b1/<head>"
+has "$(jq -r '.hookSpecificOutput.permissionDecisionReason' <<<"$deny")" "swb-1-conductor posts a card only under a rail row's key of its own: land/b1, from the"
 HOST=$box CREW_AGENT=swb-1-conductor expect_fail "no row of wldn's rail has the card key verify/v1/$stamp" crew card session "verify/v1/$stamp"
 ok "a verify report's card is refused before it is posted, and its key starts no session, since no row has it"
 

@@ -32,10 +32,10 @@ done
 lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
 for want in "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
 for want in "crew card session" "crew card wait" "answeredHere" "Never open a browser for a card" "never run \`plannotator\` yourself" \
-  "it has nothing to read, so it carries no link"; do
+  "You post, change and close no landing card"; do
   has "$out" "$want"
 done
-ok "a conductor opens nothing, its landing card carries no link, and the card discipline says how a session is started"
+ok "a conductor opens nothing, posts no landing card, and the card discipline says how a session is started"
 # The words a row's card posted again carries, after its link and its bolt, so the user tells the live copy from the
 # dead one (ADR 0005, "A card belongs to the host's sign-in").
 lost_card='"An older copy of this card is dead: it can no longer be answered, so dismiss it in the app. Answer this one."'
@@ -57,25 +57,27 @@ cards_say() {  # the card discipline the planner's and the conductor's briefs sh
   lacks "$out" "as its artifact of kind"; lacks "$out" "row's answers as its options"; lacks "$out" "leave the card's artifacts empty"
 }
 cards_say
-has "$out" "it names the bolt, and it has nothing to read, so it carries no link and no path"
+has "$out" "which crew raises itself, in your name, once the bolt reads proven"
 lacks "$out" "two or three plain sentences"; lacks "$out" "post its review card"
 ok "a conductor's cards say the document's own words, the link and the bolt first, and no path"
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" \
-  "keyed \`land/<bolt>/<head>\`, marked high stakes" "Land bolt <bolt>. The user approved it on Pending You." \
-  "post its landing card" "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." \
-  "A row's key changes when what it asks changes" "Pending You gives that card back" \
-  "close a landing card you have open with what the fix changed" "under the key the rail then shows"; do
+  "keyed \`land/<bolt>\`, which crew raises itself" "Land bolt <bolt>. The user approved it on Pending You." \
+  "crew raises its landing card, and the merge's wait that found the bolt proven prints the line that adopts it" \
+  "Send no such tell for what has a card" "The kits: switchboard-kit: WilldanGroup/switchboard-kit." "Pending You gives that card back" \
+  "Starting a fix withdraws the bolt's landing card, held for the fix" "\`call get_request (requestId <id>, name swb-1-conductor)\`" \
+  "start a fix on the bolt in the note's words, which withdraws the card"; do
   has "$out" "$want"
 done
-for want in "an \`approve\` card with \`highStakes\` true" "never an \`action\` and never a step or command for the user to land it" \
-  "since its yes has you tell \`wldn-ops\` to land"; do
+for want in "It is an approval of the landing alone, risk high" "withdraws it when you start a fix on the bolt" \
+  "raises it again, following the one the fix held"; do
   has "$out" "$want"
 done
+for gone in "highStakes" "land/<bolt>/<head>" "post its landing card" "A row's key changes when what it asks changes"; do lacks "$out" "$gone"; done
 lacks "$out" "offering approval"; lacks "$out" "Looks good"; lacks "$out" "Needs changes"; lacks "$out" "\`review\` card"
 for gone in "verify/<unit>/<stamp>" "post its verify card" "a \`multi\` when the user may pick several findings" "An answer on a verify card"; do
   lacks "$out" "$gone"
 done
-ok "the conductor posts no verify card, and its landing card is a high-stakes approval and never a step to land"
+ok "the conductor posts no verify card, and crew raises its landing card, an approval of risk high, withdraws it for a fix and raises it again"
 ok "the conductor keeps its units moving, asks the design agent, records signals, and writes the plan only through crew"
 
 for role in design planner dispatcher main-ops; do
@@ -120,7 +122,7 @@ cards_say
 lacks "$out" "Its words are the proposal's case and each of its changes in a line"
 for want in "rail --label wldn" "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\` of the first proposal it was rewritten from" \
   "or answers your card" "it no longer waits on that conductor" "The kits: atlas-kit: WilldanGroup/atlas-kit; breadboard-kit" \
-  "A row's key changes when what it asks changes" "Pending You gives that card back"; do
+  "Pending You gives that card back"; do
   has "$out" "$want"
 done
 has "$out" '`swb-1` builds Switchboard in switchboard-kit'; has "$out" "on mac-studio in session wldn-5"
@@ -300,7 +302,7 @@ done
 lacks "$out" "git rebase --abort"; lacks "$out" "proof in dev"; lacks "$out" "read-tree"; lacks "$out" "behind GitHub's, crew refuses"
 expect_ok crewpy brief swb-1 conductor
 for want in "Take main into the bolt" "a submission to the bolt like any other" \
-  "once the bolt holds it and its verification is green, post the landing card again, under the bolt's new head" \
+  "once the bolt holds it, crew raises the landing card again, following the one the fix held" \
   "That verification is the bolt's proof" \
   "an anchor at GitHub's main that the fleet's timer moves and nobody edits in or checks a branch out in: read the bolt by ref, \`git log bolt/<bolt>\`"; do
   has "$out" "$want"
@@ -329,8 +331,8 @@ for role in construct coder verify; do
 done
 expect_ok crewpy brief swb-1 ops; has "$out" "post no card: your team's cards are its conductor's, and crew refuses any other"
 expect_ok crewpy brief swb-1 conductor
-for want in "once every unit and chore has merged and its verification is green, keyed \`land/<bolt>/<head>\`" \
-  "The card asks only for the landing" "never a question on this one" \
+for want in "keyed \`land/<bolt>\`, which crew raises itself, in your name, once the bolt reads proven" \
+  "It is an approval of the landing alone" "never a question on this one" \
   "A note on the landing card that names a defect is never a landing" "shows the bolt's verification green"; do
   has "$out" "$want"
 done
@@ -356,7 +358,7 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
   "You post no card for a unit, and open nothing for a batch" "run construct again with them, word for word" \
   "hold the notes until it settles" "Overlapping *Touches* never hold a unit back" "crew puts the later after the earlier itself" \
   "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
-  "the card names them too" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches" \
+  "the card waits for them: crew makes a batch due for them at once" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches" \
   "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it"; do
   has "$out" "$want"
 done
