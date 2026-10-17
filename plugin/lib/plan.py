@@ -91,7 +91,7 @@ import kit  # noqa: E402
 import record  # noqa: E402
 import transcript  # noqa: E402
 import cards  # noqa: E402
-from cards import CAPTION, COUNTS, by_words, joined, new_units  # noqa: E402
+from cards import joined, new_units  # noqa: E402
 from crew import Refusal, Stopped, fail  # noqa: E402
 from picture import cut  # noqa: E402
 
@@ -663,13 +663,6 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
 
 def either(rows):
     return rows[0] if len(rows) == 1 else ", ".join(rows[:-1]) + " or " + rows[-1]
-
-
-def holdings(plan):
-    """Which team holds each held bolt, and each unit and chore of one: the bolts and work whose rail rows its conductor
-    owns."""
-    teams = {b.name(): b.get("Team") for b in plan.bolts() if b.get("Team")}
-    return teams, {u.name(): teams[u.get("Bolt")] for u in plan.work() if teams.get(u.get("Bolt"))}
 
 
 def notify(fleet, seen, subject):
@@ -1590,7 +1583,6 @@ def bolt_land(fleet, a):
         tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, landed))
     else:
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]}; no team held it")
-
 
 
 # A landing's submission (plan.16, record 0026), on the team's host, refused there when sluice's wt-submit, which
@@ -2974,24 +2966,6 @@ def open_refusal(n, open_, as_json):
 
 # ------------------------------------------------------------------------------------------- a proposal's card
 
-CARD_NEW = 15  # the most units new to a bolt a proposal's card asks about: three questions of five, beside its approval
-OPTIONS = 5  # Pending You's limit on a choice's options: a question of a proposal's card holds at most five new units
-SESSION_ROOM = 100  # what the card of more than fifteen new units leaves in its summary for the link to its session
-
-
-
-
-
-
-
-
-def plain_words(line):
-    """A change as `crew plan proposed` heads it, without its markdown."""
-    return line.replace("**", "").replace("`", "")
-
-
-
-
 def concerns(a):
     """The unit a proposal's command concerns, its subject, or None for a bolt's command."""
     return None if a.cmd == "bolt" else a.unit
@@ -3059,113 +3033,6 @@ def approved_words(argvs, applied, cleared, keep):
         + ([f"Kept on your word: {joined(stays)}."] if stays else []) \
         + ([f"Kept the old intent of {joined(old)}."] if old else [])
     return " ".join(said)
-
-
-def new_work(names, chores):
-    """What a question of a proposal's card calls the new work it holds (signals.7): new units, chores, or both."""
-    n = sum(1 for u in names if u in chores)
-    return "chores" if n == len(names) else "new units" if not n else "new units and chores"
-
-
-
-
-
-
-
-
-def card_model(fleet, label, w, p, after=None):
-    """Proposal p as its card shows it, from the plan at the branch's tip and the proposal alone, no kit read
-    (plan.12): its commands applied in order to a copy of the plan, as check_ops applies them, and each bolt they touch
-    and each kit's queue a unit goes to, before and after; the card's fields, its text, its picture's sections and
-    the questions it asks. Refused for a closed proposal, and for one that no longer applies, naming the command, as
-    its approval would be."""
-    n = int(p.get("Proposal"))
-    p.get("State") == "open" or fail(f"proposal {n} is {p.get('State')}: it is closed, so it has no card")
-    argvs = [do_args(label, d) for d in p.all("Do")]
-    before = w.plan
-    after = after or check_ops(fleet, label, w, argvs, n, Drawn).plan
-    d = cards.drawn(before, after, argvs)
-    sections, counts, lines, intent, came_from, goals = (d[k] for k in ("sections", "counts", "lines", "intent", "came_from", "goals"))
-    new = new_units(argvs)
-    plain = not new or len(new) > CARD_NEW
-    all_counts = ", ".join(f"{counts[c]} {c}" for c, _ in COUNTS if counts[c])
-    headings = [s["heading"] for s in sections]
-    first = sections[0]
-    if len(headings) == 1:
-        to = headings[0]
-        title = f"Approve the change to {to}" + (f": {all_counts}?" if all_counts else "?")
-    else:
-        room = 140 - len(f"Approve proposal {n} to : {all_counts}?")
-        to = next(said for k in range(len(headings), 0, -1)
-                  for said in [joined(headings[:k] + ([f"{len(headings) - k} more"] if k < len(headings) else []))]
-                  if len(said) <= room or k == 1)
-        title = f"Approve proposal {n} to {to}" + (f": {all_counts}?" if all_counts else "?")
-    replaces = f", replacing proposal {p.get('Replaces')}" if p.get("Replaces") else ""
-    mine = ", ".join(w for w, _ in first["counts"])
-    head = [f"Proposal {n}, by {p.get('By')}{replaces}", first["said"][0].upper() + first["said"][1:] + " once approved"
-            + (f": {mine}." if mine else ".")]
-    goal = next((goals.get(s["name"]) for s in sections if s["kind"] == "bolt" and goals.get(s["name"])), None)
-    room = 400 - (SESSION_ROOM if len(new) > CARD_NEW else 0) - len("\n".join(head)) - 1
-    summary = "\n".join(head + ([by_words(f"Goal: {goal}", room)] if goal and room > 10 else []))
-    d = describe(fleet, label, before, p, alone=True)
-    background = (p.get("Case").strip() + "\n\nChanges:\n" + "\n".join(plain_words(c["lines"][0]) for c in d["changes"])
-                  + (f"\n\nWaiting on {joined([f'{t}-conductor' for t in d['waiting']])} to agree." if d["waiting"] else ""))
-    card = {"title": cut(title, 140), "summary": summary,
-            "context": {"background": background, "trace": [], "filesTouched": [], "tried": [], "links": []},
-            "artifacts": [{"kind": "image", "title": "The change, once approved", "ref": f"proposal-{n}.png", "upload": True,
-                           "caption": CAPTION},
-                          {"kind": "code", "lang": "text", "title": "The change, in text", "ref": f"proposal-{n}.txt", "lines": lines}],
-            "intent": "approve"}
-    questions = {"plan": None}
-    if plain:
-        card.update(kind="approve", approve={"action": f"Apply proposal {n}", "risk": "low", "reversible": True},
-                    recommendedIds=["approve"])
-    else:
-        g = -(-len(new) // OPTIONS)
-        sizes = [len(new) // g + (1 if k < len(new) % g else 0) for k in range(g)]
-        groups = [new[sum(sizes[:k]):sum(sizes[:k + 1])] for k in range(g)]
-        bullets, detail = [x for x in re.split(r"(?<=[.!?])\s+", " ".join(p.get("Case").split())) if x], ""
-        for x in bullets:
-            more = (detail + "\n" if detail else "") + f"• {x}"
-            if len(more) > 200:
-                break
-            detail = more
-        detail = detail or by_words(f"• {bullets[0]}", 200)
-        # A note beside an approval never holds back a drop or an amendment (record 0018), so the way to object is not
-        # to approve, naming only what the proposal does.
-        objected = [w.format("s" if counts[k] > 1 else "") for w, k in
-                    (("keep the dropped unit{}", "dropped"), ("change the amendment{}", "amended")) if counts[k]]
-        aside = "A note beside an approval changes nothing applied."
-        asked = [{"id": "plan", "kind": "approve", "title": cut(f"Approve the change to {to}?", 140), "detail": detail,
-                  "rationale": (f"To {' or '.join(objected)}, don't approve: say why in a note from ⋯, and the planner "
-                                f"writes the proposal again. {aside}" if objected
-                                else f"To change it, don't approve: say how in a note from ⋯. {aside}"),
-                  "approve": {"action": f"Apply proposal {n}, with the new units you keep", "risk": "low", "reversible": True},
-                  "recommendedIds": ["approve"]}]
-
-        def consequence(u):
-            return (f"Cleared: stays in {'the queue' if came_from[u] is None else 'bolt ' + came_from[u]}; the rest still "
-                    "applies" if u in came_from else "Cleared: not added; the rest still applies")
-        if len(new) == 1:
-            u = new[0]
-            asked.append({"id": "units-1", "kind": "choice", "title": cut(f"Does {u} go in?", 140),
-                          "options": [{"id": u, "label": "Move it in" if u in came_from else "Add it", "detail": by_words(intent[u], 200)},
-                                      {"id": "leave-out", "label": "Leave it out", "consequence": consequence(u)}],
-                          "recommendedIds": [u]})
-        chores = {a.unit for a in argvs if a.cmd == "chore"}
-        for k, units in enumerate(groups if len(new) > 1 else [], 1):
-            what = new_work(units, chores)
-            asked.append({"id": f"units-{k}", "kind": "multi",
-                          "title": f"Which {what} go in? Clear one to leave it out." + (f" ({k} of {g})" if g > 1 else ""),
-                          "rationale": f"A cleared {'chore' if what == 'chores' else 'unit' if what == 'new units' else 'unit or chore'} "
-                                       "is not added; the rest of the proposal still applies.",
-                          "options": [{"id": u, "label": cut(u, 80), "detail": by_words(intent[u], 200), "consequence": consequence(u)}
-                                      for u in units],
-                          "multi": {"min": 0, "max": len(units)}, "recommendedIds": list(units)})
-        questions.update({f"units-{k}": units for k, units in enumerate(groups, 1)})
-        card.update(about={"kind": "other", "title": cut(f"Proposal {n}: {to}", 120)}, questions=asked)
-    return {"n": n, "card": card, "session": len(new) > CARD_NEW, "new": new, "questions": questions, "lone": len(new) == 1,
-            "sections": sections}
 
 
 def answers_file(label, n):
@@ -6698,7 +6565,6 @@ def team_cmd(fleet, a):
         print(f"{name} is down; its panes are still there.")
 
 
-
 def needs_cmd(fleet, a):
     """crew needs "<what you need>", run by a stage's agent: its team and slot read from its own
     name (crew.stage_agent), on the team's host, where its stage ends short (stage_needs)."""
@@ -7497,13 +7363,11 @@ def rail_rows(fleet, found, sv, props, times, held=None):
 
 
 def card_kind(key):
-    """What an open card is, from its key: a row's ("row"), under one of the rail's row keys, as record 0031 keys them
-    or as they were keyed before it; a decision record's ("record"), which is no row's; or an agent's question
-    ("question"), under a key of its asker's own or none (briefs.11)."""
-    key = key or ""
-    if key.startswith("record/"):
-        return "record"
-    return "row" if cards.row_object(key) or any(re.fullmatch(k, key) for k in CARD_KEYS) else "question"
+    """What an open card is, from its key: a row's ("row"), under a key crew raises a row's card under, as record
+    0031 keys them or as they were keyed before it (crews_key); a decision record's ("record"), which is no row's; or
+    an agent's question ("question"), under a key of its asker's own or none (briefs.11)."""
+    kind = crews_key(key or "")
+    return "record" if kind == "record" else "row" if kind else "question"
 
 
 def unjudged(sv, unread, c):
@@ -7732,7 +7596,8 @@ def rail_text(fleet, labels, read, now):
     wait, how long ago that was, the commands that answer it, and its card key with whether a card is open for it,
     whose and its id, by which its owner asks Pending You for it, or, with none open, the words of the refusal of its
     last post, oldest first; then the questions the asking roles put to the user, each with its key, which names it,
-    its asker and its age, since no entry holds a card's words (record.3); then the decision records waiting on the user, each the design
+    its asker and its age, since no entry holds a card's words (record.3); then each card act of an agent's whose reply
+    crew could not read (unread_card_acts); then the decision records waiting on the user, each the design
     agent's open card for one, with when it was asked and by whom, and no command, since the card is where it is
     answered; then any open card whose row is gone that the sweep did not close, with the host whose rail read closes
     it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, each partition it
@@ -7768,6 +7633,13 @@ def rail_text(fleet, labels, read, now):
         lines += ["", "questions waiting on you:"]
     for c in questions:
         lines.append(when(c) + f"{c['key'] or 'a question'} ({c['label']}), asked by {c['by']} on {c['host']} ({c['card']})")
+    unread_acts = unread_card_acts(logs, now)
+    if unread_acts:
+        lines += ["", "card acts crew could not read:"]
+    for label, e in unread_acts:
+        lines.append(f"  {utc(e['At']).astimezone():%Y-%m-%d %H:%M}  {age(utc(e['At']), now):<7}  {e['Act']} by {e.get('By')} "
+                     f"on {e.get('Host')} ({label})" + (f", under {e['Key']}" if e.get("Key") else "")
+                     + ": Pending You's reply named no card")
     records = record_cards(sv, cards_, read["unread"])
     if records:
         lines += ["", "decision records waiting on you:"]
@@ -7794,6 +7666,14 @@ def rail_text(fleet, labels, read, now):
     return "\n".join(lines)
 
 
+def unread_card_acts(logs, now):
+    """Each card act a crew agent made through Pending You's tools whose reply named no card, recorded unread by the card
+    hook, in the last CARD_DAYS days, oldest first: (label, entry), from each partition's entries (logs)."""
+    since = now - datetime.timedelta(days=CARD_DAYS)
+    return [(l, e) for l, es in sorted(logs.items()) for e in es
+            if (e.get("Act") or "").startswith("card.") and e.get("State") == "unread" and utc(e["At"]) >= since]
+
+
 def rail_view(fleet, a):
     """crew rail [--label L]: what waits on the user, as rail_text gives it, read from the plans, the proposals, the
     kits and the run record. It sweeps the cards on this host under its sign-in (sweep_cards) and ends the card
@@ -7814,13 +7694,13 @@ def rail_view(fleet, a):
 # started, its document the files plannotator was given joined by ", "), and plannotator's result.json once the user
 # decides.
 CARDS = pathlib.Path.home() / ".local/state/crew/cards"
-# The rail's card keys, as crew's card hook reads them, and a verify report's, verify/<unit>/<stamp>, which no row has
-# had since its findings were fixed in one round (teams.17): a card posted under it before is closed and its session
-# ended as any whose row is gone, and none is posted. A landing's is the bolt's, land/<bolt> (record 0031); a card a
-# conductor posted under land/<bolt>/<head> before then is read, and closed, under that key.
-CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}",
-             r"land/[a-z0-9][a-z0-9-]*(?:/[0-9a-f]{7})?",
-             r"deploy/[a-z0-9][a-z0-9-]*/[0-9a-f]{7}", r"op/[a-z0-9][a-z0-9-]*/\d+")
+# The rail rows' card keys, the thing's and not its version's (record 0031): a card crew keys them by, which its
+# commands name. A card under an older form, land/<bolt>/<head> or a verify report's verify/<unit>/<stamp>, is still
+# crew's (crews_key), closed by the rail's read as one whose row is gone, and none is posted.
+CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"land/[a-z0-9][a-z0-9-]*", r"deploy/[a-z0-9][a-z0-9-]*",
+             r"op/[a-z0-9][a-z0-9-]*/\d+")
+# A verify report's key, verify/<unit>/<stamp>, whose card and session from before teams.17 a sweep still ends.
+VERIFY_KEY = r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}"
 # A decision record's card key, the design agent's: the kit and the record's four digits, one card per record however
 # often it is revised (briefs.15, record 0031 §1), raised by crew record. It is no rail row's: the rail lists its open
 # cards apart.
@@ -7830,115 +7710,65 @@ CARD_POLL = 5  # seconds between a wait's reads
 CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
 
 
-def batch_keys(fleet, label):
-    """The keys of the partition's batch cards whose row is open, as the rail reads them: batch/<n> for each batch the
-    run record holds, or each batch/<n>-<k> a card was posted under for a batch posted as cards of five before a batch
-    was one card, but those a card's close has named. Refused naming what did not answer (read.1), since a close or a
-    post it did not read may be on it."""
-    entries = partition_entries(fleet, label)
-    closed = {e["Key"] for e in entries if e.get("Act") == "card.close" and e.get("Card") and e.get("Key")}
-    posts = batch_posts(entries)
-    keys = [k for n, _, units in batches(entries) for k, _ in batch_cards(n, units, posts)]
-    return [k for k in keys if k not in closed]
+# The roles that ask the user a question of their own on a card, by the kind role() gives them (record 0031, briefs.11).
+ASKERS = ("conductor", "planner", "main-ops", "design")
+# The first part of every key crew raises a card under: a rail row's, a decision record's, and a verify report's,
+# which no row has had since teams.17. No agent's question takes one (crews_key).
+CREWS = {"proposal": "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop",
+         "batch": "a batch's card is crew's, raised with its reading session once the reviewer's summary is delivered",
+         "land": "a landing card is crew's, raised when the bolt reads proven and closed when it lands",
+         "deploy": "a deploy's card is crew's, raised by crew ops offer and closed at the deploy's end",
+         "op": "a step's card is crew's, raised by crew ops step and closed with the step's state",
+         "record": "a record's card is crew's, raised by crew record and closed at the record's status",
+         "verify": "a verify report has no card: its findings are fixed in one round"}
 
 
-class CardReads:
-    """What card_refusal reads, each only when the agent's kind needs it: the partition's open proposals' card keys,
-    each its chain's, proposal/<first>, from proposals.rec at the branch's tip, and its batch cards' open keys (the
-    planner's); its plan (a conductor's); its
-    operations' open keys, where its main level runs (main-level ops's); and this host."""
-
-    def __init__(self, fleet, label):
-        self.fleet, self.label = fleet, label
-
-    def open_proposals(self):
-        repo, ref = state_of(self.fleet, self.label)
-        tip = fetch(repo, ref)
-        text = show(repo, tip, "proposals.rec") if tip else None
-        pl = Plan(text) if text else None
-        return [f"proposal/{proposal_chain(pl, int(p.get('Proposal')))[0]}" for p in pl.recs("Proposal") if p.get("State") == "open"] if pl else []
-
-    def batch_keys(self):
-        return batch_keys(self.fleet, self.label)
-
-    def plan(self):
-        return plans(self.fleet, [self.label])[0][3]
-
-    def ops_keys(self):
-        import ops  # the partition's operations rows, read where its main level runs
-        return ops.open_keys(self.label)
-
-    def here(self):
-        return crew.this_host()
+def crews_key(key):
+    """The kind of crew's own card a key names, by its first part (CREWS), whatever follows, crew's revision of a key
+    (cards.post_key) and a key of an older form among it; None for any other key, an agent's question's."""
+    kind = key.split("/", 1)[0] if isinstance(key, str) and "/" in key else None
+    return kind if kind in CREWS else None
 
 
-def card_refusal(fleet, name, label, tool, key, reads=None):
-    """Whether the agent crew started may post a Pending You card (post_request) or make an area (create_area) under an
-    idempotency key: None to let the call through, else the refusal's words, naming the key to use (briefs.11). A card's
-    key must be a rail row's of the agent's own: the planner's proposal/<n> for an open proposal of its partition, read
-    from proposals.rec, or batch/<n> for one of its batches whose row is open, read from the run record; a
-    conductor's land/<bolt> for the bolt its team holds, read from the plan. The design agent's is a decision record's, record/<kit>/<number> for a kit of any team of its
-    partition, read from the teams file (briefs.15). Every other agent owns no key. An area's key is
-    create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
-    partition, read from the teams file. The state branch is fetched once (plan.12), and only for the planner's or a
-    conductor's card; what can't be read is a Refusal naming it (read.1). The user's own name is never checked. reads
-    is what it reads (CardReads), given apart in a logic test."""
-    reads = reads or CardReads(fleet, label)
+def card_refusal(fleet, name, label, tool, key):
+    """Whether a crew agent's Pending You call may go through (briefs.11, record 0031): None to let it, else the
+    refusal's words. The user's own name is never checked. A card's post, change or close is a question's, the agent's
+    own, only from a conductor, the planner, main-level ops or the design agent (ASKERS), and never under crew's own
+    key (crews_key): the post's idempotencyKey, or, for a change or a close, the key this host's run record holds the
+    card under, None when it holds none. An area is made only under create-area:<owner>/<kit> for a kit the agent's
+    team builds or, for the main level, a kit of any team of its partition, read from the teams file. Everything else
+    passes: a question's form, and its key but crew's, are its asker's. A decision of the role, the call and the key
+    alone (code.7)."""
     kind, of = role(fleet, name)
     if kind == "user":
         return None
     what = "an area" if tool == "create_area" else "a card"
-    if not isinstance(key, str) or not key:
-        return f"crew refuses {what} with no idempotencyKey."
-    said, cmd = f"crew refuses {what} under {key}", f"{crew.HOME}/plugin/bin/crew"
+    cmd = f"{crew.HOME}/plugin/bin/crew"
+    if kind not in ASKERS:
+        if kind == "team":
+            left = (f"Tell {of}-conductor what you wait on with `{cmd} tell`." if name == f"{of}-ops"
+                    else f"Say what you need with `{cmd} needs`, and your conductor gets it and asks if it must.")
+        elif kind == "dispatcher":
+            left = f"Ask through {of}-planner with `{cmd} tell`."
+        elif kind == "operator":
+            left = "The user is in your pane: ask them there."
+        else:
+            left = "Tell the partition's operator agents what you wait on, as your brief says."
+        return (f"crew refuses {what} from {name}: only a conductor, the planner, main-level ops and the design agent ask "
+                f"the user on a card. {left}")
     if tool == "create_area":
-        teams = [of] if kind in ("conductor", "team") else [] if kind == "other" else crew.partition_of(fleet, label)["teams"]
+        teams = [of] if kind == "conductor" else crew.partition_of(fleet, label)["teams"]
         mine = sorted({f"create-area:{fleet['teams'][t]['kit']['repo']}" for t in teams})
         if key in mine:
             return None
-        return f"{said}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine else f"no kit's area is {name}'s to make.")
-    rail = f"from the `card:` line under its row in `{cmd} rail --label {label}`"
-    if kind == "planner":
-        mine = reads.open_proposals()
-        if key in mine:
-            return None
-        mine += reads.batch_keys()
-        if key in mine:
-            return None
-        return (f"{said}: {name} posts a card only under proposal/<n> for a proposal of {label} open now, or batch/<n> "
-                f"for one of its batches open now, " + (f"{either(mine)}, {rail}." if mine else "and none is open."))
-    if kind == "conductor":
-        plan = reads.plan()
-        bolts = sorted(b for b, t in holdings(plan)[0].items() if t == of) if plan else []
-        if key in [f"land/{b}" for b in bolts]:
-            return None
-        if not bolts:
-            return f"{said}: {name} posts a card only under a rail row's key of its own, and {of} holds no bolt, so none is."
-        mine = [f"land/{b}" for b in bolts]
-        return f"{said}: {name} posts a card only under a rail row's key of its own: {either(mine)}, {rail}."
-    if kind == "main-ops":
-        p = crew.partition_of(fleet, label)
-        if p["machine"] != reads.here():
-            return f"{said}: {name} posts its operations' cards on {p['machine']}, where {label}'s operations are kept."
-        mine = reads.ops_keys()
-        if key in mine:
-            return None
-        return (f"{said}: {name} posts a card only under an operations row's key of {label} open now, "
-                + (f"{either(mine)}, {rail}." if mine else "and none is open."))
-    if kind == "team":
-        left = (f"Tell {of}-conductor what you wait on with crew tell." if name == f"{of}-ops"
-                else f"Say what you need with `{cmd} needs`, and the conductor gets it.")
-        return f"{said}: {name} owns no card key, since a team's cards are its conductor's. {left}"
-    if kind == "design":
-        kits = sorted({fleet["teams"][t]["kit"]["name"] for t in crew.partition_of(fleet, of)["teams"]})
-        m = re.fullmatch(RECORD_KEY, key)
-        if m and m.group(1) in kits:
-            return None
-        return (f"{said}: {name} posts a card only for a decision record, under record/<kit>/<number> "
-                + (f"for a kit of {of}'s, {either(kits)}, " if kits else f"for a kit of {of}'s, and no team of {of} builds one, ")
-                + "the number the record's four digits.")
-    return (f"{said}: {name} owns no card key, since only the planner, the conductors, main-level ops and, for a decision "
-            "record, the design agent post cards. Tell the partition's operator agents what you wait on, as your brief says.")
+        return (f"crew refuses an area under {key}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine
+                else f"no kit's area is {name}'s to make."))
+    crews = crews_key(key)
+    if crews:
+        verb = {"post_request": "post", "update_request": "change"}.get(tool, "close")
+        return (f"crew refuses {name}'s {verb} of the card under {key}: {CREWS[crews]}. Ask a question of your own under "
+                f"a key of your own, ask/{name}/<what it is about>.")
+    return None
 
 
 def old_batch(key):
@@ -9207,7 +9037,7 @@ def card_folder(rel):
     ~/.local/state/crew/cards/<label>/ keeps, from its path there: batch/<n> is a key's own folder, as a proposal's;
     None when the path is no key's folder."""
     path = "/".join(rel.parts)
-    if any(re.fullmatch(k, path) for k in CARD_KEYS):
+    if any(re.fullmatch(k, path) for k in CARD_KEYS + (VERIFY_KEY,)):
         return path, None
     key = "/".join(rel.parts[:2])
     if len(rel.parts) == 3 and old_batch(key) and crew.NAME.match(rel.parts[2]):

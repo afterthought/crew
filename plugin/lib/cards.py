@@ -134,13 +134,14 @@ def lost(words):
 
 
 def lost_said(key, card, words):
-    """The refusal of a read of a lost card: the card is still the user's to see, but no longer its owner's to reach,
-    so while its row still waits the rail's next read posts it again under the key, the summary saying the older copy
-    is dead."""
+    """The refusal of a read of a lost card: the card is still the user's to see, but no longer its owner's to reach. A
+    row's card, while its row still waits, the rail's next read posts again under the key, the summary saying the older
+    copy is dead; a question its asker asks again, if it still matters."""
+    again = ("While the row still waits, the rail's next read posts it again under its key, its summary saying an older "
+             "copy is dead and to dismiss it in the app" if row_object(key) else
+             "Ask it again if it still matters, saying in it that an older copy is dead and to dismiss it in the app")
     return (f"card {card} under {key} is lost to its owner (Pending You: \"{words}\"): it was posted under another "
-            "sign-in than this host's, and the user may still see it and answer it, to nobody. While the row still waits, "
-            "the rail's next read posts it again under its key, its summary saying an older copy is dead and to dismiss it "
-            "in the app")
+            f"sign-in than this host's, and the user may still see it and answer it, to nobody. {again}")
 
 
 def version_of(got, card):

@@ -166,6 +166,8 @@ def test_a_lost_card_is_posted_again_under_its_key_by_the_rails_next_read():
     assert said.startswith("card req_old under land/b1 is lost to its owner (Pending You: \"Not found: request:req_old.\")")
     assert said.endswith("the rail's next read posts it again under its key, its summary saying an older copy is dead and "
                          "to dismiss it in the app")
+    assert cards.lost_said("ask/swb-1-conductor/hold", "req_q", "Not found.").endswith(
+        "Ask it again if it still matters, saying in it that an older copy is dead and to dismiss it in the app")
 
 
 # ----------------------------------------------------------------------------------------- what read prints

@@ -591,3 +591,14 @@ class TestBolts:
     def test_a_plan_not_started_says_how_to_start_it(self):
         d = plan.bolts_data(FLEET, ["wldn"], [("wldn", "WilldanGroup/crew-state", None, None)], {}, {})
         assert plan.bolts_text(d) == "wldn/main  WilldanGroup/crew-state  not started: crew state init wldn"
+
+
+def test_a_card_act_whose_reply_named_no_card_is_listed_after_the_questions():
+    """rail-cards: a crew agent's card act whose reply crew could not read is recorded unread by the card hook, and the
+    rail lists it with its agent, act and time; one older than CARD_DAYS days is not listed."""
+    fresh = dict(Act="card.post", By="swb-1-conductor", Host=BOX, At=iso(30), State="unread", Key="ask/swb-1-conductor/hold")
+    old = dict(fresh, At=(NOW - datetime.timedelta(days=plan.CARD_DAYS + 1)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    assert plan.unread_card_acts({"wldn": [old, fresh, dict(fresh, State=None, Card="req_q1")]}, NOW) == [("wldn", fresh)]
+    out = text(rows(), logs={"wldn": [fresh]})
+    assert "card acts crew could not read:" in out
+    assert f"card.post by swb-1-conductor on {BOX} (wldn), under ask/swb-1-conductor/hold: Pending You's reply named no card" in out

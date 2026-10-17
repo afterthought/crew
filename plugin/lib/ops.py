@@ -252,11 +252,6 @@ def environments(es, since=None):
     return out
 
 
-def open_keys(label):
-    """The card keys of the partition's operations rows open now, on this host."""
-    return [r["key"] for r in rows(None, label, entries(label))]
-
-
 # ----------------------------------------------------------------- the deploy's and the step's cards (record 0031)
 
 RELEASE = re.compile(r"^##\s+\[?([^\]\s(]+)", re.M)  # a release's heading in git-cliff's Markdown: ## v0.3.0 (date)

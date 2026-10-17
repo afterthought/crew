@@ -41,76 +41,57 @@ FLEET = {"partitions": {"wldn": dict(BASE["partitions"]["wldn"], teams=["swb-1",
 FLEET["partitions"]["wldn"]["teams"].append("brd-1")
 
 
-class Reads:
-    def __init__(self, proposals=("proposal/1",), batches=("batch/1-1", "batch/2"), here="mac-studio", ops=()):
-        self.p, self.b, self.h, self.o = list(proposals), list(batches), here, list(ops)
-
-    def open_proposals(self):
-        return list(self.p)
-
-    def batch_keys(self):
-        return list(self.b)
-
-    def plan(self):
-        return plan.Plan(plan_text(bolts=[("tenant-environments", "switchboard-kit", "swb-1"), ("console-pages", "switchboard-kit", "swb-2")],
-                                   units=[("x", "switchboard-kit", "tenant-environments", []), ("checked", "switchboard-kit", "tenant-environments", []),
-                                          ("z", "switchboard-kit", "console-pages", [])]))
-
-    def ops_keys(self):
-        return list(self.o)
-
-    def here(self):
-        return self.h
+def key(name, k, tool="post_request", label="wldn"):
+    return plan.card_refusal(FLEET, name, label, tool, k)
 
 
-def key(name, k, tool="post_request", label="wldn", **reads):
-    return plan.card_refusal(FLEET, name, label, tool, k, Reads(**reads))
-
-
-ROWS = ("land/tenant-environments, from the `card:` line under its row in "
-        f"`{crew.HOME}/plugin/bin/crew rail --label wldn`")
+ASK = f"{crew.HOME}/plugin/bin/crew"
 
 
 class TestKeys:
+    """rail-cards: a question is asked by four roles in their own name, and crew refuses one from any other role or
+    under a row's key (record 0031, briefs.11)."""
+
     def test_the_users_own_card_is_never_checked(self):
-        assert key("chuck@mac-studio", "anything") is None
+        assert key("chuck@mac-studio", "land/tenant-environments") is None
 
-    def test_a_card_needs_a_key(self):
-        assert key("swb-1-conductor", None) == "crew refuses a card with no idempotencyKey."
+    @pytest.mark.parametrize("name", ["swb-1-conductor", "wldn-planner", "wldn-ops", "wldn-design"])
+    @pytest.mark.parametrize("tool", ["post_request", "update_request", "cancel_request", "ack_answer"])
+    def test_the_four_ask_post_change_and_close_a_question_under_a_key_of_their_own_or_none(self, name, tool):
+        assert key(name, f"ask/{name}/hold-the-macs", tool) is None and key(name, None, tool) is None
 
-    def test_a_teams_ops_and_slots_own_no_card_key(self):
-        assert "swb-1-ops owns no card key, since a team's cards are its conductor's" in key("swb-1-ops", "land/tenant-environments/abc1234")
-        assert "Tell swb-1-conductor what you wait on with crew tell." in key("swb-1-ops", "x")
-        assert f"{crew.HOME}/plugin/bin/crew needs" in key("swb-1-unit-2", "verify/x/20261007-1412")
+    @pytest.mark.parametrize("name, words", [
+        ("swb-1-unit-2", f"Say what you need with `{ASK} needs`, and your conductor gets it and asks if it must."),
+        ("swb-1-ops", f"Tell swb-1-conductor what you wait on with `{ASK} tell`."),
+        ("wldn-dispatch-mac-studio", f"Ask through wldn-planner with `{ASK} tell`."),
+        ("wldn-operator-mac-studio", "The user is in your pane: ask them there.")])
+    def test_any_other_role_asks_nothing_on_a_card_and_is_told_whom_to_ask(self, name, words):
+        for tool in ("post_request", "update_request", "cancel_request", "ack_answer", "create_area"):
+            what = "an area" if tool == "create_area" else "a card"
+            assert key(name, f"ask/{name}/x", tool) == (
+                f"crew refuses {what} from {name}: only a conductor, the planner, main-level ops and the design agent ask "
+                f"the user on a card. {words}")
 
-    def test_a_conductor_posts_under_its_own_bolts_landing_row_keyed_by_the_bolt_and_never_a_verify_reports(self):
-        assert key("swb-1-conductor", "land/tenant-environments") is None
-        for k in ("gateway-check", "verify/checked/20261007-1412", "verify/z/20261007-1412", "land/console-pages", "review/x/abc1234",
-                  "land/tenant-environments/abc1234"):
-            assert key("swb-1-conductor", k) == f"crew refuses a card under {k}: swb-1-conductor posts a card only under a rail row's key of its own: {ROWS}."
-        assert key("brd-1-conductor", "land/x/abc1234").endswith("brd-1 holds no bolt, so none is.")
+    @pytest.mark.parametrize("name, k, said", [
+        ("swb-1-conductor", "land/tenant-environments", "a landing card is crew's, raised when the bolt reads proven and closed when it lands"),
+        ("swb-1-conductor", "land/tenant-environments/abc1234", "a landing card is crew's"),
+        ("wldn-planner", "proposal/4", "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop"),
+        ("wldn-planner", "proposal/4:2", "a proposal's card is crew's"),
+        ("wldn-planner", "batch/2-1", "a batch's card is crew's"),
+        ("wldn-ops", "deploy/dev", "a deploy's card is crew's, raised by crew ops offer"),
+        ("wldn-ops", "op/dev/1", "a step's card is crew's, raised by crew ops step"),
+        ("wldn-design", "record/atlas-kit/0021", "a record's card is crew's, raised by crew record"),
+        ("wldn-design", "proposal/1", "a proposal's card is crew's"),
+        ("swb-1-conductor", "verify/x/20261007-1412", "a verify report has no card")])
+    def test_none_of_the_four_posts_changes_or_closes_crews_own_card(self, name, k, said):
+        for tool, verb in (("post_request", "post"), ("update_request", "change"), ("ack_answer", "close"), ("cancel_request", "close")):
+            why = key(name, k, tool)
+            assert why.startswith(f"crew refuses {name}'s {verb} of the card under {k}: {said}"), why
+            assert why.endswith(f"Ask a question of your own under a key of your own, ask/{name}/<what it is about>.")
 
-    def test_the_planner_posts_under_an_open_proposal_or_an_open_batch_card(self):
-        assert key("wldn-planner", "proposal/1") is None and key("wldn-planner", "batch/2") is None and key("wldn-planner", "batch/1-1") is None
-        assert key("wldn-planner", "proposal/2") == (
-            "crew refuses a card under proposal/2: wldn-planner posts a card only under proposal/<n> for a proposal of wldn open now, "
-            f"or batch/<n> for one of its batches open now, proposal/1, batch/1-1 or batch/2, from the `card:` line under its row in "
-            f"`{crew.HOME}/plugin/bin/crew rail --label wldn`.")
-        assert key("wldn-planner", "batch/1").endswith("proposal/1, batch/1-1 or batch/2, from the `card:` line under its row in "
-                                                      f"`{crew.HOME}/plugin/bin/crew rail --label wldn`.")
-
-    def test_the_design_agent_posts_for_a_decision_record_of_a_kit_its_partition_builds_under_the_records_key(self):
-        assert key("wldn-design", "record/atlas-kit/0021") is None
-        said = ("wldn-design posts a card only for a decision record, under record/<kit>/<number> for a kit of wldn's, "
-                "atlas-kit, breadboard-kit or switchboard-kit, the number the record's four digits.")
-        for k in ("record/flywheel-next/0003", "proposal/1", "record/atlas-kit/21", "record/atlas-kit/0021/abc1234"):
-            assert key("wldn-design", k) == f"crew refuses a card under {k}: {said}"
-        assert key("madswan-design", "record/flywheel-next/0003", label="madswan") is None
-
-    def test_main_level_ops_posts_its_operations_cards_where_they_are_kept(self):
-        assert key("wldn-ops", "op/dev/1", ops=["op/dev/1"]) is None
-        assert "wldn-ops posts its operations' cards on mac-studio" in key("wldn-ops", "op/dev/1", here="chuck-herdr-alpha")
-        assert "operations row's key of wldn open now, and none is open" in key("wldn-ops", "land/x/abc1234")
+    def test_a_key_outside_crews_own_is_a_questions_whatever_it_is(self):
+        for k in ("gateway-check", "review/x/abc1234", "landing-of-y", "ask/swb-1-conductor/hold"):
+            assert key("swb-1-conductor", k) is None
 
     def test_an_area_is_made_only_under_a_kit_of_the_agents_own(self):
         assert key("swb-1-conductor", "create-area:WilldanGroup/switchboard-kit", "create_area") is None
@@ -119,9 +100,6 @@ class TestKeys:
         assert key("wldn-planner", "create-area:WilldanGroup/atlas-kit", "create_area") is None
         assert "only under create-area:WilldanGroup/atlas-kit, create-area:WilldanGroup/breadboard-kit or create-area:WilldanGroup/switchboard-kit" in (
             key("wldn-planner", "create-area:agentplot/flywheel-next", "create_area"))
-
-    def test_any_other_agent_owns_no_key(self):
-        assert "wldn-operator-mac-studio owns no card key, since only the planner, the conductors, main-level ops" in key("wldn-operator-mac-studio", "x")
 
 
 class TestResult:
@@ -136,13 +114,37 @@ class TestResult:
     def test_an_error_or_a_denial_is_a_failure(self):
         assert cards.failed({"isError": True}) and cards.failed({"deny": "not yours"}) and not cards.failed({"structuredContent": {}})
 
-    @pytest.mark.parametrize("k, row", [
-        ("verify/x/20261007-1400", "unit/x"), ("land/tenant-environments/abc1234", "bolt/tenant-environments"), ("proposal/4", "proposal/4"),
-        ("batch/3", "batch/3"), ("batch/3-2", "batch/3"), ("record/atlas-kit/0021", "record/atlas-kit/0021"),
-        ("record/atlas-kit/0021/abc1234", None),
-        ("land/tenant-environments", "bolt/tenant-environments"), ("my own key", None), ("review/x/abc1234", None)])
-    def test_a_card_is_on_its_rows_object_and_any_other_on_its_agent(self, k, row):
-        assert cards.keyed(k)[1] == row
+    def after(self, monkeypatch, tool, given, response, held=None):
+        """The PostToolUse half on one call by swb-1-conductor, its emit caught; held, the key this host's run record
+        holds a card under."""
+        import io
+        import record
+        caught = []
+        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+        monkeypatch.setenv("CREW_LABEL", "wldn")
+        monkeypatch.setattr(record, "emit", lambda label, act, on, **fields: caught.append((label, act, on, fields)))
+        monkeypatch.setattr(cards, "posted", lambda record, label, card: held)
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(
+            {"session_id": None, "tool_name": f"mcp__pendingyou__{tool}", "tool_input": given, "tool_response": response})))
+        cards.main()
+        return caught
+
+    def test_a_question_posted_is_recorded_on_its_asker_with_its_id_and_key_and_nothing_written_on_it(self, monkeypatch):
+        given = {"idempotencyKey": "ask/swb-1-conductor/hold-the-macs", "title": "Hold the Macs?", "summary": "Words."}
+        assert self.after(monkeypatch, "post_request", given, {"structuredContent": {"requestId": "req_q1"}}) == [
+            ("wldn", "card.post", ["agent/swb-1-conductor"], dict(Card="req_q1", Key="ask/swb-1-conductor/hold-the-macs", State=None))]
+
+    def test_a_reply_that_gives_no_card_is_recorded_unread(self, monkeypatch):
+        assert self.after(monkeypatch, "post_request", {"idempotencyKey": "ask/swb-1-conductor/x"}, "Posted.") == [
+            ("wldn", "card.post", ["agent/swb-1-conductor"], dict(Card=None, Key="ask/swb-1-conductor/x", State="unread"))]
+
+    def test_a_close_is_recorded_under_the_key_its_post_was(self, monkeypatch):
+        caught = self.after(monkeypatch, "ack_answer", {"requestId": "req_q1", "outcome": "Held."}, {"structuredContent": {"status": "resolved"}},
+                            held="ask/swb-1-conductor/hold-the-macs")
+        assert caught == [("wldn", "card.close", ["agent/swb-1-conductor"], dict(Card="req_q1", Key="ask/swb-1-conductor/hold-the-macs", State=None))]
+
+    def test_an_error_writes_nothing(self, monkeypatch):
+        assert self.after(monkeypatch, "post_request", {"idempotencyKey": "x"}, {"isError": True}) == []
 
     def test_pending_you_is_known_under_any_server_name(self):
         assert cards.is_pending_you("pendingyou") and cards.is_pending_you("plugin_pendingyou_pendingyou") and not cards.is_pending_you("github")
@@ -221,6 +223,22 @@ class TestNames:
         monkeypatch.delenv("CREW_AGENT")
         assert cards.refusal(hooked("whoami", {"name": "swancloud-ops"})) is None
 
+    def test_the_hook_refuses_a_stage_agents_card_and_a_card_of_crews_own_and_lets_a_question_through(self, monkeypatch):
+        """rail-cards: a coder asks; a conductor posts its landing card by hand; a conductor closes crew's card; a
+        conductor asks."""
+        monkeypatch.setenv("CREW_LABEL", "wldn")
+        monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
+        monkeypatch.setenv("CREW_AGENT", "swb-1-unit-1")
+        assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-unit-1/x"})).startswith(
+            "crew refuses a card from swb-1-unit-1: only a conductor, the planner, main-level ops and the design agent ask")
+        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+        assert "a landing card is crew's, raised when the bolt reads proven" in cards.refusal(
+            hooked("post_request", {"idempotencyKey": "land/tenant-environments", "name": "swb-1-conductor"}))
+        monkeypatch.setattr(cards, "posted", lambda record, label, card: "land/tenant-environments" if card == "req_l1" else None)
+        assert "close of the card under land/tenant-environments" in cards.refusal(hooked("cancel_request", {"requestId": "req_l1", "reason": "x"}))
+        assert cards.refusal(hooked("cancel_request", {"requestId": "req_q1", "reason": "x"})) is None
+        assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold", "kind": "text"})) is None
+
     def test_the_name_is_checked_before_and_apart_from_the_cards_key(self, monkeypatch):
         monkeypatch.setenv("CREW_AGENT", "wldn-planner")
         monkeypatch.setenv("CREW_LABEL", "wldn")
@@ -234,106 +252,6 @@ class TestNames:
                      "mcp__pendingyou__a_tool_pending_you_adds", "mcp__pendingyou__post_request"):
             assert re.search(matcher, name), name
         assert not re.search(matcher, "mcp__github__get_issue") and not re.search(matcher, "Bash")
-
-
-LANDING = {"kind": "approve", "highStakes": True}
-TWO = {"options": [{"id": "fix", "label": "Fix both"}, {"id": "merge", "label": "Merge as it is"}]}
-
-
-def form(k, given, update=False, units=None):
-    return cards.form_refusal(k, given, update, units)
-
-
-class TestForms:
-    def test_a_landing_card_is_a_high_stakes_approval_that_asks_only_for_the_landing(self):
-        # A step only the user can take is the deploy's, on its own card (record 0025).
-        assert form("land/b/abc1234", LANDING) is None
-        said = form("land/b/abc1234", dict(LANDING, action={"steps": [{"text": "Open the gateway on your Mac"}]}))
-        assert said.startswith("crew refuses card land/b/abc1234. A landing's card is an approval")
-        assert said.endswith("This card has steps for the user to take. Post it again in that form.")
-        said = form("land/b/abc1234", {"kind": "action", "action": {"steps": [{"text": "Land the bolt", "command": "crew bolt land b"}]}})
-        assert 'This card is an "action", is not marked high stakes, and has steps for the user to take. Post it again' in said
-        assert form("land/b/abc1234", {"kind": "approve"}).endswith("This card is not marked high stakes. Post it again in that form.")
-        assert "This card has options." in form("land/b/abc1234", dict(LANDING, **TWO))
-
-    def test_a_verify_reports_card_has_no_form_since_none_is_posted_and_one_posted_before_changes_unchecked(self):
-        assert not cards.formed("verify/x/20261007-1412") and cards.formed("land/b/abc1234")
-
-    def test_a_record_card_is_a_low_risk_reversible_approval(self):
-        accept = {"kind": "approve", "approve": {"action": "Accept record 0021", "risk": "low", "reversible": True}}
-        assert form("record/atlas-kit/0021", accept) is None
-        assert 'This card is a "choice", has options, and has no approve block.' in form("record/atlas-kit/0021", dict(kind="choice", **TWO))
-        assert 'This card has risk "high".' in form("record/atlas-kit/0021", {**accept, "approve": {**accept["approve"], "risk": "high"}})
-        assert "This card is not reversible." in form("record/atlas-kit/0021", {**accept, "approve": {**accept["approve"], "reversible": False}})
-
-    BATCH = {"kind": "fyi", "summary": "This is batch 2 of wldn.",
-             "context": {"background": "Read the whole batch.\n\nx1 (swb-1)\nWhat x1 does.\n\nx2 (swb-1)\nWhat x2 does.\n\nz1 (swb-2)\nWhat z1 does.",
-                         "links": [{"label": "Read batch 2", "url": "http://mac-studio:19432"}]}}
-
-    def test_a_batch_card_is_one_notice_naming_every_unit_with_one_link_and_nothing_to_answer(self):
-        units = ["x1", "x2", "z1"]
-        assert form("batch/2", self.BATCH, units=units) is None
-        assert 'This card is a "multi", and has options.' in form("batch/2", dict(self.BATCH, kind="multi", **TWO), units=units)
-        assert 'This card is an "approve", and approves something.' in form("batch/2", dict(self.BATCH, kind="approve", approve={"action": "x"}), units=units)
-        assert "This card attaches its summary." in form("batch/2", dict(self.BATCH, artifacts=[{"kind": "code"}]), units=units)
-        fenced = dict(self.BATCH, context=dict(self.BATCH["context"], background="```\n" + self.BATCH["context"]["background"] + "\n```"))
-        assert "puts its summary in a code block, which scrolls sideways on the phone" in form("batch/2", fenced, units=units)
-        assert "This card leaves out z1." in form("batch/2", dict(self.BATCH, context=dict(self.BATCH["context"], background="x1 x2")), units=units)
-        assert "This card leaves out x1, x2 and z1." in form("batch/2", {"kind": "fyi"}, units=units)
-        three = dict(self.BATCH, context=dict(self.BATCH["context"], links=[{"url": "a"}, {"url": "b"}]))
-        assert "links more than one session; a batch has one reading session" in form("batch/2", three, units=units)
-
-    def test_no_rows_card_asks_a_question_in_words(self):
-        said = form("land/b/abc1234", dict(LANDING, text={"placeholder": "Anything else?"}))
-        assert "This card asks a question in words, which Pending You makes required. The card's note is where the user's words go." in said
-
-    def test_a_change_is_checked_for_what_it_changes(self):
-        assert form("land/b/abc1234", {"highStakes": False}, update=True) == (
-            "crew refuses this change to card land/b/abc1234. A landing's card is an approval, kind \"approve\", marked high stakes "
-            "with highStakes true, whose yes has you tell main-level ops to land; it has no options and no steps. This change clears "
-            "its high stakes. Change the card without it.")
-        assert form("land/b/abc1234", {"title": "Land it"}, update=True) is None
-        assert "This change gives it options." in form("proposal/1", TWO, update=True)
-        assert 'This change gives it risk "medium".' in form("record/atlas-kit/0021", {"approve": {"risk": "medium", "reversible": True}}, update=True)
-
-    def test_an_old_batch_cards_form_is_read_as_it_was_posted(self):
-        assert cards.formed("batch/2") and cards.formed("proposal/1") and not cards.formed("batch/1-1") and not cards.formed("agent-note")
-
-
-def proposal_card(*dos):
-    w = FactsWrite(plan_text(bolts=[("t", "switchboard-kit", None)], units=[("x", "switchboard-kit", "t", [])]))
-    pl = plan.Plan(plan.PROPOSALS)
-    plan.open_proposal(pl, 4, "Case.", list(dos), "wldn-planner", "2026-10-12")
-    return plan.card_model(BASE, "wldn", w, plan.proposal(pl, 4, "wldn"), after=apply(FactsWrite(w.plan.text()), *dos).plan)
-
-
-class TestProposalForm:
-    SHOWN = "`crew plan card 4 --label wldn`"
-
-    def test_a_proposal_making_no_unit_new_is_a_plain_approval(self):
-        m = proposal_card('unit amend x "Unit x, again."')
-        assert cards.proposal_form(4, m, {"kind": "approve"}, self.SHOWN) is None
-        for given, said in (({"kind": "review"}, 'This card is a "review".'), ({"kind": "approve", **TWO}, "This card has options."),
-                            ({"kind": "approve", "action": {"steps": [{"text": "Read it"}]}}, "This card has steps for the user to take."),
-                            ({"questions": [{"id": "go", "kind": "approve"}]}, "This card is a grouped card of questions.")):
-            assert said in cards.proposal_form(4, m, given, self.SHOWN)
-
-    def test_one_with_new_units_asks_plan_and_each_new_unit_once(self):
-        m = proposal_card('unit add pb "B." --repo switchboard-kit', 'unit add pc "C." --repo switchboard-kit')
-        card = m["card"]
-        assert cards.proposal_form(4, m, card, self.SHOWN) is None
-        less = dict(card, questions=[card["questions"][0], dict(card["questions"][1], options=card["questions"][1]["options"][:1])])
-        assert "This card does not ask about pc, new to a bolt in proposal 4." in cards.proposal_form(4, m, less, self.SHOWN)
-        words = dict(card, questions=card["questions"] + [{"id": "notes", "kind": "text"}])
-        assert "The card's note is where the user's words go." in cards.proposal_form(4, m, words, self.SHOWN)
-        assert "This card asks no questions, as a plain approval." in cards.proposal_form(4, m, {"kind": "approve"}, self.SHOWN)
-        first = dict(card, questions=[dict(card["questions"][0], kind="choice"), card["questions"][1]])
-        assert 'This card does not ask `plan`, of kind "approve", first.' in cards.proposal_form(4, m, first, self.SHOWN)
-
-    def test_a_lone_new_unit_is_a_choice(self):
-        m = proposal_card('unit add g "G." --repo switchboard-kit')
-        multi = dict(m["card"], questions=[m["card"]["questions"][0], dict(m["card"]["questions"][1], kind="multi")])
-        assert 'This card asks units-1, which is no question of its new units of kind "choice".' in cards.proposal_form(4, m, multi, self.SHOWN)
 
 
 class TestSessions:
