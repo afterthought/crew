@@ -10,7 +10,7 @@
 
 ## 3. Commands and docs
 
-- [ ] 3.1 `crew plan card` and `crew card post|change|close` are removed from `plugin/bin/crew`, its usage header, README and `plugin/skills/crew/SKILL.md`; `crew record` and the kept `crew card read|wait|session|end` are in all three. Journey: `tests/t-docs.sh` (`docs.2`).
+- [x] 3.1 `crew plan card` and `crew card post|change|close` are removed from `plugin/bin/crew`, its usage header, README and `plugin/skills/crew/SKILL.md`; `crew record` and the kept `crew card read|wait|session|end` are in all three. Journey: `tests/t-docs.sh` (`docs.2`).
 
 ## 4. The suite
 
