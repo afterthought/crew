@@ -1199,56 +1199,53 @@ def make_place(fleet, t, path, branch, base, track=False, unready=False):
     return why
 
 
-# The kit's main now, read in its main checkout (plan.18): GitHub's, origin/main after a fetch, for a kit with an origin
-# remote, since sluice lands every branch there and the host's own main lags it on every host that did not land; its
-# own main for a kit with no remote. $now is the ref; refused, naming it, when the fetch fails or the ref is missing
-# (read.1). A command fetches once: a script after this one in the same command reads $now as this one left it.
-MAIN_NOW = r"""kit=$(basename "$(dirname "$main")")
-if git remote get-url origin >/dev/null 2>&1; then
-  err=$(git fetch -q origin 2>&1) || { echo "cannot fetch $kit from GitHub, so cannot read its main: $err" >&2; exit 1; }
-  now=refs/remotes/origin/main
-else now=refs/heads/main; fi
-git rev-parse --verify -q "$now^{commit}" >/dev/null || { echo "$kit has no ${now#refs/*/} in $main" >&2; exit 1; }
+# What a kit's main checkout holds of its mains, on its host, for kit.main_now to decide which is main now (plan.18,
+# code.7): ORIGIN, whether it has an origin remote, which it then fetches, once for the command, and FETCHED, ok or the
+# fetch's error; GITHUB and OWN, the commits origin/main and its own main are at, or -.
+MAINS = r"""if git remote get-url origin >/dev/null 2>&1; then
+  echo ORIGIN=yes
+  if err=$(git fetch -q origin 2>&1); then echo FETCHED=ok; else echo "FETCHED=$(printf '%s' "$err" | tr '\n' ' ')"; fi
+else echo ORIGIN=no; fi
+echo "GITHUB=$(git rev-parse --verify -q 'refs/remotes/origin/main^{commit}' || echo -)"
+echo "OWN=$(git rev-parse --verify -q 'refs/heads/main^{commit}' || echo -)"
 """
 
-# What a kit's main holds of its policy now, on its host (MAIN_NOW): REF=<the ref read> and POLICY=<the file, base64> or
-# POLICY=- when main has none, read from main's commit, not the main checkout's files, as sluice reads a branch's
-# policy (kit.bolt_checks).
+# What a kit's main holds of its policy, on its host: its mains (MAINS), and the policy file at each, AT_GITHUB and
+# AT_OWN, base64 or - when that main has none, read from main's commit, not the main checkout's files, as sluice reads
+# a branch's policy; kit.policy_said takes the one at main now (kit.bolt_checks).
 POLICY = r"""main=$1 file=$2
 cd "$main" || exit 1
-""" + MAIN_NOW + r"""echo "REF=${now#refs/*/}"
-if text=$(git show "$now:$file" 2>/dev/null); then echo "POLICY=$(printf '%s\n' "$text" | base64 | tr -d '\n')"; else echo "POLICY=-"; fi
+""" + MAINS + r"""at() { if text=$(git show "$1:$file" 2>/dev/null); then printf '%s\n' "$text" | base64 | tr -d '\n'; else printf -; fi; }
+echo "AT_GITHUB=$(at refs/remotes/origin/main)"
+echo "AT_OWN=$(at refs/heads/main)"
 """
 
-# A bolt's branch, made from the kit's main as it stands now (plan.8, plan.18), origin/main as the policy's read in the
-# same command fetched it, or its own main for a kit with no remote, tracking nothing; and no worktree (record 0026). A
-# branch already there is kept. crew marks the branch it made in the kit's git config, branch.bolt/<bolt>.crew, which
-# git drops with the branch, so the tidy knows it as crew's (read.4). Prints the commit the branch is at.
-BOLT_BRANCH = r"""main=$1 bolt=$2
+# A bolt's branch, made at the commit the kit's main is at now as the give's read of the policy found it (plan.8,
+# plan.18), tracking nothing, and no worktree (record 0026). A branch already there is kept. crew marks the branch it
+# made in the kit's git config, branch.bolt/<bolt>.crew, which git drops with the branch, so the tidy knows it as crew's
+# (read.4). Prints the commit the branch is at.
+BOLT_BRANCH = r"""main=$1 bolt=$2 at=$3
 cd "$main" || exit 1
-if git remote get-url origin >/dev/null 2>&1; then from=refs/remotes/origin/main; else from=refs/heads/main; fi
 if ! git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null; then
-  git branch -q --no-track "bolt/$bolt" "$from" && git config "branch.bolt/$bolt.crew" given || exit 1
+  git branch -q --no-track "bolt/$bolt" "$at" && git config "branch.bolt/$bolt.crew" given || exit 1
 fi
 git rev-parse --short "refs/heads/bolt/$bolt"
 """
 
 
-# What a kit's main holds now, on its host (MAIN_NOW): its commit, which a landing records (plan.14).
+# What a kit's main checkout holds of its mains, on its host (MAINS), for the commit its main is at now, which a
+# landing records (plan.14).
 MAIN = r"""main=$1
 cd "$main" || exit 1
-""" + MAIN_NOW + r"""git rev-parse "$now"
-"""
+""" + MAINS
 
 
-def main_held(kit, machine, said):
-    """The commit a kit's main holds now, as MAIN said it on its host: (sha, None), or (None, why) when what it said is
-    not a commit (read.2). A host's own main lagging GitHub's refuses nothing: sluice forms every landing on GitHub's
-    main and pushes it with a lease (plan.8), and MAIN reads GitHub's."""
-    words = said.split()
-    if len(words) != 1 or not re.fullmatch(r"[0-9a-f]{40,64}", words[0]):
-        return None, f"crew can't read what {kit}'s main on {machine} holds: {said.strip() or 'nothing was said'}"
-    return words[0], None
+def main_held(name, machine, said):
+    """The commit a kit's main holds now, from what MAIN read on its host (kit.main_now): (sha, None), or (None, why).
+    A host's own main lagging GitHub's refuses nothing: sluice forms every landing on GitHub's main and pushes it with a
+    lease (plan.8), and main now is GitHub's for a kit with an origin."""
+    _, sha, why = kit.main_now(said, name, machine)
+    return sha, why
 
 
 def tidy_after(fleet, t, what):
@@ -1280,7 +1277,8 @@ def held_by(plan, team):
 
 def bolt_give(fleet, a):
     """crew bolt give <team> [<bolt>]: the bolt given to the team in the plan, then bolt/<bolt> made from the kit's main
-    as it stands now on the team's host, GitHub's, origin/main as the policy's read fetched it (plan.18), and no
+    as it stands now on the team's host, at the commit the policy was read at, GitHub's for a kit with an origin
+    (kit.main_now, plan.18), and no
     worktree (plan.8, record 0026); the conductor and ops start in the kit's main checkout. Refused, with the plan
     unchanged, while the team holds a bolt, and when the kit's policy names no checks for its bolt branches, since a
     bolt merges and lands only through sluice (teams.5, read.1)."""
@@ -1295,7 +1293,7 @@ def bolt_give(fleet, a):
     if held:
         st = stages_for(fleet, plan, held)
         fail(holding(t["name"], held[0], plan, lambda n: st.of(n)["stage"]))
-    _, ref = kit_policy(fleet, t)
+    _, ref, now = kit_policy(fleet, t)
 
     def change(w):
         again = held_by(w.plan, t["name"])
@@ -1309,7 +1307,7 @@ def bolt_give(fleet, a):
     seen = {}
     sha = write(fleet, label, change, "plan: give a bolt")
     b = seen["bolt"]
-    at = host_run(fleet, t["machine"], BOLT_BRANCH, t["kit"]["main"], b)
+    at = host_run(fleet, t["machine"], BOLT_BRANCH, t["kit"]["main"], b, now)
     READ.drop_kit(t["machine"], t["kit"]["main"])
     print(f"{t['name']} holds {b}: bolt/{b} from {kit}'s {ref} at {at} on {t['machine']}, merged into only through sluice")
     record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
@@ -1327,10 +1325,11 @@ def bolt_give(fleet, a):
 
 def kit_policy(fleet, t):
     """The checks the team's kit's policy requires of its bolt branches, read from its main now on the team's host,
-    origin/main after a fetch (POLICY, plan.18), and the ref it was read from (kit.bolt_checks); refused, naming the
-    file and the ref, when it names none."""
-    text, ref = kit.policy_said(host_run(fleet, t["machine"], POLICY, t["kit"]["main"], kit.DECLARATION))
-    return kit.bolt_checks(text, t["kit"]["name"], f"{t['kit']['main']}/{kit.DECLARATION}", ref=ref), ref
+    origin/main after a fetch for a kit with an origin (POLICY, kit.main_now, plan.18), with the ref and the commit it
+    was read at (kit.bolt_checks); refused, naming the file and the ref, when it names none."""
+    text, ref, sha = kit.policy_said(host_run(fleet, t["machine"], POLICY, t["kit"]["main"], kit.DECLARATION),
+                                     t["kit"]["name"], t["machine"])
+    return kit.bolt_checks(text, t["kit"]["name"], f"{t['kit']['main']}/{kit.DECLARATION}", ref=ref), ref, sha
 
 
 def holding(team, b, plan, stage_of):

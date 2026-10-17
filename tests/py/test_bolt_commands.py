@@ -116,12 +116,12 @@ class TestLand:
         assert self.land({"a-console-page": "unknown", "a-console-filter": "landed"}) == (
             "cannot tell whether unit a-console-page has landed: its host did not answer")
 
-    def test_the_landing_records_the_commit_main_holds_now_and_nothing_else_is_read_of_it(self):
-        """plan.14, plan.18: MAIN says only the commit GitHub's main holds after a fetch, which the landing records;
-        how far the host's own main lags it is no longer read, and nothing is refused for it (plan.8)."""
-        sha = "c" * 40
-        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"{sha}\n") == (sha, None)
-        for said in (f"{sha} 0 1\n", "", "fatal: bad\n"):
+    def test_the_landing_records_the_commit_main_holds_now(self):
+        """plan.14, plan.18: the landing records the commit GitHub's main holds after the command's fetch, for a kit with
+        an origin, and nothing is refused for the host's own main lagging it (plan.8); what can't be read refuses."""
+        github, own = "c" * 40, "d" * 40
+        assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", f"ORIGIN=yes\nFETCHED=ok\nGITHUB={github}\nOWN={own}\n") == (github, None)
+        for said in (f"{github} 0 1\n", "", "fatal: bad\n"):
             assert plan.main_held("switchboard-kit", "chuck-herdr-alpha", said) == (
                 None, f"crew can't read what switchboard-kit's main on chuck-herdr-alpha holds: {said.strip() or 'nothing was said'}")
 

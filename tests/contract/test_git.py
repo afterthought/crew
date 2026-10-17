@@ -225,8 +225,11 @@ def kit_with_github(repo, tmp_path):
 
 
 def main_at(repo):
+    """plan.MAIN in the kit's main checkout: what kit.main_now decides main now from, and that decision."""
+    import kit
     import plan
-    return subprocess.run(["bash", "-c", plan.MAIN, "crew", str(repo.path)], capture_output=True, text=True)
+    r = subprocess.run(["bash", "-c", plan.MAIN, "crew", str(repo.path)], capture_output=True, text=True)
+    return r, kit.main_now(r.stdout, "k", "h")
 
 
 def test_a_landing_reads_githubs_main_after_a_fetch_however_far_the_hosts_own_main_lags(repo, tmp_path):
@@ -234,14 +237,14 @@ def test_a_landing_reads_githubs_main_after_a_fetch_however_far_the_hosts_own_ma
     fetch, which the landing records, against a bare remote whose main is ahead of the host's own; a kit with no origin
     says its own main's; a fetch that fails is refused, naming it (read.1)."""
     head = repo.commit("main", {"README": "r\n"})
-    assert main_at(repo).stdout == f"{head}\n"
+    assert main_at(repo)[1] == ("main", head, None)
     pushed = kit_with_github(repo, tmp_path)
     repo.commit("feat: local", {"local": "l\n"}); pushed("later")
     github = subprocess.run(["git", "-C", str(tmp_path / "other"), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    assert main_at(repo).stdout == f"{github}\n"
+    assert main_at(repo)[1] == ("origin/main", github, None)
     repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    r = main_at(repo)
-    assert r.returncode == 1 and r.stderr.startswith(f"cannot fetch {tmp_path.name} from GitHub, so cannot read its main:"), r.stderr
+    r, (ref, sha, why) = main_at(repo)
+    assert r.returncode == 0 and ref is None and why.startswith("cannot fetch k from GitHub on h, so cannot read its main now: fatal:"), why
 
 
 def script(name, *args, cwd=None):
@@ -254,26 +257,28 @@ def test_a_bolt_is_a_branch_from_main_as_it_stands_marked_as_crews_and_no_worktr
     kit's git config as crew's, and the mark goes with the branch when git deletes it, so the tidy reads it as crew's
     while the branch stands and never after (plan.9, read.4)."""
     head = repo.commit("main", {"README": "r\n"})
-    r = script("BOLT_BRANCH", str(repo.path), "b")
+    r = script("BOLT_BRANCH", str(repo.path), "b", head)
     assert (r.returncode, r.stdout.strip()) == (0, head[:7])
     assert repo.git("rev-parse", "bolt/b") == head
     assert "bolt/b" not in repo.git("worktree", "list", "--porcelain")
     assert repo.git("config", "--get-regexp", r"^branch\.bolt/.*\.crew$") == "branch.bolt/b.crew given"
     repo.commit("feat: more", {"more": "m\n"})
-    assert script("BOLT_BRANCH", str(repo.path), "b").stdout.strip() == head[:7]  # one already there is kept
+    assert script("BOLT_BRANCH", str(repo.path), "b", repo.git("rev-parse", "HEAD")).stdout.strip() == head[:7]  # kept
     repo.git("branch", "-q", "-D", "bolt/b")
     assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
 
 
 def test_a_bolt_of_a_kit_on_github_is_cut_from_githubs_main_as_the_policys_read_fetched_it(repo, tmp_path):
     """plan.bolt_give through POLICY and BOLT_BRANCH (plan.8, plan.18): the give's one fetch is the policy's, and the
-    bolt's branch is cut from origin/main as it fetched it, ahead of the host's own main, tracking nothing."""
+    bolt's branch is cut at the commit origin/main was at as it fetched it, ahead of the host's own main, tracking
+    nothing."""
+    import kit
     pushed = kit_with_github(repo, tmp_path)
     pushed("from-a-mac")
-    assert script("POLICY", str(repo.path), ".config/sluice.toml").returncode == 0
+    _, ref, at = kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout, "k", "h")
     github = repo.git("rev-parse", "origin/main")
-    assert github != repo.git("rev-parse", "main")
-    assert script("BOLT_BRANCH", str(repo.path), "b").stdout.strip() == github[:7]
+    assert (ref, at) == ("origin/main", github) and github != repo.git("rev-parse", "main")
+    assert script("BOLT_BRANCH", str(repo.path), "b", at).stdout.strip() == github[:7]
     assert repo.git("for-each-ref", "--format=%(upstream)", "refs/heads/bolt/b") == ""
 
 
@@ -282,11 +287,11 @@ def test_a_kits_policy_is_read_from_mains_commit(repo):
     main checkout's files; a main without one says so."""
     import kit
     repo.commit("main", {"README": "r\n"})
-    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == (None, "main")
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout, "k", "h")[:2] == (None, "main")
     text = '[branches."bolt/*"]\nrequired = ["#check-full"]\n'
     repo.commit("chore: policy", {".config/sluice.toml": text})
     (repo.path / ".config" / "sluice.toml").write_text("not what main holds\n")
-    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == (text, "main")
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout, "k", "h")[:2] == (text, "main")
 
 
 def test_a_kits_policy_is_read_from_githubs_main_ahead_of_the_hosts_own(repo, tmp_path):
@@ -301,7 +306,7 @@ def test_a_kits_policy_is_read_from_githubs_main_ahead_of_the_hosts_own(repo, tm
     subprocess.run(["git", "-C", str(o), "add", ".config/sluice.toml"], check=True)
     subprocess.run(["git", "-C", str(o), "commit", "-qm", "chore: policy"], check=True)
     subprocess.run(["git", "-C", str(o), "push", "-q", "origin", "main"], check=True)
-    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout) == (text, "origin/main")
+    assert kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout, "k", "h")[:2] == (text, "origin/main")
     assert not (repo.path / ".config" / "sluice.toml").exists()
 
 

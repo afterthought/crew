@@ -123,19 +123,49 @@ class TestBoltChecks:
             kit.bolt_checks(text, "switchboard-kit")
         assert "switchboard-kit" in str(e.value) and said in str(e.value)
 
-    def test_the_policy_is_read_by_ref_from_main_now_and_a_refusal_names_the_ref(self):
-        """plan.18: the policy is read from GitHub's main after a fetch, origin/main, or from main for a kit with no
-        remote, as POLICY says, and a kit given no bolt is told which ref lacks it."""
-        assert kit.policy_said(f"REF=origin/main\nPOLICY={base64.b64encode(POLICY.encode()).decode()}\n") == (POLICY, "origin/main")
-        assert kit.policy_said("REF=main\nPOLICY=-\n") == (None, "main")
+    def test_the_policy_is_read_by_ref_at_main_now_and_a_refusal_names_the_ref(self):
+        """plan.18: the policy is the one at main now, GitHub's for a kit with an origin and the kit's own for one with
+        none, as POLICY read both, and a kit given no bolt is told which ref lacks it."""
+        b64 = base64.b64encode(POLICY.encode()).decode()
+        assert kit.policy_said(mains("yes", at_github=b64), "switchboard-kit", "h") == (POLICY, "origin/main", GITHUB)
+        assert kit.policy_said(mains("no", github="-", at_own=b64), "switchboard-kit", "h") == (POLICY, "main", OWN)
+        assert kit.policy_said(mains("no", github="-"), "switchboard-kit", "h") == (None, "main", OWN)
         with pytest.raises(Refusal) as e:
             kit.bolt_checks(None, "switchboard-kit", "/k/main/.config/sluice.toml", ref="origin/main")
         assert "has no /k/main/.config/sluice.toml on origin/main" in str(e.value)
 
-    @pytest.mark.parametrize("out", ["fatal: bad\n", "POLICY=-\n", "REF=origin/main\n"])
+    @pytest.mark.parametrize("out", ["fatal: bad\n", "AT_OWN=-\n", f"ORIGIN=no\nGITHUB=-\nOWN={'b' * 40}\n"])
     def test_what_is_not_policys_words_is_refused(self, out):
         with pytest.raises(Refusal):
-            kit.policy_said(out)
+            kit.policy_said(out, "k", "h")
+
+
+GITHUB, OWN = "a" * 40, "b" * 40
+
+
+def mains(origin, fetched="ok", github=GITHUB, own=OWN, at_github="-", at_own="-"):
+    """What MAINS, and POLICY after it, print."""
+    return (f"ORIGIN={origin}\n" + (f"FETCHED={fetched}\n" if origin == "yes" else "")
+            + f"GITHUB={github}\nOWN={own}\nAT_GITHUB={at_github}\nAT_OWN={at_own}\n")
+
+
+class TestMainNow:
+    """Which main is a kit's main now (plan.18): GitHub's, after the command's one fetch, for a kit with an origin
+    remote, however far the host's own main lags it; its own main for a kit with none, which has no GitHub to lag."""
+
+    def test_a_kit_with_an_origin_reads_githubs_main_however_far_its_own_lags(self):
+        assert kit.main_now(mains("yes"), "switchboard-kit", "h") == ("origin/main", GITHUB, None)
+
+    def test_a_kit_with_no_origin_reads_its_own_main(self):
+        assert kit.main_now(mains("no", github="-"), "switchboard-kit", "h") == ("main", OWN, None)
+
+    @pytest.mark.parametrize("out, why", [
+        (mains("yes", fetched="fatal: unable to access"), "cannot fetch switchboard-kit from GitHub on h, so cannot read its main now: fatal: unable to access"),
+        (mains("yes", github="-"), "switchboard-kit's GitHub has no main, fetched on h"),
+        (mains("no", github="-", own="-"), "switchboard-kit's main checkout on h has no branch main and no origin"),
+        ("fatal: not a git repository\n", "crew can't read what switchboard-kit's main on h holds: fatal: not a git repository")])
+    def test_a_fetch_that_failed_or_a_main_that_is_not_there_refuses_and_nothing_falls_back(self, out, why):
+        assert kit.main_now(out, "switchboard-kit", "h") == (None, None, why)
 
 
 class TestVerification:

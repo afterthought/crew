@@ -157,17 +157,42 @@ def verification(head, result):
     return "unknown", f"its head {head[:7]} carries a verdict crew does not read as a pass: {result}"
 
 
-def policy_said(out):
-    """What POLICY printed of a kit's main now: (the policy text, or None when main holds none; the ref it was read
-    from, origin/main for a kit on GitHub or main for one with no remote, plan.18). Refused when the output is not
-    POLICY's (read.2)."""
-    said = dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
-    text, ref = said.get("POLICY"), said.get("REF")
-    if text is None or not ref:
-        crew.fail(f"crew can't read what the kit's main holds of {DECLARATION} from: {(out or '').strip()[:200] or 'nothing'}")
+def said_of(out):
+    """The KEY=value lines a script printed, as {key: value}."""
+    return dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
+
+
+def main_now(out, kit, host):
+    """Which of a kit's mains is its main now, from what MAINS read in its main checkout on its host (plan.18): (ref,
+    sha, None), or (None, None, why). A kit with an origin remote has its main on GitHub, where sluice lands every
+    branch and which the host's own main lags on every host that did not land, so main now is origin/main after the
+    command's one fetch, and a fetch that failed or an origin with no main refuses (read.1); a kit with no origin
+    remote has no GitHub to lag, so its own main is main now. What is not MAINS's words refuses too (read.2)."""
+    said = said_of(out)
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    origin, fetched, github, own = said.get("ORIGIN"), said.get("FETCHED"), said.get("GITHUB"), said.get("OWN")
+    if origin not in ("yes", "no") or not all(v == "-" or (v and sha.fullmatch(v)) for v in (github, own)):
+        return None, None, f"crew can't read what {kit}'s main on {host} holds: {(out or '').strip()[:200] or 'nothing was said'}"
+    if origin == "yes":
+        if fetched != "ok":
+            return None, None, f"cannot fetch {kit} from GitHub on {host}, so cannot read its main now: {(fetched or 'no word').strip()}"
+        return ("origin/main", github, None) if github != "-" else (None, None, f"{kit}'s GitHub has no main, fetched on {host}")
+    return ("main", own, None) if own != "-" else (None, None, f"{kit}'s main checkout on {host} has no branch main and no origin")
+
+
+def policy_said(out, kit, host):
+    """What POLICY printed of a kit's policy at its main now (main_now): (the policy text, or None when that main holds
+    none; the ref, origin/main or main; the commit). Refused when main now can't be told or the output is not POLICY's
+    (read.1, read.2)."""
+    ref, sha, why = main_now(out, kit, host)
+    if why:
+        crew.fail(why)
+    text = said_of(out).get("AT_GITHUB" if ref == "origin/main" else "AT_OWN")
+    if text is None:
+        crew.fail(f"crew can't read what {kit}'s main holds of {DECLARATION} from: {(out or '').strip()[:200] or 'nothing'}")
     if text == "-":
-        return None, ref
+        return None, ref, sha
     try:
-        return base64.b64decode(text).decode(), ref
+        return base64.b64decode(text).decode(), ref, sha
     except (binascii.Error, UnicodeDecodeError) as e:
-        crew.fail(f"crew can't read the kit's {DECLARATION} as it was sent: {e}")
+        crew.fail(f"crew can't read {kit}'s {DECLARATION} as it was sent: {e}")
