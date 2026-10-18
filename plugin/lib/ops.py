@@ -29,7 +29,9 @@ when it names one.
       an operation of its own and its state, after the deploy it names with --to or on its own; one the user is to
       take, or an agent's held for the user's word, that waits is a rail row with a card, which crew raises one at a
       time on an environment, each following the one before, and closes when the step is marked done or declined.
-      The text's field lines, `- why:`, `- where:`, `- command:` (one a command) and `- done:`, are the card's
+      Recorded again while its own card is open, the card is changed in place when its words, doer or hold differ,
+      and the line that adopts it is printed either way. The text's field lines, `- why:`, `- where:`, `- command:`
+      (one a command) and `- done:`, are the card's
   crew ops steps <env> --label L --json
       the latest state of every step on the environment: [{to, key, state, by, at, note}], to empty for a step that
       names no deploy
@@ -409,6 +411,41 @@ def step_point(es, entries, key):
     return None, "its step waits on no one, or another's card comes first"
 
 
+# What a step's card shows of it, by what a change note names: its words and fields, its doer, its hold.
+SHOWN = (("its words", ("text", "why", "where", "commands", "done")), ("its doer", ("doer",)), ("its hold", ("held",)))
+
+
+def step_again(es, entries, k, label):
+    """What becomes of the open card of the step k, (env, to, key), recorded again waiting on the user (record 0031 §3),
+    from the partition's ops entries (es) and this host's entries in the order written (entries): (its card's key,
+    its id, the change note or None, whether its kind changed); None when the step's own card is not open. The card
+    shows the step's latest entry before the card's last post or change, and is changed when its words, its doer or
+    its hold differ from the step as recorded now (step_facts, but for what a held step cuts, read as it is raised),
+    the note naming which; its kind, a `do` for the user's step and a choice for an agent's held, changes when its doer
+    changes between the user and an agent. A card whose step's entry this host's record no longer reaches before it is
+    changed to the step as recorded, since what it shows can't be read (read.1)."""
+    import cards  # its decisions only: what the run record shows posted and closed
+    steps = state(es)[2]
+    n = next((n for n, x, _ in numbered(steps) if x == k), None)
+    env = k[0]
+    key = f"op/{env}/{n}"
+    card = cards.card_under(entries, key, f"{label}-ops") if n else None
+    if not card:
+        return None
+    latest, shown = None, None
+    for e in entries:
+        if e.get("Act") == "ops.step" and (env_of(e), e.get("Head") or "", e.get("Key")) == k:
+            latest = e
+        elif e.get("Act") in ("card.post", "card.update") and not e.get("Refused") and (e.get("Card"), e.get("Key")) == (card, key):
+            shown = latest
+    if shown is None:
+        return key, card, "Recorded again", False
+    was, now = step_facts(env, n, shown, label), step_facts(env, n, steps[k], label)
+    what = [w for w, fields in SHOWN if any(was[f] != now[f] for f in fields)]
+    note = "Recorded again: " + cards.joined(what) + " changed" if what else None
+    return key, card, note, (was["doer"] == "user") != (now["doer"] == "user")
+
+
 def word_stands(key, es):
     """Whether a row's card under key outlives its row: a deploy's, deploy/<env>, once the user's word for it is given
     and its deploy's end not yet recorded, which closes it with the outcome (record 0031 §1), from the partition's
@@ -478,11 +515,12 @@ def stages_working(fleet, env):
     return out
 
 
-def raise_step(fleet, row, acts=None):
+def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
     """Raise the card of the rail row op/<env>/<n> of row["label"], a step that waits on the user, one at a time
     (record 0031 §5): posted in main-level ops's name, following the deploy's card or the step card before it, once its
-    point has come (step_point), and posted again when Pending You no longer finds it. None, saying why, before then;
-    the step's own call and the rail's sweep alike. The card's id, or None."""
+    point has come (step_point), and posted again when Pending You no longer finds it; while its card is open, changed
+    with note, or followed by a new card when its kind changed (step_again). None, saying why, before then; the step's
+    own call and the rail's sweep alike. The card's id, or None."""
     import cards, plan
     acts = acts or plan.CardActs(fleet)
     label, key = row["label"], row["key"]
@@ -494,16 +532,29 @@ def raise_step(fleet, row, acts=None):
     n, _, e = step
     facts = step_facts(env, n, e, label, stages_working(fleet, env) if held(e) else None)
     facts["follows"] = cards.follows_of("step", {"env": env, "key": key}, mine)
-    return plan.row_card_change(fleet, label, f"{label}-ops", cards.step_card, facts, "Raised again", ops_where(fleet, label), acts)
+    return plan.row_card_change(fleet, label, f"{label}-ops", cards.step_card, facts, note, ops_where(fleet, label), acts, kind_changed)
 
 
-def raise_next_step(fleet, label, env):
-    """Raise the card of the step on env that waits on the user next, unless a step card of env is open (step_due)."""
+def raise_next_step(fleet, label, env, k=None):
+    """Raise the card of the step on env that waits on the user next, unless a step card of env is open (step_due).
+    The step k, (env, to, key), just recorded waiting on the user while its own card is open, has that card changed
+    when what it shows differs (step_again), and the line that adopts it printed either way, as a raise prints it."""
     import plan
-    due, open_ = step_due(entries(label), plan.CardActs(fleet).entries(label), env)
+    acts = plan.CardActs(fleet)
+    es, mine = entries(label), acts.entries(label)
+    again = step_again(es, mine, k, label) if k else None
+    if again:
+        key, card, note, kind_changed = again
+        if not note:
+            print(f"card {key}: {card} shows the step as recorded, so it is not changed")
+        new = raise_step(fleet, {"label": label, "key": key}, acts, note, kind_changed) if note else None
+        if new in (None, card):
+            plan.card_heard(acts, key, card, f"{label}-ops")
+        return new or card
+    due, open_ = step_due(es, mine, env)
     if open_:
         print(f"card {open_} is open: the next step's card is raised when it closes")
-    return raise_step(fleet, {"label": label, "key": f"op/{env}/{due[0]}"}) if due else None
+    return raise_step(fleet, {"label": label, "key": f"op/{env}/{due[0]}"}, acts) if due else None
 
 
 def emit(label, act, env, why, refused=None, **fields):
@@ -604,7 +655,7 @@ def step(fleet, a):
         if cards.card_under(plan.CardActs(fleet).entries(a.label), f"op/{a.env}/{n}", owner):
             plan.row_card_close(fleet, a.label, owner, f"op/{a.env}/{n}", outcome=CLOSED[a.state])
     if a.state in CLOSED or a.state == "waiting" and (a.doer == "user" or a.held):
-        raise_next_step(fleet, a.label, a.env)
+        raise_next_step(fleet, a.label, a.env, (a.env, a.to or "", a.key) if a.state == "waiting" else None)
 
 
 def steps(fleet, a):

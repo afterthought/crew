@@ -355,3 +355,53 @@ class TestOneStepCardAtATime:
         assert ops.step_point(self.STEPS, posted, "op/mac-studio/3") == (None, "card op/mac-studio/2 is open: this step's card is raised when it closes")
         done = self.STEPS + [e("ops.step", minutes=4, Head=S1, Key="rotate/1", State="done")]
         assert ops.step_point(done, posted, "op/mac-studio/2") == (None, "its step no longer waits on the user")
+
+
+class TestStepRecordedAgain:
+    """Read on mac-studio on 2026-10-18: the deployer recorded swancloud-srv's step bd0f8289b1d8 on 2026-10-16; a rail
+    read raised its card, op/swancloud-srv/1, from that text; swancloud-ops recorded the step again with new text a
+    minute later, and crew said only "card op/swancloud-srv/1 is open: the next step's card is raised when it closes",
+    the card keeping the deployer's text."""
+    K = ("swancloud-srv", S1, "bd0f8289b1d8")
+    KEY = "op/swancloud-srv/1"
+    WAS = "1. Sign in on deneb: tailscale up against headscale.\n- doer: user\n- why: each is a sign-in the user's hand approves"
+    NOW = ("Sign in on deneb: tailscale against headscale.\n- why: only you can sign in on it.\n- where: at deneb\n"
+           "- command: PORTLESS_LAN=0 portless service install")
+
+    def step(self, minutes, text, key="bd0f8289b1d8", **f):
+        return e("ops.step", env="swancloud-srv", minutes=minutes, Head=S1, Key=key, State="waiting", **dict(dict(Doer="user", Text=text), **f))
+
+    def posted(self, act="card.post", key=KEY, card_id="req_2a16", minutes=4, **f):
+        return card(act, key, card_id, minutes, By="swancloud-ops", **f)
+
+    def again(self, *written, es=None):
+        """step_again on this host's record as written, its ops entries the partition's unless es gives them."""
+        return ops.step_again([x for x in written if x["Act"].startswith("ops.")] if es is None else es, list(written), self.K, "swancloud")
+
+    def test_a_step_recorded_again_with_new_words_changes_its_open_card_in_place_naming_what_changed(self):
+        assert self.again(self.step(1, self.WAS), self.posted(), self.posted(), self.step(5, self.NOW)) == (
+            self.KEY, "req_2a16", "Recorded again: its words changed", False)
+
+    def test_a_step_recorded_again_as_its_card_shows_it_changes_nothing_and_a_change_made_is_what_the_card_shows(self):
+        assert self.again(self.step(1, self.WAS), self.posted(), self.step(5, self.WAS)) == (self.KEY, "req_2a16", None, False)
+        written = [self.step(1, self.WAS), self.posted(), self.step(5, self.NOW), self.posted("card.update", minutes=6), self.step(7, self.NOW)]
+        assert self.again(*written)[2] is None
+        written[3] = dict(written[3], Refused="Pending You refused the change: Too many requests.")
+        assert self.again(*written)[2] == "Recorded again: its words changed"
+
+    def test_a_doer_changed_between_the_user_and_an_agent_held_changes_the_cards_kind(self):
+        held = self.step(5, self.WAS, Doer="main-ops", When="held")
+        assert self.again(self.step(1, self.WAS), self.posted(), held) == (self.KEY, "req_2a16", "Recorded again: its doer and its hold changed", True)
+        other = dict(held, Agent="swancloud-dispatch-swancloud-srv")
+        assert self.again(self.step(1, self.WAS), self.posted(), held, self.posted("card.update", minutes=6), other) == (
+            self.KEY, "req_2a16", "Recorded again: its doer changed", False)
+
+    def test_a_step_whose_own_card_is_not_open_has_no_card_changed(self):
+        assert self.again(self.step(1, self.WAS)) is None
+        assert self.again(self.step(1, self.WAS), self.posted(), card("card.close", self.KEY, "req_2a16", 5, State="withdrawn"), self.step(6, self.NOW)) is None
+        first = self.step(0, "rotate the key", key="rotate/1")
+        assert self.again(first, self.posted(), self.step(1, self.WAS), self.step(5, self.NOW)) is None
+
+    def test_a_card_whose_steps_entry_this_hosts_record_no_longer_reaches_is_changed_to_the_step_as_recorded(self):
+        assert self.again(self.posted(), self.step(5, self.NOW), es=[self.step(1, self.WAS), self.step(5, self.NOW)]) == (
+            self.KEY, "req_2a16", "Recorded again", False)

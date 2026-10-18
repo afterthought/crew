@@ -434,7 +434,7 @@ A deploy's card's face SHALL carry the kit's release notes for exactly the range
 - **THEN** the card's face gives the landings since mac-studio's last deploy by subject, and says the kit handed no release notes
 
 ### Requirement: A step's card is the user's do
-A step whose doer is the user SHALL be a `do` card with the step's words, where it is done, each command whole as an action step, what is seen when it worked, and the options Done, Skip and Later. A step an agent runs on its own SHALL have no card. When a deploy ends with more than one step for a card, crew SHALL raise one card at a time: the first following the deploy's card, each next one following the one before, raised when crew closes it.
+A step whose doer is the user SHALL be a `do` card with the step's words, where it is done, each command whole as an action step, what is seen when it worked, and the options Done, Skip and Later. A step an agent runs on its own SHALL have no card. When a deploy ends with more than one step for a card, crew SHALL raise one card at a time: the first following the deploy's card, each next one following the one before, raised when crew closes it. Only another step's open card SHALL hold a step's card back: a step recorded again while its own card is open changes that card, as a row's card changes when its thing changes.
 
 #### Scenario: Two steps after one deploy
 - **WHEN** srv's deploy ends with a step that is the user's and a step held for the user's word
@@ -496,6 +496,14 @@ When what a row's card asks changes while it is open, crew SHALL change the one 
 #### Scenario: A conductor agrees
 - **WHEN** `proposal/4`'s card says it waits on crw-2's conductor and that conductor runs `crew plan agree 4`
 - **THEN** the card is changed in place, "No longer waits on crw-2-conductor"
+
+#### Scenario: A step recorded again with new words
+- **WHEN** `op/srv/1`'s card is open, raised from the deployer's text for its step, and main-level ops records that step again waiting on the user with new words
+- **THEN** the same card is changed in place, "Recorded again: its words changed", and the command prints its id and `call get_request (requestId <id>, name <role>)`; recorded again with the words the card shows, the card is not changed and the command prints the same line
+
+#### Scenario: A step's card that changes in kind
+- **WHEN** `op/srv/1`'s card, the user's `do`, is open and its step is recorded again with main-level ops its doer, held for the user's word
+- **THEN** the card is withdrawn, "Recorded again: its doer and its hold changed", and the step's choice is posted under `op/srv/1:2` following it, since Pending You changes no card's kind in place
 
 ### Requirement: A card is closed by crew at the event that ends it
 crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`.

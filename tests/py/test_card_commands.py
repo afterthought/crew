@@ -395,9 +395,32 @@ def test_a_close_refused_on_a_card_the_user_answered_posts_nothing_and_is_record
                                           "Your latest message asks them something.")
 
 
-@pytest.mark.parametrize("status, how", [("pending", "change"), ("snoozed", "change"), ("answered", "follow")])
-def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_is_followed(status, how):
-    assert cards.revision({"status": status, "version": 2}) == how
+@pytest.mark.parametrize("status, kind_changed, how", [("pending", False, "change"), ("snoozed", False, "change"), ("answered", False, "follow"),
+                                                    ("pending", True, "follow")])
+def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_or_whose_kind_changed_is_followed(status, kind_changed, how):
+    assert cards.revision({"status": status, "version": 2}, kind_changed) == how
+
+
+STEP = dict(env="srv", n=1, text="restart crew's teams", doer="swancloud-ops", held=True, why=None, where=None, commands=[], done=None,
+            consequences={"now": "It runs at once; no stage is working on srv now"})
+
+
+def test_a_card_whose_kind_changed_is_withdrawn_while_it_waits_and_its_new_version_posted_following_it(capsys):
+    """A step recorded again with an agent as its doer, held, where the user was: its `do` card becomes a choice,
+    which update_request never changes (cards.CHANGED)."""
+    acts = Acts({"get_request": ({"status": "pending", "version": 3}, None), "cancel_request": ({"version": 4}, None),
+                 "match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s2"), None)},
+                entries=[post("op/srv/1", "swancloud-ops", "req_s1")], caller="swancloud-ops")
+    note = "Recorded again: its doer and its hold changed"
+    assert plan.row_card_change(None, "swancloud", "swancloud-ops", cards.step_card, STEP, note, WHERE, acts, kind_changed=True) == "req_s2"
+    assert [t for t, _ in acts.calls] == ["get_request", "cancel_request", "match_area", "post_request"]
+    assert acts.calls[1][1] == {"requestId": "req_s1", "name": "swancloud-ops", "reason": note}
+    sent = acts.calls[3][1]
+    assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("op/srv/1:2", "req_s1", "choice")
+    assert [(e["Act"], e.get("Card"), e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+        ("card.close", "req_s1", "withdrawn", plan.RENEWED), ("card.post", "req_s2", None, None)]
+    assert capsys.readouterr().out.startswith("card op/srv/1: req_s1 withdrawn, its kind having changed, and its new version follows it\n"
+                                              "card op/srv/1: req_s2 https://")
 
 
 def test_a_post_pending_you_answers_with_the_card_the_record_already_holds_open_is_recorded_once(capsys):
