@@ -3,9 +3,14 @@
 
 crew-role starts every role with CREW_AGENT, CREW_LABEL, SLUICE_AGENT and CREW_ROLE in its environment, and crew names the role's herdr
 pane after the agent. A herdr server that restarts resumes each agent with a bare `claude --resume <id>`. Claude
-Code brings back the conversation, the brief, the model, the permission mode and the added folders, but the pane
-comes back with no name, so `crew tell` and the greetings miss it, and the agent's crew commands lose who is
-writing and which partition is theirs.
+Code brings back the conversation, the brief until the first compaction, the model and the name, and none of the
+effort, the permission mode or the added folders (measured on 2.1.296, 2026-10-18), and no hook can give those back.
+The fleet's settings make the mode Bypass Permissions, and in bypass the agent still reads and writes those folders
+by absolute path: it loses only a `cd` into one lasting past its Bash call, their project skills and their listing
+among its working folders. `crew resume` gives back all of them. A planned restart takes the crew agents down first
+and starts them again through crew, so a bare resume is a crash's or a hard reboot's alone (the user, 2026-10-18).
+The pane comes back with no name, so `crew tell` and the greetings miss it, and the agent's crew commands lose who
+is writing and which partition is theirs.
 
 So at every start this records a crew agent's session in ~/.local/state/crew/sessions/<session id>, which a
 resume keeps, with the definition its brief comes from and the folder it began in: Claude Code finds a conversation again only from that folder, so crew
