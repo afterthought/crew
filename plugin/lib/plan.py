@@ -8529,6 +8529,8 @@ CARD_LATER = "The event stands, and its card is not posted."
 # A card the user answered before its thing changed, as its close is recorded: its note, the user's to read, is on the
 # card, and the run record holds crew's words alone (record.3).
 REVISED = "answered, then changed: a new card follows it"
+# A card whose kind changed while it waited, as its withdrawal is recorded: Pending You changes no card's kind.
+RENEWED = "changed in kind: a new card follows it"
 
 
 def card_where(kit):
@@ -8579,7 +8581,10 @@ def card_uploaded(acts, key, b, got):
 def card_posted(acts, label, owner, b, where, entries=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
     posted under the row's key, or the key with its revision once a card of the owner's under it closed (post_key,
-    from entries, this host's run record unless given), and recorded under the row's key."""
+    from entries, this host's run record unless given), and recorded under the row's key. A post Pending You answers
+    with the card this host's record holds open under the key already, another command's post of it recorded while
+    this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
+    that card, printed with the line that adopts it and recorded once, by the command that recorded it first."""
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
     cwd, remote = where
     asked = cards.post_key(acts.entries(label) if entries is None else entries, key, owner)
@@ -8593,9 +8598,14 @@ def card_posted(acts, label, owner, b, where, entries=None):
         acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
         print(f"card {key} not posted: {e}", file=sys.stderr)
         return None
-    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
     url = got.get("url")
-    print(f"card {key}: {card}" + (f" {url}" if isinstance(url, str) else ""))
+    url = f" {url}" if isinstance(url, str) else ""
+    if cards.card_under(acts.entries(label), key, owner) == card:
+        print(f"card {key}: {card}{url}, its post recorded already")
+        print(cards.adopt_line(card, owner))
+        return card
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
+    print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
     return card
 
@@ -8657,15 +8667,17 @@ def card_lost(acts, label, owner, key, card, words):
     print(f"card {key}: {card} is lost to {owner} (Pending You: \"{words}\")", file=sys.stderr)
 
 
-def row_card_change(fleet, label, owner, build, facts, note, where, acts=None):
+def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False):
     """The act that changes a card of crew's own when its thing changes (record 0031 §3): build(facts) sent as
     update_request takes it, with note as the change note the user sees, at the version Pending You reports, to the
     card the owner holds under the row's key on this host, while it waits on the user; once they have answered it,
     which Pending You changes no longer, the card acked with note as its outcome and closed, and build(facts) posted as
-    a new card that follows it, under the key with its revision (post_key). Posted instead when the owner holds none,
-    and posted again, its summary saying the older copy is dead, when Pending You no longer finds it. A long proposal's
-    card is built with its reading session's link, as a post's is (card_built). A refusal is said and recorded as the
-    change refused, refusing nothing of the event. The card's id, the new card's when one was posted, or None."""
+    a new card that follows it, under the key with its revision (post_key). A card whose kind changed (kind_changed),
+    which update_request never changes, is followed the same way, withdrawn with note while it waits. Posted instead
+    when the owner holds none, and posted again, its summary saying the older copy is dead, when Pending You no longer
+    finds it. A long proposal's card is built with its reading session's link, as a post's is (card_built). A refusal
+    is said and recorded as the change refused, refusing nothing of the event. The card's id, the new card's when one
+    was posted, or None."""
     acts = acts or CardActs(fleet)
     b = card_built(acts, label, build, facts)
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
@@ -8673,20 +8685,21 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None):
     card = cards.card_under(entries, key, owner)
     if not card:
         return card_posted(acts, label, owner, b, where, entries)
-    lost, how = None, "change"
+    lost, how, state = None, "change", None
     try:
         with acts.bridge(owner, CARD_LATER) as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
-            how = cards.revision(got) if lost is None else how
+            how = cards.revision(got, kind_changed) if lost is None else how
             if lost is None and how == "follow":
-                _, lost = py.answer("ack_answer", {"requestId": card, "name": owner, "expectedVersion": cards.version_of(got, card),
-                                                   "outcome": cut(note, 120)})
+                tool, args, state = cards.close_call(got, card, owner, outcome=cut(note, 120))
+                _, lost = py.answer(tool, args)
             elif lost is None:
                 change = dict(cards.change_args(b["card"], note), requestId=card, name=owner,
                               expectedVersion=cards.version_of(got, card))
                 got, lost = py.answer("update_request", change)
             if lost is not None and not cards.lost(lost):
-                fail(f"Pending You refused the {'close of the card the user answered' if how == 'follow' else 'change'}: {lost}")
+                what = {"closed": "close of the card the user answered", "withdrawn": "withdrawal of the card whose kind changed"}
+                fail(f"Pending You refused the {what.get(state, 'change')}: {lost}")
             if lost is None and how == "change":
                 card_uploaded(acts, key, b, got)
     except Refusal as e:
@@ -8698,8 +8711,9 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None):
         card_lost(acts, label, owner, key, card, lost)
         return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed)
     if how == "follow":
-        acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State="closed", Outcome=REVISED)
-        print(f"card {key}: {card} closed, the user having answered it, and its new version follows it")
+        acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=REVISED if state == "closed" else RENEWED)
+        print(f"card {key}: {card} " + ("closed, the user having answered it" if state == "closed" else "withdrawn, its kind having changed")
+              + ", and its new version follows it")
         return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
     acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key)
     v = got.get("version")

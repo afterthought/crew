@@ -405,7 +405,7 @@ When crew changes one of its own cards because its thing changed, it SHALL chang
 - **THEN** `req_1` is acked with the change note, and a new card following `req_1` is posted. The run record has `req_1`'s close and the new card's post under `land/b1`, and `crew card read land/b1` finds the new card
 
 ### Requirement: A card posted after a closed one takes its key's revision
-Every card crew posts under a row's key after a card of the owner's under that key has closed SHALL take the key with its revision, `<key>:<n>`, as its idempotency key, so Pending You never gives the closed card back. A card still open under the key SHALL keep its own key, so posting it again gives it back.
+Every card crew posts under a row's key after a card of the owner's under that key has closed SHALL take the key with its revision, `<key>:<n>`, as its idempotency key, so Pending You never gives the closed card back. A card still open under the key SHALL keep its own key, so posting it again gives it back, and the run record SHALL hold one post of it: a post Pending You answers with the card this host's record already holds open under the key and owner is that card, printed with the line that adopts it and recorded no second time.
 
 #### Scenario: A card raised again after its last card closed
 - **WHEN** crew raises b1's landing card after the user declined the last one under `land/b1`, or follows an answered one with its new version
@@ -414,6 +414,10 @@ Every card crew posts under a row's key after a card of the owner's under that k
 #### Scenario: A card posted again while it is open
 - **WHEN** crew posts its card under `land/b1` again while `req_1` is open there
 - **THEN** it is posted under `land/b1`, and Pending You gives `req_1` back
+
+#### Scenario: Two rail reads raise a row's card at once
+- **WHEN** two rail reads on mac-studio, from two agents' starts, sweep at once, each posts `op/srv/1`'s card, and Pending You gives both `req_1`
+- **THEN** the run record holds one `card.post` of `req_1` under `op/srv/1`, written by the read that recorded it first, and the other read prints `req_1` and `call get_request (requestId req_1, name <role>)`
 
 ### Requirement: A question whose asker is gone is withdrawn
 On each rail read crew SHALL withdraw, under the host's connection, every open question card whose asker herdr no longer lists as an agent, with the reason naming the asker, and SHALL say so.
@@ -430,7 +434,7 @@ A deploy's card's face SHALL carry the kit's release notes for exactly the range
 - **THEN** the card's face gives the landings since mac-studio's last deploy by subject, and says the kit handed no release notes
 
 ### Requirement: A step's card is the user's do
-A step whose doer is the user SHALL be a `do` card with the step's words, where it is done, each command whole as an action step, what is seen when it worked, and the options Done, Skip and Later. A step an agent runs on its own SHALL have no card. When a deploy ends with more than one step for a card, crew SHALL raise one card at a time: the first following the deploy's card, each next one following the one before, raised when crew closes it.
+A step whose doer is the user SHALL be a `do` card with the step's words, where it is done, each command whole as an action step, what is seen when it worked, and the options Done, Skip and Later. A step an agent runs on its own SHALL have no card. When a deploy ends with more than one step for a card, crew SHALL raise one card at a time: the first following the deploy's card, each next one following the one before, raised when crew closes it. Only another step's open card SHALL hold a step's card back: a step recorded again while its own card is open changes that card, as a row's card changes when its thing changes.
 
 #### Scenario: Two steps after one deploy
 - **WHEN** srv's deploy ends with a step that is the user's and a step held for the user's word
@@ -492,6 +496,14 @@ When what a row's card asks changes while it is open, crew SHALL change the one 
 #### Scenario: A conductor agrees
 - **WHEN** `proposal/4`'s card says it waits on crw-2's conductor and that conductor runs `crew plan agree 4`
 - **THEN** the card is changed in place, "No longer waits on crw-2-conductor"
+
+#### Scenario: A step recorded again with new words
+- **WHEN** `op/srv/1`'s card is open, raised from the deployer's text for its step, and main-level ops records that step again waiting on the user with new words
+- **THEN** the same card is changed in place, "Recorded again: its words changed", and the command prints its id and `call get_request (requestId <id>, name <role>)`; recorded again with the words the card shows, the card is not changed and the command prints the same line
+
+#### Scenario: A step's card that changes in kind
+- **WHEN** `op/srv/1`'s card, the user's `do`, is open and its step is recorded again with main-level ops its doer, held for the user's word
+- **THEN** the card is withdrawn, "Recorded again: its doer and its hold changed", and the step's choice is posted under `op/srv/1:2` following it, since Pending You changes no card's kind in place
 
 ### Requirement: A card is closed by crew at the event that ends it
 crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`.

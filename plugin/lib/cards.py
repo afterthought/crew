@@ -836,11 +836,12 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
-def revision(got):
-    """How crew puts a changed card before the user, from get_request's answer: "change", the card changed in place,
-    while it waits on them; "follow" once they have answered it, since Pending You changes a card only while it waits
-    and an answered one is followed by a new card (its guide, "Follow up with a new card")."""
-    return "follow" if isinstance(got, dict) and got.get("status") == "answered" else "change"
+def revision(got, kind_changed=False):
+    """How crew puts a changed card before the user, from get_request's answer and whether the card's kind changed:
+    "change", the card changed in place, while it waits on them; "follow" once they have answered it, since Pending
+    You changes a card only while it waits and an answered one is followed by a new card (its guide, "Follow up with a
+    new card"), and when its kind changed, which update_request never changes (CHANGED)."""
+    return "follow" if kind_changed or isinstance(got, dict) and got.get("status") == "answered" else "change"
 
 
 def post_key(entries, key, by):

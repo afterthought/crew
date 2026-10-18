@@ -7,11 +7,13 @@
 # it until that deploy's end is recorded, which closes the card with its outcome; a deploy's start, step and end are
 # entries as it runs; an operation's states are recorded and crew ops steps gives each one's latest, one the user is to
 # take, or an agent's held for the user's word, a rail row whose card crew raises one at a time, each following the
-# one before, and closes when it is marked; an offer on a host not signed in stands with no card; main-level ops posts
+# one before, changes in place when its step is recorded again with new words, printing the line that adopts it
+# either way, and closes when it is marked; an offer on a host not signed in stands with no card; main-level ops posts
 # no card under an operations row's key, crew's, and asks under a key of its own; quiet reads the host's agents and
 # test slots; and an ops command run away from the partition's main level runs there. Which offer is open, the word,
-# each step's latest state, the rows and their words, each card's facts, whether it is posted or changed and which
-# step's card is raised are logic cases (tests/py/test_ops.py); each step here checks a command's wiring once.
+# each step's latest state, the rows and their words, each card's facts, whether it is posted or changed, which
+# step's card is raised and what a step recorded again changes are logic cases (tests/py/test_ops.py); each step
+# here checks a command's wiring once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints afterthought/blueprints >/dev/null; blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -130,6 +132,24 @@ lacks "$out" "restart-teams"
 expect_ok dep steps mac-studio --json
 eq "$(jq -r '[.[] | "\(.key) \(.state) \(.to[:7])"] | join(", ")' <<<"$out")" \
   "restart-herdr/1 waiting ${s2:0:7}, restart-teams/1 handed ${s2:0:7}, restart-crew/1 waiting ${s2:0:7}"
+ok "an operation's states are recorded, and the first that waits on the user has its card raised while another's waits for it to close"
+
+printf 'Restart the herdr server\nonce the teams are quiet, then read its status.\n- where: a terminal on mac-studio\n- command: launchctl kickstart -k gui/501/herdr\n- done: herdr answers herdr status.\n' > "$T/again.txt"
+: > "$CREW_TEST_LOG"
+expect_ok dep step mac-studio --to "$s2" --key restart-herdr/1 --state waiting --doer user --text "$T/again.txt"
+has "$out" "card op/mac-studio/1: $step1 changed, now version 2"
+has "$out" "call get_request (requestId $step1, name swancloud-ops)"
+lacks "$out" "is open: the next step's card"
+eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request update_request "
+eq "$(jq -c '[.changeNote, .action.steps[0].command]' <<<"$(py_arg update_request)")" '["Recorded again: its words changed","launchctl kickstart -k gui/501/herdr"]'
+: > "$CREW_TEST_LOG"
+expect_ok dep step mac-studio --to "$s2" --key restart-herdr/1 --state waiting --doer user --text "$T/again.txt"
+has "$out" "card op/mac-studio/1: $step1 shows the step as recorded, so it is not changed"
+has "$out" "call get_request (requestId $step1, name swancloud-ops)"
+eq "$(py_calls)" ""
+eq "$(runs | grep -c '^Key: op/mac-studio/1$')" "2"
+ok "a step recorded again while its own card is open changes that card in place when its words differ, and prints the line that adopts it whether it changed it or not"
+
 : > "$CREW_TEST_LOG"
 expect_ok dep step mac-studio --to "$s2" --key restart-herdr/1 --state done --note "restarted at 10:02"
 has "$out" "card op/mac-studio/1: $step1 withdrawn"
