@@ -1,7 +1,7 @@
 ---
 number: 32
 title: No worktree holds main or a bolt branch; a kit's main folder is a detached anchor the fleet's timer moves, bolts live on GitHub made and ended by sluice, and crew's plugin runs live or released
-status: proposed
+status: accepted
 date: 2026-10-16
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # No worktree holds main or a bolt branch; a kit's main folder is a detached anchor the fleet's timer moves, bolts live on GitHub made and ended by sluice, and crew's plugin runs live or released
 
-Status: proposed to the user on 2026-10-16, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-18, on their card.
 
 Deciders: the user, in the sluice design session of 2026-10-16 (the handovers `worktrees-crew.md`, `worktrees-sluice.md`, `worktrees-swancloud.md`) and on the pane with the folders design agent the same day, whose words are quoted at each point they settled; written by the folders design agent.
 Amends: `state.3`, `plan.8`, `plan.9`, `plan.16`; adds `plan.18` and `plan.19`.
@@ -53,7 +53,7 @@ Sluice takes a submission only from a worktree on a branch, so `crew bolt submit
 
 ### 4. crew learns of landings, conflicts and stray checkouts from `sluice overview --json`
 
-A stage's wait keeps reading refs on the team's host every ten seconds; what refs cannot give, a conflict or a blame named to the place it came from and a cheap "nothing changed" (`version`), the wait reads from `sluice overview --json` (sluice v0.12.0 or later, `recent[]` and `from.path`). `crew status` names a worktree holding a branch sluice lands on from the overview's `holds_queued_branch`, so a stray checkout is seen, never fixed by crew.
+A stage's wait keeps reading refs on the team's host every ten seconds; what refs cannot give, a conflict or a blame placed at the worktree it came from and a cheap "nothing changed", the wait reads from `sluice overview --json` as sluice 0.18.0 prints it (`sluice/overview@1`), each fact checked against that version: each branch carries its own `version`, moved on every write to that branch's records, so a look whose versions are all unchanged reads nothing more; a `conflict` or `blamed` line of a branch's `recent[]` names its submission's id and not where it came from, so the wait places it by the `from.path` it learned from the branch's `submissions[]` while the submission was in a chain or, for an id it has not learned, since sluice records a conflict within seconds of its submission, by one `sluice status <id> --json` (`sluice/submission@1`); a line placed at the stage's place is told to the conductor in sluice's own words, and an overview that cannot be read is named once and the wait goes on by refs alone. Worded so on 2026-10-18, at the user's acceptance, as crew's part 5 built it. `crew status` names a worktree holding a branch sluice lands on from the overview's `holds_queued_branch`, so a stray checkout is seen, never fixed by crew.
 
 ### 5. crew's plugin runs live or released, per host
 
@@ -66,5 +66,5 @@ Sluice: `holds_queued_branch` in the overview, the warning in `status`, `overvie
 ### Consequences
 
 - One change in crew, `no-worktree-holds-main-or-a-bolt-branch`, in seven parts with their order in its design: legacy bolt folders detached; the landing folder and the levelling step, the unit refusal; every "main now" read from `origin/main`, the briefs losing `read-tree` and the push, `plan.8`'s refusal, the card's close, blueprints from a branch; the overview read; `crew status` naming a stray checkout; bolts on GitHub through sluice's create and delete; the plugin's modes in CLAUDE.md.
-- `state.3`, `plan.8`, `plan.9` and `plan.16` amended, `plan.18` and `plan.19` added, each proposed with this record.
+- `state.3`, `plan.8`, `plan.9` and `plan.16` amended, `plan.18` and `plan.19` added, each accepted with this record.
 - A crew behind this design keeps working on a host whose anchor is still on the branch: the levelling step is conditional, and nothing of the new reads needs the timer.
