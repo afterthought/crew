@@ -52,7 +52,7 @@ crew's process, from an idea to a machine running it, needs the user's word at s
 | **batch** | crew finds a batch due at the batch clock | the planner | `batch/<n>` | never | the user's tap, or the reading session's send, whichever first |
 | **landing** | crew reads the bolt proven: every unit and chore merged, every change batched, sluice green at the head | the bolt's conductor | `land/<bolt>` | the head moves while it is open | landed, with the merge and the hosts brought level; held for a fix, on a note naming a defect; or declined, with the user's words |
 | **deploy** | the kit's deployer offers a `manual` environment a deploy | main-level ops | `deploy/<env>` | a newer head is offered | the deploy ends, with each step's outcome, or fails, with the step and its log; or declined |
-| **step** | a deploy ends and an after-deploy step is the user's, or is an agent's held for the user's word | main-level ops | `op/<env>/<n>` | never | done or skipped by the user; done by the agent, when the user said now or quiet |
+| **step** | a deploy ends and an after-deploy step is the user's, or is an agent's held for the user's word | main-level ops | `op/<env>/<n>` | the step is recorded again with other words, another doer or another hold while its card is open (§3, amended 2026-10-18) | done or skipped by the user; done by the agent, when the user said now or quiet |
 
 The step's two shapes are the user's: "some steps would be things only I could do. Some were also going to be things an agent can do, but the agent might not do them automatically on its own immediately. Instead they would be put in front of me and I could decide when to handle it" (2026-10-14). A change marks such a step held, with the agent as its doer, in the shape its kit's `openspec/config.yaml` gives after-deploy steps (`docs.6`, `briefs.3`).
 
@@ -68,7 +68,11 @@ The question is asked through Pending You's own tools in the asker's session, sh
 
 ### 3. One card per thing, changed in place; no heads-up cards
 
-A proposal rewritten after a note, a landing whose head moved, a deploy whose head moved, a record revised: each changes its one card in place with a change note the user sees, never a second card under a new key. Something that happened with nothing to decide, a landing done, a deploy done or failed, is the outcome written on the card that asked, and otherwise the board's; crew raises no card to tell. A failed deploy in particular: "For now things like this would come back in as signals and captures, go through purification, and show up on my board as a proposal" (the user, 2026-10-14; crew's name for the step is curation, `signals.7`).
+A proposal rewritten after a note, a landing whose head moved, a deploy whose head moved, a record revised: each changes its one card in place with a change note the user sees, never a second card under a new key. 
+
+Status: proposed to the user on 2026-10-18, as `briefs.15` has it; accepted only on their yes. Amended 2026-10-18: a step's card is the same. A step recorded again while its own card is open, with other words, another doer or another hold, changes that card in place with a note naming what changed, and recorded again with the words the card shows it is left as it is; either way the command prints the line that adopts the card, as a raise does. A doer moved between the user and an agent changes the card's kind, a do for the user and a choice for a held step, which Pending You never changes in place, so that card is withdrawn with the note and the step's new form is posted following it, under the same key's next version, as a card follows one the user answered. Only another step's open card holds a step's card back. Built in crew 74d76f79, landed 3d7fddd9 on 2026-10-18, after swancloud-ops recorded srv's sign-in step again under its open card and crew only said the card was open.
+
+Something that happened with nothing to decide, a landing done, a deploy done or failed, is the outcome written on the card that asked, and otherwise the board's; crew raises no card to tell. A failed deploy in particular: "For now things like this would come back in as signals and captures, go through purification, and show up on my board as a proposal" (the user, 2026-10-14; crew's name for the step is curation, `signals.7`).
 
 ### 4. Chores change no card, and this design does not wait on them
 
