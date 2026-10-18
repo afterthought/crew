@@ -1,7 +1,7 @@
 ---
 number: 20
 title: A team is free for its next bolt once its current one is proven
-status: proposed
+status: accepted
 date: 2026-10-11
 decision-makers:
 - Chuck Swanberg
@@ -10,7 +10,7 @@ decision-makers:
 
 # A team is free for its next bolt once its current one is proven
 
-Status: proposed to the user on 2026-10-11, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-18, on their card.
 
 Deciders: the user, whose words raised it (2026-10-11, in the operator's pane, on the laptop's ssh fix: "No, it can go through fucking approval. It's just that it needs to get the fucking work done. I approved it and you added it to a bolt that's going to end up waiting on six other things."); swancloud-design.
 
