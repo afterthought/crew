@@ -678,8 +678,9 @@ def agent_views(data):
     prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
     each host's operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
-    the lines the mod draws above its view. With them, the line the mod adds once the frame is stale_after_ms old: when
-    it was read, and that the rail tab has not refreshed it since.
+    the lines the mod draws above its view. With them, the line the mod adds once the frame is stale_after_ms old: the
+    day and time it was read, since a frame a restart left can be days old, and that the rail tab has not refreshed it
+    since.
 
     A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows)
     changes these views and plugin/hooks/status.js with it, each with its cases (code.8)."""
@@ -691,7 +692,7 @@ def agent_views(data):
         for c in p.get("cards", []):
             cards.setdefault(c["by"], []).append(card_line(c, now))
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
-            "stale": row([(f"read at {plan.utc(data['read_at']).astimezone():%H:%M}; the rail tab on {data['from']} has not refreshed it since", "dim")]),
+            "stale": row([(f"read at {local(data['read_at'])}; the rail tab on {data['from']} has not refreshed it since", "dim")]),
             "views": views, "cards": {a: lines for a, lines in cards.items() if a in views}}
 
 

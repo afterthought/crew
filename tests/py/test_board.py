@@ -384,7 +384,8 @@ class TestViews:
         assert sorted(v["views"]) == sorted(["swb-1-conductor", "swb-2-conductor", "brd-1-conductor", "atl-1-conductor", "wldn-planner", "wldn-design",
                                              "wldn-ops", f"wldn-operator-{BOX}", "wldn-operator-mac-studio"])
         assert v["read_at"] == data()["read_at"] and v["stale_after_ms"] == board.STALE * 1000
-        assert v["stale"][0][0].endswith("; the rail tab on mac-studio has not refreshed it since") and v["stale"][0][1] == "dim"
+        assert v["stale"] == [(f"read at {board.local(data()['read_at'])}; the rail tab on mac-studio has not refreshed it since", "dim")]
+        assert re.fullmatch(r"read at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}; .*", v["stale"][0][0])  # a day with it: a restart can leave it days old
 
     @pytest.mark.parametrize("stages, shown", [(["queued", "waiting", "ready"], "○○○"), (["amended", "construct", "planned"], "◔◔◔"),
                                                (["code", "verify"], "◑◕"), (["merged", "landed"], "●●"), (["unknown"], "?")])
