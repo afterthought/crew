@@ -1,19 +1,21 @@
 # The operations on a partition's environments, a deploy being one kind (plan.14), through crew ops as swancloud's
 # deployer calls it, on the stubs (tests.11, record 0022): an offer is a rail row, and crew raises its card in
 # main-level ops's name on the stub pendingyou, with the release notes and steps it was handed on its face, keeping
-# those files beside it and none of their text in the run record, telling ops the line that adopts it; the same offer
-# again writes nothing, a file it can't read is refused with nothing offered, and a newer offer changes the card in
-# place; crew ops approve records the user's word, refusing an approval of another commit, and crew ops word answers
+# those files beside it and none of their text in the run record, telling ops the line that adopts it; handed no notes,
+# the landings its range carries on the kit's main, read with git, or what git could not read; the same offer
+# again writes nothing, and handed other notes or steps changes its card in place, a file it can't read is refused
+# with nothing offered, and a newer offer changes the card in place; crew ops approve records the user's word, refusing an approval of another commit, and crew ops word answers
 # it until that deploy's end is recorded, which closes the card with its outcome; a deploy's start, step and end are
 # entries as it runs; an operation's states are recorded and crew ops steps gives each one's latest, one the user is to
 # take, or an agent's held for the user's word, a rail row whose card crew raises one at a time, each following the
 # one before, changes in place when its step is recorded again with new words, printing the line that adopts it
 # either way, and closes when it is marked; an offer on a host not signed in stands with no card; main-level ops posts
 # no card under an operations row's key, crew's, and asks under a key of its own; quiet reads the host's agents and
-# test slots; and an ops command run away from the partition's main level runs there. Which offer is open, the word,
-# each step's latest state, the rows and their words, each card's facts, whether it is posted or changed, which
-# step's card is raised and what a step recorded again changes are logic cases (tests/py/test_ops.py); each step
-# here checks a command's wiring once.
+# test slots; and an ops command run away from the partition's main level runs there, an offer carrying its files'
+# text. Which offer is open, the word, each step's latest state, the rows and their words, each card's facts, whether
+# it is posted or changed, which step's card is raised, what a step recorded again or an offer handed again changes,
+# and what a forwarded offer carries are logic cases (tests/py/test_ops.py); each step here checks a command's wiring
+# once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints afterthought/blueprints >/dev/null; blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -51,13 +53,19 @@ lacks "$(runs)" "peer key"; lacks "$(runs)" "kanidm"
 eq "$(runs | grep -B4 -A6 '^Act: card.post' | grep -E '^(On|Key|Card|By):' | tr '\n' ' ')" \
   "By: swancloud-ops On: env/mac-studio Card: req_stub-1 Key: deploy/mac-studio "
 : > "$CREW_TEST_LOG"
-expect_ok dep offer mac-studio --from none --to "$s1"
+expect_ok dep offer mac-studio --from none --to "$s1" --notes "$T/notes.md" --steps "$T/steps.txt"
 eq "$(acts mac-studio swancloud ops.offer)" "1"; eq "$(py_calls)" ""
+printf '## swancloud-srv-v0.3.1 (2026-10-15)\n### Fixes\n- deployer: the release tagged after the offer (f00ba12)\n' > "$T/notes2.md"
+expect_ok dep offer mac-studio --from none --to "$s1" --notes "$T/notes2.md" --steps "$T/steps.txt"
+has "$out" "card deploy/mac-studio: req_stub-1 changed, now version 2"
+eq "$(jq -c '[.changeNote, .artifacts[0].title]' <<<"$(py_arg update_request)")" \
+  '["Offered again: its release notes changed","What'"'"'s in it: swancloud-srv-v0.3.1"]'
+eq "$(cat "$kept/notes.md")" "$(cat "$T/notes2.md")"; eq "$(acts mac-studio swancloud ops.offer)" "1"
 expect_ok crew rail --label swancloud
 has "$out" "deploy mac-studio (swancloud) to ${s1:0:7}, from nothing deployed: crew raises its card in swancloud-ops's name"
 has "$out" "answer: crew ops approve mac-studio --to $s1 --label swancloud"
 has "$out" "card:   deploy/mac-studio, open, asked by swancloud-ops (req_stub-1)"
-ok "an offer is a rail row whose card crew raises in main-level ops's name with the notes and steps it was handed, kept beside it and out of the run record, telling ops the line that adopts it; the same offer again writes nothing"
+ok "an offer is a rail row whose card crew raises in main-level ops's name with the notes and steps it was handed, kept beside it and out of the run record, telling ops the line that adopts it; the same offer again writes nothing, and handed other notes changes its card in place"
 
 printf 'step\t1\tthe-user\t\t\twhy\trotate it\n' > "$T/bad.txt"
 expect_fail "the steps file $T/bad.txt can't be read: line 1 is no step crew reads" dep offer mac-studio --from none --to "$s2" --steps "$T/bad.txt"
@@ -67,11 +75,11 @@ ok "an offer handed a file crew can't read is refused, naming it, and nothing is
 
 : > "$CREW_TEST_LOG"
 expect_ok dep offer mac-studio --from none --to "$s2"
-has "$out" "card deploy/mac-studio: req_stub-1 changed, now version 2"
+has "$out" "card deploy/mac-studio: req_stub-1 changed, now version 3"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request update_request "
 eq "$(jq -c '[.changeNote, .title, .artifacts[0].title]' <<<"$(py_arg update_request)")" \
   '["Now offering bbbbbbb, which includes aaaaaaa","Deploy main bbbbbbb to mac-studio","What'"'"'s in it"]'
-has "$(py_arg update_request)" "Which landings it carries in the first deploy to mac-studio can't be read: bbbbbbb is no landing's commit in the record."
+has "$(py_arg update_request)" "The first deploy to mac-studio, carrying all of main up to bbbbbbb."
 has "$(py_arg update_request)" "The kit handed no release notes."
 ok "a newer offer changes the one card in place, with a note naming the head it now offers and the one it replaces"
 
@@ -187,6 +195,22 @@ has "$out" "card deploy/swancloud-srv not posted: this host can't ask through Pe
 has "$(runs | grep -B8 '^Key: deploy/swancloud-srv$')" "Refused: this host can't ask through Pending You"
 ok "an offer on a host not signed in to Pending You stands, its card not posted, said and recorded"
 
+# swancloud's main as sluice moves it, with no crew bolt land: a landing of a branch, then a commit made on main itself.
+k=$(kit mac-studio madswan swancloud); base=$(git -C "$k" rev-parse HEAD)
+git -C "$k" checkout -q -b recovery; echo t > "$k/timers"; commit_all "$k" "fix(timers): every timer job runs under a time limit"
+git -C "$k" checkout -q main
+git -C "$k" merge -q --no-ff recovery -m "chore(land): #69 pull/66" -m $'Sluice-Submission: 69\nSluice-From: recovery (pull/66)'
+echo d > "$k/docs"; commit_all "$k" "docs: a commit on main itself"; head=$(git -C "$k" rev-parse HEAD)
+: > "$CREW_TEST_LOG"
+expect_ok dep offer deneb --from "$base" --to "$head"
+eq "$(jq -r .summary <<<"$(py_arg post_request)")" "2 landings since deneb's last deploy (${base:0:7}). The kit handed no release notes."
+eq "$(jq -r .context.background <<<"$(py_arg post_request)")" \
+  $'Landings since deneb\'s last deploy:\n#66 fix(timers): every timer job runs under a time limit\ndocs: a commit on main itself'
+: > "$CREW_TEST_LOG"
+expect_ok dep offer deneb --from "$base" --to "$s3"
+has "$(py_arg update_request)" "Which landings it carries since deneb's last deploy (${base:0:7}) can't be read: ccccccc is a commit of no kit swancloud's main level keeps on mac-studio."
+ok "with no notes, the card lists the range's first-parent commits on the kit's main, read from git, a landing of sluice's by the branch it merged, though the record holds no landing of them; a range git can't read is said"
+
 refusal() { as mac-studio python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import crew, plan
 print(plan.card_refusal(crew.load(), sys.argv[2], "swancloud", "post_request", sys.argv[3]))' "$CREW/plugin/lib" "$@"; }
 has "$(refusal swancloud-ops deploy/mac-studio)" "crew refuses swancloud-ops's post of the card under deploy/mac-studio: a deploy's card is crew's, raised by crew ops offer"
@@ -210,8 +234,12 @@ rc=0; out=$(dep quiet mac-studio 2>&1) || rc=$?
 eq "$rc" "1"; has "$out" "atl-1-unit-2 is working"
 ok "quiet answers whether the host's teams have a stage working or a test running"
 
-expect_ok crew ops offer "$box" --label wldn --from none --to "$s1"
+: > "$CREW_TEST_LOG"
+expect_ok crew ops offer "$box" --label wldn --from none --to "$s1" --notes "$T/notes.md" --steps "$T/steps.txt"
 eq "$(acts "$box" wldn ops.offer)" "1"
+has "$(grep "ssh $box .*ops offer" "$CREW_TEST_LOG")" "--handed -"; lacks "$(grep "ssh $box" "$CREW_TEST_LOG")" "$T/notes.md"
+eq "$(cat "$(home_of "$box")/.local/state/crew/wldn/ops/$box/$s1/notes.md")" "$(cat "$T/notes.md")"
+eq "$(cat "$(home_of "$box")/.local/state/crew/wldn/ops/$box/$s1/steps.txt")" "$(cat "$T/steps.txt")"
 eq "$(acts mac-studio wldn ops.offer)" "0"
 expect_fail "no word is given for a deploy of $box" crew ops word "$box" --label wldn
-ok "an ops command run away from the partition's main level is run there"
+ok "an ops command run away from the partition's main level is run there, an offer carrying its files' text"

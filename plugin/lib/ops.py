@@ -11,8 +11,11 @@ when it names one.
       and its card, which crew raises in main-level ops's name and tells it the line that adopts. On its face the
       kit's release notes for the range, --notes, as its changelog tool wrote them, and the range's after-deploy
       steps, --steps, one a line as the deployer gathers them (step <n> <doer> <when> <environments> <why> <text>,
-      tab-separated, held among the when words); handed neither, the landings' subjects. The same `to` again
-      changes nothing while it is open; a newer one replaces it and changes its card
+      tab-separated, held among the when words); handed no notes, the landings it carries: the first-parent commits
+      of the kit's main from --from to --to, read with git, a landing of sluice's by the branch it merged. Run away
+      from the main level's host, it carries the files' text there. The same `to` again changes nothing while it is
+      open unless it is handed other notes or steps, which change its card in place; a newer one replaces it and
+      changes its card
   crew ops approve <env> --label L --to <sha>
       the user's word for that deploy, given by holding its card, recorded by whoever the user's yes reached; the row
       leaves the rail
@@ -43,7 +46,7 @@ Every command acts on the partition's operations where its main level runs, on t
 entries on env/<env>: run anywhere else, it is run there, as the one asking. An environment is a machine of the fleet,
 named as the deployer names it.
 """
-import argparse, datetime, json, pathlib, re, sys
+import argparse, datetime, json, pathlib, re, subprocess, sys
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -182,6 +185,71 @@ def carried(to, frm, lands):
     return [l["bolt"] for l in mine[start + 1:]], None
 
 
+# How crew reads a deploy's range on its kit's main: each first-parent commit, its parents, its subject, and the
+# trailers sluice writes on a landing's merge commit, its submission and the branch and pull request it merged.
+RANGE = "%H%x1f%P%x1f%s%x1f%(trailers:key=Sluice-Submission,valueonly,separator=%x20)%x1f%(trailers:key=Sluice-From,valueonly,separator=%x20)"
+PULL = re.compile(r"\(pull/(\d+)\)")
+
+
+def first_parents(text):
+    """The commits git log --first-parent prints in RANGE's form, newest first: each {sha, parents, subject, landed
+    (sluice's submission, or None for a commit sluice did not land), pr (the pull request it merged, or None)}; None
+    when a line is not in that form (read.2)."""
+    out = []
+    for line in (text or "").splitlines():
+        f = line.split("\x1f")
+        if len(f) != 5 or not SHA.match(f[0]):
+            return None
+        pr = PULL.search(f[4])
+        out.append(dict(sha=f[0], parents=f[1].split(), subject=f[2], landed=f[3].strip() or None, pr=int(pr.group(1)) if pr else None))
+    return out
+
+
+def range_landings(commits, merged, lands):
+    """The landings a deploy's range carries, oldest first, as its card names them ({pr, subject}): each first-parent
+    commit of the kit's main in the range (commits, newest first, as first_parents reads them), by the bolt where the
+    record holds a landing at it (lands), which git does not name; else, for a landing of sluice's, by the subject of
+    the branch it merged (merged: {sha: subject} of each landing's second parent); else by its own subject."""
+    out = []
+    for c in reversed(commits):
+        bolt = next((l["bolt"] for l in lands if l["head"] == c["sha"]), None)
+        branch = merged.get(c["parents"][1]) if c["landed"] and len(c["parents"]) > 1 else None
+        out.append({"pr": c["pr"], "subject": bolt or branch or c["subject"]})
+    return out
+
+
+def kit_range(fleet, label, frm, to):
+    """What a deploy from frm to to carries on its kit's main, read with git on this host, the partition's main level's,
+    in the main checkouts of the repos its main-level session keeps: the kit is the one that holds to. (commits, merged)
+    as range_landings takes them, and None; or (None, None, why) naming what git could not read (read.1)."""
+    import plan
+    p = crew.partition_of(fleet, label)
+    sess = fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(p["session"]) or {}
+
+    def git(where, *args):
+        return subprocess.run(["git", "-C", where, *args], capture_output=True, text=True, env=plan.gitenv())
+    held = [m for m in (crew.checkout(sess, r) for r in sess.get("repos") or [])
+            if pathlib.Path(m).is_dir() and git(m, "cat-file", "-e", f"{to}^{{commit}}").returncode == 0]
+    if len(held) != 1:
+        return None, None, (f"{to[:7]} is a commit of {len(held)} kits {label}'s main level keeps on {p['machine']}" if held
+                            else f"{to[:7]} is a commit of no kit {label}'s main level keeps on {p['machine']}")
+    r = git(held[0], "log", "--first-parent", f"--format={RANGE}", f"{frm}..{to}")
+    if r.returncode:
+        return None, None, f"git can't read {frm[:7]}..{to[:7]} in {held[0]}: " + ((r.stderr or "").strip() or f"exit {r.returncode}")
+    commits = first_parents(r.stdout)
+    if commits is None:
+        return None, None, f"git's log of {frm[:7]}..{to[:7]} in {held[0]} is not in the form crew reads"
+    seconds = [c["parents"][1] for c in commits if c["landed"] and len(c["parents"]) > 1]
+    merged = {}
+    if seconds:
+        r = git(held[0], "log", "--no-walk=unsorted", "--format=%H%x1f%s", *seconds)
+        if r.returncode:
+            return None, None, f"git can't read the branches landed in {frm[:7]}..{to[:7]} in {held[0]}: " + (
+                (r.stderr or "").strip() or f"exit {r.returncode}")
+        merged = dict(line.split("\x1f", 1) for line in r.stdout.splitlines() if "\x1f" in line)
+    return commits, merged, None
+
+
 def environments(es, since=None):
     """Each environment's deploys and the operations waiting on it, from the partition's entries (es, oldest first),
     as the board's Operation lane and the page's deploys view show them (plan.14, state.4): {env: {"deploys": [...],
@@ -296,21 +364,21 @@ def release_of(notes):
     return names[0] if len(names) == 1 else None
 
 
-def deploy_facts(env, offer, es, notes=None, steps=None, unread=None):
+def deploy_facts(env, offer, es, ranged, notes=None, steps=None):
     """The facts of the deploy's card for env's open offer (cards.deploy_card, plan.14), from the partition's entries
-    (es, oldest first: the main level's ops entries and every landing): the environment, the head and the commit it
-    runs, None when nothing is deployed; the landings it carries by bolt, from the landing that left main at what it
-    runs up to the one at the head, or why they can't be read, naming each host whose record did not answer (unread,
-    {host: why}); the notes as handed, their release, and the steps as handed; the environments whose deploy of the
-    head has ended done, which it comes after. The deployer hands no order of its environments, so none comes after."""
+    (es, oldest first: the main level's ops entries and every landing) and its range as git read it on the kit's main
+    (ranged, kit_range's (commits, merged, why)): the environment, the head and the commit it runs, None when nothing is
+    deployed, whose range is then not read; the landings it carries, each first-parent commit of the range named as
+    range_landings names it, the record adding only the bolt it holds a landing of, or why git could not read them; the
+    notes as handed, their release, and the steps as handed; the environments whose deploy of the head has ended done,
+    which it comes after. The deployer hands no order of its environments, so none comes after."""
     to, base = offer["Head"], offer.get("Base")
     base = None if base in (None, "", "none") else base
-    bolts, why = carried(to, base or "none", landings(es))
-    if bolts is None and unread:
-        why += "; " + "; ".join(f"{h} did not answer" for h in sorted(unread))
+    commits, merged, why = ranged if base else (None, None, None)
+    lands = range_landings(commits, merged or {}, landings(es)) if commits is not None else []
     before = sorted({env_of(e) for e in es if e.get("Act") == "ops.deploy" and e.get("Phase") == "end" and e.get("Head") == to
                      and e.get("Outcome") in CARRIED and env_of(e) not in (None, env)})
-    return dict(env=env, head=to, base=base, landings=[{"pr": None, "subject": b} for b in bolts or []], landings_why=why,
+    return dict(env=env, head=to, base=base, landings=lands, landings_why=why,
                 notes=notes or None, release=release_of(notes), steps=list(steps or []), before=before, after=[])
 
 
@@ -478,29 +546,32 @@ def ops_where(fleet, label):
     return plan.card_where({"main": p["checkout"], "repo": p["blueprints"][0]})
 
 
-def raise_deploy(fleet, row, acts=None):
+def raise_deploy(fleet, row, acts=None, note=None):
     """Raise the deploy's card of the rail row deploy/<env> of row["label"] (record 0031 §1, plan.14): posted in
     main-level ops's name, following the card follows_of names, or changed in place when the card ops holds asks for
-    an older offer still unanswered, posted again when Pending You no longer finds it; built from the open offer, the
-    files it was handed and the partition's run record. None, saying why, when no offer waits on a card; the offer's
-    own call and the rail's sweep alike. A card not posted or changed is said and recorded, and the offer stands.
-    The card's id, or None."""
+    an older offer still unanswered, or for this one when it is offered again with other files, note naming what
+    changed; posted again when Pending You no longer finds it; built from the open offer, the files it was handed and
+    the partition's run record. None, saying why, when no offer waits on a card; the offer's own call and the rail's
+    sweep alike. A card not posted or changed is said and recorded, and the offer stands. The card's id, or None."""
     import cards, plan
     acts = acts or plan.CardActs(fleet)
     label, key = row["label"], row["key"]
     env, owner = key.split("/", 1)[1], f"{label}-ops"
     es = entries(label)
     move, said = deploy_move(es, env, cards.card_under(acts.entries(label), key, owner))
+    said = note if move == "change" and note else said
     if not move:
         print(f"card {key}: {said}")
         return None
     offer = state(es)[0][env]
     since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=DAYS)).isoformat()
-    gathered, unread = record.gather(fleet, [label], since)
+    gathered, _ = record.gather(fleet, [label], since)
     lands = sorted({e["Id"]: e for e in es + [e for e in gathered if e.get("Act") == "bolt.land"]}.values(), key=lambda e: (e["At"], e["Id"]))
+    base = offer.get("Base")
+    ranged = kit_range(fleet, label, base, offer["Head"]) if base not in (None, "", "none") else (None, None, None)
     d = kept(label, env, offer["Head"])
     steps, _ = handed_steps(kept_text(d / "steps.txt"), env, label)
-    facts = deploy_facts(env, offer, lands, kept_text(d / "notes.md"), steps, unread)
+    facts = deploy_facts(env, offer, lands, ranged, kept_text(d / "notes.md"), steps)
     facts["follows"] = cards.follows_of("deploy", {"env": env, "head": offer["Head"]}, gathered)
     return plan.row_card_change(fleet, label, owner, cards.deploy_card, facts, said or "Raised again", ops_where(fleet, label), acts)
 
@@ -574,15 +645,61 @@ def handed(path, what):
         fail(f"the {what} file {path} can't be read: {getattr(e, 'strerror', None) or e}; nothing is offered")
 
 
-def offer(fleet, a):
-    notes = handed(a.notes, "release notes") if a.notes else None
-    steps = handed(a.steps, "steps") if a.steps else None
+def carried_texts(text):
+    """The notes' and the steps' text an offer forwarded from another host carries on its stdin, as forwarded writes
+    them: (notes, steps), each None when not handed; or (None, None, why) naming what can't be read (read.2)."""
+    try:
+        got = json.loads(text or "")
+    except ValueError as e:
+        return None, None, f"it is not JSON: {e}"
+    if not isinstance(got, dict) or set(got) != {"notes", "steps"} or not all(v is None or isinstance(v, str) for v in got.values()):
+        return None, None, 'it is not {"notes", "steps"}, each text or null'
+    return got["notes"], got["steps"], None
+
+
+def offered_texts(a):
+    """What an offer was handed, (notes, steps), each None when not handed: the files --notes and --steps name, read
+    on this host, or their text carried on stdin by an offer forwarded here (--handed -); refused, naming what can't be
+    read, the file or a step's line, with nothing offered (read.1), before the offer runs here or is forwarded."""
+    if getattr(a, "handed", None):
+        notes, steps, why = carried_texts(sys.stdin.read())
+        why is None or fail(f"what the offer was handed can't be read from its stdin: {why}; nothing is offered")
+    else:
+        notes = handed(a.notes, "release notes") if a.notes else None
+        steps = handed(a.steps, "steps") if a.steps else None
     _, why = handed_steps(steps, a.env, a.label)
-    why is None or fail(f"the steps file {a.steps} can't be read: {why}; nothing is offered")
+    why is None or fail(f"{f'the steps file {a.steps}' if a.steps else 'the steps handed'} can't be read: {why}; nothing is offered")
+    return notes, steps
+
+
+def handed_changed(kept_notes, kept_steps, notes, steps):
+    """What an offer of the commit already offered changes of what its card shows (code.7): its release notes, its
+    after-deploy steps, or both, as a change note names them, from the files kept with the offer and the text handed
+    now, an empty text alike with none; [] when both are the same, and the offer then changes nothing."""
+    return [what for what, was, now in (("its release notes", kept_notes, notes), ("its after-deploy steps", kept_steps, steps))
+            if (was or None) != (now or None)]
+
+
+def forwarded(a, argv, notes, steps):
+    """The ops command as it is run on the partition's main level's host, and what it reads there on its stdin
+    (code.3): an offer handed --notes or --steps, files of this host, carries their text as JSON, {"notes", "steps"},
+    in --handed -, since the files do not reach that host; any other command runs as it was given, with nothing."""
+    if a.cmd != "offer" or not (a.notes or a.steps):
+        return list(argv), None
+    return (["offer", a.env, "--label", a.label, "--to", a.to, "--from", getattr(a, "from"), "--handed", "-"],
+            json.dumps({"notes": notes, "steps": steps}))
+
+
+def offer(fleet, a):
+    import cards
+    notes, steps = a.texts
     offers, _, _ = state(entries(a.label))
-    if offers.get(a.env, {}).get("Head") == a.to:
-        return
     d = kept(a.label, a.env, a.to)
+    changed = None
+    if offers.get(a.env, {}).get("Head") == a.to:
+        changed = handed_changed(kept_text(d / "notes.md"), kept_text(d / "steps.txt"), notes, steps)
+        if not changed:
+            return
     try:
         d.mkdir(parents=True, exist_ok=True)
         for name, text in (("notes.md", notes), ("steps.txt", steps)):
@@ -590,6 +707,9 @@ def offer(fleet, a):
             text is None or (d / name).write_text(text)
     except OSError as e:
         fail(f"crew can't keep what the offer was handed in {d}: {e.strerror or e}; nothing is offered")
+    if changed:
+        raise_deploy(fleet, {"label": a.label, "key": f"deploy/{a.env}"}, note=f"Offered again: {cards.joined(changed)} changed")
+        return
     emit(a.label, "ops.offer", a.env, f"offer a deploy of {a.to[:7]}", Head=a.to, Base=getattr(a, "from"))
     raise_deploy(fleet, {"label": a.label, "key": f"deploy/{a.env}"})
 
@@ -721,6 +841,7 @@ def parser():
     p.add_argument("--from", required=True)
     p.add_argument("--notes")
     p.add_argument("--steps")
+    p.add_argument("--handed", choices=("-",), help=argparse.SUPPRESS)  # an offer forwarded here: forwarded's
     cmd("approve")
     cmd("word", to=False)
     p = cmd("record")
@@ -762,6 +883,8 @@ def args_refusal(fleet, a):
         return f"--key {a.key} is no step key crew takes"
     if getattr(a, "held", False) and a.doer in (None, "user"):
         return "--held marks an agent's step held for the user's word: give its --doer, dispatcher or main-ops"
+    if getattr(a, "handed", None) and (a.notes or a.steps):
+        return "--handed carries the text of the files --notes and --steps name, so it is given in their place"
     return None
 
 
@@ -771,8 +894,10 @@ def main(argv):
     why = args_refusal(fleet, a)
     why is None or fail(why)
     machine = crew.partition_of(fleet, a.label)["machine"]
+    a.texts = offered_texts(a) if a.cmd == "offer" else None
     if a.cmd != "quiet" and machine != crew.this_host():
-        r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "ops", *argv))
+        args, carried = forwarded(a, argv, *(a.texts or (None, None)))
+        r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "ops", *args), input=carried)
         sys.stdout.write(r.stdout), sys.stderr.write(r.stderr)
         if r.returncode == 255 and crew.unanswered(machine, r):
             sys.exit(f"{a.label}'s operations are kept on {machine}, which did not answer: {crew.unanswered(machine, r)}")
