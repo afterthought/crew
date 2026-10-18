@@ -362,12 +362,13 @@ def local(at):
 
 
 def deploy_state(d):
-    """Where a deploy stands, as the board says it: waiting on the user's word, replaced unanswered, its outcome and
-    when it ended, at the step that failed, deploying, or approved and not yet deployed."""
+    """Where a deploy stands, as the board says it: waiting on the user's word, replaced unanswered or once the word
+    went to another commit, its outcome and when it ended, at the step that failed, deploying, or approved and not yet
+    deployed."""
     if d["answer"] == "waiting":
         return "waits on the user's word"
     if d["answer"] == "replaced":
-        return "replaced by a newer offer, unanswered"
+        return "approved, then the word went to a newer offer" if d["word"] else "replaced by a newer offer, unanswered"
     if d["ended"]:
         failed = next((x["step"] for x in d["steps"] if x["outcome"] == "failed"), None)
         return f"{d['outcome'] or 'ended'} {local(d['ended'])}" + (f" at the {failed}" if failed else "")

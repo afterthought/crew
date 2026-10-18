@@ -535,7 +535,7 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   // Where a deploy stands, in a word for its stamp and a class for its colour.
   function deployStamp(d) {
     if (d.answer === "waiting") return ["waits on your word", "wait"];
-    if (d.answer === "replaced") return ["replaced, unanswered", ""];
+    if (d.answer === "replaced") return [d.word ? "replaced, never deployed" : "replaced, unanswered", ""];
     if (d.ended) return [d.outcome || "ended", d.outcome === "failed" ? "failed" : "ok"];
     if (d.started) return ["deploying", "wait"];
     return ["approved", "wait"];
@@ -592,7 +592,8 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     $("dp-empty").hidden = DP.some(function (e) { return e.deploys.length || e.waiting.length; });
     function word(d) {
       if (d.answer === "waiting") return ["waits on your word: hold its card to deploy", "wait"];
-      if (d.answer === "replaced") return ["not answered, and replaced by a newer offer", ""];
+      if (d.answer === "replaced") return [d.word ? "approved by " + (d.word.by || "no one named") + ", " + local(d.word.at) + ", then the word went to a newer offer before it was deployed"
+                                                  : "not answered, and replaced by a newer offer", ""];
       if (d.answer === "unasked") return ["deployed with no word asked in the record (an auto environment's, or offered before its window)", ""];
       return ["approved by " + (d.word.by || "no one named") + ", " + local(d.word.at), ""];
     }
