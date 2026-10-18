@@ -18,7 +18,7 @@ The rules for the run record: what an entry is, when it is written, what it neve
 
 ## Details
 
-**[record.1]** Rules out: an entry before the act; an entry from `crew bolts`. Source: `run-record` spec; `record.py` 4–8; `plan.py` `ACTS`, `named`; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
+**[record.1]** Rules out: an entry before the act; an entry from `crew bolts`. Not ruled out: one `card.post` for two posts Pending You answers with one card: a post answered with the card this host's record already holds open under the same key and owner, another command's post of it recorded while this one's was asked, is that card's act, made once, and is not recorded again (two rail reads swept at once on mac-studio on 2026-10-18, from swancloud-ops's start and the design agent's, and recorded `req_2a16bbe95cd841c58611` under `op/swancloud-srv/1` twice, at 15:24:51Z and 15:24:52Z; `plan.py` `card_posted`, `tests/py/test_card_commands.py`). Source: `run-record` spec; `record.py` 4–8; `plan.py` `ACTS`, `named`; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
 
 **[record.2]** Rules out: `set -e` tripping on `entry`; a command failing for want of a record. Source: `record.py` 7–8, `emit`; `tests/py/test_record.py`, `tests/t-journey-state.sh`.
 

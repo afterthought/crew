@@ -405,7 +405,7 @@ When crew changes one of its own cards because its thing changed, it SHALL chang
 - **THEN** `req_1` is acked with the change note, and a new card following `req_1` is posted. The run record has `req_1`'s close and the new card's post under `land/b1`, and `crew card read land/b1` finds the new card
 
 ### Requirement: A card posted after a closed one takes its key's revision
-Every card crew posts under a row's key after a card of the owner's under that key has closed SHALL take the key with its revision, `<key>:<n>`, as its idempotency key, so Pending You never gives the closed card back. A card still open under the key SHALL keep its own key, so posting it again gives it back.
+Every card crew posts under a row's key after a card of the owner's under that key has closed SHALL take the key with its revision, `<key>:<n>`, as its idempotency key, so Pending You never gives the closed card back. A card still open under the key SHALL keep its own key, so posting it again gives it back, and the run record SHALL hold one post of it: a post Pending You answers with the card this host's record already holds open under the key and owner is that card, printed with the line that adopts it and recorded no second time.
 
 #### Scenario: A card raised again after its last card closed
 - **WHEN** crew raises b1's landing card after the user declined the last one under `land/b1`, or follows an answered one with its new version
@@ -414,6 +414,10 @@ Every card crew posts under a row's key after a card of the owner's under that k
 #### Scenario: A card posted again while it is open
 - **WHEN** crew posts its card under `land/b1` again while `req_1` is open there
 - **THEN** it is posted under `land/b1`, and Pending You gives `req_1` back
+
+#### Scenario: Two rail reads raise a row's card at once
+- **WHEN** two rail reads on mac-studio, from two agents' starts, sweep at once, each posts `op/srv/1`'s card, and Pending You gives both `req_1`
+- **THEN** the run record holds one `card.post` of `req_1` under `op/srv/1`, written by the read that recorded it first, and the other read prints `req_1` and `call get_request (requestId req_1, name <role>)`
 
 ### Requirement: A question whose asker is gone is withdrawn
 On each rail read crew SHALL withdraw, under the host's connection, every open question card whose asker herdr no longer lists as an agent, with the reason naming the asker, and SHALL say so.

@@ -8579,7 +8579,10 @@ def card_uploaded(acts, key, b, got):
 def card_posted(acts, label, owner, b, where, entries=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
     posted under the row's key, or the key with its revision once a card of the owner's under it closed (post_key,
-    from entries, this host's run record unless given), and recorded under the row's key."""
+    from entries, this host's run record unless given), and recorded under the row's key. A post Pending You answers
+    with the card this host's record holds open under the key already, another command's post of it recorded while
+    this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
+    that card, printed with the line that adopts it and recorded once, by the command that recorded it first."""
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
     cwd, remote = where
     asked = cards.post_key(acts.entries(label) if entries is None else entries, key, owner)
@@ -8593,9 +8596,14 @@ def card_posted(acts, label, owner, b, where, entries=None):
         acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
         print(f"card {key} not posted: {e}", file=sys.stderr)
         return None
-    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
     url = got.get("url")
-    print(f"card {key}: {card}" + (f" {url}" if isinstance(url, str) else ""))
+    url = f" {url}" if isinstance(url, str) else ""
+    if cards.card_under(acts.entries(label), key, owner) == card:
+        print(f"card {key}: {card}{url}, its post recorded already")
+        print(cards.adopt_line(card, owner))
+        return card
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
+    print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
     return card
 

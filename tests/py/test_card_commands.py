@@ -400,6 +400,19 @@ def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_is
     assert cards.revision({"status": status, "version": 2}) == how
 
 
+def test_a_post_pending_you_answers_with_the_card_the_record_already_holds_open_is_recorded_once(capsys):
+    """Read on mac-studio on 2026-10-18: two rail reads, from swancloud-ops's start and the design agent's, swept at
+    once; each raised op/swancloud-srv/1's card, Pending You's idempotency gave both req_2a16bbe95cd841c58611, and the
+    run record held two posts of it, at 15:24:51Z and 15:24:52Z. Here the other read's post is recorded while this
+    one's is asked: this host's record holds nothing under the key until post_request is answered, then that post."""
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="chuck@chuck-herdr-alpha")
+    acts.entries = lambda label: [post("land/b1", "swb-1-conductor", "req_c1")] if any(t == "post_request" for t, _ in acts.calls) else []
+    assert act_post(acts) == "req_c1"
+    assert acts.emitted == [] and acts.told == []
+    assert capsys.readouterr().out == ("card land/b1: req_c1 https://www.pendingyou.com/app/r/req_c1, its post recorded already\n"
+                                       "call get_request (requestId req_c1, name swb-1-conductor)\n")
+
+
 POST, CLOSE = (lambda card, by="swb-1-conductor", key="land/b1": dict(Act="card.post", Key=key, By=by, Card=card),
                lambda card, state="closed": dict(Act="card.close", Card=card, State=state))
 
