@@ -133,6 +133,22 @@ class TestEnvironments:
         d, = envs["swancloud-srv"]["deploys"]
         assert (d["answer"], d["from"], d["started"], d["ended"]) == ("unasked", S1, "2026-10-12T10:04:00Z", None)
 
+    def test_an_approved_deploy_not_started_is_replaced_once_the_word_goes_to_a_newer_offer_as_state_reads_the_word(self):
+        """mac-studio, 2026-10-15: 45eecf3 approved while the host already ran it, so the deployer never deployed it;
+        291a4e6 offered from it, approved and deployed. ops.state dropped 45eecf3's word at 291a4e6's approval, and the
+        board kept 45eecf3 approved, not yet deployed, above main-level ops's prompt for days."""
+        es = [OFFER, e("ops.approve", minutes=2, Head=S1, By="swancloud-ops"), e("ops.offer", minutes=3, Head=S2, Base=S1),
+              e("ops.approve", minutes=4, Head=S2), e("ops.deploy", minutes=5, Head=S2, Base=S1, Phase="start"),
+              e("ops.deploy", minutes=6, Head=S2, Phase="end", Outcome="done")]
+        new, old = ops.environments(es)["mac-studio"]["deploys"]
+        assert (new["to"], new["answer"], new["outcome"]) == (S2, "approved", "done")
+        assert (old["to"], old["answer"], old["word"], old["ended"], old["at"]) == (
+            S1, "replaced", {"at": "2026-10-12T10:02:00Z", "by": "swancloud-ops"}, None, "2026-10-12T10:04:00Z")
+        for n in range(1, len(es) + 1):  # at every point, the deploy approved and not ended is the word ops.state reads
+            word = ops.state(es[:n])[1].get("mac-studio", {}).get("Head")
+            assert [d["to"] for d in ops.environments(es[:n])["mac-studio"]["deploys"]
+                    if d["answer"] == "approved" and not d["ended"]] == ([word] if word else [])
+
     def test_the_same_commit_offered_again_after_its_deploy_failed_is_a_new_deploy(self):
         es = [OFFER, e("ops.approve", minutes=2, Head=S1), e("ops.deploy", minutes=3, Head=S1, Phase="start"),
               e("ops.deploy", minutes=4, Head=S1, Phase="end", Outcome="failed"), e("ops.offer", minutes=5, Head=S1, Base="none")]

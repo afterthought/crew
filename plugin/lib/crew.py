@@ -371,7 +371,7 @@ STALE = {("agent", "list"): "", ("agent", "get"): "", ("agent", "read"): "", ("p
          ("pane", "read"): "", ("workspace", "list"): "", ("workspace", "get"): "", ("tab", "list"): "", ("tab", "get"): "",
          ("tab", "rename"): "", ("workspace", "create"): "pane", ("tab", "create"): "pane", ("pane", "split"): "pane",
          ("pane", "run"): "agent", ("pane", "send-keys"): "agent", ("agent", "prompt"): "agent", ("agent", "send-keys"): "agent",
-         ("agent", "rename"): "agent"}
+         ("agent", "rename"): "agent", ("pane", "process-info"): ""}
 
 
 class Herdr:
@@ -428,6 +428,35 @@ class Herdr:
     def live(self, pane):
         """Whether the pane is there."""
         return bool(pane) and any(p.get("pane_id") == pane for p in self.listing("pane"))
+
+    def process_info(self, pane):
+        """What runs in a pane's terminal, as herdr's pane process-info answers: its process_info object, or None when
+        herdr's answer can't be read (tab_holds reads it)."""
+        r = self.run("pane", "process-info", "--pane", pane)
+        try:
+            return json.loads(r.stdout)["result"]["process_info"] if r.returncode == 0 else None
+        except (ValueError, KeyError, TypeError):
+            return None
+
+
+def tab_holds(info, words):
+    """What a tab's pane holds of the command crew runs in it, from herdr's process-info of the pane (info) and the
+    words that end the command's argv: ("running", None) when a process in the pane's foreground runs it; ("shell",
+    None) when the pane's shell alone is in its foreground, as herdr brings a pane back after a restart, or as the
+    command left it when it ended; ("other", what runs there) for anything else, which crew leaves (read.4); and
+    (None, why) when herdr's answer can't be read (read.1). Read against herdr 0.9.3 on mac-studio on 2026-10-18
+    (read.2): {"shell_pid": n, "foreground_process_group_id": n, "foreground_processes": [{"pid": n, "argv": [...]}]},
+    the group the shell's own pid while it waits at its prompt."""
+    shell, group, procs = ((info.get("shell_pid"), info.get("foreground_process_group_id"), info.get("foreground_processes"))
+                           if isinstance(info, dict) else (None, None, None))
+    if not isinstance(shell, int) or not isinstance(group, int) or not isinstance(procs, list):
+        return None, "herdr's process-info for it can't be read"
+    argvs = [p["argv"] for p in procs if isinstance(p, dict) and isinstance(p.get("argv"), list) and all(isinstance(a, str) for a in p["argv"])]
+    if any(a[-len(words):] == words for a in argvs):
+        return "running", None
+    if group == shell:
+        return "shell", None
+    return "other", shlex.join(argvs[0]) if argvs else f"process group {group}"
 
 
 def listed(what, code, out, err, where):

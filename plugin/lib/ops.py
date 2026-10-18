@@ -189,7 +189,8 @@ def environments(es, since=None):
 
     A deploy is one commit offered or deployed until its deploy ends: its to and from, when it was offered, the user's
     word (who held its card, and when), its answer (approved; waiting on the word; replaced, an unanswered offer a newer
-    one replaced; or unasked, a deploy started with no offer in the record, an auto environment's), when it started
+    one replaced, or an approved one not started when the user's word went to another commit, as state reads the word;
+    or unasked, a deploy started with no offer in the record, an auto environment's), when it started
     and ended and its outcome, each of its steps with its outcome, the suite's checks (the rows of its last step that
     has them), the bolts it carried or why the record can't tell, every after-deploy step recorded against its commit
     with its doer and latest state, its rail row while it waits on the word, and when it last moved; newest first,
@@ -218,6 +219,9 @@ def environments(es, since=None):
                 del E["open"][o["to"]]
             d or new(e.get("Base"), e["At"], "waiting")
         elif act == "ops.approve" and d and not e.get("Refused"):
+            for o in [o for o in E["open"].values() if o["to"] != to and o["answer"] == "approved" and not o["started"]]:
+                o.update(answer="replaced", at=e["At"])
+                del E["open"][o["to"]]
             d.update(word={"at": e["At"], "by": e.get("By")}, answer="approved", at=e["At"])
         elif act == "ops.deploy":
             phase = e.get("Phase")

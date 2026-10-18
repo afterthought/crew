@@ -15,8 +15,12 @@ for the pane's folder, $HOME/.claude/projects/<the folder, every character but a
 type user carries the text as sent, or for a slash command `/<command> <args>` Claude's
 <command-name>/<command></command-name> and <command-args><args></command-args>, with the time it was taken.
 
-Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status, and
-`herdr --session S stub agent <pane> [name]` puts an agent in a pane. With CREW_TEST_BLOCKED naming agents, each one
+`pane run` of anything else that starts a program leaves it in the pane's foreground, as a tab's loop stays, and `pane
+process-info` answers as herdr 0.9.3 does: the pane's shell alone at its prompt, that program, or the pane's agent.
+
+Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status,
+`herdr --session S stub agent <pane> [name]` puts an agent in a pane, and `herdr --session S stub restore <pane>` brings
+a pane back as herdr does after a restart, its shell alone with nothing running in it. With CREW_TEST_BLOCKED naming agents, each one
 named so is stopped on a question in its pane (blocked) once it has its name, as a first run's consent stops Claude.
 `herdr --session S stub leave <pane|name> <n> [status]` makes the next n prompts to that agent, up now or started
 later under that name, untaken, as a prompt that lands before Claude is ready, or whose Enter is lost: each is added to
@@ -223,6 +227,8 @@ elif group == "pane" and cmd == "run":
     p in st["panes"] or die(f"no pane {p}")
     if line.startswith("cd ") and "&&" in line:  # the pane's shell moves, as herdr then saves it
         st["panes"][p]["cwd"] = shlex.split(line.split("&&", 1)[0])[1]
+    if line.split(" ", 1)[0] not in ("cd", "export", "printf") and "crew-role" not in line:  # a program, not the shell's own
+        st["panes"][p]["running"] = line
     if "crew-role" in line:
         import subprocess
         save()
@@ -235,6 +241,13 @@ elif group == "pane" and cmd == "run":
         if r.returncode == 0:
             st["agents"][p] = {"status": "idle", "name": None}
     out({})
+elif group == "pane" and cmd == "process-info":  # as herdr 0.9.3 answers: the shell's pid is the group's at its prompt
+    p = opt("--pane")
+    p in st["panes"] or die({"code": "pane_not_found", "message": "pane not found"})
+    shell = 1000 + int(p.split(":p")[1])
+    run = "claude" if p in st["agents"] else st["panes"][p].get("running")
+    fg = [{"pid": shell + 1, "argv": shlex.split(run)}] if run else [{"pid": shell, "argv": ["-zsh"]}]
+    out({"process_info": {"pane_id": p, "shell_pid": shell, "foreground_process_group_id": fg[0]["pid"], "foreground_processes": fg}})
 elif group == "pane" and cmd == "send-keys":
     rest[0] in st["panes"] or die(f"no pane {rest[0]}")
     if "ctrl+c" in rest[1:]:
@@ -288,6 +301,10 @@ elif group == "stub" and cmd == "status":
     st["agents"][p]["status"] = rest[1]
 elif group == "stub" and cmd == "leave":
     st.setdefault("leave", {})[rest[0]] = {"n": int(rest[1]), "status": rest[2] if len(rest) > 2 else None}
+elif group == "stub" and cmd == "restore":
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    st["panes"][rest[0]].pop("running", None)
+    st["agents"].pop(rest[0], None)
 elif group == "stub" and cmd == "agent":
     rest[0] in st["panes"] or die(f"no pane {rest[0]}")
     st["agents"][rest[0]] = {"status": "idle", "name": rest[1] if len(rest) > 1 else None}

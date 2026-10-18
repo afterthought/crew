@@ -1,6 +1,7 @@
 """Teams, the main level and their agents (teams.2, teams.6, teams.7, teams.11, plan.15): crew.greet_waits for one look of
 a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
-crew.dispatch_place and crew.operator_session for where those run, crew.last_conversation for where a role resumes,
+crew.dispatch_place and crew.operator_session for where those run, crew.tab_holds for what an operator's tab holds,
+crew.last_conversation for where a role resumes,
 crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
 plan.amended_said for what a conductor brought back is told, and what crew up, restart, resume, clear and needs decide
 before they act. Starting, greeting, reviving and taking them down through the command are the teams journey's
@@ -77,6 +78,41 @@ class TestPlaces:
         fleet = dict(FLEET, partitions=dict(FLEET["partitions"], madswan={"label": "madswan", "partition": "personal"}))
         with pytest.raises(crew.Refusal, match="mac-studio's session madswan is in partition business, not personal"):
             crew.operator_session(fleet, "madswan", "mac-studio")
+
+
+# herdr 0.9.3's pane process-info on mac-studio, 2026-10-18: swancloud's rail tab (w2:pF) as herdr brought it back after
+# the host's restart of 2026-10-15, its shell alone, the loop that wrote the agents' views gone with the restart.
+RESTORED = {"foreground_process_group_id": 2301, "pane_id": "w2:pF", "shell_pid": 2301,
+            "foreground_processes": [{"argv": ["-zsh"], "argv0": "zsh", "cmdline": "-zsh", "cwd": "/Users/chuck", "name": "zsh", "pid": 2301}]}
+
+
+def running(*argvs):
+    return {"foreground_process_group_id": 9001, "pane_id": "w2:pF", "shell_pid": 2301,
+            "foreground_processes": [{"argv": list(a), "pid": 9001 + i} for i, a in enumerate(argvs)]}
+
+
+class TestOperatorTabs:
+    """What crew operator up finds in a tab's pane it opened before (crew.tab_holds, code.7): its loop running, the
+    shell alone a restart left, which runs the loop again, or something else, which crew leaves (read.4)."""
+
+    def test_a_pane_a_restart_left_holds_its_shell_alone_and_its_loop_runs_again(self):
+        assert crew.tab_holds(RESTORED, ["_rail", "swancloud"]) == ("shell", None)
+
+    def test_a_tabs_loop_runs_when_a_foreground_process_ends_with_its_words_and_the_bash_its_crew_execs_keeps_them(self):
+        rail = running(["bash", "/c/plugin/bin/crew", "_rail", "swancloud"], ["python3", "/c/plugin/lib/record.py", "events", "--follow", "--label", "swancloud"])
+        assert crew.tab_holds(rail, ["_rail", "swancloud"]) == ("running", None)
+        flow = running(["python3", "/c/plugin/bin/../lib/record.py", "events", "--follow", "--label", "swancloud"])
+        assert crew.tab_holds(flow, ["events", "--follow", "--label", "swancloud"]) == ("running", None)
+
+    def test_anything_else_in_the_foreground_is_left_and_named(self):
+        assert crew.tab_holds(running(["less", "notes"]), ["_board", "swancloud"]) == ("other", "less notes")
+        assert crew.tab_holds(running(["bash", "/c/plugin/bin/crew", "_rail", "wldn"]), ["_rail", "swancloud"]) == ("other", "bash /c/plugin/bin/crew _rail wldn")
+        assert crew.tab_holds(running(), ["_board", "swancloud"]) == ("other", "process group 9001")
+
+    @pytest.mark.parametrize("info", [None, {}, {"shell_pid": 1, "foreground_process_group_id": "1", "foreground_processes": []},
+                                      {"shell_pid": 1, "foreground_process_group_id": 1}])
+    def test_an_answer_crew_cant_read_is_said_and_runs_nothing(self, info):
+        assert crew.tab_holds(info, ["_rail", "swancloud"]) == (None, "herdr's process-info for it can't be read")
 
 
 class TestResume:

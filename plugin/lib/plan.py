@@ -6714,8 +6714,10 @@ def review_cmd(fleet, a):
 def operator_cmd(fleet, a):
     """crew operator up <label>: the operator agent in this host's operator session of the partition, started and
     greeted when it is not up, and its tabs, each opened once: flow, following the run record; rail, what waits on the
-    user above and a shell below with this crew on its path; and board, drawn from what the rail's loop read. The agent
-    is greeted once its rail is open."""
+    user above and a shell below with this crew on its path; and board, drawn from what the rail's loop read. A tab whose
+    pane holds its shell alone, as herdr brings each pane back after a restart, runs its command there again, and one
+    running anything else is left and said (crew.tab_holds, read.4); swancloud's timer runs this every five minutes, so
+    a restart leaves the agents' bands unrefreshed no longer than that. The agent is greeted once its rail is open."""
     o = crew.standing(fleet, "operator", a.label)
     o.ensure()
     label, crew_cmd, started = a.label, shlex.quote(str(crew.HOME / "plugin/bin/crew")), []
@@ -6727,16 +6729,27 @@ def operator_cmd(fleet, a):
             raise Stopped(1)
         started = ["operator"]
         o.record("operator.up", f"operator({label}): up {o.agent_of('operator')}", started)
-    for tab, run in (("flow", f"bash {crew_cmd} events --follow --label {label}"), ("rail", f"bash {crew_cmd} _rail {label}")):
-        if not o.herdr.live(o.pane(tab)):
+
+    def keep(tab, words):
+        run, pane = f"bash {crew_cmd} {shlex.join(words)}", o.pane(tab)
+        if not o.herdr.live(pane):
             o.tab("operator", tab, o.cwd, tab)
             o.herdr.run("pane", "run", o.pane(tab), run)
+            return
+        held, what = crew.tab_holds(o.herdr.process_info(pane), words)
+        if held == "shell":
+            o.herdr.run("pane", "run", pane, run)
+            print(f"{label}'s {tab} tab ({pane}) held its shell alone; its {tab} runs there again")
+        elif held == "other":
+            print(f"{label}'s {tab} tab ({pane}) runs {what}, not crew's {tab}; crew left it", file=sys.stderr)
+        elif held is None:
+            print(f"{label}'s {tab} tab ({pane}): {what}; crew left it", file=sys.stderr)
+    keep("flow", ["events", "--follow", "--label", label])
+    keep("rail", ["_rail", label])
     if not o.herdr.live(o.pane("rail-shell")):
         o.put("panes", "rail-shell", o.split(o.pane("rail"), "down", o.cwd))
         o.herdr.run("pane", "run", o.pane("rail-shell"), f"export PATH={shlex.quote(str(crew.HOME / 'plugin/bin'))}:$PATH")
-    if not o.herdr.live(o.pane("board")):
-        o.tab("operator", "board", o.cwd, "board")
-        o.herdr.run("pane", "run", o.pane("board"), f"bash {crew_cmd} _board {label}")
+    keep("board", ["_board", label])
     greeted(greeting(fleet, o, started))
 
 

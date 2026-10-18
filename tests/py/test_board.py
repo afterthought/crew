@@ -369,12 +369,23 @@ class TestViews:
                 entry("ops.deploy", 12, Head=S2, Phase="start"), entry("ops.deploy", 10, Head=S2, Phase="end", Outcome="done")]
         assert view("wldn-ops", entries=done) == ["wldn operations  0 deploys wait on the user's word  0 deploys running  0 operations waiting"]
 
+    def test_an_approved_deploy_whose_word_went_to_a_newer_offer_leaves_main_level_opss_view_and_the_board_says_so(self):
+        """mac-studio, 2026-10-15 to 18: 45eecf3 approved and never deployed, its word gone to 291a4e6, deployed since,
+        stood as approved, not yet deployed in swancloud-ops's band."""
+        moved = [entry("ops.offer", 30, Head=S1, Base="none"), entry("ops.approve", 25, Head=S1), entry("ops.offer", 20, Head=S2, Base=S1),
+                 entry("ops.approve", 15, Head=S2), entry("ops.deploy", 12, Head=S2, Base=S1, Phase="start"),
+                 entry("ops.deploy", 10, Head=S2, Phase="end", Outcome="done")]
+        assert view("wldn-ops", entries=moved) == ["wldn operations  0 deploys wait on the user's word  0 deploys running  0 operations waiting"]
+        assert lane(board.board_text(data(entries=moved)), "Operation")[-1].startswith(
+            f"  mac-studio  deploy {S1[:7]} from nothing deployed  approved, then the word went to a newer offer  carrying")
+
     def test_each_conductor_the_planner_the_design_agent_main_level_ops_and_each_hosts_operator_has_a_view_and_no_other_agent(self):
         v = board.agent_views(data())
         assert sorted(v["views"]) == sorted(["swb-1-conductor", "swb-2-conductor", "brd-1-conductor", "atl-1-conductor", "wldn-planner", "wldn-design",
                                              "wldn-ops", f"wldn-operator-{BOX}", "wldn-operator-mac-studio"])
         assert v["read_at"] == data()["read_at"] and v["stale_after_ms"] == board.STALE * 1000
-        assert v["stale"][0][0].endswith("; the rail tab on mac-studio has not refreshed it since") and v["stale"][0][1] == "dim"
+        assert v["stale"] == [(f"read at {board.local(data()['read_at'])}; the rail tab on mac-studio has not refreshed it since", "dim")]
+        assert re.fullmatch(r"read at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}; .*", v["stale"][0][0])  # a day with it: a restart can leave it days old
 
     @pytest.mark.parametrize("stages, shown", [(["queued", "waiting", "ready"], "○○○"), (["amended", "construct", "planned"], "◔◔◔"),
                                                (["code", "verify"], "◑◕"), (["merged", "landed"], "●●"), (["unknown"], "?")])
