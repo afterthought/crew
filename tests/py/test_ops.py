@@ -272,6 +272,38 @@ class TestRange:
         assert ops.range_landings(commits, {}, [])[1]["subject"] == "chore(land): #69 pull/66"
 
 
+class TestOfferedAgain:
+    def test_an_offer_of_the_commit_offered_changes_its_card_only_for_other_notes_or_steps(self):
+        assert ops.handed_changed(NOTES, STEPS, NOTES, STEPS) == [] and ops.handed_changed(None, None, "", None) == []
+        assert ops.handed_changed(None, STEPS, NOTES, STEPS) == ["its release notes"]
+        assert ops.handed_changed(NOTES, STEPS, NOTES + "\n- one more", None) == ["its release notes", "its after-deploy steps"]
+
+
+class TestForwarded:
+    ARGV = ["offer", "srv", "--label", "swancloud", "--to", S2, "--from", S1, "--notes", "/tmp/n.md", "--steps", "/tmp/s.txt"]
+
+    def test_an_offer_run_away_from_the_main_level_carries_its_files_text_and_no_path(self):
+        a = ops.parser().parse_args(self.ARGV)
+        argv, carried = ops.forwarded(a, self.ARGV, NOTES, STEPS)
+        assert argv == ["offer", "srv", "--label", "swancloud", "--to", S2, "--from", S1, "--handed", "-"]
+        assert ops.carried_texts(carried) == (NOTES, STEPS, None)
+
+    def test_any_other_command_and_an_offer_with_no_files_run_as_given(self):
+        word = ["word", "srv", "--label", "swancloud"]
+        assert ops.forwarded(ops.parser().parse_args(word), word, None, None) == (word, None)
+        bare = self.ARGV[:8]
+        assert ops.forwarded(ops.parser().parse_args(bare), bare, None, None) == (bare, None)
+
+    def test_what_crew_cant_read_on_the_stdin_is_said(self):
+        assert ops.carried_texts('{"notes": null, "steps": "x"}') == (None, "x", None)
+        assert ops.carried_texts("")[2].startswith("it is not JSON")
+        assert ops.carried_texts('{"notes": 1, "steps": null}')[2] == 'it is not {"notes", "steps"}, each text or null'
+
+    def test_handed_text_is_given_in_place_of_the_files_never_beside_them(self):
+        a = ops.parser().parse_args([x if x != "swancloud" else "wldn" for x in self.ARGV] + ["--handed", "-"])
+        assert ops.args_refusal(FLEET, a) == "--handed carries the text of the files --notes and --steps name, so it is given in their place"
+
+
 class TestDeployCard:
     def test_the_notes_and_steps_handed_are_on_its_face_with_the_landings_since_the_environments_last_deploy_in_its_details(self):
         offer = e("ops.offer", minutes=10, Head=S3, Base=S1)

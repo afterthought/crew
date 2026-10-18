@@ -12,8 +12,10 @@ when it names one.
       kit's release notes for the range, --notes, as its changelog tool wrote them, and the range's after-deploy
       steps, --steps, one a line as the deployer gathers them (step <n> <doer> <when> <environments> <why> <text>,
       tab-separated, held among the when words); handed no notes, the landings it carries: the first-parent commits
-      of the kit's main from --from to --to, read with git, a landing of sluice's by the branch it merged. The same
-      `to` again changes nothing while it is open; a newer one replaces it and changes its card
+      of the kit's main from --from to --to, read with git, a landing of sluice's by the branch it merged. Run away
+      from the main level's host, it carries the files' text there. The same `to` again changes nothing while it is
+      open unless it is handed other notes or steps, which change its card in place; a newer one replaces it and
+      changes its card
   crew ops approve <env> --label L --to <sha>
       the user's word for that deploy, given by holding its card, recorded by whoever the user's yes reached; the row
       leaves the rail
@@ -544,19 +546,20 @@ def ops_where(fleet, label):
     return plan.card_where({"main": p["checkout"], "repo": p["blueprints"][0]})
 
 
-def raise_deploy(fleet, row, acts=None):
+def raise_deploy(fleet, row, acts=None, note=None):
     """Raise the deploy's card of the rail row deploy/<env> of row["label"] (record 0031 §1, plan.14): posted in
     main-level ops's name, following the card follows_of names, or changed in place when the card ops holds asks for
-    an older offer still unanswered, posted again when Pending You no longer finds it; built from the open offer, the
-    files it was handed and the partition's run record. None, saying why, when no offer waits on a card; the offer's
-    own call and the rail's sweep alike. A card not posted or changed is said and recorded, and the offer stands.
-    The card's id, or None."""
+    an older offer still unanswered, or for this one when it is offered again with other files, note naming what
+    changed; posted again when Pending You no longer finds it; built from the open offer, the files it was handed and
+    the partition's run record. None, saying why, when no offer waits on a card; the offer's own call and the rail's
+    sweep alike. A card not posted or changed is said and recorded, and the offer stands. The card's id, or None."""
     import cards, plan
     acts = acts or plan.CardActs(fleet)
     label, key = row["label"], row["key"]
     env, owner = key.split("/", 1)[1], f"{label}-ops"
     es = entries(label)
     move, said = deploy_move(es, env, cards.card_under(acts.entries(label), key, owner))
+    said = note if move == "change" and note else said
     if not move:
         print(f"card {key}: {said}")
         return None
@@ -642,15 +645,61 @@ def handed(path, what):
         fail(f"the {what} file {path} can't be read: {getattr(e, 'strerror', None) or e}; nothing is offered")
 
 
-def offer(fleet, a):
-    notes = handed(a.notes, "release notes") if a.notes else None
-    steps = handed(a.steps, "steps") if a.steps else None
+def carried_texts(text):
+    """The notes' and the steps' text an offer forwarded from another host carries on its stdin, as forwarded writes
+    them: (notes, steps), each None when not handed; or (None, None, why) naming what can't be read (read.2)."""
+    try:
+        got = json.loads(text or "")
+    except ValueError as e:
+        return None, None, f"it is not JSON: {e}"
+    if not isinstance(got, dict) or set(got) != {"notes", "steps"} or not all(v is None or isinstance(v, str) for v in got.values()):
+        return None, None, 'it is not {"notes", "steps"}, each text or null'
+    return got["notes"], got["steps"], None
+
+
+def offered_texts(a):
+    """What an offer was handed, (notes, steps), each None when not handed: the files --notes and --steps name, read
+    on this host, or their text carried on stdin by an offer forwarded here (--handed -); refused, naming what can't be
+    read, the file or a step's line, with nothing offered (read.1), before the offer runs here or is forwarded."""
+    if getattr(a, "handed", None):
+        notes, steps, why = carried_texts(sys.stdin.read())
+        why is None or fail(f"what the offer was handed can't be read from its stdin: {why}; nothing is offered")
+    else:
+        notes = handed(a.notes, "release notes") if a.notes else None
+        steps = handed(a.steps, "steps") if a.steps else None
     _, why = handed_steps(steps, a.env, a.label)
-    why is None or fail(f"the steps file {a.steps} can't be read: {why}; nothing is offered")
+    why is None or fail(f"{f'the steps file {a.steps}' if a.steps else 'the steps handed'} can't be read: {why}; nothing is offered")
+    return notes, steps
+
+
+def handed_changed(kept_notes, kept_steps, notes, steps):
+    """What an offer of the commit already offered changes of what its card shows (code.7): its release notes, its
+    after-deploy steps, or both, as a change note names them, from the files kept with the offer and the text handed
+    now, an empty text alike with none; [] when both are the same, and the offer then changes nothing."""
+    return [what for what, was, now in (("its release notes", kept_notes, notes), ("its after-deploy steps", kept_steps, steps))
+            if (was or None) != (now or None)]
+
+
+def forwarded(a, argv, notes, steps):
+    """The ops command as it is run on the partition's main level's host, and what it reads there on its stdin
+    (code.3): an offer handed --notes or --steps, files of this host, carries their text as JSON, {"notes", "steps"},
+    in --handed -, since the files do not reach that host; any other command runs as it was given, with nothing."""
+    if a.cmd != "offer" or not (a.notes or a.steps):
+        return list(argv), None
+    return (["offer", a.env, "--label", a.label, "--to", a.to, "--from", getattr(a, "from"), "--handed", "-"],
+            json.dumps({"notes": notes, "steps": steps}))
+
+
+def offer(fleet, a):
+    import cards
+    notes, steps = a.texts
     offers, _, _ = state(entries(a.label))
-    if offers.get(a.env, {}).get("Head") == a.to:
-        return
     d = kept(a.label, a.env, a.to)
+    changed = None
+    if offers.get(a.env, {}).get("Head") == a.to:
+        changed = handed_changed(kept_text(d / "notes.md"), kept_text(d / "steps.txt"), notes, steps)
+        if not changed:
+            return
     try:
         d.mkdir(parents=True, exist_ok=True)
         for name, text in (("notes.md", notes), ("steps.txt", steps)):
@@ -658,6 +707,9 @@ def offer(fleet, a):
             text is None or (d / name).write_text(text)
     except OSError as e:
         fail(f"crew can't keep what the offer was handed in {d}: {e.strerror or e}; nothing is offered")
+    if changed:
+        raise_deploy(fleet, {"label": a.label, "key": f"deploy/{a.env}"}, note=f"Offered again: {cards.joined(changed)} changed")
+        return
     emit(a.label, "ops.offer", a.env, f"offer a deploy of {a.to[:7]}", Head=a.to, Base=getattr(a, "from"))
     raise_deploy(fleet, {"label": a.label, "key": f"deploy/{a.env}"})
 
@@ -789,6 +841,7 @@ def parser():
     p.add_argument("--from", required=True)
     p.add_argument("--notes")
     p.add_argument("--steps")
+    p.add_argument("--handed", choices=("-",), help=argparse.SUPPRESS)  # an offer forwarded here: forwarded's
     cmd("approve")
     cmd("word", to=False)
     p = cmd("record")
@@ -830,6 +883,8 @@ def args_refusal(fleet, a):
         return f"--key {a.key} is no step key crew takes"
     if getattr(a, "held", False) and a.doer in (None, "user"):
         return "--held marks an agent's step held for the user's word: give its --doer, dispatcher or main-ops"
+    if getattr(a, "handed", None) and (a.notes or a.steps):
+        return "--handed carries the text of the files --notes and --steps name, so it is given in their place"
     return None
 
 
@@ -839,8 +894,10 @@ def main(argv):
     why = args_refusal(fleet, a)
     why is None or fail(why)
     machine = crew.partition_of(fleet, a.label)["machine"]
+    a.texts = offered_texts(a) if a.cmd == "offer" else None
     if a.cmd != "quiet" and machine != crew.this_host():
-        r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "ops", *argv))
+        args, carried = forwarded(a, argv, *(a.texts or (None, None)))
+        r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "ops", *args), input=carried)
         sys.stdout.write(r.stdout), sys.stderr.write(r.stderr)
         if r.returncode == 255 and crew.unanswered(machine, r):
             sys.exit(f"{a.label}'s operations are kept on {machine}, which did not answer: {crew.unanswered(machine, r)}")
