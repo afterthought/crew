@@ -249,13 +249,36 @@ DEPLOYED = [landed("deployer-holds", S1, minutes=0), e("ops.offer", minutes=1, H
             landed("doctor-names-step", S2, minutes=8), landed("retry-offered", S3, minutes=9)]
 
 
+D = "d" * 40
+# git log --first-parent of S1..S3 on the kit's main, in ops.RANGE's form: S3 sluice's landing of a branch whose head
+# is D, S2 a commit made on main itself.
+RANGE_LOG = (f"{S3}\x1f{S2} {D}\x1fchore(land): #69 pull/66\x1f69\x1frecovery (pull/66)\n"
+             f"{S2}\x1f{S1}\x1ffix(docs): a commit on main itself\x1f\x1f\n")
+MERGED = {D: "fix(timers): every timer job runs under a time limit"}
+
+
+class TestRange:
+    def test_git_names_each_first_parent_commit_and_for_sluices_landing_the_submission_and_pull_request(self):
+        assert ops.first_parents(RANGE_LOG) == [
+            dict(sha=S3, parents=[S2, D], subject="chore(land): #69 pull/66", landed="69", pr=66),
+            dict(sha=S2, parents=[S1], subject="fix(docs): a commit on main itself", landed=None, pr=None)]
+        assert ops.first_parents("") == [] and ops.first_parents("not git's\n") is None
+
+    def test_a_landing_of_sluices_is_named_by_the_branch_it_merged_and_one_the_record_holds_by_its_bolt(self):
+        commits = ops.first_parents(RANGE_LOG)
+        assert ops.range_landings(commits, MERGED, []) == [{"pr": None, "subject": "fix(docs): a commit on main itself"},
+                                                           {"pr": 66, "subject": "fix(timers): every timer job runs under a time limit"}]
+        assert ops.range_landings(commits, MERGED, [dict(bolt="retry-offered", head=S3)])[1] == {"pr": 66, "subject": "retry-offered"}
+        assert ops.range_landings(commits, {}, [])[1]["subject"] == "chore(land): #69 pull/66"
+
+
 class TestDeployCard:
     def test_the_notes_and_steps_handed_are_on_its_face_with_the_landings_since_the_environments_last_deploy_in_its_details(self):
         offer = e("ops.offer", minutes=10, Head=S3, Base=S1)
         steps = ops.handed_steps(STEPS, "mac-studio", "swancloud")[0]
-        f = ops.deploy_facts("mac-studio", offer, DEPLOYED + [offer], NOTES, steps)
+        f = ops.deploy_facts("mac-studio", offer, DEPLOYED + [offer], (ops.first_parents(RANGE_LOG), MERGED, None), NOTES, steps)
         assert (f["head"], f["base"], f["landings"], f["landings_why"]) == (S3, S1, [{"pr": None, "subject": "doctor-names-step"},
-                                                                                       {"pr": None, "subject": "retry-offered"}], None)
+                                                                                       {"pr": 66, "subject": "retry-offered"}], None)
         assert (f["release"], f["before"], f["after"]) == ("swancloud-srv-v0.3.0", [], [])
         c = cards.deploy_card(f)["card"]
         assert c["summary"] == "2 landings since mac-studio's last deploy (aaaaaaa). After the deploy: 2 steps, 0 yours."
@@ -263,22 +286,33 @@ class TestDeployCard:
         assert (notes["lang"], notes["title"], notes["lines"]) == ("markdown", "What's in it: swancloud-srv-v0.3.0", NOTES.split("\n"))
         assert listed["lines"] == ["2  restart crew's teams", "   swancloud-ops, held for your word", "1  restart the box's herdr",
                                    "   swancloud-dispatch-mac-studio"]
-        assert c["context"]["background"] == "Landings since mac-studio's last deploy:\ndoctor-names-step\nretry-offered"
+        assert c["context"]["background"] == "Landings since mac-studio's last deploy:\ndoctor-names-step\n#66 retry-offered"
 
-    def test_an_offer_handed_neither_gives_the_landings_subjects_and_says_the_kit_handed_no_release_notes(self):
-        offer = e("ops.offer", minutes=10, Head=S2, Base=S1)
-        c = cards.deploy_card(ops.deploy_facts("mac-studio", offer, DEPLOYED + [offer]))["card"]
-        assert c["summary"] == "1 landing since mac-studio's last deploy (aaaaaaa). The kit handed no release notes. It comes after box."
-        assert [(a["lang"], a["title"], a["lines"]) for a in c["artifacts"]] == [("text", "What's in it: 1 landing", ["doctor-names-step"])]
-
-    def test_landings_crew_cant_read_are_said_rather_than_counted(self):
-        offer = e("ops.offer", minutes=10, Head="d" * 40, Base=S1)
-        f = ops.deploy_facts("mac-studio", offer, DEPLOYED + [offer], unread={"chuck-herdr-alpha": "no answer"})
-        assert f["landings"] == [] and f["landings_why"] == "ddddddd is no landing's commit in the record; chuck-herdr-alpha did not answer"
+    def test_an_offer_handed_no_notes_gives_the_ranges_commits_from_git_though_the_record_holds_no_landing_of_them(self):
+        offer = e("ops.offer", minutes=10, Head=S3, Base=S1)
+        f = ops.deploy_facts("mac-studio", offer, [offer], (ops.first_parents(RANGE_LOG), MERGED, None))
         c = cards.deploy_card(f)["card"]
-        assert c["summary"].startswith("Which landings it carries since mac-studio's last deploy (aaaaaaa) can't be read: ddddddd is no")
-        assert [(a["title"], a["lines"]) for a in c["artifacts"]] == [("What's in it", ["ddddddd is no landing's commit in the",
-                                                                                          "  record; chuck-herdr-alpha did not", "  answer"])]
+        assert c["summary"] == "2 landings since mac-studio's last deploy (aaaaaaa). The kit handed no release notes."
+        assert [(a["lang"], a["title"], a["lines"]) for a in c["artifacts"]] == [
+            ("text", "What's in it: 2 landings", ["fix(docs): a commit on main itself", "#66 fix(timers): every timer job runs",
+                                                  "  under a time limit"])]
+
+    def test_a_range_git_cant_read_is_said_rather_than_counted(self):
+        offer = e("ops.offer", minutes=10, Head=D, Base=S1)
+        why = "ddddddd is a commit of no kit swancloud's main level keeps on mac-studio"
+        f = ops.deploy_facts("mac-studio", offer, DEPLOYED + [offer], (None, None, why))
+        assert f["landings"] == [] and f["landings_why"] == why
+        c = cards.deploy_card(f)["card"]
+        assert c["summary"].startswith(f"Which landings it carries since mac-studio's last deploy (aaaaaaa) can't be read: {why}.")
+        assert [(a["title"], a["lines"][0]) for a in c["artifacts"]] == [("What's in it", "ddddddd is a commit of no kit")]
+
+    def test_the_first_deploy_carries_all_of_main_and_reads_no_range(self):
+        offer = e("ops.offer", minutes=10, Head=S2, Base="none")
+        f = ops.deploy_facts("mac-studio", offer, DEPLOYED + [offer], (None, None, "never read"))
+        assert (f["base"], f["landings"], f["landings_why"]) == (None, [], None)
+        c = cards.deploy_card(f)["card"]
+        assert c["summary"] == "The first deploy to mac-studio, carrying all of main up to bbbbbbb. The kit handed no release notes. It comes after box."
+        assert [(a["title"], a["lines"]) for a in c["artifacts"]] == [("What's in it", ["All of main up to bbbbbbb"])]
 
     def test_a_newer_offer_changes_the_card_of_one_unanswered_and_waits_on_an_approved_ones_deploy(self):
         newer = e("ops.offer", minutes=3, Head=S2, Base="none")

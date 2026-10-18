@@ -1,7 +1,8 @@
 # The operations on a partition's environments, a deploy being one kind (plan.14), through crew ops as swancloud's
 # deployer calls it, on the stubs (tests.11, record 0022): an offer is a rail row, and crew raises its card in
 # main-level ops's name on the stub pendingyou, with the release notes and steps it was handed on its face, keeping
-# those files beside it and none of their text in the run record, telling ops the line that adopts it; the same offer
+# those files beside it and none of their text in the run record, telling ops the line that adopts it; handed no notes,
+# the landings its range carries on the kit's main, read with git, or what git could not read; the same offer
 # again writes nothing, a file it can't read is refused with nothing offered, and a newer offer changes the card in
 # place; crew ops approve records the user's word, refusing an approval of another commit, and crew ops word answers
 # it until that deploy's end is recorded, which closes the card with its outcome; a deploy's start, step and end are
@@ -71,7 +72,7 @@ has "$out" "card deploy/mac-studio: req_stub-1 changed, now version 2"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request update_request "
 eq "$(jq -c '[.changeNote, .title, .artifacts[0].title]' <<<"$(py_arg update_request)")" \
   '["Now offering bbbbbbb, which includes aaaaaaa","Deploy main bbbbbbb to mac-studio","What'"'"'s in it"]'
-has "$(py_arg update_request)" "Which landings it carries in the first deploy to mac-studio can't be read: bbbbbbb is no landing's commit in the record."
+has "$(py_arg update_request)" "The first deploy to mac-studio, carrying all of main up to bbbbbbb."
 has "$(py_arg update_request)" "The kit handed no release notes."
 ok "a newer offer changes the one card in place, with a note naming the head it now offers and the one it replaces"
 
@@ -186,6 +187,22 @@ eq "$rc" "0"; eq "$(acts mac-studio swancloud ops.offer)" "4"
 has "$out" "card deploy/swancloud-srv not posted: this host can't ask through Pending You: Claude Code on this computer isn"
 has "$(runs | grep -B8 '^Key: deploy/swancloud-srv$')" "Refused: this host can't ask through Pending You"
 ok "an offer on a host not signed in to Pending You stands, its card not posted, said and recorded"
+
+# swancloud's main as sluice moves it, with no crew bolt land: a landing of a branch, then a commit made on main itself.
+k=$(kit mac-studio madswan swancloud); base=$(git -C "$k" rev-parse HEAD)
+git -C "$k" checkout -q -b recovery; echo t > "$k/timers"; commit_all "$k" "fix(timers): every timer job runs under a time limit"
+git -C "$k" checkout -q main
+git -C "$k" merge -q --no-ff recovery -m "chore(land): #69 pull/66" -m $'Sluice-Submission: 69\nSluice-From: recovery (pull/66)'
+echo d > "$k/docs"; commit_all "$k" "docs: a commit on main itself"; head=$(git -C "$k" rev-parse HEAD)
+: > "$CREW_TEST_LOG"
+expect_ok dep offer deneb --from "$base" --to "$head"
+eq "$(jq -r .summary <<<"$(py_arg post_request)")" "2 landings since deneb's last deploy (${base:0:7}). The kit handed no release notes."
+eq "$(jq -r .context.background <<<"$(py_arg post_request)")" \
+  $'Landings since deneb\'s last deploy:\n#66 fix(timers): every timer job runs under a time limit\ndocs: a commit on main itself'
+: > "$CREW_TEST_LOG"
+expect_ok dep offer deneb --from "$base" --to "$s3"
+has "$(py_arg update_request)" "Which landings it carries since deneb's last deploy (${base:0:7}) can't be read: ccccccc is a commit of no kit swancloud's main level keeps on mac-studio."
+ok "with no notes, the card lists the range's first-parent commits on the kit's main, read from git, a landing of sluice's by the branch it merged, though the record holds no landing of them; a range git can't read is said"
 
 refusal() { as mac-studio python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import crew, plan
 print(plan.card_refusal(crew.load(), sys.argv[2], "swancloud", "post_request", sys.argv[3]))' "$CREW/plugin/lib" "$@"; }
