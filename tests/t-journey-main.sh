@@ -58,6 +58,24 @@ has "$out" "wldn-operator-mac-studio is already up"
 grep -q "workspace create\|tab create\|pane run\|agent prompt" "$CREW_TEST_LOG" && fail "a second operator up made, ran or greeted something"
 ok "main status reaches every host, a tell records its length and never its text, and the operator comes up with its flow, rail and board tabs, greeted once its rail is open"
 
+# A restart: herdr brings each tab back as its shell alone. operator up, which the fleet runs every five minutes, runs
+# each tab's command there again, and leaves a pane running something else.
+pane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of mac-studio)/.local/state/crew/wldn-operator/panes"; }
+for t in flow rail board; do as mac-studio herdr --session wldn stub restore "$(pane $t)"; done
+as mac-studio herdr --session wldn pane run "$(pane board)" "less notes" >/dev/null
+: > "$CREW_TEST_LOG"
+expect_ok crew operator up wldn
+grep -q "^mac-studio wldn pane run $(pane flow) .*/crew events --follow --label wldn'" "$CREW_TEST_LOG" || fail "the flow tab's follow was not run again"
+grep -q "^mac-studio wldn pane run $(pane rail) .*/crew _rail wldn'" "$CREW_TEST_LOG" || fail "the rail tab's loop was not run again"
+grep -q "pane run $(pane board) " "$CREW_TEST_LOG" && fail "crew typed into a board tab running something else"
+grep -q "workspace create\|tab create\|agent prompt" "$CREW_TEST_LOG" && fail "a restored operator workspace was opened again or greeted"
+has "$out" "wldn's rail tab ($(pane rail)) held its shell alone; its rail runs there again"
+has "$out" "wldn's board tab ($(pane board)) runs less notes, not crew's board; crew left it"
+: > "$CREW_TEST_LOG"
+expect_ok crew operator up wldn
+grep -q "pane run" "$CREW_TEST_LOG" && fail "operator up ran a tab's command over one already running"
+ok "after a restart, operator up runs each tab's command again in the shell herdr brought back, once, and leaves a tab running something else"
+
 # After a restart: panes back with no agent in them are revived, resumed or fresh; a team taken down stays down.
 gone() { local p; p=$(as $box herdr --session "$1" agent get "$2" | jq -r .result.agent.pane_id); as $box herdr --session "$1" agent prompt "$p" /exit >/dev/null; }
 crew up swb-1 >/dev/null; crew up swb-2 >/dev/null; crew down swb-2 >/dev/null

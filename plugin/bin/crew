@@ -176,8 +176,8 @@
 #                                      it with the commit. A status the file does not hold is refused
 #   crew operator up <label>           the operator agent in this host's operator session <label>, with a flow tab
 #                                      following the run record, a rail tab (crew rail above, a shell below) and a
-#                                      board tab drawn from the rail tab's read; the agent it starts is greeted the
-#                                      same way
+#                                      board tab drawn from the rail tab's read, each tab's command run again where a
+#                                      restart left its pane a shell; the agent it starts is greeted the same way
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
