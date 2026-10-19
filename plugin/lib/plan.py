@@ -3245,14 +3245,17 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
     """Proposal n's card at its event (record 0031 §1, briefs.11), once the event's write is made (code.9), from the
     write w as it left the branch: the act proposal_act decides; the card built by the proposal's builder from
     proposal_facts, and posted, changed or closed by the act in the planner's name under its chain's key,
-    proposal/<first>, filed in the area of the kit of the first bolt or unit its commands name. A card crew cannot
+    proposal/<first>, filed in the area of the kit of the first bolt or unit its commands name. A rewrite whose card
+    takes another form than the replaced proposal's (cards.proposal_form: a hold-to-approve, a choice, one list or
+    lists), which update_request never changes, has the card followed as a card whose kind changed. A card crew cannot
     build, or Pending You refuses, refuses nothing of the proposal: it is said, and the rail shows the row with no card.
     The card's id, or None."""
     acts = acts or CardActs(fleet)
     owner, part = f"{label}-planner", crew.partition_of(fleet, label)
     pl = proposals(w)
     p = proposal(pl, n, label)
-    was = proposal(pl, int(p.get("Replaces")), label).get("By") if (p.get("Replaces") or "").isdigit() else None
+    replaced = proposal(pl, int(p.get("Replaces")), label) if (p.get("Replaces") or "").isdigit() else None
+    was = replaced.get("By") if replaced else None
     key = f"proposal/{proposal_chain(pl, n)[0]}"
     near = event in ("replace", "agree")
     act = proposal_act(event, n, p.get("By") == owner, was == owner,
@@ -3271,7 +3274,9 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
         where = card_where(team["kit"] if team else {"main": part["checkout"], "repo": part["blueprints"][0]})
         if act[0] == "post":
             return row_card_post(fleet, label, owner, cards.proposal_card, facts, where, acts)
-        return row_card_change(fleet, label, owner, cards.proposal_card, facts, act[1], where, acts)
+        moved = event == "replace" and replaced is not None and (
+            cards.proposal_form([do_args(label, d) for d in replaced.all("Do")]) != cards.proposal_form(facts["argvs"]))
+        return row_card_change(fleet, label, owner, cards.proposal_card, facts, act[1], where, acts, kind_changed=moved)
     except Refusal as e:
         print(f"card {key} not raised: {e}", file=sys.stderr)
         return None

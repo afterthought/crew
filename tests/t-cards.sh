@@ -411,10 +411,10 @@ expect_fail "no card and no session of batch/4 is open on $box" planner wait bat
 ok "a session whose link only the host could open is ended and the card raised all the same, saying so, its wait on the card alone; a wait with neither is refused"
 
 # A proposal's card, crew's own (plan-proposals, record 0031 §1, change crew-raises-a-proposals-card): raised by crew plan
-# propose in the planner's name on its own host, withdrawn by a rewrite whose rows fill more than one list while it
-# waits, the lists being questions update_request never changes, and followed by the new version, followed by a new
-# version too when a rewrite comes after the user's note answered it, answered on the card and applied with its boxes
-# as they stand, then closed with what was applied. Which act each step makes is a logic case
+# propose in the planner's name on its own host, withdrawn by a rewrite that moves it from one list to lists of
+# questions while it waits, a change of form update_request never makes, and followed by the new version, followed by
+# a new version too when a rewrite comes after the user's note answered it, answered on the card and applied with its
+# boxes as they stand, then closed with what was applied. Which act each step makes is a logic case
 # (tests/py/test_proposal_life.py); the plan's side of each step, the proposals journey's (t-journey-plan).
 as_planner() { HOST=$box CREW_AGENT=wldn-planner "$@"; }
 proposal() { printf '%s\n' "$@" > "$T/proposal.rec"; echo "$T/proposal.rec"; }
@@ -433,24 +433,25 @@ eq "$(jq -c '[.idempotencyKey, .session.label, .title, .kind, [.options[].id], .
 grep -q "agent prompt wldn-planner" "$CREW_TEST_LOG" && fail "the planner was told of the card its own command raised"
 ok "crew plan propose raises the proposal's card in the planner's name under proposal/<n>, one checkbox list every row set as proposed, and prints the line that adopts it"
 
-# A rewrite of six rows while the card waits: its rows are questions (rows-1, rows-2), which Pending You's
-# update_request never changes, so the waiting card is withdrawn with the note and the new version follows it.
+# A rewrite of six rows while the card waits: its one list becomes two, asked as questions (rows-1, rows-2), a form
+# Pending You's update_request never changes into, so the waiting card is withdrawn with the note and the new version
+# follows it.
 : > "$CREW_TEST_LOG"
 as_planner expect_ok crew plan propose --replaces "$n" "$(proposal 'Case: The page gets a bolt of its own, with c to g in place of b.' \
   'Do: bolt new p2 "The page is drawn." --repo switchboard-kit' 'Do: unit add p-a "A page." --bolt p2' 'Do: unit add p-c "C page." --bolt p2' \
   'Do: unit add p-d "D page." --bolt p2' 'Do: unit add p-e "E page." --bolt p2' 'Do: unit add p-f "F page." --bolt p2' \
   'Do: unit add p-g "G page." --bolt p2')"
 m=$(opened); c1=$(raised "$n")
-has "$out" "card proposal/$n: $c withdrawn, its questions having to be asked anew, and its new version follows it"
+has "$out" "card proposal/$n: $c withdrawn, its kind having changed, and its new version follows it"
 [[ -n $c1 && $c1 != "$c" ]] || fail "no new version of proposal/$n's card was posted:"$'\n'"$out"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request cancel_request whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.requestId, .reason]')" "[\"$c\",\"Rewritten as proposal $m after your note\"]"
 eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows, .title, [.questions[] | [.id, [.options[].id]]]]')" \
   "[\"proposal/$n:2\",\"$c\",\"Plan change to p2: 6 new\",[[\"rows-1\",[\"add:p-a\",\"add:p-c\",\"add:p-d\"]],[\"rows-2\",[\"add:p-e\",\"add:p-f\",\"add:p-g\"]]]]"
-eq "$(entries card.close | jq -r "select(.Card == \"$c\") | .State")" "withdrawn"
+eq "$(entries card.close | jq -r "select(.Card == \"$c\") | [.State, .Outcome] | join(\": \")")" "withdrawn: changed in kind: a new card follows it"
 eq "$(as_planner crew rail --label wldn | grep -A4 "proposal $m (wldn)" | grep 'card:' | sed 's/^ *//')" \
   "card:   proposal/$n, open, asked by wldn-planner ($c1)"
-ok "a rewrite whose card asks its rows as questions withdraws the waiting card with its note and posts the new version following it, and the rail's row for the successor carries the chain's key"
+ok "a rewrite that moves the card from one list to lists of questions withdraws the waiting card with its note and posts the new version following it, and the rail's row for the successor carries the chain's key"
 
 # The user sends the card with a note asking for a change, which answers it; the planner's rewrite follows it.
 echo '{"answer": {"answers": {"rows-1": {"choiceIds": ["add:p-a", "add:p-c"]}}, "note": {"text": "c before a, and only those."}}}' > "$stub/answered/$c1.json"
