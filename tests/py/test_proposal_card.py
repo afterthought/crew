@@ -143,6 +143,18 @@ def test_sixteen_new_units_are_a_hold_to_approve_that_links_its_reading_session_
     assert c["context"]["links"] == [{"label": "Read proposal 7", "url": "http://mac-studio:19500"}]
 
 
+@pytest.mark.parametrize("dos, form", [
+    (("unit order a-first --first",), "approve"), (adds("p", 1), "choice"), (adds("p", 5), "multi"), (adds("p", 6), "lists"),
+    (adds("p", 16), "approve"), (('unit drop c-third "Not needed."', 'unit amend b-second "Better."'), "multi")])
+def test_a_proposals_card_form_is_read_from_its_commands_alone_as_its_card_is_built(dos, form):
+    """cards.proposal_form, which a rewrite compares with the replaced proposal's, agrees with the card proposal_card
+    builds: a hold-to-approve, a choice, one list or lists of questions."""
+    assert cards.proposal_form([plan.do_args("wldn", d) for d in dos]) == form
+    c = built(3, "Case.", *dos)["card"]
+    assert {"approve": c.get("kind") == "approve", "choice": c.get("kind") == "choice", "multi": c.get("kind") == "multi",
+            "lists": "questions" in c and "kind" not in c}[form]
+
+
 def test_a_move_into_a_bolt_is_a_box_to_move_it_in():
     c = built(8, "The moving page belongs with the deploys.", "unit move m-move deploys")["card"]
     assert c["title"] == "Plan change to pages and deploys: 1 new, 1 moved"

@@ -123,12 +123,17 @@ def one_line(v):
     return " ".join(str(v).split())
 
 
+def entry_id(now, host, pid, n):
+    """An entry's id: its second, its microsecond, the host, the process and a count, unique without a lock. The
+    microsecond orders the entries of one second as they were made, which the process cannot: a process id says
+    nothing of when, and wraps (99891, then 352, on mac-studio on 2026-10-19)."""
+    return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{now.microsecond:06d}-{host}-{pid}-{n}"
+
+
 def new_id():
-    """A new entry's id: the time, the host, the process and a count, unique without a lock. A write makes its
-    entry's id before its commit, so the commit can name the entry its message describes."""
-    n = next(_ids)
-    now = datetime.datetime.now(datetime.timezone.utc)
-    return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{crew.this_host()}-{os.getpid()}-{n}"
+    """A new entry's id, made now (entry_id). A write makes its entry's id before its commit, so the commit can name
+    the entry its message describes."""
+    return entry_id(datetime.datetime.now(datetime.timezone.utc), crew.this_host(), os.getpid(), next(_ids))
 
 
 def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, by=None, **extra):
