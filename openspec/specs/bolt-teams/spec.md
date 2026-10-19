@@ -192,7 +192,7 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 - **THEN** the command returns saying the stage is still running, and whether its agent is working or waiting on work of its own, and no `stage.end` entry is written
 
 ### Requirement: A unit in flight goes back through construct and review
-`crew unit run <unit> construct "<words>"` SHALL be accepted at any stage before the unit has merged into its bolt. Run on a unit that is in code or in verify, it SHALL mark the unit amended in the plan before the stage starts. While construct runs again, `crew unit run <unit> code`, `verify` and `merge` SHALL be refused; once it has committed, the unit SHALL go on from its tasks with no approval asked, and its revised change SHALL be due for the next batch.
+`crew unit run <unit> construct "<words>"` SHALL be accepted at any stage before the unit has merged into its bolt. Run on a unit that is in code or in verify, it SHALL mark the unit amended in the plan before the stage starts, and only the conductor of the team holding the unit's bolt or the user SHALL be accepted to run it. Run on a unit whose intent was amended and whose construct has not run since, it SHALL be accepted from any caller. While construct runs again, `crew unit run <unit> code`, `verify` and `merge` SHALL be refused; once it has committed, the unit SHALL go on from its tasks with no approval asked, and its revised change SHALL be due for the next batch.
 
 #### Scenario: The user wants a change to a unit in code
 - **WHEN** the conductor runs `crew unit run <unit> construct "<the user's words>"` on a unit in code
@@ -204,7 +204,11 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 
 #### Scenario: An amended intent arrives from an approved proposal
 - **WHEN** an approved proposal amends the intent of a unit in flight
-- **THEN** the conductor is told, runs construct again, and the fresh construct agent is given the new intent and told the change is to be revised to it
+- **THEN** the approval starts construct again on the unit, and the fresh construct agent is given the new intent, told the change is to be revised to it, and given the case of the proposal the user approved; the conductor is told that construct runs again and to wait for it, and the unit goes on from its tasks once it has committed, with no approval asked
+
+#### Scenario: The planner approves on the user's word
+- **WHEN** the planner runs `crew plan approve <n>` for a proposal that amends a unit in flight
+- **THEN** construct starts on the unit, recorded as started by the planner, and is not refused for who asked
 
 #### Scenario: A merged unit
 - **WHEN** `crew unit run <unit> construct` runs on a unit that has merged into its bolt
@@ -737,3 +741,33 @@ When the second sending is not taken either, or the agent never becomes ready fo
 #### Scenario: crew cannot read whether it was taken
 - **WHEN** a merge stage's prompt is sent, and the agent's transcript cannot be read, or the agent is working while its transcript shows no prompt received
 - **THEN** the prompt is not sent again and nothing is pressed in the pane, and the command fails naming what crew could not read
+
+### Requirement: A team taken down starts no stage
+While a team is down, from `crew down` or `crew close` until `crew up` brings it back, `crew unit run <unit> <stage>` SHALL be refused for every stage, construct, code, verify and merge alike, on any unit of the team's bolt, saying `<team> is down; crew up <team> brings it back`. The refusal SHALL come before crew frees or takes a slot, writes the plan or ends an agent, and SHALL be recorded as a refused `stage.start`.
+
+#### Scenario: Code on a team taken down
+- **WHEN** `crew unit run <unit> code` runs while the unit's team is down
+- **THEN** it is refused with "<team> is down; crew up <team> brings it back", the plan is not written, no slot's agent is sent anything, and the run record holds a refused `stage.start` for `stage/<unit>/code`
+
+#### Scenario: An amendment's construct on a team taken down
+- **WHEN** an amendment to a unit of a team that is down is applied
+- **THEN** its construct is refused the same way, and the unit keeps its mark and reads `amended`
+
+#### Scenario: The team is brought back
+- **WHEN** `crew up <team>` brings the team back
+- **THEN** `crew unit run` starts stages on its units again
+
+### Requirement: A conductor brought back is told which units wait amended
+When crew starts or brings back a team's conductor with `crew up`, `crew rebuild`, `crew restart` or `crew revive`, its one greeting SHALL name each unit of its bolt whose stage is `amended`, and tell it to run construct on each. `crew resume`, which greets nobody, SHALL send the same words as a notice, and only when such a unit exists. When the plan or the bolt's kit cannot be read, the greeting or notice SHALL say so rather than name no unit.
+
+#### Scenario: Restarted with an amended unit
+- **WHEN** swb-1's conductor is restarted while a unit of its bolt reads `amended`
+- **THEN** its greeting names that unit and tells it to run construct on it, and it does
+
+#### Scenario: Nothing amended
+- **WHEN** swb-1's conductor is resumed and no unit of its bolt reads `amended`
+- **THEN** it is sent nothing
+
+#### Scenario: A construct already running
+- **WHEN** a unit's amended construct has started and not yet committed, and its conductor is restarted
+- **THEN** the greeting does not name the unit, whose stage reads `construct`
