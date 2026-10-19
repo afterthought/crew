@@ -211,8 +211,9 @@ BACK = {"agent_status": "unknown", "cwd": "/c/bolts/curation-and-holds", "focuse
 class TestDeadPanes:
     """A pane crew keeps that herdr lists with no terminal behind it, as crw-2's were when crew up did not bring its
     conductor back at test D (2026-10-18), is dead (crew.dead_said, teams.2); one an agent holds never is (read.4); and a
-    pane not there opens again beside its tab's other pane, else in its workspace while that stands (crew.opens_at).
-    Closing and opening them through crew up is the teams journey's."""
+    pane not there opens again beside its tab's other pane, else in its workspace while that stands (crew.opens_at);
+    crew revive opens again a pane brought back dead and picks up one brought back empty (crew.revived). Closing and
+    opening them through crew up is the teams journey's, through crew revive and crew main up the main journey's."""
 
     def test_a_pane_herdr_could_not_bring_back_is_dead_said_with_its_folder_and_herdrs_words(self):
         assert crew.dead_said("crw-3", "conductor", DEAD, None) == (
@@ -233,6 +234,14 @@ class TestDeadPanes:
     @pytest.mark.parametrize("err", ["", "  ", None, 1, ["Saved directory is unavailable."]])
     def test_a_restore_error_with_no_words_is_not_read_as_one(self, err):
         assert crew.dead_said("crw-3", "conductor", dict(DEAD, restore_error=err), None) is None
+
+    def test_revive_opens_again_a_pane_brought_back_dead_and_picks_up_one_brought_back_empty(self):
+        assert crew.revived(DEAD, None) == "dead"
+        assert crew.revived(BACK, None) == "empty"
+
+    @pytest.mark.parametrize("item, status", [(BACK, "idle"), (DEAD, "working"), (None, None)])
+    def test_revive_leaves_a_pane_an_agent_holds_and_one_herdr_does_not_list(self, item, status):
+        assert crew.revived(item, status) is None
 
     def test_a_pane_opens_beside_its_tabs_other_pane_else_in_its_workspace_while_it_stands_else_in_a_new_one(self):
         assert crew.opens_at("w2X:p2", "w2X") == ("split", "w2X:p2")

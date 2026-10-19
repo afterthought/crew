@@ -6773,7 +6773,7 @@ def dispatch_up(fleet, label):
     d = crew.standing(fleet, "dispatch", label)
     d.ensure()
     d.mark(down=False)
-    d.single(f"{label} dispatch", "dispatcher")
+    d.panes()
     started = d.start_standing()
     d.record("main.up", f"main({label}): up {d.agent_of('dispatcher')}", started)
     return d, started
@@ -6819,11 +6819,7 @@ def main_cmd(fleet, a):
     hosts = crew.partition_hosts(fleet, label)
     if a.act == "up":
         m.mark(down=False)
-        if not m.herdr.live(m.pane("design")):
-            m.first_tab(label, "design", m.cwd, "design")
-        for role in ("planner", "ops"):
-            if not m.herdr.live(m.pane(role)):
-                m.tab(label, role, m.cwd, role)
+        m.panes()
         started = m.start_standing()
         m.record("main.up", f"main({label}): up", started)
         rc, greetings, away = 0, [], [(h, elsewhere(fleet, h, "_dispatch", "up", label)) for h in hosts if h != here]
@@ -6910,7 +6906,7 @@ def operator_cmd(fleet, a):
     o = crew.standing(fleet, "operator", a.label)
     o.ensure()
     label, crew_cmd, started = a.label, shlex.quote(str(crew.HOME / "plugin/bin/crew")), []
-    o.single("operator", "operator")
+    o.panes()
     if o.status("operator"):
         print(f"{o.agent_of('operator')} is already up")
     else:
@@ -6944,9 +6940,10 @@ def operator_cmd(fleet, a):
 
 def revive_cmd(fleet, a):
     """crew revive, after a restart: on this host, each team's, main level's, dispatcher's and operator agent's standing
-    role whose pane came back with no agent in it picked up from its last conversation, a team's conductor greeted, and
-    its ops when it had none to pick up (crew.greeted_roles), and every agent brought back outside a team greeted; one
-    taken down with crew down stays down. What can't be revived is said, and the rest still are."""
+    role whose pane came back with no agent in it, or dead, closed and opened again in its layout first (crew.revived,
+    teams.2), picked up from its last conversation, a team's conductor greeted, and its ops when it had none to pick up
+    (crew.greeted_roles), and every agent brought back outside a team greeted; one taken down with crew down stays
+    down. What can't be revived is said, and the rest still are."""
     greetings = []
     for kind, scope in crew.here(fleet):
         try:
@@ -6956,13 +6953,16 @@ def revive_cmd(fleet, a):
             if agents.down():
                 print(f"{scope} was taken down; it stays down")
                 continue
-            back = []
+            back, ways = [], {r: crew.revived(agents.herdr.item(agents.pane(r)), agents.status(r)) for r in agents.standing}
+            if "dead" in ways.values():
+                agents.panes()
             for role in agents.standing:
-                if not agents.herdr.live(agents.pane(role)) or agents.status(role):
+                if not ways[role]:
                     continue
-                crew.nap(10)
-                if agents.status(role, fresh=True):  # herdr may still be resuming it
-                    continue
+                if ways[role] == "empty":
+                    crew.nap(10)
+                    if agents.status(role, fresh=True):  # herdr may still be resuming it
+                        continue
                 if not agents.start(role, "resume"):
                     continue
                 agents.record("agent.resume", f"{kind}({scope}): resume {agents.agent_of(role)}", [role])

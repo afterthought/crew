@@ -470,12 +470,30 @@ def dead_said(scope, role, item, status):
     (read.2: read on mac-studio on 2026-10-19 in a scratch session, and in swancloud's, where crw-3's w10:p6 stood in a
     removed worktree). A pane an agent holds is never dead (read.4), nor one whose folder went while herdr ran, whose
     shell takes what crew types."""
-    err = item.get("restore_error") if isinstance(item, dict) else None
-    if status or not isinstance(err, str) or not err.strip():
+    err = unrestored(item)
+    if status or not err:
         return None
     cwd = item.get("cwd")
     where = f" in {cwd}" if isinstance(cwd, str) and cwd else ""
-    return f"{scope}'s {role} pane {item['pane_id']} is dead: herdr could not bring it back{where} ({err.strip()})"
+    return f"{scope}'s {role} pane {item['pane_id']} is dead: herdr could not bring it back{where} ({err})"
+
+
+def unrestored(item):
+    """herdr's words for a pane it lists but could not bring back when its server started (dead_said), from the pane's
+    item in its pane list: its restore_error, or None when it has none or none crew can read (read.2)."""
+    err = item.get("restore_error") if isinstance(item, dict) else None
+    return err.strip() if isinstance(err, str) and err.strip() else None
+
+
+def revived(item, status):
+    """How crew revive brings back a standing role after a restart, from its pane's item in herdr's pane list (None
+    when herdr lists none) and its agent's status (teams.2, teams.6): "dead" when herdr brought the pane back with no
+    terminal behind it (unrestored), to be closed and opened again in its layout before its agent is picked up there;
+    "empty" when herdr brought it back with no agent in it, which herdr may still be resuming; None when an agent holds
+    it or there is no pane to bring back."""
+    if status or item is None:
+        return None
+    return "dead" if unrestored(item) else "empty"
 
 
 def opens_at(beside, workspace):
@@ -1574,6 +1592,20 @@ class Agents:
         """A workspace holding one agent, its pane opened when it is not there, a dead one closed first (mend)."""
         self.mend((role,))
         self.herdr.live(self.pane(role)) or self.opened(workspace, role, self.cwd, role)
+
+    def panes(self):
+        """Each standing role's pane, opened when it is not there, a dead one closed first (mend): a main level's design
+        agent, planner and ops one tab each in the <label> workspace, the design agent's first when the workspace is
+        new; a dispatcher's alone in "<label> dispatch"; an operator agent's in "operator", beside the tabs crew operator
+        up keeps there. A team's are Team.panes."""
+        if self.kind != "main":
+            return self.single(f"{self.label} dispatch" if self.kind == "dispatch" else "operator", self.standing[0])
+        self.mend(self.standing)
+        if not self.herdr.live(self.pane("design")):
+            self.opened(self.label, "design", self.cwd, "design")
+        for role in ("planner", "ops"):
+            if not self.herdr.live(self.pane(role)):
+                self.tab(self.label, role, self.cwd, role)
 
     def mend(self, roles):
         """Each of the roles' panes that herdr lists but holds no terminal for (dead_said) closed and dropped from the

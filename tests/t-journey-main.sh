@@ -1,9 +1,9 @@
 # A partition's main level and its operator through the crew command on the stubs (tests.11, record 0022), a part of
 # the teams journey (t-journey-teams): crew main up starts the main level and a dispatcher on each host of the
 # partition, each greeted once, one waiting on a question holding back no other; main status reaches every host; a
-# tell records its length and never its text; the operator gets its tabs; and crew revive brings back what a restart
-# left empty, leaving down what was taken down. What each agent is greeted with and where it runs are logic cases
-# (tests/py/test_teams.py).
+# tell records its length and never its text; the operator gets its tabs; crew revive brings back what a restart left
+# empty, leaving down what was taken down; and crew revive and crew main up open again a pane herdr brought back dead.
+# What each agent is greeted with, where it runs and whether a pane is dead are logic cases (tests/py/test_teams.py).
 # Reads: plugin/hooks/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
@@ -100,3 +100,26 @@ HOST=$box expect_fail "mac-studio port 22: Operation timed out" crew main up wld
 has "$out" "wldn-dispatch-$box started"; has "$out" "wldn-dispatch-$box greeted"
 rm "$T/down"
 ok "crew revive brings back the agents whose panes came back empty and greets each it brought back once, a team's ops it had to start fresh among them; a team or main level taken down stays down; main down reaches every host, and a host that does not answer fails main up once the others are up"
+
+# herdr brings panes back dead, their folder gone at its restart, as it brought crw-2's back before test D (2026-10-18):
+# crew revive closes each and opens it again in its layout, a team's and a main level's, and picks up its agent there;
+# crew main up does the same and starts it.
+tpane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of $box)/.local/state/swb-1-team/panes"; }
+mpane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of $box)/.local/state/crew/wldn-main/panes"; }
+c=$(tpane conductor); o=$(tpane ops); d=$(mpane design)
+for p in "$c" "$o"; do as $box herdr --session wldn-1 stub dead "$p" "$T/trash/gone"; done
+as $box herdr --session wldn-3 stub dead "$d"
+HOST=$box expect_ok crew revive
+has "$out" "swb-1's conductor pane $c is dead: herdr could not bring it back in $T/trash/gone (Saved directory is unavailable. Restore the directory and restart this session.); crew closes it and opens it again"
+has "$out" "swb-1's ops pane $o is dead"; has "$out" "wldn's design pane $d is dead"
+has "$out" "swb-1-conductor resumed"; has "$out" "swb-1-ops resumed"; has "$out" "wldn-design resumed"
+eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-2,swb-1"
+eq "$(herdr_state $box wldn-3 '[.workspaces[].label] | join(",")')" "wldn,wldn dispatch"
+eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "planner,ops,design"
+HOST=$box crew main down wldn >/dev/null
+d=$(mpane design); as $box herdr --session wldn-3 stub dead "$d"
+HOST=$box expect_ok crew main up wldn
+has "$out" "wldn's design pane $d is dead"; has "$out" "wldn-design started"; has "$out" "wldn-design greeted"
+eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "planner,ops,design"
+eq "$(herdr_state $box wldn-3 "[.panes | keys[] | select(. == \"$d\")] | length")" "0"
+ok "crew revive closes the panes herdr brought back dead, a team's and a main level's, opens each again in its layout and picks up its agent there, and crew main up does the same and starts it, each saying so"
