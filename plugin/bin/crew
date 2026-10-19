@@ -16,7 +16,10 @@
 #                                      to carry on with its bolt, its greeting (also on rebuild, restart and revive)
 #                                      opening with the units of its bolt that wait amended, for it to start their
 #                                      construct. A greeting is read back from the agent's transcript and sent once
-#                                      more when not taken
+#                                      more when not taken. A pane herdr lists with no terminal, its folder gone
+#                                      when herdr started, is closed and opened again in the team's workspace, said
+#                                      (also on restart, resume and a stage's start); one an agent holds is never
+#                                      touched
 #   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh,
 #                                      keeping only the slots of work still in flight on its bolt
 #   crew close   <team>                end everything the team has and close its panes; nothing is started

@@ -3,6 +3,7 @@ session resolves its partition, kit and blueprints to, crew.greet_waits for one 
 a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
 crew.greeted_roles for which of a team's agents a command greets and crew.ops_greeting for what its ops is told,
 crew.dispatch_place and crew.operator_session for where those run, crew.tab_holds for what an operator's tab holds,
+crew.dead_said for a pane herdr lists with no terminal behind it and crew.opens_at for where a pane opens again,
 crew.last_conversation for where a role resumes,
 crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
 plan.amended_said for what a conductor brought back is told, and what crew up, restart, resume, clear and needs decide
@@ -195,6 +196,48 @@ class TestOperatorTabs:
                                       {"shell_pid": 1, "foreground_process_group_id": 1}])
     def test_an_answer_crew_cant_read_is_said_and_runs_nothing(self, info):
         assert crew.tab_holds(info, ["_rail", "swancloud"]) == (None, "herdr's process-info for it can't be read")
+
+
+# herdr 0.9.3's pane list of swancloud's session on mac-studio, 2026-10-19: crw-3's w10:p6, which herdr could not bring
+# back at its restart, its folder a worktree since removed, and crw-1's conductor pane, brought back with its shell.
+DEAD = {"agent_status": "unknown", "cwd": "/c/crew.git/wt/trash/the-board-is-a-page-1791745030", "focused": False,
+        "pane_id": "w10:p6", "restore_error": "Saved directory is unavailable. Restore the directory and restart this session.",
+        "revision": 0, "tab_id": "w10:t1", "terminal_id": "term_65e35acc23da81a", "workspace_id": "w10"}
+BACK = {"agent_status": "unknown", "cwd": "/c/bolts/curation-and-holds", "focused": False, "foreground_cwd": "/c/bolts/curation-and-holds",
+        "pane_id": "w3:p1", "revision": 0, "scroll": {"max_offset_from_bottom": 0, "offset_from_bottom": 0, "viewport_rows": 77},
+        "tab_id": "w3:t1", "terminal_id": "term_65e35acc0e86bf", "workspace_id": "w3"}
+
+
+class TestDeadPanes:
+    """A pane crew keeps that herdr lists with no terminal behind it, as crw-2's were when crew up did not bring its
+    conductor back at test D (2026-10-18), is dead (crew.dead_said, teams.2); one an agent holds never is (read.4); and a
+    pane not there opens again beside its tab's other pane, else in its workspace while that stands (crew.opens_at).
+    Closing and opening them through crew up is the teams journey's."""
+
+    def test_a_pane_herdr_could_not_bring_back_is_dead_said_with_its_folder_and_herdrs_words(self):
+        assert crew.dead_said("crw-3", "conductor", DEAD, None) == (
+            "crw-3's conductor pane w10:p6 is dead: herdr could not bring it back in /c/crew.git/wt/trash/the-board-is-a-page-1791745030 "
+            "(Saved directory is unavailable. Restore the directory and restart this session.)")
+        assert crew.dead_said("crw-3", "ops", {k: v for k, v in DEAD.items() if k != "cwd"}, None) == (
+            "crw-3's ops pane w10:p6 is dead: herdr could not bring it back (Saved directory is unavailable. Restore the directory and "
+            "restart this session.)")
+
+    def test_a_pane_brought_back_with_its_shell_or_not_listed_is_not_dead(self):
+        assert crew.dead_said("crw-1", "conductor", BACK, None) is None
+        assert crew.dead_said("crw-1", "conductor", None, None) is None
+
+    @pytest.mark.parametrize("status", ["idle", "working", "blocked", "done"])
+    def test_a_pane_an_agent_holds_is_never_dead(self, status):
+        assert crew.dead_said("crw-3", "conductor", DEAD, status) is None
+
+    @pytest.mark.parametrize("err", ["", "  ", None, 1, ["Saved directory is unavailable."]])
+    def test_a_restore_error_with_no_words_is_not_read_as_one(self, err):
+        assert crew.dead_said("crw-3", "conductor", dict(DEAD, restore_error=err), None) is None
+
+    def test_a_pane_opens_beside_its_tabs_other_pane_else_in_its_workspace_while_it_stands_else_in_a_new_one(self):
+        assert crew.opens_at("w2X:p2", "w2X") == ("split", "w2X:p2")
+        assert crew.opens_at("", "w2X") == ("tab", "w2X")
+        assert crew.opens_at("", "") == ("workspace", None)
 
 
 class TestResume:
