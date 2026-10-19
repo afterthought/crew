@@ -12,7 +12,7 @@
 
 ## 3. A question already ended
 
-- [ ] 3.1 Withdrawing a question whose asker has ended records a question Pending You already ended as closed and sends no `cancel_request`, proved by a logic case in `tests/py/test_rail.py` (design: decision 4; Task notes 3.1; `briefs.11`).
+- [x] 3.1 Withdrawing a question whose asker has ended records a question Pending You already ended as closed and sends no `cancel_request`, proved by a logic case in `tests/py/test_rail.py` (design: decision 4; Task notes 3.1; `briefs.11`).
 
 ## 4. The stub, and the suite
 

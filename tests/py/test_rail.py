@@ -519,6 +519,18 @@ class TestSweep:
                                      State="withdrawn", Outcome="crw-3-conductor ended; ask again if it still matters")]
         assert [(d["did"], d["words"]) for d in out["done"]] == [("withdrawn", "crw-3-conductor ended")]
 
+    def test_a_question_pending_you_already_ended_when_its_asker_is_gone_is_recorded_closed_and_sent_nothing(self):
+        """The rail-cards scenario: crw-3-conductor's question, which Pending You reports resolved, after crw-3's team
+        closed."""
+        q = card("ask/crw-3-conductor/hold", "req_q1", "crw-3-conductor")
+        out, acts = swept(cards_=[q], listed={"crw-3-conductor": (False, None)},
+                          answers={"get_request": ({"status": "resolved", "version": 3}, None),
+                                   "cancel_request": (None, "This request is already closed.")})
+        assert acts.calls[1:] == [("crw-3-conductor", "get_request", {"requestId": "req_q1", "name": "crw-3-conductor"})]
+        assert acts.emitted == [dict(Act="card.close", On=["agent/crw-3-conductor"], by="crw-3-conductor", Card="req_q1", Key="ask/crw-3-conductor/hold",
+                                     State="closed", Outcome=plan.ENDED_ELSEWHERE)]
+        assert [(d["did"], d["words"]) for d in out["done"]] == [("closed", "crw-3-conductor ended")]
+
     def test_a_question_whose_asker_runs_is_kept_and_one_herdr_cant_answer_for_is_kept_saying_why(self):
         q, r = card(None, "req_q1", "swb-1-conductor"), card(None, "req_q2", "wldn-ops")
         out, acts = swept(cards_=[q, r], listed={"swb-1-conductor": (True, None), "wldn-ops": (None, "herdr's agent list in session wldn-3 failed: x")},

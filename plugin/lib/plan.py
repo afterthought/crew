@@ -9238,14 +9238,18 @@ class SweepActs(CardActs):
 def question_close(acts, label, c, words):
     """A question withdrawn by crew once its asker has ended (briefs.11): read in the asker's name, which no session
     holds now, and withdrawn with words, or acked with them when the user answered it to nobody; recorded on the
-    asker. Pending You's "not found" records it lost, and a refusal is said and recorded refused. The close's state,
-    or None."""
+    asker. One Pending You ended already, followed up by its asker or dismissed by the user, is recorded so and sent
+    nothing (cards.ended). Pending You's "not found" records it lost, and a refusal is said and recorded refused. The
+    close's state, or None."""
     who, card, key = c["by"], c["card"], c["key"] or ""
-    lost = None
+    lost, outcome = None, words
     try:
         with acts.bridge(who, "The question stays open.") as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": who})
-            if lost is None:
+            state = cards.ended(got) if lost is None else None
+            if state:
+                outcome = ENDED_ELSEWHERE
+            elif lost is None:
                 tool, args, state = cards.close_call(got, card, who, reason=words)
                 _, lost = py.answer(tool, args)
             if lost is not None and not cards.lost(lost):
@@ -9257,7 +9261,7 @@ def question_close(acts, label, c, words):
     if lost is not None:
         card_lost(acts, label, who, key, card, lost)
         return "lost"
-    acts.emit(label, "card.close", [f"agent/{who}"], by=who, Card=card, Key=key, State=state, Outcome=words)
+    acts.emit(label, "card.close", [f"agent/{who}"], by=who, Card=card, Key=key, State=state, Outcome=outcome)
     return state
 
 
