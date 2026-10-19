@@ -801,7 +801,8 @@ ROWS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"), (re.compile(r"^batch/(
         (re.compile(r"^land/([a-z0-9][a-z0-9-]*)$"), "bolt/{}"), (re.compile(r"^deploy/([a-z0-9][a-z0-9-]*)$"), "env/{}"),
         (re.compile(r"^op/([a-z0-9][a-z0-9-]*)/\d+$"), "env/{}"),
         (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})$"), "record/{}/{}"))
-# What update_request takes of a card crew built: a card's kind and questions are never changed in place.
+# What update_request takes of a card crew built. It changes neither a card's kind nor its questions, so a card whose
+# kind changed, or one that carries questions, a proposal's rows in lists, is followed by a new card (revision).
 CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "multi", "recommendedIds", "action",
            "rationale", "urgency", "blocking")
 DEAD = "An older copy of this card was lost: dismiss it in the app."
@@ -837,12 +838,14 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
-def revision(got, kind_changed=False):
-    """How crew puts a changed card before the user, from get_request's answer and whether the card's kind changed:
-    "change", the card changed in place, while it waits on them; "follow" once they have answered it, since Pending
-    You changes a card only while it waits and an answered one is followed by a new card (its guide, "Follow up with a
-    new card"), and when its kind changed, which update_request never changes (CHANGED)."""
-    return "follow" if kind_changed or isinstance(got, dict) and got.get("status") == "answered" else "change"
+def revision(got, kind_changed=False, questions=False):
+    """How crew puts a changed card before the user, from get_request's answer, whether the card's kind changed and
+    whether the card crew built again carries questions: "change", the card changed in place, while it waits on them;
+    "follow" once they have answered it, since Pending You changes a card only while it waits and an answered one is
+    followed by a new card (its guide, "Follow up with a new card"), and when its kind changed or it carries questions,
+    which update_request never changes (CHANGED): a card changed in place would keep its old questions under its new
+    title, as proposal 140's did over proposal 139's rows on 2026-10-18."""
+    return "follow" if kind_changed or questions or isinstance(got, dict) and got.get("status") == "answered" else "change"
 
 
 def post_key(entries, key, by):

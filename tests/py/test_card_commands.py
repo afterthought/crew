@@ -395,10 +395,13 @@ def test_a_close_refused_on_a_card_the_user_answered_posts_nothing_and_is_record
                                           "Your latest message asks them something.")
 
 
-@pytest.mark.parametrize("status, kind_changed, how", [("pending", False, "change"), ("snoozed", False, "change"), ("answered", False, "follow"),
-                                                    ("pending", True, "follow")])
-def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_or_whose_kind_changed_is_followed(status, kind_changed, how):
-    assert cards.revision({"status": status, "version": 2}, kind_changed) == how
+@pytest.mark.parametrize("status, kind_changed, questions, how", [
+    ("pending", False, False, "change"), ("snoozed", False, False, "change"), ("answered", False, False, "follow"),
+    ("pending", True, False, "follow"), ("pending", False, True, "follow"), ("snoozed", False, True, "follow"),
+    ("answered", False, True, "follow")])
+def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_whose_kind_changed_or_with_questions_is_followed(
+        status, kind_changed, questions, how):
+    assert cards.revision({"status": status, "version": 2}, kind_changed, questions) == how
 
 
 STEP = dict(env="srv", n=1, text="restart crew's teams", doer="swancloud-ops", held=True, why=None, where=None, commands=[], done=None,
