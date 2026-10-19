@@ -8783,6 +8783,8 @@ RENEWED = "changed in kind: a new card follows it"
 # A card built again with questions while it waited, as its withdrawal is recorded: Pending You changes no card's
 # questions.
 REASKED = "changed with its questions: a new card follows it"
+# A card Pending You had ended already, by another hand than crew's close, as its close is recorded (cards.ended).
+ENDED_ELSEWHERE = "ended in Pending You already"
 
 
 def card_where(kit):
@@ -8944,8 +8946,11 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     try:
         with acts.bridge(owner, CARD_LATER) as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
-            how = cards.revision(got, kind_changed, "questions" in b["card"]) if lost is None else how
-            if lost is None and how == "follow":
+            if lost is None:
+                how = "ended" if cards.ended(got) else cards.revision(got, kind_changed, "questions" in b["card"])
+            if lost is None and how == "ended":
+                state = "closed" if got.get("status") == "closed" else "withdrawn"
+            elif lost is None and how == "follow":
                 tool, args, state = cards.close_call(got, card, owner, outcome=cut(note, 120))
                 _, lost = py.answer(tool, args)
             elif lost is None:
@@ -8965,6 +8970,11 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed)
+    if how == "ended":
+        acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=ENDED_ELSEWHERE)
+        print(f"card {key}: {card} was {state} in Pending You already, and its new version follows it")
+        follows = {"follows": card} if state == "closed" else {}
+        return card_posted(acts, label, owner, dict(b, card=dict(b["card"], **follows)), where, closed)
     if how == "follow":
         acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
                   Outcome=REVISED if state == "closed" else RENEWED if kind_changed else REASKED)
@@ -9005,7 +9015,10 @@ def card_closed(acts, label, owner, key, outcome, reason):
     try:
         with acts.bridge(owner, "The event stands, and its card stays open.") as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
-            if lost is None:
+            if lost is None and cards.ended(got):
+                state = "closed" if got.get("status") == "closed" else "withdrawn"
+                outcome, reason = ENDED_ELSEWHERE, None
+            elif lost is None:
                 tool, args, state = cards.close_call(got, card, owner, outcome, reason)
                 _, lost = py.answer(tool, args)
             if lost is not None and not cards.lost(lost):
