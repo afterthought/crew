@@ -61,6 +61,13 @@ def reviewed(n, units, minutes=0):
     return {"Act": "review.batch", "Batch": str(n), "Units": " ".join(f"{u}:{t}@{s}" for u, t, s in units), "At": at(minutes), "On": []}
 
 
+def card_closed(key, card, minutes=0, state="closed", refused=None):
+    """A run-record entry: the card under key closed, as crew records it once the user answered it ("closed"), sent its
+    reading session ("withdrawn"), or as Pending You lost it to its owner ("lost"); refused, a close Pending You refused."""
+    return {"Act": "card.close", "Key": key, "Card": card, "State": None if refused else state, "Refused": refused, "At": at(minutes),
+            "On": [key]}
+
+
 def told(minutes=0):
     """A run-record entry: the planner was told a batch is due."""
     return {"Act": "batch.due", "At": at(minutes), "On": []}

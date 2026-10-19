@@ -1435,14 +1435,15 @@ def landing_unready(work, head, verdict, fixes):
     return f"{either(sorted(fixes))} is in flight on it" if fixes else None
 
 
-def landing_facts(bolt, kit_name, work, head, at, due, read_in, moved, pr):
+def landing_facts(bolt, kit_name, work, head, at, due, unanswered, read_in, moved, pr):
     """The landing card's facts as cards.landing_card takes them, once the bolt reads proven by its kit (landing_unready):
     the bolt, its kit, its units and chores, the batch each unit was last read in (read_in), its head and when sluice
     landed it there (at), how many landings main has had since the bolt last met it (moved), and sluice's pull request
-    at the head (pr) or None. None while a unit's latest change waits for a batch (due), since a bolt lands only once
-    each has been in one (briefs.12)."""
+    at the head (pr) or None. None while a unit's latest change waits for a batch (due), or has been in one whose card
+    the user has not answered (unanswered, awaiting_answer), since a bolt lands only once each has been in a batch the
+    user has answered (briefs.12); a chore is in no batch."""
     units = [n for n, kind, _ in work if kind == "unit"]
-    if any(u in due for u in units):
+    if any(u in due or u in unanswered for u in units):
         return None
     return dict(bolt=bolt, kit=kit_name, units=units, chores=[n for n, kind, _ in work if kind == "chore"],
                 batches={u: read_in[u] for u in units if u in read_in}, head=head, at=at, moved=moved, pr=pr)
@@ -1493,7 +1494,7 @@ def raise_land(fleet, row, acts=None):
     _, moved = kit_git(fleet, t, main, "rev-list", "--count", "--first-parent", f"{base}..{now}")
     _, came = kit_git(fleet, t, main, "log", "-1", "--format=%(trailers:key=Sluice-From,valueonly)", head)
     card = landing_facts(bolt, t["kit"]["name"], work, head, facts.get("head_at"), {u for u, *_ in due_changes(plan, entries)},
-                         read_in, int(moved), pull_of(came.strip(), t["kit"]["repo"]))
+                         awaiting_answer(entries), read_in, int(moved), pull_of(came.strip(), t["kit"]["repo"]))
     if not card:
         return None
     card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label))
@@ -7118,9 +7119,8 @@ def batch_cards(n, units, posts):
     return [(k, card_part(k, units)) for _, k in old] or [(f"batch/{n}", units)]
 
 
-def due_changes(plan, entries):
-    """Each change due for the user's review, in the plan's order: a unit of a bolt a team holds whose last delivered
-    construct left a commit no batch has held it at, as (unit, team, commit, when it was constructed)."""
+def latest_changes(entries):
+    """Each unit's latest change, the commit its last delivered construct left, and when: {unit: (commit, when)}."""
     latest = {}
     for e in entries:
         if e.get("Act") != "stage.end" or e.get("Ended") != "delivered" or e.get("Refused"):
@@ -7130,6 +7130,34 @@ def due_changes(plan, entries):
         got = e.get("Delivered") or ""
         if unit and got.startswith(f"unit/{unit}@"):
             latest[unit] = (got.rpartition("@")[2], e["At"])
+    return latest
+
+
+def batch_closed(entries):
+    """The batch card keys the run record holds closed: a card.close under the key, not refused and not lost to its
+    owner, once the user sent the card back with a tap or sent its reading session, or closed it in Pending You; the
+    rail then shows the batch's row no longer (record_reading)."""
+    return {e["Key"] for e in entries if e.get("Act") == "card.close" and e.get("Card") and not e.get("Refused")
+            and e.get("State") != "lost" and (e.get("Key") or "").startswith("batch/")}
+
+
+def awaiting_answer(entries):
+    """Each unit whose latest change has been in a batch whose card the user has not answered (briefs.12), as {unit: the
+    batch}: no card of a batch holding the change at its commit (batch_cards) is closed (batch_closed), so its row
+    still waits on the rail. A unit whose latest change no batch has held is due_changes', and a chore is in no batch."""
+    latest, closed, posts, held = latest_changes(entries), batch_closed(entries), batch_posts(entries), {}
+    for n, _, units in batches(entries):
+        for key, part in batch_cards(n, units, posts):
+            for u, _, sha in part:
+                if u in latest and latest[u][0] == sha:
+                    held.setdefault(u, []).append((n, key in closed))
+    return {u: max(n for n, _ in ns) for u, ns in held.items() if not any(answered for _, answered in ns)}
+
+
+def due_changes(plan, entries):
+    """Each change due for the user's review, in the plan's order: a unit of a bolt a team holds whose last delivered
+    construct left a commit no batch has held it at, as (unit, team, commit, when it was constructed)."""
+    latest = latest_changes(entries)
     held = {(u, sha) for _, _, us in batches(entries) for u, _, sha in us}
     out = []
     for u in plan.units():
@@ -7164,7 +7192,7 @@ def batch_due(due, entries, setting, now, bolts):
     for name, merged, waiting in bolts:
         if merged and waiting:
             why.append(f"bolt {name} has every unit merged, and lands only once {either(waiting)} "
-                       + ("has" if len(waiting) == 1 else "have") + " been in a batch")
+                       + ("has" if len(waiting) == 1 else "have") + " been in a batch the user has answered")
     return why
 
 
@@ -7421,8 +7449,9 @@ def rail_record(fleet, found, props):
     whose record did not answer, {label: {host: why}}; the landings, each {label, bolt, units, at, by, host}, from each
     bolt.land entry not refused, oldest first; the team each bolt was given to, {(label, bolt): team}, from the newest
     bolt.give entry naming it that was not refused; what the batches hold, {label: {"batches": [(n, at, units)],
-    "closed": card keys closed, "posts": batch card keys posted, "due": units whose latest change no batch has held}},
-    the last None for a partition whose record did not all answer, since then it can't be told; the rail's rows for the
+    "closed": card keys closed, "posts": batch card keys posted, "due": units whose latest change no batch has held,
+    "unanswered": {unit: the batch} whose card the user has not answered that holds its latest change}}, the last two
+    None for a partition whose record did not all answer, since then they can't be told; the rail's rows for the
     operations; the entries the operations are read from, {label: entries}, the ops entries of the main level's host
     and the landings, oldest first, which the board's Operation lane reads (ops.environments); and every entry read,
     {label: entries}, oldest first, which the sweep (sweep_cards) and the board's design band read."""
@@ -7453,8 +7482,9 @@ def record_reading(l, entries, plan, fresh, missing=None):
     """What the rail reads of one partition's run record entries, as rail_record gives it: when each proposal was
     proposed, the cards open (posted since fresh and not closed, the same owner's newer card under a key replacing its
     older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
-    None while a host of the record did not answer (missing). A close refused leaves its card open; a card's close as
-    lost to its owner ends that card but not its row, whose card is posted again under its key."""
+    None while a host of the record did not answer (missing), as are the units whose latest change waits on the user's
+    answer to its batch's card (awaiting_answer). A close refused leaves its card open; a card's close as lost to its
+    owner ends that card but not its row, whose card is posted again under its key."""
     times, posted, closed, landings, gives = {}, {}, set(), [], {}
     for e in entries:
         act = e.get("Act")
@@ -7483,7 +7513,8 @@ def record_reading(l, entries, plan, fresh, missing=None):
             if bolt and team:
                 gives[(l, bolt)] = team
     held = dict(batches=batches(entries), closed=closed, posts=batch_posts(entries),
-                due=None if missing else {u for u, *_ in due_changes(plan, entries)})
+                due=None if missing else {u for u, *_ in due_changes(plan, entries)},
+                unanswered=None if missing else awaiting_answer(entries))
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
 
 
@@ -7498,7 +7529,8 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     batch/<n>, holding every unit, until its card closes; a batch posted as cards of five before a batch was one card is
     a row for each card posted, keyed batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row,
     offered for landing only once its verification is green, sluice's verdict on its last landing (kit.verification,
-    record 0025), and every unit's latest change has been in a batch: until then the row says which, and offers nothing
+    record 0025), and every unit's latest change has been in a batch whose card the user has answered: until then the
+    row says which units no batch has held and which batches wait on the user's answer, and offers nothing
     (briefs.12)."""
     rows, here, held = [], crew.this_host(), held or {}
     for d in props:
@@ -7542,8 +7574,9 @@ def rail_rows(fleet, found, sv, props, times, held=None):
             stages = [st.of(u.name())["stage"] for u in units]
             at, head = k["bolts"].get(b.name(), {}).get("head_at"), k["bolts"].get(b.name(), {}).get("head")
             if stages and at and head and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
-                due = held.get(l, {}).get("due")
+                due, waits = held.get(l, {}).get("due"), held.get(l, {}).get("unanswered") or {}
                 outside = [u.name() for u in units if due is not None and u.name() in due]
+                unread = sorted({waits[u.name()] for u in units if u.name() in waits})
                 what = [f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"]
                 cmds = [("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]
                 state, said = kit.verification(head, k["bolts"].get(b.name(), {}).get("verdict"))
@@ -7551,9 +7584,12 @@ def rail_rows(fleet, found, sv, props, times, held=None):
                     what, cmds = what + [f"lands once its verification is green; now {said}"], []
                 elif due is None and l in held:
                     what, cmds = what + ["whether every unit's latest change has been in a batch can't be told: a host did not answer"], []
-                elif outside:
-                    what = what + [f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have")
-                                   + " been in a batch, which is due for them"]
+                elif outside or unread:  # in a batch whose card the user has answered (briefs.12)
+                    if outside:
+                        what = what + [f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have")
+                                       + " been in a batch, which is due for them"]
+                    if unread:
+                        what = what + [f"lands once you have answered batch{'' if len(unread) == 1 else 'es'} {joined([str(n) for n in unread])}"]
                     cmds = []
                 fixes = fixes_in_flight(k.get("fixes", []), b.name())
                 if fixes and cmds:  # a fix started on the bolt holds its landing (landing_held)

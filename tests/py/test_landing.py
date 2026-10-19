@@ -117,10 +117,20 @@ class TestTheLandingsPoint:
 
     def test_its_facts_wait_for_every_units_latest_change_to_have_been_in_a_batch(self):
         pr = plan.pull_of("swb-1-unit-2 (pull/23)", "WilldanGroup/switchboard-kit")
-        facts = plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", "2026-10-17T10:00:00Z", set(), {"a": 4, "b": 5}, 2, pr)
+        facts = plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", "2026-10-17T10:00:00Z", set(), {}, {"a": 4, "b": 5}, 2, pr)
         assert facts == dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], batches={"a": 4, "b": 5}, head="abc1234",
                              at="2026-10-17T10:00:00Z", moved=2, pr={"number": 23, "url": "https://github.com/WilldanGroup/switchboard-kit/pull/23"})
-        assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, {"b"}, {"a": 4}, 0, None) is None
+        assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, {"b"}, {}, {"a": 4}, 0, None) is None
+
+    def test_its_facts_wait_for_the_users_answer_on_each_batch_card_that_holds_a_units_latest_change(self):
+        """briefs.12: the user, 2026-10-19, on card req_5ff4d31d: "Wait for my answer on the batch card", after crew's
+        small-leftovers-of-crew landed (#71) while batch 7's card, which held its unit, was unanswered."""
+        assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, set(), {"b": 7}, {"a": 6, "b": 7}, 0, None) is None
+        assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, set(), {"q": 7}, {"a": 6, "b": 7}, 0, None)["units"] == ["a", "b"]
+
+    def test_a_chore_is_in_no_batch_and_holds_no_landing(self):
+        facts = plan.landing_facts("y", "switchboard-kit", [("c", "chore", "merged")], "abc1234", None, set(), {}, {}, 0, None)
+        assert (facts["units"], facts["chores"], facts["batches"]) == ([], ["c"], {})
 
     def test_sluices_pull_request_is_the_one_its_submission_at_the_head_went_through(self):
         assert plan.pull_of("swb-1-unit-2 (unit/a)", "o/k") is None and plan.pull_of("", "o/k") is None
