@@ -79,13 +79,15 @@ ok "after a restart, operator up runs each tab's command again in the shell herd
 # After a restart: panes back with no agent in them are revived, resumed or fresh; a team taken down stays down.
 gone() { local p; p=$(as $box herdr --session "$1" agent get "$2" | jq -r .result.agent.pane_id); as $box herdr --session "$1" agent prompt "$p" /exit >/dev/null; }
 crew up swb-1 >/dev/null; crew up swb-2 >/dev/null; crew down swb-2 >/dev/null
-gone wldn-1 swb-1-conductor; gone wldn-3 wldn-design
+CREW_TEST_NO_MESSAGE=1 crew restart swb-1 ops --no-greet >/dev/null  # an ops never spoken to, with no conversation
+gone wldn-1 swb-1-conductor; gone wldn-1 swb-1-ops; gone wldn-3 wldn-design
 : > "$CREW_TEST_CLAUDE_LOG"; : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew revive
 has "$out" "swb-1-conductor resumed"; has "$out" "wldn-design resumed"
+has "$out" "swb-1-ops has no conversation to resume; starting it fresh"
 has "$out" "swb-2 was taken down; it stays down"
-for a in swb-1-ops wldn-planner wldn-ops swb-2-conductor; do eq "$(jq -r --arg a $a 'select(.agent == $a)' "$CREW_TEST_CLAUDE_LOG" | wc -l | tr -d ' ')" "0"; done
-eq "$(greetings $box wldn-1 swb-1-conductor)" "1"; eq "$(greetings $box wldn-3 wldn-design)" "1"
+for a in wldn-planner wldn-ops swb-2-conductor; do eq "$(jq -r --arg a $a 'select(.agent == $a)' "$CREW_TEST_CLAUDE_LOG" | wc -l | tr -d ' ')" "0"; done
+eq "$(greetings $box wldn-1 swb-1-conductor)" "1"; eq "$(greetings $box wldn-3 wldn-design)" "1"; eq "$(greetings $box wldn-1 swb-1-ops)" "1"
 grep -q "agent prompt wldn-planner '" "$CREW_TEST_LOG" && fail "an agent that came back by itself was greeted"
 HOST=$box crew main down wldn >/dev/null
 eq "$(herdr_state $box wldn-3 '.agents | length') $(herdr_state mac-studio wldn-5 '[.agents[].name] | map(select(startswith("wldn-dispatch"))) | length')" "0 0"
@@ -97,4 +99,4 @@ echo mac-studio > "$T/down"
 HOST=$box expect_fail "mac-studio port 22: Operation timed out" crew main up wldn
 has "$out" "wldn-dispatch-$box started"; has "$out" "wldn-dispatch-$box greeted"
 rm "$T/down"
-ok "crew revive brings back the agents whose panes came back empty and greets each it brought back once; a team or main level taken down stays down; main down reaches every host, and a host that does not answer fails main up once the others are up"
+ok "crew revive brings back the agents whose panes came back empty and greets each it brought back once, a team's ops it had to start fresh among them; a team or main level taken down stays down; main down reaches every host, and a host that does not answer fails main up once the others are up"
