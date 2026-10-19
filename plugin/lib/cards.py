@@ -22,6 +22,7 @@ from picture import cut, wrap
 BRIDGE = ("pendingyou", "mcp", "--app", "claude-code")
 PROTOCOL = "2025-06-18"  # the MCP revision Pending You's CLI opens its sessions with
 CALL = 60  # seconds a call waits for its reply: what Claude Code's own transport waited on 2026-10-09
+AGENT = "crew"  # the User-Agent a picture is put with (put)
 CLOSE = 5  # seconds the bridge is given to end once its input is closed
 SIGNED_OUT = -32001  # the bridge's code when this computer has no sign-in, or its sign-in has ended
 WORDS = 300  # the most of Pending You's words a refusal carries, as its CLI cuts them
@@ -964,11 +965,14 @@ def git_remote(cwd):
 
 
 def put(url, data, kind):
-    """A file put to the upload URL Pending You gave for it, with its content type: None once it is there, else why
-    not, in the words that say so."""
+    """A file put to the upload URL Pending You gave for it, with its content type and crew's own User-Agent: None once
+    it is there, else why not, in the words that say so. Pending You's host refuses urllib's own, Python-urllib/3.x,
+    as a banned browser signature (403 Forbidden, "error code: 1010"), as every proposal card's picture was refused on
+    2026-10-18; curl's and a named agent's are taken."""
     import urllib.error, urllib.request
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": kind}),
+        with urllib.request.urlopen(urllib.request.Request(url, data=data, method="PUT",
+                                                           headers={"Content-Type": kind, "User-Agent": AGENT}),
                                     timeout=CALL) as r:
             return None if 200 <= r.status < 300 else f"its upload answered {r.status}"
     except (OSError, urllib.error.URLError) as e:
