@@ -17,6 +17,19 @@ expect_ok crewpy brief swb-1 coder; has "$out" "run \`wt submit\` in the backgro
 has "$out" "wt submit bolt/<bolt> --no-remove"; lacks "$out" "wt merge"; lacks "$out" "--no-hooks"
 ok "the coder merges by a submission to sluice, whose checks can outlast a command's time limit, in the background"
 
+# sluice 0.3.1's `wt submit --help` removes the worktree it ran in as if the submission had landed (teams.5's
+# details), so every brief that names `wt submit` says never to run it, and where the usage is read instead.
+named=()
+for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" \
+  "wldn design" "wldn planner" "wldn dispatcher" "wldn main-ops" "wldn operator"; do
+  expect_ok crewpy brief $brief
+  [[ $out == *"wt submit"* ]] || continue
+  named+=("${brief#* }")
+  has "$out" "Never run \`wt submit --help\` in a worktree: with sluice 0.3.1 it prints its help and then removes the worktree it ran in as if the submission had landed; read the usage from \`sluice submit --help\` or \`wt --help\`, which remove nothing."
+done
+[[ ${named[*]} == "conductor coder design main-ops operator" ]] || fail "the briefs naming wt submit are ${named[*]}"
+ok "every brief that names wt submit says never to run wt submit --help in a worktree, and to read sluice submit --help or wt --help"
+
 expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by hand: sluice runs it."
 has "$out" "run the tests of what you changed, as the kit's CLAUDE.md says"; lacks "$out" "moon run"
 expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it runs only those the change affects"
