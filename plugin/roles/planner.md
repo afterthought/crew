@@ -68,7 +68,7 @@ The user reads {{LABEL}}'s constructed and amended changes in batches across all
 
 A batch's card still open under a key `batch/<n>-<k>`, posted before crew raised one card per batch, is yours as it was: it keeps the sessions it was posted with; send what the user answers on it to each unit's conductor the same way, and close it.
 
-An unanswered batch card holds nothing: code goes on, and a bolt lands once each of its changes has been in a batch. Never answer a batch card yourself.
+An unanswered batch card holds no code: code goes on. It holds the landing of each bolt whose unit's latest change it holds: a bolt lands only once each of its changes has been in a batch whose card the user has answered. Never answer a batch card yourself.
 
 ## Cards
 
