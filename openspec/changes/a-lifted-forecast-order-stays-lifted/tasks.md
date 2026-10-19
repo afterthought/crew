@@ -15,4 +15,4 @@
 ## 3. The briefs and the docs
 
 - [x] 3.1 The conductor's and planner's briefs say crew orders and lifts its own forecast orders and that nobody proposes lifting one, checked by `t-briefs.sh` (design.md, Decisions 6, Task notes 3.1). Verify `tests/suite t-briefs` ends with "0 failed".
-- [ ] 3.2 README, the crew skill and `crew unit wait`'s usage say how a settle orders two units and what crew's order writes record (design.md, Task notes 3.2). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 3.2 README, the crew skill and `crew unit wait`'s usage say how a settle orders two units and what crew's order writes record (design.md, Task notes 3.2). Verify `tests/suite --affected` ends with "0 failed".
