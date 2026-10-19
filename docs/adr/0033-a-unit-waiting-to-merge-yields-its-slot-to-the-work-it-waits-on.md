@@ -1,7 +1,7 @@
 ---
 number: 33
 title: A unit waiting to merge yields its slot to the work it waits on
-status: proposed
+status: rejected
 date: 2026-10-19
 decision-makers:
 - Chuck Swanberg
@@ -10,7 +10,7 @@ decision-makers:
 
 # A unit waiting to merge yields its slot to the work it waits on
 
-Status: proposed to the user on 2026-10-19, as `briefs.15` has it; accepted only on their yes.
+Status: rejected by the user on 2026-10-19, on their card: "What the goddamn fuck is this? How is this a fucking ADR? You're not paying attention to the goddamn design". The design as written holds: a slot is taken when a unit's first stage starts and freed when the unit merges or is dropped (`bolt-teams` spec, *Units run in slots*; `teams.1`), and the deadlock's cause is the merge that stopped short for archives its own stage could make, which record 0034 rules; with that cause gone there is no chore to wait for and no slot to yield. `teams.1` stands unamended.
 
 Deciders: swancloud-design, on wldn-planner's finding (2026-10-19, signal 2026-10-19-swancloud-planner-e9298b79/01: "a team with one unit slot cannot build a chore its bolt needs to land ... A unit waiting on an unblocker should not hold the slot the unblocker needs, or an --unblocks chore should run outside the slot count. For now the user is asked for a second awb-1 slot."); the user, on this card.
 Amends: `teams.1`.
