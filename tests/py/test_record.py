@@ -63,6 +63,15 @@ class TestEmit:
         err = capsys.readouterr().err.strip().splitlines()
         assert len(err) == 1 and err[0].startswith(f"crew: the run record at {tmp_path}/crew/wldn/runs/mac-studio/") and "could not be written" in err[0]
 
+    def test_the_entries_of_one_second_sort_as_they_were_made_whichever_process_made_each(self):
+        import datetime
+        t = datetime.datetime(2026, 10, 19, 1, 49, 46, 120000, tzinfo=datetime.timezone.utc)
+        post = entry(record.entry_id(t, BOX, 99891, 1), "2026-10-19T01:49:46Z", "card.post", Card="req_1", Key="batch/2", By="wldn-planner")
+        close = entry(record.entry_id(t + datetime.timedelta(milliseconds=400), BOX, 352, 1), "2026-10-19T01:49:46Z", "card.close",
+                      Card="req_1", Key="batch/2", By="wldn-planner")
+        assert post["Id"].startswith("20261019T014946Z-120000-")
+        assert [e["Act"] for e in sorted([close, post], key=lambda e: (e["At"], e["Id"]))] == ["card.post", "card.close"]
+
     def test_a_commits_subject_is_its_entrys_why_without_the_agent(self):
         assert record.subject("plan(b): add x (chuck@mac-studio)\n\nbody") == "plan(b): add x"
 

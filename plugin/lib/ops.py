@@ -71,14 +71,7 @@ def entries(label, days=DAYS):
     for f in sorted(d.glob("*.rec")) if d.is_dir() else []:
         if f.stem >= since:
             out += [e for e in record.parse(f.read_text()) if (e.get("Act") or "").startswith("ops.")]
-    return in_order(out)
-
-
-def in_order(es):
-    """A host's entries, read day by day and each day as it was appended, in the order they were made: by their time,
-    and those of one second as the record holds them, since an id names the process that made its entry, which says
-    nothing of which of one second's came first."""
-    return sorted(es, key=lambda e: e["At"])
+    return sorted(out, key=lambda e: (e["At"], e["Id"]))
 
 
 def env_of(e):
@@ -110,10 +103,8 @@ def state(es):
     return offers, words, steps
 
 
-def ordered(steps, es):
-    """The steps, {(env, to, key): latest entry}, in the order their latest entries were made, as es holds them."""
-    made = {e["Id"]: n for n, e in enumerate(es)}
-    return sorted(steps.items(), key=lambda kv: made[kv[1]["Id"]])
+def ordered(steps):
+    return sorted(steps.items(), key=lambda kv: (kv[1]["At"], kv[1]["Id"]))
 
 
 def numbered(steps):
@@ -792,9 +783,9 @@ def step(fleet, a):
 
 
 def steps(fleet, a):
-    es = entries(a.label)
+    _, _, st = state(entries(a.label))
     print(json.dumps([dict(to=to, key=key, state=e.get("State"), by=e.get("By"), at=e["At"], note=e.get("Note"))
-                      for (env, to, key), e in ordered(state(es)[2], es) if env == a.env]))
+                      for (env, to, key), e in ordered(st) if env == a.env]))
 
 
 # What `quiet` runs on the environment's host: how many of crew's tests hold a test slot there (tests/slot).
