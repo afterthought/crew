@@ -1,7 +1,7 @@
 ---
 number: 19
 title: An elaboration works one question in one workspace and ends on one card
-status: proposed
+status: rejected
 date: 2026-10-11
 decision-makers:
 - Chuck Swanberg
@@ -10,7 +10,7 @@ decision-makers:
 
 # An elaboration works one question in one workspace and ends on one card
 
-Status: proposed to the user on 2026-10-11, as `briefs.15` has it; accepted only on their yes. Record 0016, the spike, waits on this one.
+Status: rejected by the user on 2026-10-19, on their card: "Reject it: elaboration is Sounding's, crew builds none", after their note on the record's own card the day before ("Not sure that we want to waste time on this in crew if they're going to build it in the new tool called Sounding"). Elaboration is built in Sounding, a tool outside crew's records; crew keeps its parts around it (signals and their moves, records, units, cards) and adds no intent, elaborate or conclude. Record 0016, the spike, is rejected with it. Either may be proposed again if Sounding does not cover it.
 
 Deciders: the user, who asked for it (2026-10-11: "I think the real concept is intent elaboration and if we could have some simple version of intent elaboration, that's what I really want. It doesn't have to be that a spike runs beside the design agent. Again it's about the elaboration and I would probably want one workspace per elaboration." "I don't want to have some hard-coded thing just for spikes." "What's the simple mental model for an elaboration in Crew that gets us 80% of the benefit of the design from Flywheel Next without fully implementing it?"), with a side session's starting point, not a ruling: one elaboration is one question, one session and one workspace with its own worktree; its notes and any prototype stay in its folder; what it concludes comes to the user as one document to approve; prototype code reaches main only through a unit.
 
