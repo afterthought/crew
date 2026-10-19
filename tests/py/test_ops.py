@@ -182,6 +182,13 @@ class TestEnvironments:
             ("restart-herdr", "failed", None, None, False), ("restart-teams/2", "waiting", "op/mac-studio/5", None, True)]
         assert ops.environments(es)["mac-studio"]["deploys"] == []
 
+    def test_each_operation_waiting_says_whether_it_is_a_gate_and_gives_its_link(self):
+        es = [gate(), e("ops.step", env="dev", minutes=2, Key="rotate-key", State="waiting", Doer="user", Text="Rotate the key."),
+              e("ops.step", env="dev", minutes=3, Key="restart", State="handed", Doer="dispatcher", Text=RUN)]
+        waiting = ops.environments(es)["dev"]["waiting"]
+        assert [(w["key"], w["to"], w["gate"], w["row"]) for w in waiting] == [
+            ("gate-38612817613", SHA4, RUN, "op/dev/1"), ("rotate-key", None, None, "op/dev/2"), ("restart", None, None, None)]
+
 
 class TestCarried:
     LANDS = [dict(bolt="one", repo="swancloud", head=S1), dict(bolt="crew-one", repo="crew", head="d" * 40),

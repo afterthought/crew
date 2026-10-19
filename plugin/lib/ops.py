@@ -269,8 +269,8 @@ def environments(es, since=None):
     has them), the bolts it carried or why the record can't tell, every after-deploy step recorded against its commit
     with its doer and latest state, its rail row while it waits on the word, and when it last moved; newest first,
     those that last moved before since left out unless still open. Waiting are the operations whose latest state is
-    waiting, handed or failed, each with whether it is held for the user's word and its rail row when it waits on the
-    user."""
+    waiting, handed or failed, each with whether it is held for the user's word, the link of the gate it waits at
+    (gate_of) or None, and its rail row when it waits on the user."""
     lands = landings(es)
     _, _, steps = state(es)
     envs = {}
@@ -326,7 +326,7 @@ def environments(es, since=None):
             deploys.append(dict(d, bolts=bolts, bolts_why=why, after=after, row=row))
         waiting = [{"key": key, "to": t or None, "state": x.get("State"), "doer": x.get("Doer"), "agent": x.get("Agent"), "at": x["At"],
                     "text": next((l.strip() for l in (x.get("Text") or "").splitlines() if l.strip()), None), "note": x.get("Note"),
-                    "held": held(x), "row": f"op/{env}/{n}" if waits_on_user(x) else None}
+                    "held": held(x), "gate": gate_of(x), "row": f"op/{env}/{n}" if waits_on_user(x) else None}
                    for n, (en, t, key), x in numbered(steps) if en == env and x.get("State") in WAITING]
         out[env] = {"deploys": deploys, "waiting": waiting}
     return out
