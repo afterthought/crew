@@ -1,4 +1,4 @@
-> An exploration's plan (2026-10-03): the build order of the findings-to-design changes only; the partition's plan orders every change. Steps 0 to 5 are built; later ADR-driven changes are not listed here.
+> An exploration's plan (2026-10-03): the build order of the findings-to-design changes only; the partition's plan orders every change. Dropped by the user on 2026-10-19: change 9, the daily pass through crew (the Wispr Flow pass is to be rebuilt with the flywheel tools), and any curation cadence (`signals.7` as amended that day). Steps 0 to 5 are built; later ADR-driven changes are not listed here.
 
 # Findings to design: the roadmap
 
