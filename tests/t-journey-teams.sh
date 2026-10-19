@@ -2,10 +2,11 @@
 # ops on its host in one workspace, each greeted once and recorded, and status, down, resume, restart, clear, rebuild and
 # close act on them; a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and
 # restarts them in the kit's main checkout, greeting each; a role resumes where its conversation began, and one with
-# none is started fresh and greeted; a conductor brought back is told a unit waits amended; and a landing records
-# GitHub's main, however far the host's own lags. The main level's agents are t-journey-main's. Which agents a command
-# greets, what each is greeted with, where it runs and resumes, and what a conductor brought back is told are logic
-# cases (tests/py/test_teams.py); how git makes a bolt's branch, contract cases
+# none is started fresh and greeted; crew up opens again in the team's workspace a pane herdr brought back dead; a
+# conductor brought back is told a unit waits amended; and a landing records GitHub's main, however far the host's own
+# lags. The main level's agents are t-journey-main's. Which agents a command greets, what each is greeted with, where
+# it runs and resumes, whether a pane is dead and where it opens again, and what a conductor brought back is told are
+# logic cases (tests/py/test_teams.py); how git makes a bolt's branch, contract cases
 # (tests/contract/test_git.py).
 # Reads: plugin/hooks/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -94,6 +95,21 @@ done
 expect_ok crew up atl-1
 eq "$(herdr_state mac-studio wldn-5 '[.tabs[].label] | join(",")')" "conductor,git"
 ok "assign and opsx are gone, and a team on a Mac has a git tab"
+
+# herdr brings atl-1's conductor and ops back dead, their folder gone at its restart, as it brought crw-2's back before
+# test D (2026-10-18): crew up closes each and opens it again in the team's workspace, the git tab left as it stands.
+crew down atl-1 >/dev/null
+apane() { awk -v r="$1" '$1 == r {print $2}' "$(home_of mac-studio)/.local/state/atl-1-team/panes"; }
+c=$(apane conductor); o=$(apane ops); g=$(apane git-kit)
+for p in "$c" "$o"; do as mac-studio herdr --session wldn-5 stub dead "$p" "$T/trash/gone"; done
+expect_ok crew up atl-1
+has "$out" "atl-1's conductor pane $c is dead: herdr could not bring it back in $T/trash/gone (Saved directory is unavailable. Restore the directory and restart this session.); crew closes it and opens it again"
+has "$out" "atl-1's ops pane $o is dead"; has "$out" "atl-1-conductor started"; has "$out" "atl-1-ops started"
+eq "$(herdr_state mac-studio wldn-5 "[.panes | keys[] | select(. == \"$c\" or . == \"$o\")] | length")" "0"
+eq "$(herdr_state mac-studio wldn-5 '[.workspaces[].label] | join(",")'),$(apane git-kit)" "atl-1,$g"
+eq "$(herdr_state mac-studio wldn-5 '[.tabs[].label] | join(",")')" "git,conductor"
+eq "$(herdr_state mac-studio wldn-5 '[.agents[].name] | sort | join(",")')" "atl-1-conductor,atl-1-ops"
+ok "crew up closes the conductor's and ops' panes herdr brought back dead, saying so, and opens them again in the team's workspace beside its git tab"
 
 # A unit of swb-2's bolt waits amended: the conductor brought back is told so, by its greeting or, on resume, as crew's notice.
 crew bolt new later "What comes next." --repo switchboard-kit >/dev/null

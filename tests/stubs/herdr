@@ -16,11 +16,15 @@ type user carries the text as sent, or for a slash command `/<command> <args>` C
 <command-name>/<command></command-name> and <command-args><args></command-args>, with the time it was taken.
 
 `pane run` of anything else that starts a program leaves it in the pane's foreground, as a tab's loop stays, and `pane
-process-info` answers as herdr 0.9.3 does: the pane's shell alone at its prompt, that program, or the pane's agent.
+process-info` answers as herdr 0.9.3 does: the pane's shell alone at its prompt, that program, or the pane's agent. A
+tab's last pane closed closes the tab, and a workspace's last tab the workspace, as herdr 0.9.3 closes them.
 
 Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status,
-`herdr --session S stub agent <pane> [name]` puts an agent in a pane, and `herdr --session S stub restore <pane>` brings
-a pane back as herdr does after a restart, its shell alone with nothing running in it. With CREW_TEST_BLOCKED naming agents, each one
+`herdr --session S stub agent <pane> [name]` puts an agent in a pane, `herdr --session S stub restore <pane>` brings
+a pane back as herdr does after a restart, its shell alone with nothing running in it, and `herdr --session S stub dead
+<pane> [cwd]` brings it back as herdr 0.9.3 does when the pane's saved folder (cwd, else its own) is gone at the restart:
+listed with a restore_error and no terminal, so its read, run, send-keys and process-info answer pane_not_found, while
+its split and close work. With CREW_TEST_BLOCKED naming agents, each one
 named so is stopped on a question in its pane (blocked) once it has its name, as a first run's consent stops Claude.
 `herdr --session S stub leave <pane|name> <n> [status]` makes the next n prompts to that agent, up now or started
 later under that name, untaken, as a prompt that lands before Claude is ready, or whose Enter is lost: each is added to
@@ -155,9 +159,27 @@ def cleared(p):
         st["agents"][p].pop("typed", None)
 
 
+def driven(p):
+    """A pane herdr drives: one it lists with no terminal, as it brings back a pane whose folder is gone, is not found."""
+    p in st["panes"] or die(f"no pane {p}")
+    "restore_error" not in st["panes"][p] or die({"code": "pane_not_found", "message": f"pane {p} not found"})
+
+
+def listed(p):
+    """A pane as herdr's pane list and pane get give it, with its workspace's and tab's ids."""
+    v = st["panes"][p]
+    return dict(v, pane_id=p, workspace_id=v["workspace"], tab_id=v["tab"])
+
+
 def close_pane(p):
-    st["panes"].pop(p, None)
+    """A pane closed, and with a tab's last pane its tab and with a workspace's last tab its workspace, as herdr 0.9.3
+    closes them."""
+    v = st["panes"].pop(p, None)
     st["agents"].pop(p, None)
+    if v and not any(o["tab"] == v["tab"] for o in st["panes"].values()):
+        st["tabs"].pop(v["tab"], None)
+    if v and not any(o["workspace"] == v["workspace"] for o in st["tabs"].values()):
+        st["workspaces"].pop(v["workspace"], None)
 
 
 group, cmd, rest = (args + ["", ""])[0], (args + ["", ""])[1], args[2:]
@@ -214,17 +236,17 @@ elif group == "pane" and cmd == "split":
     out({"pane": {"pane_id": p}})
 elif group == "pane" and cmd == "get":
     rest[0] in st["panes"] or die(f"no pane {rest[0]}")
-    out({"pane": dict(st["panes"][rest[0]], pane_id=rest[0])})
+    out({"pane": listed(rest[0])})
 elif group == "pane" and cmd == "list":
     ws = opt("--workspace")
-    out({"panes": [dict(v, pane_id=p) for p, v in st["panes"].items() if ws in (None, v["workspace"])]})
+    out({"panes": [listed(p) for p, v in st["panes"].items() if ws in (None, v["workspace"])]})
 elif group == "pane" and cmd == "close":
     rest[0] in st["panes"] or die(f"no pane {rest[0]}")
     close_pane(rest[0])
     out({})
 elif group == "pane" and cmd == "run":
     p, line = rest[0], rest[1]
-    p in st["panes"] or die(f"no pane {p}")
+    driven(p)
     if line.startswith("cd ") and "&&" in line:  # the pane's shell moves, as herdr then saves it
         st["panes"][p]["cwd"] = shlex.split(line.split("&&", 1)[0])[1]
     if line.split(" ", 1)[0] not in ("cd", "export", "printf") and "crew-role" not in line:  # a program, not the shell's own
@@ -244,17 +266,18 @@ elif group == "pane" and cmd == "run":
 elif group == "pane" and cmd == "process-info":  # as herdr 0.9.3 answers: the shell's pid is the group's at its prompt
     p = opt("--pane")
     p in st["panes"] or die({"code": "pane_not_found", "message": "pane not found"})
+    driven(p)
     shell = 1000 + int(p.split(":p")[1])
     run = "claude" if p in st["agents"] else st["panes"][p].get("running")
     fg = [{"pid": shell + 1, "argv": shlex.split(run)}] if run else [{"pid": shell, "argv": ["-zsh"]}]
     out({"process_info": {"pane_id": p, "shell_pid": shell, "foreground_process_group_id": fg[0]["pid"], "foreground_processes": fg}})
 elif group == "pane" and cmd == "send-keys":
-    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    driven(rest[0])
     if "ctrl+c" in rest[1:]:
         cleared(rest[0])
     out({})
 elif group == "pane" and cmd == "read":
-    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    driven(rest[0])
     print(st["panes"][rest[0]]["output"])
 elif group == "agent" and cmd == "get":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
@@ -305,6 +328,13 @@ elif group == "stub" and cmd == "restore":
     rest[0] in st["panes"] or die(f"no pane {rest[0]}")
     st["panes"][rest[0]].pop("running", None)
     st["agents"].pop(rest[0], None)
+elif group == "stub" and cmd == "dead":
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    v = st["panes"][rest[0]]
+    v.pop("running", None)
+    st["agents"].pop(rest[0], None)
+    v["cwd"] = rest[1] if len(rest) > 1 else v["cwd"]
+    v["restore_error"] = "Saved directory is unavailable. Restore the directory and restart this session."
 elif group == "stub" and cmd == "agent":
     rest[0] in st["panes"] or die(f"no pane {rest[0]}")
     st["agents"][rest[0]] = {"status": "idle", "name": rest[1] if len(rest) > 1 else None}

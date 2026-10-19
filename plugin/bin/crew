@@ -16,7 +16,10 @@
 #                                      to carry on with its bolt, its greeting (also on rebuild, restart and revive)
 #                                      opening with the units of its bolt that wait amended, for it to start their
 #                                      construct. A greeting is read back from the agent's transcript and sent once
-#                                      more when not taken
+#                                      more when not taken. A pane herdr lists with no terminal, its folder gone
+#                                      when herdr started, is closed and opened again in the team's workspace, said
+#                                      (also on restart, resume, revive and a stage's start); one an agent holds is
+#                                      never touched
 #   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh,
 #                                      keeping only the slots of work still in flight on its bolt
 #   crew close   <team>                end everything the team has and close its panes; nothing is started
@@ -165,7 +168,8 @@
 # Each partition's main level, and the operator agent in each operator session:
 #   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
 #                                      main level's session, and a dispatcher on each host the partition's teams run on;
-#                                      each agent up starts is greeted to read where the partition stands and carry on
+#                                      each agent up starts is greeted to read where the partition stands and carry on;
+#                                      a pane herdr brought back dead is closed and opened again in its workspace, said
 #   crew review   <label> [--wait [--timeout <ms>]]
 #                                      the partition's reviewer, started fresh for the batch of changes due, in a
 #                                      review tab beside the planner; --wait waits for its summary, records the batch,
@@ -186,9 +190,10 @@
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
-#                                      agent in it, picked up from its last conversation and greeted when it is a
-#                                      conductor or an agent outside a team, or started fresh and greeted when it has
-#                                      none; a team or main level taken down with crew down stays down
+#                                      agent in it, or dead, closed and opened again in its layout first, picked up
+#                                      from its last conversation and greeted when it is a conductor or an agent
+#                                      outside a team, or started fresh and greeted when it has none; a team or main
+#                                      level taken down with crew down stays down
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
 #
 # Operations on a partition's environments, a deploy being one kind (plan.14), run where the partition's main level
