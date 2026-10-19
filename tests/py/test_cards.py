@@ -892,7 +892,7 @@ class TestRecordCommand:
         from test_card_commands import Acts, MATCHED, POSTED
         where, f = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), recorded(MADR, "proposed")
         held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
-        for status, state, follows in (("closed", "closed", "req_c1"), ("cancelled", "withdrawn", None), ("expired", "withdrawn", None)):
+        for status, state, follows in (("resolved", "closed", "req_c1"), ("cancelled", "withdrawn", None), ("expired", "withdrawn", None)):
             acts = Acts({"get_request": ({"status": status, "version": 4}, None), "match_area": (MATCHED, None),
                          "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=held, caller="wldn-design")
             assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
@@ -900,7 +900,7 @@ class TestRecordCommand:
             assert (acts.emitted[0]["Act"], acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("card.close", state, plan.ENDED_ELSEWHERE)
             assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032:2"
             assert acts.calls[2][1].get("follows") == follows
-        acts = Acts({"get_request": ({"status": "closed", "version": 4}, None)}, entries=held, caller="wldn-design")
+        acts = Acts({"get_request": ({"status": "resolved", "version": 4}, None)}, entries=held, caller="wldn-design")
         assert plan.row_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", outcome="Accepted", acts=acts) == "req_c1"
         assert [c[0] for c in acts.calls] == ["get_request"]
         assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
@@ -990,6 +990,15 @@ class TestActDecisions:
             "ack_answer", {"requestId": "req_a", "name": "wldn-ops", "expectedVersion": 3, "outcome": "Deployed at 14:20"}, "closed")
         assert built.close_call({"status": "pending", "version": 1}, "req_a", "wldn-ops", reason="A newer head") == (
             "cancel_request", {"requestId": "req_a", "name": "wldn-ops", "reason": "A newer head"}, "withdrawn")
+
+    @pytest.mark.parametrize("got, state", [
+        ({"status": "resolved"}, "closed"), ({"status": "cancelled"}, "withdrawn"), ({"status": "expired"}, "withdrawn"),
+        ({"status": "pending"}, None), ({"status": "snoozed"}, None), ({"status": "delegated"}, None),
+        ({"status": "answered"}, None), ({"status": "closed"}, None), ({}, None), (None, None), ("resolved", None)])
+    def test_a_card_pending_you_resolved_reads_closed_and_one_it_cancelled_or_expired_withdrawn(self, got, state):
+        """Pending You 0.35.1 ends a card as resolved, cancelled or expired, and gives no `closed` (its wake mod's
+        CLOSED): mac-studio's deploy card of 2026-10-19 was resolved by its step's card, which followed it."""
+        assert built.ended(got) == state
 
     def test_a_change_carries_only_what_update_request_takes_and_a_card_posted_again_says_its_older_copy_is_dead(self):
         c = landing()["card"]

@@ -882,16 +882,19 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
-# The statuses get_request gives a card that waits on nobody any more: acked, withdrawn or expired.
-ENDED = ("closed", "cancelled", "expired")
+# The statuses get_request gives a card that waits on nobody any more: picked up or acked, withdrawn, or expired
+# (pendingyou 0.35.1, its wake mod's CLOSED); it gives no `closed`.
+ENDED = ("resolved", "cancelled", "expired")
 
 
 def ended(got):
-    """Whether get_request gives a card already ended in Pending You by another hand than crew's close, so crew can
-    neither change nor close it, and the run record must say it closed: the mac-studio deploy card of 2026-10-19,
-    acked when its word was recorded, refused every change and close for seven hours after, and no later offer of
-    mac-studio reached the user."""
-    return isinstance(got, dict) and got.get("status") in ENDED
+    """The state crew records a card in once get_request gives it ended in Pending You by another hand than crew's
+    close, so crew can neither change nor close it, and the run record must say it closed: "closed" when it is
+    resolved, answered and picked up, "withdrawn" when it is cancelled or expired, and None for any other reply. The
+    mac-studio deploy card of 2026-10-19 was resolved by the after-deploy step's card posted following it, refused
+    every close and change for six hours after, and no later offer of mac-studio reached the user."""
+    status = got.get("status") if isinstance(got, dict) else None
+    return None if status not in ENDED else "closed" if status == "resolved" else "withdrawn"
 
 
 def revision(got, kind_changed=False, questions=False):

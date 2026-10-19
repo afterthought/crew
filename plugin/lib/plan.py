@@ -8947,13 +8947,12 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
         with acts.bridge(owner, CARD_LATER) as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
             if lost is None:
-                how = "ended" if cards.ended(got) else cards.revision(got, kind_changed, "questions" in b["card"])
-            if lost is None and how == "ended":
-                state = "closed" if got.get("status") == "closed" else "withdrawn"
-            elif lost is None and how == "follow":
+                state = cards.ended(got)
+                how = "ended" if state else cards.revision(got, kind_changed, "questions" in b["card"])
+            if lost is None and how == "follow":
                 tool, args, state = cards.close_call(got, card, owner, outcome=cut(note, 120))
                 _, lost = py.answer(tool, args)
-            elif lost is None:
+            elif lost is None and how == "change":
                 change = dict(cards.change_args(b["card"], note), requestId=card, name=owner,
                               expectedVersion=cards.version_of(got, card))
                 got, lost = py.answer("update_request", change)
@@ -9015,8 +9014,8 @@ def card_closed(acts, label, owner, key, outcome, reason):
     try:
         with acts.bridge(owner, "The event stands, and its card stays open.") as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
-            if lost is None and cards.ended(got):
-                state = "closed" if got.get("status") == "closed" else "withdrawn"
+            state = cards.ended(got) if lost is None else None
+            if state:
                 outcome, reason = ENDED_ELSEWHERE, None
             elif lost is None:
                 tool, args, state = cards.close_call(got, card, owner, outcome, reason)

@@ -2,7 +2,7 @@
 
 ## 1. Pending You's ended statuses
 
-- [ ] 1.1 crew reads `resolved`, `cancelled` and `expired` as ended, recording `resolved` closed and the other two withdrawn, and changing and closing a card so reported sends nothing more, proved by the logic cases in `tests/py/test_cards.py` (design: decision 1; Task notes 1.1; `read.2`, `code.7`).
+- [x] 1.1 crew reads `resolved`, `cancelled` and `expired` as ended, recording `resolved` closed and the other two withdrawn, and changing and closing a card so reported sends nothing more, proved by the logic cases in `tests/py/test_cards.py` (design: decision 1; Task notes 1.1; `read.2`, `code.7`).
 - [ ] 1.2 crew can tell, from the run record's entries alone, under which key an owner's card a new post follows is still open, proved by logic cases in `tests/py/test_cards.py` (design: decision 2; Task notes 1.2; `code.7`, `state.2`).
 
 ## 2. A card picked up by the card that follows it
