@@ -1,7 +1,7 @@
 ---
 number: 34
 title: A merge archives what its archive needs, and a stage's need it can meet itself is never plan work
-status: proposed
+status: rejected
 date: 2026-10-19
 decision-makers:
 - Chuck Swanberg
@@ -10,7 +10,7 @@ decision-makers:
 
 # A merge archives what its archive needs, and a stage's need it can meet itself is never plan work
 
-Status: proposed to the user on 2026-10-19, as `briefs.15` has it; accepted only on their yes. Record 0033 rules the slot; this record rules the two faults ahead of it.
+Status: rejected by the user on 2026-10-19, on their card: "Did a designer fucking even look at this? What the goddamn fuck? Stop sending me ADRs without thinking about it. We've done all this fucking work on crew, Flume, and sluice and now you're just giving me these point solutions that are like, 'Well if I need to merge I need to archive first.' What was the goddamn design?" The design already holds what awb-1's case needed and nothing here decided anything new: a unit's change is archived by its merge, first thing (record 0006, record 0027, `teams.17`); a change already on main is archived directly by main-level ops and is never a unit or a chore (the user, 2026-10-06: "It's not a new unit because it's not new work.", signal archiving-is-not-a-unit); and when an agent breaks a rule its brief states, the fix is a check in crew that refuses the act (`roles.3`). awb-1's leftovers were ops's to archive, the conductor's chore was the act `roles.3` says crew refuses, and record 0033, rejected the same day, was a rule for the symptom. `teams.4` and `teams.17` stand unamended.
 
 Deciders: the user, on awb-1's deadlock (2026-10-19, in awb-1's pane: "why the fuck would you do that? can we get that root cause fixed", signal 2026-10-19-awb-1-conductor-5eafeeda/01 on wldn/main of WilldanGroup/crew-state, relayed by swancloud-planner as 2026-10-19-swancloud-planner-1e0507a1/01); swancloud-design.
 Amends: `teams.4`, `teams.17`.
