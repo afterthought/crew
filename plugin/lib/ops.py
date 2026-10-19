@@ -430,15 +430,26 @@ def step_words(text):
     return parts[0].strip(), fields
 
 
+GATE = re.compile(r"^https?://\S+$")  # a gate's step: its words one link alone (plan.14)
+
+
+def gate_of(e):
+    """The link of the gate a step's latest entry waits at, or None: a step that is the user's whose words, all its
+    text says before its first field (step_words), are one link alone is a deploy a hosted deployer holds at a gate
+    whose reviewer is the user (plan.14). An agent's step is never one, since a gate's reviewer is the user."""
+    words = step_words(e.get("Text"))[0]
+    return words if e.get("Doer") == "user" and GATE.match(words) else None
+
+
 def step_facts(env, n, e, label, working=None):
     """The facts of a step's card (cards.step_card) from its latest entry: its environment and number, its words and
-    fields as its text gives them (step_words), its doer as a card names it, whether it is held, and for a held step
-    what doing it now cuts: working, the stage agents working on its host as the card is raised, or why crew could not
-    tell (a string)."""
+    fields as its text gives them (step_words), its doer as a card names it, whether it is held, the gate it waits at
+    (gate_of) and the deploy it names, and for a held step what doing it now cuts: working, the stage agents working
+    on its host as the card is raised, or why crew could not tell (a string)."""
     words, fields = step_words(e.get("Text"))
     doer = "user" if e.get("Doer") == "user" else doer_of(e.get("Doer"), e.get("Agent"), label, env)
     f = dict(env=env, n=n, text=words or e.get("Key"), doer=doer, held=held(e), why=fields.get("why"), where=fields.get("where"),
-             commands=fields["commands"], done=fields.get("done"))
+             commands=fields["commands"], done=fields.get("done"), gate=gate_of(e), to=e.get("Head") or None)
     if f["held"]:
         if isinstance(working, str):
             now = f"It runs at once, whatever is working on {env}: crew could not tell what is ({working})"

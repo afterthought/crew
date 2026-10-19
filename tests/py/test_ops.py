@@ -400,6 +400,34 @@ class TestStepCard:
         assert ops.step_facts("mac-studio", 2, dict(step, Text=None), "swancloud")["text"] == "restart-teams/1"
 
 
+RUN = "https://github.com/WilldanGroup/switchboard-kit/actions/runs/38612817613"
+SHA4 = "4f2a9c1" + "0" * 33
+
+
+def gate(text=RUN + "\n", **f):
+    """swb-4's break-glass stand, 2026-10-14: switchboard-kit's run held at dev's gate, whose one reviewer is the user,
+    recorded as the user's step with the gate's link as its text (plan.14)."""
+    return e("ops.step", env="dev", minutes=1, Key="gate-38612817613", **dict(dict(Head=SHA4, State="waiting", Doer="user", Text=text), **f))
+
+
+class TestGate:
+    def test_a_users_step_whose_words_are_one_link_alone_is_a_gate_its_facts_carrying_the_link_and_the_commit(self):
+        assert ops.gate_of(gate()) == RUN
+        f = ops.step_facts("dev", 1, gate(), "wldn")
+        assert (f["gate"], f["to"], f["text"], f["doer"], f["why"]) == (RUN, SHA4, RUN, "user", None)
+        assert ops.step_facts("dev", 1, gate(Head=None), "wldn")["to"] is None
+
+    def test_a_link_with_a_why_after_it_is_a_gate_with_its_why(self):
+        f = ops.step_facts("dev", 1, gate(RUN + "\n- why: the break-glass stand, while the tenant is down.\n"), "wldn")
+        assert (f["gate"], f["why"]) == (RUN, "the break-glass stand, while the tenant is down.")
+
+    def test_words_around_a_link_or_an_agents_step_are_no_gate(self):
+        assert ops.gate_of(gate("Open https://example.com and rotate the key")) is None
+        assert ops.gate_of(gate(f"{RUN} {RUN}")) is None and ops.gate_of(gate("ftp://example.com/run")) is None
+        assert ops.gate_of(gate(Doer="main-ops", Agent="wldn-ops", When="held")) is None
+        assert ops.step_facts("dev", 1, gate(Text=None), "wldn")["gate"] is None
+
+
 def card(act, key, card_id, minutes, **f):
     return dict(Act=act, Key=key, Card=card_id, At=f"2026-10-12T11:{minutes:02d}:00Z", **f)
 
