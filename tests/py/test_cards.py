@@ -862,7 +862,8 @@ class TestRecordCommand:
         from test_card_commands import Acts, MATCHED, POSTED
         where, f = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), recorded(MADR, "proposed")
         held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
-        for status, state, follows in (("closed", "closed", "req_c1"), ("cancelled", "withdrawn", None), ("expired", "withdrawn", None)):
+        for status, state, follows in (("resolved", "closed", "req_c1"), ("closed", "closed", "req_c1"), ("cancelled", "withdrawn", None),
+                                       ("expired", "withdrawn", None)):
             acts = Acts({"get_request": ({"status": status, "version": 4}, None), "match_area": (MATCHED, None),
                          "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=held, caller="wldn-design")
             assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
@@ -870,10 +871,11 @@ class TestRecordCommand:
             assert (acts.emitted[0]["Act"], acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("card.close", state, plan.ENDED_ELSEWHERE)
             assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032:2"
             assert acts.calls[2][1].get("follows") == follows
-        acts = Acts({"get_request": ({"status": "closed", "version": 4}, None)}, entries=held, caller="wldn-design")
-        assert plan.row_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", outcome="Accepted", acts=acts) == "req_c1"
-        assert [c[0] for c in acts.calls] == ["get_request"]
-        assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
+        for status in ("resolved", "closed"):
+            acts = Acts({"get_request": ({"status": status, "version": 4}, None)}, entries=held, caller="wldn-design")
+            assert plan.row_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", outcome="Accepted", acts=acts) == "req_c1"
+            assert [c[0] for c in acts.calls] == ["get_request"]
+            assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
 
 
 class TestBatch:

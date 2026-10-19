@@ -873,8 +873,11 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
-# The statuses get_request gives a card that waits on nobody any more: acked, withdrawn or expired.
-ENDED = ("closed", "cancelled", "expired")
+# The statuses get_request gives a card that waits on nobody any more: acked (resolved, or closed), withdrawn or
+# expired. An answered card acked reads resolved (Pending You's ack_answer, read 2026-10-19).
+ENDED = ("resolved", "closed", "cancelled", "expired")
+# Of those, the ones whose close the run record keeps as closed rather than withdrawn.
+ACKED = ("resolved", "closed")
 
 
 def ended(got):
