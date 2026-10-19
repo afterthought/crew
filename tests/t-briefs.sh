@@ -383,7 +383,9 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
   "Never ask the planner or the user to lift an order crew wrote from a forecast" \
   "no proposal and no card asks the user to undo one" \
   "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
-  "the card waits for them: crew makes a batch due for them at once" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches" \
+  "the card waits for them: crew makes a batch due for them at once" \
+  "every unit's latest change in a batch whose card the user has answered" \
+  "When it names a batch the user has not answered, the card waits for their answer on that batch's card" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches" \
   "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it"; do
   has "$out" "$want"
 done
@@ -402,11 +404,13 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "at once, word for word, to the conductor of each unit it speaks of" \
   "go to every unit's conductor, saying they named no unit you could tell" \
   "Never split, reword or summarize the user's words" "you never run a stage" "Never answer a batch card yourself" \
+  "a bolt lands only once each of its changes has been in a batch whose card the user has answered" \
   "posted before crew raised one card per batch, is yours as it was" \
   "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back"; do
   has "$out" "$want"
 done
 for gone in "of at most five units" "which need notes?" "one in words for the notes" "A unit not picked is fine" \
+  "An unanswered batch card holds nothing" \
   "card session batch/<n> <unit>" "card session batch/<n>-<k> <unit>" "send each picked unit's notes" "once for each of its units" \
   "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
   "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \
@@ -467,7 +471,8 @@ expect_ok crewpy brief wldn design; has "$out" "\`wldn-reviewer\`, started fresh
 expect_ok crewpy brief swb-1 ops; has "$out" "(construct, code, verify, settle, merge)"
 expect_ok crewpy brief wldn main-ops
 for want in "plugin/bin/crew rail --label wldn\` carries its answer" \
-  "your submission in step 2, not step 3, is what puts it on main" "while a unit's latest change has been in no batch"; do
+  "your submission in step 2, not step 3, is what puts it on main" "while a unit's latest change has been in no batch" \
+  "or the batches whose card the user has not answered"; do
   has "$out" "$want"
 done
 ok "the briefs build units in waves, put changes before the user in batches, and resolve conflicts in the later unit"

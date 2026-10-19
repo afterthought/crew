@@ -94,12 +94,24 @@ For a unit that has not merged, its conductor SHALL run construct again with the
 - **WHEN** the user's notes name a defect in a unit that has merged into its bolt
 - **THEN** the unit is not amended, and its conductor starts a fix with the user's words
 
-### Requirement: A bolt lands only once every unit's latest change has been in a batch
-A bolt SHALL be offered for landing only once every unit's latest change, the commit its last construct left, has appeared in a batch. When a bolt is otherwise ready to land and some unit's latest change has not, a batch SHALL be due at once for those units, and the landing card SHALL name them. A landing SHALL be refused while any of them remains outside a batch.
+### Requirement: A bolt lands only once every unit's latest change has been in a batch the user has answered
+A bolt SHALL be offered for landing only once every unit's latest change, the commit its last construct left, has been in a batch whose card the user has answered: sent back with a tap, sent from its reading session, or closed in Pending You, as crew records the card's close. When a bolt is otherwise ready to land and some unit's latest change has not been in a batch, a batch SHALL be due at once for those units, and the bolt's landing row SHALL name them. While a batch holding a unit's latest change waits on the user's answer, the landing row SHALL name that batch. No landing card SHALL be raised, and the row SHALL carry no word to land, until every unit's latest change has been in a batch the user has answered, and `crew bolt land` SHALL be refused while any unit's latest change remains outside a batch. A card Pending You lost to its owner SHALL be no answer. A chore SHALL be in no batch and SHALL hold no landing.
 
 #### Scenario: A late amendment
-- **WHEN** every unit of a bolt has merged and its proof is clean, and one unit's change was constructed again after the last batch
-- **THEN** a batch holding that unit is due at once, the landing card names the unit, and the landing is refused until the batch has been posted
+- **WHEN** every unit of a bolt has merged and its verification is green, and one unit's change was constructed again after the last batch
+- **THEN** a batch holding that unit is due at once, the landing row names the unit, and no landing card is raised until the batch's card has been answered
+
+#### Scenario: A batch card unanswered
+- **WHEN** every unit of bolt `y` has merged and its verification is green, and batch 7, whose card the user has not answered, holds one unit's latest change
+- **THEN** `y`'s landing row says it lands once you have answered batch 7, carries no command, and no landing card is raised for `y`
+
+#### Scenario: The batch card answered
+- **WHEN** the user sends batch 7's card back with no notes
+- **THEN** the next rail read on `y`'s team's host raises `y`'s landing card, and its row carries the word to land
+
+#### Scenario: Notes send a unit back
+- **WHEN** the user's notes on batch 7 send one of `y`'s units back to construct, and its new change is in no batch yet
+- **THEN** `y`'s landing row names that unit as due a batch, and no landing card is raised until the batch that holds its new change has been answered
 
 ### Requirement: crew raises a batch's one card
 When the reviewer delivers a batch's summary and the planner's `crew review --wait` returns, crew SHALL start the batch's one reading session and raise its one card in the planner's name, keyed `batch/<n>`, as `rail-cards` says a batch's card is; the planner SHALL write nothing of it and post nothing. `crew card wait batch/<n>` SHALL give the planner the notes and close the card.

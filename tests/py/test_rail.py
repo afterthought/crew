@@ -114,6 +114,25 @@ class TestRows:
         land, = [r for r in rows(held=held) if r["group"] == "land"]
         assert land["what"][1] == "whether every unit's latest change has been in a batch can't be told: a host did not answer"
 
+    def test_a_bolt_lands_only_once_the_user_has_answered_each_batch_holding_a_units_latest_change(self):
+        """briefs.12: the user, 2026-10-19, on card req_5ff4d31d: "Wait for my answer on the batch card"."""
+        held = {"wldn": {"batches": [(8, iso(10), [("zone-one", "swb-2", "abc1234")])], "closed": set(), "posts": set(), "due": set(),
+                         "unanswered": {"zone-one": 8, "early": 7}}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1:] == ["lands once you have answered batch 8"] and land["cmds"] == []
+        held["wldn"]["unanswered"] = {}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+
+    def test_a_landing_row_names_both_the_units_due_a_batch_and_the_batches_that_wait_on_the_user(self):
+        p = plan.Plan(plan_text(bolts=[("apex-zones", KIT, "swb-2")], units=[(u, KIT, "apex-zones", []) for u in ("zone-one", "zone-two", "zone-three")]))
+        sv, zones = survey(), ["zone-one", "zone-two", "zone-three"]
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"].update(changes=zones, archived=zones)
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": {"zone-one"}, "unanswered": {"zone-two": 8, "zone-three": 9}}}
+        land, = [r for r in plan.rail_rows(FLEET, [("wldn", "WilldanGroup/crew-state", "tip", p)], sv, [], {}, held) if r["group"] == "land"]
+        assert land["what"][1:] == ["lands once zone-one has been in a batch, which is due for them", "lands once you have answered batches 8 and 9"]
+        assert land["cmds"] == []
+
     def test_a_proposal_is_timed_by_its_entry_else_its_opened_date_naming_whom_it_waits_on(self):
         p1, p2 = [r for r in rows([proposal(1), proposal(2, ["swb-1"])], times={("wldn", "proposal/1"): NOW}) if r["group"] == "proposals"]
         assert (p1["at"], p1.get("date"), p2["date"]) == (NOW, None, "2026-10-12")
@@ -250,6 +269,20 @@ class TestRecord:
         r = self.read([post("req_1", "batch/1"), lost, post("req_2", "batch/1", minutes=2)])
         assert ([c["card"] for c in r["cards"]], r["held"]["closed"]) == (["req_2"], set())
 
+    def test_a_batch_card_posted_again_after_its_close_keeps_its_row_and_the_sweep_holds_it(self):
+        units = [("zone-one", "swb-2", "abc1")]
+        batch = {"Act": "review.batch", "Batch": "1", "Units": "zone-one:swb-2@abc1", "At": "2026-10-12T09:59:00Z", "On": []}
+        closed = post("req_1", "batch/1", act="card.close", minutes=1)
+        r = self.read([batch, post("req_1", "batch/1"), closed, post("req_2", "batch/1", minutes=2)])
+        assert ([c["card"] for c in r["cards"]], r["held"]["closed"]) == (["req_2"], set())
+        b, = [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
+        assert (b["key"], b["units"]) == ("batch/1", [u for u, *_ in units])
+        j = TestSweepJudged().judged(rows=[b], cards_=[card("batch/1", "req_2", "wldn-planner")])
+        assert (j["held"], j["gone"]) == ([(card("batch/1", "req_2", "wldn-planner"), b)], [])
+        r = self.read([batch, post("req_1", "batch/1"), closed, post("req_2", "batch/1", minutes=2),
+                       post("req_2", "batch/1", act="card.close", minutes=3)])
+        assert r["held"]["closed"] == {"batch/1"} and not [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
+
     def test_a_card_its_owner_posts_again_under_a_key_replaces_the_older_but_another_agents_does_not(self):
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]
@@ -271,7 +304,17 @@ class TestRecord:
         assert r["gives"] == {("wldn", "apex-zones"): "swb-2"}
 
     def test_while_a_host_of_the_record_does_not_answer_no_unit_is_known_due(self):
-        assert plan.record_reading("wldn", [], the_plan(), START, missing={"mac-studio": "x"})["held"]["due"] is None
+        held = plan.record_reading("wldn", [], the_plan(), START, missing={"mac-studio": "x"})["held"]
+        assert (held["due"], held["unanswered"]) == (None, None)
+
+    def test_the_units_waiting_on_the_users_answer_to_their_batch_are_read_with_the_batches(self):
+        made = {"Act": "stage.end", "Ended": "delivered", "On": ["stage/zone-one/construct", "unit/zone-one"], "Delivered": "unit/zone-one@abc1",
+                "At": "2026-10-12T10:00:00Z"}
+        batch = {"Act": "review.batch", "Batch": "8", "Units": "zone-one:swb-2@abc1", "At": "2026-10-12T10:10:00Z", "On": []}
+        r = self.read([made, batch, post("req_8", "batch/8", minutes=11)])
+        assert (r["held"]["due"], r["held"]["unanswered"]) == (set(), {"zone-one": 8})
+        r = self.read([made, batch, post("req_8", "batch/8", minutes=11), post("req_8", "batch/8", act="card.close", minutes=12)])
+        assert r["held"]["unanswered"] == {}
 
 
 def card(key, cid, by, host="mac-studio", minutes=0):

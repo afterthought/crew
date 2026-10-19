@@ -5,7 +5,7 @@ batch_subjects; record 0031). The rail's rows are test_rail's; telling the plann
 journey's (t-journey-review); the raise's wiring, its session and its card, t-cards'."""
 import datetime
 
-from facts import START, constructed, plan_of, reviewed, told
+from facts import START, card_closed, constructed, plan_of, reviewed, told
 
 import plan
 
@@ -36,6 +36,55 @@ class TestDue:
         assert plan.due_changes(PLAN, [stopped, refused]) == []
 
 
+class TestAnswered:
+    """A bolt lands only once every unit's latest change has been in a batch whose card the user has answered
+    (briefs.12; the user, 2026-10-19, on card req_5ff4d31d: "Wait for my answer on the batch card")."""
+
+    def test_a_change_in_a_batch_whose_card_the_user_answered_waits_on_nothing(self):
+        entries = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10), card_closed("batch/7", "req_7", 20)]
+        assert plan.awaiting_answer(entries) == {}
+
+    def test_a_change_in_a_batch_whose_card_is_unanswered_waits_on_that_batch(self):
+        entries = [constructed("x1", "bbb1"), constructed("x2", "ccc1"), reviewed(7, [("x1", "swb-1", "bbb1"), ("x2", "swb-1", "ccc1")], 10)]
+        assert plan.awaiting_answer(entries) == {"x1": 7, "x2": 7}
+
+    def test_a_card_sent_back_through_its_reading_session_is_answered_and_one_lost_or_whose_close_was_refused_is_not(self):
+        held = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10)]
+        assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, state="withdrawn")]) == {}
+        assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, state="lost")]) == {"x1": 7}
+        assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, refused="Pending You did not answer")]) == {"x1": 7}
+
+    def test_a_card_posted_again_under_the_key_after_its_close_waits_until_that_card_closes(self):
+        held = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10)]
+        posted = lambda card, minutes: {"Act": "card.post", "Key": "batch/7", "Card": card, "At": f"2026-10-12T10:{minutes:02d}:00Z", "On": []}
+        assert plan.awaiting_answer(held + [posted("req_7", 11), card_closed("batch/7", "req_7", 20), posted("req_8", 21)]) == {"x1": 7}
+        assert plan.awaiting_answer(held + [posted("req_7", 11), posted("req_8", 12), card_closed("batch/7", "req_8", 20)]) == {}
+        assert plan.awaiting_answer(held + [posted("req_7", 11), card_closed("batch/7", "req_7", 20),
+                                            dict(posted("req_8", 21), Refused="Pending You did not answer")]) == {}
+
+    def test_a_unit_sent_back_by_the_batchs_notes_waits_for_its_new_change_to_be_in_a_batch_and_then_for_its_answer(self):
+        entries = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10), card_closed("batch/7", "req_7", 20),
+                   constructed("x1", "bbb2", 30)]
+        assert plan.awaiting_answer(entries) == {}
+        assert [(u, sha) for u, _, sha, _ in plan.due_changes(PLAN, entries)] == [("x1", "bbb2")]
+        entries.append(reviewed(8, [("x1", "swb-1", "bbb2")], 40))
+        assert plan.due_changes(PLAN, entries) == [] and plan.awaiting_answer(entries) == {"x1": 8}
+        entries.append(card_closed("batch/8", "req_8", 50))
+        assert plan.awaiting_answer(entries) == {}
+
+    def test_an_older_change_of_the_unit_in_an_unanswered_batch_holds_nothing(self):
+        entries = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10), constructed("x1", "bbb2", 20),
+                   reviewed(8, [("x1", "swb-1", "bbb2")], 30), card_closed("batch/8", "req_8", 40)]
+        assert plan.awaiting_answer(entries) == {}
+
+    def test_a_batch_posted_as_cards_of_five_before_waits_on_the_card_that_holds_the_unit(self):
+        units = [(f"u{i}", "swb-1", f"{i:04x}") for i in range(7)]
+        entries = [constructed(u, sha) for u, _, sha in units] + [reviewed(3, units, 10)] + [
+            {"Act": "card.post", "Key": k, "Card": f"req_{k}", "At": "2026-10-12T10:11:00Z", "On": []} for k in ("batch/3-1", "batch/3-2")]
+        entries.append(card_closed("batch/3-1", "req_batch/3-1", 20))
+        assert plan.awaiting_answer(entries) == {"u5": 3, "u6": 3}
+
+
 def due(n):
     return [(f"u{i}", "swb-1", f"{i:04x}", "2026-10-12T10:00:00Z") for i in range(n)]
 
@@ -64,7 +113,7 @@ class TestBatchDue:
 
     def test_a_bolt_with_every_unit_merged_makes_its_due_units_a_batch_at_once(self):
         assert plan.batch_due(due(1), [], EVERY_5, START, [("b1", True, ["u0"])]) == [
-            "bolt b1 has every unit merged, and lands only once u0 has been in a batch"]
+            "bolt b1 has every unit merged, and lands only once u0 has been in a batch the user has answered"]
         assert plan.batch_due(due(1), [], EVERY_5, START, [("b1", False, ["u0"]), ("b2", True, [])]) == []
 
 
@@ -134,3 +183,5 @@ class TestBatchFacts:
         refused = dict(closed, Refused="Pending You refused the close: x")
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, refused], SUMMARY, {})["n"] == 3
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, dict(closed, State="lost")], SUMMARY, {})["n"] == 3
+        again = dict(posted, Card="req_9")
+        assert plan.batch_facts(3, [reviewed(3, UNITS), posted, closed, again, dict(closed, Card="req_9", State="lost")], SUMMARY, {})["n"] == 3
