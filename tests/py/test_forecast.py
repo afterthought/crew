@@ -138,6 +138,10 @@ class TestOrders:
         assert self.orders(entries + [self.forecast(4), self.settle(5)], held=True)[0] == ([("b", "a", "s5")], [])
         assert self.orders(entries, held=True)[0] == ([], [])  # the settle before the lift decided nothing more
 
+    def test_a_pair_git_cannot_read_is_neither_ordered_nor_lifted(self):
+        assert self.orders([self.forecast(1), self.settle(2)], held=None)[0] == ([], [])
+        assert self.orders([self.wrote(1, before=True), self.forecast(1), self.settle(2, "short")], after=["a"], held=None)[0] == ([], [])
+
     def test_an_order_set_by_hand_is_never_lifted(self):
         hand = {"Act": "unit.after", "On": ["unit/b", "bolt/t"], "At": at(1), "Id": "w1", "Why": "plan(t): b after a"}
         assert self.orders([hand, self.forecast(1), self.settle(2, "short")], after=["a"]) == (([], []), [])
