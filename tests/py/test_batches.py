@@ -183,3 +183,5 @@ class TestBatchFacts:
         refused = dict(closed, Refused="Pending You refused the close: x")
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, refused], SUMMARY, {})["n"] == 3
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, dict(closed, State="lost")], SUMMARY, {})["n"] == 3
+        again = dict(posted, Card="req_9")
+        assert plan.batch_facts(3, [reviewed(3, UNITS), posted, closed, again, dict(closed, Card="req_9", State="lost")], SUMMARY, {})["n"] == 3

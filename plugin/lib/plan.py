@@ -7362,14 +7362,14 @@ def batch_facts(n, entries, summary, subjects):
     level's host, oldest first, and the reviewer's summary: n, the batch before it, and each unit in the batch's order
     with its team, the commit the batch read it at, what it is about (subjects, else its name in words) and the
     paragraph the reviewer opened its section with, or a line saying the summary has none. None while the batch's point
-    has not come or has passed: the run record holds no batch n, its summary is not there (None), or a card of it is
-    closed, but as lost to its owner. A card of it the owner holds open is no reason: the act changes it, or posts it
-    again once lost."""
+    has not come or has passed: the run record holds no batch n, its summary is not there (None), or its key is closed
+    (batch_closed), the last card act under it a close, but as lost to its owner. A card of it the owner holds open is
+    no reason: the act changes it, or posts it again once lost."""
     key = f"batch/{n}"
     held = [e for e in entries if e.get("Act") == "review.batch" and not e.get("Refused") and e.get("Batch") == str(n)]
     if not held or summary is None:
         return None
-    if any(e.get("Act") == "card.close" and not e.get("Refused") and e.get("State") != "lost" and e.get("Key") == key for e in entries):
+    if key in batch_closed(entries):
         return None
     previous = max((m for m, _, _ in batches(entries) if m < n), default=None)
     units = [dict(unit=u, team=team, commit=sha, subject=subjects.get(u) or u.replace("-", " "),
@@ -7494,7 +7494,8 @@ def record_reading(l, entries, plan, fresh, missing=None):
     older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
     None while a host of the record did not answer (missing), as are the units whose latest change waits on the user's
     answer to its batch's card (awaiting_answer). A close refused leaves its card open; a card's close as lost to its
-    owner ends that card but not its row, whose card is posted again under its key."""
+    owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed only
+    while its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row."""
     times, posted, closed, landings, gives = {}, {}, set(), [], {}
     for e in entries:
         act = e.get("Act")
@@ -7522,6 +7523,7 @@ def record_reading(l, entries, plan, fresh, missing=None):
             team = next((o[5:] for o in e["On"] if o.startswith("team/")), None)
             if bolt and team:
                 gives[(l, bolt)] = team
+    closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries)  # a batch card posted again reopens its row
     held = dict(batches=batches(entries), closed=closed, posts=batch_posts(entries),
                 due=None if missing else {u for u, *_ in due_changes(plan, entries)},
                 unanswered=None if missing else awaiting_answer(entries))

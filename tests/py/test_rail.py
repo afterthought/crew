@@ -269,6 +269,20 @@ class TestRecord:
         r = self.read([post("req_1", "batch/1"), lost, post("req_2", "batch/1", minutes=2)])
         assert ([c["card"] for c in r["cards"]], r["held"]["closed"]) == (["req_2"], set())
 
+    def test_a_batch_card_posted_again_after_its_close_keeps_its_row_and_the_sweep_holds_it(self):
+        units = [("zone-one", "swb-2", "abc1")]
+        batch = {"Act": "review.batch", "Batch": "1", "Units": "zone-one:swb-2@abc1", "At": "2026-10-12T09:59:00Z", "On": []}
+        closed = post("req_1", "batch/1", act="card.close", minutes=1)
+        r = self.read([batch, post("req_1", "batch/1"), closed, post("req_2", "batch/1", minutes=2)])
+        assert ([c["card"] for c in r["cards"]], r["held"]["closed"]) == (["req_2"], set())
+        b, = [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
+        assert (b["key"], b["units"]) == ("batch/1", [u for u, *_ in units])
+        j = TestSweepJudged().judged(rows=[b], cards_=[card("batch/1", "req_2", "wldn-planner")])
+        assert (j["held"], j["gone"]) == ([(card("batch/1", "req_2", "wldn-planner"), b)], [])
+        r = self.read([batch, post("req_1", "batch/1"), closed, post("req_2", "batch/1", minutes=2),
+                       post("req_2", "batch/1", act="card.close", minutes=3)])
+        assert r["held"]["closed"] == {"batch/1"} and not [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
+
     def test_a_card_its_owner_posts_again_under_a_key_replaces_the_older_but_another_agents_does_not(self):
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]
