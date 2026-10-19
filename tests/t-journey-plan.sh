@@ -6,7 +6,7 @@
 # racing on one branch, or on two branches of one repository, both land. Whether a proposal holds, whom it waits on,
 # what its page and card say and who may write the plan are logic cases (tests/py/test_proposals.py,
 # test_proposal_life.py, test_proposal_card.py, test_plan_roles.py); each step here checks a command's wiring once.
-# Reads: plugin/hooks/ plugin/lib/picture.py plugin/lib/font.py
+# Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 wb=$(blueprints WilldanGroup/willdan-blueprints)
