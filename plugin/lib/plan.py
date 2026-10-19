@@ -5473,9 +5473,8 @@ def reach(fleet, t):
     conflicts with the bolt resolves that first, and is forecast against the units ahead of it once it is clean with
     the bolt. A conflict is a forecast for the later unit, recorded once for a pair of
     heads (`forecast`, with both heads, the paths and how it reached the unit) and reaching it once (deliver). The
-    earlier unit is told nothing. A forecast between two unmerged units gives the later After on the earlier, in a write that is the waiting
-    conductor's own (plan.13, roles.1). What crew can't read or write here is said on standard error, and the wait
-    goes on (teams.12)."""
+    earlier unit is told nothing, and the forecast orders neither: a settle that takes the other's work does (plan.13).
+    What crew can't read or write here is said on standard error, and the wait goes on (teams.12)."""
     label, main = t["label"], t["kit"]["main"]
     plan = plan_of(fleet, label)
     if plan is None:
@@ -5529,20 +5528,7 @@ def reach(fleet, t):
                                     lambda o, h, base: merge_tree(main, o, h, base), done, took, bolt_order(plan, b.name())[1])
         for name, other in unread:
             print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
-        for name, other, paths, heads, after in due:
-            if after:
-                def change(w, name=name, other=other):
-                    v = w.unit(name)
-                    w.unit(other)
-                    if other not in v.all("After"):
-                        v.add("After", other, after="Intent")
-                    return [b.name()]
-                try:
-                    with contextlib.redirect_stdout(sys.stderr):
-                        write(fleet, label, change, f"plan({b.name()}): {name} after {other}, forecast to conflict",
-                              act="unit.after", on=[f"unit/{name}", f"bolt/{b.name()}"])
-                except Refusal as e:
-                    print(f"{name} is not put after {other}: {e}", file=sys.stderr)
+        for name, other, paths, heads in due:
             way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, b.name(), name, other, paths))
             if way:
                 record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
@@ -5560,8 +5546,8 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
     already made for the same heads (done) is not made again. A unit is forecast against one it comes after only on
     what it adds beyond that unit's head its place took (took, {unit: {after unit: head}}), so the other's own work it
     carries, rewritten since by a rebase or a settle, is no conflict of its; with no head taken, from their merge base
-    (plan.13). Returns the forecasts as (unit, other, paths, heads, whether the unit is to be put after the other, which
-    it is unless it already comes after it), and the pairs git could not read."""
+    (plan.13). Returns the forecasts as (unit, other, paths, heads), none of which orders the two (plan.13, teams.12),
+    and the pairs git could not read."""
     due, unread = [], []
     order = [name for name, _, _ in live]
     after_of = after_of if after_of is not None else {name: after for name, _, after in live}
@@ -5577,7 +5563,7 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
                 continue
             heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
             if heads not in done:
-                due.append((name, other, paths, heads, not other.startswith("bolt/") and not comes_after(after_of, name, other)))
+                due.append((name, other, paths, heads))
             if other.startswith("bolt/"):
                 break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
     return due, unread

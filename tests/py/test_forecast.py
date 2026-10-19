@@ -23,25 +23,27 @@ def due(live, bolt_head=BOLT, clash=(), done=(), took=None):
 
 
 class TestDue:
-    def test_two_unmerged_units_in_conflict_give_the_later_the_forecast_and_after_on_the_earlier(self):
+    def test_two_unmerged_units_in_conflict_give_the_later_the_forecast_and_nothing_else(self):
+        # wldn, swb-1, 2026-10-15: the forecast's own After held finished units for a proposal each (plan.13).
         assert due([("a", A, []), ("b", B, [])], clash=[(A, B)]) == (
-            [("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}", True)], [])
+            [("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}")], [])
 
-    def test_a_unit_already_after_the_other_is_not_put_after_it_again(self):
-        assert due([("a", A, []), ("b", B, ["a"])], clash=[(A, B)])[0][0][4] is False
+    def test_a_unit_already_after_the_other_is_forecast_with_its_four_parts(self):
+        assert due([("a", A, []), ("b", B, ["a"])], clash=[(A, B)]) == (
+            [("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}")], [])
 
     def test_a_forecast_made_for_the_same_heads_is_not_made_again(self):
         assert due([("a", A, []), ("b", B, [])], clash=[(A, B)], done=[f"b@{B[:7]} a@{A[:7]}"]) == ([], [])
 
     def test_a_unit_in_conflict_with_the_bolt_resolves_that_first(self):
         assert due([("a", A, []), ("b", B, [])], clash=[(BOLT, B), (A, B)]) == (
-            [("b", "bolt/t", ["shared.txt"], f"b@{B[:7]} bolt/t@{BOLT[:7]}", False)], [])
+            [("b", "bolt/t", ["shared.txt"], f"b@{B[:7]} bolt/t@{BOLT[:7]}")], [])
         assert due([("a", A, []), ("b", B, [])], clash=[(BOLT, B), (A, B)], done=[f"b@{B[:7]} bolt/t@{BOLT[:7]}"]) == ([], [])
 
     def test_what_git_cannot_read_is_named_and_the_rest_forecast(self):
         got = plan.forecasts_due([("a", A, []), ("b", B, [])], "t", BOLT, lambda o, h, base: None if o == BOLT else ["x"],
                                  set(), {})
-        assert got == ([("b", "a", ["x"], f"b@{B[:7]} a@{A[:7]}", True)], [("a", "bolt/t"), ("b", "bolt/t")])
+        assert got == ([("b", "a", ["x"], f"b@{B[:7]} a@{A[:7]}")], [("a", "bolt/t"), ("b", "bolt/t")])
 
     def test_units_clean_with_each_other_have_none(self):
         assert due([("a", A, []), ("b", B, []), ("c", C, [])]) == ([], [])
@@ -49,13 +51,13 @@ class TestDue:
     def test_a_dependent_listed_first_is_forecast_against_the_unit_it_comes_after_never_the_other_way(self):
         # wldn, swb-4, 2026-10-13: d comes after s and the file lists d first; s was told d was ahead (signal 51c2c852/01).
         assert due([("d", B, ["s"]), ("s", A, [])], clash=[(A, B), (B, A)]) == (
-            [("d", "s", ["shared.txt"], f"d@{B[:7]} s@{A[:7]}", False)], [])
+            [("d", "s", ["shared.txt"], f"d@{B[:7]} s@{A[:7]}")], [])
 
-    def test_one_that_comes_after_at_any_depth_is_not_put_after_it_again(self):
-        # c comes after b, which comes after a: c's forecast against a gives c no After, and a is never forecast against c.
+    def test_one_that_comes_after_at_any_depth_is_forecast_with_its_four_parts(self):
+        # c comes after b, which comes after a: c is forecast against a, and a is never forecast against c.
         got = plan.forecasts_due([("c", C, ["b"]), ("a", A, [])], "t", None,
                                  lambda o, h, base: ["shared.txt"] if {o, h} == {A, C} else [], set(), {}, {"c": ["b"], "b": ["a"]})
-        assert got == ([("c", "a", ["shared.txt"], f"c@{C[:7]} a@{A[:7]}", False)], [])
+        assert got == ([("c", "a", ["shared.txt"], f"c@{C[:7]} a@{A[:7]}")], [])
 
 
 class TestDependent:
@@ -81,11 +83,11 @@ class TestDependent:
 
     def test_one_whose_own_commit_overlaps_the_after_units_rewritten_change_is(self):
         got, _ = self.due(lambda base: ["shared.txt"])
-        assert got == ([("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}", False)], [])
+        assert got == ([("b", "a", ["shared.txt"], f"b@{B[:7]} a@{A[:7]}")], [])
 
     def test_one_with_no_took_is_compared_from_their_merge_base_as_before(self):
         got, asked = self.due(lambda base: ["openspec/changes/a/design.md"] if base is None else [], took={})
-        assert got == ([("b", "a", ["openspec/changes/a/design.md"], f"b@{B[:7]} a@{A[:7]}", False)], [])
+        assert got == ([("b", "a", ["openspec/changes/a/design.md"], f"b@{B[:7]} a@{A[:7]}")], [])
         assert asked == [(A, B, None)]
 
     def test_a_head_taken_of_a_unit_it_does_not_come_after_is_not_its_base(self):
