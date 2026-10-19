@@ -948,3 +948,31 @@ class TestActDecisions:
         ch = built.change_args(c, "Head is now 9ab12cd after the fix")
         assert set(ch) == {"title", "summary", "context", "artifacts", "approve", "recommendedIds", "rationale", "urgency", "blocking", "changeNote"}
         assert built.posted_again(c)["summary"].startswith("An older copy of this card was lost: dismiss it in the app.\n\n6 units land")
+
+
+def test_a_picture_is_put_with_crews_own_agent(monkeypatch):
+    """A card's picture is put with its content type and crew's User-Agent, never urllib's own, which Pending You's host
+    refuses as a banned browser signature (403, "error code: 1010": every proposal card's picture, 2026-10-18)."""
+    import urllib.request
+    sent = []
+
+    class Answer:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def urlopen(req, timeout):
+        sent.append(req)
+        return Answer()
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert plan.cards.put("https://pendingyou.test/up", b"png", "image/png") is None
+    (req,) = sent
+    assert req.get_method() == "PUT"
+    assert req.get_header("Content-type") == "image/png"
+    assert req.get_header("User-agent") == plan.cards.AGENT
+    assert not req.get_header("User-agent").startswith("Python-urllib")
