@@ -1,21 +1,11 @@
 # crew reads teams.json version 2: partitions with their main levels, teams with units and [kit, blueprints],
-# a team's partition from its session, roles overrides, and errors for anything missing or inconsistent.
+# roles overrides, and errors for anything missing or inconsistent. What a team's session resolves its partition, kit
+# and blueprints to is the logic tier's (tests/py/test_teams.py).
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 
 expect_ok crewpy teams; eq "$out" $'swb-1\nswb-2\nbrd-1\natl-1\napk-1'
 expect_ok crewpy labels; eq "$out" $'wldn\nmadswan\nswancloud'
-
-expect_ok crewpy env swb-1
-box=$(space chuck-herdr-alpha willdan)
-has "$out" "LABEL=wldn"; has "$out" "UNITS=4"; has "$out" "MACHINE=chuck-herdr-alpha"; has "$out" "SESSION=wldn-1"
-has "$out" "KIT=$box/switchboard-kit/main"; has "$out" "KIT_DIR=$box/switchboard-kit"
-has "$out" "BLUEPRINTS=$box/willdan-blueprints/main"
-ok "a team's partition, kit and blueprints come from its session"
-
-# Two repos named blueprints: apk-1's resolves through its session, whose space keeps agentplot's.
-expect_ok crewpy env apk-1; has "$out" "LABEL=madswan"; has "$out" "BLUEPRINTS=$(space mac-studio agentplot)/blueprints/main"
-ok "a repo's name is resolved to owner/name through the team's session"
 
 edit teams "$(part wldn)['roles'] = {'planner': {'effort': 'max'}}; $(team swb-1)['roles'] = {'coder': {'model': 'claude-opus-5-5'}}"
 expect_ok crewpy teams
