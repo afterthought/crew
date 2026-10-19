@@ -3,22 +3,22 @@
 ## MODIFIED Requirements
 
 ### Requirement: A unit in flight goes back through construct and review
-`crew unit run <unit> construct "<words>"` SHALL be accepted at any stage before the unit has merged into its bolt. Run on a unit that is approved, in code or in verify, it SHALL mark the unit amended in the plan before the stage starts, and only the conductor of the team holding the unit's bolt or the user SHALL be accepted to run it. Run on a unit whose intent was amended and whose construct has not run since, it SHALL be accepted from any caller. While a unit is marked amended, `crew unit run <unit> code`, `verify` and `merge` SHALL be refused, saying the unit waits for the user's review.
+`crew unit run <unit> construct "<words>"` SHALL be accepted at any stage before the unit has merged into its bolt. Run on a unit that is in code or in verify, it SHALL mark the unit amended in the plan before the stage starts, and only the conductor of the team holding the unit's bolt or the user SHALL be accepted to run it. Run on a unit whose intent was amended and whose construct has not run since, it SHALL be accepted from any caller. While construct runs again, `crew unit run <unit> code`, `verify` and `merge` SHALL be refused; once it has committed, the unit SHALL go on from its tasks with no approval asked, and its revised change SHALL be due for the next batch.
 
 #### Scenario: The user wants a change to a unit in code
 - **WHEN** the conductor runs `crew unit run <unit> construct "<the user's words>"` on a unit in code
-- **THEN** the unit is marked amended, a fresh construct agent rewrites the change in the unit's slot and place, and when it commits the unit's stage is `review`
+- **THEN** the unit is marked amended, a fresh construct agent rewrites the change in the unit's slot and place, and when it commits the unit's stage is read from its tasks
 
 #### Scenario: Code on an amended unit
-- **WHEN** `crew unit run <unit> code` runs on a unit that is marked amended
-- **THEN** it is refused until the user has approved the unit again
+- **WHEN** `crew unit run <unit> code` runs on a unit marked amended whose construct has not committed again
+- **THEN** it is refused until that construct has committed
 
 #### Scenario: An amended intent arrives from an approved proposal
 - **WHEN** an approved proposal amends the intent of a unit in flight
-- **THEN** the approval starts construct again on the unit, and the fresh construct agent is given the new intent, told the change is to be revised to it, and given the case of the proposal the user approved; the conductor is told that construct runs again and to wait for it
+- **THEN** the approval starts construct again on the unit, and the fresh construct agent is given the new intent, told the change is to be revised to it, and given the case of the proposal the user approved; the conductor is told that construct runs again and to wait for it, and the unit goes on from its tasks once it has committed, with no approval asked
 
 #### Scenario: The planner approves on the user's word
-- **WHEN** the planner runs `crew plan approve <n>` for a proposal that amends a unit in review
+- **WHEN** the planner runs `crew plan approve <n>` for a proposal that amends a unit in flight
 - **THEN** construct starts on the unit, recorded as started by the planner, and is not refused for who asked
 
 #### Scenario: A merged unit
@@ -26,17 +26,6 @@
 - **THEN** it is refused; a defect is a fix, and a new need is a new unit
 
 ## ADDED Requirements
-
-### Requirement: Construct on an amended unit names the card the amendment ended
-When construct starts on a unit whose intent was amended, crew SHALL name to the unit's conductor the card of the row the unit held before the amendment, `review/<unit>` or `verify/<unit>`: in the command's output when the conductor started it, and by a notice when anyone else did. When the amendment's construct does not start, the amendment's notice to the conductor SHALL name that card.
-
-#### Scenario: An amendment approved while the unit is in review
-- **WHEN** the planner approves a proposal amending a unit whose review card is open, and construct starts
-- **THEN** the conductor is told to close its card for `review/<unit>`
-
-#### Scenario: The conductor starts it itself
-- **WHEN** a conductor brought back runs `crew unit run <unit> construct` on an amended unit that was in verify before its amendment
-- **THEN** the command's output names the card for `verify/<unit>` to close
 
 ### Requirement: A team taken down starts no stage
 While a team is down, from `crew down` or `crew close` until `crew up` brings it back, `crew unit run <unit> <stage>` SHALL be refused for every stage, construct, code, verify and merge alike, on any unit of the team's bolt, saying `<team> is down; crew up <team> brings it back`. The refusal SHALL come before crew frees or takes a slot, writes the plan or ends an agent, and SHALL be recorded as a refused `stage.start`.

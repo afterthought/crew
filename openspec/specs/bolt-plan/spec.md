@@ -206,6 +206,14 @@ Each flywheel SHALL keep one plan, the recutils file `plan.rec` on its branch of
 - **WHEN** the conductor runs a stage of a unit whose handed construct is starting
 - **THEN** crew refuses it, saying the construct is starting and that `crew unit wait <unit>` waits for it
 
+#### Scenario: The unit's stage cannot be read
+- **WHEN** an amendment to a unit with a worktree is applied while its team's host does not answer, so the unit's stage cannot be read
+- **THEN** the amendment, or the approval holding it, is refused naming the host that did not answer, and nothing is written
+
+#### Scenario: The construct cannot start
+- **WHEN** an amendment to a unit in flight is applied once its stage has been read, and its handed construct cannot start because its team's host stops answering before the run reaches it or its team is down
+- **THEN** the amendment stands, the unit's stage reads `amended`, the command says why construct did not start, and the conductor, when it can be told, is told why and to run construct once it can, with the card the amendment ended named
+
 #### Scenario: A merged unit
 - **WHEN** `crew unit amend` names a unit that has merged into its bolt
 - **THEN** it is refused; what is needed is a fix or a new unit
