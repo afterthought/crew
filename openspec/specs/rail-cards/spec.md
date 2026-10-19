@@ -514,7 +514,11 @@ When what a row's card asks changes while it is open, crew SHALL change the one 
 - **THEN** the card is withdrawn, "Recorded again: its doer and its hold changed", and the step's choice is posted under `op/srv/1:2` following it, since Pending You changes no card's kind in place
 
 ### Requirement: A card is closed by crew at the event that ends it
-crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`.
+crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`. The outcome or reason crew sends with a close SHALL be cut to Pending You's 200 characters, and the run record SHALL keep it whole.
+
+#### Scenario: An outcome longer than Pending You takes
+- **WHEN** an approval's outcome, naming every unit it added and every one the user left out, runs past 200 characters
+- **THEN** the card is acked with the outcome cut to 200 characters, ending with …, and the run record's close holds it whole
 
 #### Scenario: A proposal approved from the phone
 - **WHEN** the user approves `proposal/4` on the phone with its new unit `c` unticked, and the planner runs `crew plan answer 4 rows-1 b`

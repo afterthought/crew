@@ -476,6 +476,32 @@ def test_a_close_acks_an_answered_card_with_its_outcome_and_withdraws_a_waiting_
     assert capsys.readouterr().out.splitlines()[-1] == "card land/b1: req_c1 withdrawn"
 
 
+LONG = ("Applied: added " + ", ".join(f"the-unit-that-does-thing-{i}" for i in range(1, 9))
+        + "; 3 other changes. Left out on your word: the-briefs-say-never-wt-submit-help.")
+
+
+def test_a_close_cuts_its_outcome_and_its_reason_to_pending_yous_two_hundred_characters_and_records_them_whole():
+    """Read on 2026-10-18: the planner's `crew plan answer 142 ...` applied the proposal and printed "card
+    proposal/139 not closed: Pending You refused the close: Some fields need fixing. outcome: Too big: expected
+    string to have <=200 characters.", the card left open. Pending You takes an outcome or a reason of 200 characters
+    at most (cards.OUTCOME)."""
+    assert len(LONG) > cards.OUTCOME
+    held = [post("proposal/139", "wldn-planner", "req_p1")]
+    acts = Acts({"get_request": ({"status": "answered", "turn": "agent", "version": 3}, None)}, entries=held, caller="wldn-planner")
+    acts.end = lambda label, key: None  # a proposal's reading session, which this one has none of
+    assert plan.row_card_close(None, "wldn", "wldn-planner", "proposal/139", outcome=LONG, acts=acts) == "req_p1"
+    tool, sent = acts.calls[1]
+    assert (tool, len(sent["outcome"]), sent["outcome"][-1]) == ("ack_answer", cards.OUTCOME, "…")
+    assert LONG.startswith(sent["outcome"][:-1]) and acts.emitted[0]["Outcome"] == LONG
+    acts = Acts({"get_request": ({"status": "pending", "version": 1}, None)}, entries=held, caller="wldn-planner")
+    acts.end = lambda label, key: None
+    plan.row_card_close(None, "wldn", "wldn-planner", "proposal/139", reason=LONG, acts=acts)
+    tool, sent = acts.calls[1]
+    assert (tool, len(sent["reason"]), acts.emitted[0]["Outcome"]) == ("cancel_request", cards.OUTCOME, LONG)
+    short = cards.close_call({"status": "pending"}, "req_p1", "wldn-planner", reason="Dropped: not now")
+    assert short[1]["reason"] == "Dropped: not now"
+
+
 def test_a_close_pending_you_does_not_find_is_recorded_lost_and_a_refused_one_recorded_refused():
     acts = Acts({"get_request": (None, "Not found: request:req_c1.")}, entries=HELD)
     assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome="x", acts=acts) is None

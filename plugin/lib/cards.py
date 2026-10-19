@@ -408,6 +408,7 @@ def drawn(before, after, argvs):
 # --------------------------------------------------------------------------------- the words rule (briefs.13)
 
 TITLE, SUMMARY, DETAIL, LABEL = 140, 400, 200, 80  # Pending You's budgets: a title, a summary, a detail, consequence or rationale, an option's label
+OUTCOME = 200  # Pending You's budget for a close's words: ack_answer's outcome and cancel_request's reason
 LINE = 40  # the most characters a line of a list on a card's face holds: the phone shows it in monospace
 CARD_NEW = 15  # the most units new to a bolt a proposal's card takes as boxes; more link its reading session (briefs.9)
 BOXES, GROUPS = 5, 4  # Pending You's limits: a question's options, and a card's questions
@@ -897,12 +898,17 @@ def posted_again(card):
 def close_call(got, card, name, outcome=None, reason=None):
     """How crew closes a card, from get_request's answer: one the user answered acked at its version with what was
     done on it, the outcome, or the reason it is withdrawn; one still waiting withdrawn with the reason, or the
-    outcome. The tool, its arguments, and the close's state as the run record keeps it."""
+    outcome. Either is cut to OUTCOME characters, since Pending You refuses a longer one (proposal 142's close on
+    2026-10-18: "outcome: Too big: expected string to have <=200 characters"); the run record keeps crew's words
+    whole. The tool, its arguments, and the close's state as the run record keeps it."""
+    def said(first, then):
+        words = first if first is not None else then
+        return cut(words, OUTCOME) if isinstance(words, str) else words
     if got.get("status") == "answered":
         return ("ack_answer", {"requestId": card, "name": name, "expectedVersion": version_of(got, card),
-                               "outcome": outcome if outcome is not None else reason},
+                               "outcome": said(outcome, reason)},
                 "closed" if outcome is not None else "withdrawn")
-    return "cancel_request", {"requestId": card, "name": name, "reason": reason if reason is not None else outcome}, "withdrawn"
+    return "cancel_request", {"requestId": card, "name": name, "reason": said(reason, outcome)}, "withdrawn"
 
 
 def declined(got):
