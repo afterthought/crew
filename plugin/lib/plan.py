@@ -1293,14 +1293,16 @@ def bolt_give(fleet, a):
     record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
                 eid=CONTEXT["eid"])
     # A team takes a bolt only once its last one has landed or been dropped, so nothing is in flight: a conductor
-    # or ops that is up starts again, with fresh context, before the conductor is greeted.
+    # or ops that is up starts again, with fresh context, and each is greeted here, told the bolt (teams.7).
     up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
     if up:
         r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "restart", t["name"], *up, "--no-greet"))
         said = (r.stdout + r.stderr).strip()
         if said:
             print(said)
-    crew.greet(fleet, t["name"], first=f"Your team now holds the bolt {b}. ", wait=90 if "conductor" in up else 0)
+    if "conductor" not in up:
+        print(f"{t['name']}-conductor is not up: crew up {t['name']} starts and greets it", file=sys.stderr)
+    greeted(greet_team(fleet, t, crew.greeted_roles("give", up, up), bolt=b))
 
 
 def kit_policy(fleet, t):
@@ -6605,18 +6607,48 @@ def greeted(greetings):
         th.join()
 
 
-def greet_conductor(fleet, t):
-    """A fresh conductor told to read where its bolt stands and carry on, before anyone asks it anything (teams.7), the
-    greeting opening with the units of its bolt that wait amended, for it to start their construct (plan.15). A greeting
-    that can't be sent fails nothing."""
-    try:
-        first = amended_units(fleet, t)
-    except Refusal:
-        first = ""
-    try:
-        crew.greet(fleet, t["name"], first=f"{first} " if first else "")
-    except Refusal as e:
-        print(e, file=sys.stderr)
+def greet_team(fleet, t, roles, bolt=None):
+    """Each of a team's roles a command greets (crew.greeted_roles), side by side, so neither waits on the other
+    (teams.7): the conductor told to read where its bolt stands and carry on, before anyone asks it anything, the
+    greeting opening with the bolt a give has just given it, else with the units of its bolt that wait amended, for it
+    to start their construct (plan.15); ops told who it is, the bolt its team holds, and to wait to be told. What each
+    is told is read before either is sent; a greeting that can't be sent fails nothing. Returns the greetings, for the
+    command to wait on before it ends (greeted)."""
+    import threading
+    sends = []
+    if "conductor" in roles:
+        try:
+            first = f"Your team now holds the bolt {bolt}." if bolt else amended_units(fleet, t)
+        except Refusal:
+            first = ""
+        sends.append(lambda first=first: crew.greet(fleet, t["name"], first=f"{first} " if first else ""))
+    if "ops" in roles:
+        try:
+            held, unread = (bolt, None) if bolt else team_holds(fleet, t)
+        except Refusal as e:
+            held, unread = None, str(e)
+        sends.append(lambda: crew.greet_ops(fleet, t["name"], held, unread))
+
+    def send(greet):
+        try:
+            greet()
+        except Refusal as e:
+            print(e, file=sys.stderr)
+    out = [threading.Thread(target=send, args=(s,)) for s in sends]
+    for th in out:
+        th.start()
+    return out
+
+
+def team_holds(fleet, t):
+    """The bolt a team holds, for its ops's greeting, or None when it holds none; and what crew could not read of its
+    plan, else None, which the greeting says rather than name no bolt (read.1)."""
+    CONTEXT["label"] = t["label"]
+    errors = {}
+    found = plans(fleet, [t["label"]], errors)
+    plan = found[0][3] if found else None
+    held = held_by(plan, t["name"]) if plan else []
+    return (held[0].name() if held else None), ("; ".join(f"{k} could not be read: {v}" for k, v in errors.items()) or None)
 
 
 def picked(team, roles):
@@ -6649,8 +6681,9 @@ def team_cmd(fleet, a):
             not team.status(role) or fail(crew.already_up_said(team.agent_of(role), name))
         team.mark(down=False)
         team.panes()
-        team.record("team.up", f"team({name}): up", started_all(team))
-        greet_conductor(fleet, t)
+        started = started_all(team)
+        team.record("team.up", f"team({name}): up", started)
+        greeted(greet_team(fleet, t, crew.greeted_roles("up", started, team.fresh)))
     elif a.act == "close":
         team.teardown(end)
         team.mark(down=True)
@@ -6661,8 +6694,9 @@ def team_cmd(fleet, a):
         reap(fleet, team)
         team.mark(down=False)
         team.panes()
-        team.record("team.rebuild", f"team({name}): rebuild", started_all(team))
-        greet_conductor(fleet, t)
+        started = started_all(team)
+        team.record("team.rebuild", f"team({name}): rebuild", started)
+        greeted(greet_team(fleet, t, crew.greeted_roles("rebuild", started, team.fresh)))
     elif a.act == "restart":
         roles, stopped_ = picked(team, a.roles), []
         team.mark(down=False)
@@ -6674,10 +6708,9 @@ def team_cmd(fleet, a):
             if not team.start(role):
                 raise Stopped(1)
             team.record("agent.restart", f"team({name}): restart {role}", [role])
-        if a.greet and "conductor" in roles:
-            greet_conductor(fleet, t)
+        greeted(greet_team(fleet, t, crew.greeted_roles("restart", stopped_, team.fresh, a.greet)))
     elif a.act == "resume":
-        roles, back = picked(team, a.roles), False
+        roles, back = picked(team, a.roles), []
         team.mark(down=False)
         team.panes()
         for role in roles:
@@ -6691,11 +6724,14 @@ def team_cmd(fleet, a):
                 if not team.start(role):
                     raise Stopped(1)
                 team.record("agent.start", f"team({name}): start {role}", [role])
-            back = back or role == "conductor"
-        # resume greets nobody: a conductor it brought back is sent, as crew's notice, the units of its bolt that wait amended
-        line = amended_units(fleet, t) if back else ""
+            back.append(role)
+        # resume greets only what it had to start fresh: a conductor it brought back with its conversation is sent, as
+        # crew's notice, the units of its bolt that wait amended
+        greet = crew.greeted_roles("resume", back, team.fresh)
+        line = amended_units(fleet, t) if "conductor" in back and "conductor" not in greet else ""
         if line:
             crew.tell(fleet, f"{name}-conductor", line)
+        greeted(greet_team(fleet, t, greet))
     elif a.act == "clear":
         role = picked(team, a.roles[:1])[0]
         agent, pane = team.agent_of(role), team.pane(role)
@@ -6908,9 +6944,9 @@ def operator_cmd(fleet, a):
 
 def revive_cmd(fleet, a):
     """crew revive, after a restart: on this host, each team's, main level's, dispatcher's and operator agent's standing
-    role whose pane came back with no agent in it picked up from its last conversation, a team's conductor greeted and
-    every agent brought back outside a team greeted; one taken down with crew down stays down. What can't be revived is
-    said, and the rest still are."""
+    role whose pane came back with no agent in it picked up from its last conversation, a team's conductor greeted, and
+    its ops when it had none to pick up (crew.greeted_roles), and every agent brought back outside a team greeted; one
+    taken down with crew down stays down. What can't be revived is said, and the rest still are."""
     greetings = []
     for kind, scope in crew.here(fleet):
         try:
@@ -6930,11 +6966,9 @@ def revive_cmd(fleet, a):
                 if not agents.start(role, "resume"):
                     continue
                 agents.record("agent.resume", f"{kind}({scope}): resume {agents.agent_of(role)}", [role])
-                if kind != "team":
-                    back.append(role)
-                elif role == "conductor":
-                    greet_conductor(fleet, agents.t)
-            greetings += greeting(fleet, agents, back)
+                back.append(role)
+            greetings += (greet_team(fleet, agents.t, crew.greeted_roles("revive", back, agents.fresh)) if kind == "team"
+                          else greeting(fleet, agents, back))
         except Refusal as e:
             print(e, file=sys.stderr)
     greeted(greetings)

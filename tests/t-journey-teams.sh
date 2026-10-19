@@ -1,33 +1,36 @@
 # A team's agents through the crew command on the stubs (tests.11, record 0022): crew up starts a team's conductor and
-# ops on its host in one workspace, greeted once and recorded, and status, down, resume, restart, clear, rebuild and
+# ops on its host in one workspace, each greeted once and recorded, and status, down, resume, restart, clear, rebuild and
 # close act on them; a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and
-# restarts them in the kit's main checkout; a role resumes where its conversation began; a conductor brought back is
-# told a unit waits amended; and a landing records GitHub's main, however far the host's own lags. The main level's
-# agents are t-journey-main's. What each agent is greeted with, where it runs and resumes, and what a conductor brought
-# back is told are logic cases (tests/py/test_teams.py); how git makes a bolt's branch, contract cases
+# restarts them in the kit's main checkout, greeting each; a role resumes where its conversation began, and one with
+# none is started fresh and greeted; a conductor brought back is told a unit waits amended; and a landing records
+# GitHub's main, however far the host's own lags. The main level's agents are t-journey-main's. Which agents a command
+# greets, what each is greeted with, where it runs and resumes, and what a conductor brought back is told are logic
+# cases (tests/py/test_teams.py); how git makes a bolt's branch, contract cases
 # (tests/contract/test_git.py).
 # Reads: plugin/hooks/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 . "$TESTS/teams.sh"
 
 expect_ok crew up swb-1
-has "$out" "swb-1-conductor started"; has "$out" "swb-1-ops started"; has "$out" "swb-1-conductor greeted"
+has "$out" "swb-1-conductor started"; has "$out" "swb-1-ops started"; has "$out" "swb-1-conductor greeted"; has "$out" "swb-1-ops greeted"
 grep -q "^mac-studio ssh $box " "$CREW_TEST_LOG" || fail "crew up did not run on the team's host"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1"
 eq "$(herdr_state $box wldn-1 '[.tabs[].label] | join(",")')" "conductor"
 eq "$(herdr_state $box wldn-1 '[.agents[].name] | sort | join(",")')" "swb-1-conductor,swb-1-ops"
 eq "$(launched swb-1-conductor)" "$k fresh"
-eq "$(greetings $box wldn-1 swb-1-conductor)" "1"
+eq "$(greetings $box wldn-1 swb-1-conductor)" "1"; eq "$(greetings $box wldn-1 swb-1-ops)" "1"
+has "$(grep "agent prompt swb-1-ops '" "$CREW_TEST_LOG")" "'[crew] You are swb-1'\"'\"'s ops; your team holds no bolt. Nothing is asked of you now"
 eq "$(field $box team.up On)" "team/swb-1 agent/swb-1-conductor agent/swb-1-ops"
 eq "$(field $box team.up By)" "$me@mac-studio"
-eq "$(field $box greet On)" "agent/swb-1-conductor team/swb-1"
+eq "$(field $box greet On agent/swb-1-conductor)" "agent/swb-1-conductor team/swb-1"
+eq "$(field $box greet On agent/swb-1-ops)" "agent/swb-1-ops team/swb-1"
 [[ -d $(home_of $box)/.local/state/swb-1-team && ! -d $(home_of mac-studio)/.local/state/swb-1-team ]] || fail "the team's state is not on its host"
 expect_fail "swb-1-conductor is already up" crew up swb-1
 expect_ok crew status swb-1
 has "$out" "swb-1-conductor"; has "$out" "swb-1-ops"; eq "$(grep -c ' free ' <<<"$out")" "4"
 pane_cwd() { herdr_state $box wldn-1 ".panes[\"$(awk -v r="$1" '$1==r{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].cwd"; }
 eq "$(pane_cwd conductor)" "$k"
-ok "crew up starts a team's conductor and ops on its host, in one workspace with a conductor tab and in the kit's main checkout, greets the conductor once and records it; status lists them and four free slots"
+ok "crew up starts a team's conductor and ops on its host, in one workspace with a conductor tab and in the kit's main checkout, greets each once and records it; status lists them and four free slots"
 
 crew bolt new smoke "Prove the loop." --repo switchboard-kit >/dev/null
 pushed from-a-mac
@@ -39,8 +42,10 @@ eq "$(launched swb-1-conductor)" "$k fresh"; eq "$(launched swb-1-ops)" "$k fres
 eq "$(pane_cwd conductor)" "$k"
 eq "$(greetings $box wldn-1 swb-1-conductor)" "1"
 has "$(grep "agent prompt swb-1-conductor '" "$CREW_TEST_LOG")" "Your team now holds the bolt smoke. Read where your bolt stands"
+eq "$(greetings $box wldn-1 swb-1-ops)" "1"
+has "$(grep "agent prompt swb-1-ops '" "$CREW_TEST_LOG")" "You are swb-1'\"'\"'s ops; your team holds the bolt smoke."
 eq "$(field $box agent.restart By agent/swb-1-ops)" "$me@mac-studio"
-ok "a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and restarts its conductor and ops in the kit's main checkout, then greets the conductor once"
+ok "a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and restarts its conductor and ops in the kit's main checkout, then greets each once, told the bolt"
 
 first=$(jq -r 'select(.agent == "swb-1-ops") | .session' "$CREW_TEST_CLAUDE_LOG" | tail -1)
 expect_ok crew down swb-1
@@ -52,9 +57,9 @@ has "$out" "swb-1-conductor resumed"; has "$out" "swb-1-ops resumed"
 eq "$(launched swb-1-ops)" "$k resumed"
 eq "$(jq -r 'select(.agent == "swb-1-ops") | .argv | .[index("--resume") + 1]' "$CREW_TEST_CLAUDE_LOG")" "$first"
 eq "$(count $box agent.resume)" "2"
-grep -q "agent prompt swb-1-conductor '" "$CREW_TEST_LOG" && fail "crew resume greeted the conductor"
+grep -q "agent prompt swb-1-\(conductor\|ops\) '" "$CREW_TEST_LOG" && fail "crew resume greeted an agent it brought back with its conversation"
 CREW_TEST_TRUST=1 expect_ok crew restart swb-1 ops
-has "$out" "swb-1-ops started"; lacks "$out" "conductor"
+has "$out" "swb-1-ops started"; has "$out" "swb-1-ops greeted"; lacks "$out" "conductor"
 eq "$(grep -c "^$box wldn-1 agent send-keys w[0-9]*:p[0-9]* down enter" "$CREW_TEST_LOG")" "1"
 expect_fail "no role 'fable' here; roles: conductor ops" crew restart swb-1 fable
 : > "$CREW_TEST_LOG"
@@ -67,6 +72,20 @@ eq "$(herdr_state $box wldn-1 '[.agents[].name] | sort | join(",")')" "swb-1-con
 expect_ok crew close swb-1
 eq "$(herdr_state $box wldn-1 '.workspaces | length')" "0"
 ok "down, resume (in the folder the conversation began in, greeting nobody), restart with the folder-trust question answered and never the Bypass warning, clear, rebuild and close act on the conductor and ops, each recorded, the pane's shell in the role's folder"
+
+# An ops started with no first message, as crw-2's give left crw-2-ops on 2026-10-19, has no conversation to resume:
+# crew resume starts it fresh and greets it, so it has one for the next resume (teams.7).
+expect_ok crew up swb-1
+CREW_TEST_NO_MESSAGE=1 expect_ok crew restart swb-1 ops --no-greet
+lacks "$out" "greeted"
+crew down swb-1 >/dev/null; : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
+expect_ok crew resume swb-1 ops
+has "$out" "swb-1-ops has no conversation to resume; starting it fresh"
+eq "$(launched swb-1-ops)" "$k fresh"
+eq "$(greetings $box wldn-1 swb-1-ops)" "1"
+has "$(grep "agent prompt swb-1-ops '" "$CREW_TEST_LOG")" "You are swb-1'\"'\"'s ops; your team holds the bolt smoke."
+crew close swb-1 >/dev/null
+ok "an ops crew resume finds no conversation for is started fresh and greeted, told the bolt its team holds"
 
 for gone in "assign swb-1 coder-1 x" "opsx swb-1 explorer /opsx:propose x"; do
   if out=$(crew $gone 2>&1); then fail "crew $gone still works"; fi

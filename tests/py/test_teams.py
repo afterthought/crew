@@ -1,6 +1,7 @@
 """Teams, the main level and their agents (teams.2, teams.6, teams.7, teams.11, plan.15): crew.load for what a team's
 session resolves its partition, kit and blueprints to, crew.greet_waits for one look of
 a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
+crew.greeted_roles for which of a team's agents a command greets and crew.ops_greeting for what its ops is told,
 crew.dispatch_place and crew.operator_session for where those run, crew.tab_holds for what an operator's tab holds,
 crew.last_conversation for where a role resumes,
 crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
@@ -106,6 +107,43 @@ class TestStandingGreeting:
     def test_a_teams_agent_the_reviewer_and_an_unknown_name_are_refused(self, name, said):
         with pytest.raises(crew.Refusal, match=said):
             crew.standing_greeting(FLEET, name)
+
+
+class TestTeamGreetings:
+    """Every agent crew starts gets a first message, so it has a conversation a resume after a herdr restart can pick up
+    (teams.7): crw-2's give of 2026-10-19 restarted its conductor and ops and greeted only the conductor, so herdr's
+    resume of crw-2-ops found no conversation and left its pane a shell, and crew resume then started it fresh and
+    ungreeted again."""
+
+    @pytest.mark.parametrize("act", ["up", "rebuild", "restart", "give"])
+    def test_each_role_a_command_starts_fresh_is_greeted_ops_with_the_conductor(self, act):
+        assert crew.greeted_roles(act, ["conductor", "ops"], ["conductor", "ops"]) == ["conductor", "ops"]
+        assert crew.greeted_roles(act, ["ops"], ["ops"]) == ["ops"]
+
+    def test_a_restart_told_not_to_greet_greets_none_since_its_caller_does(self):
+        assert crew.greeted_roles("restart", ["conductor", "ops"], ["conductor", "ops"], greet=False) == []
+
+    def test_a_resume_greets_what_it_had_to_start_fresh_and_nothing_it_brought_back_with_its_conversation(self):
+        assert crew.greeted_roles("resume", ["ops"], ["ops"]) == ["ops"]
+        assert crew.greeted_roles("resume", ["conductor", "ops"], ["ops"]) == ["ops"]
+        assert crew.greeted_roles("resume", ["conductor", "ops"], []) == []
+
+    def test_a_revive_greets_the_conductor_it_brought_back_and_ops_only_when_it_started_fresh(self):
+        assert crew.greeted_roles("revive", ["conductor", "ops"], []) == ["conductor"]
+        assert crew.greeted_roles("revive", ["ops"], []) == []
+        assert crew.greeted_roles("revive", ["ops"], ["ops"]) == ["ops"]
+
+    def test_ops_is_told_who_it_is_what_its_team_holds_and_to_wait_to_be_told(self):
+        assert crew.ops_greeting("crw-2", "tells-reach-the-pane") == (
+            "You are crw-2's ops; your team holds the bolt tells-reach-the-pane. Nothing is asked of you now: reply in "
+            "one line, then wait until your conductor or I tell you what is needed.")
+        assert "your team holds no bolt. Nothing is asked of you now" in crew.ops_greeting("crw-2", None)
+
+    def test_a_plan_crew_could_not_read_is_said_rather_than_no_bolt(self):
+        said = crew.ops_greeting("crw-2", None, "wldn/main of afterthought/crew-state could not be read:\nfatal: unable to access")
+        assert "crew could not read which bolt your team holds (wldn/main of afterthought/crew-state could not be read: fatal: " \
+               "unable to access). Nothing is asked of you now" in said
+        assert "holds no bolt" not in said
 
 
 class TestPlaces:

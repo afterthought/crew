@@ -717,6 +717,10 @@ def read_back(pane, sid, size, text):
 GREETING = ("Read where your bolt stands with `crew bolts`, tell me in a few lines, then carry on with it: "
             "start each stage that is ready.")
 
+# A team's ops is told who it is and what its team holds, and set to nothing: its work comes from its conductor or the user.
+OPS_GREETING = ("You are {team}'s ops; {holds}. Nothing is asked of you now: reply in one line, then wait until your "
+                "conductor or I tell you what is needed.")
+
 # The greeting of each agent crew starts outside a team, by role: the reads its brief already teaches, and what is its own.
 GREETINGS = {
     "design": ("Read where {label} stands with `crew bolts` and `crew rail`, and the signals waiting for curation, tell me in "
@@ -782,6 +786,36 @@ def greet(fleet, team, first="", wait=90):
     name = f"{t['name']}-conductor"
     return greet_agent(fleet, name, first + GREETING, [f"agent/{name}", f"team/{t['name']}"], t["label"],
                        f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
+
+
+def greet_ops(fleet, team, bolt, unread=None, wait=90):
+    """Give a team's ops its first message (teams.7): who it is, what its team holds, and to wait to be told."""
+    t = team_of(fleet, team)
+    name = f"{t['name']}-ops"
+    return greet_agent(fleet, name, ops_greeting(t["name"], bolt, unread), [f"agent/{name}", f"team/{t['name']}"],
+                       t["label"], f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
+
+
+def ops_greeting(team, bolt, unread=None):
+    """What a team's ops is greeted with (teams.7): who it is, the bolt its team holds or that it holds none, and that it
+    waits to be told, so it starts nothing of its own; when crew could not read the plan (unread), it says so rather
+    than name no bolt (read.1)."""
+    holds = (f"crew could not read which bolt your team holds ({' '.join(unread.split())})" if unread
+             else f"your team holds the bolt {bolt}" if bolt else "your team holds no bolt")
+    return OPS_GREETING.format(team=team, holds=holds)
+
+
+def greeted_roles(act, started, fresh, greet=True):
+    """The standing roles of a team a command greets once it has started them (teams.7), in the order started: each that
+    began a new conversation (fresh), since Claude Code keeps a conversation only once it has had a message, and a
+    herdr restart's resume of one that never had one leaves its pane a shell (teams.6); and the conductor crew revive
+    brought back with its conversation, to carry on with its bolt. A conductor crew resume brought back with its
+    conversation is sent the units that wait amended instead (plan.15), and ops brought back with its own waits to be
+    told. act is up, rebuild, restart, resume, revive or give; with greet false (restart --no-greet) none is, since the
+    command's caller greets them, as a bolt's give does."""
+    if not greet:
+        return []
+    return [r for r in started if r in fresh or (act == "revive" and r == "conductor")]
 
 
 def greet_standing(fleet, name, wait=90):
@@ -1419,13 +1453,13 @@ class Agents:
     (code.3): a team's (Team), a main level's, a dispatcher's or an operator agent's (standing). The panes, layout and
     slots files of its state folder change only by writing a new file over the old (teams.9), and its herdr session is
     read through the command's Herdr. A working agent is ended only when force is given (teams.2); `ended` names each
-    role whose agent this command ended."""
+    role whose agent this command ended, and `fresh` each it started with a new conversation, none picked up."""
 
     def __init__(self, fleet, kind, scope, label, session, state, standing, cwd, machine, host=None, force=False):
         self.fleet, self.kind, self.scope, self.label, self.force = fleet, kind, scope, label, force
         self.session, self.state, self.standing, self.cwd, self.machine, self.host = session, state, standing, cwd, machine, host
         self.herdr = herdr_in(session)
-        self.ended = []
+        self.ended, self.fresh = [], []
 
     def ensure(self):
         self.state.mkdir(parents=True, exist_ok=True)
@@ -1575,6 +1609,8 @@ class Agents:
                 break
             if self.herdr.status(pane, fresh=True) == "idle":
                 break
+        if not (stage == "resume" and session):
+            self.fresh.append(role)
         print(started_said(name, pane, stage))
         return True
 
