@@ -7743,7 +7743,8 @@ CREWS = {"proposal": "a proposal's card is crew's, raised by crew plan propose a
 
 def crews_key(key):
     """The kind of crew's own card a key names, by its first part (CREWS), whatever follows, crew's revision of a key
-    (cards.post_key) and a key of an older form among it; None for any other key, an agent's question's."""
+    and its fill of a short one (cards.post_key) and a key of an older form among it; None for any other key, an
+    agent's question's."""
     kind = key.split("/", 1)[0] if isinstance(key, str) and "/" in key else None
     return kind if kind in CREWS else None
 
@@ -7752,10 +7753,10 @@ def card_refusal(fleet, name, label, tool, key):
     """Whether a crew agent's Pending You call may go through (briefs.11, record 0031): None to let it, else the
     refusal's words. The user's own name is never checked. A card's post, change or close is a question's, the agent's
     own, only from a conductor, the planner, main-level ops or the design agent (ASKERS), and never under crew's own
-    key (crews_key). A post's key is its idempotencyKey, judged by its form alone, with or without :<n>, and no plan
-    read. A change or a close carries a request id and no key, so its key is the one this host's run record holds the
-    card under, crew's raises and the agents' own posts alike, read locally with no state-branch fetch, None when it
-    holds none; the hook refuses the call when that record can't be read. The planner's close of a card under
+    key (crews_key). A post's key is its idempotencyKey, judged by its form alone, with or without :<n> or the fill of
+    a short key (cards.post_key), and no plan read. A change or a close carries a request id and no key, so its key is
+    the one this host's run record holds the card under, crew's raises and the agents' own posts alike, read locally
+    with no state-branch fetch, None when it holds none; the hook refuses the call when that record can't be read. The planner's close of a card under
     batch/<n>-<k>, which it posted itself before a batch was one card and crew never raises, passes, a departure from
     briefs.11 that goes once no such card is open; its post or change there is refused. An area is made only under
     create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
@@ -8601,8 +8602,9 @@ def card_uploaded(acts, key, b, got):
 
 def card_posted(acts, label, owner, b, where, entries=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
-    posted under the row's key, or the key with its revision once a card of the owner's under it closed (post_key,
-    from entries, this host's run record unless given), and recorded under the row's key. A post Pending You answers
+    posted under the row's key, or the key with its revision once a card of the owner's under it closed, either filled
+    out to Pending You's eight characters when shorter (post_key, from entries, this host's run record unless given),
+    and recorded under the row's key. A post Pending You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
     this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
     that card, printed with the line that adopts it and recorded once, by the command that recorded it first."""
