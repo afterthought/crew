@@ -47,8 +47,21 @@ class TestState:
         steps = [e("ops.step", minutes=1, Head=S1, Key="restart-herdr/1", State="waiting", Doer="user"),
                  e("ops.step", minutes=2, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher"),
                  e("ops.step", minutes=3, Head=S1, Key="restart-herdr/1", State="done", Note="restarted at 10:02")]
-        got = [(key, x["State"]) for (env, to, key), x in ops.ordered(ops.state(steps)[2])]
+        got = [(key, x["State"]) for (env, to, key), x in ops.ordered(ops.state(steps)[2], steps)]
         assert got == [("restart-teams/1", "handed"), ("restart-herdr/1", "done")]
+
+    def test_steps_recorded_in_one_second_keep_the_order_they_were_recorded_in_whatever_process_made_each(self):
+        def made(pid, key, **f):
+            return dict(e("ops.step", Head=S1, Key=key, **f), Id=f"20261012T100000Z-mac-studio-{pid}-1")
+        steps = [made(99987, "restart-herdr/1", State="waiting", Doer="user"),
+                 made(100012, "restart-teams/1", State="handed", Doer="dispatcher"),
+                 made(100031, "restart-crew/1", State="waiting", Doer="main-ops", When="quiet held")]
+        es = ops.in_order(steps)
+        assert [x["Key"] for x in es] == ["restart-herdr/1", "restart-teams/1", "restart-crew/1"]
+        assert [(n, key) for n, (env, to, key), _ in ops.numbered(ops.state(es)[2])] == \
+            [(1, "restart-herdr/1"), (2, "restart-teams/1"), (3, "restart-crew/1")]
+        es = ops.in_order(steps + [made(100050, "restart-herdr/1", State="done")])
+        assert [key for (env, to, key), _ in ops.ordered(ops.state(es)[2], es)] == ["restart-teams/1", "restart-crew/1", "restart-herdr/1"]
 
 
 class TestRows:
