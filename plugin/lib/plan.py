@@ -5569,6 +5569,67 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
     return due, unread
 
 
+# The subject crew wrote an After with at a forecast, before a forecast stopped ordering two units (plan.13): crew's
+# own words, matched whole, so an order a wait wrote then is read as crew's.
+FORECAST_ORDER = re.compile(r"^plan\([a-z0-9][a-z0-9-]*\): ([a-z0-9][a-z0-9-]*) after ([a-z0-9][a-z0-9-]*), forecast to conflict$")
+
+
+def forecast_ordered(e):
+    """The pair a unit.after entry's subject says a forecast ordered before this was a settle's (FORECAST_ORDER), as
+    (unit, other), or None."""
+    m = FORECAST_ORDER.match(e.get("Why") or "")
+    return m.groups() if m else None
+
+
+def forecast_orders(after_of, unmerged, entries, holds):
+    """Which pairs of a bolt's unmerged units crew puts in order, and which orders of its own it lifts (plan.13,
+    teams.12, teams.14), from the run record's entries (oldest first), each unit's After names as the plan holds them
+    (after_of) and the bolt's unmerged units. A pair is (unit, other) of a forecast entry on unit/<unit> and
+    unit/<other>, both unmerged. crew's writes for a pair are its unit.after entries on unit/<unit> with After: <other>,
+    made on a settle, or with the subject a forecast wrote before (FORECAST_ORDER); its lifts, those with Lifted:
+    <other>. holds(unit, other, head) says whether the unit's branch holds the other's work, head being the other's as
+    the pair's latest forecast recorded it, or None; it is asked only of a pair a settle's end may decide.
+
+    A pair is ordered when the plan does not put the unit after the other, a settle of the unit delivered after a
+    forecast for the pair and after crew's latest record for it, the branch holds the other's work, crew has never
+    written the pair's order on a settle, and crew's latest record for the pair is not a write: a write the plan no
+    longer holds was lifted by someone else, and stays lifted. A pair is lifted when the plan puts the unit after the
+    other, crew's latest record for it is a write, the unit's latest settle end since that write stopped short with no
+    settle of it delivered since, and the branch does not hold the other's work. An order set by hand or by a proposal
+    is no write of crew's, and is never lifted. Returns (to order, to lift), each [(unit, other, the id of the settle
+    end that decided it)], in the order of the pairs' first forecasts."""
+    key = lambda e: (e["At"], e["Id"])
+    pairs = []
+    for e in entries:
+        on = e.get("On") or []
+        if e.get("Act") == "forecast" and not e.get("Refused") and len(on) > 1 and on[0].startswith("unit/") and on[1].startswith("unit/"):
+            pair = (on[0][5:], on[1][5:])
+            if pair not in pairs and pair[0] in unmerged and pair[1] in unmerged:
+                pairs.append(pair)
+    order, lift = [], []
+    for unit, other in pairs:
+        forecasts = [e for e in entries if e.get("Act") == "forecast" and not e.get("Refused") and (e.get("On") or [])[:2] == [f"unit/{unit}", f"unit/{other}"]]
+        records = [e for e in entries if e.get("Act") == "unit.after" and not e.get("Refused") and f"unit/{unit}" in (e.get("On") or [])
+                   and (e.get("After") == other or e.get("Lifted") == other or forecast_ordered(e) == (unit, other))]
+        ends = [e for e in entries if e.get("Act") == "stage.end" and not e.get("Refused") and f"stage/{unit}/settle" in (e.get("On") or [])]
+        latest = records[-1] if records else None
+        written = latest is not None and latest.get("Lifted") != other
+        since = key(latest) if latest else None
+        head = next((w.split("@", 1)[1] for w in reversed((forecasts[-1].get("Heads") or "").split()) if w.startswith(f"{other}@")), None)
+        if comes_after(after_of, unit, other):
+            later = [e for e in ends if since is None or key(e) > since]
+            if written and other in after_of.get(unit, ()) and later and later[-1].get("Ended") == "short" \
+                    and not any(e.get("Ended") == "delivered" for e in later) and not holds(unit, other, head):
+                lift.append((unit, other, later[-1]["Id"]))
+            continue
+        if written or any(e.get("After") == other for e in records):
+            continue
+        settled = [e for e in ends if e.get("Ended") == "delivered" and key(e) > key(forecasts[0]) and (since is None or key(e) > since)]
+        if settled and holds(unit, other, head):
+            order.append((unit, other, settled[-1]["Id"]))
+    return order, lift
+
+
 def carried_forecasts(fleet, t, plan, st_all, bolt, unit):
     """The forecasts and amendments waiting to reach a unit in its next stage's prompt: this host's entries for it that
     reached it by prompt and that no stage start of it has carried since. Returns their ids and their words."""

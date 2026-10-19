@@ -1,5 +1,6 @@
 """Conflicts forecast and amendments reaching a unit (teams.12, teams.13, teams.14, plan.13): plan.forecasts_due for
-what a conductor's wait forecasts, a dependent from the head its place took (plan.took_heads), plan.reach_way for how
+what a conductor's wait forecasts, a dependent from the head its place took (plan.took_heads), plan.forecast_orders for
+which pairs a settle orders and which of crew's own orders it lifts, plan.reach_way for how
 a forecast or an amendment reaches the later unit, plan.verified for whether it waits to merge, plan.amended_afters for each After unit constructed again since its
 dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent
 whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
@@ -58,6 +59,102 @@ class TestDue:
         got = plan.forecasts_due([("c", C, ["b"]), ("a", A, [])], "t", None,
                                  lambda o, h, base: ["shared.txt"] if {o, h} == {A, C} else [], set(), {}, {"c": ["b"], "b": ["a"]})
         assert got == ([("c", "a", ["shared.txt"], f"c@{C[:7]} a@{A[:7]}")], [])
+
+
+class TestOrders:
+    """Which pairs crew orders and which orders of its own it lifts (plan.13, teams.12, teams.14): b, later in the bolt,
+    is forecast to conflict with a, both unmerged; a settle of b that delivers holding a's work puts b after a, once
+    for the pair; an order crew wrote whose settle then stopped short, b not holding a's work, is lifted; one someone
+    else lifted stays lifted."""
+
+    def forecast(self, minutes, unit="b", other="a"):
+        return {"Act": "forecast", "On": [f"unit/{unit}", f"unit/{other}"], "At": at(minutes), "Id": f"f{minutes}",
+                "Heads": f"{unit}@{B[:7]} {other}@{A[:7]}", "Reached": "settle"}
+
+    def settle(self, minutes, how="delivered", unit="b"):
+        return {"Act": "stage.end", "On": [f"stage/{unit}/settle", f"unit/{unit}", "agent/swb-1-unit-2"], "At": at(minutes),
+                "Id": f"s{minutes}", "Ended": how, "Delivered": f"unit/{unit}@{B[:7]}" if how == "delivered" else None}
+
+    def wrote(self, minutes, before=False, **fields):
+        # before: an order a forecast wrote before this change, known by crew's own subject
+        why = "plan(t): b after a, forecast to conflict" if before else (
+            "plan(t): b no longer after a, its settle found nothing to change" if "Lifted" in fields else "plan(t): b after a, its settle took a's work")
+        return {"Act": "unit.after", "On": ["unit/b", "bolt/t"], "At": at(minutes), "Id": f"w{minutes}", "Why": why, **fields}
+
+    def orders(self, entries, after=(), held=False, unmerged=("a", "b")):
+        asked = []
+
+        def holds(unit, other, head):
+            asked.append((unit, other, head))
+            return held
+        got = plan.forecast_orders({"a": [], "b": list(after)}, set(unmerged), entries, holds)
+        return got, asked
+
+    def test_a_forecast_with_no_settle_orders_nothing(self):
+        assert self.orders([self.forecast(1)]) == (([], []), [])
+
+    def test_a_settle_that_delivers_holding_the_others_work_orders_the_pair(self):
+        got, asked = self.orders([self.forecast(1), self.settle(2)], held=True)
+        assert got == ([("b", "a", "s2")], [])
+        assert asked == [("b", "a", A[:7])]
+
+    def test_a_second_delivered_settle_does_not_order_it_again(self):
+        entries = [self.forecast(1), self.settle(2), self.wrote(3, After="a", Settle="s2"), self.forecast(4), self.settle(5)]
+        assert self.orders(entries, after=["a"], held=True)[0] == ([], [])
+        assert self.orders(entries, held=True)[0] == ([], [])  # lifted since by someone else: once for a pair
+
+    def test_a_settle_that_delivered_without_holding_the_others_work_orders_nothing(self):
+        assert self.orders([self.forecast(1), self.settle(2)], held=False)[0] == ([], [])
+
+    def test_a_settle_before_any_forecast_for_the_pair_orders_nothing(self):
+        assert self.orders([self.settle(1), self.forecast(2)], held=True) == (([], []), [])
+
+    def test_a_short_settle_orders_nothing(self):
+        assert self.orders([self.forecast(1), self.settle(2, "short")], held=True)[0] == ([], [])
+
+    def test_an_order_a_forecast_wrote_whose_settle_stopped_short_is_lifted(self):
+        # wldn, swb-1, 2026-10-15: proposals 346 and 347 lifted such orders, a card for the user each time.
+        entries = [self.wrote(1, before=True), self.forecast(1), self.settle(2, "short")]
+        assert self.orders(entries, after=["a"])[0] == ([], [("b", "a", "s2")])
+
+    def test_one_whose_branch_holds_the_others_work_is_not_lifted(self):
+        entries = [self.wrote(1, before=True), self.forecast(1), self.settle(2, "short")]
+        assert self.orders(entries, after=["a"], held=True)[0] == ([], [])
+
+    def test_one_whose_settle_has_not_ended_or_delivered_since_is_not_lifted(self):
+        assert self.orders([self.wrote(1, before=True), self.forecast(1)], after=["a"]) == (([], []), [])
+        entries = [self.wrote(1, before=True), self.forecast(1), self.settle(2), self.settle(3, "short")]
+        assert self.orders(entries, after=["a"])[0] == ([], [])
+        assert self.orders([self.wrote(1, before=True), self.forecast(1), self.settle(2, "stopped")], after=["a"])[0] == ([], [])
+
+    def test_an_order_the_user_lifted_is_neither_written_nor_lifted_and_a_later_settle_does_not_write_it_back(self):
+        # wldn, swb-1, 2026-10-15: proposal 346 lifted the order, and the next forecast on new heads wrote it back.
+        entries = [self.wrote(1, before=True), self.forecast(1), self.settle(2, "short"), self.forecast(3)]
+        assert self.orders(entries)[0] == ([], [])
+        assert self.orders(entries + [self.settle(4)], held=True)[0] == ([], [])
+
+    def test_crews_own_lift_followed_by_a_delivered_settle_holding_the_others_work_orders_it(self):
+        entries = [self.wrote(1, before=True), self.forecast(1), self.settle(2, "short"), self.wrote(3, Lifted="a", Settle="s2")]
+        assert self.orders(entries + [self.forecast(4), self.settle(5)], held=True)[0] == ([("b", "a", "s5")], [])
+        assert self.orders(entries, held=True)[0] == ([], [])  # the settle before the lift decided nothing more
+
+    def test_an_order_set_by_hand_is_never_lifted(self):
+        hand = {"Act": "unit.after", "On": ["unit/b", "bolt/t"], "At": at(1), "Id": "w1", "Why": "plan(t): b after a"}
+        assert self.orders([hand, self.forecast(1), self.settle(2, "short")], after=["a"]) == (([], []), [])
+
+    def test_one_that_comes_after_the_other_through_another_unit_is_not_ordered(self):
+        got = plan.forecast_orders({"a": [], "c": ["a"], "b": ["c"]}, {"a", "b", "c"}, [self.forecast(1), self.settle(2)],
+                                   lambda unit, other, head: True)
+        assert got == ([], [])
+
+    def test_a_merged_other_gives_no_pair(self):
+        assert self.orders([self.forecast(1), self.settle(2)], held=True, unmerged=("b",)) == (([], []), [])
+        assert self.orders([self.wrote(1, before=True), self.forecast(1), self.settle(2, "short")], after=["a"], unmerged=("b",)) == (([], []), [])
+
+    def test_a_forecast_against_the_bolt_or_an_amendment_is_no_pair(self):
+        bolt = dict(self.forecast(1), On=["unit/b", "bolt/t"])
+        amendment = dict(self.forecast(1), Act="amendment")
+        assert self.orders([bolt, amendment, self.settle(2)], held=True) == (([], []), [])
 
 
 class TestDependent:
