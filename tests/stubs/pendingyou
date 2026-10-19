@@ -18,7 +18,8 @@ never given twice. A test signs the host in again by moving cards.json aside: ev
   answered/<id>.json     the user's answer to that card, {"answer": {...}}, taken on the next get_request
   messages/<id>.json     messages on that card, a list, given back by get_request
 Tools: whoami, match_area (use for a remote an area was made for, else create), create_area (one area a key),
-post_request (a key gives its card back), get_request, update_request and ack_answer (at the card's version),
+post_request (a key gives its card back, and one under eight characters is refused in Pending You's words, as its
+schema refuses it in pendingyou 0.35.1), get_request, update_request and ack_answer (at the card's version),
 cancel_request. Any other is a JSON-RPC error."""
 import json, os, pathlib, sys
 
@@ -82,6 +83,8 @@ def tool(name, args):
             return said({"areaId": areas[key]["areaId"], "name": args["name"], "created": True})
         return said({"areaId": areas[key]["areaId"], "name": areas[key]["name"], "created": False})
     if name == "post_request":
+        if len(args.get("idempotencyKey") or "") < 8:
+            return refused("Some fields need fixing. idempotencyKey: Too small: expected string to have >=8 characters.")
         known = next((i for i, c in cards.items() if c["key"] == args["idempotencyKey"]), None)
         if not known:
             n = load("counter").get("cards", 0) + 1

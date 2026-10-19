@@ -285,7 +285,7 @@ def test_a_card_is_posted_in_its_owners_name_under_its_rows_key_filed_in_its_kit
     assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
     sent = acts.calls[1][1]
     assert (sent["idempotencyKey"], sent["areaId"], sent["session"]) == (
-        "land/b1", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
+        "land/b1_", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
     assert sent["approve"]["risk"] == "high"
     assert acts.emitted == [dict(Act="card.post", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", label="wldn")]
     assert capsys.readouterr().out == ("card land/b1: req_c1 https://www.pendingyou.com/app/r/req_c1\n"
@@ -395,10 +395,13 @@ def test_a_close_refused_on_a_card_the_user_answered_posts_nothing_and_is_record
                                           "Your latest message asks them something.")
 
 
-@pytest.mark.parametrize("status, kind_changed, how", [("pending", False, "change"), ("snoozed", False, "change"), ("answered", False, "follow"),
-                                                    ("pending", True, "follow")])
-def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_or_whose_kind_changed_is_followed(status, kind_changed, how):
-    assert cards.revision({"status": status, "version": 2}, kind_changed) == how
+@pytest.mark.parametrize("status, kind_changed, questions, how", [
+    ("pending", False, False, "change"), ("snoozed", False, False, "change"), ("answered", False, False, "follow"),
+    ("pending", True, False, "follow"), ("pending", False, True, "follow"), ("snoozed", False, True, "follow"),
+    ("answered", False, True, "follow")])
+def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_whose_kind_changed_or_with_questions_is_followed(
+        status, kind_changed, questions, how):
+    assert cards.revision({"status": status, "version": 2}, kind_changed, questions) == how
 
 
 STEP = dict(env="srv", n=1, text="restart crew's teams", doer="swancloud-ops", held=True, why=None, where=None, commands=[], done=None,
@@ -441,17 +444,32 @@ POST, CLOSE = (lambda card, by="swb-1-conductor", key="land/b1": dict(Act="card.
 
 
 @pytest.mark.parametrize("entries, asked", [
-    ([], "land/b1"),
-    ([POST("req_1")], "land/b1"),
-    ([POST("req_1"), POST("req_1")], "land/b1"),
+    ([], "land/b1_"),
+    ([POST("req_1")], "land/b1_"),
+    ([POST("req_1"), POST("req_1")], "land/b1_"),
     ([POST("req_1"), CLOSE("req_1", "declined")], "land/b1:2"),
     ([POST("req_1"), CLOSE("req_1"), POST("req_2")], "land/b1:2"),
     ([POST("req_1"), CLOSE("req_1"), POST("req_2"), CLOSE("req_2", "lost")], "land/b1:3"),
-    ([POST("req_1", by="swb-2-conductor"), CLOSE("req_1")], "land/b1"),
-    ([POST("req_1", key="land/b2"), CLOSE("req_1")], "land/b1"),
-    ([dict(POST("req_1"), Refused="x"), CLOSE("req_1")], "land/b1")])
+    ([POST("req_1", by="swb-2-conductor"), CLOSE("req_1")], "land/b1_"),
+    ([POST("req_1", key="land/b2"), CLOSE("req_1")], "land/b1_"),
+    ([dict(POST("req_1"), Refused="x"), CLOSE("req_1")], "land/b1_")])
 def test_a_card_is_posted_under_its_rows_key_and_after_a_closed_one_under_the_key_with_its_revision(entries, asked):
     assert cards.post_key(entries, "land/b1", "swb-1-conductor") == asked
+
+
+@pytest.mark.parametrize("key, first, revised", [
+    ("batch/7", "batch/7_", "batch/7:2"), ("land/a", "land/a__", "land/a:2"), ("op/a/1", "op/a/1__", "op/a/1:2"),
+    ("batch/12", "batch/12", "batch/12:2"), ("deploy/dev", "deploy/dev", "deploy/dev:2")])
+def test_a_key_shorter_than_pending_you_takes_is_filled_out_to_eight_characters_the_same_on_every_post(key, first, revised):
+    """rail-cards: a row's key shorter than Pending You takes. Read on mac-studio on 2026-10-19 (test D): crew could not
+    post batch 7's card, the rail saying "card: batch/7, none open; its last post was refused: Pending You refused
+    post_request: Some fields need fixing. idempotencyKey: Too small: expected string to have >=8 characters.", since
+    batch/<n> under ten is seven characters. A short key is filled out at its end, the same on a retry and while its
+    card is open; its revision, and a key long enough, are sent as they are."""
+    by = "wldn-planner"
+    held, closed = [POST("req_1", by=by, key=key)], [POST("req_1", by=by, key=key), CLOSE("req_1")]
+    sent = [cards.post_key([], key, by), cards.post_key([], key, by), cards.post_key(held, key, by), cards.post_key(closed, key, by)]
+    assert sent == [first, first, first, revised] and all(len(k) >= cards.KEY_LEAST for k in sent)
 
 
 def test_a_change_with_no_card_held_posts_it():
@@ -471,6 +489,32 @@ def test_a_close_acks_an_answered_card_with_its_outcome_and_withdraws_a_waiting_
     assert acts.calls[1] == ("cancel_request", {"requestId": "req_c1", "name": "swb-1-conductor", "reason": "Held for a fix: the log is empty"})
     assert acts.emitted[0]["State"] == "withdrawn"
     assert capsys.readouterr().out.splitlines()[-1] == "card land/b1: req_c1 withdrawn"
+
+
+LONG = ("Applied: added " + ", ".join(f"the-unit-that-does-thing-{i}" for i in range(1, 9))
+        + "; 3 other changes. Left out on your word: the-briefs-say-never-wt-submit-help.")
+
+
+def test_a_close_cuts_its_outcome_and_its_reason_to_pending_yous_two_hundred_characters_and_records_them_whole():
+    """Read on 2026-10-18: the planner's `crew plan answer 142 ...` applied the proposal and printed "card
+    proposal/139 not closed: Pending You refused the close: Some fields need fixing. outcome: Too big: expected
+    string to have <=200 characters.", the card left open. Pending You takes an outcome or a reason of 200 characters
+    at most (cards.OUTCOME)."""
+    assert len(LONG) > cards.OUTCOME
+    held = [post("proposal/139", "wldn-planner", "req_p1")]
+    acts = Acts({"get_request": ({"status": "answered", "turn": "agent", "version": 3}, None)}, entries=held, caller="wldn-planner")
+    acts.end = lambda label, key: None  # a proposal's reading session, which this one has none of
+    assert plan.row_card_close(None, "wldn", "wldn-planner", "proposal/139", outcome=LONG, acts=acts) == "req_p1"
+    tool, sent = acts.calls[1]
+    assert (tool, len(sent["outcome"]), sent["outcome"][-1]) == ("ack_answer", cards.OUTCOME, "…")
+    assert LONG.startswith(sent["outcome"][:-1]) and acts.emitted[0]["Outcome"] == LONG
+    acts = Acts({"get_request": ({"status": "pending", "version": 1}, None)}, entries=held, caller="wldn-planner")
+    acts.end = lambda label, key: None
+    plan.row_card_close(None, "wldn", "wldn-planner", "proposal/139", reason=LONG, acts=acts)
+    tool, sent = acts.calls[1]
+    assert (tool, len(sent["reason"]), acts.emitted[0]["Outcome"]) == ("cancel_request", cards.OUTCOME, LONG)
+    short = cards.close_call({"status": "pending"}, "req_p1", "wldn-planner", reason="Dropped: not now")
+    assert short[1]["reason"] == "Dropped: not now"
 
 
 def test_a_close_pending_you_does_not_find_is_recorded_lost_and_a_refused_one_recorded_refused():

@@ -408,6 +408,7 @@ def drawn(before, after, argvs):
 # --------------------------------------------------------------------------------- the words rule (briefs.13)
 
 TITLE, SUMMARY, DETAIL, LABEL = 140, 400, 200, 80  # Pending You's budgets: a title, a summary, a detail, consequence or rationale, an option's label
+OUTCOME = 200  # Pending You's budget for a close's words: ack_answer's outcome and cancel_request's reason
 LINE = 40  # the most characters a line of a list on a card's face holds: the phone shows it in monospace
 CARD_NEW = 15  # the most units new to a bolt a proposal's card takes as boxes; more link its reading session (briefs.9)
 BOXES, GROUPS = 5, 4  # Pending You's limits: a question's options, and a card's questions
@@ -651,6 +652,36 @@ def batch_card(f):
                  [(f"Read batch {n}", f["link"])] if f.get("link") else (), shown, urgency="whenever", kind="fyi", intent="tell")
 
 
+def proposal_rows(argvs):
+    """The rows of a proposal's card from its commands alone, in order, each (is, command): a unit or chore new to a
+    bolt, added or moved in, once ("new"); one dropped ("dropped"); one amended ("amended")."""
+    new, seen, rows = new_units(argvs), set(), []
+    for a in argvs:
+        if a.cmd not in ("unit", "chore"):
+            continue
+        if a.unit in new and a.unit not in seen:
+            seen.add(a.unit)
+            rows.append(("new", a))
+        elif a.sub == "drop":
+            seen.add(a.unit)
+            rows.append(("dropped", a))
+        elif a.sub == "amend":
+            rows.append(("amended", a))
+    return rows
+
+
+def proposal_form(argvs):
+    """The form of a proposal's card from its commands alone (proposal_card): "approve", a hold-to-approve, when it
+    has no unit rows or links its reading session, for more than CARD_NEW new units or more rows than its lists hold;
+    "choice" for a lone row; "multi" for one list, BOXES rows at most; "lists" for more, each list a question. Pending
+    You's update_request changes neither a card's kind nor its questions, so a rewrite that moves its chain's card from
+    one form to another is followed rather than changed (plan.raise_proposal_at)."""
+    rows = proposal_rows(argvs)
+    if not rows or len(new_units(argvs)) > CARD_NEW or len(rows) > BOXES * GROUPS:
+        return "approve"
+    return "choice" if len(rows) == 1 else "multi" if len(rows) <= BOXES else "lists"
+
+
 def proposal_card(f):
     """A proposal's card (record 0031 §5, plan-proposals): titled "Plan change to <bolt>: <counts>", with no number and
     no question; a sentence of what the planner proposes and why, from its case; one checkbox list, every row of the
@@ -675,8 +706,8 @@ def proposal_card(f):
     title = f"Plan change to {to}" + (f": {counts}" if counts else "")
     new, units = new_units(argvs), {}
     rows = []
-    for a in argvs:
-        if a.cmd in ("unit", "chore") and a.unit in new and a.unit not in units:
+    for is_, a in proposal_rows(argvs):
+        if is_ == "new":
             units[a.unit] = a
             moved = a.sub == "move"
             src = d["came_from"].get(a.unit)
@@ -684,26 +715,26 @@ def proposal_card(f):
                          "label": f"Move {a.unit} in" if moved else f"Add {a.unit}", "detail": d["intent"].get(a.unit) or "",
                          "consequence": f"Cleared: stays in {'the queue' if src is None else 'bolt ' + src}; the rest still applies"
                          if moved else "Cleared: not added; the rest still applies"})
-        elif a.cmd in ("unit", "chore") and a.sub == "drop":
+        elif is_ == "dropped":
             units[a.unit] = a
             rows.append({"id": f"keep:{a.unit}", "unit": a.unit, "is": "dropped", "ticked": False,
                          "label": f"Keep {a.unit}", "detail": f"Proposed: drop. Why: {a.reason}",
                          "consequence": "Ticked: it stays; the rest still applies"})
-        elif a.cmd in ("unit", "chore") and a.sub == "amend":
+        else:
             rows.append({"id": f"old:{a.unit}", "unit": a.unit, "is": "amended", "ticked": False,
                          "label": f"Keep {a.unit}'s old intent", "detail": d["amended"].get(a.unit) or "",
                          "consequence": "Ticked: its intent stays as it was; the rest still applies"})
     session = len(new) > CARD_NEW or len(rows) > BOXES * GROUPS
-    plain = not rows or session
+    shape = proposal_form(argvs)
 
     def option(r):
         return {"id": r["id"], "label": cut(r["label"], LABEL), "detail": by_words(r["detail"], DETAIL),
                 "consequence": by_words(r["consequence"], DETAIL)}
-    if plain:
+    if shape == "approve":
         how = "Hold to apply it whole."
         form = dict(kind="approve", intent="approve", recommendedIds=["approve"],
                     approve={"action": f"Apply the plan change to {to}", "risk": "low", "reversible": True})
-    elif len(rows) == 1:
+    elif shape == "choice":
         r = rows[0]
         how = "Its one row is set as proposed; pick the other side and send to change it."
         other = {"new": f"Leave {r['unit']} out", "dropped": f"Drop {r['unit']}", "amended": f"Amend {r['unit']}"}[r["is"]]
@@ -801,10 +832,14 @@ ROWS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"), (re.compile(r"^batch/(
         (re.compile(r"^land/([a-z0-9][a-z0-9-]*)$"), "bolt/{}"), (re.compile(r"^deploy/([a-z0-9][a-z0-9-]*)$"), "env/{}"),
         (re.compile(r"^op/([a-z0-9][a-z0-9-]*)/\d+$"), "env/{}"),
         (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})$"), "record/{}/{}"))
-# What update_request takes of a card crew built: a card's kind and questions are never changed in place.
+# What update_request takes of a card crew built. It changes neither a card's kind nor its questions, so a card whose
+# kind changed, or one that carries questions, a proposal's rows in lists, is followed by a new card (revision).
 CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "multi", "recommendedIds", "action",
            "rationale", "urgency", "blocking")
 DEAD = "An older copy of this card was lost: dismiss it in the app."
+# The fewest characters Pending You takes in an idempotencyKey (post_request's schema, pendingyou 0.35.1), and what
+# fills a shorter key of crew's out to it: no row key and no revision holds it, so a filled key is no other row's.
+KEY_LEAST, FILL = 8, "_"
 
 
 def row_object(key):
@@ -837,12 +872,14 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
-def revision(got, kind_changed=False):
-    """How crew puts a changed card before the user, from get_request's answer and whether the card's kind changed:
-    "change", the card changed in place, while it waits on them; "follow" once they have answered it, since Pending
-    You changes a card only while it waits and an answered one is followed by a new card (its guide, "Follow up with a
-    new card"), and when its kind changed, which update_request never changes (CHANGED)."""
-    return "follow" if kind_changed or isinstance(got, dict) and got.get("status") == "answered" else "change"
+def revision(got, kind_changed=False, questions=False):
+    """How crew puts a changed card before the user, from get_request's answer, whether the card's kind changed and
+    whether the card crew built again carries questions: "change", the card changed in place, while it waits on them;
+    "follow" once they have answered it, since Pending You changes a card only while it waits and an answered one is
+    followed by a new card (its guide, "Follow up with a new card"), and when its kind changed or it carries questions,
+    which update_request never changes (CHANGED): a card changed in place would keep its old questions under its new
+    title, as proposal 140's did over proposal 139's rows on 2026-10-18."""
+    return "follow" if kind_changed or questions or isinstance(got, dict) and got.get("status") == "answered" else "change"
 
 
 def post_key(entries, key, by):
@@ -850,10 +887,13 @@ def post_key(entries, key, by):
     its first card, and for each card after one of `by`'s under it closed (answered and followed, declined, withdrawn or
     lost), the key with that card's revision, <key>:<n>, since Pending You gives a key's card back as long as it keeps
     it and takes one key per question. A card still open under the key keeps its own key, so posting it again gives it
-    back."""
+    back. A key shorter than Pending You takes, batch/7 or land/b1, is filled out to KEY_LEAST at its end with FILL,
+    batch/7_, the same on every post: its first part is still crew's (plan.crews_key), and a key long enough is sent as
+    it always was, so a card open under it is given back (batch 7's card on 2026-10-19, refused "idempotencyKey: Too
+    small: expected string to have >=8 characters")."""
     mine = [e for e in entries if e.get("Act") == "card.close" or (e.get("Key") == key and e.get("By") == by)]
     closed = {c["card"] for c in posted_cards(mine) if c["state"]}
-    return f"{key}:{len(closed) + 1}" if closed else key
+    return (f"{key}:{len(closed) + 1}" if closed else key).ljust(KEY_LEAST, FILL)
 
 
 def posted_again(card):
@@ -864,12 +904,17 @@ def posted_again(card):
 def close_call(got, card, name, outcome=None, reason=None):
     """How crew closes a card, from get_request's answer: one the user answered acked at its version with what was
     done on it, the outcome, or the reason it is withdrawn; one still waiting withdrawn with the reason, or the
-    outcome. The tool, its arguments, and the close's state as the run record keeps it."""
+    outcome. Either is cut to OUTCOME characters, since Pending You refuses a longer one (proposal 142's close on
+    2026-10-18: "outcome: Too big: expected string to have <=200 characters"); the run record keeps crew's words
+    whole. The tool, its arguments, and the close's state as the run record keeps it."""
+    def said(first, then):
+        words = first if first is not None else then
+        return cut(words, OUTCOME) if isinstance(words, str) else words
     if got.get("status") == "answered":
         return ("ack_answer", {"requestId": card, "name": name, "expectedVersion": version_of(got, card),
-                               "outcome": outcome if outcome is not None else reason},
+                               "outcome": said(outcome, reason)},
                 "closed" if outcome is not None else "withdrawn")
-    return "cancel_request", {"requestId": card, "name": name, "reason": reason if reason is not None else outcome}, "withdrawn"
+    return "cancel_request", {"requestId": card, "name": name, "reason": said(reason, outcome)}, "withdrawn"
 
 
 def declined(got):

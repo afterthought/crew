@@ -6,11 +6,15 @@ Each decision on the rail reaches the user as one Pending You card from the agen
 ## Requirements
 
 ### Requirement: Each rail row has a card key
-Each rail row SHALL have one card key, the thing's and not its version's: `proposal/<n>` for a proposal chain, `n` its first proposal; `batch/<n>` for review batch n; `land/<bolt>` for a bolt proven; `deploy/<env>` for a `manual` environment's open offer; `op/<env>/<n>` for a step that waits on the user; `record/<kit>/<number>` for a record proposed. crew SHALL post the row's card with that key as its idempotency key. A question's card has no row and a key of its asker's own. There SHALL be no review row and no verify row. A batch whose cards were posted under `batch/<n>-<k>` before one card per batch was built SHALL keep a row for each of those keys until its card closes, and SHALL have no `batch/<n>` row.
+Each rail row SHALL have one card key, the thing's and not its version's: `proposal/<n>` for a proposal chain, `n` its first proposal; `batch/<n>` for review batch n; `land/<bolt>` for a bolt proven; `deploy/<env>` for a `manual` environment's open offer; `op/<env>/<n>` for a step that waits on the user; `record/<kit>/<number>` for a record proposed. crew SHALL post the row's card with that key as its idempotency key, filled out at its end with `_` to Pending You's eight characters when it is shorter, the same on every post of it, and SHALL record the post under the row's key. A question's card has no row and a key of its asker's own. There SHALL be no review row and no verify row. A batch whose cards were posted under `batch/<n>-<k>` before one card per batch was built SHALL keep a row for each of those keys until its card closes, and SHALL have no `batch/<n>` row.
 
 #### Scenario: A batch of seven
 - **WHEN** review batch 3 holds seven changes and no card has been posted for it
 - **THEN** the rail has one batch row for it, keyed `batch/3`, holding all seven units
+
+#### Scenario: A key shorter than Pending You takes
+- **WHEN** crew raises review batch 7's card, `batch/7` being seven characters, and raises it again after its first post had no answer within a minute
+- **THEN** both posts are under `batch/7_`, so Pending You gives the second the card the first made, and the run record holds it under `batch/7`
 
 #### Scenario: A batch posted as two cards before
 - **WHEN** the run record holds the planner's posts of batch 2's cards under `batch/2-1` and `batch/2-2` from before one card per batch, and `batch/2-1` has closed
@@ -413,7 +417,7 @@ Every card crew posts under a row's key after a card of the owner's under that k
 
 #### Scenario: A card posted again while it is open
 - **WHEN** crew posts its card under `land/b1` again while `req_1` is open there
-- **THEN** it is posted under `land/b1`, and Pending You gives `req_1` back
+- **THEN** it is posted under the key its first post took, `land/b1_`, and Pending You gives `req_1` back
 
 #### Scenario: Two rail reads raise a row's card at once
 - **WHEN** two rail reads on mac-studio, from two agents' starts, sweep at once, each posts `op/srv/1`'s card, and Pending You gives both `req_1`
@@ -479,11 +483,19 @@ crew SHALL build and post each rail row's card itself, from the facts of the eve
 - **THEN** the batch is recorded, no card posts, and the command and the rail say the host is not signed in
 
 ### Requirement: A row's card is changed in place when its thing changes
-When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
+When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A card that asks questions, a proposal's whose rows fill more than one list, SHALL never be changed in place, since Pending You's `update_request` changes no card's questions: while it waits crew SHALL withdraw it with the change note and post its new version following it, under the key's next revision. A rewrite that moves a proposal's card to another form, a hold-to-approve, a choice, one list or lists, read from the replaced proposal's commands, SHALL be followed the same way, since Pending You changes no card's kind in place. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
 
 #### Scenario: A proposal rewritten while its card waits
-- **WHEN** proposal 4's card is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
+- **WHEN** proposal 4's card, its rows in one list, is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
 - **THEN** the card keyed `proposal/4` is changed in place to proposal 5's, with the change note "Rewritten as proposal 5 after your note", and the rail's row for proposal 5 names it as its card
+
+#### Scenario: A proposal whose rows fill more than one list rewritten while its card waits
+- **WHEN** proposal 4's card asks its seven rows as `rows-1` and `rows-2`, is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
+- **THEN** the card is withdrawn, "Rewritten as proposal 5 after your note", and proposal 5's card, asking proposal 5's rows, is posted under `proposal/4:2` following it, since Pending You changes no card's questions in place; the rail's row for proposal 5 names the new card
+
+#### Scenario: A rewrite that moves a proposal's card to another form while it waits
+- **WHEN** proposal 4's card asks its seven rows as `rows-1` and `rows-2`, is open and unanswered, and proposal 5, which replaces it, has three rows, one list
+- **THEN** the card is withdrawn, "Rewritten as proposal 5 after your note", and proposal 5's one list is posted under `proposal/4:2` following it; so is a hold-to-approve rewritten to a list, or a list to lists
 
 #### Scenario: A merge moves a bolt with an open landing card
 - **WHEN** the landing card `land/y` is open and unanswered, and a merge into bolt `y` moves its head to `def5678`
@@ -506,7 +518,11 @@ When what a row's card asks changes while it is open, crew SHALL change the one 
 - **THEN** the card is withdrawn, "Recorded again: its doer and its hold changed", and the step's choice is posted under `op/srv/1:2` following it, since Pending You changes no card's kind in place
 
 ### Requirement: A card is closed by crew at the event that ends it
-crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`.
+crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`. The outcome or reason crew sends with a close SHALL be cut to Pending You's 200 characters, and the run record SHALL keep it whole.
+
+#### Scenario: An outcome longer than Pending You takes
+- **WHEN** an approval's outcome, naming every unit it added and every one the user left out, runs past 200 characters
+- **THEN** the card is acked with the outcome cut to 200 characters, ending with …, and the run record's close holds it whole
 
 #### Scenario: A proposal approved from the phone
 - **WHEN** the user approves `proposal/4` on the phone with its new unit `c` unticked, and the planner runs `crew plan answer 4 rows-1 b`
@@ -548,7 +564,7 @@ A conductor, the planner, main-level ops and the design agent MAY post a card fo
 - **THEN** the call goes through: a question's form is its asker's
 
 ### Requirement: crew refuses a question card from any other role or under a row's key
-crew SHALL refuse a post, change or close from any role but the four, naming the chain of command, and a crew agent's own post, change or close under a row's key or of a row's card, naming the card as crew's; it SHALL refuse nothing else of a question's form. A post's key SHALL be judged by its form alone, with or without `:<n>`; a change's or a close's, which carries a request id, by the card this host's run record holds under that id, crew's raises and the agents' own posts alike.
+crew SHALL refuse a post, change or close from any role but the four, naming the chain of command, and a crew agent's own post, change or close under a row's key or of a row's card, naming the card as crew's; it SHALL refuse nothing else of a question's form. A post's key SHALL be judged by its form alone, with or without `:<n>` or the fill of a short key; a change's or a close's, which carries a request id, by the card this host's run record holds under that id, crew's raises and the agents' own posts alike.
 
 #### Scenario: A coder asks
 - **WHEN** a coder in a crew session calls `post_request`
@@ -557,6 +573,10 @@ crew SHALL refuse a post, change or close from any role but the four, naming the
 #### Scenario: A conductor posts its landing card by hand
 - **WHEN** swb-1-conductor calls `post_request` with the key `land/y`
 - **THEN** the call is refused, saying the landing card is crew's and is raised when the bolt reads proven
+
+#### Scenario: An agent posts under a row's key as crew sends it
+- **WHEN** swb-1-conductor calls `post_request` with the key `land/b1_`, or wldn-planner with `batch/7_` or `batch/7:2`
+- **THEN** the call is refused, saying the card is crew's
 
 ### Requirement: The planner closes the old batch cards it posted
 The planner's close, `cancel_request` or `ack_answer`, of a card under `batch/<n>-<k>`, which it posted itself before a batch was one card and which crew never raises, SHALL pass, and its post or change there SHALL be refused.

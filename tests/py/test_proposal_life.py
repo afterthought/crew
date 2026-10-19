@@ -508,3 +508,93 @@ def test_a_rewrite_after_the_users_note_acks_the_card_they_answered_and_its_new_
     assert (post["idempotencyKey"], post["follows"], [o["id"] for o in post["options"]]) == ("proposal/1:2", "req_p1", ["add:b-new", "unticked"])
     assert [(e["Act"], e["Key"], e.get("Card")) for e in acts.emitted] == [("card.close", "proposal/1", "req_p1"), ("card.post", "proposal/1", "req_p2")]
     assert "update_request" not in [t for t, _ in acts.calls]
+
+
+def rewritten_while_waiting(monkeypatch, first, second):
+    """Proposal 1 (first, its Do lines) rewritten as proposal 2 (second) while the chain's card req_p1 waits on the
+    user, through the act's change on its stand-in for Pending You (test_card_commands.Acts): the calls it made, by
+    tool, and what it recorded."""
+    from test_card_commands import Acts
+    monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+    pl = proposals_with(("Console first.", first))
+    plan.open_proposal(pl, 2, "Console last.", second, "wldn-planner", TODAY, 1, "wldn")
+    w = write()
+    w.files["proposals.rec"] = pl.text()
+    held = [{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": "req_p1"}]
+    acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None), "cancel_request": ({"version": 4}, None),
+                 "update_request": ({"version": 4}, None), "match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                 "post_request": ({"requestId": "req_p2", "version": 1}, None)}, held, caller="wldn-planner")
+    assert plan.raise_proposal_at(CARDED, "wldn", w, 2, "replace", acts) in ("req_p1", "req_p2")
+    calls = {}
+    for t, a in acts.calls:
+        calls.setdefault(t, []).append(a)
+    return calls, [(e["Act"], e["Key"], e.get("Card"), e.get("State"), e.get("Outcome")) for e in acts.emitted]
+
+
+def rows(*units):
+    return [f'unit add {u} "{u}." --bolt console-pages' for u in units]
+
+
+def test_a_rewrite_of_a_card_with_questions_while_it_waits_withdraws_it_and_its_new_version_follows_it(monkeypatch, capsys):
+    """Read live on 2026-10-18 in test D: proposal 140 replaced 139 while 139's card waited, and crew changed that card
+    in place, which Pending You's update_request does for its title and summary but never its questions: the card
+    showed 140's title over 139's rows, and the user's answer carried a row of 139's that `crew plan answer 140 rows-1`
+    refused. A proposal whose rows fill more than one list asks them as questions (rows-1, rows-2), so its rewrite withdraws the
+    waiting card with the rewrite's note and posts the new version following it."""
+    calls, emitted = rewritten_while_waiting(monkeypatch, rows("a-1", "a-2", "a-3", "a-4", "a-5", "a-6"),
+                                             rows("a-1", "a-2", "a-3", "a-4", "a-5", "b-6"))
+    assert "update_request" not in calls
+    assert calls["cancel_request"] == [{"requestId": "req_p1", "name": "wldn-planner", "reason": "Rewritten as proposal 2 after your note"}]
+    post, = calls["post_request"]
+    assert (post["idempotencyKey"], post["follows"]) == ("proposal/1:2", "req_p1")
+    assert [(q["id"], [o["id"] for o in q["options"]]) for q in post["questions"]] == [
+        ("rows-1", ["add:a-1", "add:a-2", "add:a-3"]), ("rows-2", ["add:a-4", "add:a-5", "add:b-6"])]
+    assert emitted == [("card.close", "proposal/1", "req_p1", "withdrawn", plan.REASKED), ("card.post", "proposal/1", "req_p2", None, None)]
+    assert capsys.readouterr().out.startswith("card proposal/1: req_p1 withdrawn, its questions having to be asked anew, "
+                                              "and its new version follows it\n")
+
+
+def test_a_rewrite_of_a_card_without_questions_while_it_waits_still_changes_it_in_place(monkeypatch):
+    calls, emitted = rewritten_while_waiting(monkeypatch, rows("a-1", "a-2"), rows("a-1", "b-2"))
+    assert "cancel_request" not in calls and "post_request" not in calls
+    change, = calls["update_request"]
+    assert (change["requestId"], change["changeNote"], [o["id"] for o in change["options"]]) == (
+        "req_p1", "Rewritten as proposal 2 after your note", ["add:a-1", "add:b-2"])
+    assert emitted == [("card.update", "proposal/1", "req_p1", None, None)]
+
+
+@pytest.mark.parametrize("first, second, asked", [
+    (rows("a-1", "a-2", "a-3", "a-4", "a-5", "a-6"), rows("a-1", "a-2", "b-3"), "options"),
+    (rows("a-1", "a-2", "a-3"), rows("a-1", "a-2", "a-3", "a-4", "a-5", "b-6"), "questions"),
+    (["unit order queued-one --first"], rows("a-1", "a-2"), "options")],
+    ids=["lists-to-one-list", "one-list-to-lists", "approve-to-one-list"])
+def test_a_rewrite_that_moves_its_card_to_another_form_withdraws_it_while_it_waits_and_its_new_version_follows_it(
+        monkeypatch, capsys, first, second, asked):
+    """A rewrite whose card takes another form than the replaced proposal's, lists of questions to one list, one list
+    to lists, a hold-to-approve to one list: update_request changes neither a card's kind nor its questions, so the
+    waiting card is withdrawn with the rewrite's note and the new form posted following it."""
+    calls, emitted = rewritten_while_waiting(monkeypatch, first, second)
+    assert "update_request" not in calls
+    assert calls["cancel_request"] == [{"requestId": "req_p1", "name": "wldn-planner", "reason": "Rewritten as proposal 2 after your note"}]
+    post, = calls["post_request"]
+    assert (post["idempotencyKey"], post["follows"], asked in post) == ("proposal/1:2", "req_p1", True)
+    assert emitted == [("card.close", "proposal/1", "req_p1", "withdrawn", plan.RENEWED), ("card.post", "proposal/1", "req_p2", None, None)]
+    assert capsys.readouterr().out.startswith("card proposal/1: req_p1 withdrawn, its kind having changed, and its new version follows it\n")
+
+
+def test_an_agreement_on_a_card_with_questions_withdraws_it_while_it_waits_and_posts_it_again_following_it(monkeypatch):
+    """The same proposal's card built again, its questions as they were, when a conductor agrees: followed all the
+    same, since crew holds no copy of the card's questions to compare, accepted 2026-10-18 as churn a card of lists
+    bears rarely."""
+    from test_card_commands import Acts
+    monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+    dos = [f'unit add z-{i} "z-{i}." --bolt tenant-environments' for i in range(1, 7)]
+    w = write()
+    w.files["proposals.rec"] = proposals_with(("Zone.", dos)).text()
+    held = [{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": "req_p1"}]
+    acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None), "cancel_request": ({"version": 4}, None),
+                 "match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                 "post_request": ({"requestId": "req_p2", "version": 1}, None)}, held, caller="wldn-planner")
+    assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "agree", acts, agreed=["swb-1"]) == "req_p2"
+    assert [t for t, _ in acts.calls] == ["get_request", "cancel_request", "match_area", "post_request"]
+    assert acts.calls[1][1]["reason"] == "No longer waits on swb-1-conductor"
