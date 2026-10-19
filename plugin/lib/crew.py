@@ -3,7 +3,6 @@
 
   crew.py teams                       every team's name
   crew.py labels                      every partition's label
-  crew.py env <team>                  the team's settings as shell assignments
   crew.py brief <team|label> <definition> [name]
                                       a definition's brief for a team or a partition's main level; name is the agent's own
   crew.py launch <team|label> <role> [stage|resume]
@@ -951,15 +950,6 @@ def reach(fleet, machine):
     return out
 
 
-def env(fleet, t):
-    pairs = {
-        "TEAM": t["name"], "SYSTEM": t["system"], "MACHINE": t["machine"], "SSH_TARGET": t["ssh"], "SESSION": t["session"],
-        "LABEL": t["label"], "CREW_HOME": str(HOME), "KIT": t["kit"]["main"], "KIT_DIR": t["kit"]["dir"], "KIT_NAME": t["kit"]["name"],
-        "BLUEPRINTS": t["blueprints"]["main"], "UNITS": str(t["units"]), "HOST_KIND": t.get("kind", ""), **reach(fleet, t["machine"]),
-    }
-    return "\n".join(f"{k}={shlex.quote(v)}" for k, v in pairs.items()) + f'\nSTATE="$HOME/.local/state/{t["name"]}-team"'
-
-
 # How an agent records a finding, the same in every brief that records one.
 def signal_how(cmd, label, state):
     return (f"`{cmd} signal <slug> \"<what it asserts, in a sentence>\" --excerpt \"<the exact words the user said or the tool "
@@ -1727,8 +1717,6 @@ def main(a):
         print("\n".join(fleet["teams"]))
     elif a[:1] == ["labels"]:
         print("\n".join(fleet["partitions"]))
-    elif a[:1] == ["env"] and len(a) == 2:
-        print(env(fleet, team_of(fleet, a[1])))
     elif a[:1] == ["brief"] and len(a) >= 3:
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:
