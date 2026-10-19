@@ -5,6 +5,8 @@ batch_subjects; record 0031). The rail's rows are test_rail's; telling the plann
 journey's (t-journey-review); the raise's wiring, its session and its card, t-cards'."""
 import datetime
 
+import pytest
+
 from facts import START, card_closed, constructed, plan_of, reviewed, told
 
 import plan
@@ -185,3 +187,18 @@ class TestBatchFacts:
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, dict(closed, State="lost")], SUMMARY, {})["n"] == 3
         again = dict(posted, Card="req_9")
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, closed, again, dict(closed, Card="req_9", State="lost")], SUMMARY, {})["n"] == 3
+
+
+@pytest.mark.parametrize("stage, fix, then", [
+    ("construct", False, ["batch"]),
+    ("construct", True, []),
+    ("code", False, []),
+    ("verify", False, []),
+    ("merge", False, ["landing", "batch"]),
+    ("merge", True, ["landing", "batch"]),
+])
+def test_a_merge_reckons_a_batch_as_a_construct_does(stage, fix, then):
+    """A wait's end reckons a batch after a construct's change and after a merge (briefs.12): a bolt whose last unit
+    merged leaves its conductor waiting on nothing, so no later wait would tell the planner its batch is due at once, as
+    on 2026-10-19, when every-deploy-has-its-live-card and swc-1's bolt sat merged two hours with no batch begun."""
+    assert plan.after_delivery(stage, fix) == then

@@ -6037,23 +6037,42 @@ def stage_wait(fleet, a):
             if how == "ended":
                 print(ended_said(t, agent))
                 return
+            then = []
             if how == "delivered":
                 if not end_owed(fleet, t, o, "delivered", got):
                     continue
                 unmark(fleet, t, o)
-                if o.stage == "construct" and not o.fix:
-                    try:  # the change it delivered is due, and may make a batch due now
-                        batch_check(fleet, t)
-                    except Refusal as e:
-                        print(f"no batch reckoned: {e}", file=sys.stderr)
+                then = after_delivery(o.stage, o.fix)
+                if "batch" in then and "landing" not in then:  # the change it delivered is due, and may make a batch due now
+                    batch_reckoned(fleet, t)
             if how in ("delivered", "short") and o.stage == "settle" and not o.fix and not o.chore:
                 said = settle_said(fleet, t, o.name, said)
             if how:
                 print(said, flush=True)
-                if how == "delivered" and o.stage == "merge":  # the bolt's head moved: its landing card (raise_land)
+                if "landing" in then:  # the bolt's head moved: its landing card (raise_land)
                     landing_after_merge(fleet, t)
+                if "batch" in then and "landing" in then:  # its last unit merged may make a batch due at once
+                    batch_reckoned(fleet, t)
                 return
             time.sleep(min(POLL, remaining))
+
+
+def after_delivery(stage, fix):
+    """What crew does once a stage a wait watched has delivered (briefs.12, plan.16): "batch", reckon whether a batch is
+    due (batch_check), after a construct's change, not a fix's, which is due itself, and after a merge, whose last unit
+    merged makes a batch due at once for the bolt's units in none; "landing", raise or change the bolt's landing card,
+    after a merge, which moved the bolt's head. A bolt whose last unit merged left no wait to reckon its batch, since
+    its conductor waits on nothing more (every-deploy-has-its-live-card and every-host-reaches-every-other-by-its-
+    tailnet-name on 2026-10-19, every unit merged and the planner never told, for two hours)."""
+    return (["batch"] if stage == "construct" and not fix else []) + (["landing", "batch"] if stage == "merge" else [])
+
+
+def batch_reckoned(fleet, t):
+    """batch_check at a wait's end, what crew can't read said on standard error, the wait's answer standing."""
+    try:
+        batch_check(fleet, t)
+    except Refusal as e:
+        print(f"no batch reckoned: {e}", file=sys.stderr)
 
 
 def settle_said(fleet, t, unit, said):
@@ -7207,7 +7226,8 @@ def batch_due(due, entries, setting, now, bolts):
 
 
 def batch_check(fleet, t):
-    """On each wait of a conductor of the partition: the changes due across the partition, counted from the run
+    """On each wait of a conductor of the partition, and at the end of a construct or a merge it waited on
+    (after_delivery): the changes due across the partition, counted from the run
     record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
     one due, or at once when the team's bolt has every unit merged and some unit's latest change has been in no batch.
     crew then tells the partition's planner once, `batch.due` in the run record, until the next batch is delivered
