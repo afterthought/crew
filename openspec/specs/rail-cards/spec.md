@@ -479,11 +479,19 @@ crew SHALL build and post each rail row's card itself, from the facts of the eve
 - **THEN** the batch is recorded, no card posts, and the command and the rail say the host is not signed in
 
 ### Requirement: A row's card is changed in place when its thing changes
-When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
+When what a row's card asks changes while it is open, crew SHALL change the one card in place with a change note the user sees, and SHALL post no second card under a new key. A card that asks questions, a proposal's whose rows fill more than one list, SHALL never be changed in place, since Pending You's `update_request` changes no card's questions: while it waits crew SHALL withdraw it with the change note and post its new version following it, under the key's next revision. A rewrite that moves a proposal's card to another form, a hold-to-approve, a choice, one list or lists, read from the replaced proposal's commands, SHALL be followed the same way, since Pending You changes no card's kind in place. A proposal chain's card SHALL be the first proposal's, and the rail's row for the replacing proposal SHALL carry it.
 
 #### Scenario: A proposal rewritten while its card waits
-- **WHEN** proposal 4's card is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
+- **WHEN** proposal 4's card, its rows in one list, is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
 - **THEN** the card keyed `proposal/4` is changed in place to proposal 5's, with the change note "Rewritten as proposal 5 after your note", and the rail's row for proposal 5 names it as its card
+
+#### Scenario: A proposal whose rows fill more than one list rewritten while its card waits
+- **WHEN** proposal 4's card asks its seven rows as `rows-1` and `rows-2`, is open and unanswered, and the planner runs `crew plan propose <file> --replaces 4` and proposal 5 is accepted
+- **THEN** the card is withdrawn, "Rewritten as proposal 5 after your note", and proposal 5's card, asking proposal 5's rows, is posted under `proposal/4:2` following it, since Pending You changes no card's questions in place; the rail's row for proposal 5 names the new card
+
+#### Scenario: A rewrite that moves a proposal's card to another form while it waits
+- **WHEN** proposal 4's card asks its seven rows as `rows-1` and `rows-2`, is open and unanswered, and proposal 5, which replaces it, has three rows, one list
+- **THEN** the card is withdrawn, "Rewritten as proposal 5 after your note", and proposal 5's one list is posted under `proposal/4:2` following it; so is a hold-to-approve rewritten to a list, or a list to lists
 
 #### Scenario: A merge moves a bolt with an open landing card
 - **WHEN** the landing card `land/y` is open and unanswered, and a merge into bolt `y` moves its head to `def5678`
@@ -506,7 +514,11 @@ When what a row's card asks changes while it is open, crew SHALL change the one 
 - **THEN** the card is withdrawn, "Recorded again: its doer and its hold changed", and the step's choice is posted under `op/srv/1:2` following it, since Pending You changes no card's kind in place
 
 ### Requirement: A card is closed by crew at the event that ends it
-crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`.
+crew SHALL close each of its cards at the event that ends what it asks, with a one-line outcome, and SHALL withdraw a row's card whose row is gone on the next rail read, with the reason. A declined approval SHALL be closed with the user's words when its owner reads it with `crew card read`. The outcome or reason crew sends with a close SHALL be cut to Pending You's 200 characters, and the run record SHALL keep it whole.
+
+#### Scenario: An outcome longer than Pending You takes
+- **WHEN** an approval's outcome, naming every unit it added and every one the user left out, runs past 200 characters
+- **THEN** the card is acked with the outcome cut to 200 characters, ending with …, and the run record's close holds it whole
 
 #### Scenario: A proposal approved from the phone
 - **WHEN** the user approves `proposal/4` on the phone with its new unit `c` unticked, and the planner runs `crew plan answer 4 rows-1 b`
