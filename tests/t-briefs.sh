@@ -352,7 +352,8 @@ ok "ops, every stage and the dispatcher post no card, the four that ask carry on
 
 # Units build at once and are reviewed in batches (teams.12 to teams.14, briefs.1, briefs.2, briefs.4, briefs.12): the
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
-# a unit; the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
+# a unit; crew orders and lifts its own forecast orders, which neither the conductor nor the planner asks anyone to lift
+# (plan.13); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
 # one reading session on the batch, posts and closes no batch card, and sends the notes the card's wait prints from the
 # session and the card to each unit they speak of (briefs.9, briefs.12, briefs.13);
 # construct writes Touches as a block crew reads;
@@ -362,15 +363,21 @@ ok "ops, every stage and the dispatcher post no card, the four that ask carry on
 expect_ok crewpy brief swb-1 conductor
 for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned\`" "with nobody asked to approve it" \
   "You post no card for a unit, and open nothing for a batch" "run construct again with them, word for word" \
-  "hold the notes until it settles" "Overlapping *Touches* never hold a unit back" "crew puts the later after the earlier itself" \
+  "hold the notes until it settles" "Overlapping *Touches* never hold a unit back" "orders neither by itself" \
+  "when the later unit's settle takes the earlier's work, crew puts the later after the earlier itself, as your write" \
+  "when that settle finds nothing to change, crew lifts an order of its own" \
+  "Never ask the planner or the user to lift an order crew wrote from a forecast" \
+  "no proposal and no card asks the user to undo one" \
   "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
   "the card waits for them: crew makes a batch due for them at once" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches" \
   "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it"; do
   has "$out" "$want"
 done
-for gone in "build them one after the other" "When in doubt, don't" "## Review with the user"; do lacks "$out" "$gone"; done
+for gone in "build them one after the other" "When in doubt, don't" "## Review with the user" \
+  "A forecast between two unmerged units puts the later after the earlier"; do lacks "$out" "$gone"; done
 expect_ok crewpy brief wldn planner
 for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
+  "Never propose lifting an \`After\` crew wrote from a forecast: crew lifts its own." \
   "crew records the batch, starts its one reading session, the summary and every unit's whole change as one review, and raises its one card in your name, keyed \`batch/<n>\`" \
   "naming every unit of the batch with its team and the paragraph the reviewer opened it with, however many" \
   "a batch is never split across cards" "\`call get_request (requestId req_…, name wldn-planner)\`" \
