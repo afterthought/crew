@@ -20,4 +20,4 @@
 
 ## 5. Checks
 
-- [ ] 5.1 The logic tier, `t-briefs` and the affected tests are green (design, *Task notes* 5.1).
+- [x] 5.1 The logic tier, `t-briefs` and the affected tests are green (design, *Task notes* 5.1).
