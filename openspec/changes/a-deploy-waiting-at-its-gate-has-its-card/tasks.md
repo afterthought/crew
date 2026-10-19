@@ -12,7 +12,7 @@
 
 ## 3. The views
 
-- [ ] 3.1 The board's Operation lane and main-level ops's view say a gate's step waits at its gate, not that it comes after its commit; proved by cases in `tests/py/test_board.py` (design, *Task notes* 3.1).
+- [x] 3.1 The board's Operation lane and main-level ops's view say a gate's step waits at its gate, not that it comes after its commit; proved by cases in `tests/py/test_board.py` (design, *Task notes* 3.1).
 
 ## 4. The brief
 
