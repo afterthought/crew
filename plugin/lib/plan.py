@@ -5968,7 +5968,8 @@ def stage_wait(fleet, a):
     """Wait on the stage a slot's agent, or ops, owes, until it ends at its deliverable, stops short, is stuck, its agent
     is gone, or the timeout passes, and print the one line that says which. A delivered end is recorded here; nothing
     else is. The wait holds waits/<slot>.lock for its life, so crew needs knows a wait is there to hand its words to.
-    Each look also reads sluice's overview, and says at once, before that line, each conflict or blame sluice records
+    A unit's settle that ends delivered or short orders or lifts its unit's forecast orders, and its line says so
+    (settle_said). Each look also reads sluice's overview, and says at once, before that line, each conflict or blame sluice records
     for a submission from the stage's place (overview_look)."""
     t = crew.team_of(fleet, a.team)
     agent = f"{t['name']}-{a.slot}"
@@ -6036,12 +6037,33 @@ def stage_wait(fleet, a):
                         batch_check(fleet, t)
                     except Refusal as e:
                         print(f"no batch reckoned: {e}", file=sys.stderr)
+            if how in ("delivered", "short") and o.stage == "settle" and not o.fix and not o.chore:
+                said = settle_said(fleet, t, o.name, said)
             if how:
                 print(said, flush=True)
                 if how == "delivered" and o.stage == "merge":  # the bolt's head moved: its landing card (raise_land)
                     landing_after_merge(fleet, t)
                 return
             time.sleep(min(POLL, remaining))
+
+
+def settle_said(fleet, t, unit, said):
+    """A unit's settle ended, delivered or short: crew's own order of it after a unit a forecast found it in conflict
+    with, or that order's lift, written now (settle_orders), and the wait's answer with a sentence for each. What crew
+    can't read is said on standard error, and the next wait decides again."""
+    try:
+        plan = plan_of(fleet, t["label"])
+        if plan is None:
+            print(f"{t['label']}'s plan could not be read, so {unit}'s settle orders nothing yet", file=sys.stderr)
+            return said
+        more = settle_orders(fleet, t, plan, stages_for(fleet, plan, held_by(plan, t["name"])), unit)
+    except Refusal as e:
+        print(f"{unit}'s settle orders nothing yet: {e}", file=sys.stderr)
+        return said
+    if not more:
+        return said
+    said = said.rstrip()
+    return " ".join([said if said.endswith(".") else f"{said}."] + [f"{x}." for x in more])
 
 
 def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time):
