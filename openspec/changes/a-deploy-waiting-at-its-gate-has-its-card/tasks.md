@@ -3,7 +3,7 @@
 ## 1. crew reads a gate's step
 
 - [x] 1.1 A user's step whose words are one link alone is read as a gate, and its card's facts carry the link and the commit; proved by new cases in `tests/py/test_ops.py` (design, *Task notes* 1.1).
-- [ ] 1.2 A gate's rail row says the deploy waits at its gate for the user, with the link; proved by a case in `tests/py/test_ops.py` (design, *Task notes* 1.2).
+- [x] 1.2 A gate's rail row says the deploy waits at its gate for the user, with the link; proved by a case in `tests/py/test_ops.py` (design, *Task notes* 1.2).
 - [ ] 1.3 Each waiting operation in `ops.environments` says whether it is a gate and gives its link; proved by a case in `tests/py/test_ops.py` (design, *Task notes* 1.3).
 
 ## 2. The gate's card

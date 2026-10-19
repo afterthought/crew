@@ -74,6 +74,16 @@ class TestRows:
                                    ("decline", "crew ops step mac-studio --key rotate-tailnet-key --state declined --label swancloud")]
         assert ops.rows(None, "swancloud", steps + [e("ops.step", minutes=4, Key="rotate-tailnet-key", State="declined", Doer="user")])[1:] == []
 
+    def test_a_gates_step_is_a_row_saying_the_deploy_waits_at_its_gate_for_the_user_with_its_link(self):
+        row, = ops.rows(None, "wldn", [gate()])
+        assert row["key"] == "op/dev/1"
+        assert row["what"] == [f"the deploy of dev to 4f2a9c1 waits at its gate (wldn), yours to approve there: {RUN}"]
+        assert row["cmds"] == [("done", f"crew ops step dev --to {SHA4} --key gate-38612817613 --state done --label wldn"),
+                               ("decline", f"crew ops step dev --to {SHA4} --key gate-38612817613 --state declined --label wldn")]
+        bare, = ops.rows(None, "wldn", [gate(Head=None)])
+        assert bare["what"] == [f"a deploy of dev waits at its gate (wldn), yours to approve there: {RUN}"]
+        assert ops.rows(None, "wldn", [gate(), gate(State="done")]) == []
+
     def test_a_waiting_steps_row_keeps_its_key_when_an_earlier_steps_state_changes(self):
         steps = [e("ops.step", minutes=1, Key="restart-herdr", State="waiting", Doer="user"),
                  e("ops.step", minutes=2, Key="rotate-tailnet-key", State="waiting", Doer="user")]

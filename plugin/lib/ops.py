@@ -131,7 +131,8 @@ def rows(fleet, label, es):
     """The rail's rows for the partition's operations, from its entries: each open deploy offer, deploy/<env>,
     answered by crew ops approve; and each step that waits on the user, theirs to take or an agent's held for their
     word, op/<env>/<n>, its n counting the environment's steps in the order they were first recorded, answered by
-    marking it done or declined. Each row's card is raised by crew in main-level ops's name (briefs.11)."""
+    marking it done or declined; a gate's step (gate_of) said as the deploy waiting at its gate for the user. Each
+    row's card is raised by crew in main-level ops's name (briefs.11)."""
     offers, _, steps = state(es)
     out = []
     for env, e in sorted(offers.items()):
@@ -143,9 +144,14 @@ def rows(fleet, label, es):
     for n, (env, to, key), e in numbered(steps):
         if not waits_on_user(e):
             continue
-        after = f"after the deploy of {env} to {to[:7]}" if to else f"on {env}"
-        whose = "yours to do" if e.get("Doer") == "user" else f"{e.get('Agent') or e.get('Doer')}'s, held for your word"
-        what = [f"an operation {after} ({label}), {whose}: {e.get('Text') or key}"]
+        link = gate_of(e)
+        if link:
+            deploy = f"the deploy of {env} to {to[:7]}" if to else f"a deploy of {env}"
+            what = [f"{deploy} waits at its gate ({label}), yours to approve there: {link}"]
+        else:
+            after = f"after the deploy of {env} to {to[:7]}" if to else f"on {env}"
+            whose = "yours to do" if e.get("Doer") == "user" else f"{e.get('Agent') or e.get('Doer')}'s, held for your word"
+            what = [f"an operation {after} ({label}), {whose}: {e.get('Text') or key}"]
         to_arg = f" --to {to}" if to else ""
         cmds = [(s, f"crew ops step {env}{to_arg} --key {key} --state {'done' if s == 'done' else 'declined'} --label {label}")
                 for s in ("done", "decline")]
