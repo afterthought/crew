@@ -11,18 +11,21 @@
 #                                      is not working, and removes, through the kit's wt remove, the worktrees in
 #                                      the team's kit checkout whose work is over, naming one kept for uncommitted
 #                                      changes or a remove hook
-#   crew up      <team>                open the team's workspace and start its conductor and ops; the conductor's
-#                                      greeting (also on rebuild, restart and revive) opens with the units of its bolt
-#                                      that wait amended, for it to start their construct. A greeting is read back
-#                                      from the agent's transcript and sent once more when not taken
+#   crew up      <team>                open the team's workspace and start its conductor and ops, each greeted: ops
+#                                      told who it is, what its team holds and to wait to be told; the conductor told
+#                                      to carry on with its bolt, its greeting (also on rebuild, restart and revive)
+#                                      opening with the units of its bolt that wait amended, for it to start their
+#                                      construct. A greeting is read back from the agent's transcript and sent once
+#                                      more when not taken
 #   crew rebuild <team>                end everything the team has, close its panes, and stand it up fresh,
 #                                      keeping only the slots of work still in flight on its bolt
 #   crew close   <team>                end everything the team has and close its panes; nothing is started
 #   crew restart <team> [role...] [--no-greet]
-#                                      end the conductor's or ops' session and start a fresh one in the same pane
-#   crew resume  <team> [role...]      bring back the conductor or ops when not up, with its last conversation; a
-#                                      conductor brought back is sent, as crew's notice, the units of its bolt that
-#                                      wait amended
+#                                      end the conductor's or ops' session and start a fresh one in the same pane,
+#                                      greeted; --no-greet leaves the greeting to the caller, as a bolt's give does
+#   crew resume  <team> [role...]      bring back the conductor or ops when not up, with its last conversation, or
+#                                      fresh and greeted when it has none; a conductor brought back with its
+#                                      conversation is sent, as crew's notice, the units of its bolt that wait amended
 #   crew clear   <team> <role>         /clear the conductor or ops and give it its name back
 #   crew down    <team>                end every session the team has; the panes stay
 #   crew unit free <unit> [--team <team>]
@@ -184,8 +187,8 @@
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
 #                                      agent in it, picked up from its last conversation and greeted when it is a
-#                                      conductor or an agent outside a team; a team or main level taken down with
-#                                      crew down stays down
+#                                      conductor or an agent outside a team, or started fresh and greeted when it has
+#                                      none; a team or main level taken down with crew down stays down
 #   crew sites    [<label>] [--json]   every host's bolts, units and fixes, with the URL of each running dev server
 #
 # Operations on a partition's environments, a deploy being one kind (plan.14), run where the partition's main level
