@@ -6037,23 +6037,42 @@ def stage_wait(fleet, a):
             if how == "ended":
                 print(ended_said(t, agent))
                 return
+            then = []
             if how == "delivered":
                 if not end_owed(fleet, t, o, "delivered", got):
                     continue
                 unmark(fleet, t, o)
-                if o.stage == "construct" and not o.fix:
-                    try:  # the change it delivered is due, and may make a batch due now
-                        batch_check(fleet, t)
-                    except Refusal as e:
-                        print(f"no batch reckoned: {e}", file=sys.stderr)
+                then = after_delivery(o.stage, o.fix)
+                if "batch" in then and "landing" not in then:  # the change it delivered is due, and may make a batch due now
+                    batch_reckoned(fleet, t)
             if how in ("delivered", "short") and o.stage == "settle" and not o.fix and not o.chore:
                 said = settle_said(fleet, t, o.name, said)
             if how:
                 print(said, flush=True)
-                if how == "delivered" and o.stage == "merge":  # the bolt's head moved: its landing card (raise_land)
+                if "landing" in then:  # the bolt's head moved: its landing card (raise_land)
                     landing_after_merge(fleet, t)
+                if "batch" in then and "landing" in then:  # its last unit merged may make a batch due at once
+                    batch_reckoned(fleet, t)
                 return
             time.sleep(min(POLL, remaining))
+
+
+def after_delivery(stage, fix):
+    """What crew does once a stage a wait watched has delivered (briefs.12, plan.16): "batch", reckon whether a batch is
+    due (batch_check), after a construct's change, not a fix's, which is due itself, and after a merge, whose last unit
+    merged makes a batch due at once for the bolt's units in none; "landing", raise or change the bolt's landing card,
+    after a merge, which moved the bolt's head. A bolt whose last unit merged left no wait to reckon its batch, since
+    its conductor waits on nothing more (every-deploy-has-its-live-card and every-host-reaches-every-other-by-its-
+    tailnet-name on 2026-10-19, every unit merged and the planner never told, for two hours)."""
+    return (["batch"] if stage == "construct" and not fix else []) + (["landing", "batch"] if stage == "merge" else [])
+
+
+def batch_reckoned(fleet, t):
+    """batch_check at a wait's end, what crew can't read said on standard error, the wait's answer standing."""
+    try:
+        batch_check(fleet, t)
+    except Refusal as e:
+        print(f"no batch reckoned: {e}", file=sys.stderr)
 
 
 def settle_said(fleet, t, unit, said):
@@ -7206,12 +7225,44 @@ def batch_due(due, entries, setting, now, bolts):
     return why
 
 
+def batch_reckoners(found, teams, here):
+    """The teams the rail's sweep on this host (here) reckons a batch for (briefs.12): for each partition whose plan was
+    read, each team on this host holding a bolt of it, in the plan's order, as {label: [team]}; a partition is reckoned
+    by its first team until one tells its planner (reckon_batches). A batch due by the partition's clock, or at once for
+    a bolt whose units have all merged, so reaches the planner when no conductor waits on anything (2026-10-19: two
+    bolts merged two hours with no batch begun)."""
+    out = {}
+    for label, _, _, pl in found:
+        if not pl:
+            continue
+        names = [b.get("Team") for b in pl.bolts() if b.get("Team")]
+        held = [n for n in dict.fromkeys(names) if (teams.get(n) or {}).get("machine") == here]
+        if held:
+            out[label] = held
+    return out
+
+
+def reckon_batches(fleet, found):
+    """The rail's sweep reckons each partition's batch on this host (batch_reckoners, batch_check), stopping at the first
+    of its teams that tells the planner, since a batch is told once; what crew can't read is said on standard error and
+    the rail read stands."""
+    for label, names in batch_reckoners(found, fleet["teams"], crew.this_host()).items():
+        for name in names:
+            try:
+                if batch_check(fleet, fleet["teams"][name]):
+                    break
+            except Refusal as e:
+                print(f"no batch reckoned for {name}: {e}", file=sys.stderr)
+                break
+
+
 def batch_check(fleet, t):
-    """On each wait of a conductor of the partition: the changes due across the partition, counted from the run
+    """On each wait of a conductor of the partition, at the end of a construct or a merge it waited on
+    (after_delivery), and on the rail's sweep (reckon_batches): the changes due across the partition, counted from the run
     record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
     one due, or at once when the team's bolt has every unit merged and some unit's latest change has been in no batch.
     crew then tells the partition's planner once, `batch.due` in the run record, until the next batch is delivered
-    (briefs.12). What crew can't read is said on standard error, and the wait goes on."""
+    (briefs.12). What crew can't read is said on standard error, and the wait goes on. Returns whether it told the planner."""
     label = t["label"]
     setting = fleet["partitions"][label]["review"]
     plan = plan_of(fleet, label)
@@ -7233,6 +7284,8 @@ def batch_check(fleet, t):
     if crew.tell(fleet, planner, text):
         record.emit(label, "batch.due", [f"agent/{planner}"] + [f"unit/{u}" for u, *_ in due], why=f"batch: due, {len(due)} changes",
                     Count=len(due))
+        return True
+    return False
 
 
 def batch_due_said(label, due, why):
@@ -7827,6 +7880,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
         read["swept"] = sweep_cards(fleet, read)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc))
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
+        reckon_batches(fleet, found)
     return read
 
 
