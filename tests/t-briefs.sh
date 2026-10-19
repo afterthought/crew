@@ -197,7 +197,10 @@ for want in "crew raises its card in your name, with those notes and steps on it
   "\`call get_request (requestId <id>, name wldn-ops)\`: run it" "crew closes the card at the deploy's end with its outcome" \
   "card read deploy/<env> --label wldn" "a step an agent can do that is held for the user's word" \
   "one at a time on an environment, each following the one before" "you post and close no step card" \
-  "ops quiet <env> --label wldn\` exits 0" "when they pick skip, run the row's \`decline\` command"; do has "$out" "$want"; done
+  "ops quiet <env> --label wldn\` exits 0" "when they pick skip, run the row's \`decline\` command" \
+  "ops step <env> --to <sha> --key <key> --doer user --state waiting --text <file> --label wldn\`, the file holding the gate's link alone" \
+  "Post no offer for that deploy" "the user's approval at the gate is its word" \
+  "Record the step done once the run shows the gate passed, or declined once it was rejected"; do has "$out" "$want"; done
 for gone in "Post its card under that key" "and close the card"; do lacks "$out" "$gone"; done
 asks_say
 has "$out" $'A landing is never that word.\n\n## Asking the user\n\nA question of yours for the user'

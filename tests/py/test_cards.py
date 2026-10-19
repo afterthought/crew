@@ -698,6 +698,36 @@ class TestStep:
         assert [s["command"] for s in c["action"]["steps"]] == ["clan vars generate swancloud-srv --generator kanidm-admin --regenerate",
                                                                 "clan machines update swancloud-srv"]
 
+    RUN = "https://github.com/WilldanGroup/switchboard-kit/actions/runs/38612817613"
+
+    def gate(self, **f):
+        """swb-4's break-glass stand at dev's gate, 2026-10-14, as ops.step_facts gives it (plan.14)."""
+        return built.step_card(dict(dict(env="dev", n=1, text=self.RUN, doer="user", held=False, commands=[], gate=self.RUN,
+                                         to="4f2a9c1" + "0" * 33, follows="req_d1"), **f))
+
+    def test_a_deploy_waiting_at_its_gate_is_the_users_do_to_approve_it_there_its_one_step_and_where_the_gates_link(self):
+        b = self.gate()
+        c = b["card"]
+        assert b["key"] == "op/dev/1" and (c["kind"], c["intent"], c["urgency"], c["follows"]) == ("action", "do", "today", "req_d1")
+        assert c["title"] == "Approve the deploy of 4f2a9c1 to dev at its gate"
+        assert c["summary"] == ("The deploy of 4f2a9c1 to dev waits at its gate for your approval there. Approving it at the gate is "
+                                "the word to deploy; nothing else asks for it.")
+        assert c["action"] == {"steps": [{"text": self.RUN}], "where": self.RUN, "done": "The run goes on past its gate."}
+        assert c["context"]["links"] == [{"label": "The gate", "url": self.RUN}] and "approve" not in c
+
+    def test_a_gate_whose_step_names_no_commit_and_one_with_a_why(self):
+        c = self.gate(to=None)["card"]
+        assert c["title"] == "Approve the deploy to dev at its gate"
+        assert c["summary"].startswith("The deploy to dev waits at its gate for your approval there.")
+        c = self.gate(why="The break-glass stand, while the tenant is down.")["card"]
+        assert c["summary"].endswith("nothing else asks for it. The break-glass stand, while the tenant is down.")
+
+    def test_a_users_step_with_no_gate_keeps_its_card(self):
+        c = built.step_card(dict(env="srv", n=1, text="Open https://example.com and rotate the key", doer="user", held=False,
+                                 gate=None, to="4f2a9c1" + "0" * 33))["card"]
+        assert c["title"] == "After srv's deploy: Open https://example.com and rotate the key"
+        assert c["action"] == {"steps": [{"text": "Open https://example.com and rotate the key"}]}
+
     def test_a_held_step_is_a_choice_of_when_quiet_recommended(self):
         c = built.step_card(dict(env="mac-studio", n=2, text="restart crew's teams", doer="swancloud-ops", held=True,
                                  why="It ends swc-1's code stage mid-unit.", consequences={"now": "swc-1's stage starts again"}))["card"]
@@ -926,7 +956,8 @@ class TestWords:
         cards_built = [landing()["card"], deploy()["card"], built.batch_card(dict(n=2, units=BATCH_UNITS, link=None))["card"],
                        built.record_card(dict(kit="k", number=1, title="t", opening="o.", text="r"))["card"],
                        built.step_card(dict(env="srv", n=1, text="do it", doer="user", held=False))["card"],
-                       built.step_card(dict(env="srv", n=2, text="do it", doer="ops", held=True))["card"]]
+                       built.step_card(dict(env="srv", n=2, text="do it", doer="ops", held=True))["card"],
+                       TestStep().gate(why="A why. " * 60)["card"]]
         assert not [c["title"] for c in cards_built if words_asked(c)]
         assert all(len(c["summary"]) <= 400 and 8 <= len(c["title"]) <= 140 for c in cards_built)
 

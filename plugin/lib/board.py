@@ -387,9 +387,10 @@ def deploy_fields(env, d):
 
 
 def waiting_fields(env, w):
-    """An operation waiting on an environment: its key, who has it, held for the user's word or not, and its first line
-    or note."""
+    """An operation waiting on an environment: its key, who has it, held for the user's word or not, a deploy waiting
+    at its gate for the user (plan.14), and its first line or note."""
     said = {"handed": f"handed to {w['agent'] or w['doer']}", "failed": "failed"}.get(w["state"]) or (
+        "waits at its gate for the user" if w.get("gate") else
         "waits on the user" if w["doer"] == "user" else
         f"held for the user's word, for {w['agent'] or w['doer'] or 'its doer'}" if w.get("held") else
         f"waits for {w['agent'] or w['doer'] or 'its doer'}")
@@ -648,7 +649,8 @@ def operator_view(p):
 def ops_view(p):
     """Main-level ops's: the partition's operations in brief, then, environment by environment, each deploy waiting on
     the user's word with its card, each approved and not yet deployed, each running, and each operation step waiting,
-    handed or failed, with the deploy it comes after and its doer; and what keeps a host or the plan from being read."""
+    handed or failed, with the deploy it comes after, or whose gate it is, and its doer; and what keeps a host or the
+    plan from being read."""
     pending = [(e["env"], d) for e in p.get("environments", []) for d in e["deploys"] if not d["ended"] and d["answer"] != "replaced"]
     steps = [(e["env"], w) for e in p.get("environments", []) for w in e["waiting"]]
     word = sum(d["answer"] == "waiting" for _, d in pending)
@@ -661,7 +663,8 @@ def ops_view(p):
             out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))
         for w in (w for env, w in steps if env == e["env"]):
             doer = (w["doer"] or "no doer named") + (f", {w['agent']}" if w["agent"] else "") + (", held for the user's word" if w.get("held") else "")
-            out.append(row(fields(e["env"], w["key"], (f"after {w['to'][:7]}", "dim") if w["to"] else "", w["state"], f"doer {doer}"),
+            of = (f"gate of {w['to'][:7]}" if w["to"] else "gate") if w.get("gate") else f"after {w['to'][:7]}" if w["to"] else ""
+            out.append(row(fields(e["env"], w["key"], (of, "dim") if of else "", w["state"], f"doer {doer}"),
                            gutter(w["markers"]), 0, w["markers"]))
     return out + attention_rows(p, lambda a: a["what"] in ("host", "plan"))
 
