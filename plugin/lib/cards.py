@@ -873,6 +873,18 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
+# The statuses get_request gives a card that waits on nobody any more: acked, withdrawn or expired.
+ENDED = ("closed", "cancelled", "expired")
+
+
+def ended(got):
+    """Whether get_request gives a card already ended in Pending You by another hand than crew's close, so crew can
+    neither change nor close it, and the run record must say it closed: the mac-studio deploy card of 2026-10-19,
+    acked when its word was recorded, refused every change and close for seven hours after, and no later offer of
+    mac-studio reached the user."""
+    return isinstance(got, dict) and got.get("status") in ENDED
+
+
 def revision(got, kind_changed=False, questions=False):
     """How crew puts a changed card before the user, from get_request's answer, whether the card's kind changed and
     whether the card crew built again carries questions: "change", the card changed in place, while it waits on them;
