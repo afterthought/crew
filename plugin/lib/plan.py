@@ -7225,13 +7225,44 @@ def batch_due(due, entries, setting, now, bolts):
     return why
 
 
+def batch_reckoners(found, teams, here):
+    """The teams the rail's sweep on this host (here) reckons a batch for (briefs.12): for each partition whose plan was
+    read, each team on this host holding a bolt of it, in the plan's order, as {label: [team]}; a partition is reckoned
+    by its first team until one tells its planner (reckon_batches). A batch due by the partition's clock, or at once for
+    a bolt whose units have all merged, so reaches the planner when no conductor waits on anything (2026-10-19: two
+    bolts merged two hours with no batch begun)."""
+    out = {}
+    for label, _, _, pl in found:
+        if not pl:
+            continue
+        names = [b.get("Team") for b in pl.bolts() if b.get("Team")]
+        held = [n for n in dict.fromkeys(names) if (teams.get(n) or {}).get("machine") == here]
+        if held:
+            out[label] = held
+    return out
+
+
+def reckon_batches(fleet, found):
+    """The rail's sweep reckons each partition's batch on this host (batch_reckoners, batch_check), stopping at the first
+    of its teams that tells the planner, since a batch is told once; what crew can't read is said on standard error and
+    the rail read stands."""
+    for label, names in batch_reckoners(found, fleet["teams"], crew.this_host()).items():
+        for name in names:
+            try:
+                if batch_check(fleet, fleet["teams"][name]):
+                    break
+            except Refusal as e:
+                print(f"no batch reckoned for {name}: {e}", file=sys.stderr)
+                break
+
+
 def batch_check(fleet, t):
-    """On each wait of a conductor of the partition, and at the end of a construct or a merge it waited on
-    (after_delivery): the changes due across the partition, counted from the run
+    """On each wait of a conductor of the partition, at the end of a construct or a merge it waited on
+    (after_delivery), and on the rail's sweep (reckon_batches): the changes due across the partition, counted from the run
     record, make a batch due at the partition's setting, `every` of them or `hours` since its last batch with at least
     one due, or at once when the team's bolt has every unit merged and some unit's latest change has been in no batch.
     crew then tells the partition's planner once, `batch.due` in the run record, until the next batch is delivered
-    (briefs.12). What crew can't read is said on standard error, and the wait goes on."""
+    (briefs.12). What crew can't read is said on standard error, and the wait goes on. Returns whether it told the planner."""
     label = t["label"]
     setting = fleet["partitions"][label]["review"]
     plan = plan_of(fleet, label)
@@ -7253,6 +7284,8 @@ def batch_check(fleet, t):
     if crew.tell(fleet, planner, text):
         record.emit(label, "batch.due", [f"agent/{planner}"] + [f"unit/{u}" for u, *_ in due], why=f"batch: due, {len(due)} changes",
                     Count=len(due))
+        return True
+    return False
 
 
 def batch_due_said(label, due, why):
@@ -7847,6 +7880,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
         read["swept"] = sweep_cards(fleet, read)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc))
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
+        reckon_batches(fleet, found)
     return read
 
 

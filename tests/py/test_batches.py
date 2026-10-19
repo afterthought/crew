@@ -202,3 +202,14 @@ def test_a_merge_reckons_a_batch_as_a_construct_does(stage, fix, then):
     merged leaves its conductor waiting on nothing, so no later wait would tell the planner its batch is due at once, as
     on 2026-10-19, when every-deploy-has-its-live-card and swc-1's bolt sat merged two hours with no batch begun."""
     assert plan.after_delivery(stage, fix) == then
+
+
+def test_the_rails_sweep_reckons_a_batch_for_the_teams_on_its_host():
+    """The rail's sweep reckons each partition's batch for its teams on this host holding a bolt, in the plan's order
+    (briefs.12), so a bolt whose units have all merged reaches the planner with no conductor waiting; a team elsewhere,
+    and a partition whose plan was not read, are not reckoned here."""
+    teams = {"swb-1": {"machine": "mac-studio"}, "swb-2": {"machine": "chuck-herdr-alpha"}}
+    found = [("wldn", None, None, PLAN), ("swancloud", None, None, None)]
+    assert plan.batch_reckoners(found, teams, "mac-studio") == {"wldn": ["swb-1"]}
+    assert plan.batch_reckoners(found, teams, "chuck-herdr-alpha") == {"wldn": ["swb-2"]}
+    assert plan.batch_reckoners(found, teams, "deneb") == {}
