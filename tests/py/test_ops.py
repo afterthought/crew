@@ -444,6 +444,13 @@ class TestGate:
         assert ops.gate_of(gate(Doer="main-ops", Agent="wldn-ops", When="held")) is None
         assert ops.step_facts("dev", 1, gate(Text=None), "wldn")["gate"] is None
 
+    def test_the_gates_card_is_the_users_do_to_approve_it_there_and_an_agents_step_held_with_a_link_is_the_choice_of_when(self):
+        c = cards.step_card(ops.step_facts("dev", 1, gate(), "wldn"))["card"]
+        assert (c["title"], c["kind"], c["action"]["steps"], c["action"]["where"]) == (
+            "Approve the deploy of 4f2a9c1 to dev at its gate", "action", [{"text": RUN}], RUN)
+        held = ops.step_facts("dev", 1, gate(Doer="main-ops", Agent="wldn-ops", When="held"), "wldn", [])
+        assert cards.step_card(held)["card"]["kind"] == "choice"
+
 
 def card(act, key, card_id, minutes, **f):
     return dict(Act=act, Key=key, Card=card_id, At=f"2026-10-12T11:{minutes:02d}:00Z", **f)

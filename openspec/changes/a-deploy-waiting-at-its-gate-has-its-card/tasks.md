@@ -8,7 +8,7 @@
 
 ## 2. The gate's card
 
-- [ ] 2.1 A gate's card is the user's `do` asking them to approve the deploy at its gate, its one step and its where the gate's link, and every other step's card is unchanged; proved by new cases in `tests/py/test_cards.py` (design, *Decisions* and *Task notes* 2.1).
+- [x] 2.1 A gate's card is the user's `do` asking them to approve the deploy at its gate, its one step and its where the gate's link, and every other step's card is unchanged; proved by new cases in `tests/py/test_cards.py` (design, *Decisions* and *Task notes* 2.1).
 
 ## 3. The views
 

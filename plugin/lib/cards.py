@@ -581,9 +581,18 @@ QUIET = {"quiet": ("When the host is quiet", "No stage is cut; it could be hours
 def step_card(f):
     """An after-deploy step's card (record 0031 §5, plan.14): the user's step a `do` with its words, where, each
     command whole and what is seen when it worked, its Done, Skip and Later the app's own; an agent's step held for
-    the user's word a choice of when, quiet recommended, now or skip, each with its consequence. f: env, n, text,
-    doer ("user" or the agent), held, why, where, commands, done, consequences ({quiet, now, skip}), follows."""
+    the user's word a choice of when, quiet recommended, now or skip, each with its consequence; a deploy waiting at
+    its gate (plan.14) the user's `do` to approve it there, its one step, its where and its link the gate's. f: env, n,
+    text, doer ("user" or the agent), held, why, where, commands, done, gate (the gate's link) or None, to (the commit
+    the step names) or None, consequences ({quiet, now, skip}), follows."""
     key, title = f"op/{f['env']}/{f['n']}", f"After {f['env']}'s deploy: {f['text']}"
+    if f.get("gate"):
+        link, of = f["gate"], f" of {f['to'][:7]}" if f.get("to") else ""
+        said = (f"The deploy{of} to {f['env']} waits at its gate for your approval there. Approving it at the gate is the "
+                "word to deploy; nothing else asks for it.")
+        return built(key, f"Approve the deploy{of} to {f['env']} at its gate", said + (f" {f['why']}" if f.get("why") else ""),
+                     links=[("The gate", link)], follows=f.get("follows"), kind="action", intent="do",
+                     action={"steps": [{"text": link}], "where": link, "done": "The run goes on past its gate."})
     if f["doer"] == "user":
         steps = [{"text": c, "command": c} for c in f.get("commands") or []] or [{"text": f["text"]}]
         action = dict({"steps": steps}, **{k: f[k] for k in ("where", "done") if f.get(k)})
