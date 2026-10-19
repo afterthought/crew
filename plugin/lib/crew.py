@@ -3,7 +3,6 @@
 
   crew.py teams                       every team's name
   crew.py labels                      every partition's label
-  crew.py env <team>                  the team's settings as shell assignments
   crew.py brief <team|label> <definition> [name]
                                       a definition's brief for a team or a partition's main level; name is the agent's own
   crew.py launch <team|label> <role> [stage|resume]
@@ -474,6 +473,20 @@ def listed(what, code, out, err, where):
         items = None
     isinstance(items, list) or fail(f"herdr's {what} list {where} can't be read")
     return [i for i in items if isinstance(i, dict)]
+
+
+def herdr_made(group, cmd, code, out, err, where, ids=()):
+    """What herdr's act (group and cmd, as `workspace create`) made, from its exit, standard output and standard error:
+    its result, each of ids (a path of keys into it) a string that is not empty. An answer crew can't read, or one whose
+    id is missing or empty, is refused in herdr's words, saying where (read.1, read.2), so crew keeps nothing of it and
+    acts on no id it lacks."""
+    try:
+        result = json.loads(out)["result"]
+        ok = all(isinstance(v, str) and v for v in (functools.reduce(lambda d, k: d[k], path, result) for path in ids))
+    except (ValueError, KeyError, TypeError):
+        ok = False
+    ok or fail(f"herdr could not {cmd} a {group} {where}: " + ((err or "").strip().splitlines() or [f"exit {code}"])[-1])
+    return result
 
 
 _SESSIONS = {}
@@ -949,15 +962,6 @@ def reach(fleet, machine):
     except Refusal as e:
         out["REMOTE_CREW_REFUSED"] = str(e)
     return out
-
-
-def env(fleet, t):
-    pairs = {
-        "TEAM": t["name"], "SYSTEM": t["system"], "MACHINE": t["machine"], "SSH_TARGET": t["ssh"], "SESSION": t["session"],
-        "LABEL": t["label"], "CREW_HOME": str(HOME), "KIT": t["kit"]["main"], "KIT_DIR": t["kit"]["dir"], "KIT_NAME": t["kit"]["name"],
-        "BLUEPRINTS": t["blueprints"]["main"], "UNITS": str(t["units"]), "HOST_KIND": t.get("kind", ""), **reach(fleet, t["machine"]),
-    }
-    return "\n".join(f"{k}={shlex.quote(v)}" for k, v in pairs.items()) + f'\nSTATE="$HOME/.local/state/{t["name"]}-team"'
 
 
 # How an agent records a finding, the same in every brief that records one.
@@ -1477,18 +1481,16 @@ class Agents:
             import record as rec  # record imports this module
             rec.emit(self.label, act, on, why=why)
 
-    def answer(self, *args):
-        """herdr's result for an act that answers with what it made; refused in herdr's words when it fails."""
+    def answer(self, *args, ids=()):
+        """herdr's result for an act that answers with what it made; refused in herdr's words when it fails, or when an
+        id of ids it names is missing or empty (herdr_made)."""
         r = self.herdr.run(*args)
-        try:
-            return json.loads(r.stdout)["result"]
-        except (ValueError, KeyError, TypeError):
-            fail(f"herdr could not {args[1]} a {args[0]} in session {self.session}: "
-                 + ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1])
+        return herdr_made(args[0], args[1], r.returncode, r.stdout, r.stderr, f"in session {self.session}", ids)
 
     def workspace(self, label, cwd):
-        """A new workspace, kept in the layout file: its first tab and its root pane."""
-        made = self.answer("workspace", "create", "--cwd", cwd, "--label", label, "--no-focus")
+        """A new workspace, kept in the layout file: its first tab and its root pane. One herdr makes with no id is
+        refused and kept nowhere, so no tab is later made in it."""
+        made = self.answer("workspace", "create", "--cwd", cwd, "--label", label, "--no-focus", ids=[("workspace", "workspace_id")])
         self.put("layout", ws_key(label), made["workspace"]["workspace_id"])
         return made["tab"]["tab_id"], made["root_pane"]["pane_id"]
 
@@ -1727,8 +1729,6 @@ def main(a):
         print("\n".join(fleet["teams"]))
     elif a[:1] == ["labels"]:
         print("\n".join(fleet["partitions"]))
-    elif a[:1] == ["env"] and len(a) == 2:
-        print(env(fleet, team_of(fleet, a[1])))
     elif a[:1] == ["brief"] and len(a) >= 3:
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:

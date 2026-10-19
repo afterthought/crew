@@ -45,7 +45,7 @@ DESCRIPTOR = """\
 %rec: Entry
 %key: Id
 %mandatory: Id At Host By Act
-%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo
+%allowed: Id At Host By Session Act On From Commit Why Refused Result Tasks Head Ended Delivered Observed Chars Amended Took Heads Paths Reached Forecast Batch Units Count Card Key Base Phase Step Outcome Log Rows State Doer Agent When Text Changes Note Repo After Lifted Settle
 
 """
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
@@ -55,12 +55,14 @@ DESCRIPTOR = """\
 # unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
 # Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's Count, a
 # card act's Card (the Pending You card's id) and Key (the rail row's card key), a landing's Repo (the kit it landed on)
-# and Head (the commit that kit's main holds afterwards, plan.14), and an operation's (ops.py): a deploy's commit as Head
-# and the one it comes from as Base, its Phase (start, step or end), a step's Step and Outcome, its Log and the suite's
-# Rows; a step's Key, State, Doer, Agent, When, Text, Changes and Note.
+# and Head (the commit that kit's main holds afterwards, plan.14), crew's own order of two units a forecast found in
+# conflict, the unit.after that puts one After the other or the one that Lifted it, with the Settle whose end decided
+# it (plan.13), and an operation's (ops.py): a deploy's commit as Head and the one it comes from as Base, its Phase
+# (start, step or end), a step's Step and Outcome, its Log and the suite's Rows; a step's Key, State, Doer, Agent, When,
+# Text, Changes and Note.
 EXTRA = ("Result", "Tasks", "Head", "Ended", "Delivered", "Observed", "Chars", "Amended", "Took", "Heads", "Paths", "Reached",
          "Forecast", "Batch", "Units", "Count", "Card", "Key", "Base", "Phase", "Step", "Outcome", "Log", "Rows", "State", "Doer", "Agent",
-         "When", "Text", "Changes", "Note", "Repo")
+         "When", "Text", "Changes", "Note", "Repo", "After", "Lifted", "Settle")
 LISTS = ("On", "From", "Commit")
 # Objects a trace prints but never follows: following them would pull in everything a team or a kit ever did.
 UNFOLLOWED = ("agent/", "team/", "queue/", "plan/")
@@ -121,12 +123,17 @@ def one_line(v):
     return " ".join(str(v).split())
 
 
+def entry_id(now, host, pid, n):
+    """An entry's id: its second, its microsecond, the host, the process and a count, unique without a lock. The
+    microsecond orders the entries of one second as they were made, which the process cannot: a process id says
+    nothing of when, and wraps (99891, then 352, on mac-studio on 2026-10-19)."""
+    return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{now.microsecond:06d}-{host}-{pid}-{n}"
+
+
 def new_id():
-    """A new entry's id: the time, the host, the process and a count, unique without a lock. A write makes its
-    entry's id before its commit, so the commit can name the entry its message describes."""
-    n = next(_ids)
-    now = datetime.datetime.now(datetime.timezone.utc)
-    return f"{now.strftime('%Y%m%dT%H%M%SZ')}-{crew.this_host()}-{os.getpid()}-{n}"
+    """A new entry's id, made now (entry_id). A write makes its entry's id before its commit, so the commit can name
+    the entry its message describes."""
+    return entry_id(datetime.datetime.now(datetime.timezone.utc), crew.this_host(), os.getpid(), next(_ids))
 
 
 def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None, by=None, **extra):

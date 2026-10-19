@@ -5478,9 +5478,9 @@ def reach(fleet, t):
     conflicts with the bolt resolves that first, and is forecast against the units ahead of it once it is clean with
     the bolt. A conflict is a forecast for the later unit, recorded once for a pair of
     heads (`forecast`, with both heads, the paths and how it reached the unit) and reaching it once (deliver). The
-    earlier unit is told nothing. A forecast between two unmerged units gives the later After on the earlier, in a write that is the waiting
-    conductor's own (plan.13, roles.1). What crew can't read or write here is said on standard error, and the wait
-    goes on (teams.12)."""
+    earlier unit is told nothing, and the forecast orders neither: a settle that takes the other's work does, and an
+    order of crew's own whose settle found nothing to change is lifted, both before the forecasts (settle_orders,
+    plan.13). What crew can't read or write here is said on standard error, and the wait goes on (teams.12)."""
     label, main = t["label"], t["kit"]["main"]
     plan = plan_of(fleet, label)
     if plan is None:
@@ -5494,6 +5494,13 @@ def reach(fleet, t):
     if met:
         with READ.fresh():
             st = stages_for(fleet, plan, bolts)
+    ordered = settle_orders(fleet, t, plan, st)
+    for text in ordered:
+        say(text)
+    if ordered:  # the forecasts read the plan as crew's own orders left it
+        plan = plan_of(fleet, label) or plan
+        bolts = held_by(plan, t["name"])
+        st = stages_for(fleet, plan, bolts)
     entries = local_entries(label)
     done = {e.get("Heads") for e in entries if e.get("Act") in ("forecast", "amendment") and e.get("Heads")}
     for bolt, name, paths, left_out in met:
@@ -5534,20 +5541,7 @@ def reach(fleet, t):
                                     lambda o, h, base: merge_tree(main, o, h, base), done, took, bolt_order(plan, b.name())[1])
         for name, other in unread:
             print(f"no forecast of {name} against {other}: git merge-tree could not read them", file=sys.stderr)
-        for name, other, paths, heads, after in due:
-            if after:
-                def change(w, name=name, other=other):
-                    v = w.unit(name)
-                    w.unit(other)
-                    if other not in v.all("After"):
-                        v.add("After", other, after="Intent")
-                    return [b.name()]
-                try:
-                    with contextlib.redirect_stdout(sys.stderr):
-                        write(fleet, label, change, f"plan({b.name()}): {name} after {other}, forecast to conflict",
-                              act="unit.after", on=[f"unit/{name}", f"bolt/{b.name()}"])
-                except Refusal as e:
-                    print(f"{name} is not put after {other}: {e}", file=sys.stderr)
+        for name, other, paths, heads in due:
             way = deliver(fleet, t, entries, name, st.of(name)["stage"], forecast_words(t, k, b.name(), name, other, paths))
             if way:
                 record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
@@ -5565,8 +5559,8 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
     already made for the same heads (done) is not made again. A unit is forecast against one it comes after only on
     what it adds beyond that unit's head its place took (took, {unit: {after unit: head}}), so the other's own work it
     carries, rewritten since by a rebase or a settle, is no conflict of its; with no head taken, from their merge base
-    (plan.13). Returns the forecasts as (unit, other, paths, heads, whether the unit is to be put after the other, which
-    it is unless it already comes after it), and the pairs git could not read."""
+    (plan.13). Returns the forecasts as (unit, other, paths, heads), none of which orders the two (plan.13, teams.12),
+    and the pairs git could not read."""
     due, unread = [], []
     order = [name for name, _, _ in live]
     after_of = after_of if after_of is not None else {name: after for name, _, after in live}
@@ -5582,10 +5576,142 @@ def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):
                 continue
             heads = f"{name}@{head[:7]} {other}@{ohead[:7]}"
             if heads not in done:
-                due.append((name, other, paths, heads, not other.startswith("bolt/") and not comes_after(after_of, name, other)))
+                due.append((name, other, paths, heads))
             if other.startswith("bolt/"):
                 break  # it meets the bolt first: the units ahead are forecast once it is clean with the bolt
     return due, unread
+
+
+# The subject crew wrote an After with at a forecast, before a forecast stopped ordering two units (plan.13): crew's
+# own words, matched whole, so an order a wait wrote then is read as crew's.
+FORECAST_ORDER = re.compile(r"^plan\([a-z0-9][a-z0-9-]*\): ([a-z0-9][a-z0-9-]*) after ([a-z0-9][a-z0-9-]*), forecast to conflict$")
+
+
+def forecast_ordered(e):
+    """The pair a unit.after entry's subject says a forecast ordered before this was a settle's (FORECAST_ORDER), as
+    (unit, other), or None."""
+    m = FORECAST_ORDER.match(e.get("Why") or "")
+    return m.groups() if m else None
+
+
+def forecast_orders(after_of, unmerged, entries, holds):
+    """Which pairs of a bolt's unmerged units crew puts in order, and which orders of its own it lifts (plan.13,
+    teams.12, teams.14), from the run record's entries (oldest first), each unit's After names as the plan holds them
+    (after_of) and the bolt's unmerged units. A pair is (unit, other) of a forecast entry on unit/<unit> and
+    unit/<other>, both unmerged. crew's writes for a pair are its unit.after entries on unit/<unit> with After: <other>,
+    made on a settle, or with the subject a forecast wrote before (FORECAST_ORDER); its lifts, those with Lifted:
+    <other>. holds(unit, other, head) says whether the unit's branch holds the other's work, head being the other's as
+    the pair's latest forecast recorded it, or None, and answers None when git can't tell, which orders and lifts
+    nothing for the pair (read.1); it is asked only of a pair a settle's end may decide.
+
+    A pair is ordered when the plan does not put the unit after the other, a settle of the unit delivered after a
+    forecast for the pair and after crew's latest record for it, the branch holds the other's work, crew has never
+    written the pair's order on a settle, and crew's latest record for the pair is not a write: a write the plan no
+    longer holds was lifted by someone else, and stays lifted. A pair is lifted when the plan puts the unit after the
+    other, crew's latest record for it is a write, the unit's latest settle end since that write stopped short with no
+    settle of it delivered since, and the branch does not hold the other's work. An order set by hand or by a proposal
+    is no write of crew's, and is never lifted. Returns (to order, to lift), each [(unit, other, the id of the settle
+    end that decided it)], in the order of the pairs' first forecasts."""
+    key = lambda e: (e["At"], e["Id"])
+    pairs = []
+    for e in entries:
+        on = e.get("On") or []
+        if e.get("Act") == "forecast" and not e.get("Refused") and len(on) > 1 and on[0].startswith("unit/") and on[1].startswith("unit/"):
+            pair = (on[0][5:], on[1][5:])
+            if pair not in pairs and pair[0] in unmerged and pair[1] in unmerged:
+                pairs.append(pair)
+    order, lift = [], []
+    for unit, other in pairs:
+        forecasts = [e for e in entries if e.get("Act") == "forecast" and not e.get("Refused")
+                     and (e.get("On") or [])[:2] == [f"unit/{unit}", f"unit/{other}"]]
+        records = [e for e in entries if e.get("Act") == "unit.after" and not e.get("Refused") and f"unit/{unit}" in (e.get("On") or [])
+                   and (e.get("After") == other or e.get("Lifted") == other or forecast_ordered(e) == (unit, other))]
+        ends = [e for e in entries if e.get("Act") == "stage.end" and not e.get("Refused") and f"stage/{unit}/settle" in (e.get("On") or [])]
+        latest = records[-1] if records else None
+        written = latest is not None and latest.get("Lifted") != other
+        since = key(latest) if latest else None
+        head = next((w.split("@", 1)[1] for w in reversed((forecasts[-1].get("Heads") or "").split()) if w.startswith(f"{other}@")), None)
+        if comes_after(after_of, unit, other):
+            later = [e for e in ends if since is None or key(e) > since]
+            if written and other in after_of.get(unit, ()) and later and later[-1].get("Ended") == "short" \
+                    and not any(e.get("Ended") == "delivered" for e in later) and holds(unit, other, head) is False:
+                lift.append((unit, other, later[-1]["Id"]))
+            continue
+        if written or any(e.get("After") == other for e in records):
+            continue
+        settled = [e for e in ends if e.get("Ended") == "delivered" and key(e) > key(forecasts[0]) and (since is None or key(e) > since)]
+        if settled and holds(unit, other, head) is True:
+            order.append((unit, other, settled[-1]["Id"]))
+    return order, lift
+
+
+def settle_orders(fleet, t, plan, st, unit=None):
+    """What forecast_orders says for the unmerged units of the team's bolts, or for one unit, written: each pair put in
+    order or lifted in a write of its own in the waiting conductor's name (roles.1, state.1), the conductor told
+    nothing by it, since its wait says it. Whether the unit's branch holds the other's work is read with git on the
+    team's host (branch_holds). A write refused, or a pair git can't read, is said on standard error, and the next wait
+    decides again. Returns what the writes did, a sentence each."""
+    main, label, said, entries = t["kit"]["main"], t["label"], [], None
+    for b in held_by(plan, t["name"]):
+        order_of, after_of = bolt_order(plan, b.name())
+        if unit is not None and unit not in order_of:
+            continue
+        unmerged = {n for n in order_of if st.of(n)["stage"] not in ("merged", "landed", "unknown")}
+        entries = local_entries(label) if entries is None else entries
+        order, lift = forecast_orders(after_of, unmerged, entries, lambda u, o, head: branch_holds(main, u, o, head))
+        for u, o, settle in order + lift:
+            if unit is not None and u != unit:
+                continue
+            lifted = (u, o, settle) in lift
+            try:
+                with contextlib.redirect_stdout(sys.stderr):
+                    order_write(fleet, t, b.name(), u, o, settle, lifted)
+            except Refusal as e:
+                print(f"{u} is not {'lifted from after' if lifted else 'put after'} {o}: {e}", file=sys.stderr)
+                continue
+            said.append(f"{u} no longer comes after {o}: its settle found nothing to change" if lifted else
+                        f"{u} now comes after {o}, whose work its settle took: it merges after {o}")
+    return said
+
+
+def branch_holds(main, unit, other, head):
+    """Whether unit/<unit> holds the other's work (plan.13): its head as a forecast recorded it (head), or unit/<other>'s
+    head now, read with git in the kit's main checkout. None, said on standard error, when git can't tell."""
+    branch, why = f"refs/heads/unit/{unit}", None
+    for h in (head, f"refs/heads/unit/{other}"):
+        if not h:
+            continue
+        r = subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", h, branch], capture_output=True, text=True, env=gitenv())
+        if r.returncode == 0:
+            return True
+        if r.returncode != 1:
+            why = why or (r.stderr.strip() or f"git exited {r.returncode}")
+    if why:
+        print(f"crew can't tell whether unit/{unit} holds {other}'s work, so it neither orders nor lifts them: {why}", file=sys.stderr)
+        return None
+    return False
+
+
+def order_write(fleet, t, bolt, unit, other, settle, lift):
+    """crew's own order of a unit after another a forecast found it in conflict with, or its lift (plan.13): one write in
+    the waiting conductor's name, the unit.after entry naming the other as After or Lifted and the settle end that
+    decided it. The change removes or adds only that one After name."""
+    def change(w):
+        v = w.unit(unit)
+        w.unit(other)
+        v.get("Bolt") == bolt or fail(f"unit {unit} moved to {v.get('Bolt') or 'the queue'} meanwhile")
+        if lift:
+            other in v.all("After") or fail(f"unit {unit} no longer comes after {other}")
+            v.fields = [(n, x) for n, x in v.fields if not (n == "After" and x == other)]
+        else:
+            other not in v.all("After") or fail(f"unit {unit} already comes after {other}")
+            v.add("After", other, after="Intent")
+        w.quiet.add(t["name"])  # its conductor learns it from its wait, not from this write
+        return [bolt]
+    subject = (f"plan({bolt}): {unit} no longer after {other}, its settle found nothing to change" if lift else
+               f"plan({bolt}): {unit} after {other}, its settle took {other}'s work")
+    return write(fleet, t["label"], change, subject, act="unit.after", on=[f"unit/{unit}", f"bolt/{bolt}"],
+                 fields={"Lifted" if lift else "After": other, "Settle": settle})
 
 
 def carried_forecasts(fleet, t, plan, st_all, bolt, unit):
@@ -5848,8 +5974,9 @@ def stage_wait(fleet, a):
     """Wait on the stage a slot's agent, or ops, owes, until it ends at its deliverable, stops short, is stuck, its agent
     is gone, or the timeout passes, and print the one line that says which. A delivered end is recorded here; nothing
     else is. The wait holds waits/<slot>.lock for its life, so crew needs knows a wait is there to hand its words to.
-    Each look also reads sluice's overview, and says at once, before that line, each conflict or blame sluice records
-    for a submission from the stage's place (overview_look)."""
+    A unit's settle that ends delivered or short orders or lifts its unit's forecast orders, and its line says so
+    (settle_said). Each look also reads sluice's overview, and says at once, before that line, each conflict or blame
+    sluice records for a submission from the stage's place (overview_look)."""
     t = crew.team_of(fleet, a.team)
     agent = f"{t['name']}-{a.slot}"
     (team_state(t) / "waits").mkdir(parents=True, exist_ok=True)
@@ -5916,12 +6043,33 @@ def stage_wait(fleet, a):
                         batch_check(fleet, t)
                     except Refusal as e:
                         print(f"no batch reckoned: {e}", file=sys.stderr)
+            if how in ("delivered", "short") and o.stage == "settle" and not o.fix and not o.chore:
+                said = settle_said(fleet, t, o.name, said)
             if how:
                 print(said, flush=True)
                 if how == "delivered" and o.stage == "merge":  # the bolt's head moved: its landing card (raise_land)
                     landing_after_merge(fleet, t)
                 return
             time.sleep(min(POLL, remaining))
+
+
+def settle_said(fleet, t, unit, said):
+    """A unit's settle ended, delivered or short: crew's own order of it after a unit a forecast found it in conflict
+    with, or that order's lift, written now (settle_orders), and the wait's answer with a sentence for each. What crew
+    can't read is said on standard error, and the next wait decides again."""
+    try:
+        plan = plan_of(fleet, t["label"])
+        if plan is None:
+            print(f"{t['label']}'s plan could not be read, so {unit}'s settle orders nothing yet", file=sys.stderr)
+            return said
+        more = settle_orders(fleet, t, plan, stages_for(fleet, plan, held_by(plan, t["name"])), unit)
+    except Refusal as e:
+        print(f"{unit}'s settle orders nothing yet: {e}", file=sys.stderr)
+        return said
+    if not more:
+        return said
+    said = said.rstrip()
+    return " ".join([said if said.endswith(".") else f"{said}."] + [f"{x}." for x in more])
 
 
 def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time):

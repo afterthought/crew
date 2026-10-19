@@ -1,4 +1,5 @@
-"""Teams, the main level and their agents (teams.2, teams.6, teams.7, teams.11, plan.15): crew.greet_waits for one look of
+"""Teams, the main level and their agents (teams.2, teams.6, teams.7, teams.11, plan.15): crew.load for what a team's
+session resolves its partition, kit and blueprints to, crew.greet_waits for one look of
 a greeting's wait, crew.standing_greeting for what an agent crew starts outside a team is greeted with,
 crew.dispatch_place and crew.operator_session for where those run, crew.tab_holds for what an operator's tab holds,
 crew.last_conversation for where a role resumes,
@@ -19,6 +20,49 @@ FLEET = {"partitions": {"wldn": {"label": "wldn", "partition": "clients/willdan"
          "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": BOX, "session": "wldn-1"},
                    "atl-1": {"name": "atl-1", "label": "wldn", "machine": "mac-studio", "session": "wldn-5"}},
          "hosts": {"mac-studio": {"sessions": {"wldn": {"partition": "clients/willdan"}, "madswan": {"partition": "business"}}}}}
+
+
+class TestLoad:
+    """A team's partition, kit and blueprints come from the herdr session it runs in; the files' refusals are t-teams'."""
+
+    @pytest.fixture
+    def fleet(self, tmp_path, monkeypatch):
+        def sess(space, partition, repos):
+            return {"dir": f"{tmp_path}/{space}", "partition": partition, "repos": repos}
+        willdan = ["WilldanGroup/switchboard-kit", "WilldanGroup/willdan-blueprints"]
+        hosts = {BOX: {"ssh": BOX, "sessions": {s: sess("box/willdan", "clients/willdan", willdan) for s in ("wldn-1", "wldn-3")}},
+                 "mac-studio": {"ssh": "mac-studio", "sessions": {
+                     "madswan-1": sess("mac/madswan", "business", ["afterthought/blueprints", "afterthought/crew"]),
+                     "madswan-2": sess("mac/agentplot", "business", ["agentplot/blueprints", "agentplot/flywheel-next"])}}}
+        part = {"state": "afterthought/crew-state", "review": {"every": 5, "hours": 4}}
+        teams = {"version": 2,
+                 "partitions": [dict(part, label="wldn", partition="clients/willdan", blueprints=["WilldanGroup/willdan-blueprints"],
+                                     machine=BOX, session="wldn-3"),
+                                dict(part, label="madswan", partition="business", blueprints=["afterthought/blueprints", "agentplot/blueprints"],
+                                     machine="mac-studio", session="madswan-1")],
+                 "teams": [{"name": "swb-1", "system": "Switchboard", "machine": BOX, "session": "wldn-1", "units": 4,
+                            "repos": ["switchboard-kit", "willdan-blueprints"]},
+                           {"name": "apk-1", "system": "Flywheel", "machine": "mac-studio", "session": "madswan-2", "units": 4,
+                            "repos": ["flywheel-next", "blueprints"]}]}
+        (tmp_path / "herdr-hosts.json").write_text(json.dumps({"version": 1, "hosts": hosts}))
+        (tmp_path / "teams.json").write_text(json.dumps(teams))
+        monkeypatch.setattr(crew, "HOSTS", tmp_path / "herdr-hosts.json")
+        monkeypatch.setattr(crew, "TEAMS", tmp_path / "teams.json")
+        crew.load.cache_clear()
+        yield crew.load()
+        crew.load.cache_clear()
+
+    def test_a_teams_partition_kit_and_blueprints_come_from_its_session(self, fleet, tmp_path):
+        t = crew.team_of(fleet, "swb-1")
+        assert (t["label"], t["units"], t["machine"], t["session"]) == ("wldn", 4, BOX, "wldn-1")
+        box = f"{tmp_path}/box/willdan"
+        assert (t["kit"]["main"], t["kit"]["dir"]) == (f"{box}/switchboard-kit/main", f"{box}/switchboard-kit")
+        assert t["blueprints"]["main"] == f"{box}/willdan-blueprints/main"
+
+    def test_a_repos_name_is_resolved_to_owner_and_name_through_the_teams_session(self, fleet, tmp_path):
+        t = crew.team_of(fleet, "apk-1")
+        assert (t["label"], t["blueprints"]["repo"]) == ("madswan", "agentplot/blueprints")
+        assert t["blueprints"]["main"] == f"{tmp_path}/mac/agentplot/blueprints/main"
 
 
 class TestGreetWaits:
