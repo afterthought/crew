@@ -7134,11 +7134,21 @@ def latest_changes(entries):
 
 
 def batch_closed(entries):
-    """The batch card keys the run record holds closed: a card.close under the key, not refused and not lost to its
-    owner, once the user sent the card back with a tap or sent its reading session, or closed it in Pending You; the
-    rail then shows the batch's row no longer (record_reading)."""
-    return {e["Key"] for e in entries if e.get("Act") == "card.close" and e.get("Card") and not e.get("Refused")
-            and e.get("State") != "lost" and (e.get("Key") or "").startswith("batch/")}
+    """The batch card keys the run record holds closed, entries oldest first: those whose last card act under the key
+    is a card.close, not refused and not lost to its owner, once the user sent the card back with a tap or sent its
+    reading session, or closed it in Pending You. A card posted under the key after it, one followed or raised again,
+    opens the key again, and a close as lost leaves it open for its card posted again; a refused post or close changes
+    nothing, since Pending You did neither."""
+    closed = set()
+    for e in entries:
+        key = e.get("Key") or ""
+        if not key.startswith("batch/") or not e.get("Card") or e.get("Refused"):
+            continue
+        if e.get("Act") == "card.post" or (e.get("Act") == "card.close" and e.get("State") == "lost"):
+            closed.discard(key)
+        elif e.get("Act") == "card.close":
+            closed.add(key)
+    return closed
 
 
 def awaiting_answer(entries):

@@ -54,6 +54,14 @@ class TestAnswered:
         assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, state="lost")]) == {"x1": 7}
         assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, refused="Pending You did not answer")]) == {"x1": 7}
 
+    def test_a_card_posted_again_under_the_key_after_its_close_waits_until_that_card_closes(self):
+        held = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10)]
+        posted = lambda card, minutes: {"Act": "card.post", "Key": "batch/7", "Card": card, "At": f"2026-10-12T10:{minutes:02d}:00Z", "On": []}
+        assert plan.awaiting_answer(held + [posted("req_7", 11), card_closed("batch/7", "req_7", 20), posted("req_8", 21)]) == {"x1": 7}
+        assert plan.awaiting_answer(held + [posted("req_7", 11), posted("req_8", 12), card_closed("batch/7", "req_8", 20)]) == {}
+        assert plan.awaiting_answer(held + [posted("req_7", 11), card_closed("batch/7", "req_7", 20),
+                                            dict(posted("req_8", 21), Refused="Pending You did not answer")]) == {}
+
     def test_a_unit_sent_back_by_the_batchs_notes_waits_for_its_new_change_to_be_in_a_batch_and_then_for_its_answer(self):
         entries = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10), card_closed("batch/7", "req_7", 20),
                    constructed("x1", "bbb2", 30)]
