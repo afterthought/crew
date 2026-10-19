@@ -9,7 +9,7 @@
 
 ## 2. The journeys
 
-- [ ] 2.1 The slots journey's forecast between two units tells the later one and leaves the plan with no `After` (design.md, Task notes 2.1). Verify `tests/suite t-journey-slots` ends with "0 failed".
+- [x] 2.1 The slots journey's forecast between two units tells the later one and leaves the plan with no `After` (design.md, Task notes 2.1). Verify `tests/suite t-journey-slots` ends with "0 failed".
 - [ ] 2.2 A journey proves a settle that takes the other's work orders the pair and holds its merge, and a settle that stops short lifts an order crew wrote at a forecast (design.md, Task notes 2.2). Verify `tests/suite t-journey-merge` ends with "0 failed".
 
 ## 3. The briefs and the docs
