@@ -919,6 +919,55 @@ class TestRecordCommand:
         assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
 
 
+class TestPickedUp:
+    """mac-studio's run record of 2026-10-19 (signal 2026-10-19-swancloud-ops-5b7775dd/01): the user approved
+    deploy/mac-studio's card, its deploy recorded a step that is the user's, and crew posted op/mac-studio/1's card
+    following the deploy's card, which Pending You then resolved. The deploy's end was refused "This request is already
+    closed.", and the offer of d35fbf2 went to the resolved card as a change, refused "This was already answered"."""
+    OWNER, WHERE = "swancloud-ops", ("/kit/main", "github.com/agentplot/swancloud")
+    STEP = dict(env="mac-studio", n=1, text="restart crew's teams on mac-studio", doer="user", held=False, gate=None, follows="req_d1")
+    OFFER = dict(env="mac-studio", head="d35fbf2" + "0" * 33, base="97e54d5" + "0" * 33,
+                 landings=[{"pr": 48, "subject": "A deploy card resolved under its step card reads closed"}],
+                 notes=None, steps=[], before=[{"env": "deneb", "policy": "manual"}], after=[])
+
+    def held(self, entries, acts):
+        """The run record after an act: what it held, and each entry the act emitted, as record.emit writes it."""
+        return entries + [dict({k: v for k, v in e.items() if k not in ("by", "label", "refused")}, By=e["by"],
+                               **({"Refused": e["refused"]} if "refused" in e else {})) for e in acts.emitted]
+
+    def test_a_deploy_card_picked_up_by_its_steps_card_then_the_deploys_end_and_the_next_offer_to_that_environment(self):
+        from test_card_commands import Acts, MATCHED, POSTED
+        entries = [dict(Act="card.post", Key="land/b48", By="crw-2-conductor", Card="req_l48"),
+                   dict(Act="bolt.land", On=["bolt/b48"], Head=self.OFFER["head"]),
+                   dict(Act="card.close", Card="req_l48", Key="land/b48", By="crw-2-conductor", State="closed"),
+                   dict(Act="card.post", Key="deploy/mac-studio", By=self.OWNER, Card="req_d1")]
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s1"), None),
+                     "get_request": ({"status": "resolved", "version": 5}, None)}, entries=entries, caller=self.OWNER)
+        assert plan.row_card_change(None, "swancloud", self.OWNER, built.step_card, self.STEP, "x", self.WHERE, acts) == "req_s1"
+        assert acts.calls[2] == ("get_request", {"requestId": "req_d1", "name": self.OWNER})
+        assert [(e["Act"], e["Card"], e["Key"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+            ("card.post", "req_s1", "op/mac-studio/1", None, None), ("card.close", "req_d1", "deploy/mac-studio", "closed", plan.FOLLOWED)]
+        entries = self.held(entries, acts)
+        assert built.card_under(entries, "deploy/mac-studio", self.OWNER) is None
+
+        acts = Acts({"get_request": ({"status": "resolved", "version": 5}, None),
+                     "cancel_request": (None, "This request is already closed.")}, entries=entries, caller=self.OWNER)
+        assert plan.row_card_close(None, "swancloud", self.OWNER, "deploy/mac-studio",
+                                   outcome="Deployed 97e54d5 to mac-studio: machine ok, suite ok.", acts=acts) is None
+        assert acts.calls == [] and acts.emitted == []
+
+        follows = built.follows_of("deploy", {"env": "mac-studio", "head": self.OFFER["head"]}, entries)
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_d2"), None),
+                     "update_request": (None, "This was already answered; follow up with reply_in_thread.")},
+                    entries=entries, caller=self.OWNER)
+        assert plan.row_card_change(None, "swancloud", self.OWNER, built.deploy_card, dict(self.OFFER, follows=follows),
+                                    "Now d35fbf2", self.WHERE, acts) == "req_d2"
+        assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
+        assert (acts.calls[1][1]["idempotencyKey"], acts.calls[1][1]["follows"]) == ("deploy/mac-studio:2", "req_l48")
+        entries = self.held(entries, acts)
+        assert built.card_under(entries, "deploy/mac-studio", self.OWNER) == "req_d2"
+
+
 class TestBatch:
     def test_six_units_named_with_their_teams_and_paragraphs_as_prose_and_one_link_to_its_session(self):
         b = built.batch_card(dict(n=2, previous=1, units=BATCH_UNITS, link="http://mac-studio:19432"))
