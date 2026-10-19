@@ -252,6 +252,21 @@ class TestNames:
         assert cards.refusal(hooked("cancel_request", {"requestId": "req_q1", "reason": "x"})) is None
         assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold", "kind": "text"})) is None
 
+    @pytest.mark.parametrize("agent, row, said", [
+        ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a landing card is crew's"),
+        ("wldn-ops", "op/a/1", "a step's card is crew's")])
+    def test_the_hook_refuses_an_agents_post_under_crews_key_as_crew_sends_it(self, monkeypatch, agent, row, said):
+        """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key shorter
+        than Pending You's eight characters filled out (cards.post_key, batch/7 as batch/7_), and its revision."""
+        monkeypatch.setenv("CREW_LABEL", "wldn")
+        monkeypatch.setenv("CREW_AGENT", agent)
+        monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
+        closed = [dict(Act="card.post", Key=row, By=agent, Card="req_1"), dict(Act="card.close", Card="req_1")]
+        for sent in (plan.cards.post_key([], row, agent), plan.cards.post_key(closed, row, agent)):
+            assert len(sent) >= plan.cards.KEY_LEAST
+            assert cards.refusal(hooked("post_request", {"idempotencyKey": sent, "name": agent})).startswith(
+                f"crew refuses {agent}'s post of the card under {sent}: {said}")
+
     def test_a_close_the_run_record_cannot_key_is_refused_and_a_question_reads_no_plan(self, monkeypatch):
         """rail-cards: crew's record of its cards cannot be read; the plan cannot be read."""
         monkeypatch.setenv("CREW_LABEL", "wldn")

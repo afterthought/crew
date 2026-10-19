@@ -167,7 +167,7 @@ eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami match_area post_request "
 eq "$(py_calls | sed -n 1p)" 'whoami {"name": "swb-1-conductor"}'
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .approve.risk, .approve.reversible, (.highStakes // "none"), .artifacts[0].lines]' <<<"$posted")" \
-  '["land/b1","swb-1-conductor","approve","high",false,"none",["v1"]]'
+  '["land/b1_","swb-1-conductor","approve","high",false,"none",["v1"]]'
 has "$(grep "agent prompt swb-1-conductor" "$CREW_TEST_LOG")" \
   "[crew] Your card land/b1 is up for the user: call get_request (requestId req_stub-5, name swb-1-conductor), to hear their answer."
 eq "$(entries card.post | jq -r 'select(.Key == "land/b1") | [(.On | join(" ")), .Card, .By] | join(" ")')" "bolt/b1 req_stub-5 swb-1-conductor"
@@ -334,7 +334,7 @@ posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
 s1=$cards_dir/batch/1/session.json; u1=$(jq -r .url "$s1"); p1=$(jq -r .pid "$s1")
 [[ $u1 =~ ^http://chuck-herdr-alpha\.ts\.swancloud\.net:194[3-5][0-9]$ ]] || fail "not a link on the box's tailnet name: $u1"
 eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .title, .context.links[0].url]' <<<"$posted")" \
-  "[\"batch/1\",\"wldn-planner\",\"fyi\",\"Goal of b1 (batch 1)\",\"$u1\"]"
+  "[\"batch/1_\",\"wldn-planner\",\"fyi\",\"Goal of b1 (batch 1)\",\"$u1\"]"
 has "$(jq -r .summary <<<"$posted")" "1 change to read, nothing to approve."
 has "$(jq -r '.artifacts[0].lines | join("\n")' <<<"$posted")" "**swb-1 · v1**"$'\n\n'"v1 gives each tenant its own zone."
 folder=$(cd "$reports" && pwd -P)/batch-wldn-1

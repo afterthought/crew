@@ -285,7 +285,7 @@ def test_a_card_is_posted_in_its_owners_name_under_its_rows_key_filed_in_its_kit
     assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
     sent = acts.calls[1][1]
     assert (sent["idempotencyKey"], sent["areaId"], sent["session"]) == (
-        "land/b1", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
+        "land/b1_", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
     assert sent["approve"]["risk"] == "high"
     assert acts.emitted == [dict(Act="card.post", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", label="wldn")]
     assert capsys.readouterr().out == ("card land/b1: req_c1 https://www.pendingyou.com/app/r/req_c1\n"
@@ -444,17 +444,32 @@ POST, CLOSE = (lambda card, by="swb-1-conductor", key="land/b1": dict(Act="card.
 
 
 @pytest.mark.parametrize("entries, asked", [
-    ([], "land/b1"),
-    ([POST("req_1")], "land/b1"),
-    ([POST("req_1"), POST("req_1")], "land/b1"),
+    ([], "land/b1_"),
+    ([POST("req_1")], "land/b1_"),
+    ([POST("req_1"), POST("req_1")], "land/b1_"),
     ([POST("req_1"), CLOSE("req_1", "declined")], "land/b1:2"),
     ([POST("req_1"), CLOSE("req_1"), POST("req_2")], "land/b1:2"),
     ([POST("req_1"), CLOSE("req_1"), POST("req_2"), CLOSE("req_2", "lost")], "land/b1:3"),
-    ([POST("req_1", by="swb-2-conductor"), CLOSE("req_1")], "land/b1"),
-    ([POST("req_1", key="land/b2"), CLOSE("req_1")], "land/b1"),
-    ([dict(POST("req_1"), Refused="x"), CLOSE("req_1")], "land/b1")])
+    ([POST("req_1", by="swb-2-conductor"), CLOSE("req_1")], "land/b1_"),
+    ([POST("req_1", key="land/b2"), CLOSE("req_1")], "land/b1_"),
+    ([dict(POST("req_1"), Refused="x"), CLOSE("req_1")], "land/b1_")])
 def test_a_card_is_posted_under_its_rows_key_and_after_a_closed_one_under_the_key_with_its_revision(entries, asked):
     assert cards.post_key(entries, "land/b1", "swb-1-conductor") == asked
+
+
+@pytest.mark.parametrize("key, first, revised", [
+    ("batch/7", "batch/7_", "batch/7:2"), ("land/a", "land/a__", "land/a:2"), ("op/a/1", "op/a/1__", "op/a/1:2"),
+    ("batch/12", "batch/12", "batch/12:2"), ("deploy/dev", "deploy/dev", "deploy/dev:2")])
+def test_a_key_shorter_than_pending_you_takes_is_filled_out_to_eight_characters_the_same_on_every_post(key, first, revised):
+    """rail-cards: a row's key shorter than Pending You takes. Read on mac-studio on 2026-10-19 (test D): crew could not
+    post batch 7's card, the rail saying "card: batch/7, none open; its last post was refused: Pending You refused
+    post_request: Some fields need fixing. idempotencyKey: Too small: expected string to have >=8 characters.", since
+    batch/<n> under ten is seven characters. A short key is filled out at its end, the same on a retry and while its
+    card is open; its revision, and a key long enough, are sent as they are."""
+    by = "wldn-planner"
+    held, closed = [POST("req_1", by=by, key=key)], [POST("req_1", by=by, key=key), CLOSE("req_1")]
+    sent = [cards.post_key([], key, by), cards.post_key([], key, by), cards.post_key(held, key, by), cards.post_key(closed, key, by)]
+    assert sent == [first, first, first, revised] and all(len(k) >= cards.KEY_LEAST for k in sent)
 
 
 def test_a_change_with_no_card_held_posts_it():

@@ -837,6 +837,9 @@ ROWS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"), (re.compile(r"^batch/(
 CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "multi", "recommendedIds", "action",
            "rationale", "urgency", "blocking")
 DEAD = "An older copy of this card was lost: dismiss it in the app."
+# The fewest characters Pending You takes in an idempotencyKey (post_request's schema, pendingyou 0.35.1), and what
+# fills a shorter key of crew's out to it: no row key and no revision holds it, so a filled key is no other row's.
+KEY_LEAST, FILL = 8, "_"
 
 
 def row_object(key):
@@ -884,10 +887,13 @@ def post_key(entries, key, by):
     its first card, and for each card after one of `by`'s under it closed (answered and followed, declined, withdrawn or
     lost), the key with that card's revision, <key>:<n>, since Pending You gives a key's card back as long as it keeps
     it and takes one key per question. A card still open under the key keeps its own key, so posting it again gives it
-    back."""
+    back. A key shorter than Pending You takes, batch/7 or land/b1, is filled out to KEY_LEAST at its end with FILL,
+    batch/7_, the same on every post: its first part is still crew's (plan.crews_key), and a key long enough is sent as
+    it always was, so a card open under it is given back (batch 7's card on 2026-10-19, refused "idempotencyKey: Too
+    small: expected string to have >=8 characters")."""
     mine = [e for e in entries if e.get("Act") == "card.close" or (e.get("Key") == key and e.get("By") == by)]
     closed = {c["card"] for c in posted_cards(mine) if c["state"]}
-    return f"{key}:{len(closed) + 1}" if closed else key
+    return (f"{key}:{len(closed) + 1}" if closed else key).ljust(KEY_LEAST, FILL)
 
 
 def posted_again(card):
