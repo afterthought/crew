@@ -63,6 +63,8 @@
 #   crew chore wait|free <chore> ...   as a unit's wait and free
 #   crew unit wait <unit> [--timeout <ms>] [--stuck <ms>]
 #                                      first forecast conflicts with git merge-tree, telling each later unit once,
+#                                      ordering a later unit after an earlier one whose work its settle took, and
+#                                      lifting an order of crew's whose settle found nothing to change, saying so;
 #                                      rebase dependents whose unit merged, and count the partition's changes due for
 #                                      a batch; then wait for the unit's stage to end at what it delivers (construct's
 #                                      change, code's ticked tasks, verify's report, settle's commit, merge's commit
