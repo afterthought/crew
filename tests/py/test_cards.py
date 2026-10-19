@@ -683,6 +683,19 @@ class TestFollows:
         assert built.follows_of("land", {"bolt": "b7"}, lost) is None
         assert [built.follows_of(k, {}, self.E) for k in ("proposal", "batch", "record")] == [None, None, None]
 
+    D1 = dict(Act="card.post", Key="deploy/srv", By="swancloud-ops", Card="req_d1")
+
+    @pytest.mark.parametrize("entries, key", [
+        ([D1], "deploy/srv"),
+        ([D1, dict(Act="card.close", Card="req_d1", Key="deploy/srv", State="closed")], None),
+        ([D1, dict(Act="card.close", Card="req_d1")], None),
+        ([dict(D1, By="swb-1-conductor")], None),
+        ([D1, dict(Act="card.close", Card="req_d1", Refused="Pending You refused the close: This request is already closed.")], "deploy/srv"),
+        ([dict(D1, Card=None, Refused="Pending You refused post_request: x")], None),
+        ([dict(Act="card.post", Key="land/b1", By="swancloud-ops", Card="req_l1")], None)])
+    def test_the_key_a_followed_card_is_still_open_under_is_read_from_the_record_alone(self, entries, key):
+        assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
+
 
 class TestStep:
     def test_the_users_step_is_a_do_with_its_commands_whole_where_and_done_when(self):
@@ -892,7 +905,7 @@ class TestRecordCommand:
         from test_card_commands import Acts, MATCHED, POSTED
         where, f = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), recorded(MADR, "proposed")
         held = [dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
-        for status, state, follows in (("closed", "closed", "req_c1"), ("cancelled", "withdrawn", None), ("expired", "withdrawn", None)):
+        for status, state, follows in (("resolved", "closed", "req_c1"), ("cancelled", "withdrawn", None), ("expired", "withdrawn", None)):
             acts = Acts({"get_request": ({"status": status, "version": 4}, None), "match_area": (MATCHED, None),
                          "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=held, caller="wldn-design")
             assert plan.raise_record(None, "wldn", f, where, "Revised at 9ab0123: ops.7 loosened", acts) == "req_c2"
@@ -900,10 +913,59 @@ class TestRecordCommand:
             assert (acts.emitted[0]["Act"], acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("card.close", state, plan.ENDED_ELSEWHERE)
             assert acts.calls[2][1]["idempotencyKey"] == "record/switchboard-kit/0032:2"
             assert acts.calls[2][1].get("follows") == follows
-        acts = Acts({"get_request": ({"status": "closed", "version": 4}, None)}, entries=held, caller="wldn-design")
+        acts = Acts({"get_request": ({"status": "resolved", "version": 4}, None)}, entries=held, caller="wldn-design")
         assert plan.row_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", outcome="Accepted", acts=acts) == "req_c1"
         assert [c[0] for c in acts.calls] == ["get_request"]
         assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
+
+
+class TestPickedUp:
+    """mac-studio's run record of 2026-10-19 (signal 2026-10-19-swancloud-ops-5b7775dd/01): the user approved
+    deploy/mac-studio's card, its deploy recorded a step that is the user's, and crew posted op/mac-studio/1's card
+    following the deploy's card, which Pending You then resolved. The deploy's end was refused "This request is already
+    closed.", and the offer of d35fbf2 went to the resolved card as a change, refused "This was already answered"."""
+    OWNER, WHERE = "swancloud-ops", ("/kit/main", "github.com/agentplot/swancloud")
+    STEP = dict(env="mac-studio", n=1, text="restart crew's teams on mac-studio", doer="user", held=False, gate=None, follows="req_d1")
+    OFFER = dict(env="mac-studio", head="d35fbf2" + "0" * 33, base="97e54d5" + "0" * 33,
+                 landings=[{"pr": 48, "subject": "A deploy card resolved under its step card reads closed"}],
+                 notes=None, steps=[], before=[{"env": "deneb", "policy": "manual"}], after=[])
+
+    def held(self, entries, acts):
+        """The run record after an act: what it held, and each entry the act emitted, as record.emit writes it."""
+        return entries + [dict({k: v for k, v in e.items() if k not in ("by", "label", "refused")}, By=e["by"],
+                               **({"Refused": e["refused"]} if "refused" in e else {})) for e in acts.emitted]
+
+    def test_a_deploy_card_picked_up_by_its_steps_card_then_the_deploys_end_and_the_next_offer_to_that_environment(self):
+        from test_card_commands import Acts, MATCHED, POSTED
+        entries = [dict(Act="card.post", Key="land/b48", By="crw-2-conductor", Card="req_l48"),
+                   dict(Act="bolt.land", On=["bolt/b48"], Head=self.OFFER["head"]),
+                   dict(Act="card.close", Card="req_l48", Key="land/b48", By="crw-2-conductor", State="closed"),
+                   dict(Act="card.post", Key="deploy/mac-studio", By=self.OWNER, Card="req_d1")]
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s1"), None),
+                     "get_request": ({"status": "resolved", "version": 5}, None)}, entries=entries, caller=self.OWNER)
+        assert plan.row_card_change(None, "swancloud", self.OWNER, built.step_card, self.STEP, "x", self.WHERE, acts) == "req_s1"
+        assert acts.calls[2] == ("get_request", {"requestId": "req_d1", "name": self.OWNER})
+        assert [(e["Act"], e["Card"], e["Key"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+            ("card.post", "req_s1", "op/mac-studio/1", None, None), ("card.close", "req_d1", "deploy/mac-studio", "closed", plan.FOLLOWED)]
+        entries = self.held(entries, acts)
+        assert built.card_under(entries, "deploy/mac-studio", self.OWNER) is None
+
+        acts = Acts({"get_request": ({"status": "resolved", "version": 5}, None),
+                     "cancel_request": (None, "This request is already closed.")}, entries=entries, caller=self.OWNER)
+        assert plan.row_card_close(None, "swancloud", self.OWNER, "deploy/mac-studio",
+                                   outcome="Deployed 97e54d5 to mac-studio: machine ok, suite ok.", acts=acts) is None
+        assert acts.calls == [] and acts.emitted == []
+
+        follows = built.follows_of("deploy", {"env": "mac-studio", "head": self.OFFER["head"]}, entries)
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_d2"), None),
+                     "update_request": (None, "This was already answered; follow up with reply_in_thread.")},
+                    entries=entries, caller=self.OWNER)
+        assert plan.row_card_change(None, "swancloud", self.OWNER, built.deploy_card, dict(self.OFFER, follows=follows),
+                                    "Now d35fbf2", self.WHERE, acts) == "req_d2"
+        assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
+        assert (acts.calls[1][1]["idempotencyKey"], acts.calls[1][1]["follows"]) == ("deploy/mac-studio:2", "req_l48")
+        entries = self.held(entries, acts)
+        assert built.card_under(entries, "deploy/mac-studio", self.OWNER) == "req_d2"
 
 
 class TestBatch:
@@ -990,6 +1052,15 @@ class TestActDecisions:
             "ack_answer", {"requestId": "req_a", "name": "wldn-ops", "expectedVersion": 3, "outcome": "Deployed at 14:20"}, "closed")
         assert built.close_call({"status": "pending", "version": 1}, "req_a", "wldn-ops", reason="A newer head") == (
             "cancel_request", {"requestId": "req_a", "name": "wldn-ops", "reason": "A newer head"}, "withdrawn")
+
+    @pytest.mark.parametrize("got, state", [
+        ({"status": "resolved"}, "closed"), ({"status": "cancelled"}, "withdrawn"), ({"status": "expired"}, "withdrawn"),
+        ({"status": "pending"}, None), ({"status": "snoozed"}, None), ({"status": "delegated"}, None),
+        ({"status": "answered"}, None), ({"status": "closed"}, None), ({}, None), (None, None), ("resolved", None)])
+    def test_a_card_pending_you_resolved_reads_closed_and_one_it_cancelled_or_expired_withdrawn(self, got, state):
+        """Pending You 0.35.1 ends a card as resolved, cancelled or expired, and gives no `closed` (its wake mod's
+        CLOSED): mac-studio's deploy card of 2026-10-19 was resolved by its step's card, which followed it."""
+        assert built.ended(got) == state
 
     def test_a_change_carries_only_what_update_request_takes_and_a_card_posted_again_says_its_older_copy_is_dead(self):
         c = landing()["card"]

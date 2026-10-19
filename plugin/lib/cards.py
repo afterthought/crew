@@ -128,6 +128,21 @@ def card_under(entries, key, by):
     return held
 
 
+def followed_open(entries, card, by):
+    """The key under which the run record still holds open the agent `by`'s card a new post follows: the key of its
+    newest card.post of that card, done, that no later card.close of the card closes, a close naming no key among
+    them; None when it holds none. entries are in the order they were written."""
+    key = None
+    for e in entries:
+        if e.get("Card") != card or e.get("Refused"):
+            continue
+        if e.get("Act") == "card.post" and e.get("By") == by:
+            key = e.get("Key")
+        elif e.get("Act") == "card.close":
+            key = None
+    return key
+
+
 def lost(words):
     """Whether Pending You's refusal says it no longer finds the card: what a card posted under another sign-in reads
     as to its owner once the host has signed in again (ADR 0005 as amended 2026-10-11)."""
@@ -882,16 +897,19 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
-# The statuses get_request gives a card that waits on nobody any more: acked, withdrawn or expired.
-ENDED = ("closed", "cancelled", "expired")
+# The statuses get_request gives a card that waits on nobody any more: picked up or acked, withdrawn, or expired
+# (pendingyou 0.35.1, its wake mod's CLOSED); it gives no `closed`.
+ENDED = ("resolved", "cancelled", "expired")
 
 
 def ended(got):
-    """Whether get_request gives a card already ended in Pending You by another hand than crew's close, so crew can
-    neither change nor close it, and the run record must say it closed: the mac-studio deploy card of 2026-10-19,
-    acked when its word was recorded, refused every change and close for seven hours after, and no later offer of
-    mac-studio reached the user."""
-    return isinstance(got, dict) and got.get("status") in ENDED
+    """The state crew records a card in once get_request gives it ended in Pending You by another hand than crew's
+    close, so crew can neither change nor close it, and the run record must say it closed: "closed" when it is
+    resolved, answered and picked up, "withdrawn" when it is cancelled or expired, and None for any other reply. The
+    mac-studio deploy card of 2026-10-19 was resolved by the after-deploy step's card posted following it, refused
+    every close and change for six hours after, and no later offer of mac-studio reached the user."""
+    status = got.get("status") if isinstance(got, dict) else None
+    return None if status not in ENDED else "closed" if status == "resolved" else "withdrawn"
 
 
 def revision(got, kind_changed=False, questions=False):
