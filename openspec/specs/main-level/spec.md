@@ -253,3 +253,35 @@ What the user settled in their own words in the design talk SHALL be quoted in t
 #### Scenario: A record from the signals, accepted on its card
 - **WHEN** the design agent runs `crew record crew 32 --proposed`, the user accepts the card, and the design agent commits it accepted and runs `crew record crew 32 --accepted`
 - **THEN** the card was raised, and is closed with the accepting commit
+
+### Requirement: A signal names where what its words point at lives
+An agent recording a signal whose words point at something made elsewhere (another conversation, a page or prototype, an artifact, files in another repo, a spike) SHALL find it and name in the signal's sentence where it lives, in a form another agent can open: `<owner>/<repo>:<path>`, a branch, or an artifact's link. A conversation's id alone SHALL NOT stand for what the conversation made. The excerpt SHALL stay the words as said.
+
+#### Scenario: The user pastes a conversation's id
+- **WHEN** the user asks the planner for work and pastes the id of a conversation, held in another repo, that wrote the design pages and published the artifact the work rests on
+- **THEN** the signal the planner records quotes the user's words, id and all, and its sentence names those pages by repo and path and the artifact by its link
+
+### Requirement: A unit made from a signal names what the signal points at
+A unit the planner proposes from a signal, or the design agent queues from one, SHALL name with `--source` what the signal points at, beside the signal itself.
+
+#### Scenario: Work queued from a signal that names a page
+- **WHEN** the planner proposes a unit from a signal whose sentence names a page in another repo
+- **THEN** the unit's sources are the signal and that page, and the construct's prompt carries both
+
+### Requirement: A greeting is taken or sent again
+A greeting crew sends, to a conductor or to any agent crew starts outside a team, SHALL be sent only once the agent is ready for input, and crew SHALL then read the agent's transcript to see that Claude received it within a short time. When it does not, and the agent sits idle or done, crew SHALL clear what was left typed in the agent's input and send the greeting once more. Exactly one greeting SHALL reach the agent per start.
+
+#### Scenario: A greeting taken at once
+- **WHEN** `crew up swb-1` starts the conductor and its transcript shows the greeting received moments after crew sent it
+- **THEN** crew says swb-1-conductor was greeted, records one greeting, and sent it once
+
+#### Scenario: A greeting left typed
+- **WHEN** crew greets wldn-planner and the planner's transcript shows nothing received within the time, while it sits idle
+- **THEN** crew clears the planner's input, sends the greeting once more, and says it was greeted once the transcript shows it
+
+### Requirement: A greeting not taken is reported, with nothing left typed
+When the second sending of a greeting is not taken either, crew SHALL leave nothing typed, record no greeting, and say the agent was not greeted, with the `crew tell` that would greet it. When crew cannot read whether the greeting was taken, it SHALL send nothing more and say what it could not read. A greeting that is not delivered SHALL fail nothing else the command does.
+
+#### Scenario: A greeting never taken
+- **WHEN** neither sending of wldn-design's greeting shows in its transcript within the time
+- **THEN** its input is cleared, crew says wldn-design was not greeted and gives the `crew tell wldn-design "<greeting>"` that would greet it, no greeting is recorded, and `crew main up` goes on with its other agents

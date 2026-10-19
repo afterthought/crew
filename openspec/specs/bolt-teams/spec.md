@@ -679,3 +679,61 @@ A conflict between two units, forecast, met at a rebase or met at merge, SHALL b
 #### Scenario: A merge conflicts
 - **WHEN** B's merge into the bolt conflicts with A, which merged first
 - **THEN** B's agent resolves it in B's place with A's change in hand, and B merges again
+
+### Requirement: A construct reads every source it is handed, and what each points at
+A construct SHALL read each of its unit's sources, and SHALL open what each points at: a page or file it names, an artifact's link, a branch. It SHALL read a page as committed on its repository's main when the stage starts, not the bolt's copy in its own worktree, and a signal with `crew signal show`. A construct run again SHALL read the sources afresh.
+
+#### Scenario: A signal points at a page in another repo
+- **WHEN** a unit's sources are a signal and the signal names a page in another repo where the user's design lives
+- **THEN** the construct reads the signal with `crew signal show`, opens that page, and cites both
+
+#### Scenario: A record lands after the bolt is cut
+- **WHEN** the design agent commits a record on the kit's main after the unit's bolt was cut, and the unit names that record as a source
+- **THEN** the unit's construct reads the record as main holds it, not the bolt's older copy in the unit's worktree
+
+### Requirement: A construct stops on a source it cannot open
+When a construct cannot open one of its unit's sources, or something a source points at, it SHALL stop through `crew needs`, naming what it could not open and which source named it, and SHALL NOT write the change from the intent in its place.
+
+#### Scenario: A signal names only a conversation's id
+- **WHEN** a unit's source is a signal whose words point at a conversation by its id, and nothing names what that conversation made
+- **THEN** the construct commits no change and stops through crew, naming the conversation and the signal
+
+### Requirement: A construct builds from its sources where the intent says more or otherwise
+Where a unit's intent says more than its sources, or says something they contradict, its construct SHALL write the change from the sources, and its final message SHALL open with the difference: what the intent says, what the sources say instead, and which source. A construct whose intent and sources agree SHALL say nothing of a difference.
+
+#### Scenario: The intent names a measure the sources do not
+- **WHEN** a unit's intent names a measure and its sample points, and the design its sources lead to shows a different measure
+- **THEN** the change builds the sources' measure, and the construct's final message opens by naming the intent's measure, the sources', and the source
+
+#### Scenario: Intent and sources agree
+- **WHEN** a unit's intent names only the outcome its sources describe
+- **THEN** the construct writes the change and its final message names no difference
+
+### Requirement: A stage begins only when its agent takes its prompt
+When crew starts a stage in a slot (construct, code, verify or merge of a unit, a fix, or a fix's merge), it SHALL send the stage's prompt only once the slot's new agent is ready for input: herdr reports it idle or done, it waits on no question in its pane, and herdr names its session. The stage SHALL begin only when the agent's transcript shows that Claude received the prompt after crew sent it, within a short time. Text typed into a pane and not submitted SHALL never be a stage's state.
+
+#### Scenario: The prompt is taken
+- **WHEN** `crew unit run a code` starts a fresh agent in a's slot, and the agent's transcript shows `/opsx:apply a` received moments after crew sent it
+- **THEN** the command says the slot has a in code, records the stage's start, and owes its end, having sent the prompt once
+
+#### Scenario: The agent never becomes ready
+- **WHEN** a fix's fresh agent stays on a question in its pane, and never becomes ready for input within the time crew waits
+- **THEN** nothing is typed into its pane, and the command fails saying the fix's stage never started because its agent was waiting on a question
+
+### Requirement: A stage's prompt not taken is sent once more
+When the agent's transcript does not show the stage's prompt received within the time, and the agent sits idle or done, crew SHALL clear what was left typed in the agent's input and send the prompt once more, and read the transcript again. crew SHALL never send a prompt again, or press anything in the pane, while the agent is working.
+
+#### Scenario: The prompt is left typed
+- **WHEN** `crew unit run a code` sends the prompt and the agent's transcript shows nothing received within the time, while the agent sits idle
+- **THEN** crew clears the agent's input, sends the prompt once more, and, when the transcript then shows it received, records the stage's start as for a prompt taken at once
+
+### Requirement: A stage whose prompt is not taken never started
+When the second sending is not taken either, or the agent never becomes ready for input, crew SHALL leave nothing typed in the pane, record the stage's start as refused with the reason, owe no end for it, and fail, saying the stage never started and how to run it again. When crew cannot read whether the prompt was taken, it SHALL send nothing more, record the start as refused naming what it could not read, and fail.
+
+#### Scenario: The second sending is not taken either
+- **WHEN** neither sending of a's code prompt shows in the agent's transcript within the time
+- **THEN** the agent's input is cleared, the command fails saying a's code stage never started and to run `crew unit run a code` again, the run record holds the start as refused, and `crew unit wait a` finds no stage owed
+
+#### Scenario: crew cannot read whether it was taken
+- **WHEN** a merge stage's prompt is sent, and the agent's transcript cannot be read, or the agent is working while its transcript shows no prompt received
+- **THEN** the prompt is not sent again and nothing is pressed in the pane, and the command fails naming what crew could not read
