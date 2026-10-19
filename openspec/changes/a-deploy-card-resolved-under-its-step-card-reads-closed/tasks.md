@@ -7,7 +7,7 @@
 
 ## 2. A card picked up by the card that follows it
 
-- [ ] 2.1 A post that follows a card the record holds open reads that card once posted and records it closed when Pending You has ended it, the post standing whatever the read gives, proved by logic cases in `tests/py/test_card_commands.py` (design: decision 2; Task notes 2.1; `briefs.16`, `read.1`, `record.1`).
+- [x] 2.1 A post that follows a card the record holds open reads that card once posted and records it closed when Pending You has ended it, the post standing whatever the read gives, proved by logic cases in `tests/py/test_card_commands.py` (design: decision 2; Task notes 2.1; `briefs.16`, `read.1`, `record.1`).
 - [ ] 2.2 mac-studio's sequence of 2026-10-19 runs to a deploy card closed at its step's post, a deploy end that sends nothing, and a new card for the next offer, proved by its reproducing logic case in `tests/py/test_cards.py` (design: decision 3; Task notes 2.2; `tests.4`, `plan.14`).
 
 ## 3. A question already ended

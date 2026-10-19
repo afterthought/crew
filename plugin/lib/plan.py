@@ -8785,6 +8785,8 @@ RENEWED = "changed in kind: a new card follows it"
 REASKED = "changed with its questions: a new card follows it"
 # A card Pending You had ended already, by another hand than crew's close, as its close is recorded (cards.ended).
 ENDED_ELSEWHERE = "ended in Pending You already"
+# A card Pending You resolved as crew's post of a card following it went in, as its close is recorded (card_posted).
+FOLLOWED = "picked up in Pending You by the card that follows it"
 
 
 def card_where(kit):
@@ -8839,30 +8841,67 @@ def card_posted(acts, label, owner, b, where, entries=None):
     and recorded under the row's key. A post Pending You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
     this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
-    that card, printed with the line that adopts it and recorded once, by the command that recorded it first."""
+    that card, printed with the line that adopts it and recorded once, by the command that recorded it first. A post
+    that follows a card of the owner's those entries still hold open reads that card once it is made, and records it
+    closed when Pending You has ended it, as it picks up an answered card a new card follows (followed_closed); one
+    given back as recorded already reads nothing, the command that recorded it having read it."""
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
     cwd, remote = where
-    asked = cards.post_key(acts.entries(label) if entries is None else entries, key, owner)
+    known = acts.entries(label) if entries is None else entries
+    asked = cards.post_key(known, key, owner)
+    follows = b["card"].get("follows")
+    held = cards.followed_open(known, follows, owner) if follows else None
     try:
         with acts.bridge(owner, CARD_LATER) as py:
             area = card_area(py, label, cwd, remote, owner)
             got = py.call("post_request", cards.post_args(b["card"], asked, owner, acts.host(), cwd, area))
             card = cards.request_id(got, "post_request")
             card_uploaded(acts, key, b, got)
+            again = cards.card_under(acts.entries(label), key, owner) == card
+            read = followed_read(py, follows, owner) if held and not again else None
     except Refusal as e:
         acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
         print(f"card {key} not posted: {e}", file=sys.stderr)
         return None
     url = got.get("url")
     url = f" {url}" if isinstance(url, str) else ""
-    if cards.card_under(acts.entries(label), key, owner) == card:
+    if again:
         print(f"card {key}: {card}{url}, its post recorded already")
         print(cards.adopt_line(card, owner))
         return card
     acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
     print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
+    if held:
+        followed_closed(acts, label, owner, held, follows, card, *read)
     return card
+
+
+def followed_read(py, card, owner):
+    """The card a post followed, read in the post's session once the post is made: (get_request's answer, None), or
+    (None, why) when it could not be read, the session's failure caught here so the post stands."""
+    try:
+        got, words = py.answer("get_request", {"requestId": card, "name": owner})
+    except Refusal as e:
+        return None, str(e).removesuffix(f" {CARD_LATER}")
+    return (None, f"Pending You refused get_request: {words}") if words is not None else (got, None)
+
+
+def followed_closed(acts, label, owner, key, card, by, got, why):
+    """The card a post followed, held open under key, once read: recorded closed when Pending You has ended it, picked
+    up by the card by that follows it when it reports it resolved; left as the run record holds it while it waits or
+    is answered, for the event that ends it to close, and when the read failed, which is said."""
+    if why:
+        print(f"card {key}: whether {card} was picked up can't be read: {why}", file=sys.stderr)
+        return
+    state = cards.ended(got)
+    if not state:
+        return
+    picked = got.get("status") == "resolved"
+    acts.emit(label, "card.close", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key, State=state,
+              Outcome=FOLLOWED if picked else ENDED_ELSEWHERE)
+    print(f"card {key}: {card} picked up in Pending You by {by}, which follows it" if picked else
+          f"card {key}: {card} was {state} in Pending You already")
 
 
 # The fact a builder takes a card's reading session's link as, by the kind of card that links one (briefs.9).
