@@ -4,7 +4,7 @@ What is still open now that every page is written. A working file: an item leave
 
 ## Decisions waiting
 
-- **sluice 0.3.1's `wt submit --help` removes the worktree it ran in** (wldn's atl-1, 2026-10-14; read on mac-studio the same day): sluice's defect, the user's sluice work; until it is fixed CLAUDE.md and `teams.5` say no agent runs it in a worktree, and the briefs' line is a chore of the planner's. The item leaves when sluice's fix is on the hosts.
+- **sluice 0.3.1's `wt submit --help` removes the worktree it ran in** (wldn's atl-1, 2026-10-14; read on mac-studio the same day): sluice's defect, the user's sluice work; until it is fixed CLAUDE.md, `teams.5` and every brief that names `wt submit` say no agent runs it in a worktree, `tests/t-briefs.sh` checking the briefs' line. The item leaves when sluice's fix is on the hosts.
 - **Where meeting signals live** (daily-pass-through-crew, decision D7): the blueprints, or the flywheel's branch with an agent's signals.
 - **Who is told about a finding outside a bolt**: the conductor and main-ops briefs say the planner, the ops brief the conductor, the planner brief the design agent; curation-and-agenda, approved and placed, settles it as "a noticing agent captures and tells nobody" when it lands.
 - **`docs.7`, proposed 2026-10-11 on the user's card**: the design pages have one writer and a unit never edits them; eight landings since the 9th conflicted on an open-items page, two of them swancloud's. Once accepted: `a-unit-never-edits-the-design-pages`.
