@@ -40,6 +40,7 @@ None.
 
 ```
 plugin/lib/plan.py
+plugin/lib/record.py
 plugin/roles/conductor.md
 plugin/roles/planner.md
 tests/py/test_forecast.py
