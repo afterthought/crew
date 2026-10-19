@@ -6,9 +6,6 @@
 toolchain = ["devenv", "print-dev-env"]
 runner = "moon"
 
-[checkout]
-method = "git-worktree"
-
 # crew's tests run open on the host, as they run in a worktree (the user, 2026-10-13: "On the host for now"): they write
 # the host's test slots, ~/.cache/crew/test-slots (tests.9), and moon's archives in the git common dir, both outside the
 # checkout sluice's sandbox confines writes to.
@@ -16,9 +13,13 @@ method = "git-worktree"
 kind = "open"
 
 # A merge into a bolt and a landing each take every check-full task, run open and afresh: neither trusts a replay
-# (tests.5, tests.10).
+# (tests.5, tests.10). A run takes about two minutes and has taken seven on a loaded host, so one past twenty is stuck
+# and is ended rather than holding the queue for sluice's default hour; a task that both passes and fails on the same
+# tree fails.
 [branches."bolt/*"]
 required = ["#check-full"]
+flaky = "fail"
+timeout = "20m"
 trust = ["open"]
 
 # main lives on GitHub (swancloud ADR 0027): every round fetches it from origin and forms on it, and a landing is a push
@@ -28,6 +29,8 @@ trust = ["open"]
 [branches.main]
 remote = "origin"
 required = ["#check-full"]
+flaky = "fail"
+timeout = "20m"
 trust = ["open"]
 
 [branches.main.pull_requests]
