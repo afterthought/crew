@@ -5617,7 +5617,8 @@ def forecast_orders(after_of, unmerged, entries, holds):
                 pairs.append(pair)
     order, lift = [], []
     for unit, other in pairs:
-        forecasts = [e for e in entries if e.get("Act") == "forecast" and not e.get("Refused") and (e.get("On") or [])[:2] == [f"unit/{unit}", f"unit/{other}"]]
+        forecasts = [e for e in entries if e.get("Act") == "forecast" and not e.get("Refused")
+                     and (e.get("On") or [])[:2] == [f"unit/{unit}", f"unit/{other}"]]
         records = [e for e in entries if e.get("Act") == "unit.after" and not e.get("Refused") and f"unit/{unit}" in (e.get("On") or [])
                    and (e.get("After") == other or e.get("Lifted") == other or forecast_ordered(e) == (unit, other))]
         ends = [e for e in entries if e.get("Act") == "stage.end" and not e.get("Refused") and f"stage/{unit}/settle" in (e.get("On") or [])]
@@ -5643,8 +5644,8 @@ def settle_orders(fleet, t, plan, st, unit=None):
     """What forecast_orders says for the unmerged units of the team's bolts, or for one unit, written: each pair put in
     order or lifted in a write of its own in the waiting conductor's name (roles.1, state.1), the conductor told
     nothing by it, since its wait says it. Whether the unit's branch holds the other's work is read with git on the
-    team's host (branch_holds). A write refused, or a pair git can't read, is said on standard error, and the next wait decides
-    again. Returns what the writes did, a sentence each."""
+    team's host (branch_holds). A write refused, or a pair git can't read, is said on standard error, and the next wait
+    decides again. Returns what the writes did, a sentence each."""
     main, label, said, entries = t["kit"]["main"], t["label"], [], None
     for b in held_by(plan, t["name"]):
         order_of, after_of = bolt_order(plan, b.name())
@@ -5969,8 +5970,8 @@ def stage_wait(fleet, a):
     is gone, or the timeout passes, and print the one line that says which. A delivered end is recorded here; nothing
     else is. The wait holds waits/<slot>.lock for its life, so crew needs knows a wait is there to hand its words to.
     A unit's settle that ends delivered or short orders or lifts its unit's forecast orders, and its line says so
-    (settle_said). Each look also reads sluice's overview, and says at once, before that line, each conflict or blame sluice records
-    for a submission from the stage's place (overview_look)."""
+    (settle_said). Each look also reads sluice's overview, and says at once, before that line, each conflict or blame
+    sluice records for a submission from the stage's place (overview_look)."""
     t = crew.team_of(fleet, a.team)
     agent = f"{t['name']}-{a.slot}"
     (team_state(t) / "waits").mkdir(parents=True, exist_ok=True)
