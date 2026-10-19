@@ -1,10 +1,12 @@
 """A team's slots, panes and status on its host (teams.1, teams.2, teams.9, teams.15, read.1, read.2), as crew unit run,
 crew unit wait, crew fix and crew status decide them in one process: crew.slot_for for the slot a unit or fix runs in,
 crew.reaped for what a team's read does with a slot, crew.held_object for how the run record names what a slot holds,
-crew.slot_pane_at for where a slot's pane opens, crew.listed for reading herdr's listings, crew.context_of and
-crew.holds_said for what status shows, and the words crew says when a stage is refused. Taking a slot, starting its
-agent and sending its prompt through the command are the units journey's (t-journey-units, t-journey-slots)."""
+crew.slot_pane_at for where a slot's pane opens, crew.listed for reading herdr's listings, crew.herdr_made for reading
+what herdr made, crew.context_of and crew.holds_said for what status shows, and the words crew says when a stage is
+refused. Taking a slot, starting its agent and sending its prompt through the command are the units journey's
+(t-journey-units, t-journey-slots)."""
 import json
+import types
 
 import pytest
 
@@ -106,6 +108,54 @@ class TestListed:
         with pytest.raises(crew.Refusal) as e:
             crew.listed("agent", 0, '{"result": {"agents": null}}', "", "in session wldn-1 on mac-studio")
         assert str(e.value) == "herdr's agent list in session wldn-1 on mac-studio can't be read"
+
+
+# herdr's `workspace create` answer, as crew reads it and the stub herdr gives it.
+CREATED = {"result": {"workspace": {"workspace_id": "w3", "label": "crw-2 units"}, "tab": {"tab_id": "w3:t1"},
+                      "root_pane": {"pane_id": "w3:p1"}}}
+WORKSPACE_ID = [("workspace", "workspace_id")]
+
+
+def created(**workspace):
+    return json.dumps({"result": {**CREATED["result"], "workspace": workspace}})
+
+
+class TestMade:
+    def test_a_workspace_herdr_made_is_read_with_its_id(self):
+        made = crew.herdr_made("workspace", "create", 0, json.dumps(CREATED), "", "in session crw-2", WORKSPACE_ID)
+        assert made["workspace"]["workspace_id"] == "w3"
+
+    @pytest.mark.parametrize("out", [created(workspace_id="", label="crw-2 units"), created(label="crw-2 units"),
+                                     created(workspace_id=None), json.dumps({"result": {"tab": {"tab_id": "w3:t1"}}})])
+    def test_a_workspace_with_an_empty_or_missing_id_is_refused_as_a_malformed_answer_is(self, out):
+        with pytest.raises(crew.Refusal) as e:
+            crew.herdr_made("workspace", "create", 0, out, "", "in session crw-2", WORKSPACE_ID)
+        assert str(e.value) == "herdr could not create a workspace in session crw-2: exit 0"
+        with pytest.raises(crew.Refusal) as malformed:
+            crew.herdr_made("workspace", "create", 0, "not json", "", "in session crw-2", WORKSPACE_ID)
+        assert str(malformed.value) == str(e.value)
+
+    def test_a_refusal_is_in_herdrs_words_when_it_says_any(self):
+        with pytest.raises(crew.Refusal) as e:
+            crew.herdr_made("workspace", "create", 1, "", 'herdr: starting\n{"error":{"code":"internal","message":"boom"}}\n',
+                            "in session crw-2", WORKSPACE_ID)
+        assert str(e.value) == 'herdr could not create a workspace in session crw-2: {"error":{"code":"internal","message":"boom"}}'
+
+    def test_a_workspace_with_no_id_is_kept_nowhere_so_no_tab_is_made_against_it(self, tmp_path):
+        acts = []
+
+        class Herdr:
+            def run(self, *args):
+                acts.append(args[:2])
+                return types.SimpleNamespace(returncode=0, stdout=created(workspace_id="", label="crw-2 units"), stderr="")
+
+        agents = crew.Agents(None, "team", "crw-2", "crew", "crw-2", tmp_path, None, "/w", None)
+        agents.herdr = Herdr()
+        agents.ensure()
+        with pytest.raises(crew.Refusal):
+            agents.workspace("crw-2 units", "/w")
+        assert (tmp_path / "layout").read_text() == "" and agents.get("layout", crew.ws_key("crw-2 units")) == ""
+        assert acts == [("workspace", "create")]
 
 
 def record(**v):
