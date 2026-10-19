@@ -128,6 +128,21 @@ def card_under(entries, key, by):
     return held
 
 
+def followed_open(entries, card, by):
+    """The key under which the run record still holds open the agent `by`'s card a new post follows: the key of its
+    newest card.post of that card, done, that no later card.close of the card closes, a close naming no key among
+    them; None when it holds none. entries are in the order they were written."""
+    key = None
+    for e in entries:
+        if e.get("Card") != card or e.get("Refused"):
+            continue
+        if e.get("Act") == "card.post" and e.get("By") == by:
+            key = e.get("Key")
+        elif e.get("Act") == "card.close":
+            key = None
+    return key
+
+
 def lost(words):
     """Whether Pending You's refusal says it no longer finds the card: what a card posted under another sign-in reads
     as to its owner once the host has signed in again (ADR 0005 as amended 2026-10-11)."""

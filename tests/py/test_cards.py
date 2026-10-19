@@ -683,6 +683,19 @@ class TestFollows:
         assert built.follows_of("land", {"bolt": "b7"}, lost) is None
         assert [built.follows_of(k, {}, self.E) for k in ("proposal", "batch", "record")] == [None, None, None]
 
+    D1 = dict(Act="card.post", Key="deploy/srv", By="swancloud-ops", Card="req_d1")
+
+    @pytest.mark.parametrize("entries, key", [
+        ([D1], "deploy/srv"),
+        ([D1, dict(Act="card.close", Card="req_d1", Key="deploy/srv", State="closed")], None),
+        ([D1, dict(Act="card.close", Card="req_d1")], None),
+        ([dict(D1, By="swb-1-conductor")], None),
+        ([D1, dict(Act="card.close", Card="req_d1", Refused="Pending You refused the close: This request is already closed.")], "deploy/srv"),
+        ([dict(D1, Card=None, Refused="Pending You refused post_request: x")], None),
+        ([dict(Act="card.post", Key="land/b1", By="swancloud-ops", Card="req_l1")], None)])
+    def test_the_key_a_followed_card_is_still_open_under_is_read_from_the_record_alone(self, entries, key):
+        assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
+
 
 class TestStep:
     def test_the_users_step_is_a_do_with_its_commands_whole_where_and_done_when(self):
