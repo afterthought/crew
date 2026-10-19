@@ -16,7 +16,7 @@
 
 ## 4. The brief
 
-- [ ] 4.1 Main-level ops's *Deploying main* says how a gate is recorded, that no offer is posted for it, and how its step ends; proved by its words in `tests/t-briefs.sh` (design, *Task notes* 4.1).
+- [x] 4.1 Main-level ops's *Deploying main* says how a gate is recorded, that no offer is posted for it, and how its step ends; proved by its words in `tests/t-briefs.sh` (design, *Task notes* 4.1).
 
 ## 5. Checks
 
