@@ -17,4 +17,4 @@
 ## 4. The stub, and the suite
 
 - [x] 4.1 The stub pendingyou picks up the answered card a post follows and refuses to cancel a card already ended, in Pending You's words, as Pending You does (design: decision 5; Task notes 4.1; `tests.4`).
-- [ ] 4.2 `tests/suite logic` and then `tests/suite --affected` each end "0 failed" (Task notes 4.2; `tests.5`, `tests.12`).
+- [x] 4.2 `tests/suite logic` and then `tests/suite --affected` each end "0 failed" (Task notes 4.2; `tests.5`, `tests.12`).
