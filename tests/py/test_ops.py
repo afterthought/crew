@@ -460,19 +460,19 @@ class TestOneStepCardAtATime:
     STEPS = [e("ops.step", minutes=1, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher"),
              e("ops.step", minutes=2, Head=S1, Key="rotate/1", State="waiting", Doer="user"),
              e("ops.step", minutes=3, Head=S1, Key="restart-herdr/1", State="waiting", Doer="main-ops", When="held")]
-    DEPLOY = [card("card.post", "deploy/mac-studio", "req_d", 1)]
+    DEPLOY = [card("card.post", "deploy/mac-studio", "req_d", 1, By="wldn-ops")]
 
     def test_the_first_step_that_waits_on_the_user_is_raised_and_the_next_only_once_its_card_closes(self):
         due, open_ = ops.step_due(self.STEPS, self.DEPLOY, "mac-studio")
         assert (due[0], due[1], open_) == (2, ("mac-studio", S1, "rotate/1"), None)
-        posted = self.DEPLOY + [card("card.post", "op/mac-studio/2", "req_s2", 2)]
+        posted = self.DEPLOY + [card("card.post", "op/mac-studio/2", "req_s2", 2, By="wldn-ops")]
         assert ops.step_due(self.STEPS, posted, "mac-studio") == (None, "op/mac-studio/2")
         done = self.STEPS + [e("ops.step", minutes=4, Head=S1, Key="rotate/1", State="done")]
         closed = posted + [card("card.close", "op/mac-studio/2", "req_s2", 3, State="closed")]
         due, open_ = ops.step_due(done, closed, "mac-studio")
         assert (due[0], due[1][2], open_) == (3, "restart-herdr/1", None)
-        follows = cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/3"}, closed)
-        assert follows == "req_s2" and cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/2"}, self.DEPLOY) == "req_d"
+        follows = cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/3"}, closed, "wldn-ops")
+        assert follows == "req_s2" and cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/2"}, self.DEPLOY, "wldn-ops") == "req_d"
 
     def test_a_step_whose_card_was_raised_is_not_raised_again_and_another_environments_card_holds_none(self):
         had = self.DEPLOY + [card("card.post", "op/mac-studio/2", "req_s2", 2), card("card.close", "op/mac-studio/2", "req_s2", 3),

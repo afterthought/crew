@@ -1570,7 +1570,7 @@ def land_facts(fleet, label, plan, b, t):
 def raise_land(fleet, row, acts=None, note=None):
     """A bolt's landing card raised (record 0031 §1, plan.16), for its rail row land/<bolt>, on the host of the team
     holding the bolt, where its conductor's cards are: once the bolt reads proven (land_facts), in the conductor's name,
-    following the card a fix held (follows_of), posted through row_card_change, so a card the conductor holds is
+    following its own card a fix held (follows_of), posted through row_card_change, so a card the conductor holds is
     changed in place, its head moved, or followed by a new one once the user answered it, and one Pending You no longer
     finds is posted again; its reading session, on what the bolt brings to main, is started first on this host and its
     link put on the card (card_built), a session on an older head ended (reading_open); a preview of its head, in a kit
@@ -1589,10 +1589,11 @@ def raise_land(fleet, row, acts=None, note=None):
     card, why = land_facts(fleet, label, plan, b, t)
     if why:
         return None
-    card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label))
+    owner = f"{t['name']}-conductor"
+    card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
     card["preview"] = landing_preview(fleet, t, label, bolt, card, acts)
     note = note or landing_act("proven", head=card["head"])[1]
-    return row_card_change(fleet, label, f"{t['name']}-conductor", cards.landing_card, card, note, card_where(t["kit"]), acts)
+    return row_card_change(fleet, label, owner, cards.landing_card, card, note, card_where(t["kit"]), acts)
 
 
 def head_previewed(fleet, t, head):
@@ -8432,7 +8433,7 @@ def land_session(fleet, label, key, acts=None):
     except Refusal as e:
         words = str(e)
     if relinks(started, got):
-        facts = dict(facts, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label)))
+        facts = dict(facts, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
         facts["preview"] = landing_preview(fleet, t, label, bolt, facts, acts)
         row_card_change(fleet, label, owner, cards.landing_card, facts, RELINKED, card_where(t["kit"]), acts)
     elif got is not None:

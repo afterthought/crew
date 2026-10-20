@@ -2,7 +2,7 @@
 
 ## 1. What a card follows
 
-- [ ] 1.1 A card follows only a card posted in its own owner's name, and a deploy's card follows only its environment's declined deploy card; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 1 and *Task notes* 1.1).
+- [x] 1.1 A card follows only a card posted in its own owner's name, and a deploy's card follows only its environment's declined deploy card; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 1 and *Task notes* 1.1).
 - [ ] 1.2 The run record of 2026-10-19 23:54Z to 2026-10-20 00:16Z, as a case: deneb's deploy at `ddcf2cb` follows no card, and a post Pending You refuses is recorded refused in its words; proved by a case in `tests/py/test_cards.py` (design, *Context* and *Task notes* 1.2).
 
 ## 2. The offer again

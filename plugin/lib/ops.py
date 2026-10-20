@@ -589,7 +589,7 @@ def raise_deploy(fleet, row, acts=None, note=None):
     d = kept(label, env, offer["Head"])
     steps, _ = handed_steps(kept_text(d / "steps.txt"), env, label)
     facts = deploy_facts(env, offer, lands, ranged, kept_text(d / "notes.md"), steps)
-    facts["follows"] = cards.follows_of("deploy", {"env": env, "head": offer["Head"]}, gathered)
+    facts["follows"] = cards.follows_of("deploy", {"env": env, "head": offer["Head"]}, gathered, owner)
     return plan.row_card_change(fleet, label, owner, cards.deploy_card, facts, said or "Raised again", ops_where(fleet, label), acts)
 
 
@@ -623,7 +623,7 @@ def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
         return None
     n, _, e = step
     facts = step_facts(env, n, e, label, stages_working(fleet, env) if held(e) else None)
-    facts["follows"] = cards.follows_of("step", {"env": env, "key": key}, mine)
+    facts["follows"] = cards.follows_of("step", {"env": env, "key": key}, mine, f"{label}-ops")
     return plan.row_card_change(fleet, label, f"{label}-ops", cards.step_card, facts, note, ops_where(fleet, label), acts, kind_changed)
 
 
