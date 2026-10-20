@@ -1580,17 +1580,54 @@ def landing_retry(why, fresh, fresh_why):
     return ("none", None) if unproven else ("again", facts)
 
 
+def landing_opened(fleet, label, plan, b, t, card, acts):
+    """A landing card's facts with its reading opened by the raise (raise_land), before the card is built: its link,
+    or on a refusal one more try as crew card session land/<bolt> makes it, the kit's main fetched on the team's host,
+    this one, a fetch that failed said and the try going on (plan.18), the landing read afresh (land_facts) and its
+    reading opened again with those facts (landing_retry). The facts the card is built from, carrying the reading's
+    link or why it could not be opened (unread, the second try's reason, or the first's when the fresh read was
+    refused); None when, read afresh, the bolt no longer reads proven, so the raise posts and changes nothing."""
+    key, main = f"land/{card['bolt']}", t["kit"]["main"]
+    try:
+        return dict(card, link=acts.reading(label, key, card)[0])
+    except Refusal as e:
+        why = str(e)
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}; crew fetches {t['kit']['name']}'s main "
+          "and tries once more", file=sys.stderr)
+    try:
+        if gather.has_origin(main):
+            kit_git(fleet, t, main, "fetch", "-q", "origin")
+    except Refusal as e:
+        print(f"card {key}: {e}; the reading is tried again all the same", file=sys.stderr)
+    fresh, fresh_why = None, None
+    try:
+        with READ.fresh():
+            fresh = land_facts(fleet, label, plan, b, t)
+    except Refusal as e:
+        fresh_why = str(e)
+    step, got = landing_retry(why, fresh, fresh_why)
+    if step == "none":
+        return None
+    if step == "stand":
+        return dict(card, unread=got)
+    try:
+        return dict(got, link=acts.reading(label, key, got)[0])
+    except Refusal as e:
+        return dict(got, unread=str(e))
+
+
 def raise_land(fleet, row, acts=None, note=None):
     """A bolt's landing card raised (record 0031 §1, plan.16), for its rail row land/<bolt>, on the host of the team
     holding the bolt, where its conductor's cards are: once the bolt reads proven (land_facts), in the conductor's name,
     following its own card a fix held (follows_of), posted through row_card_change, so a card the conductor holds is
     changed in place, its head moved, or followed by a new one once the user answered it, and one Pending You no longer
-    finds is posted again; its reading session, on what the bolt brings to main, is started first on this host and its
-    link put on the card (card_built), a session on an older head ended (reading_open); a preview of its head, in a kit
-    whose policy at the head declares one, is asked for before it and its addresses put on the card (landing_preview).
-    Nothing, and nothing said, while the bolt does not read proven. The merge's end calls it, the rail's sweep for a
-    row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or None; what
-    crew can't read is refused (read.1), refusing nothing of the bolt."""
+    finds is posted again; its reading session, on what the bolt brings to main, is opened first on this host, twice if
+    it must be, the second time on the landing read afresh, and its link or why it could not be opened put on the card
+    (landing_opened), a session on an older head ended (reading_open); a preview of its head, in a kit whose policy at
+    the head declares one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and
+    nothing said, while the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's
+    sweep for a row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or
+    None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
     m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", row.get("key") or "")
     if not m:
         return None
@@ -1601,6 +1638,9 @@ def raise_land(fleet, row, acts=None, note=None):
     t["machine"] == acts.host() or fail(f"bolt {bolt}'s landing card is raised on {t['machine']}, where {t['name']}-conductor's cards are")
     card, why = land_facts(fleet, label, plan, b, t)
     if why:
+        return None
+    card = landing_opened(fleet, label, plan, b, t, card, acts)
+    if not card:
         return None
     owner = f"{t['name']}-conductor"
     card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
