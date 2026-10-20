@@ -7,7 +7,7 @@
 
 ## 2. What the agents and the README say
 
-- [ ] 2.1 Every brief that records findings says a refusal means the words were reworded or are a background task's output not yet read, proved by `tests/suite t-briefs` (design: *The briefs' sentence*; Task notes 2.1).
+- [x] 2.1 Every brief that records findings says a refusal means the words were reworded or are a background task's output not yet read, proved by `tests/suite t-briefs` (design: *The briefs' sentence*; Task notes 2.1).
 - [ ] 2.2 README's Signals section says a refusal names both cases, proved by `tests/suite t-docs` (Task notes 2.2; `docs.2`).
 
 ## 3. The whole change

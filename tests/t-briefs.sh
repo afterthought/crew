@@ -240,6 +240,7 @@ for brief in "swb-1 conductor" "swb-1 ops" "wldn main-ops" "wldn design" "wldn p
   expect_ok crewpy brief $brief
   has "$out" 'signal <slug> "<what it asserts, in a sentence>" --excerpt "<the exact words the user said or the tool printed>"'
   has "$out" "Copy the excerpt, never reword it"; has "$out" "a refusal means the words were reworded"
+  has "$out" "or are a background task's output you have not read"
   has "$out" "When the words point at something made elsewhere"; has "$out" "A conversation's id alone is not enough"
   has "$out" '`signals/` on `wldn/main` of WilldanGroup/crew-state'
   lacks "$out" "signal in WilldanGroup/willdan-blueprints"
