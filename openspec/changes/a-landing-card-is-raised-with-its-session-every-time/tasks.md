@@ -26,4 +26,4 @@
 
 ## 6. Checks
 
-- [ ] 6.1 `tests/suite logic`, `tests/suite t-journey-land t-briefs t-docs t-cards t-journey-review`, then `tests/suite --affected` once, all report 0 failed (Task notes 6.1).
+- [x] 6.1 `tests/suite logic`, `tests/suite t-journey-land t-briefs t-docs t-cards t-journey-review`, then `tests/suite --affected` once, all report 0 failed (Task notes 6.1).
