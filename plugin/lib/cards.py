@@ -1,6 +1,7 @@
 """cards.py: crew's Pending You cards. The six of crew's own, built from the facts of their events (record 0031, briefs.13):
 the proposal's, the batch's, the landing's, the deploy's, the step's and the record's, in the words rule's forms, each
-following the card its thing follows, and read by its owner through crew card read (briefs.16). plan.py's act,
+following the card its thing follows when its own owner posted that card, and read by its owner through crew card read
+(briefs.16). plan.py's act,
 row_card_post, row_card_change and row_card_close, sends them; an agent's own question goes through Pending You's own
 tools in its session, and crew's card hook records it.
 
@@ -849,12 +850,12 @@ def proposal_card(f):
 # ------------------------------------------------------------------------------------- what a card follows
 
 def posted_cards(entries):
-    """Each card the run record's entries show posted, oldest first: {key, card, state}, its state None while it is
-    open, else its close's, closed, withdrawn, declined or lost."""
+    """Each card the run record's entries show posted, oldest first: {key, card, by, state}, by the agent its post
+    names, its state None while it is open, else its close's, closed, withdrawn, declined or lost."""
     out = []
     for e in entries:
         if e.get("Act") == "card.post" and e.get("Card") and not e.get("Refused"):
-            out.append({"key": e.get("Key") or "", "card": e["Card"], "state": None})
+            out.append({"key": e.get("Key") or "", "card": e["Card"], "by": e.get("By"), "state": None})
         elif e.get("Act") == "card.close" and e.get("Card") and not e.get("Refused"):
             for c in out:
                 if c["card"] == e["Card"] and c["state"] is None:
@@ -862,15 +863,17 @@ def posted_cards(entries):
     return out
 
 
-def follows_of(kind, thing, entries):
-    """The card a card of kind follows, so one thing's chain reads as one thread on the phone (record 0031 §5), from the
-    run record's entries, oldest first: its id, or None. A landing raised again follows the bolt's last landing card
-    once that is closed, as a defect note holds it; a deploy follows its environment's last card when the user
-    declined it, else the landing card of the bolt whose landing left main at the deployed head; a step follows the
-    step card raised after its environment's last deploy card, else that card. A proposal, a batch and a record follow
-    nothing. A card lost to its owner is followed by none, since Pending You takes only a card of the asker's own.
-    thing: a landing's {bolt}, a deploy's {env, head}, a step's {env, key}."""
-    cards = [c for c in posted_cards(entries) if c["state"] != "lost"]
+def follows_of(kind, thing, entries, by):
+    """The card a card of kind posted in the name of `by` follows, so one thing's chain reads as one thread on the
+    phone (record 0031 §5), from the run record's entries, oldest first: its id, or None. Only a card the entries show
+    posted in by's own name is followed, since Pending You takes `follows` only to a card of the asker's own and
+    refuses the post otherwise (briefs.11, read 2026-10-20). A landing raised again follows the bolt's last landing
+    card once that is closed, as a defect note holds it; a deploy follows its environment's last deploy card when the
+    user declined it, else nothing, never a landing's card, whose landings its face names (briefs.13); a step follows
+    the step card raised after its environment's last deploy card, else that card. A proposal, a batch and a record
+    follow nothing. A card lost to its owner is followed by none. thing: a landing's {bolt}, a deploy's {env, head}, a
+    step's {env, key}."""
+    cards = [c for c in posted_cards(entries) if c["state"] != "lost" and c["by"] == by]
 
     def landing(bolt):  # a bolt's landing cards, keyed by the bolt, or by its head before record 0031
         return [c for c in cards if c["key"] == f"land/{bolt}" or c["key"].startswith(f"land/{bolt}/")]
@@ -879,13 +882,7 @@ def follows_of(kind, thing, entries):
         return mine[-1]["card"] if mine and mine[-1]["state"] else None
     if kind == "deploy":
         mine = [c for c in cards if c["key"] == f"deploy/{thing['env']}"]
-        if mine and mine[-1]["state"] == "declined":
-            return mine[-1]["card"]
-        head = thing.get("head") or ""
-        bolts = [o[5:] for e in entries if e.get("Act") == "bolt.land" and not e.get("Refused") and head
-                 and (e.get("Head") or "")[:7] == head[:7] for o in e.get("On") or [] if o.startswith("bolt/")]
-        landed = landing(bolts[-1]) if bolts else []
-        return landed[-1]["card"] if landed else None
+        return mine[-1]["card"] if mine and mine[-1]["state"] == "declined" else None
     if kind == "step":
         deploys = [i for i, c in enumerate(cards) if c["key"] == f"deploy/{thing['env']}"]
         if not deploys:

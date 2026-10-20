@@ -290,10 +290,56 @@ class TestRange:
 
 
 class TestOfferedAgain:
+    """An offer of the commit already offered (main-level "The same commit offered again after its card was refused"
+    and "... while its card is open"): offer_move on the open offers, what changed and whether ops holds its card."""
+    OPEN = {"deneb": e("ops.offer", env="deneb", minutes=1, Head=S1, Base=S2)}
+    REFUSED = dict(Act="card.post", On=["env/deneb"], By="swancloud-ops", Key="deploy/deneb",
+                   Refused="Pending You refused post_request: This is swc-2-conductor’s card; leave it.")
+
     def test_an_offer_of_the_commit_offered_changes_its_card_only_for_other_notes_or_steps(self):
         assert ops.handed_changed(NOTES, STEPS, NOTES, STEPS) == [] and ops.handed_changed(None, None, "", None) == []
         assert ops.handed_changed(None, STEPS, NOTES, STEPS) == ["its release notes"]
         assert ops.handed_changed(NOTES, STEPS, NOTES + "\n- one more", None) == ["its release notes", "its after-deploy steps"]
+
+    def test_a_commit_other_than_the_open_offers_is_offered(self):
+        assert ops.offer_move(self.OPEN, "deneb", "c" * 40, None, True) == "offer"
+        assert ops.offer_move({}, "deneb", S1, None, False) == "offer"
+
+    def test_the_commit_offered_handed_other_files_changes_its_card(self):
+        assert ops.offer_move(self.OPEN, "deneb", S1, ["its release notes"], True) == "change"
+        assert ops.offer_move(self.OPEN, "deneb", S1, ["its release notes"], False) == "change"
+
+    def test_the_commit_offered_with_the_same_files_posts_its_card_when_ops_holds_none(self):
+        assert ops.offer_move(self.OPEN, "deneb", S1, [], False) == "post"
+
+    def test_the_commit_offered_with_the_same_files_while_its_card_is_held_does_nothing(self):
+        assert ops.offer_move(self.OPEN, "deneb", S1, [], True) is None
+
+    def test_an_offer_again_after_its_post_was_refused_raises_the_card_once_and_records_no_second_offer(self, monkeypatch, tmp_path):
+        import argparse
+        import plan
+        held, raised, emitted = [self.REFUSED], [], []
+
+        class Acts:
+            def __init__(self, fleet):
+                pass
+
+            def entries(self, label):
+                return held
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: [self.OPEN["deneb"]])
+        monkeypatch.setattr(ops, "kept", lambda label, env, to: tmp_path)
+        monkeypatch.setattr(plan, "CardActs", Acts)
+        monkeypatch.setattr(ops, "raise_deploy", lambda fleet, row, acts=None, note=None: raised.append((row, note)))
+        monkeypatch.setattr(ops, "emit", lambda *a, **f: emitted.append(a))
+        (tmp_path / "notes.md").write_text(NOTES)
+        (tmp_path / "steps.txt").write_text(STEPS)
+        a = argparse.Namespace(label="swancloud", env="deneb", to=S1, texts=(NOTES, STEPS), **{"from": S2})
+        ops.offer(FLEET, a)
+        assert raised == [({"label": "swancloud", "key": "deploy/deneb"}, None)] and emitted == []
+        assert ((tmp_path / "notes.md").read_text(), (tmp_path / "steps.txt").read_text()) == (NOTES, STEPS)
+        held.append(dict(self.REFUSED, Refused=None, Card="req_d2"))
+        ops.offer(FLEET, a)
+        assert len(raised) == 1 and emitted == []
 
 
 class TestForwarded:
@@ -460,19 +506,19 @@ class TestOneStepCardAtATime:
     STEPS = [e("ops.step", minutes=1, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher"),
              e("ops.step", minutes=2, Head=S1, Key="rotate/1", State="waiting", Doer="user"),
              e("ops.step", minutes=3, Head=S1, Key="restart-herdr/1", State="waiting", Doer="main-ops", When="held")]
-    DEPLOY = [card("card.post", "deploy/mac-studio", "req_d", 1)]
+    DEPLOY = [card("card.post", "deploy/mac-studio", "req_d", 1, By="wldn-ops")]
 
     def test_the_first_step_that_waits_on_the_user_is_raised_and_the_next_only_once_its_card_closes(self):
         due, open_ = ops.step_due(self.STEPS, self.DEPLOY, "mac-studio")
         assert (due[0], due[1], open_) == (2, ("mac-studio", S1, "rotate/1"), None)
-        posted = self.DEPLOY + [card("card.post", "op/mac-studio/2", "req_s2", 2)]
+        posted = self.DEPLOY + [card("card.post", "op/mac-studio/2", "req_s2", 2, By="wldn-ops")]
         assert ops.step_due(self.STEPS, posted, "mac-studio") == (None, "op/mac-studio/2")
         done = self.STEPS + [e("ops.step", minutes=4, Head=S1, Key="rotate/1", State="done")]
         closed = posted + [card("card.close", "op/mac-studio/2", "req_s2", 3, State="closed")]
         due, open_ = ops.step_due(done, closed, "mac-studio")
         assert (due[0], due[1][2], open_) == (3, "restart-herdr/1", None)
-        follows = cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/3"}, closed)
-        assert follows == "req_s2" and cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/2"}, self.DEPLOY) == "req_d"
+        follows = cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/3"}, closed, "wldn-ops")
+        assert follows == "req_s2" and cards.follows_of("step", {"env": "mac-studio", "key": "op/mac-studio/2"}, self.DEPLOY, "wldn-ops") == "req_d"
 
     def test_a_step_whose_card_was_raised_is_not_raised_again_and_another_environments_card_holds_none(self):
         had = self.DEPLOY + [card("card.post", "op/mac-studio/2", "req_s2", 2), card("card.close", "op/mac-studio/2", "req_s2", 3),

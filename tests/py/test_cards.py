@@ -979,11 +979,15 @@ class TestDeploy:
         assert [(a["lang"], a["title"]) for a in c["artifacts"]] == [("text", "What's in it: 3 landings")]
         assert c["artifacts"][0]["lines"][0] == "#16 The deployer holds at a failure"
 
-    def test_a_card_follows_the_card_its_thing_follows(self):
-        entries = [dict(Act="card.post", Key="land/b24", Card="req_land24"), dict(Act="bolt.land", On=["bolt/b24"], Head="c882cff0123"),
+    def test_a_head_a_landing_card_put_on_main_follows_no_card_and_its_details_name_the_landing(self):
+        """rail-cards "A head a landing card put on main": the landing card is its conductor's, which Pending You
+        takes no follows to from main-level ops, so the deploy's card follows nothing and names the landing."""
+        entries = [dict(Act="card.post", Key="land/b24", By="swb-1-conductor", Card="req_land24"),
+                   dict(Act="bolt.land", On=["bolt/b24"], Head="c882cff0123"),
                    dict(Act="card.close", Card="req_land24", State="closed")]
-        follows = built.follows_of("deploy", {"env": "srv", "head": "c882cff"}, entries)
-        assert follows == "req_land24" and deploy(follows=follows)["card"]["follows"] == "req_land24"
+        follows = built.follows_of("deploy", {"env": "srv", "head": "c882cff"}, entries, "swancloud-ops")
+        c = deploy(follows=follows, landings=[{"pr": 24, "subject": "The deployer holds at a failure"}])["card"]
+        assert follows is None and "follows" not in c and "#24 The deployer holds at a failure" in c["context"]["background"]
 
     def test_a_kit_that_hands_no_notes_is_said_to_and_landings_crew_cant_read_are_said_not_counted(self):
         assert deploy(notes=None, steps=[])["card"]["summary"] == (
@@ -995,30 +999,55 @@ class TestDeploy:
 
 
 class TestFollows:
-    E = [dict(Act="card.post", Key="land/b24/abc1234", Card="req_old"), dict(Act="card.close", Card="req_old"),
-         dict(Act="card.post", Key="land/b24", Card="req_land"), dict(Act="bolt.land", On=["bolt/b24"], Head="c882cff"),
+    """What a card follows (rail-cards "A card follows only a card in its owner's name"): only a card the run record
+    shows posted in the poster's own name, since Pending You takes follows to no other."""
+    OPS, CONDUCTOR = "swancloud-ops", "swb-1-conductor"
+    E = [dict(Act="card.post", Key="land/b24/abc1234", By=CONDUCTOR, Card="req_old"), dict(Act="card.close", Card="req_old"),
+         dict(Act="card.post", Key="land/b24", By=CONDUCTOR, Card="req_land"), dict(Act="bolt.land", On=["bolt/b24"], Head="c882cff"),
          dict(Act="card.close", Card="req_land", State="closed"),
-         dict(Act="card.post", Key="deploy/srv", Card="req_d1")]
+         dict(Act="card.post", Key="deploy/srv", By=OPS, Card="req_d1")]
 
     def test_a_deploy_of_a_newer_head_after_a_no_follows_the_declined_card(self):
         declined = self.E + [dict(Act="card.close", Card="req_d1", State="declined")]
-        assert built.follows_of("deploy", {"env": "srv", "head": "9ab12cd"}, declined) == "req_d1"
-        assert built.follows_of("deploy", {"env": "srv", "head": "9ab12cd"}, self.E) is None
+        assert built.follows_of("deploy", {"env": "srv", "head": "9ab12cd"}, declined, self.OPS) == "req_d1"
+        assert built.follows_of("deploy", {"env": "srv", "head": "9ab12cd"}, self.E, self.OPS) is None
+
+    def test_a_deploy_after_one_that_ran_follows_nothing_and_none_follows_a_landing_card(self):
+        """rail-cards "A deploy after one that ran" and "A deploy of the head a landing left"."""
+        ran = self.E + [dict(Act="card.close", Card="req_d1", State="closed")]
+        assert built.follows_of("deploy", {"env": "srv", "head": "9ab12cd"}, ran, self.OPS) is None
+        assert built.follows_of("deploy", {"env": "srv", "head": "c882cff"}, ran, self.OPS) is None
+        assert built.follows_of("deploy", {"env": "srv", "head": "c882cff"}, ran, self.CONDUCTOR) is None
 
     def test_a_step_follows_the_deploys_card_and_each_later_step_the_one_before(self):
-        assert built.follows_of("step", {"env": "srv", "key": "op/srv/1"}, self.E) == "req_d1"
-        more = self.E + [dict(Act="card.post", Key="op/srv/1", Card="req_s1"), dict(Act="card.close", Card="req_s1")]
-        assert built.follows_of("step", {"env": "srv", "key": "op/srv/2"}, more) == "req_s1"
+        assert built.follows_of("step", {"env": "srv", "key": "op/srv/1"}, self.E, self.OPS) == "req_d1"
+        more = self.E + [dict(Act="card.post", Key="op/srv/1", By=self.OPS, Card="req_s1"), dict(Act="card.close", Card="req_s1")]
+        assert built.follows_of("step", {"env": "srv", "key": "op/srv/2"}, more, self.OPS) == "req_s1"
+
+    def test_a_step_whose_deploy_card_is_another_owners_follows_nothing(self):
+        """A deploy card a person posted under deploy/srv: the step's card, main-level ops's, follows none of it."""
+        theirs = [dict(e, By="chuck") if e.get("Key") == "deploy/srv" else e for e in self.E]
+        assert built.follows_of("step", {"env": "srv", "key": "op/srv/1"}, theirs, self.OPS) is None
+        more = theirs + [dict(Act="card.post", Key="op/srv/1", By="chuck", Card="req_s1"), dict(Act="card.close", Card="req_s1")]
+        assert built.follows_of("step", {"env": "srv", "key": "op/srv/2"}, more, self.OPS) is None
 
     def test_a_landing_raised_again_follows_the_card_its_defect_note_held_and_an_open_one_is_changed_not_followed(self):
-        held = [dict(Act="card.post", Key="land/b7", Card="req_l1"), dict(Act="card.close", Card="req_l1", State="withdrawn")]
-        assert built.follows_of("land", {"bolt": "b7"}, held) == "req_l1"
-        assert built.follows_of("land", {"bolt": "b7"}, held[:1]) is None
+        held = [dict(Act="card.post", Key="land/b7", By=self.CONDUCTOR, Card="req_l1"),
+                dict(Act="card.close", Card="req_l1", State="withdrawn")]
+        assert built.follows_of("land", {"bolt": "b7"}, held, self.CONDUCTOR) == "req_l1"
+        assert built.follows_of("land", {"bolt": "b7"}, held[:1], self.CONDUCTOR) is None
+
+    def test_a_landing_raised_again_on_a_team_that_did_not_post_the_last_one_follows_nothing(self):
+        """rail-cards "A landing raised again on a team that did not post the last one": b7 now held by swb-2."""
+        held = [dict(Act="card.post", Key="land/b7", By=self.CONDUCTOR, Card="req_l1"),
+                dict(Act="card.close", Card="req_l1", State="withdrawn")]
+        assert built.follows_of("land", {"bolt": "b7"}, held, "swb-2-conductor") is None
 
     def test_a_lost_card_is_followed_by_none_and_a_proposal_a_batch_and_a_record_follow_nothing(self):
-        lost = [dict(Act="card.post", Key="land/b7", Card="req_l1"), dict(Act="card.close", Card="req_l1", State="lost")]
-        assert built.follows_of("land", {"bolt": "b7"}, lost) is None
-        assert [built.follows_of(k, {}, self.E) for k in ("proposal", "batch", "record")] == [None, None, None]
+        lost = [dict(Act="card.post", Key="land/b7", By=self.CONDUCTOR, Card="req_l1"),
+                dict(Act="card.close", Card="req_l1", State="lost")]
+        assert built.follows_of("land", {"bolt": "b7"}, lost, self.CONDUCTOR) is None
+        assert [built.follows_of(k, {}, self.E, self.OPS) for k in ("proposal", "batch", "record")] == [None, None, None]
 
     D1 = dict(Act="card.post", Key="deploy/srv", By="swancloud-ops", Card="req_d1")
 
@@ -1032,6 +1061,62 @@ class TestFollows:
         ([dict(Act="card.post", Key="land/b1", By="swancloud-ops", Card="req_l1")], None)])
     def test_the_key_a_followed_card_is_still_open_under_is_read_from_the_record_alone(self, entries, key):
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
+
+
+
+class TestTheRefusedDeployCards:
+    """The run record of 2026-10-19 23:54Z to 2026-10-20 00:16Z on swancloud/main (runs/mac-studio/2026-10-19.rec and
+    2026-10-20.rec, signal 2026-10-20-swancloud-planner-c422e742/01): swc-2-conductor's landing card for
+    the-box-works-in-wldn-prod, the landing leaving swancloud's main at ddcf2cb, and the deployer's offers of ddcf2cb to
+    five environments, whose every card swancloud-ops posted followed that landing card and was refused as another
+    agent's. Each now follows no card; and a post Pending You refuses is recorded refused in its words."""
+    OPS, HEAD = "swancloud-ops", "ddcf2cb4e5ad15281a11fe1e636d17dfed9c66b9"
+    LANDING = "req_5de89eb68b7c495fbb36"
+    ENVS = ("deneb", "mac-studio", "macbook-pro", "chuck-herdr-alpha", "swancloud-srv")
+    WORDS = "This is swc-2-conductor’s card; leave it. You’re “swancloud-ops”: act only on the cards you posted."
+    WHERE = ("/kit/main", "github.com/agentplot/swancloud")
+    ENTRIES = ([dict(Act="card.post", At="2026-10-19T18:02:11Z", On=["env/deneb"], By=OPS, Key="deploy/deneb", Card="req_deneb1"),
+                dict(Act="card.close", At="2026-10-19T18:40:03Z", On=["env/deneb"], By=OPS, Key="deploy/deneb", Card="req_deneb1",
+                     State="closed"),
+                dict(Act="card.post", At="2026-10-19T21:50:41Z", On=["bolt/the-box-works-in-wldn-prod"], By="swc-2-conductor",
+                     Key="land/the-box-works-in-wldn-prod", Card=LANDING),
+                dict(Act="bolt.land", At="2026-10-19T23:36:27Z", On=["bolt/the-box-works-in-wldn-prod"], By="swancloud-ops",
+                     Head=HEAD, Repo="swancloud")]
+               + [dict(Act="ops.offer", At=f"2026-10-19T23:5{4 + i}:39Z", On=[f"env/{env}"], By="swancloud-deployer", Head=head,
+                       Base="d46500a" + "0" * 33) for i, env, head in zip(range(5), ENVS, [HEAD] * 5)]
+               + [dict(Act="card.close", At="2026-10-19T23:57:19Z", On=["bolt/the-box-works-in-wldn-prod"], By="swc-2-conductor",
+                       Key="land/the-box-works-in-wldn-prod", Card=LANDING, State="closed")])
+
+    def facts(self, follows):
+        return dict(env="deneb", head=self.HEAD, base="d46500a" + "0" * 33,
+                    landings=[{"pr": None, "subject": "the-box-works-in-wldn-prod"}], notes=None, steps=[], before=[], after=[],
+                    follows=follows)
+
+    def test_none_of_the_five_environments_deploy_cards_follows_the_conductors_landing_card(self):
+        """rail-cards "Five environments offered that head"."""
+        assert [built.follows_of("deploy", {"env": env, "head": self.HEAD}, self.ENTRIES, self.OPS) for env in self.ENVS] == [None] * 5
+
+    def test_a_post_pending_you_refuses_is_recorded_refused_in_its_words_and_refuses_nothing_else(self, capsys):
+        """rail-cards "Pending You refuses a deploy card"."""
+        from test_card_commands import Acts, MATCHED
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (None, self.WORDS)}, entries=self.ENTRIES, caller=self.OPS)
+        follows = built.follows_of("deploy", {"env": "deneb", "head": self.HEAD}, self.ENTRIES, self.OPS)
+        assert plan.row_card_post(None, "swancloud", self.OPS, built.deploy_card, self.facts(follows), self.WHERE, acts) is None
+        assert acts.emitted == [{"Act": "card.post", "On": ["env/deneb"], "label": "swancloud", "by": self.OPS, "Key": "deploy/deneb",
+                                 "refused": f"Pending You refused post_request: {self.WORDS}"}]
+        assert f"card deploy/deneb not posted: Pending You refused post_request: {self.WORDS}" in capsys.readouterr().err
+
+    def test_the_post_sends_no_follows_and_its_face_names_the_landing(self):
+        """rail-cards "A deploy of the head a landing left"."""
+        from test_card_commands import Acts, MATCHED, POSTED
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_deneb2"), None)},
+                    entries=self.ENTRIES, caller=self.OPS)
+        follows = built.follows_of("deploy", {"env": "deneb", "head": self.HEAD}, self.ENTRIES, self.OPS)
+        assert plan.row_card_post(None, "swancloud", self.OPS, built.deploy_card, self.facts(follows), self.WHERE, acts) == "req_deneb2"
+        sent = next(a for t, a in acts.calls if t == "post_request")
+        assert sent["idempotencyKey"] == "deploy/deneb:2" and "follows" not in sent
+        assert sent["artifacts"][0]["lines"] == ["the-box-works-in-wldn-prod"]
+        assert [(e["Act"], e["Card"], e["Key"], e["by"]) for e in acts.emitted] == [("card.post", "req_deneb2", "deploy/deneb", self.OPS)]
 
 
 class TestStep:
@@ -1295,14 +1380,15 @@ class TestPickedUp:
                                    outcome="Deployed 97e54d5 to mac-studio: machine ok, suite ok.", acts=acts) is None
         assert acts.calls == [] and acts.emitted == []
 
-        follows = built.follows_of("deploy", {"env": "mac-studio", "head": self.OFFER["head"]}, entries)
+        follows = built.follows_of("deploy", {"env": "mac-studio", "head": self.OFFER["head"]}, entries, self.OWNER)
+        assert follows is None
         acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_d2"), None),
                      "update_request": (None, "This was already answered; follow up with reply_in_thread.")},
                     entries=entries, caller=self.OWNER)
         assert plan.row_card_change(None, "swancloud", self.OWNER, built.deploy_card, dict(self.OFFER, follows=follows),
                                     "Now d35fbf2", self.WHERE, acts) == "req_d2"
         assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
-        assert (acts.calls[1][1]["idempotencyKey"], acts.calls[1][1]["follows"]) == ("deploy/mac-studio:2", "req_l48")
+        assert acts.calls[1][1]["idempotencyKey"] == "deploy/mac-studio:2" and "follows" not in acts.calls[1][1]
         entries = self.held(entries, acts)
         assert built.card_under(entries, "deploy/mac-studio", self.OWNER) == "req_d2"
 

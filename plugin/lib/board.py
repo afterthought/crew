@@ -139,22 +139,25 @@ def flow_read(fleet, labels, sweep=False):
 
 # ------------------------------------------------------------------------------------------------- the data
 
-def marker(r, cards, label):
-    """A rail row as a marker: its group, its card key, its glyph, when it began to wait, and its card, open or None."""
+def marker(r, cards, label, logs):
+    """A rail row as a marker: its group, its card key, its glyph, when it began to wait, its card, open or None, and,
+    when none is open, the words of Pending You's refusal of the last post under its key, as the rail's card line gives
+    them (plan.last_refusal), or None; logs are the label's run-record entries the rail read."""
     card = [c for c in cards if (c["label"], c["key"]) == (label, r["key"])]
     return {"group": r["group"], "key": r["key"], "glyph": GLYPH[r["group"]], "at": r.get("date") or iso(r["at"]),
-            "card": {"by": card[-1]["by"], "host": card[-1]["host"], "at": iso(card[-1]["at"])} if card else None}
+            "card": {"by": card[-1]["by"], "host": card[-1]["host"], "at": iso(card[-1]["at"])} if card else None,
+            "refused": None if card else plan.last_refusal(logs, r["key"])}
 
 
-def markers(rows, cards, label, group, obj):
+def markers(rows, cards, label, group, obj, logs):
     """The rail's rows for an object, as markers."""
-    return [marker(r, cards, label) for r in rows if r["label"] == label and r["group"] == group and r["key"].split("/")[1] == obj]
+    return [marker(r, cards, label, logs) for r in rows if r["label"] == label and r["group"] == group and r["key"].split("/")[1] == obj]
 
 
-def keyed(rows, cards, label, key):
+def keyed(rows, cards, label, key, logs):
     """The rail's row with that card key, as a marker, when there is one: an operation's, whose key names the deploy or
     the step itself."""
-    return [marker(r, cards, label) for r in rows if key and r["label"] == label and r["key"] == key]
+    return [marker(r, cards, label, logs) for r in rows if key and r["label"] == label and r["key"] == key]
 
 
 def records_proposed(entries, cards):
@@ -177,13 +180,13 @@ def records_proposed(entries, cards):
     return list(out.values())
 
 
-def environments(fleet, label, teams, entries, rows, cards, since):
+def environments(fleet, label, teams, entries, rows, cards, since, logs):
     """The partition's environments for the Operation lane: each one's deploys that moved since since or are still open,
     and the operations waiting on it, as ops.environments reads them from the run record (plan.14, state.4), each
     deploy and operation with its rail row's marker; and the teams on that host, which is what the page narrows by."""
     return [{"env": env, "teams": [t["team"] for t in teams if t["host"] == env],
-             "deploys": [dict(d, markers=keyed(rows, cards, label, d["row"])) for d in v["deploys"]],
-             "waiting": [dict(w, markers=keyed(rows, cards, label, w["row"])) for w in v["waiting"]]}
+             "deploys": [dict(d, markers=keyed(rows, cards, label, d["row"], logs)) for d in v["deploys"]],
+             "waiting": [dict(w, markers=keyed(rows, cards, label, w["row"], logs)) for w in v["waiting"]]}
             for env, v in ops.environments(entries, iso(since)).items()]
 
 
@@ -204,7 +207,7 @@ def board_data(fleet, labels, read, now):
         p = crew.partition_of(fleet, l)
         found = next(((repo, tip, pl) for x, repo, tip, pl in read["found"] if x == l), None)
         repo, tip, pl = found or (plan.state_of(fleet, l)[0], None, None)
-        unread = read["unread"].get(l, {})
+        unread, logs = read["unread"].get(l, {}), read.get("logs", {}).get(l, [])
         teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
 
         def building(repo):
@@ -263,7 +266,7 @@ def board_data(fleet, labels, read, now):
             kind, of = plan.role(fleet, s["captured_by"])
             return [of] if kind in ("conductor", "team") and of in p["teams"] else []
         proposals = [{"proposal": d["proposal"], "by": d["by"], "opened": d["opened"], "case": (d["case"] or "").splitlines()[0] if d["case"] else None,
-                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"])), "teams": proposal_teams(d)}
+                      "waiting": d["waiting"], "markers": markers(rows, cards, l, "proposals", str(d.get("first") or d["proposal"]), logs), "teams": proposal_teams(d)}
                      for d in read["props"] if d["label"] == l]
         planned, queue, construction = [], [], []
         if pl:
@@ -287,7 +290,7 @@ def board_data(fleet, labels, read, now):
                 state = st.bolt_state(b) if t else "unknown"
                 ledger = {"bolt": b.name(), "repo": b.get("Repo"), "goal": b.get("Goal"), "team": b.get("Team"), "host": t["machine"] if t else None,
                           "state": state, "url": url(k.get("bolts", {}).get(b.name(), {}).get("worktree")),
-                          "markers": markers(rows, cards, l, "land", b.name()), "teams": [b.get("Team")], "units": [], "fixes": []}
+                          "markers": markers(rows, cards, l, "land", b.name(), logs), "teams": [b.get("Team")], "units": [], "fixes": []}
                 for u in units:
                     s = st.of(u.name())
                     ledger["units"].append({"unit": u.name(), "kind": plan.kind_of(u), "stage": s["stage"], "tasks": s["tasks"],
@@ -303,12 +306,12 @@ def board_data(fleet, labels, read, now):
         operation = [{"bolt": x["bolt"], "at": iso(x["at"]), "by": x["by"], "units": x["units"], "team": read["gives"].get((l, x["bolt"])),
                       "teams": [read["gives"][(l, x["bolt"])]] if read["gives"].get((l, x["bolt"])) else []}
                      for x in sorted(read["landings"], key=lambda x: x["at"], reverse=True) if x["label"] == l and x["at"] and x["at"] >= since]
-        envs = environments(fleet, l, teams, read.get("ops", {}).get(l, []), rows, cards, since)
+        envs = environments(fleet, l, teams, read.get("ops", {}).get(l, []), rows, cards, since, logs)
         mine = sorted((c for c in cards if c["label"] == l), key=lambda c: (c["at"], c["card"]))
         parts.append({"label": l, "plan": tip, "hosts": hosts, "teams": teams,
                       "cards": [{"key": c["key"], "card": c["card"], "by": c["by"], "host": c["host"], "at": iso(c["at"]),
                                  "kind": plan.card_kind(c["key"])} for c in mine],
-                      "records": records_proposed(read.get("logs", {}).get(l, []), mine),
+                      "records": records_proposed(logs, mine),
                       "inception": {"signals": sorted((dict(s, teams=captured(s)) for s in sigs),
                                                       key=lambda s: (when(s["at"]) is None, when(s["at"]) or now, s["signal"])),
                                     "explorations": explorations},
@@ -335,7 +338,10 @@ def named(repo, name):
 
 
 def card_of(ms):
-    return [("no card open" if not m["card"] else f"card open, asked by {m['card']['by']}", None) for m in ms]
+    """What each marker of a line says of its card at the line's end: open and who asked it, none open, or none open
+    because Pending You refused its row's last post, which the row then owes."""
+    return [(f"card open, asked by {m['card']['by']}" if m["card"] else
+             "no card open, its post refused" if m.get("refused") else "no card open", None) for m in ms]
 
 
 def row(segs, gutter=None, indent=0, ms=()):
