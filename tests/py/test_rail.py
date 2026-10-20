@@ -679,6 +679,15 @@ class TestSettledSweep:
             ("batch.close", None, None, WORDS), ("card.close", "req_b3", "withdrawn", WORDS)]
         assert [(d["card"], d["did"], d["words"]) for d in out["done"]] == [(None, "closed", WORDS), ("req_b3", "withdrawn", WORDS)]
 
+    def test_its_card_open_here_is_withdrawn_once_its_last_unit_is_dropped(self):
+        """review-batches, "A unit dropped"."""
+        words = "its batch waits on nothing: x1 has landed; x2 was dropped"
+        entries = [did("review.batch", 60, Batch="3", Units="x1:swb-1@aaa1 x2:swb-1@bbb1"), did("bolt.land", 40, On=["bolt/b", "unit/x1"])]
+        out, acts = swept(cards_=[card("batch/3", "req_b3", "wldn-planner")], entries=entries + [did("unit.drop", 35, On=["unit/x2", "bolt/b"])])
+        assert acts.calls[-1] == ("wldn-planner", "cancel_request", {"requestId": "req_b3", "name": "wldn-planner", "reason": words})
+        assert [(e["Act"], e.get("Card"), e.get("State"), e["Outcome"]) for e in acts.emitted] == [
+            ("batch.close", None, None, words), ("card.close", "req_b3", "withdrawn", words)]
+
     def test_a_batch_crew_closed_or_the_user_answered_records_nothing_more(self):
         """review-batches, "Read again after the close": no second close is recorded, and nothing is posted."""
         again = LANDED + [did("batch.close", 30, On=["batch/3"], Key="batch/3", Outcome=WORDS)]
