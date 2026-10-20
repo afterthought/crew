@@ -7461,6 +7461,31 @@ def batch_closed(entries):
     return closed
 
 
+def batch_settled(entries):
+    """The batch card keys whose batch waits on nothing (briefs.12), from the run record's entries, oldest first, as
+    {key: why}: each batch/<n>, or for a batch posted as cards of five before, each batch/<n>-<k> (batch_cards), every
+    unit of which has landed, a bolt.land not refused naming it, or is held by a later batch not refused, at any
+    commit, since a later batch held the unit's latest change when it was made, and landings and batches are only ever
+    added, so a key once settled stays so. Whether a card of it closed is not read: batch_closed is what the user's
+    answer closed. A unit both landed and held later is counted as landed. The words name the units in the batch's
+    order: those landed, then, oldest first, each later batch with the units it is the newest to hold."""
+    landed = {o[5:] for e in entries if e.get("Act") == "bolt.land" and not e.get("Refused") for o in e.get("On") or [] if o.startswith("unit/")}
+    made, posts, out = batches(entries), batch_posts(entries), {}
+    for n, _, units in made:
+        for key, part in batch_cards(n, units, posts):
+            names = list(dict.fromkeys(u for u, *_ in part))
+            later = {u: max((m for m, _, us in made if m > n and any(v == u for v, *_ in us)), default=None) for u in names}
+            if not names or not all(u in landed or later[u] for u in names):
+                continue
+            here = [u for u in names if u in landed]
+            held = sorted({later[u] for u in names if u not in landed})
+            why = ([f"{joined(here)} {'has' if len(here) == 1 else 'have'} landed"] if here else []) + [
+                f"batch {m} holds " + ("a newer change of " if len(us) == 1 else "newer changes of ") + joined(us)
+                for m in held for us in [[u for u in names if u not in landed and later[u] == m]]]
+            out[key] = "its batch waits on nothing: " + "; ".join(why)
+    return out
+
+
 def awaiting_answer(entries):
     """Each unit whose latest change has been in a batch whose card the user has not answered (briefs.12), as {unit: the
     batch}: no card of a batch holding the change at its commit (batch_cards) is closed (batch_closed), so its row
