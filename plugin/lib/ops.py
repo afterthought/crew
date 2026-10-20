@@ -13,8 +13,9 @@ when it names one.
       steps, --steps, one a line as the deployer gathers them (step <n> <doer> <when> <environments> <why> <text>,
       tab-separated, held among the when words); handed no notes, the landings it carries: the first-parent commits
       of the kit's main from --from to --to, read with git, a landing of sluice's by the branch it merged. Run away
-      from the main level's host, it carries the files' text there. The same `to` again changes nothing while it is
-      open unless it is handed other notes or steps, which change its card in place; a newer one replaces it and
+      from the main level's host, it carries the files' text there. The same `to` again records no second offer: it
+      posts the card again when main-level ops holds none open, as when Pending You refused its post, changes the card
+      in place when it is handed other notes or steps, and otherwise changes nothing; a newer one replaces it and
       changes its card
   crew ops approve <env> --label L --to <sha>
       the user's word for that deploy, given by holding its card, recorded by whoever the user's yes reached; the row
@@ -707,28 +708,45 @@ def forwarded(a, argv, notes, steps):
             json.dumps({"notes": notes, "steps": steps}))
 
 
+def offer_move(offers, env, to, changed, held):
+    """What an offer of env's deploy of `to` does (plan.14, code.7), from the open offers (state's), what it changes of
+    the files the open offer was handed (handed_changed's) and whether main-level ops holds a card under deploy/<env>:
+    "offer" when `to` is not the open offer's head, the offer recorded and its card raised; "change" when it is and it
+    was handed other notes or steps, its card changed in place; "post" when it is, nothing changed, and ops holds no
+    card, as when Pending You refused its post, the card posted again and no second offer recorded; None when it is,
+    nothing changed and the card is held, and nothing is done."""
+    if offers.get(env, {}).get("Head") != to:
+        return "offer"
+    if changed:
+        return "change"
+    return None if held else "post"
+
+
 def offer(fleet, a):
-    import cards
+    import cards, plan
     notes, steps = a.texts
     offers, _, _ = state(entries(a.label))
-    d = kept(a.label, a.env, a.to)
-    changed = None
-    if offers.get(a.env, {}).get("Head") == a.to:
-        changed = handed_changed(kept_text(d / "notes.md"), kept_text(d / "steps.txt"), notes, steps)
-        if not changed:
-            return
-    try:
-        d.mkdir(parents=True, exist_ok=True)
-        for name, text in (("notes.md", notes), ("steps.txt", steps)):
-            (d / name).unlink(missing_ok=True)
-            text is None or (d / name).write_text(text)
-    except OSError as e:
-        fail(f"crew can't keep what the offer was handed in {d}: {e.strerror or e}; nothing is offered")
-    if changed:
-        raise_deploy(fleet, {"label": a.label, "key": f"deploy/{a.env}"}, note=f"Offered again: {cards.joined(changed)} changed")
+    d, key = kept(a.label, a.env, a.to), f"deploy/{a.env}"
+    same = offers.get(a.env, {}).get("Head") == a.to
+    changed = handed_changed(kept_text(d / "notes.md"), kept_text(d / "steps.txt"), notes, steps) if same else None
+    held = same and cards.card_under(plan.CardActs(fleet).entries(a.label), key, f"{a.label}-ops") is not None
+    move = offer_move(offers, a.env, a.to, changed, held)
+    if not move:
         return
-    emit(a.label, "ops.offer", a.env, f"offer a deploy of {a.to[:7]}", Head=a.to, Base=getattr(a, "from"))
-    raise_deploy(fleet, {"label": a.label, "key": f"deploy/{a.env}"})
+    if move != "post":
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            for name, text in (("notes.md", notes), ("steps.txt", steps)):
+                (d / name).unlink(missing_ok=True)
+                text is None or (d / name).write_text(text)
+        except OSError as e:
+            fail(f"crew can't keep what the offer was handed in {d}: {e.strerror or e}; nothing is offered")
+    if move == "change":
+        raise_deploy(fleet, {"label": a.label, "key": key}, note=f"Offered again: {cards.joined(changed)} changed")
+        return
+    if move == "offer":
+        emit(a.label, "ops.offer", a.env, f"offer a deploy of {a.to[:7]}", Head=a.to, Base=getattr(a, "from"))
+    raise_deploy(fleet, {"label": a.label, "key": key})
 
 
 def approve(fleet, a):

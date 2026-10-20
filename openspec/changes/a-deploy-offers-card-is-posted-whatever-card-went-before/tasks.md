@@ -7,7 +7,7 @@
 
 ## 2. The offer again
 
-- [ ] 2.1 An offer of the commit already offered, with the same files, posts its card when main-level ops holds none open, and writes no second offer; proved by cases in `tests/py/test_ops.py` (design, *Decisions* 2 and *Task notes* 2.1).
+- [x] 2.1 An offer of the commit already offered, with the same files, posts its card when main-level ops holds none open, and writes no second offer; proved by cases in `tests/py/test_ops.py` (design, *Decisions* 2 and *Task notes* 2.1).
 
 ## 3. A row owing its card
 
