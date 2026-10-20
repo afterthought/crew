@@ -505,6 +505,27 @@ def test_a_deleted_bolt_is_still_named_as_the_upstream_but_neither_compared_nor_
     assert cherry.returncode != 0 and "bolt/b" in cherry.stderr
 
 
+def test_a_bolt_on_github_a_branch_tracks_is_found_at_the_ref_its_upstream_names(repo, tmp_path):
+    """plan.branch_gone (plan.10, plan.19): a fix cut from origin/bolt/<bolt> names it as its upstream, which is no
+    branch of the host's, so whether its bolt stands is read at gather.bolt_ref's refs/remotes/origin/bolt/<bolt>; read
+    under refs/heads/ it would seem gone, and the fix be compared with main rather than the bolt holding it."""
+    import gather
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    repo.git("branch", "-q", "-D", "bolt/b")
+    repo.git("fetch", "-q", "origin")
+    repo.git("branch", "-q", "--track", "fix/b/edge", "origin/bolt/b")
+    up = repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/fix/b/edge")
+    assert up == "origin/bolt/b"
+    verify = lambda ref: subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", ref], capture_output=True).returncode
+    assert verify(f"refs/heads/{up}") != 0
+    assert verify(gather.bolt_ref(up)[1]) == 0
+    assert repo.git("cherry", up, "fix/b/edge") == ""
+
+
 def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt_and_prints_its_commit(repo, tmp_path):
     """plan.make_place through PLACE (record 0003, plan.10): unit/u, kept when u was dropped from bolt a, whose bolt's
     branch is gone, is taken by the place of a unit u added to bolt b as it stands, holding its kept commit; it then
