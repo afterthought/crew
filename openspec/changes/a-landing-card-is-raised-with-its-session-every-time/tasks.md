@@ -13,7 +13,7 @@
 
 ## 3. The conductor's wait starts a missing reading
 
-- [ ] 3.1 `crew card wait land/<bolt>` with no session and the conductor's card open starts the reading as `crew card session` does and waits on it. A start that refuses is refused naming why and `crew card session land/<bolt>`, and no card held is refused as before, with the decision's cases in `tests/py/test_cards.py` (design, Decision 4; Task notes 3.1).
+- [x] 3.1 `crew card wait land/<bolt>` with no session and the conductor's card open starts the reading as `crew card session` does and waits on it. A start that refuses is refused naming why and `crew card session land/<bolt>`, and no card held is refused as before, with the decision's cases in `tests/py/test_cards.py` (design, Decision 4; Task notes 3.1).
 
 ## 4. Briefs and docs
 

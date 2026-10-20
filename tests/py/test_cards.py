@@ -652,6 +652,39 @@ class TestLandingSession:
             self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
         assert acts.sessions == []
 
+    def started(self, monkeypatch, acts, team=TEAM):
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
+        monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (False, None))
+        plan.land_start(FLEET, "wldn", "land/b1", acts)
+
+    def test_a_wait_with_no_session_starts_the_reading_and_changes_the_held_card_to_carry_it(self, monkeypatch, capsys):
+        """card-sessions "A card raised without its reading" and "Waiting again after a decision"."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, self.HELD)
+        self.started(monkeypatch, acts)
+        assert acts.sessions == [("wldn", "land/b1")]
+        change = next(a for t, a in acts.calls if t == "update_request")
+        assert change["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card land/b1: req_l1 changed"]
+
+    def test_a_wait_whose_reading_still_will_not_open_is_refused_naming_crew_card_session(self, monkeypatch):
+        """card-sessions "The reading still will not open": the card is not changed."""
+        acts = ReadingActs(entries=self.HELD, refused="plannotator is not on this host's path, and a card's session is a plannotator session")
+        with pytest.raises(plan.Refusal, match=r"^land/b1's reading could not be opened: plannotator is not on this host's path, "
+                                               r"and a card's session is a plannotator session; crew card session land/b1 starts "
+                                               r"it once that is mended$"):
+            self.started(monkeypatch, acts)
+        assert acts.calls == [] and acts.emitted == []
+
+    def test_a_wait_with_no_card_held_is_refused_and_starts_nothing(self, monkeypatch):
+        """card-sessions "No landing card held"."""
+        acts = ReadingActs(entries=[])
+        with pytest.raises(plan.Refusal, match="^no session was started for card land/b1, and no landing card of b1 is held on this host$"):
+            self.started(monkeypatch, acts)
+        assert acts.sessions == []
+        with pytest.raises(plan.Refusal, match="no landing card of b1 is held"):
+            self.started(monkeypatch, ReadingActs(entries=self.HELD), team=None)
+
     def opened(self, monkeypatch, tmp_path, on):
         """reading_open of land/b1 at head def5678, its recorded session serving the bolt as it stood at on: what it
         ended, and the folder of the session it opened."""
@@ -906,6 +939,17 @@ class TestSessionWords:
         assert plan.land_waited("land/y", None, True) is None
         assert plan.land_waited("land/y", None, True, gone=True) == "land/y: the session ended with no decision"
         assert plan.land_waited("land/y", None, False) == "land/y: crew ended its session, as its card closed or crew card end was run"
+
+    @pytest.mark.parametrize("recorded, held, refused, step, words", [
+        (True, False, None, "wait", None),
+        (False, True, None, "start", None),
+        (False, True, "plannotator is not on this host's path, and a card's session is a plannotator session", "refuse",
+         "land/y's reading could not be opened: plannotator is not on this host's path, and a card's session is a plannotator "
+         "session; crew card session land/y starts it once that is mended"),
+        (False, False, None, "refuse", "no session was started for card land/y, and no landing card of y is held on this host")])
+    def test_a_wait_on_a_landing_with_no_session_starts_its_reading_while_its_card_is_held(self, recorded, held, refused, step, words):
+        """card-sessions "A wait on a landing card starts its reading when none runs"."""
+        assert plan.land_unstarted("land/y", recorded, held, refused) == (step, words)
 
     def test_a_decided_landing_reading_is_set_aside_and_forgotten_and_an_undecided_one_kept(self, tmp_path):
         s = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio.ts.swancloud.net:19432", "started": "2026-10-19T10:00:00Z"}

@@ -8834,7 +8834,9 @@ def card_wait(fleet, a):
     card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. A landing's, land/<bolt>, waits on
     its reading alone, on the team's host: its decision is notes on the landing card and never the word to land
     (land_waited), and once it is printed the session is forgotten (reading_decided), so the next crew card session
-    starts it anew; the card is left as it is. Refused for a key with no session started."""
+    starts it anew; the card is left as it is. With no session of its own while the bolt's conductor holds its card,
+    the raise having failed to open it or a wait having forgotten it, it starts the reading as crew card session does
+    and waits on it (land_start). Refused for any other key with no session started."""
     label, d = card_of(fleet, a)
     if a.key.startswith("batch/") and not old_batch(a.key):
         return batch_wait(fleet, label, a.key, d)
@@ -8844,6 +8846,8 @@ def card_wait(fleet, a):
             return forward_card(fleet, t, a, label)
     name = f"{a.key} {a.unit}" if a.unit else a.key
     say = land_waited if a.key.startswith("land/") else waited
+    if say is land_waited and not card_recorded(d):
+        land_start(fleet, label, a.key)
     card_recorded(d) or fail(f"no session was started for card {name}: crew card session {name} starts one")
     while True:
         decided = card_result(d)
@@ -8862,6 +8866,38 @@ def card_wait(fleet, a):
                 reading_decided(d, decided)
             return
         time.sleep(CARD_POLL)
+
+
+def land_unstarted(key, recorded, held, refused=None):
+    """What crew card wait land/<bolt> does before it waits (card-sessions "A wait on a landing card starts its reading
+    when none runs"), from whether a session of the key is recorded on this host, whether the bolt's conductor holds its
+    landing card open here (held), and why the start it made refused (refused): ("wait", None) on a session recorded;
+    ("start", None) with none and the card held, to start it as crew card session does; ("refuse", words) when the
+    start refused, naming crew card session to start it once that is mended, or no card is held."""
+    if recorded:
+        return "wait", None
+    if not held:
+        return "refuse", f"no session was started for card {key}, and no landing card of {key.split('/', 1)[1]} is held on this host"
+    if refused:
+        return "refuse", f"{key}'s reading could not be opened: {refused}; crew card session {key} starts it once that is mended"
+    return "start", None
+
+
+def land_start(fleet, label, key, acts=None):
+    """A landing's reading started for its wait when none is recorded (land_unstarted): while the conductor of the
+    team holding the bolt holds its landing card on this host, opened as crew card session opens it, its link printed
+    and the card changed in place to carry it while it waits on the user (land_session); refused naming why and crew
+    card session when it could not open, and when no card is held."""
+    acts = acts or CardActs(fleet)
+    _, _, t = land_held(fleet, label, key.split("/", 1)[1])
+    held = bool(t) and bool(cards.card_under(acts.entries(label), key, f"{t['name']}-conductor"))
+    step, words = land_unstarted(key, False, held)
+    if step == "start":
+        try:
+            land_session(fleet, label, key, acts)
+        except Refusal as e:
+            step, words = land_unstarted(key, False, held, str(e))
+    not words or fail(words)
 
 
 CARD_READ = 30  # seconds between a batch wait's reads of its card in Pending You, the poll its post's answer asks for
