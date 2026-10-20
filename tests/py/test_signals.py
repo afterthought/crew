@@ -1,7 +1,7 @@
 """A finding recorded through crew signal, its moves and its show (signals.1 to signals.5), and a program's capture
 landed through crew signal land (signals.6): the capture a signal goes in, named and quoted by its excerpt's verdict;
 the number it takes in its capture; its file; what crew says; where its agent was working; a curation move's record and
-refusals; a route's; crew signal show's text; and what a program's capture must hold to land and what its landing
+refusals; a route's; a short id's signal; crew signal show's text; and what a program's capture must hold to land and what its landing
 writes. That a capture and its signal are one commit on the flywheel's branch, the raw record banked on the host, a
 route and its unit one commit, any host answers show from the branches alone, and a program's capture lands in one
 commit and once, is the signal journey's (t-journey-signals)."""
@@ -200,6 +200,25 @@ class TestShow:
         assert plan.shown_signal("s/01-a", "main", "r", "t", None, [("wldn", route)]).endswith("Its move in wldn: route unit/u, by chuck@laptop on 2026-10-12")
 
 
+class TestShortId:
+    CAP = "2026-10-20-swb-2-conductor-9f2c1a7e"
+    NAMES = ["capture.md", "01-cfn-nag-templates.md", "02-beside-cfn-lint.md", "10-ten.md", "03-Not-Ours.md"]
+
+    def test_a_short_id_is_the_one_signal_its_capture_numbers(self):
+        assert plan.signal_named(f"{self.CAP}/01", self.NAMES) == f"{self.CAP}/01-cfn-nag-templates"
+        assert plan.signal_named(f"{self.CAP}/02", self.NAMES) == f"{self.CAP}/02-beside-cfn-lint"
+        assert plan.signal_named(f"{self.CAP}/03", self.NAMES) is None
+
+    def test_a_short_id_is_told_from_a_full_one_which_is_taken_as_it_is(self):
+        assert plan.SHORT_ID.match("2026-10-20-swancloud-planner-72efd8ec/01")
+        assert not plan.SHORT_ID.match("2026-10-20-swancloud-planner-72efd8ec/01-a-slug")
+        assert plan.signal_id(None, "wldn", "x/01-a") == "x/01-a"
+
+    def test_a_short_id_two_signals_answer_to_is_refused_naming_both(self):
+        with pytest.raises(Refusal, match=r"^signal x/01 names 2 signals: x/01-a, x/01-b; give the full id of one$"):
+            plan.signal_named("x/01", ["01-a.md", "01-b.md"])
+
+
 class TestRefused:
     FLEET = {"partitions": {"wldn": {"label": "wldn", "blueprints": ["WilldanGroup/willdan-blueprints"], "state": "WilldanGroup/crew-state"}},
              "teams": {}, "hosts": {}}
@@ -207,6 +226,8 @@ class TestRefused:
     def test_a_signal_in_neither_home_is_refused_naming_both(self):
         with pytest.raises(Refusal, match="^no signal x/01-y on wldn/main of WilldanGroup/crew-state or on main of WilldanGroup/willdan-blueprints"):
             plan.no_signal(self.FLEET, "wldn", "x/01-y")
+        with pytest.raises(Refusal, match="^no signal x/01 on wldn/main .*: signals/x/ holds no 01-<slug>.md in either$"):
+            plan.no_signal(self.FLEET, "wldn", "x/01")
 
     def test_a_route_is_no_curation_move_it_is_written_only_with_its_unit(self, capsys):
         with pytest.raises(SystemExit):
