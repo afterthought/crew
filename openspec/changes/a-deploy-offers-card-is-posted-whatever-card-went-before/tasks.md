@@ -20,4 +20,4 @@
 
 ## 5. Checks
 
-- [ ] 5.1 The logic tier and the end-to-end tests this change affects are green (design, *Task notes* 5.1).
+- [x] 5.1 The logic tier and the end-to-end tests this change affects are green (design, *Task notes* 5.1).
