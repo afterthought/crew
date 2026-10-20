@@ -8295,10 +8295,24 @@ def card_session(fleet, a):
               "the decision", file=sys.stderr)
 
 
+# The change note of a landing card changed to carry its reading's new link (card-sessions).
+RELINKED = "Its reading is open again at a new link"
+
+
+def relinks(started, got):
+    """Whether crew card session land/<bolt> changes the landing card to carry its reading's new link (card-sessions
+    "A landing's session follows the bolt's head"): only when it started the session anew, and the card, as
+    get_request gives it (got, None when none is held or it could not be read), still waits on the user; a card the user
+    has answered is left as it is, since a new card following it would ask for the landing again."""
+    return bool(started) and isinstance(got, dict) and got.get("status") in OPEN
+
+
 def land_session(fleet, label, key, acts=None):
     """crew card session land/<bolt>: the landing's one reading session, on what the bolt brings to main at its head,
     on the host of the team holding the bolt and refused elsewhere, naming it, read from the same facts as its card
-    (land_facts) and opened as the card opens it (reading_open), its link printed. Refused for a bolt the plan does not
+    (land_facts) and opened as the card opens it (reading_open), its link printed. When it started the session anew,
+    none running, the landing card its conductor holds is changed in place to carry the new link while it waits on the
+    user (relinks, row_card_change), and left as it is once they answered it. Refused for a bolt the plan does not
     hold, one no team holds, and one that does not read proven, saying why (card-sessions)."""
     acts = acts or CardActs(fleet)
     bolt = key.split("/", 1)[1]
@@ -8309,10 +8323,28 @@ def land_session(fleet, label, key, acts=None):
     not why or fail(why)
     facts, why = land_facts(fleet, label, plan, b, t)
     not why or fail(f"bolt {bolt} does not read proven, so its landing card is not raised and has no reading: {why}")
-    url, decided, _ = acts.reading(label, key, facts)
+    url, decided, started = acts.reading(label, key, facts)
     print(url)
     if decided:
         print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
+    owner = f"{t['name']}-conductor"
+    card = cards.card_under(acts.entries(label), key, owner) if started else None
+    if not card:
+        return
+    got = None
+    try:
+        with acts.bridge(owner, "The reading stands at its new link, and its card is not changed.") as py:
+            got, words = py.answer("get_request", {"requestId": card, "name": owner})
+    except Refusal as e:
+        words = str(e)
+    if relinks(started, got):
+        facts = dict(facts, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label)))
+        row_card_change(fleet, label, owner, cards.landing_card, facts, RELINKED, card_where(t["kit"]), acts)
+    elif got is not None:
+        print(f"card {key}: {card} is left as it is: " + ("the user has answered it" if got.get("status") == "answered"
+                                                          else f"Pending You shows it {got.get('status')}"))
+    else:
+        print(f"card {key}: {card} is not changed, since whether it waits on the user can't be read: {words}", file=sys.stderr)
 
 
 def proposal_reads(argvs):
