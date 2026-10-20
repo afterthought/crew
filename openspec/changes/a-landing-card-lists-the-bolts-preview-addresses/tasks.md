@@ -8,7 +8,7 @@
 ## 2. The card
 
 - [x] 2.1 A landing card built with a preview lists its addresses beside the reading, says it lands nothing, says a preview that failed or was not named, keeps its face within eight artifacts, and one built without is as before; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 4 and *Task notes* 2.1).
-- [ ] 2.2 A landing card is raised with its preview asked for first when the kit declares one, and its close releases the preview crew recorded; proved by cases with the acts' stand-in in `tests/py/test_cards.py` (design, *Decisions* 2, 3, 6 and *Task notes* 2.2).
+- [x] 2.2 A landing card is raised with its preview asked for first when the kit declares one, and its close releases the preview crew recorded; proved by cases with the acts' stand-in in `tests/py/test_cards.py` (design, *Decisions* 2, 3, 6 and *Task notes* 2.2).
 
 ## 3. The handed ask and the sweep
 
