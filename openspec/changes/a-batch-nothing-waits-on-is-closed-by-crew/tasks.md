@@ -7,7 +7,7 @@
 - [x] 1.3 The rail's sweep on the partition's main-level host records crew's close of each such batch once, as `batch.close` in the planner's name, before it reaches Pending You, and withdraws a card open under it with the same words, proved by the sweep's cases in `tests/py/test_rail.py` (design, Task notes 1.3).
 - [x] 1.4 The rail's sweep lines name a close with no card as such, proved by a `rail_text` case in `tests/py/test_rail.py` (design, Task notes 1.4).
 - [x] 1.5 A unit dropped from the plan after its batch was made, by a unit drop, a proposal's drop or its bolt's drop without requeue, no longer keeps that batch waiting, and crew's close names it as dropped, proved by cases in `tests/py/test_batches.py` and `tests/py/test_rail.py` (design, Task notes 1.5).
-- [ ] 1.6 The logic tier is green: `devenv shell -- moon run tests:logic`.
+- [x] 1.6 The logic tier is green: `devenv shell -- moon run tests:logic`.
 
 ## 2. The documents say it
 
