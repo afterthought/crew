@@ -10,7 +10,8 @@
 # reading and releasing its preview, and once the fix merges and the bolt reads proven again a new card follows it
 # with a new reading and a preview of the new head; the landing then lands, leaving the kit's detached main checkout
 # as it was and marking the bolt's branch landed; the bolt lands in the plan once every unit has, recording the commit
-# main holds and removing its branch, since main holds every commit of it, its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
+# main holds and removing its branch, since main holds every commit of it, and the place a stopped landing left on it,
+# its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
 # preview, and its conductor told; a landed bolt's branch holding a commit main lacks is kept and named instead, its
 # mark unset and the keeping recorded, and the team's next read leaves it; a bolt no team holds lands once its unit's
 # change is on main; and dropping a held
@@ -180,9 +181,12 @@ eq "$(git -C "$k" config branch.bolt/tenant-environments.crew)" "landed"
 ok "the landing then lands, its worktree removed, the detached main checkout left as it was and the bolt's branch marked landed"
 git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
 
-# The user approves the landing card raised again.
+# The user approves the landing card raised again. A landing stopped before it removed its worktree left one on the
+# bolt's branch, its process gone, which the landing sweeps with the bolt's branch.
 mkdir -p "$(home_of $box)/.stub-pendingyou/answered"
 echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answered/$again.json"
+git -C "$k" worktree add -q "$land" bolt/tenant-environments
+sh -c 'echo $$' > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
 : > "$CREW_TEST_LOG"
 expect_ok crew bolt land tenant-environments
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
@@ -194,6 +198,8 @@ eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid2"
 gone "$pid2"; eq "$(listed)" ""
 [[ ! -e $reading ]] || fail "the landing's reading outlived its card"
+has "$out" "$land is removed: bolt tenant-environments is in no plan"
+[[ ! -e $land ]] || fail "the landing's worktree outlived the landing"
 has "$out" "bolt/tenant-environments is removed: bolt tenant-environments has landed, and main holds every commit of it (git cherry); it was at"
 grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio)'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told of the landing:"$'\n'"$(calls)"
@@ -201,7 +207,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch, which main holds every commit of, and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch, the place a stopped landing left and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told"
 
 # A bolt whose branch takes a commit after its landing: crew bolt land keeps the branch at its commit, the user's, its
 # mark unset and the keeping recorded on the team's host, and the team's next read leaves it.

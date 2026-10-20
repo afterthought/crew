@@ -10,8 +10,8 @@ import plan
 OLD, NEW = "a" * 40, "b" * 40
 
 
-def said(rc, new=NEW, kept="''", level="yes", marked="yes"):
-    return f"RC={rc} OLD={OLD} NEW={new} KEPT={kept} LEVEL={level} MARKED={marked}\n"
+def said(rc, new=NEW, kept="''", why="''", level="yes", marked="yes"):
+    return f"RC={rc} OLD={OLD} NEW={new} KEPT={kept} WHY={why} LEVEL={level} MARKED={marked}\n"
 
 
 def test_a_landing_says_where_main_is_and_what_comes_next():
@@ -51,9 +51,15 @@ def test_checks_that_failed_land_nothing():
     assert plan.landing_said("b", "k", said(1, new=OLD))[1].startswith("bolt/b did not land: main's checks failed on it")
 
 
-def test_a_worktree_git_could_not_remove_is_named():
-    assert plan.landing_said("b", "k", said(2, new=OLD, kept="/k/places/land-b"))[1].endswith(
-        "Its worktree /k/places/land-b is kept: remove it once you have read why.")
+def test_a_worktree_git_could_not_remove_is_named_with_gits_words_and_goes_with_the_bolt():
+    """read.1, plan.19: the landing's place git could not remove is said by name, in git's words, never kept silently,
+    and crew bolt land sweeps it with the bolt or names it there."""
+    why = "\"fatal: '/k/places/land-b' contains modified or untracked files, use --force to delete it\""
+    for rc, new in ((2, OLD), (0, NEW)):
+        assert plan.landing_said("b", "k", said(rc, new=new, kept="/k/places/land-b", why=why))[1].endswith(
+            "Its worktree /k/places/land-b is kept, git refusing to remove it: fatal: '/k/places/land-b' contains modified "
+            "or untracked files, use --force to delete it. crew bolt land removes it with the bolt, or names it with why it stays.")
+    assert plan.landing_said("b", "k", said(0))[1].endswith("now crew bolt land b.")
 
 
 def test_words_crew_cannot_read_land_nothing():
