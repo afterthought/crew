@@ -516,11 +516,13 @@ LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="ab
 
 class ReadingActs:
     """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends, and a landing's
-    preview is asked for and released: a session's link given, or its start refused with why; the preview given
-    (preview), and its release said (released); Pending You's tools answered from answers, a (got, words) pair."""
+    preview is asked for and released: a session's link given, or its start refused with why, always (refused) or for
+    each start in turn (refusals, None for a start that opens); the preview given (preview), and its release said
+    (released); Pending You's tools answered from answers, a (got, words) pair."""
 
-    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None):
+    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None, refusals=()):
         self.answers, self.held, self.refused, self.started = dict(answers or {}), list(entries), refused, started
+        self.refusals = list(refusals)
         self.given, self.said = preview, released
         self.sessions, self.ended, self.emitted, self.calls, self.previews, self.releases = [], [], [], [], [], []
 
@@ -541,8 +543,9 @@ class ReadingActs:
 
     def reading(self, label, key, facts):
         self.sessions.append((label, key))
-        if self.refused:
-            raise crew.Refusal(self.refused)
+        why = self.refusals.pop(0) if self.refusals else self.refused
+        if why:
+            raise crew.Refusal(why)
         return "http://mac-studio.ts.swancloud.net:19432", False, self.started
 
     def end(self, label, key):
@@ -733,6 +736,100 @@ class TestLandingPreview:
         change = self.sent(acts, "update_request")
         assert change["changeNote"] == "Its preview of abc1234 is up"
         assert {"label": "Preview: web", "url": "http://web.example"} in change["context"]["links"]
+
+
+class TestLandingReading:
+    """A landing's raise opens its reading itself, and tries once more when it refuses, as crew card session would
+    (card-sessions "A landing's raise tries its reading again before raising without it"): the kit's main fetched on
+    the team's host, the landing read afresh and its reading opened again with those facts."""
+    TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    POSTED = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+              "post_request": ({"requestId": "req_l2", "version": 1}, None)}
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+    SLOW = "plannotator did not list land/b1's session within 10 seconds, so crew ended it"
+    ENDED = "plannotator ended before land/b1's session was ready: stub: refused to start"
+
+    def raised(self, monkeypatch, acts, fresh=None, fetched=None):
+        """raise_land of land/b1: the first read proven at abc1234, the second as fresh gives it, (facts, why), or
+        refused with fresh's words, proven at def5678 when None; the card, whether each read was a fresh one, and what
+        was fetched."""
+        reads, fetches = [], []
+        first = dict(LANDING, team="swb-1", host="mac-studio", base="abc0000")
+
+        def facts(fleet, label, p, b, t):
+            reads.append(plan.READ.bypass > 0)
+            if len(reads) > 1 and isinstance(fresh, str):
+                raise plan.Refusal(fresh)
+            return (first, None) if len(reads) == 1 else fresh or (dict(first, head="def5678"), None)
+
+        def fetch(fleet, t, where, *args):
+            fetches.append((where, *args))
+            if fetched:
+                raise plan.Refusal(fetched)
+            return 0, ""
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), self.TEAM))
+        monkeypatch.setattr(plan, "land_facts", facts)
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (False, None))
+        monkeypatch.setattr(plan.gather, "has_origin", lambda main: True)
+        monkeypatch.setattr(plan, "kit_git", fetch)
+        card = plan.raise_land(FLEET, {"label": "wldn", "key": "land/b1"}, acts)
+        return card, reads, fetches
+
+    def sent(self, acts):
+        return next((a for t, a in acts.calls if t == "post_request"), None)
+
+    def test_a_reading_that_opens_at_once_is_started_once_and_nothing_is_fetched(self, monkeypatch):
+        acts = ReadingActs(dict(self.POSTED))
+        assert self.raised(monkeypatch, acts) == ("req_l2", [False], [])
+        assert acts.sessions == [("wldn", "land/b1")]
+        assert self.sent(acts)["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+
+    def test_the_first_start_fails_and_the_second_opens(self, monkeypatch, capsys):
+        """card-sessions "The first start fails and the second opens": the card carries the second try's link, built
+        from the landing read afresh after the kit's main was fetched."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        assert self.raised(monkeypatch, acts) == ("req_l2", [False, True], [("/kit/main", "fetch", "-q", "origin")])
+        assert acts.sessions == [("wldn", "land/b1"), ("wldn", "land/b1")]
+        card = self.sent(acts)
+        assert card["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+        assert "sluice is green at def5678" in card["summary"] and "could not be opened" not in card["summary"]
+        assert capsys.readouterr().err == (f"card land/b1: its reading could not be opened on the tailnet: {self.SLOW}; crew "
+                                           "fetches switchboard-kit's main and tries once more\n")
+
+    def test_both_starts_fail(self, monkeypatch, capsys):
+        """card-sessions "Both starts fail": the card says so with the second start's reason and names crew card
+        session."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW, self.ENDED])
+        assert self.raised(monkeypatch, acts)[0] == "req_l2"
+        card = self.sent(acts)
+        assert "the bolt's conductor starts it with crew card session land/b1, and this card then carries its link." in card["summary"]
+        assert card["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
+        assert card["context"]["links"] == []
+        assert capsys.readouterr().err.splitlines()[-1] == (
+            f"card land/b1: its reading could not be opened on the tailnet: {self.ENDED}; crew card session land/b1 starts it")
+
+    def test_a_fetch_that_fails_is_said_and_the_reading_is_tried_again(self, monkeypatch, capsys):
+        why = "git fetch in /kit/main on mac-studio failed: fatal: unable to access GitHub"
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        assert self.raised(monkeypatch, acts, fetched=why)[0] == "req_l2"
+        assert len(acts.sessions) == 2 and self.sent(acts)["context"]["links"][0]["url"] == self.LINK
+        assert f"card land/b1: {why}; the reading is tried again all the same" in capsys.readouterr().err
+
+    def test_the_bolt_no_longer_reads_proven_at_the_second_try(self, monkeypatch):
+        """card-sessions "The bolt no longer reads proven at the second try": nothing posted or changed."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        card, reads, _ = self.raised(monkeypatch, acts, fresh=(None, "fix/b1/gap is in flight on it"))
+        assert (card, reads) == (None, [False, True])
+        assert acts.sessions == [("wldn", "land/b1")] and acts.calls == [] and acts.emitted == []
+
+    def test_a_fresh_read_that_is_refused_raises_the_first_facts_with_the_first_reason(self, monkeypatch):
+        """read.1: what the second read could not read is not guessed past."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        assert self.raised(monkeypatch, acts, fresh="bolt b1's kit could not be read: ssh: timed out")[0] == "req_l2"
+        assert acts.sessions == [("wldn", "land/b1")]
+        card = self.sent(acts)
+        assert "sluice is green at abc1234" in card["summary"]
+        assert card["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.SLOW}\n\n")
 
 
 class TestSessionWords:
