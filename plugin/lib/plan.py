@@ -4676,10 +4676,11 @@ def slot_stage(kind, name, kit, plan, bolts, marks):
     """The stage of the work a slot holds, and its tasks done and total where its change has a task list (teams.1):
     read from the kit as gathered (kit, unread unless ok) and the plan (None when it could not be read), bolts the
     names of those the team holds, marks the plan's Amended marks. A fix reads its stage from its branch's facts, its
-    place's or, its place gone, its branch's (fix_stage); a unit or a chore has landed, merged into its bolt, been dropped from the plan, left the team's bolts,
-    or reads its stage from its place. A unit has merged once its bolt holds its change archived; one whose change the
-    bolt holds open, carried there inside another unit's merge, reads its stage from its place, or the bolt's change
-    when its place is gone, with a third value, True, for carried (teams.17)."""
+    place's or, its place gone, its branch's (fix_stage); a unit or a chore has landed, merged into its bolt, been
+    dropped from the plan, left the team's bolts, or reads its stage from its place. A unit has merged once its bolt
+    holds its change archived; one whose change the bolt holds open, carried there inside another unit's merge, reads
+    its stage from its place, or the bolt's change when its place is gone, with a third value, True, for carried
+    (teams.17)."""
     if not kit.get("ok"):
         return "unknown", None
     if kind == "fix":
@@ -4909,9 +4910,9 @@ def fix_branch_gone(main, branch, up, path=None):
 def fix_branches_over(facts, held, dropped, bolts):
     """Each fix branch no worktree holds whose work is over, for the tidy to remove (teams.3, plan.10), from each one's
     facts (facts, gather.fix_facts, by branch): of those no slot or worktree holds (held, the slots' names and places
-    and the worktrees' branches) and their conductor did not drop (dropped, which fix_branch_gone judges), each whose stage reads landed or merged (fix_stage, its bolt planned when it is in
-    bolts), so main or its bolt holds its tip and nothing is lost; [(branch, why its work is over)] in name order. Any
-    other is left as it is and not named."""
+    and the worktrees' branches) and their conductor did not drop (dropped, which fix_branch_gone judges), each whose
+    stage reads landed or merged (fix_stage, its bolt planned when it is in bolts), so main or its bolt holds its tip
+    and nothing is lost; [(branch, why its work is over)] in name order. Any other is left as it is and not named."""
     out = []
     for branch, f in sorted(facts.items()):
         if branch in held or branch in dropped:
@@ -4967,12 +4968,12 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
     (the name a slot holds its work by, why its work is over or None while it goes on). crew made it when it is
     directly in <kit>/bolts/ on bolt/<its folder>, or detached there, as the tidy leaves it (bolt_detach), or directly
     in <kit>/places/ on unit/<its folder>, on chore/<name> in chore-<name>, or on a fix/ branch made from a bolt (up, its
-    upstream, bolt/<bolt> or origin/bolt/<bolt>: gather.bolt_ref). A bolt's is over once no plan has the bolt (bolts); a unit's once it has landed on main (on_main), merged
-    into its bolt (archived_of(bolt)) or no
-    plan has it (units), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while
-    the bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
-    it (chores); a fix's once it has landed on main or merged into its bolt (fix_stage, on its branch's facts,
-    fix_of(branch)), its conductor dropped it (its branch in dropped, record 0028) or no plan has its bolt."""
+    upstream, bolt/<bolt> or origin/bolt/<bolt>: gather.bolt_ref). A bolt's is over once no plan has the bolt (bolts);
+    a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)) or no plan has it (units),
+    merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while the bolt holds it
+    open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has it (chores); a
+    fix's once it has landed on main or merged into its bolt (fix_stage, on its branch's facts, fix_of(branch)), its
+    conductor dropped it (its branch in dropped, record 0028) or no plan has its bolt."""
     folder, bolt = os.path.basename(path), up[5:] if up.startswith("bolt/") else None
     if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch in (f"bolt/{folder}", ""):
         return None, None if folder in bolts else f"bolt {folder} is in no plan"
