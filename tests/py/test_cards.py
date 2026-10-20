@@ -822,6 +822,40 @@ class TestLandingReading:
         assert (card, reads) == (None, [False, True])
         assert acts.sessions == [("wldn", "land/b1")] and acts.calls == [] and acts.emitted == []
 
+    # Why is kept in the run record, on the card's own entry (card-sessions "Why is kept in the run record").
+    def test_a_post_whose_reading_could_not_open_records_why(self, monkeypatch):
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW, self.ENDED])
+        self.raised(monkeypatch, acts)
+        post, = acts.emitted
+        assert (post["Act"], post["Card"], post["Key"], post["Unread"]) == ("card.post", "req_l2", "land/b1", self.ENDED)
+
+    def test_a_change_whose_reading_could_not_open_records_why(self, monkeypatch):
+        """A merge that moves the head changes the card the conductor holds, without its reading."""
+        held = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}, held, refused=self.ENDED)
+        assert self.raised(monkeypatch, acts)[0] == "req_l1"
+        change, = acts.emitted
+        assert (change["Act"], change["Card"], change["Unread"]) == ("card.update", "req_l1", self.ENDED)
+
+    def test_a_card_whose_reading_opened_records_no_reason(self, monkeypatch):
+        """card-sessions "A card whose reading opened records no reason"."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        self.raised(monkeypatch, acts)
+        post, = acts.emitted
+        assert post["Act"] == "card.post" and post.get("Unread") is None
+
+    def test_the_run_record_takes_why_on_a_cards_entry_and_leaves_an_empty_one_out(self, monkeypatch, tmp_path):
+        import record
+        monkeypatch.setattr(record, "ROOT", tmp_path / "crew")
+        monkeypatch.setattr(record, "_session", None)
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        record.emit("wldn", "card.post", ["bolt/b1"], by="swb-1-conductor", Card="req_l2", Key="land/b1", Unread=self.ENDED)
+        record.emit("wldn", "card.post", ["bolt/b2"], by="swb-1-conductor", Card="req_l3", Key="land/b2", Unread=None)
+        f, = (tmp_path / "crew" / "wldn" / "runs" / "mac-studio").glob("*.rec")
+        assert " Unread " in f.read_text().split("%allowed:")[1].splitlines()[0] + " "
+        unread, opened = record.parse(f.read_text())
+        assert unread["Unread"] == self.ENDED and "Unread" not in opened
+
     def test_a_fresh_read_that_is_refused_raises_the_first_facts_with_the_first_reason(self, monkeypatch):
         """read.1: what the second read could not read is not guessed past."""
         acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])

@@ -9,7 +9,7 @@
 
 ## 2. The run record keeps why
 
-- [ ] 2.1 A landing card's `card.post` and `card.update` entries hold `Unread` with crew's message when its reading could not open, and none when it opened. The field is in the run record's descriptor, and its cases pass in `tests/py/test_cards.py` (design, Decision 3; Task notes 2.1).
+- [x] 2.1 A landing card's `card.post` and `card.update` entries hold `Unread` with crew's message when its reading could not open, and none when it opened. The field is in the run record's descriptor, and its cases pass in `tests/py/test_cards.py` (design, Decision 3; Task notes 2.1).
 
 ## 3. The conductor's wait starts a missing reading
 
