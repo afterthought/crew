@@ -4770,7 +4770,8 @@ def tidy(fleet, a):
     chore/<name> in chore-<name>, or on a fix/ branch; nothing else is touched. While its bolt lasts, a bolt's worktree
     still on its branch is detached at the bolt's tip when it is clean, its branch then marked as crew's, and named as
     kept on the branch while it is not (bolt_detach, plan.18). A bolt's branch crew marked, which no worktree holds,
-    goes once no plan has the bolt (bolt_branch_over); crew's marks are read once, before the worktrees are judged, so
+    goes once no plan has the bolt, and a landed bolt's only when main holds every commit of it, being kept, named and
+    recorded otherwise (bolt_branch_gone, record 0003); crew's marks are read once, before the worktrees are judged, so
     each place of a landed bolt is judged against main. The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
     makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
@@ -4852,26 +4853,17 @@ def tidy(fleet, a):
             print(branch_gone(t, main, branch, ups.get(branch, ""), now, path, "it was dropped" if branch in dropped else over,
                               marks.get(ups.get(branch, "")) == "landed"))
             continue
-        sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
-                             capture_output=True, text=True, env=gitenv()).stdout.strip()
-        r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
-        print(f"{path} and {branch} are removed; the branch was at {sha}" if r.returncode == 0 else
-              f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
+        print(bolt_branch_gone(t, main, branch, marks.get(branch), now, bolts, False, path))  # a legacy bolt's worktree
     # A bolt is a branch with no worktree (record 0026): each one crew made, by its mark, goes once no plan has the bolt
-    # and no worktree holds it; a deletion sluice's guard refuses, while a submission to it waits, is kept and named.
+    # and no worktree holds it, a landed bolt's only when main holds every commit of it; a deletion sluice's guard
+    # refuses, while a submission to it waits, is kept and named.
     worked = {w.get("branch") for w in trees}
     for branch in sorted(dropped - worked - held):  # a dropped fix's branch no worktree holds, its place gone already
         print(branch_gone(t, main, branch, ups.get(branch, ""), now, landed=marks.get(ups.get(branch, "")) == "landed"))
-    for branch in sorted(marks):
-        name = branch[len("bolt/"):]
-        over = bolt_branch_over(name, bolts, branch in worked)
-        if not over:
-            continue
-        sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/bolt/{name}"],
-                             capture_output=True, text=True, env=gitenv()).stdout.strip()
-        r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", f"bolt/{name}"], capture_output=True, text=True, env=gitenv())
-        print(f"bolt/{name} is removed: {over}; it was at {sha}" if r.returncode == 0 else
-              f"bolt/{name} is kept: {over}, and git refused to remove it: {' '.join(r.stderr.split())}")
+    for branch, mark in sorted(marks.items()):
+        said = bolt_branch_gone(t, main, branch, mark, now, bolts, branch in worked)
+        if said:
+            print(said)
 
 
 def bolt_marks(main):
@@ -4960,7 +4952,8 @@ def branch_said(branch, path, sha, over, kept, refused=None):
     said = f"{lead} is kept at {sha}: {over}, and {why}"
     if kind == "fix":
         return said
-    return said + ("" if n else ", the user's to keep or delete") + f"; a {kind} added as {name} starts from it"
+    said += "" if n else ", the user's to keep or delete"
+    return said if kind == "bolt" else said + f"; a {kind} added as {name} starts from it"
 
 
 def kept_record(over, target, kept):
@@ -4981,6 +4974,47 @@ def bolt_branch_over(bolt, bolts, worktree):
     no worktree holds the branch; else None, while the bolt is planned or held, or a worktree is on its branch."""
     return None if bolt in bolts or worktree else f"bolt {bolt} is in no plan"
 
+
+def bolt_branch_judged(bolt, bolts, worktree, mark, target, cherry):
+    """What becomes of a bolt's branch crew made (plan.9, plan.10, record 0003), from plain facts: None while the bolt
+    is planned (bolts) or a worktree holds the branch (worktree), left as it is; else why it is over and branch_kept's
+    (why, count) when it is kept, or None when it goes. One marked given (mark), a dropped bolt's or one landed by a
+    crew older than the landed mark, or a legacy bolt worktree's with no mark, goes once no plan has the bolt
+    (bolt_branch_over); one marked landed goes only when git cherry (cherry: exit, output, error) of it against the
+    kit's main now (target) finds no commit whose patch main lacks, and is kept otherwise, or when git cannot compare
+    them (read.1)."""
+    over = bolt_branch_over(bolt, bolts, worktree)
+    if not over:
+        return None
+    if mark != "landed":
+        return over, None
+    kept = branch_kept(target, cherry)
+    return (f"bolt {bolt} has landed" if kept else
+            f"bolt {bolt} has landed, and {ref_named(target)} holds every commit of it (git cherry)"), kept
+
+
+def bolt_branch_gone(t, main, branch, mark, now, bolts, worktree, path=None):
+    """A bolt's branch crew made, by its mark (mark, bolt_marks), or a legacy bolt worktree's once its place (path) is
+    removed: judged by bolt_branch_judged, a landed bolt's against the kit's main now (now) by git cherry, run only
+    then; deleted, saying the commit it was at, or kept, its mark unset so no later read deletes it, named as the
+    user's and recorded once on the team's host as branch.kept (record 0003); a deletion git or sluice's guard refuses
+    is kept and named. None while the bolt lasts."""
+    git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
+    bolt = branch.split("/", 1)[-1]
+    r = git("cherry", now, branch) if mark == "landed" else None
+    judged = bolt_branch_judged(bolt, bolts, worktree, mark, now, r and (r.returncode, r.stdout, r.stderr))
+    if not judged:
+        return None
+    over, kept = judged
+    sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
+    if kept:
+        git("config", "--unset", f"branch.{branch}.crew")
+        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [branch], why=kept_record(over, now, kept),
+                    Head=sha, Count=kept[1])
+        return branch_said(branch, path, sha, over, kept)
+    r = git("branch", "-q", "-D", branch)
+    return branch_said(branch, path, sha, over, None,
+                       f"{over}, and git refused to remove it: {' '.join(r.stderr.split()) or f'exit {r.returncode}'}" if r.returncode else None)
 
 
 def bolt_detach(path, branch, kdir, over, locked, status):
