@@ -13,7 +13,7 @@
 ## 3. The commands
 
 - [x] 3.1 `crew card session land/<bolt>` prints the running session's link, or starts it anew and changes the open card in place to carry the new link while the card waits on the user, and refuses a bolt that does not read proven; proved by a case in `tests/py/test_cards.py` (design, *Decisions* 4 and *Task notes* 3.1).
-- [ ] 3.2 `crew card wait land/<bolt>` prints the session's annotations as notes on the landing card and an approval as landing nothing, then forgets the decided session; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 5 and *Task notes* 3.2).
+- [x] 3.2 `crew card wait land/<bolt>` prints the session's annotations as notes on the landing card and an approval as landing nothing, then forgets the decided session; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 5 and *Task notes* 3.2).
 
 ## 4. The words
 

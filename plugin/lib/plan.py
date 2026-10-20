@@ -8682,8 +8682,10 @@ def card_wait(fleet, a):
     user's words after it as they are, closed in plannotator with no decision, or ended with no decision; a decision
     made before the wait began is printed at once. A session crew ended, its card closed, is said so. A batch card's,
     batch/<n>, waits on the card and its one session together, on the main level's host (batch_wait); an old batch
-    card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. Refused for a key with no session
-    started."""
+    card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. A landing's, land/<bolt>, waits on
+    its reading alone, on the team's host: its decision is notes on the landing card and never the word to land
+    (land_waited), and once it is printed the session is forgotten (reading_decided), so the next crew card session
+    starts it anew; the card is left as it is. Refused for a key with no session started."""
     label, d = card_of(fleet, a)
     if a.key.startswith("batch/") and not old_batch(a.key):
         return batch_wait(fleet, label, a.key, d)
@@ -8692,20 +8694,23 @@ def card_wait(fleet, a):
         if t["machine"] != crew.this_host():
             return forward_card(fleet, t, a, label)
     name = f"{a.key} {a.unit}" if a.unit else a.key
+    say = land_waited if a.key.startswith("land/") else waited
     card_recorded(d) or fail(f"no session was started for card {name}: crew card session {name} starts one")
     while True:
-        said = waited(name, card_result(d), True)
+        decided = card_result(d)
+        said = say(name, decided, True)
+        if not said:
+            s = card_recorded(d)
+            if s is None:
+                said = say(name, None, False)
+            else:
+                listed, _ = plannotator_sessions()  # a list that can't be read says nothing: the wait goes on
+                decided = card_result(d)
+                said = say(name, decided, card_recorded(d) == s, gone=listed is not None and not serving(listed, s))
         if said:
             print(said)
-            return
-        s = card_recorded(d)
-        if s is None:
-            print(waited(name, None, False))
-            return
-        listed, _ = plannotator_sessions()  # a list that can't be read says nothing: the wait goes on
-        said = waited(name, card_result(d), card_recorded(d) == s, gone=listed is not None and not serving(listed, s))
-        if said:
-            print(said)
+            if say is land_waited:
+                reading_decided(d, decided)
             return
         time.sleep(CARD_POLL)
 
@@ -8833,6 +8838,38 @@ def waited(name, decided, recorded, gone=False):
     if not recorded:
         return f"{name}: crew ended its session, as its card closed or crew card end was run"
     return f"{name}: the session ended with no decision" if gone else None
+
+
+def land_waited(name, decided, recorded, gone=False):
+    """What a wait on a landing's reading says once it ends (card-sessions, briefs.9): its annotations, with the user's
+    words as plannotator gives them, as notes on the landing card; an approval, with any words after it, as landing
+    nothing, the card's approval being the word to land; anything else as waited says it. None while it runs
+    undecided."""
+    words = f"\n{decided[1].rstrip(chr(10))}" if decided and decided[1] else ""
+    if decided and decided[0] == "annotated":
+        return f"{name}: notes from its reading, as notes on the landing card:" + words
+    if decided and decided[0] == "approved":
+        return f"{name}: approved in its reading, which lands nothing: the card's approval is the word to land" + words
+    return waited(name, decided, recorded, gone)
+
+
+def reading_decided(d, decided):
+    """A landing's reading once its wait printed the user's decision (card-sessions): an approval or annotations set
+    aside, as result.<started>.json, and the session forgotten, plannotator having ended with the decision, so the next
+    crew card session starts it anew and changes the card's link, and the next wait waits on that one. Anything else,
+    and a session crew ended meanwhile, is left as it is."""
+    if not decided or decided[0] not in ("approved", "annotated"):
+        return
+    try:
+        lock = open(d / ".lock", "w")
+    except FileNotFoundError:
+        return  # crew ended the session, its card closed, while the wait printed
+    with lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        s = card_recorded(d)
+        if s and (d / "result.json").exists():
+            (d / "result.json").rename(d / f"result.{re.sub(r'[-:]', '', s['started'])}.json")
+            (d / "session.json").unlink()
 
 
 def end_session(label, key, unit=None):

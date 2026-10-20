@@ -604,6 +604,31 @@ class TestSessionWords:
     def test_a_session_gone_undecided_ends_its_wait(self):
         assert plan.waited("v", None, True, gone=True) == "v: the session ended with no decision"
 
+    def test_a_landings_reading_is_notes_on_its_card_and_its_approval_lands_nothing(self):
+        """card-sessions "Annotated in a landing's session" and "Approved in a landing's session"."""
+        notes = "# Annotations\n\n1. 03-y-diff.txt: this drops the retry\n"
+        assert plan.land_waited("land/y", ("annotated", notes, 1), True) == (
+            "land/y: notes from its reading, as notes on the landing card:\n# Annotations\n\n1. 03-y-diff.txt: this drops the retry")
+        assert plan.land_waited("land/y", ("approved", None, 0), True) == (
+            "land/y: approved in its reading, which lands nothing: the card's approval is the word to land")
+        assert plan.land_waited("land/y", ("approved", "Looks right.", 0), True).endswith("the word to land\nLooks right.")
+        assert plan.land_waited("land/y", ("dismissed", None, None), True) == "land/y: closed in plannotator with no decision"
+        assert plan.land_waited("land/y", None, True) is None
+        assert plan.land_waited("land/y", None, True, gone=True) == "land/y: the session ended with no decision"
+        assert plan.land_waited("land/y", None, False) == "land/y: crew ended its session, as its card closed or crew card end was run"
+
+    def test_a_decided_landing_reading_is_set_aside_and_forgotten_and_an_undecided_one_kept(self, tmp_path):
+        s = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio.ts.swancloud.net:19432", "started": "2026-10-19T10:00:00Z"}
+        (tmp_path / "session.json").write_text(json.dumps(s))
+        (tmp_path / "result.json").write_text(json.dumps({"decision": "dismissed"}))
+        plan.reading_decided(tmp_path, ("dismissed", None, None))
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["result.json", "session.json"]
+        (tmp_path / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "x"}))
+        plan.reading_decided(tmp_path, ("annotated", "x", 1))
+        assert sorted(p.name for p in tmp_path.iterdir()) == [".lock", "result.20261019T100000Z.json"]
+        assert plan.card_recorded(tmp_path) is None and plan.card_result(tmp_path) is None
+        plan.reading_decided(tmp_path / "gone", ("approved", None, 0))
+
     def test_a_batch_whose_change_can_not_be_read_names_the_unit_and_the_host(self):
         t = {"name": "atl-1", "machine": "mac-studio", "kit": {"main": "/a/main"}}
         assert plan.unread_change(t, "z1", "abc1234", 255, "ssh: connect to host mac-studio port 22: Operation timed out\n") == (
