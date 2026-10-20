@@ -22,7 +22,7 @@
 
 ## 5. The journey
 
-- [ ] 5.1 A landing's session is started with its card, given again by `crew card session`, ended and started again by a fix, and ended by the landing, on the stubs; proved by `tests/t-journey-land.sh` (design, *Task notes* 5.1).
+- [x] 5.1 A landing's session is started with its card, given again by `crew card session`, ended and started again by a fix, and ended by the landing, on the stubs; proved by `tests/t-journey-land.sh` (design, *Task notes* 5.1).
 
 ## 6. Checks
 
