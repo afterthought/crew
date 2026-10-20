@@ -2843,8 +2843,9 @@ def plan_approve(fleet, a):
 
 
 def plan_drop(fleet, a):
-    """crew plan drop <n> "<reason>": an open proposal closed unapplied, with the reason; the planner is told when
-    someone else dropped it, and crew withdraws its card with the reason (raise_proposal_at)."""
+    """crew plan drop <n> "<reason>": an open proposal closed unapplied, with the reason kept whole on its record; the
+    planner is told when someone else dropped it, and crew withdraws its card with the reason, or acks it, once the
+    user answered it, as dropped on their note (raise_proposal_at, DROPPED)."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
 
@@ -3319,12 +3320,17 @@ def chain_open(pl, first):
 
 
 SWEPT = "Raised again as the plan stands"  # the change note of a proposal's card the rail's sweep raises
+# The outcome a dropped proposal's card is acked with once the user answered it: their note, the drop's reason, may ask
+# them something, which Pending You refuses as an outcome (proposal 161's drop on 2026-10-19: "Your outcome asks your
+# person something; put it on a new card with follows instead."), so the reason stays on the proposal's record.
+DROPPED = "Dropped on your note, nothing of it applied"
 
 
 def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=(), outcome=None, reason=None, by=None):
     """Which act proposal n's card takes at its event (record 0031 §1), from facts alone: ("post",) when it is
     accepted, ("change", note) when it is rewritten (replace), a conductor agrees, or the rail's sweep finds its card
-    missing or lost (sweep), ("close", outcome, reason) when it is approved or dropped, or None when it has no card of
+    missing or lost (sweep), ("close", outcome, reason) when it is approved, or dropped, its card acked with DROPPED
+    once the user answered it and withdrawn with the reason while it waits, or None when it has no card of
     crew's. mine, whether the planner wrote it, the card's owner, whose proposals alone crew raises a card for;
     was_mine, at a rewrite, whether the planner wrote the one it replaces, whose card a rewrite of anyone else's
     withdraws. A change is made only where its card was posted, held on this host, or on the planner's own (home),
@@ -3343,7 +3349,7 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
             return ("skip",)
         return ("change", f"Rewritten as proposal {n} after your note" if event == "replace" else
                 "No longer waits on " + either([f"{t}-conductor" for t in agreed]))
-    return ("close", outcome, None) if event == "approve" else ("close", None, reason)
+    return ("close", outcome, None) if event == "approve" else ("close", DROPPED, reason)
 
 
 def raise_proposal(fleet, row, acts=None):
@@ -9723,8 +9729,7 @@ def card_closed(acts, label, owner, key, outcome, reason):
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return None
-    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
-              Outcome=outcome if outcome is not None else reason)
+    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=cards.close_words(got, outcome, reason))
     print(f"card {key}: {card} {state}")
     return card
 
