@@ -6,9 +6,9 @@ On 2026-10-20 crew on wldn's box posted 23 batch cards in wldn-planner's name, f
 
 ## What Changes
 
-- A batch waits on nothing once each of its units has either landed or been held by a later batch, whose card then carries that unit to the user. crew reads such a batch closed from the run record alone, at every rail read, the board's among them, so it is no row and its card is never posted.
-- A batch with even one unit that has not landed and that no later batch holds stays a row, exactly as today, until the user answers its card.
-- The rail's sweep, on the partition's main-level host, records crew's close of each such batch once, in the planner's name, with words that say why: which units have landed and which later batch holds the others.
+- A batch waits on nothing once each of its units has landed, been dropped from the plan since the batch was made, or been held by a later batch, whose card then carries that unit to the user. crew reads such a batch closed from the run record alone, at every rail read, the board's among them, so it is no row and its card is never posted.
+- A batch with even one unit that has not landed, was not dropped and that no later batch holds stays a row, exactly as today, until the user answers its card.
+- The rail's sweep, on the partition's main-level host, records crew's close of each such batch once, in the planner's name, with words that say why: which units have landed, which were dropped, and which later batch holds the others.
 - A card still open under such a batch's key is withdrawn by the sweep with the same words, so the 23 open in wldn close themselves on the next read after this lands.
 - crew does not raise a card for such a batch when the planner's `crew review --wait` returns, and the rail's sweep text says what it closed.
 - The landing's rule is unchanged: crew's close is not the user's answer, and a bolt still lands only once each unit's latest change has been in a batch the user answered.
