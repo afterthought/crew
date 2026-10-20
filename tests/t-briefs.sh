@@ -193,6 +193,7 @@ for want in "swancloud's main moves only through sluice (\`state.3\`), so never 
 lacks "$out" "read-tree"; lacks "$out" "push swancloud's main"
 expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
+  "The bolt's branch goes too, once main holds every commit of it" "a branch holding a commit main lacks is kept and named" \
   "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" \
   "The word to land is also the word for sluice to push main to GitHub: you push nothing, and pull and level no host's checkout" \
   "records the commit GitHub's main holds" "closes the bolt's landing card on its team's host" "Nothing waits on a host, and no agent is told main moved" \
