@@ -1449,10 +1449,11 @@ def preview_change(shown, outcome, head):
 def preview_listed(doc, branch, head):
     """The preview of head on branch as `sluice previews --json` lists it (doc), its fields checked as sluice 0.29.3
     gives them (read.2): {head, name, addresses, state}, with sluice's output when it failed; None when none is listed.
-    Refused when the document is no list, or the entry's fields are not sluice's."""
+    Refused when the document is no list of objects, or the entry's fields are not sluice's."""
     isinstance(doc, list) or fail(f"sluice's previews are no list crew reads: {cut(json.dumps(doc), 200)}")
     for e in doc:
-        rev = e.get("revision") if isinstance(e, dict) else None
+        isinstance(e, dict) or fail(f"sluice lists a preview crew can't read: {cut(json.dumps(e), 200)}")
+        rev = e.get("revision")
         if not (e.get("branch") == branch and isinstance(rev, str) and len(rev) >= 7 and (head.startswith(rev) or rev.startswith(head))):
             continue
         name, addresses, state = e.get("name"), e.get("addresses"), e.get("state")

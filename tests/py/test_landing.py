@@ -258,6 +258,8 @@ class TestThePreview:
 
     @pytest.mark.parametrize("doc, said", [
         ({"previews": []}, "sluice's previews are no list crew reads"),
+        (["preview/0123456789ab"], "sluice lists a preview crew can't read"),
+        ([LISTED[0], None], "sluice lists a preview crew can't read"),
         ([dict(LISTED[2], state="booting")], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
         ([dict(LISTED[2], name=7)], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
         ([dict(LISTED[2], addresses={"web": None})], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
