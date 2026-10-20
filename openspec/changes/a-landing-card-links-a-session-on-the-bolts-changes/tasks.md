@@ -18,7 +18,7 @@
 ## 4. The words
 
 - [x] 4.1 The conductor's brief says the landing card links a reading, how its notes reach the conductor and that it lands nothing; proved by its words in `tests/t-briefs.sh` (design, *Task notes* 4.1).
-- [ ] 4.2 README, the crew skill and `plugin/bin/crew`'s usage describe the landing's session together; proved by `tests/t-docs.sh` (design, *Task notes* 4.2).
+- [x] 4.2 README, the crew skill and `plugin/bin/crew`'s usage describe the landing's session together; proved by `tests/t-docs.sh` (design, *Task notes* 4.2).
 
 ## 5. The journey
 
