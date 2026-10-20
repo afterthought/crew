@@ -342,7 +342,8 @@ def test_a_landings_verdict_is_its_trailer(repo):
 def landing(repo, tmp_path):
     """plan.LANDING as bolt_submit runs it on the team's host, for bolt b of the kit at repo, with a path holding wt
     and the tools LANDING runs but no wt-submit; and stand_in(), which puts a stand-in wt-submit there that lands as
-    sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout on main behind its HEAD."""
+    sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout on main behind its HEAD, and,
+    with stray, leaves a file git does not ignore in the landing's worktree."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
@@ -357,11 +358,12 @@ def landing(repo, tmp_path):
         return subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
                               capture_output=True, text=True, env=dict(os.environ, PATH=path))
 
-    def stand_in():
+    def stand_in(stray=False):
         (bin_ / "wt-submit").write_text(f'''#!/bin/sh
 [ "$1 $2" = "main --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
+{"echo s > stray.txt" if stray else ""}
 tree=$(printf 'x\\n' | git hash-object -w --stdin)
 idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree main
 GIT_INDEX_FILE=$idx git update-index --add --cacheinfo 100644,$tree,landed.txt
@@ -414,6 +416,22 @@ def test_a_landing_of_a_bolt_branch_crew_did_not_mark_leaves_it_unmarked(repo, t
     assert "MARKED=no" in r.stdout, r.stdout + r.stderr
     assert plan.landing_said("b", "kit", r.stdout)[1].endswith("crew could not mark bolt/b landed: its branch carries no mark of crew's.")
     assert subprocess.run(["git", "-C", str(repo.path), "config", "--get", "branch.bolt/b.crew"]).returncode == 1
+
+
+def test_a_landings_worktree_git_cannot_remove_is_kept_and_named_in_gits_words(repo, tmp_path):
+    """plan.LANDING and plan.landing_said (read.1, plan.19): a landing's worktree holding a file git does not ignore is
+    one git worktree remove refuses; the landing still lands, and names the worktree with git's words, which LANDING
+    keeps rather than discarding, for crew bolt land to sweep it with the bolt or name it there."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    land, _, stand_in = landing(repo, tmp_path)
+    r = stand_in(stray=True)()
+    landed, words = plan.landing_said("b", "kit", r.stdout)
+    assert landed, r.stdout + r.stderr
+    assert (land / "stray.txt").exists() and "land-b" in repo.git("worktree", "list")
+    assert f"Its worktree {land} is kept, git refusing to remove it: fatal: '{land}' contains modified or untracked files" in words, words
+    assert words.endswith("crew bolt land removes it with the bolt, or names it with why it stays."), words
 
 
 def test_a_landing_against_a_detached_main_checkout_leaves_it_untouched_and_says_nothing_of_levelling(repo, tmp_path):

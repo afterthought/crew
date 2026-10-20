@@ -62,9 +62,17 @@ class TestOver:
         assert over("places/fix-gone--y", "fix/gone/y", "origin/bolt/gone") == (
             "fix/gone/y", "bolt gone, which fix/gone/y was made from, is in no plan")
 
+    def test_a_landings_place_goes_with_its_bolt(self):
+        """bolt-teams "A bolt lands on main on the user's word" (plan.19): the landing's place, <kit>/places/land-<bolt>
+        on bolt/<bolt>, which git could not remove after its submission or a stopped landing left, is crew's, and over
+        once the landing ends the bolt."""
+        assert over("places/land-gone", "bolt/gone") == ("land-gone", "bolt gone is in no plan")
+        assert over("places/land-t", "bolt/t") == ("land-t", None)
+
     @pytest.mark.parametrize("path, branch, up", [
         ("mine", "mine", ""), ("places/fix-t--y", "fix/t/y", "origin/main"), ("x", "unit/x", "bolt/t"), ("bolts/not-elsewhere", "bolt/elsewhere", ""),
-        ("places/detached", "", ""), ("places/fix-t--y", "fix/t/y", ""), ("main", "main", "")])
+        ("places/detached", "", ""), ("places/fix-t--y", "fix/t/y", ""), ("main", "main", ""),
+        ("places/land-gone", "bolt/elsewhere", ""), ("places/land-gone", "", ""), ("places/gone", "bolt/gone", "")])
     def test_a_worktree_crew_did_not_make_is_never_touched(self, path, branch, up):
         assert over(path, branch, up, units=()) is None
 
@@ -136,6 +144,10 @@ class TestKept:
 
     def test_a_clean_one_goes(self):
         assert plan.kept_why("x", False, (0, "", "")) is None
+
+    def test_a_landings_place_whose_submission_is_still_with_sluice_is_kept_and_named(self):
+        assert plan.kept_why("bolt gone is in no plan", False, (0, "", ""), True) == (
+            "bolt gone is in no plan, and its submission is still with sluice")
 
 
 class TestWt:
