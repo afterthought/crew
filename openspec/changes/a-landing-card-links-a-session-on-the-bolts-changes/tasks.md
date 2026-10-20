@@ -12,12 +12,12 @@
 
 ## 3. The commands
 
-- [ ] 3.1 `crew card session land/<bolt>` prints the running session's link, or starts it anew and changes the open card in place to carry the new link while the card waits on the user, and refuses a bolt that does not read proven; proved by a case in `tests/py/test_cards.py` (design, *Decisions* 4 and *Task notes* 3.1).
-- [ ] 3.2 `crew card wait land/<bolt>` prints the session's annotations as notes on the landing card and an approval as landing nothing, then forgets the decided session; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 5 and *Task notes* 3.2).
+- [x] 3.1 `crew card session land/<bolt>` prints the running session's link, or starts it anew and changes the open card in place to carry the new link while the card waits on the user, and refuses a bolt that does not read proven; proved by a case in `tests/py/test_cards.py` (design, *Decisions* 4 and *Task notes* 3.1).
+- [x] 3.2 `crew card wait land/<bolt>` prints the session's annotations as notes on the landing card and an approval as landing nothing, then forgets the decided session; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 5 and *Task notes* 3.2).
 
 ## 4. The words
 
-- [ ] 4.1 The conductor's brief says the landing card links a reading, how its notes reach the conductor and that it lands nothing; proved by its words in `tests/t-briefs.sh` (design, *Task notes* 4.1).
+- [x] 4.1 The conductor's brief says the landing card links a reading, how its notes reach the conductor and that it lands nothing; proved by its words in `tests/t-briefs.sh` (design, *Task notes* 4.1).
 - [ ] 4.2 README, the crew skill and `plugin/bin/crew`'s usage describe the landing's session together; proved by `tests/t-docs.sh` (design, *Task notes* 4.2).
 
 ## 5. The journey
