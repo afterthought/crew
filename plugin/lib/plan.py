@@ -8234,8 +8234,8 @@ def rail_text(fleet, labels, read, now):
     agent's open card for one, with when it was asked and by whom, and no command, since the card is where it is
     answered; then any open card whose row is gone that the sweep did not close, with the host whose rail read closes
     it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, and each batch it
-    closed or left with no card, named so, each partition it changed nothing for and why, each card session ended, with its host and why, and each host whose sessions were not
-    checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
+    closed or left with no card, named so, each partition it changed nothing for and why, each card session ended,
+    with its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
     (the board's) gives the same text."""
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
