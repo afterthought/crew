@@ -41,6 +41,13 @@ FLEET = {"partitions": {"wldn": dict(BASE["partitions"]["wldn"], teams=["swb-1",
 FLEET["partitions"]["wldn"]["teams"].append("brd-1")
 
 
+@pytest.fixture(autouse=True)
+def previews(monkeypatch, tmp_path):
+    """crew's records of the previews it asked for, in a scratch folder rather than the host's."""
+    monkeypatch.setattr(plan, "PREVIEWS", tmp_path / "previews")
+    return tmp_path / "previews"
+
+
 def key(name, k, tool="post_request", label="wldn"):
     return plan.card_refusal(FLEET, name, label, tool, k)
 
@@ -353,13 +360,26 @@ class TestSessions:
         now = START + datetime.timedelta(minutes=10)
         assert plan.young("2026-10-12T10:09:00Z", now) and not plan.young("2026-10-12T10:00:00Z", now)
 
+    def test_a_sweep_releases_a_landings_preview_whose_card_no_live_row_holds_once_it_is_two_minutes_old(self):
+        """rail-cards "A card closed elsewhere": the preview crew asked for goes with a landing card the rail holds
+        dead, and one asked since the rail's read is left for a later sweep."""
+        now = START + datetime.timedelta(minutes=10)
+        assert plan.preview_dead("land/y", "2026-10-12T10:00:00Z", {"land/z"}, [], now)
+        assert not plan.preview_dead("land/y", "2026-10-12T10:09:00Z", {"land/z"}, [], now)
+        assert not plan.preview_dead("land/y", "2026-10-12T10:00:00Z", {"land/y"}, [], now)
+        assert not plan.preview_dead("land/y", "2026-10-12T10:00:00Z", set(), ["land/"], now)
+        assert not plan.preview_dead("land/y", "not a time", {"land/y"}, [], now)
+        with pytest.raises(ValueError):
+            plan.preview_dead("land/y", "not a time", set(), [], now)
 
-    # A batch's card and a long proposal's are raised with their reading session (card-sessions, record 0031 §5).
-    def test_a_batchs_card_links_its_session_a_long_proposals_when_its_builder_says_and_no_other_card_any(self):
-        assert plan.reading_of({"key": "batch/3"}) == "batch"
+
+    # A batch's card, a landing's and a long proposal's are raised with their reading session (card-sessions, record
+    # 0031 §5).
+    def test_a_batchs_and_a_landings_card_link_their_session_a_long_proposals_when_its_builder_says_and_no_other_card_any(self):
+        assert plan.reading_of({"key": "batch/3"}) == "batch" and plan.reading_of({"key": "land/b1"}) == "land"
         assert plan.reading_of({"key": "proposal/4", "session": True}) == "proposal"
         assert plan.reading_of({"key": "proposal/4", "session": False}) is None
-        assert plan.reading_of({"key": "land/b1"}) is None and plan.reading_of({"key": "record/crew/0031"}) is None
+        assert plan.reading_of({"key": "deploy/srv"}) is None and plan.reading_of({"key": "record/crew/0031"}) is None
 
     def test_a_proposal_of_more_than_fifteen_new_units_or_more_rows_than_its_lists_hold_has_a_reading(self):
         def args(*dos):
@@ -375,9 +395,10 @@ class TestSessions:
         assert acts.sessions == [("wldn", "batch/3")]
         assert b["card"]["context"]["links"] == [{"label": "Read batch 3", "url": "http://mac-studio.ts.swancloud.net:19432"}]
         assert b["card"]["context"]["background"].startswith("Read it all in one session: http://mac-studio.ts.swancloud.net:19432")
-        landing = plan.card_built(acts, "wldn", built.landing_card, dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={},
-                                                                           head="abc1234", at=None, moved=0, pr=None))
-        assert acts.sessions == [("wldn", "batch/3")] and landing["key"] == "land/b1"
+        landing = plan.card_built(acts, "wldn", built.landing_card, LANDING)
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "land/b1")] and landing["key"] == "land/b1"
+        assert landing["card"]["context"]["links"] == [{"label": "Read bolt b1", "url": "http://mac-studio.ts.swancloud.net:19432"}]
+        assert landing["card"]["context"]["background"].startswith("Read the bolt in one session: http://mac-studio.ts.swancloud.net:19432")
         assert capsys.readouterr().err == ""
 
     def test_a_card_whose_session_could_not_open_is_raised_all_the_same_saying_so(self, capsys):
@@ -390,6 +411,16 @@ class TestSessions:
         assert c["context"]["links"] == [] and not [a for a in c["artifacts"] if a["kind"] == "url"]
         assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {why}\n"
 
+    def test_a_landing_whose_reading_could_not_open_is_raised_all_the_same_an_approval_as_before(self, capsys):
+        """card-sessions "A landing whose reading could not open"."""
+        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
+        b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
+        c, bare = b["card"], built.landing_card(LANDING)["card"]
+        assert c["summary"] == bare["summary"] + "\n\nIts reading could not be opened on the tailnet."
+        assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
+        assert (c["kind"], c["approve"], c["context"]["links"]) == ("approve", bare["approve"], [])
+        assert capsys.readouterr().err == f"card land/b1: its reading could not be opened on the tailnet: {why}\n"
+
     def test_crews_close_ends_the_keys_session_and_a_refused_close_keeps_it(self, capsys):
         held = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
         acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None)}, held)
@@ -399,9 +430,26 @@ class TestSessions:
         acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None), "cancel_request": (None, "Too many requests.")}, held)
         assert plan.row_card_close(None, "wldn", "wldn-planner", "batch/3", outcome="Read; no notes", acts=acts) is None
         assert acts.ended == []
-        acts = ReadingActs(entries=[])
-        plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome="Landed", acts=acts)
-        assert acts.ended == []
+        landing = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+        acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None)}, landing)
+        assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="held for a fix: The zone list misses one zone.",
+                                   acts=acts) == "req_l1"
+        assert acts.ended == [("wldn", "land/b1")]
+        assert capsys.readouterr().out.splitlines()[-2:] == ["card land/b1: req_l1 withdrawn", "ended land/b1's session, plannotator pid 42"]
+
+    def test_a_landing_cards_close_releases_its_preview_whatever_became_of_the_card_and_no_other_cards_does(self, capsys):
+        """rail-cards "The bolt lands" and "A fix holds the landing": the preview crew asked for goes with the card."""
+        landing = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+        released = "released land/b1's preview of abc1234, preview/0123456789ab"
+        for answers in ({"get_request": ({"status": "pending", "version": 1}, None)},
+                        {"get_request": ({"status": "pending", "version": 1}, None), "cancel_request": (None, "Too many requests.")}):
+            acts = ReadingActs(answers, landing, released=released)
+            plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="held for a fix: The zone list misses one zone.", acts=acts)
+            assert acts.releases == [("wldn", "land/b1")] and capsys.readouterr().out.splitlines()[-1] == released
+        acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None)},
+                           [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}])
+        plan.row_card_close(None, "wldn", "wldn-planner", "batch/3", outcome="Read; no notes", acts=acts)
+        assert acts.releases == []
 
     def test_a_batch_wait_returns_the_cards_note_and_the_sessions_annotations_as_the_user_wrote_them(self):
         tapped = {"status": "answered", "turn": "agent", "answer": {"note": {"text": "x1: say what a zone is."}}}
@@ -446,19 +494,39 @@ class TestSessions:
         assert plan.raise_batch(FLEET, dict(row, key="batch/3-1"), acts) is None
         assert plan.raise_batch(FLEET, dict(row, key="batch/4"), acts) is None
 
-class ReadingActs:
-    """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends: a session's link
-    given, or its start refused with why; Pending You's tools answered from answers, a (got, words) pair."""
+LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="abc1234", at=None, moved=0, pr=None)
 
-    def __init__(self, answers=None, entries=(), refused=None):
-        self.answers, self.held, self.refused = dict(answers or {}), list(entries), refused
-        self.sessions, self.ended, self.emitted, self.calls = [], [], [], []
+
+class ReadingActs:
+    """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends, and a landing's
+    preview is asked for and released: a session's link given, or its start refused with why; the preview given
+    (preview), and its release said (released); Pending You's tools answered from answers, a (got, words) pair."""
+
+    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None):
+        self.answers, self.held, self.refused, self.started = dict(answers or {}), list(entries), refused, started
+        self.given, self.said = preview, released
+        self.sessions, self.ended, self.emitted, self.calls, self.previews, self.releases = [], [], [], [], [], []
+
+    def preview(self, label, key, facts):
+        self.previews.append((label, key, facts["head"], facts["previewed"]))
+        return self.given
+
+    def release_preview(self, label, key):
+        self.releases.append((label, key))
+        return self.said
+
+    def tell(self, name, text):
+        self.calls.append(("tell", {"to": name, "text": text}))
+        return True
 
     def session(self, label, key, facts):
+        return self.reading(label, key, facts)[0]
+
+    def reading(self, label, key, facts):
         self.sessions.append((label, key))
         if self.refused:
             raise crew.Refusal(self.refused)
-        return "http://mac-studio.ts.swancloud.net:19432"
+        return "http://mac-studio.ts.swancloud.net:19432", False, self.started
 
     def end(self, label, key):
         self.ended.append((label, key))
@@ -498,10 +566,166 @@ class ReadingActs:
         return "wldn-planner"
 
 
+class TestLandingSession:
+    """crew card session land/<bolt> (card-sessions "A landing's session follows the bolt's head"): its link printed,
+    the open card changed in place to carry it when the session was started anew while the card waits on the user, and
+    left once the user answered it; refused for a bolt that does not read proven, and off its team's host."""
+    TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    HELD = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+
+    def run(self, monkeypatch, acts, why=None, team=TEAM, previewed=False):
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
+        monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (None, why) if why else (
+            dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (previewed, None))
+        plan.land_session(FLEET, "wldn", "land/b1", acts)
+
+    @pytest.mark.parametrize("started, got, change", [
+        (True, {"status": "pending", "turn": "you"}, True), (True, {"status": "snoozed"}, True), (False, {"status": "pending"}, False),
+        (True, {"status": "answered", "turn": "agent"}, False), (True, {"status": "resolved"}, False), (True, None, False)])
+    def test_the_card_is_changed_only_for_a_session_started_anew_while_it_waits_on_the_user(self, started, got, change):
+        assert plan.relinks(started, got) is change
+
+    def test_a_session_started_anew_changes_the_waiting_card_in_place_to_carry_its_link(self, monkeypatch, capsys):
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, self.HELD)
+        self.run(monkeypatch, acts)
+        sent = [a for t, a in acts.calls if t == "update_request"]
+        assert len(sent) == 1 and sent[0]["changeNote"] == "Its reading is open again at a new link"
+        assert (sent[0]["requestId"], sent[0]["expectedVersion"]) == ("req_l1", 3)
+        assert sent[0]["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+        assert not [t for t, _ in acts.calls if t == "post_request"]
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card land/b1: req_l1 changed"]
+
+    def test_a_card_carrying_its_new_link_keeps_the_preview_it_lists(self, monkeypatch):
+        """crew card session's change of the card lists the head's preview as the raise did, taken by keep."""
+        p = dict(head=LANDING["head"], name="preview/0123456789ab", state="up", addresses={"web": "http://web.example"})
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, self.HELD, preview=p)
+        self.run(monkeypatch, acts, previewed=True)
+        sent = next(a for t, a in acts.calls if t == "update_request")
+        assert acts.previews == [("wldn", "land/b1", LANDING["head"], True)]
+        assert {"label": "Preview: web", "url": "http://web.example"} in sent["context"]["links"]
+
+    def test_a_running_session_given_again_changes_nothing(self, monkeypatch, capsys):
+        acts = ReadingActs(entries=self.HELD, started=False)
+        self.run(monkeypatch, acts)
+        assert acts.calls == [] and capsys.readouterr().out == f"{self.LINK}\n"
+
+    def test_a_card_the_user_has_answered_is_left_and_no_card_follows_it(self, monkeypatch, capsys):
+        """card-sessions "A card already approved"."""
+        acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "answer": {"approved": True}}, None)}, self.HELD)
+        self.run(monkeypatch, acts)
+        assert [t for t, _ in acts.calls] == ["get_request"] and acts.emitted == []
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card land/b1: req_l1 is left as it is: the user has answered it"]
+
+    def test_a_bolt_that_does_not_read_proven_is_refused_saying_why_and_nothing_is_started(self, monkeypatch):
+        """card-sessions "A landing card", while a unit has not merged."""
+        acts = ReadingActs(entries=self.HELD)
+        with pytest.raises(plan.Refusal, match="^bolt b1 does not read proven, so its landing card is not raised and has no "
+                                               "reading: unit b has not merged: it is verify$"):
+            self.run(monkeypatch, acts, why="unit b has not merged: it is verify")
+        assert acts.sessions == []
+
+    def test_off_its_teams_host_it_is_refused_naming_that_host(self, monkeypatch):
+        acts = ReadingActs(entries=self.HELD)
+        with pytest.raises(plan.Refusal, match="land/b1's reading session runs on chuck-herdr-alpha, the host of the team holding its bolt"):
+            self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
+        assert acts.sessions == []
+
+    def opened(self, monkeypatch, tmp_path, on):
+        """reading_open of land/b1 at head def5678, its recorded session serving the bolt as it stood at on: what it
+        ended, and the folder of the session it opened."""
+        d = tmp_path / "wldn" / "land/b1"
+        (d / on).mkdir(parents=True)
+        docs = ", ".join(str((d / on).resolve() / f) for f in ("00-b1.md", "01-v1-proposal.md", "02-b1-diff.txt"))
+        (d / "session.json").write_text(json.dumps({"pid": 42, "document": docs, "url": self.LINK, "started": "2026-10-19T10:00:00Z"}))
+        ended, opened = [], []
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "end_session", lambda label, key, unit=None: ended.append((label, key)) or [f"ended {key}'s session, plannotator pid 42"])
+        monkeypatch.setattr(plan, "landing_write", lambda fleet, facts, folder: folder)
+        monkeypatch.setattr(plan, "session_open", lambda at, name, write: opened.append((at, name, write())) or (self.LINK, None, True))
+        facts = dict(LANDING, team="swb-1", host="mac-studio", base="abc0000", head="def5678" + "0" * 33)
+        assert plan.reading_open(FLEET, "wldn", "land/b1", facts) == (self.LINK, None, True)
+        assert opened == [(d, "land/b1's session", d / "def5678")]
+        return ended
+
+    def test_a_merge_that_moves_the_head_ends_the_old_heads_session_and_opens_one_on_the_new(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A merge moves the head"."""
+        assert self.opened(monkeypatch, tmp_path, "abc1234") == [("wldn", "land/b1")]
+        assert capsys.readouterr().out == "ended land/b1's session, plannotator pid 42\n"
+
+    def test_a_session_on_the_head_as_it_stands_is_given_again_and_nothing_is_ended(self, monkeypatch, tmp_path, capsys):
+        assert self.opened(monkeypatch, tmp_path, "def5678") == []
+        assert capsys.readouterr().out == ""
+
+
+class TestLandingPreview:
+    """A landing card is raised with its preview asked for first when the kit's policy at the head declares one
+    (rail-cards, record 0031 §3), through the act's reach, and with none and no word of one when it does not."""
+    TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    PREVIEW = dict(head=LANDING["head"], name="preview/0123456789ab", state="starting", addresses={"web": "http://web.example"})
+    POSTED = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+              "post_request": ({"requestId": "req_l2", "version": 1}, None)}
+
+    def raised(self, monkeypatch, acts, previewed, note=None):
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), self.TEAM))
+        monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: previewed)
+        return plan.raise_land(FLEET, {"label": "wldn", "key": "land/b1"}, acts, note=note)
+
+    def sent(self, acts, tool):
+        return next(a for t, a in acts.calls if t == tool)
+
+    def test_a_kit_declaring_a_preview_has_it_asked_first_and_listed_on_the_card(self, monkeypatch):
+        """rail-cards "A kit that declares a preview"."""
+        acts = ReadingActs(dict(self.POSTED), preview=self.PREVIEW)
+        assert self.raised(monkeypatch, acts, (True, None)) == "req_l2"
+        assert acts.previews == [("wldn", "land/b1", LANDING["head"], True)]
+        card = self.sent(acts, "post_request")
+        assert {"label": "Preview: web", "url": "http://web.example"} in card["context"]["links"]
+        assert card["approve"]["risk"] == "high"
+
+    def test_a_kit_declaring_none_is_asked_nothing_and_its_card_says_nothing_of_one(self, monkeypatch):
+        """rail-cards "A kit that declares none"."""
+        acts = ReadingActs(dict(self.POSTED), preview=self.PREVIEW)
+        self.raised(monkeypatch, acts, (False, None))
+        assert acts.previews == [] and "preview" not in json.dumps(self.sent(acts, "post_request")).lower()
+
+    def test_a_preview_recorded_where_the_policy_now_declares_none_is_handed_to_the_act_to_release(self, monkeypatch, previews):
+        (previews / "wldn").mkdir(parents=True)
+        (previews / "wldn" / "b1.json").write_text(json.dumps({"head": "0" * 40, "main": "/kit/main"}))
+        acts = ReadingActs(dict(self.POSTED))
+        self.raised(monkeypatch, acts, (False, None))
+        assert acts.previews == [("wldn", "land/b1", LANDING["head"], False)]
+
+    def test_a_policy_crew_cannot_read_is_said_as_a_preview_not_asked_and_the_card_raised(self, monkeypatch):
+        why = "git show in /kit/main on mac-studio failed: fatal: bad object abc1234"
+        acts = ReadingActs(dict(self.POSTED), preview=self.PREVIEW)
+        assert self.raised(monkeypatch, acts, (None, why)) == "req_l2"
+        assert acts.previews == []
+        assert f"A preview of abc1234 was asked for and is not there: {why}. Nothing waits on it." in (
+            self.sent(acts, "post_request")["context"]["background"])
+
+    def test_a_previews_end_changes_the_open_card_with_its_own_note(self, monkeypatch):
+        """rail-cards "The host is busy when the card is raised": the card changed in place with the preview's note."""
+        held = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}, held,
+                           preview=dict(self.PREVIEW, state="up"))
+        assert self.raised(monkeypatch, acts, (True, None), note="Its preview of abc1234 is up") == "req_l1"
+        change = self.sent(acts, "update_request")
+        assert change["changeNote"] == "Its preview of abc1234 is up"
+        assert {"label": "Preview: web", "url": "http://web.example"} in change["context"]["links"]
+
+
 class TestSessionWords:
-    def test_a_landing_key_has_no_session_and_a_batch_cards_runs_on_the_main_levels_host(self):
-        assert plan.session_refusal("land/b/abc1234", "wldn", "box", "box") == (
-            "a landing card has nothing to read: it has no document to read, so it has no session")
+    def test_a_landings_session_runs_on_its_bolts_teams_host_and_a_batch_cards_on_the_main_levels(self):
+        """card-sessions "A landing's session on another host": refused naming the team's host, the main level's
+        being no matter."""
+        assert plan.session_refusal("land/y", "wldn", "mac-studio", "mac-studio", "box") == (
+            "land/y's reading session runs on box, the host of the team holding its bolt, where its landing card is raised: "
+            "run crew card session land/y there")
+        assert plan.session_refusal("land/y", "wldn", "mac-studio", "box", "box") is None
         assert plan.session_refusal("batch/1", "wldn", "chuck-herdr-alpha", "mac-studio") == (
             "batch/1's reading session runs on chuck-herdr-alpha, where wldn's main level writes the batch's summary: run crew card session batch/1 there")
         assert plan.session_refusal("batch/2-1", "wldn", "chuck-herdr-alpha", "mac-studio") is None
@@ -521,6 +745,31 @@ class TestSessionWords:
 
     def test_a_session_gone_undecided_ends_its_wait(self):
         assert plan.waited("v", None, True, gone=True) == "v: the session ended with no decision"
+
+    def test_a_landings_reading_is_notes_on_its_card_and_its_approval_lands_nothing(self):
+        """card-sessions "Annotated in a landing's session" and "Approved in a landing's session"."""
+        notes = "# Annotations\n\n1. 03-y-diff.txt: this drops the retry\n"
+        assert plan.land_waited("land/y", ("annotated", notes, 1), True) == (
+            "land/y: notes from its reading, as notes on the landing card:\n# Annotations\n\n1. 03-y-diff.txt: this drops the retry")
+        assert plan.land_waited("land/y", ("approved", None, 0), True) == (
+            "land/y: approved in its reading, which lands nothing: the card's approval is the word to land")
+        assert plan.land_waited("land/y", ("approved", "Looks right.", 0), True).endswith("the word to land\nLooks right.")
+        assert plan.land_waited("land/y", ("dismissed", None, None), True) == "land/y: closed in plannotator with no decision"
+        assert plan.land_waited("land/y", None, True) is None
+        assert plan.land_waited("land/y", None, True, gone=True) == "land/y: the session ended with no decision"
+        assert plan.land_waited("land/y", None, False) == "land/y: crew ended its session, as its card closed or crew card end was run"
+
+    def test_a_decided_landing_reading_is_set_aside_and_forgotten_and_an_undecided_one_kept(self, tmp_path):
+        s = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio.ts.swancloud.net:19432", "started": "2026-10-19T10:00:00Z"}
+        (tmp_path / "session.json").write_text(json.dumps(s))
+        (tmp_path / "result.json").write_text(json.dumps({"decision": "dismissed"}))
+        plan.reading_decided(tmp_path, ("dismissed", None, None))
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["result.json", "session.json"]
+        (tmp_path / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "x"}))
+        plan.reading_decided(tmp_path, ("annotated", "x", 1))
+        assert sorted(p.name for p in tmp_path.iterdir()) == [".lock", "result.20261019T100000Z.json"]
+        assert plan.card_recorded(tmp_path) is None and plan.card_result(tmp_path) is None
+        plan.reading_decided(tmp_path / "gone", ("approved", None, 0))
 
     def test_a_batch_whose_change_can_not_be_read_names_the_unit_and_the_host(self):
         t = {"name": "atl-1", "machine": "mac-studio", "kit": {"main": "/a/main"}}
@@ -615,10 +864,98 @@ class TestLanding:
         assert bare["summary"] == ("1 unit and 1 chore land, every one merged and every unit read in a batch (3). sluice is green "
                                    "at abc1234. main has not moved since the bolt was cut.")
 
-    def test_a_card_with_nothing_to_show_carries_the_units_and_the_link_and_no_reading_session(self):
+    def test_a_card_built_without_a_reading_carries_the_units_and_the_pull_request_and_no_session(self):
         c = landing()["card"]
         assert [(a["kind"], a.get("lang")) for a in c["artifacts"]] == [("code", "text"), ("url", None)]
         assert "plannotator" not in json.dumps(c) and "session" not in c
+
+    READ = "http://mac-studio.ts.swancloud.net:19433"
+
+    def test_a_card_built_with_its_reading_opens_its_details_with_it_and_leads_its_links_with_it(self):
+        """rail-cards "A landing card links its reading": the link first in its details and among its links, before
+        sluice's pull request, saying the reading lands nothing; the face, the summary and the approval as without."""
+        bare, c = landing()["card"], landing(link=self.READ)["card"]
+        assert c["context"]["background"] == (f"Read the bolt in one session: {self.READ}\n\nIt lands nothing: approving this "
+                                              "card is the word to land.\n\n" + bare["context"]["background"])
+        assert c["context"]["links"] == [{"label": "Read bolt a-deploy-holds-at-a-failure", "url": self.READ},
+                                         {"label": "Pull request #23 on GitHub, opened by sluice", "url": "https://github.com/agentplot/crew/pull/23"}]
+        assert c["artifacts"][0] == bare["artifacts"][0]
+        assert c["artifacts"][1:] == [{"kind": "url", "title": "Read bolt a-deploy-holds-at-a-failure", "ref": self.READ},
+                                      bare["artifacts"][1]]
+        assert {k: c[k] for k in ("title", "summary", "approve", "rationale", "kind")} == {
+            k: bare[k] for k in ("title", "summary", "approve", "rationale", "kind")}
+
+    def test_a_card_with_its_reading_and_no_pull_request_links_the_reading_alone(self):
+        c = built.landing_card(dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches={"v1": 3}, head="abc1234",
+                                    at=None, moved=0, pr=None, link=self.READ))["card"]
+        assert c["context"]["links"] == [{"label": "Read bolt b1", "url": self.READ}]
+        assert [a["kind"] for a in c["artifacts"]] == ["code", "url"]
+
+    WEB, API = "http://web-4581216--bolt-y--crew.localhost:4321", "http://api-4581216--bolt-y--crew.localhost:4322"
+    PREVIEW = dict(head="4581216abcdef", name="preview/0123456789ab", state="starting", addresses={"web": WEB, "api": API})
+    PR = {"kind": "url", "title": "Pull request #23 on GitHub, opened by sluice", "ref": "https://github.com/agentplot/crew/pull/23"}
+
+    def same_but_details(self, c, bare):
+        assert {k: c[k] for k in ("title", "summary", "approve", "rationale", "kind")} == {
+            k: bare[k] for k in ("title", "summary", "approve", "rationale", "kind")}
+
+    def test_a_preview_coming_up_is_listed_after_the_reading_and_lands_nothing(self):
+        """rail-cards "A kit that declares a preview": each address under the name the kit gives it, after the
+        reading's link and its sentence, in the links and on the face after the reading's and before the pull
+        request, saying the preview is coming up and lands nothing; the rest of the card as without."""
+        bare, c = landing(link=self.READ)["card"], landing(link=self.READ, preview=self.PREVIEW)["card"]
+        reading = (f"Read the bolt in one session: {self.READ}\n\nIt lands nothing: approving this card is the word to land.\n\n")
+        assert c["context"]["background"] == (
+            reading + "Try it running: a preview of 4581216 sluice brings up, at these addresses once it is up. It lands "
+            f"nothing; approving this card is the word to land.\nweb: {self.WEB}\napi: {self.API}\n\n"
+            + bare["context"]["background"].removeprefix(reading))
+        assert c["context"]["links"] == [{"label": "Read bolt a-deploy-holds-at-a-failure", "url": self.READ},
+                                         {"label": "Preview: web", "url": self.WEB}, {"label": "Preview: api", "url": self.API},
+                                         {"label": self.PR["title"], "url": self.PR["ref"]}]
+        assert c["artifacts"] == [bare["artifacts"][0], bare["artifacts"][1], {"kind": "url", "title": "Preview: web", "ref": self.WEB},
+                                  {"kind": "url", "title": "Preview: api", "ref": self.API}, self.PR]
+        self.same_but_details(c, bare)
+
+    def test_a_preview_up_is_listed_as_up(self):
+        c = landing(link=self.READ, preview=dict(self.PREVIEW, state="up"))["card"]
+        assert ("Try it running: a preview of 4581216, up at these addresses. It lands nothing; approving this card is the "
+                f"word to land.\nweb: {self.WEB}\napi: {self.API}\n\n") in c["context"]["background"]
+        assert [a["title"] for a in c["artifacts"][2:4]] == ["Preview: web", "Preview: api"]
+
+    def test_a_preview_that_failed_says_so_with_the_end_of_its_output_and_lists_no_address(self):
+        """rail-cards "The stack fails to come up"."""
+        output = "".join(f"step {i}: building the stack's images, which takes its time\n" for i in range(8)) + "error: port 4321 in use\n"
+        bare = landing(link=self.READ)["card"]
+        c = landing(link=self.READ, preview=dict(self.PREVIEW, state="failed", output=output))["card"]
+        said = c["context"]["background"].split("\n\n")[2]
+        assert said == ("A preview of 4581216 was asked for and is not there: step 6: building the stack's images, which takes "
+                        "its time / step 7: building the stack's images, which takes its time / error: port 4321 in use. Nothing "
+                        "waits on it.")
+        assert "Preview:" not in json.dumps(c) and c["artifacts"] == bare["artifacts"]
+        self.same_but_details(c, bare)
+
+    def test_a_preview_not_asked_says_why_and_the_card_is_raised_all_the_same(self):
+        """rail-cards "The host's sluice has no preview command"."""
+        why = "sluice exited 2: unrecognized subcommand 'preview'"
+        bare, c = landing()["card"], landing(preview={"head": "4581216abcdef", "why": why})["card"]
+        assert c["context"]["background"] == (f"A preview of 4581216 was asked for and is not there: {why}. Nothing waits on it.\n\n"
+                                              + bare["context"]["background"])
+        assert c["artifacts"] == bare["artifacts"] and c["context"]["links"] == bare["context"]["links"]
+        self.same_but_details(c, bare)
+
+    def test_a_preview_of_nine_addresses_keeps_the_cards_face_at_eight_artifacts(self):
+        many = {f"site{i}": f"http://site{i}-4581216.localhost:{4320 + i}" for i in range(9)}
+        c = landing(link=self.READ, preview=dict(self.PREVIEW, addresses=many))["card"]
+        assert len(c["artifacts"]) == 8
+        assert [a["title"] for a in c["artifacts"]] == (["What lands: 6 units, no chores", "Read bolt a-deploy-holds-at-a-failure"]
+                                                        + [f"Preview: site{i}" for i in range(5)] + [self.PR["title"]])
+        assert [l["label"] for l in c["context"]["links"]][1:10] == [f"Preview: site{i}" for i in range(9)]
+        assert all(f"site{i}: {u}" in c["context"]["background"] for i, u in enumerate(many.values()))
+
+    def test_a_card_built_with_no_preview_is_as_before(self):
+        """rail-cards "A kit that declares none": no preview and no word of one."""
+        c = landing(link=self.READ, preview=None)["card"]
+        assert c == landing(link=self.READ)["card"] and "preview" not in json.dumps(c).lower()
 
 
 class TestDeploy:

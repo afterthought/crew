@@ -425,6 +425,7 @@ def drawn(before, after, argvs):
 
 TITLE, SUMMARY, DETAIL, LABEL = 140, 400, 200, 80  # Pending You's budgets: a title, a summary, a detail, consequence or rationale, an option's label
 OUTCOME = 200  # Pending You's budget for a close's words: ack_answer's outcome and cancel_request's reason
+ARTIFACTS = 8  # Pending You's most artifacts on a card: post_request's artifacts maxItems (read 2026-10-19)
 LINE = 40  # the most characters a line of a list on a card's face holds: the phone shows it in monospace
 CARD_NEW = 15  # the most units new to a bolt a proposal's card takes as boxes; more link its reading session (briefs.9)
 BOXES, GROUPS = 5, 4  # Pending You's limits: a question's options, and a card's questions
@@ -508,13 +509,49 @@ def high(action):
 
 # ---------------------------------------------------------------------------------------- the six builders
 
+def preview_said(p):
+    """What a landing card says of a preview of the bolt's head (rail-cards, record 0031 §3): the paragraph its details
+    hold after the reading's, and the addresses it lists, [(label, address)] in the order sluice gives them. p is a
+    preview sluice named, {head, name, addresses, state}, its output with it when it failed, or one that is not there,
+    {head, why}; None says nothing. One that waits or starts lists its addresses for once it is up, one up lists them as
+    up, each saying it lands nothing; one that failed or is not there says why, the end of a failure's output cut to a
+    detail's budget by whole lines, and lists none."""
+    if not p:
+        return "", []
+    h = p["head"][:7]
+    if p.get("state") in ("waiting", "starting", "up"):
+        shown = list(p["addresses"].items())
+        where = f"a preview of {h}, up at these addresses" if p["state"] == "up" else (
+            f"a preview of {h} sluice brings up, at these addresses once it is up")
+        return (f"Try it running: {where}. It lands nothing; approving this card is the word to land.\n"
+                + "".join(f"{label}: {url}\n" for label, url in shown) + "\n"), shown
+    why = (last_lines(p.get("output"), DETAIL) or "its command failed, printing nothing") if p.get("state") == "failed" else p["why"]
+    return f"A preview of {h} was asked for and is not there: {why.rstrip('.')}. Nothing waits on it.\n\n", []
+
+
+def last_lines(text, budget):
+    """The last lines of a command's output that fit budget characters together, joined by " / ", the blank ones left
+    out; a last line longer than the budget cut by whole words."""
+    out = []
+    for line in reversed([l.strip() for l in (text or "").splitlines() if l.strip()]):
+        if len(" / ".join([line] + out)) > budget:
+            break
+        out.insert(0, line)
+    if not out and (text or "").strip():
+        return by_words([l for l in text.splitlines() if l.strip()][-1].strip(), budget)
+    return " / ".join(out)
+
+
 def landing_card(f):
-    """A bolt's landing card (record 0031 §5): an approval of risk high, the units and chores that land as a list on
-    its face, the counts, the batches, sluice's verdict and how far main moved in its summary, what follows as its
-    rationale, sluice's pull request linked when the submission has one, and in its details only the batches.
-    f: bolt, kit, units, chores, batches ({unit: the batch it was read in}), head, at (sluice's time), moved (landings
-    on main since the bolt was cut), pr ({number, url}) or None, offers (the environments whose deploy will be offered
-    on a card), follows."""
+    """A bolt's landing card (record 0031 §5, briefs.9): an approval of risk high, the units and chores that land as a
+    list on its face, the counts, the batches, sluice's verdict and how far main moved in its summary, what follows as
+    its rationale; its details opening with the one link to the landing's reading session, which lands nothing, then
+    the batches; the reading linked first, then sluice's pull request when the submission has one. f: bolt, kit,
+    units, chores, batches ({unit: the batch it was read in}), head, at (sluice's time), moved (landings on main since
+    the bolt was cut), pr ({number, url}) or None, offers (the environments whose deploy will be offered on a card),
+    link (the reading session's) or None, preview (a preview of the head as preview_said takes it) or None, follows.
+    A preview's addresses follow the reading in its details and links, each on its face as a link after the reading's
+    and before the pull request, as many as the card's artifacts leave room for (record 0031 §3)."""
     units, chores, batches = list(f["units"]), list(f.get("chores") or []), f.get("batches") or {}
     parts = ([plural(len(units), "unit")] if units else []) + ([plural(len(chores), "chore")] if chores else [])
     what = joined(parts) if parts else "nothing"
@@ -534,12 +571,19 @@ def landing_card(f):
                       f"{plural(len(chores), 'chore') if chores else 'no chores'}", f"land-{f['bolt']}.txt",
                       units + [f"{c} (chore)" for c in chores])
     counted = [f"batch {b}: {plural(sum(1 for u in units if batches.get(u) == b), 'unit')}" for b in read]
-    background = (("Read in its batches:\n" + "\n".join(counted) + "\n\n" if counted else "")
+    reading = (f"Read the bolt in one session: {f['link']}\n\n"
+               "It lands nothing: approving this card is the word to land.\n\n") if f.get("link") else ""
+    tried, addresses = preview_said(f.get("preview"))
+    background = (reading + tried + ("Read in its batches:\n" + "\n".join(counted) + "\n\n" if counted else "")
                   + "A note naming a defect holds the landing: crew withdraws this card, and raises it again, "
                     "following this one, once the bolt is green again.")
     pr_title = f"Pull request #{pr['number']} on GitHub, opened by sluice" if pr else None
+    read = [(f"Read bolt {f['bolt']}", f["link"])] if f.get("link") else []
+    pulled = [(pr_title, pr["url"])] if pr else []
+    previews = [(f"Preview: {label}", url) for label, url in addresses]
+    room = ARTIFACTS - 1 - len(read) - len(pulled)  # the list of what lands, the reading and the pull request kept
     return built(f"land/{f['bolt']}", f"Land the bolt {f['bolt']} on {f['kit']}'s main", " ".join(said), background,
-                 [(pr_title, pr["url"])] if pr else (), [lands] + ([link(pr_title, pr["url"])] if pr else []),
+                 read + previews + pulled, [lands] + [link(title, url) for title, url in read + previews[:room] + pulled],
                  f.get("follows"), kind="approve", intent="approve", approve=high(f"Land {f['bolt']} on {f['kit']}'s main"),
                  recommendedIds=["approve"], rationale=by_words(then, DETAIL))
 

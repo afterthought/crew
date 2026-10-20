@@ -140,14 +140,18 @@
 #                                      attention at the foot; it answers nothing
 #   crew card  session|wait|end <key> [<unit>] [--label L]
 #                                      the plannotator session on what a rail row's card asks the user to read, which
-#                                      crew starts with a batch's card and a long proposal's: session prints its link
-#                                      (the running one's, else one started on this host with no browser), a batch
-#                                      card's one on the whole batch, on the main level's host, a proposal's only for
-#                                      one of more than fifteen new units, and an old batch card's (batch/<n>-<k>) one
-#                                      per <unit> on that unit's team's host; wait waits for the user's decision in it
-#                                      and prints it with their words, and for a batch card waits on the card too,
-#                                      printing its note and every annotation, and closes the card; end ends it, as
-#                                      the card's close does
+#                                      crew starts with a batch's card, a landing card and a long proposal's: session
+#                                      prints its link (the running one's, else one started on this host with no
+#                                      browser), a batch card's one on the whole batch, on the main level's host, a
+#                                      landing's (land/<bolt>) one on what the bolt brings to main, on the host of the
+#                                      team holding it, changing its open card to carry a new link while it waits on
+#                                      the user, a proposal's only for one of more than fifteen new units, and an old
+#                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
+#                                      waits for the user's decision in it and prints it with their words, for a batch
+#                                      card waits on the card too, printing its note and every annotation, and closes
+#                                      the card, and for a landing prints its annotations as notes on the landing card
+#                                      and its approval as landing nothing, leaving the card; end ends it, as the
+#                                      card's close does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use
@@ -332,6 +336,9 @@ case $cmd in
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
+  _preview)  # crew _preview <label> <bolt> <head>: a landing card's preview of the bolt's head, asked of sluice and
+    # waited on to its end in a process of its own on the team's host, which the card's raise hands it to (code.9)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   main)
     need_label "${3:-}"
     case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;

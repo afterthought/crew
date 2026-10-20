@@ -1,6 +1,8 @@
 """A bolt lands by main-level ops's submission of its branch to main through sluice (plan.16, record 0026): what
 plan.landing_said makes of what the landing's submission did on the team's host; and its landing card, raised by crew
 once the bolt reads proven, held by a fix and closed at the landing (record 0031 §1)."""
+import pathlib
+
 import pytest
 
 import plan
@@ -135,8 +137,147 @@ class TestTheLandingsPoint:
     def test_sluices_pull_request_is_the_one_its_submission_at_the_head_went_through(self):
         assert plan.pull_of("swb-1-unit-2 (unit/a)", "o/k") is None and plan.pull_of("", "o/k") is None
 
+    def test_a_landing_reading_is_its_cover_each_units_change_in_the_plans_order_then_the_diff(self):
+        """card-sessions "A landing's session opens what the bolt brings to main, as one review": two units and a chore,
+        each unit's Markdown named for it in a change's reading order, the diff numbered after the last unit."""
+        a = [("tasks.md", "a's tasks"), ("specs/x/spec.md", "a's spec"), ("proposal.md", "a's proposal"), ("design.md", "a's design")]
+        b = [("proposal.md", "b's proposal")]
+        files = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, ["a", "b"], ["c"], [("a", a), ("b", b)],
+                                     "diff --git a/x b/x\n")
+        assert [n for n, _ in files] == ["00-y.md", "01-a-proposal.md", "01-a-design.md", "01-a-specs-x-spec.md", "01-a-tasks.md",
+                                         "02-b-proposal.md", "03-y-diff.txt"]
+        assert files[1][1] == "a's proposal" and files[-1][1] == "diff --git a/x b/x\n"
+
+    def test_a_bolt_of_chores_alone_reads_as_its_cover_and_its_diff(self):
+        files = plan.landing_reading("y", "k", "def5678", [], ["c", "d"], [], "diff --git a/x b/x\n")
+        assert [n for n, _ in files] == ["00-y.md", "01-y-diff.txt"]
+        assert plan.landing_reading("y", "k", "def5678", [], ["c"], [], "")[-1][1] == (
+            "The bolt changes nothing against main outside its change folders.\n")
+
+    def test_the_cover_names_every_unit_and_chore_and_says_the_reading_lands_nothing(self):
+        cover = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, ["a", "b"], ["c"],
+                                     [("a", [("proposal.md", "")]), ("b", [("proposal.md", "")])], "")[0][1]
+        assert cover.startswith("# Bolt y, landing on switchboard-kit's main\n\nWhat lands, at its head def5678:\n\n- a\n- b\n- c (chore)\n")
+        assert "This reading lands nothing: approving the landing card is the word to land" in cover
+        assert "reaches the bolt's conductor as notes on the landing card, and a note naming a defect holds the landing for a fix" in cover
+
+    def test_a_landings_reading_is_written_into_its_heads_folder_from_the_kit_at_the_head(self, monkeypatch, tmp_path):
+        """card-sessions "A bolt of two units and a chore": each unit's change read at the head, and the diff from where
+        the bolt last met main to its head, less the change folders."""
+        held = {"a": [("proposal.md", "a's proposal")], "b": [("tasks.md", "b's tasks"), ("proposal.md", "b's proposal")]}
+        asked = []
+        monkeypatch.setattr(plan, "change_held", lambda main, ref, u: asked.append((main, ref, u)) or held.get(u))
+        monkeypatch.setattr(plan, "kit_git", lambda fleet, t, where, *args: asked.append((where, *args)) or (0, "diff --git a/x b/x"))
+        fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main"}}}}
+        f = dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], head="def5678" + "0" * 33, base="abc1234",
+                 team="swb-1", host="box")
+        folder = tmp_path / "def5678"
+        folder.mkdir()
+        (folder / "01-old-proposal.md").write_text("an older head's")
+        paths = plan.landing_write(fleet, f, folder)
+        assert [pathlib.Path(p).name for p in paths] == ["00-y.md", "01-a-proposal.md", "02-b-proposal.md", "02-b-tasks.md", "03-y-diff.txt"]
+        assert sorted(p.name for p in folder.iterdir()) == sorted(pathlib.Path(p).name for p in paths)
+        assert (folder / "03-y-diff.txt").read_text() == "diff --git a/x b/x\n"
+        assert asked[:2] == [("/kit/main", f["head"], "a"), ("/kit/main", f["head"], "b")]
+        assert asked[2] == ("/kit/main", "diff", "--no-color", "--no-ext-diff", "abc1234", f["head"], "--", ".", ":(exclude)openspec/changes")
+
+    def test_a_unit_whose_change_the_head_does_not_hold_refuses_and_nothing_is_written(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(plan, "change_held", lambda main, ref, u: None)
+        monkeypatch.setattr(plan, "kit_git", lambda *a: pytest.fail("the diff was read after a change crew could not read"))
+        fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main"}}}}
+        f = dict(bolt="y", kit="k", units=["a"], chores=[], head="def5678" + "0" * 33, base="abc1234", team="swb-1", host="box")
+        with pytest.raises(plan.Refusal, match="unit a's change is not on bolt y at def5678, open or archived, in /kit/main on box"):
+            plan.landing_write(fleet, f, tmp_path / "def5678")
+        assert not (tmp_path / "def5678").exists()
+
+    def test_a_proven_bolts_card_waits_on_its_batches_and_says_which(self):
+        """briefs.12, as crew card session land/<bolt> says why the bolt has no card yet."""
+        assert plan.batch_waits(["a", "b", "c"], {"a"}, {"b": 7, "c": 8}) == (
+            "a has not been in a batch, which is due; the user has not answered batches 7 and 8")
+        assert plan.batch_waits(["a", "b"], {"a", "b"}, {}) == "a or b have not been in a batch, which is due"
+        assert plan.batch_waits(["a"], set(), {"a": 7}) == "the user has not answered batch 7"
+        assert plan.batch_waits(["a"], set(), {"q": 7}) is None
+
     def test_which_act_follows_each_event(self):
         assert plan.landing_act("proven", head="abc1234" + "0" * 33) == ("change", "Its head is now abc1234")
         assert plan.landing_act("fix", words="The zone list misses one zone.") == ("close", None, "held for a fix: The zone list misses one zone.")
         assert plan.landing_act("landed", words="landed on GitHub's main at c0ffee1 (#3); every host's folder follows") == (
             "close", "landed on GitHub's main at c0ffee1 (#3); every host's folder follows", None)
+
+
+class TestThePreview:
+    """A landing's card lists the addresses of a preview of the bolt's head when the kit declares one, follows the head
+    with it, says one that failed, and releases it when the card closes (rail-cards, record 0031 §3)."""
+    HEAD, NEW = "abc1234" + "0" * 33, "def5678" + "0" * 33
+
+    @pytest.mark.parametrize("declared, recorded, listed, alive, step", [
+        (False, None, False, False, "none"),
+        (True, None, False, False, "ask"),
+        (True, HEAD, True, False, "keep"),
+        (True, HEAD, False, True, "keep"),
+        (True, HEAD, False, False, "ask"),
+        (True, NEW, True, True, "replace"),
+        (False, HEAD, True, False, "release"),
+        (False, NEW, False, False, "release"),
+    ])
+    def test_what_crew_does_with_the_preview_at_each_raise(self, declared, recorded, listed, alive, step):
+        """"Asked again with nothing changed": the recorded preview of the head kept, nothing asked; "The head moves":
+        the old head's replaced; a kit that declares none asks nothing."""
+        assert plan.preview_step(declared, recorded, self.HEAD, listed, alive) == step
+
+    @pytest.mark.parametrize("shown, outcome, note", [
+        ("addresses", "failed", "Its preview of abc1234 did not come up"),
+        ("reason", "up", "Its preview of abc1234 is up"),
+        ("addresses", "up", None),
+        ("reason", "failed", None),
+    ])
+    def test_a_previews_end_changes_the_card_only_when_it_changes_what_the_card_says(self, shown, outcome, note):
+        """"The stack fails to come up" and "The host is busy when the card is raised"."""
+        assert plan.preview_change(shown, outcome, self.HEAD) == note
+
+    def test_a_previews_end_is_a_change_of_the_card_in_its_words(self):
+        assert plan.landing_act("preview", head=self.HEAD, words="Its preview of abc1234 is up") == ("change", "Its preview of abc1234 is up")
+
+    LISTED = [
+        {"name": "preview/0123456789ab", "branch": "main", "revision": HEAD, "state": "up", "addresses": {"web": "http://w"}},
+        {"name": "preview/aaaaaaaaaaaa", "branch": "bolt/y", "revision": NEW, "state": "up", "addresses": {"web": "http://n"}},
+        {"name": "preview/bbbbbbbbbbbb", "branch": "bolt/y", "revision": HEAD, "state": "starting", "made": "2026-10-19T10:00:00Z",
+         "addresses": {"web": "http://web-abc1234--bolt-y--kit.localhost:4321", "api": "http://api-abc1234--bolt-y--kit.localhost:4322"}},
+    ]
+
+    def test_the_heads_preview_is_the_entry_sluice_lists_for_the_bolts_branch_and_its_head(self):
+        assert plan.preview_listed(self.LISTED, "bolt/y", self.HEAD) == dict(
+            head=self.HEAD, name="preview/bbbbbbbbbbbb", state="starting",
+            addresses={"web": "http://web-abc1234--bolt-y--kit.localhost:4321", "api": "http://api-abc1234--bolt-y--kit.localhost:4322"})
+        assert plan.preview_listed(self.LISTED, "bolt/z", self.HEAD) is None and plan.preview_listed([], "bolt/y", self.HEAD) is None
+
+    def test_a_failed_preview_carries_sluices_output(self):
+        failed = [dict(self.LISTED[2], state="failed", output="building web\nerror: port 4321 in use\n")]
+        assert plan.preview_listed(failed, "bolt/y", self.HEAD)["output"] == "building web\nerror: port 4321 in use\n"
+        assert plan.preview_listed([dict(failed[0], output=None)], "bolt/y", self.HEAD)["output"] == ""
+
+    @pytest.mark.parametrize("doc, said", [
+        ({"previews": []}, "sluice's previews are no list crew reads"),
+        (["preview/0123456789ab"], "sluice lists a preview crew can't read"),
+        ([LISTED[0], None], "sluice lists a preview crew can't read"),
+        ([dict(LISTED[2], state="booting")], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
+        ([dict(LISTED[2], name=7)], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
+        ([dict(LISTED[2], addresses={"web": None})], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
+    ])
+    def test_a_list_crew_cannot_read_is_refused(self, doc, said):
+        with pytest.raises(plan.Refusal) as e:
+            plan.preview_listed(doc, "bolt/y", self.HEAD)
+        assert str(e.value).startswith(said)
+
+    @pytest.mark.parametrize("code, out, err, ended", [
+        (0, '{"name": "preview/0123456789ab", "state": "up", "addresses": {"web": "http://w"}}', "", {"state": "up"}),
+        (1, '{"name": "preview/0123456789ab", "state": "failed", "output": "building\\nerror: port 4321 in use\\n"}', "",
+         {"state": "failed", "why": "building / error: port 4321 in use"}),
+        (2, '{"error": {"kind": "refused", "message": "abc1234 has no [preview] table in .config/sluice.toml", "next": []}}', "",
+         {"state": "failed", "why": "abc1234 has no [preview] table in .config/sluice.toml"}),
+        (2, "", "error: unrecognized subcommand 'preview'\n\nUsage: sluice <COMMAND>\n", {"state": "failed", "why": "Usage: sluice <COMMAND>"}),
+        (137, "", "", {"state": "failed", "why": "sluice exited 137"}),
+    ])
+    def test_how_sluices_preview_ended_is_read_from_its_exit_and_its_words(self, code, out, err, ended):
+        """"The stack fails to come up" and "The host's sluice has no preview command"."""
+        assert plan.preview_ended(code, out, err) == ended

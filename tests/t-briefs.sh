@@ -45,8 +45,15 @@ done
 lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
 for want in "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
 has "$out" "You post, change and close no landing card"
-for gone in "crew card session" "crew card wait" "answeredHere" "plannotator"; do lacks "$out" "$gone"; done
-ok "a conductor opens nothing, posts no landing card and starts no card's session"
+for want in "The card links a reading of the bolt, first in its details" "crew starts that reading with the card and ends it when the card closes" \
+  "crew card wait land/<bolt>\` as a background command" "crew card session land/<bolt>\` prints its link, or starts the reading again" \
+  "Notes the user sends from the reading are notes on the landing card" "An approval in the reading lands nothing" \
+  "the card also lists the addresses of a preview of that head, which crew asks sluice for, replaces when a merge moves the head and releases when the card closes" \
+  "the preview lands nothing, and one that failed is said on the card and holds nothing"; do
+  has "$out" "$want"
+done
+for gone in "answeredHere" "plannotator"; do lacks "$out" "$gone"; done
+ok "a conductor opens nothing, posts no landing card, starts no batch's session, and waits on its landing card's reading, whose notes are the card's and whose approval lands nothing, and whose preview crew asks for, replaces and releases"
 # The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
 # You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
 # row's card as crew's.
