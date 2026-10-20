@@ -7926,7 +7926,8 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now):
 
 
 def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
-    """End the card sessions crew started whose card is closed or whose row is gone, on every host of each partition
+    """End the card sessions crew started, and release the landings' previews it asked for, whose card is closed or
+    whose row is gone, on every host of each partition
     whose plan was read, its main machine and each team's: one crew card sweep --label <label> on each (code.3), handed
     as live every row key less each the record holds as closed with no card open under it (batched, what the batches
     hold as rail_record reads it, {label: {batches, closed, due}}), and as blind the key prefixes it can't judge, batch/
@@ -10032,9 +10033,11 @@ def card_sweep(fleet, a):
     JSON, {"live": [card keys], "blind": [key prefixes]}. It ends, through end_session, each session crew recorded on
     this host for the partition whose key is in no live entry and starts with no blind prefix, once it is at least two
     minutes old by its own start against this host's clock and its folder's lock is free (crew card session holds it
-    while it starts one). It prints, as a JSON list, each session it acted on: its key, its unit (a batch card's) or
-    null, what it said, and whether it sent SIGTERM. A folder with no session.json, or whose path is no card key's, is
-    left alone, and a record it can't read is kept and said (read.1, read.4)."""
+    while it starts one). Then it releases, through preview_release, each preview crew recorded on this host for a
+    bolt of the partition whose landing card's key the judgment holds dead, once it is two minutes old by when it was
+    asked (preview_dead). It prints, as a JSON list, each session and preview it acted on: its key, its unit (a batch
+    card's) or null, what it said, and whether it sent SIGTERM or released the preview. A folder with no session.json,
+    or whose path is no card key's, is left alone, and a record it can't read is kept and said (read.1, read.4)."""
     a.key is None or fail("crew card sweep takes no key: it judges every session crew recorded on this host, from the "
                           "rail's judgment on standard input")
     label = default_label(fleet, a) or fail("crew card sweep runs for a partition: add --label")
@@ -10079,6 +10082,25 @@ def card_sweep(fleet, a):
                 continue
             said, ended = end_session(label, key, unit)
             out.append(dict(key=key, unit=unit, said=said, ended=ended))
+    previews = PREVIEWS / label
+    for f in sorted(previews.glob("*.json")) if previews.is_dir() else []:
+        bolt, key = f.stem, f"land/{f.stem}"
+        if not crew.NAME.match(bolt) or not judged_dead((key, None), live, blind):
+            continue
+        try:
+            r = preview_recorded(label, bolt)
+            dead = bool(r) and preview_dead(key, r.get("asked"), live, blind, now)
+        except Refusal as e:
+            out.append(dict(key=key, unit=None, said=f"{e}; crew released nothing, and keeps it", ended=False))
+            continue
+        except (ValueError, TypeError):
+            out.append(dict(key=key, unit=None, ended=False,
+                            said=f"crew can't read when {key}'s preview was asked ({r.get('asked')}): it released nothing, and keeps it"))
+            continue
+        if dead:
+            said, released = preview_release(label, bolt)
+            if said:
+                out.append(dict(key=key, unit=None, said=said, ended=released))
     print(json.dumps(out))
 
 
@@ -10086,6 +10108,14 @@ def judged_dead(found, live, blind):
     """Whether the rail's judgment makes a recorded session's key dead: a card key's folder (found), in no live entry and
     under no blind prefix."""
     return bool(found) and found[0] not in live and not found[0].startswith(tuple(blind))
+
+
+def preview_dead(key, asked, live, blind, now):
+    """Whether the rail's sweep releases the preview crew asked for with a landing card under key (rail-cards "A card
+    closed elsewhere"): its key dead by the rail's judgment (judged_dead), and asked at least CARD_GRACE seconds before
+    now, so a card raised since the rail's read is not taken for one whose row is gone. Refused, as young is, when when
+    it was asked can't be read."""
+    return judged_dead((key, None), live, blind) and not young(asked, now)
 
 
 def young(started, now):

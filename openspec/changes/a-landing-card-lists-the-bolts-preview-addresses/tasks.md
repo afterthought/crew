@@ -13,7 +13,7 @@
 ## 3. The handed ask and the sweep
 
 - [x] 3.1 `crew _preview` waits on sluice's preview in a process of its own, records its outcome, and changes the open card in place when the outcome changes what the card says while it waits on the user; proved by `tests/t-journey-land.sh` with the stub's failure switch (design, *Decisions* 5 and *Task notes* 3.1, 5.1).
-- [ ] 3.2 The rail's card sweep releases each preview crew recorded whose landing card is judged dead; proved by a case beside the sweep's judgment cases in `tests/py/` (design, *Decisions* 6 and *Task notes* 3.2).
+- [x] 3.2 The rail's card sweep releases each preview crew recorded whose landing card is judged dead; proved by a case beside the sweep's judgment cases in `tests/py/` (design, *Decisions* 6 and *Task notes* 3.2).
 
 ## 4. The words
 

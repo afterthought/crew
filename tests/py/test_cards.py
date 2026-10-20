@@ -360,6 +360,18 @@ class TestSessions:
         now = START + datetime.timedelta(minutes=10)
         assert plan.young("2026-10-12T10:09:00Z", now) and not plan.young("2026-10-12T10:00:00Z", now)
 
+    def test_a_sweep_releases_a_landings_preview_whose_card_no_live_row_holds_once_it_is_two_minutes_old(self):
+        """rail-cards "A card closed elsewhere": the preview crew asked for goes with a landing card the rail holds
+        dead, and one asked since the rail's read is left for a later sweep."""
+        now = START + datetime.timedelta(minutes=10)
+        assert plan.preview_dead("land/y", "2026-10-12T10:00:00Z", {"land/z"}, [], now)
+        assert not plan.preview_dead("land/y", "2026-10-12T10:09:00Z", {"land/z"}, [], now)
+        assert not plan.preview_dead("land/y", "2026-10-12T10:00:00Z", {"land/y"}, [], now)
+        assert not plan.preview_dead("land/y", "2026-10-12T10:00:00Z", set(), ["land/"], now)
+        assert not plan.preview_dead("land/y", "not a time", {"land/y"}, [], now)
+        with pytest.raises(ValueError):
+            plan.preview_dead("land/y", "not a time", set(), [], now)
+
 
     # A batch's card, a landing's and a long proposal's are raised with their reading session (card-sessions, record
     # 0031 §5).
