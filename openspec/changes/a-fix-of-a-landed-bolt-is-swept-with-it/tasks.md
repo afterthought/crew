@@ -8,7 +8,7 @@
 ## 2. A fix's end frees its slot and sweeps its branch
 
 - [x] 2.1 The tidy ends a landed fix's place with its branch, reads a fix tracking `origin/bolt/<bolt>` as crew's, and removes each fix branch no worktree or slot holds once it has merged or landed, leaving any other (design.md, Task notes 2.1). Verify `tests/suite logic` ends with "0 failed".
-- [ ] 2.2 A slot freed for landed work says it has landed on main (design.md, Task notes 2.2). Verify `tests/suite logic` ends with "0 failed".
+- [x] 2.2 A slot freed for landed work says it has landed on main (design.md, Task notes 2.2). Verify `tests/suite logic` ends with "0 failed".
 
 ## 3. The command, end to end
 
