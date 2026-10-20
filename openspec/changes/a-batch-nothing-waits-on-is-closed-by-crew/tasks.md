@@ -12,4 +12,4 @@
 ## 2. The documents say it
 
 - [x] 2.1 README and the planner's brief say a batch's row and card end when the user answers or when the batch waits on nothing, each of its units landed, dropped or held by a later batch, and README lists `batch.close` among the run record's acts, proved by `tests/suite briefs docs` passing (design, Task notes 2.1).
-- [ ] 2.2 `tests/suite --affected` passes once the change is done.
+- [x] 2.2 `tests/suite --affected` passes once the change is done.
