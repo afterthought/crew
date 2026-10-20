@@ -130,12 +130,87 @@ def test_a_fix_is_listed_with_its_bolt_and_reads_merged_only_once_it_moved_and_t
     """crew bolts and the board: a fix's line; carry and tidy: a fix born at the bolt's head has not merged."""
     k = Kit(repo, tmp_path)
     f = k.place("te/edge", prefix="fix")
-    assert k.read()["fixes"] == [{"fix": "fix/te/edge", "path": os.path.realpath(f), "bolt": "te", "merged": False, "dropped": False}]
+    assert k.read()["fixes"] == [{"fix": "fix/te/edge", "path": os.path.realpath(f), "bolt": "te", "merged": False, "dropped": False,
+                                  "on_main": True, "moved": False}]
     (f / "edge").write_text("e\n")
     k.commit(f, "fix(te): the edge")
     assert k.read()["fixes"][0]["merged"] is False
     repo.git("-C", str(k.dir / "bolts" / "te"), "merge", "-q", "--ff-only", "fix/te/edge")
     assert k.read()["fixes"][0]["merged"] is True
+
+
+def landed_fix(repo, k):
+    """A fix with a commit of its own merged into its bolt, and the bolt landed on main and its branch deleted, as
+    sluice's landing leaves it: the fix's upstream reads gone."""
+    f = k.place("te/edge", prefix="fix")
+    (f / "edge").write_text("e\n")
+    k.commit(f, "fix(te): the edge")
+    b = k.dir / "bolts" / "te"
+    repo.git("-C", str(b), "merge", "-q", "--no-ff", "-m", "merge fix", "fix/te/edge")
+    repo.git("merge", "-q", "--no-ff", "-m", "land te", "bolt/te")
+    repo.git("worktree", "remove", str(b))
+    repo.git("branch", "-qD", "bolt/te")
+    assert repo.git("for-each-ref", "--format=%(upstream:short) %(upstream:track)", "refs/heads/fix/te/edge") == "bolt/te [gone]"
+    return f
+
+
+def test_a_fix_whose_bolt_landed_and_whose_place_is_gone_is_read_from_its_branch(repo, tmp_path):
+    """slot_stage and the tidy's sweep (teams.1, teams.3): a fix branch no worktree holds is listed in fix_branches with
+    its bolt from its upstream, still named though the bolt's branch is gone, and reads on main and moved, merged no
+    more with its bolt's branch gone; it is no place, so the board and the sites page, which draw places, do not see it."""
+    k = Kit(repo, tmp_path)
+    f = landed_fix(repo, k)
+    repo.git("worktree", "remove", str(f))
+    got = k.read()
+    assert got["fixes"] == []
+    assert got["fix_branches"] == {"fix/te/edge": {"bolt": "te", "merged": False, "on_main": True, "moved": True}}
+
+
+def test_a_fix_whose_bolt_landed_with_its_place_standing_reads_on_main_and_moved(repo, tmp_path):
+    """slot_stage and tidy_over (teams.1, teams.3): a fix's place carries the same facts, and its branch is not listed
+    again in fix_branches."""
+    k = Kit(repo, tmp_path)
+    landed_fix(repo, k)
+    got = k.read()
+    assert [(x["fix"], x["bolt"], x["merged"], x["on_main"], x["moved"]) for x in got["fixes"]] == [("fix/te/edge", "te", False, True, True)]
+    assert got["fix_branches"] == {}
+
+
+def test_a_fix_tracking_its_bolt_on_github_reads_its_bolt_and_merges_at_that_ref(repo, tmp_path):
+    """slot_stage, the tidy and the drop's and the merge's fix_merged (plan.19): a fix whose place was cut from
+    origin/bolt/<bolt> tracks the remote-tracking branch, %(upstream:short) prints origin/bolt/<bolt>, and the fix
+    reads its bolt from it and merged once that ref, not the host's own bolt/<bolt>, holds its tip."""
+    import subprocess
+    k = Kit(repo, tmp_path)
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    repo.git("fetch", "-q", "origin")
+    f = k.dir / "places" / "fix-te--edge"
+    repo.git("worktree", "add", "-q", "--track", "-b", "fix/te/edge", str(f), "origin/bolt/te")
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/fix/te/edge") == "origin/bolt/te"
+    (f / "edge").write_text("e\n")
+    k.commit(f, "fix(te): the edge")
+    got = k.read()["fixes"][0]
+    assert (got["bolt"], got["merged"], got["on_main"]) == ("te", False, False)
+    repo.git("push", "-q", "origin", "fix/te/edge:bolt/te")
+    repo.git("fetch", "-q", "origin")
+    got = k.read()["fixes"][0]
+    assert (got["bolt"], got["merged"], got["on_main"], got["moved"]) == ("te", True, False, True)
+    assert gather.fix_merged(str(repo.path), "fix/te/edge", "te") is True
+    assert repo.git("rev-parse", "bolt/te") != repo.git("rev-parse", "fix/te/edge")
+
+
+def test_a_fix_just_cut_at_mains_commit_is_on_main_and_has_not_moved(repo, tmp_path):
+    """slot_stage (teams.1): a fix cut from its bolt at a commit main holds reads on main, but has not moved, so it is in
+    flight while its bolt is planned."""
+    k = Kit(repo, tmp_path)
+    k.place("te/edge", prefix="fix")
+    got = k.read()["fixes"][0]
+    assert (got["merged"], got["on_main"], got["moved"]) == (False, True, False)
+    assert gather.bolt_ref("bolt/te") == ("te", "refs/heads/bolt/te")
+    assert gather.bolt_ref("origin/bolt/te") == ("te", "refs/remotes/origin/bolt/te")
+    assert gather.bolt_ref("origin/main") == gather.bolt_ref("") == gather.bolt_ref("bolt/") == (None, None)
 
 
 def test_a_fix_its_conductor_dropped_reads_dropped_while_its_place_still_stands(repo, tmp_path):
