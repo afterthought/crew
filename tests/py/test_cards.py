@@ -354,12 +354,13 @@ class TestSessions:
         assert plan.young("2026-10-12T10:09:00Z", now) and not plan.young("2026-10-12T10:00:00Z", now)
 
 
-    # A batch's card and a long proposal's are raised with their reading session (card-sessions, record 0031 §5).
-    def test_a_batchs_card_links_its_session_a_long_proposals_when_its_builder_says_and_no_other_card_any(self):
-        assert plan.reading_of({"key": "batch/3"}) == "batch"
+    # A batch's card, a landing's and a long proposal's are raised with their reading session (card-sessions, record
+    # 0031 §5).
+    def test_a_batchs_and_a_landings_card_link_their_session_a_long_proposals_when_its_builder_says_and_no_other_card_any(self):
+        assert plan.reading_of({"key": "batch/3"}) == "batch" and plan.reading_of({"key": "land/b1"}) == "land"
         assert plan.reading_of({"key": "proposal/4", "session": True}) == "proposal"
         assert plan.reading_of({"key": "proposal/4", "session": False}) is None
-        assert plan.reading_of({"key": "land/b1"}) is None and plan.reading_of({"key": "record/crew/0031"}) is None
+        assert plan.reading_of({"key": "deploy/srv"}) is None and plan.reading_of({"key": "record/crew/0031"}) is None
 
     def test_a_proposal_of_more_than_fifteen_new_units_or_more_rows_than_its_lists_hold_has_a_reading(self):
         def args(*dos):
@@ -375,9 +376,10 @@ class TestSessions:
         assert acts.sessions == [("wldn", "batch/3")]
         assert b["card"]["context"]["links"] == [{"label": "Read batch 3", "url": "http://mac-studio.ts.swancloud.net:19432"}]
         assert b["card"]["context"]["background"].startswith("Read it all in one session: http://mac-studio.ts.swancloud.net:19432")
-        landing = plan.card_built(acts, "wldn", built.landing_card, dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={},
-                                                                           head="abc1234", at=None, moved=0, pr=None))
-        assert acts.sessions == [("wldn", "batch/3")] and landing["key"] == "land/b1"
+        landing = plan.card_built(acts, "wldn", built.landing_card, LANDING)
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "land/b1")] and landing["key"] == "land/b1"
+        assert landing["card"]["context"]["links"] == [{"label": "Read bolt b1", "url": "http://mac-studio.ts.swancloud.net:19432"}]
+        assert landing["card"]["context"]["background"].startswith("Read the bolt in one session: http://mac-studio.ts.swancloud.net:19432")
         assert capsys.readouterr().err == ""
 
     def test_a_card_whose_session_could_not_open_is_raised_all_the_same_saying_so(self, capsys):
@@ -390,6 +392,16 @@ class TestSessions:
         assert c["context"]["links"] == [] and not [a for a in c["artifacts"] if a["kind"] == "url"]
         assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {why}\n"
 
+    def test_a_landing_whose_reading_could_not_open_is_raised_all_the_same_an_approval_as_before(self, capsys):
+        """card-sessions "A landing whose reading could not open"."""
+        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
+        b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
+        c, bare = b["card"], built.landing_card(LANDING)["card"]
+        assert c["summary"] == bare["summary"] + "\n\nIts reading could not be opened on the tailnet."
+        assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
+        assert (c["kind"], c["approve"], c["context"]["links"]) == ("approve", bare["approve"], [])
+        assert capsys.readouterr().err == f"card land/b1: its reading could not be opened on the tailnet: {why}\n"
+
     def test_crews_close_ends_the_keys_session_and_a_refused_close_keeps_it(self, capsys):
         held = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
         acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None)}, held)
@@ -399,9 +411,12 @@ class TestSessions:
         acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None), "cancel_request": (None, "Too many requests.")}, held)
         assert plan.row_card_close(None, "wldn", "wldn-planner", "batch/3", outcome="Read; no notes", acts=acts) is None
         assert acts.ended == []
-        acts = ReadingActs(entries=[])
-        plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome="Landed", acts=acts)
-        assert acts.ended == []
+        landing = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+        acts = ReadingActs({"get_request": ({"status": "pending", "version": 1}, None)}, landing)
+        assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", reason="held for a fix: The zone list misses one zone.",
+                                   acts=acts) == "req_l1"
+        assert acts.ended == [("wldn", "land/b1")]
+        assert capsys.readouterr().out.splitlines()[-2:] == ["card land/b1: req_l1 withdrawn", "ended land/b1's session, plannotator pid 42"]
 
     def test_a_batch_wait_returns_the_cards_note_and_the_sessions_annotations_as_the_user_wrote_them(self):
         tapped = {"status": "answered", "turn": "agent", "answer": {"note": {"text": "x1: say what a zone is."}}}
@@ -445,6 +460,9 @@ class TestSessions:
         assert acts.sessions == [("wldn", "batch/3")]
         assert plan.raise_batch(FLEET, dict(row, key="batch/3-1"), acts) is None
         assert plan.raise_batch(FLEET, dict(row, key="batch/4"), acts) is None
+
+LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="abc1234", at=None, moved=0, pr=None)
+
 
 class ReadingActs:
     """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends: a session's link

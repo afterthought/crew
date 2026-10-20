@@ -8,7 +8,7 @@
 ## 2. The card
 
 - [x] 2.1 A landing card built with a link opens its details with it, says the reading lands nothing, and leads its links with it, and one built without is as today; proved by cases in `tests/py/test_cards.py` (design, *Decisions* 3 and *Task notes* 2.1).
-- [ ] 2.2 A landing card is raised with its session started first, raised all the same saying so when it could not open, and its close ends the session; proved by the rewritten reading cases in `tests/py/test_cards.py` (design, *Decisions* 3, 6 and *Task notes* 2.2).
+- [x] 2.2 A landing card is raised with its session started first, raised all the same saying so when it could not open, and its close ends the session; proved by the rewritten reading cases in `tests/py/test_cards.py` (design, *Decisions* 3, 6 and *Task notes* 2.2).
 
 ## 3. The commands
 

@@ -9093,14 +9093,14 @@ def followed_closed(acts, label, owner, key, card, by, got, why):
 
 
 # The fact a builder takes a card's reading session's link as, by the kind of card that links one (briefs.9).
-READING = {"batch": "link", "proposal": "session"}
+READING = {"batch": "link", "proposal": "session", "land": "link"}
 
 
 def reading_of(b):
-    """Whether a built card links a reading session, and of which kind: a batch's always, a proposal's when its
-    builder says it needs one, for more than fifteen new units; None for any other."""
+    """Whether a built card links a reading session, and of which kind: a batch's and a landing's always, a
+    proposal's when its builder says it needs one, for more than fifteen new units; None for any other."""
     kind = b["key"].split("/")[0]
-    return kind if kind == "batch" or (kind == "proposal" and b.get("session")) else None
+    return kind if kind in ("batch", "land") or (kind == "proposal" and b.get("session")) else None
 
 
 def unopened(b, why):
@@ -9134,8 +9134,9 @@ def row_card_post(fleet, label, owner, build, facts, where, acts=None):
     builders, posted through the fleet's `pendingyou mcp` under the host's sign-in, asked in the name of owner, the
     role whose row it is, under the row's key, from where, the kit's (checkout, remote) as card_where gives it, and
     filed in the kit's area, its picture uploaded; recorded on the row's object with the card's id and key, and
-    printed with the line that adopts it, told to the owner when the command is not the owner's. A batch's card and a
-    long proposal's have their reading session started first, its link handed to the builder (card_built). Pending
+    printed with the line that adopts it, told to the owner when the command is not the owner's. A batch's card, a
+    landing's and a long proposal's have their reading session started first, its link handed to the builder
+    (card_built). Pending
     You's refusal, a host not signed in, no answer within a minute or a reply naming no card is said and recorded as
     the post refused, and refuses nothing of the event it was raised for. The card's id, or None."""
     acts = acts or CardActs(fleet)
@@ -9158,7 +9159,8 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     or one built again that carries questions, a proposal's whose rows fill more than one list, neither of which
     update_request ever changes, is followed the same way, withdrawn with note while it waits. Posted instead when the
     owner holds none, and posted again, its summary saying the older copy is dead, when Pending You no longer finds it.
-    A long proposal's card is built with its reading session's link, as a post's is (card_built). A refusal is said
+    A landing's card and a long proposal's are built with their reading session's link, as a post's is (card_built),
+    a landing's session on a moved head started anew there, so the card changed carries the new link. A refusal is said
     and recorded as the change refused, refusing nothing of the event. The card's id, the new card's when one was
     posted, or None."""
     acts = acts or CardActs(fleet)
