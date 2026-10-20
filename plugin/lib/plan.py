@@ -9182,6 +9182,8 @@ def preview_ask(fleet, t, label, bolt, head, declared):
                     return None if step == "release" else {"head": head, "why": f"its earlier preview is not released yet: {said}"}
             if step in ("none", "release"):
                 return None
+            if step == "keep" and not listed and r.get("outcome"):  # it ended unlisted, as a refusal does
+                listed = {"head": head, "why": r["outcome"].get("why") or f"it ended {r['outcome'].get('state')}"}
             proc = None
             if step != "keep":
                 r = dict(head=head, main=main, asked=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
@@ -9238,6 +9240,92 @@ def preview_awaited(main, bolt, head, proc, label):
         if time.monotonic() > deadline:
             return {"head": head, "why": f"sluice named no preview within {PREVIEW_START} seconds"}
         time.sleep(PREVIEW_POLL)
+
+
+def preview_ended(code, out, err):
+    """How `sluice preview <branch> <revision> --wait --json` ended, from its exit, its standard output and its standard
+    error, as sluice 0.29.3 gives them (read.2): {state: "up"}, or {state: "failed", why}, why sluice's error's message
+    when it refused, the end of the preview command's output when its stack failed, else sluice's last line."""
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        doc = None
+    if isinstance(doc, dict) and isinstance(doc.get("error"), dict) and isinstance(doc["error"].get("message"), str):
+        return {"state": "failed", "why": doc["error"]["message"]}
+    if isinstance(doc, dict) and doc.get("state") == "up" and code == 0:
+        return {"state": "up"}
+    if isinstance(doc, dict) and doc.get("state") == "failed":
+        return {"state": "failed", "why": cards.last_lines(doc.get("output") if isinstance(doc.get("output"), str) else "",
+                                                           cards.DETAIL) or "its command failed, printing nothing"}
+    said = [l.strip() for l in f"{err or ''}\n{out or ''}".splitlines() if l.strip()]
+    return {"state": "failed", "why": said[-1] if said else f"sluice exited {code}"}
+
+
+def preview_handed(fleet, a):
+    """crew _preview <label> <bolt> <head>: the ask preview_ask hands to a process of its own on the team's host (code.9).
+    It runs `sluice preview bolt/<bolt> <head> --wait --json` in the checkout crew's record names, with no timeout of
+    crew's, since the policy's [preview] timeout bounds sluice's command and a release ends this wait
+    (preview_released); writes how it ended (preview_ended) to the record while the record still names this head; and,
+    when that changes what the card says (preview_change), changes the landing card in place with the note while it
+    waits on the user (preview_changed). A record naming another head, or none, has nothing written and nothing
+    changed. What goes wrong is said in its log, never a traceback to anyone (code.2)."""
+    sys.stdout.reconfigure(line_buffering=True)
+    name = f"bolt/{a.bolt}'s preview of {a.head[:7]}"
+    try:
+        r = preview_recorded(a.label, a.bolt)
+        if not r or r["head"] != a.head:
+            print(f"{name} is no longer crew's to ask: its record names " + (f"{r['head'][:7]}" if r else "none"))
+            return
+        print(f"asking sluice for {name} in {r['main']}")
+        try:
+            run = subprocess.run(["sluice", "preview", f"bolt/{a.bolt}", a.head, "--wait", "--json"], cwd=r["main"],
+                                 stdin=subprocess.DEVNULL, capture_output=True, text=True)
+            ended = preview_ended(run.returncode, run.stdout, run.stderr)
+        except OSError as e:
+            ended = {"state": "failed", "why": f"sluice could not run: {e}"}
+        with preview_lock(a.label):
+            r = preview_recorded(a.label, a.bolt)
+            if not r or r["head"] != a.head:
+                print(f"{name} ended {ended['state']}, and crew writes nothing: its record has moved on")
+                return
+            preview_write(a.label, a.bolt, dict(r, outcome=ended))
+        print(f"{name} ended {ended['state']}" + (f": {ended['why']}" if ended.get("why") else ""))
+        note = preview_change(r.get("shown"), ended["state"], a.head)
+        if note:
+            preview_changed(fleet, a.label, a.bolt, note)
+    except Refusal as e:
+        print(f"{name}: {e}")
+    except Exception as e:  # said in its log, as the handed construct's are
+        import traceback
+        traceback.print_exc()
+        print(f"{name}: {type(e).__name__}: {e}")
+
+
+def preview_changed(fleet, label, bolt, note):
+    """The landing card changed in place with a preview's note (raise_land, which takes the preview again by keep), only
+    while its conductor's card waits on the user (card_waiting): a card the user answered is left as it is, since a new
+    one following it would ask for the landing again; one crew can't read is left, said."""
+    key, acts = f"land/{bolt}", CardActs(fleet)
+    _, _, t = land_held(fleet, label, bolt)
+    if not t:
+        print(f"{key} is not changed: no team holds bolt {bolt}")
+        return
+    owner = f"{t['name']}-conductor"
+    card = cards.card_under(acts.entries(label), key, owner)
+    if not card:
+        print(f"{key} is not changed: {owner} holds no card under it on this host")
+        return
+    got, words = None, None
+    try:
+        with acts.bridge(owner, "The preview stands, and its card is not changed.") as py:
+            got, words = py.answer("get_request", {"requestId": card, "name": owner})
+    except Refusal as e:
+        words = str(e)
+    if not card_waiting(got):
+        print(f"card {key}: {card} is left as it is: " + (f"Pending You shows it {got.get('status')}" if isinstance(got, dict)
+                                                           else f"whether it waits on the user can't be read: {words}"))
+        return
+    raise_land(fleet, {"label": label, "key": key}, acts, note=landing_act("preview", words=note)[1])
 
 
 def preview_released(label, bolt, r):
@@ -10248,6 +10336,10 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--by", required=True)
     x.add_argument("--handed", action="store_true", help="the handed construct's own process")
     x.add_argument("--force", action="store_true")
+    x = sub.add_parser("_preview")
+    x.add_argument("label")
+    x.add_argument("bolt")
+    x.add_argument("head")
     x = sub.add_parser("_unit-wait")
     x.add_argument("unit")
     x.add_argument("--timeout", type=int, default=3600000)
@@ -10308,7 +10400,7 @@ COMMANDS = {
     ("chore", "add"): direct(("chore", "add")), ("chore", "order"): direct(("chore", "order")), ("chore", "after"): direct(("chore", "after")),
     ("chore", "move"): direct(("chore", "move")), ("chore", "drop"): direct(("chore", "drop")),
     ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
-    ("_construct-again", None): construct_hand,
+    ("_construct-again", None): construct_hand, ("_preview", None): preview_handed,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
     ("_review", None): review_cmd, ("_operator", None): operator_cmd, ("_revive", None): revive_cmd,

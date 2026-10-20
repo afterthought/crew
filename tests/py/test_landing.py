@@ -266,3 +266,16 @@ class TestThePreview:
         with pytest.raises(plan.Refusal) as e:
             plan.preview_listed(doc, "bolt/y", self.HEAD)
         assert str(e.value).startswith(said)
+
+    @pytest.mark.parametrize("code, out, err, ended", [
+        (0, '{"name": "preview/0123456789ab", "state": "up", "addresses": {"web": "http://w"}}', "", {"state": "up"}),
+        (1, '{"name": "preview/0123456789ab", "state": "failed", "output": "building\\nerror: port 4321 in use\\n"}', "",
+         {"state": "failed", "why": "building / error: port 4321 in use"}),
+        (2, '{"error": {"kind": "refused", "message": "abc1234 has no [preview] table in .config/sluice.toml", "next": []}}', "",
+         {"state": "failed", "why": "abc1234 has no [preview] table in .config/sluice.toml"}),
+        (2, "", "error: unrecognized subcommand 'preview'\n\nUsage: sluice <COMMAND>\n", {"state": "failed", "why": "Usage: sluice <COMMAND>"}),
+        (137, "", "", {"state": "failed", "why": "sluice exited 137"}),
+    ])
+    def test_how_sluices_preview_ended_is_read_from_its_exit_and_its_words(self, code, out, err, ended):
+        """"The stack fails to come up" and "The host's sluice has no preview command"."""
+        assert plan.preview_ended(code, out, err) == ended
