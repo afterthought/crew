@@ -3567,8 +3567,7 @@ def signal(fleet, a):
         excerpt or fail('a signal quotes the words that show it: add --excerpt "<the exact words the user said or the '
                         'tool printed>", or --excerpt-file <path>')
         v, sid = check_excerpt(fleet, name, a, excerpt, host)
-        v.grade != "refused" or fail("the excerpt is not in your session's transcript: quote the words as you received "
-                                     "them, from the user or from a tool's output")
+        excerpt_refusal(v) and fail(excerpt_refusal(v))
     else:
         import getpass
         excerpt, user = (excerpt or a.asserts).strip(), getpass.getuser()
@@ -3621,6 +3620,16 @@ def signal_refusal(slug, asserts):
     if not asserts.strip():
         return "a signal says what it asserts, in a sentence"
     return None
+
+
+def excerpt_refusal(v):
+    """Why crew signal refuses an agent's excerpt on its verdict v, or None: the words are not in the session's
+    transcript, reworded or a background task's output the agent has not read yet (signals.2)."""
+    if v.grade != "refused":
+        return None
+    return ("the excerpt is not in your session's transcript: quote the words as you received them, from the user or "
+            "from a tool's output. A background task's output reaches your transcript only once you read the output file "
+            "its task notification names: read that file, then record the signal again")
 
 
 def capture_named(name, v, sid, excerpt, now, kind=None, user=None, host=None, by=None):
