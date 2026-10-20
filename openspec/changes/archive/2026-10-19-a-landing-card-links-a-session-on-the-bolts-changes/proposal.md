@@ -43,8 +43,10 @@ plugin/skills/crew/SKILL.md
 plugin/bin/crew
 README.md
 tests/py/test_cards.py
+tests/py/test_card_commands.py
 tests/py/test_landing.py
 tests/t-journey-land.sh
 tests/t-briefs.sh
+tests/t-cards.sh
 tests/moon.yml
 ```

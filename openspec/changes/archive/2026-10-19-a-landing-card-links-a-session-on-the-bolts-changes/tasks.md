@@ -18,12 +18,12 @@
 ## 4. The words
 
 - [x] 4.1 The conductor's brief says the landing card links a reading, how its notes reach the conductor and that it lands nothing; proved by its words in `tests/t-briefs.sh` (design, *Task notes* 4.1).
-- [ ] 4.2 README, the crew skill and `plugin/bin/crew`'s usage describe the landing's session together; proved by `tests/t-docs.sh` (design, *Task notes* 4.2).
+- [x] 4.2 README, the crew skill and `plugin/bin/crew`'s usage describe the landing's session together; proved by `tests/t-docs.sh` (design, *Task notes* 4.2).
 
 ## 5. The journey
 
-- [ ] 5.1 A landing's session is started with its card, given again by `crew card session`, ended and started again by a fix, and ended by the landing, on the stubs; proved by `tests/t-journey-land.sh` (design, *Task notes* 5.1).
+- [x] 5.1 A landing's session is started with its card, given again by `crew card session`, ended and started again by a fix, and ended by the landing, on the stubs; proved by `tests/t-journey-land.sh` (design, *Task notes* 5.1).
 
 ## 6. Checks
 
-- [ ] 6.1 The logic tier and the end-to-end tests this change affects are green (design, *Task notes* 6.1).
+- [x] 6.1 The logic tier and the end-to-end tests this change affects are green (design, *Task notes* 6.1).

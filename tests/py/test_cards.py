@@ -632,6 +632,33 @@ class TestLandingSession:
             self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
         assert acts.sessions == []
 
+    def opened(self, monkeypatch, tmp_path, on):
+        """reading_open of land/b1 at head def5678, its recorded session serving the bolt as it stood at on: what it
+        ended, and the folder of the session it opened."""
+        d = tmp_path / "wldn" / "land/b1"
+        (d / on).mkdir(parents=True)
+        docs = ", ".join(str((d / on).resolve() / f) for f in ("00-b1.md", "01-v1-proposal.md", "02-b1-diff.txt"))
+        (d / "session.json").write_text(json.dumps({"pid": 42, "document": docs, "url": self.LINK, "started": "2026-10-19T10:00:00Z"}))
+        ended, opened = [], []
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "end_session", lambda label, key, unit=None: ended.append((label, key)) or [f"ended {key}'s session, plannotator pid 42"])
+        monkeypatch.setattr(plan, "landing_write", lambda fleet, facts, folder: folder)
+        monkeypatch.setattr(plan, "session_open", lambda at, name, write: opened.append((at, name, write())) or (self.LINK, None, True))
+        facts = dict(LANDING, team="swb-1", host="mac-studio", base="abc0000", head="def5678" + "0" * 33)
+        assert plan.reading_open(FLEET, "wldn", "land/b1", facts) == (self.LINK, None, True)
+        assert opened == [(d, "land/b1's session", d / "def5678")]
+        return ended
+
+    def test_a_merge_that_moves_the_head_ends_the_old_heads_session_and_opens_one_on_the_new(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A merge moves the head"."""
+        assert self.opened(monkeypatch, tmp_path, "abc1234") == [("wldn", "land/b1")]
+        assert capsys.readouterr().out == "ended land/b1's session, plannotator pid 42\n"
+
+    def test_a_session_on_the_head_as_it_stands_is_given_again_and_nothing_is_ended(self, monkeypatch, tmp_path, capsys):
+        assert self.opened(monkeypatch, tmp_path, "def5678") == []
+        assert capsys.readouterr().out == ""
+
 
 class TestLandingPreview:
     """A landing card is raised with its preview asked for first when the kit's policy at the head declares one
