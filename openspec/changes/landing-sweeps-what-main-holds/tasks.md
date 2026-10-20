@@ -12,4 +12,4 @@
 
 ## 3. The docs say it
 
-- [ ] 3.1 README and `plugin/roles/main-ops.md` say a landed bolt's branch, and each branch of its work, goes only when main holds every commit of it and is otherwise kept and named; `tests/suite docs briefs` passes (design: Task notes 3.1; `docs.2`).
+- [x] 3.1 README and `plugin/roles/main-ops.md` say a landed bolt's branch, and each branch of its work, goes only when main holds every commit of it and is otherwise kept and named; `tests/suite docs briefs` passes (design: Task notes 3.1; `docs.2`).
