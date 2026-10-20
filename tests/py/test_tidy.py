@@ -180,21 +180,28 @@ class TestBoltBranch:
 
 class TestBranch:
     """A unit's, chore's or fix's branch goes with its place only when git cherry finds nothing on it whose patch its
-    target lacks: a unit's or chore's bolt while the bolt's branch stands, else the kit's main now; a fix's bolt or
-    nothing (plan.10, record 0003, record 0028). Else it is kept, counted for the run record."""
+    target lacks: its bolt while the bolt's branch stands unlanded, else the kit's main now; nothing for a fix tracking
+    no bolt (plan.10, record 0003, record 0028). Else it is kept, counted for the run record."""
     NOW = "refs/remotes/origin/main"
 
-    @pytest.mark.parametrize("kind", ["unit", "chore"])
-    def test_a_units_or_chores_is_compared_with_its_bolt_while_the_bolts_branch_stands(self, kind):
-        assert plan.branch_target(kind, "bolt/t", True, self.NOW) == "bolt/t"
+    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
+    def test_one_is_compared_with_its_bolt_while_the_bolts_branch_stands_unlanded(self, kind):
+        assert plan.branch_target(kind, "bolt/t", True, False, self.NOW) == "bolt/t"
+
+    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
+    def test_once_its_bolt_is_marked_landed_it_is_compared_with_the_kits_main_now_not_the_bolt(self, kind):
+        assert plan.branch_target(kind, "bolt/t", True, True, self.NOW) == self.NOW
+
+    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
+    def test_once_the_bolts_branch_is_gone_it_is_compared_with_the_kits_main_now(self, kind):
+        assert plan.branch_target(kind, "bolt/gone", False, False, self.NOW) == self.NOW
 
     @pytest.mark.parametrize("kind", ["unit", "chore"])
-    def test_once_the_bolts_branch_is_gone_it_is_compared_with_the_kits_main_now(self, kind):
-        assert plan.branch_target(kind, "bolt/gone", False, self.NOW) == self.NOW
-        assert plan.branch_target(kind, "", False, "refs/heads/main") == "refs/heads/main"
+    def test_a_unit_or_chore_tracking_nothing_is_compared_with_main(self, kind):
+        assert plan.branch_target(kind, "", False, False, "refs/heads/main") == "refs/heads/main"
 
     def test_a_fix_tracking_no_bolt_has_nothing_to_compare_with(self):
-        assert plan.branch_target("fix", "", False, self.NOW) is None
+        assert plan.branch_target("fix", "", False, False, self.NOW) is None
 
     def test_only_plus_lines_are_counted_and_keep_it(self):
         assert plan.branch_kept("bolt/t", (0, "+ 1a2b3c\n- 4d5e6f\n+ 7a8b9c\n", "")) == (

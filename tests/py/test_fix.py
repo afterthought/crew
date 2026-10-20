@@ -130,9 +130,12 @@ class TestDrop:
             "git cannot compare it with bolt/gone: fatal: unknown commit bolt/gone", None)
 
     def test_one_tracking_no_bolt_is_compared_with_nothing_and_kept(self):
-        assert plan.branch_target("fix", "", False, "refs/remotes/origin/main") is None
+        assert plan.branch_target("fix", "", False, False, "refs/remotes/origin/main") is None
         assert plan.branch_kept(None, None) == ("it tracks no bolt to compare it with", None)
 
-    def test_its_bolt_is_its_target_even_once_the_bolts_branch_is_gone(self):
-        assert plan.branch_target("fix", "bolt/t", True, "refs/remotes/origin/main") == "bolt/t"
-        assert plan.branch_target("fix", "bolt/gone", False, "refs/remotes/origin/main") == "bolt/gone"
+    def test_its_bolt_is_its_target_while_it_stands_unlanded_and_main_once_it_has_landed_or_is_gone(self):
+        """bolt-teams "A worktree goes when its work is over" (record 0003): a fix's branch whose bolt has landed, or
+        whose bolt's branch is gone, is judged against the kit's main as a unit's is."""
+        assert plan.branch_target("fix", "bolt/t", True, False, "refs/remotes/origin/main") == "bolt/t"
+        assert plan.branch_target("fix", "bolt/t", True, True, "refs/remotes/origin/main") == "refs/remotes/origin/main"
+        assert plan.branch_target("fix", "bolt/gone", False, False, "refs/remotes/origin/main") == "refs/remotes/origin/main"

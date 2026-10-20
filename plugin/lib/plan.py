@@ -4759,10 +4759,10 @@ def silenced():
 def tidy(fleet, a):
     """Each worktree crew made in the team's kit checkout, on this host, whose work is over and that no slot holds:
     removed with its branch, saying the commit the branch was at, a unit's, chore's or fix's branch kept, named and
-    recorded instead when git cherry finds work on it its bolt, or main once the bolt is gone, lacks (branch_gone,
-    plan.10); or kept and named, with its branch, while it is locked or has uncommitted changes. The removal goes
-    through the kit's own `wt remove`, run from the kit's main
-    checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having failed or
+    recorded instead when git cherry finds work on it its bolt, or main once the bolt has landed or is gone, lacks
+    (branch_gone, plan.10); or kept and named, with its branch, while it is locked or has uncommitted changes. The
+    removal goes through the kit's own `wt remove`, run from the kit's main checkout and leaving the branch to crew,
+    so the kit's remove hooks run; one wt refuses, a hook having failed or
     waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is kept
     and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
     alone, the branch is kept and said. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
@@ -4770,7 +4770,8 @@ def tidy(fleet, a):
     chore/<name> in chore-<name>, or on a fix/ branch; nothing else is touched. While its bolt lasts, a bolt's worktree
     still on its branch is detached at the bolt's tip when it is clean, its branch then marked as crew's, and named as
     kept on the branch while it is not (bolt_detach, plan.18). A bolt's branch crew marked, which no worktree holds,
-    goes once no plan has the bolt (bolt_branch_over). The worktrees are listed
+    goes once no plan has the bolt (bolt_branch_over); crew's marks are read once, before the worktrees are judged, so
+    each place of a landed bolt is judged against main. The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
     makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
     work goes in can't be read. Once a worktree is removed, the command's next step reads the kit again."""
@@ -4794,7 +4795,7 @@ def tidy(fleet, a):
     chores = {u.name() for *_, p in found for u in p.chores() if u.get("Repo") == kit}
     now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as Stages reads it (plan.18)
     ups, on_main = gather.upstreams(main), set(gather.changes(main, now))
-    dropped = fixes_dropped(main)
+    dropped, marks = fixes_dropped(main), bolt_marks(main)
     chores_on = {}  # each branch's chores, read once each and only for a chore's place
 
     def chores_of(ref):
@@ -4848,7 +4849,8 @@ def tidy(fleet, a):
             print(f"{path} is removed, and {branch} is kept: crew could not read what wt remove said of the branch")
             continue
         if branch.startswith(("unit/", "chore/", "fix/")):  # judged by git cherry (plan.10)
-            print(branch_gone(t, main, branch, ups.get(branch, ""), now, path, "it was dropped" if branch in dropped else over))
+            print(branch_gone(t, main, branch, ups.get(branch, ""), now, path, "it was dropped" if branch in dropped else over,
+                              marks.get(ups.get(branch, "")) == "landed"))
             continue
         sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
                              capture_output=True, text=True, env=gitenv()).stdout.strip()
@@ -4859,10 +4861,10 @@ def tidy(fleet, a):
     # and no worktree holds it; a deletion sluice's guard refuses, while a submission to it waits, is kept and named.
     worked = {w.get("branch") for w in trees}
     for branch in sorted(dropped - worked - held):  # a dropped fix's branch no worktree holds, its place gone already
-        print(branch_gone(t, main, branch, ups.get(branch, ""), now))
-    for line in (gather.run(["git", "config", "--get-regexp", r"^branch\.bolt/.*\.crew$"], main) or "").splitlines():
-        name = line.split()[0][len("branch.bolt/"):-len(".crew")]
-        over = bolt_branch_over(name, bolts, f"bolt/{name}" in worked)
+        print(branch_gone(t, main, branch, ups.get(branch, ""), now, landed=marks.get(ups.get(branch, "")) == "landed"))
+    for branch in sorted(marks):
+        name = branch[len("bolt/"):]
+        over = bolt_branch_over(name, bolts, branch in worked)
         if not over:
             continue
         sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/bolt/{name}"],
@@ -4872,6 +4874,14 @@ def tidy(fleet, a):
               f"bolt/{name} is kept: {over}, and git refused to remove it: {' '.join(r.stderr.split())}")
 
 
+def bolt_marks(main):
+    """crew's mark on each bolt branch of a kit checkout, {bolt/<bolt>: given or landed}, from the kit's git config,
+    branch.bolt/<bolt>.crew, set given when crew makes the branch (BOLT_BRANCH, bolt_detached) and landed once sluice
+    has landed it on main (LANDING), which git drops with the branch (read.4, record 0003)."""
+    out = gather.run(["git", "config", "--get-regexp", r"^branch\.bolt/.*\.crew$"], main) or ""
+    return {k[len("branch."):-len(".crew")]: v for k, _, v in (l.partition(" ") for l in out.splitlines())}
+
+
 def fixes_dropped(main):
     """The fix branches of a kit checkout their conductor dropped (record 0028), by the mark crew fix --drop sets in
     the kit's git config, branch.<fix>.crew dropped, which git drops with the branch."""
@@ -4879,15 +4889,16 @@ def fixes_dropped(main):
     return {k[len("branch."):-len(".crew")] for k, _, v in (l.partition(" ") for l in out.splitlines()) if v == "dropped"}
 
 
-def branch_target(kind, up, up_exists, main_ref):
-    """What a branch whose place goes is compared with by git cherry (plan.10, record 0003), from plain facts: a unit's
-    or a chore's bolt, the branch it tracks (up), while that branch exists (up_exists), else the kit's main now
-    (main_ref, gather.now_ref), the only place its work could have arrived once its bolt has landed or been dropped; a
-    fix's bolt, or None when it tracks none, which keeps it (record 0028). Whether the bolt exists is read apart from
-    the upstream, which git still names once the branch is gone."""
-    if kind == "fix":
-        return up or None
-    return up if up and up_exists else main_ref
+def branch_target(kind, up, up_exists, up_landed, main_ref):
+    """What a branch whose place goes is compared with by git cherry (plan.10, record 0003), from plain facts: a unit's,
+    a chore's or a fix's bolt, the branch it tracks (up), while that branch exists (up_exists) and is not marked landed
+    (up_landed), else the kit's main now (main_ref, gather.now_ref), the only place its work could have arrived once its
+    bolt has landed or been dropped, since a landed bolt can hold what main lacks; None for a fix tracking no bolt,
+    which keeps it (record 0028). Whether the bolt exists is read apart from the upstream, which git still names once
+    the branch is gone."""
+    if kind == "fix" and not up:
+        return None
+    return up if up and up_exists and not up_landed else main_ref
 
 
 def branch_kept(target, cherry):
@@ -4899,7 +4910,7 @@ def branch_kept(target, cherry):
     merge counts only its own."""
     if not target:
         return "it tracks no bolt to compare it with", None
-    named = target.split("/", 2)[-1] if target.startswith("refs/") else target
+    named = ref_named(target)
     code, out, err = cherry
     if code:
         return f"git cannot compare it with {named}: {' '.join(err.split()) or f'exit {code}'}", None
@@ -4908,24 +4919,27 @@ def branch_kept(target, cherry):
             "delete", n) if n else None
 
 
-def branch_gone(t, main, branch, up, now, path=None, over="it was dropped"):
+def branch_gone(t, main, branch, up, now, path=None, over="it was dropped", landed=False):
     """A unit's, chore's or fix's branch once no worktree is on it, its place (path) removed now or before, its work
     over (over): compared by git cherry, in the kit's main checkout, with its bolt (up, the branch it tracks) while
-    that branch stands, else with the kit's main now (now), a fix with its bolt alone (branch_target); deleted when it
-    holds nothing its target lacks, else kept and named, a dropped fix's mark unset, so the user's from then on
-    (branch_kept, plan.10, record 0003), and recorded once on the team's host as branch.kept, since no later read
-    reaches a branch no worktree is on. What crew says of it (branch_said)."""
+    that branch stands and is not marked landed (landed), else with the kit's main now (now), a fix tracking no bolt
+    with nothing (branch_target); deleted when it holds nothing its target lacks, else kept and named, a dropped fix's
+    mark unset, so the user's from then on (branch_kept, plan.10, record 0003), and recorded once on the team's host as
+    branch.kept, from its bolt when it was compared with it or the bolt has landed, since no later read reaches a branch
+    no worktree is on. What crew says of it (branch_said)."""
     git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
     kind = branch.split("/", 1)[0]
     sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
-    target = branch_target(kind, up, bool(up) and git("rev-parse", "--verify", "-q", f"refs/heads/{up}").returncode == 0, now)
+    target = branch_target(kind, up, bool(up) and git("rev-parse", "--verify", "-q", f"refs/heads/{up}").returncode == 0,
+                           landed, now)
     r = git("cherry", target, branch) if target else None
     kept = branch_kept(target, r and (r.returncode, r.stdout, r.stderr))
     if kept:
         why, n = kept
         git("config", "--unset", f"branch.{branch}.crew")
-        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [target] if target == up else [],
-                    why=over if n else f"{over}, and {why}", Head=sha, Count=n)
+        why = kept_record(f"bolt {up.split('/', 1)[-1]} has landed", target, kept) if landed else over if n else f"{over}, and {why}"
+        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [up] if target == up or landed else [],
+                    why=why, Head=sha, Count=n)
         return branch_said(branch, path, sha, over, kept)
     r = git("branch", "-q", "-D", branch)
     return branch_said(branch, path, sha, over, None, (r.stderr.strip() or f"exit {r.returncode}") if r.returncode else None)
@@ -4949,10 +4963,24 @@ def branch_said(branch, path, sha, over, kept, refused=None):
     return said + ("" if n else ", the user's to keep or delete") + f"; a {kind} added as {name} starts from it"
 
 
+def kept_record(over, target, kept):
+    """The Why of a landed bolt's branch.kept entry, or of a branch of its work, composed from names (record.3): why it
+    is over (over), and that main (target, which the run record has no kind for) lacks its patches, or git's words
+    when it could not compare them (branch_kept's (why, count))."""
+    why, n = kept
+    return f"{over}, and {ref_named(target)} lacks its patches" if n else f"{over}, and {why}"
+
+
+def ref_named(ref):
+    """A ref as crew names it to the user: origin/main for refs/remotes/origin/main, a branch by its name."""
+    return ref.split("/", 2)[-1] if ref.startswith("refs/") else ref
+
+
 def bolt_branch_over(bolt, bolts, worktree):
     """Why a bolt's branch crew made, and holds no worktree of, is over (plan.9, record 0026): no plan has the bolt and
     no worktree holds the branch; else None, while the bolt is planned or held, or a worktree is on its branch."""
     return None if bolt in bolts or worktree else f"bolt {bolt} is in no plan"
+
 
 
 def bolt_detach(path, branch, kdir, over, locked, status):
