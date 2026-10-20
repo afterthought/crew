@@ -749,6 +749,72 @@ class TestLanding:
         assert c["context"]["links"] == [{"label": "Read bolt b1", "url": self.READ}]
         assert [a["kind"] for a in c["artifacts"]] == ["code", "url"]
 
+    WEB, API = "http://web-4581216--bolt-y--crew.localhost:4321", "http://api-4581216--bolt-y--crew.localhost:4322"
+    PREVIEW = dict(head="4581216abcdef", name="preview/0123456789ab", state="starting", addresses={"web": WEB, "api": API})
+    PR = {"kind": "url", "title": "Pull request #23 on GitHub, opened by sluice", "ref": "https://github.com/agentplot/crew/pull/23"}
+
+    def same_but_details(self, c, bare):
+        assert {k: c[k] for k in ("title", "summary", "approve", "rationale", "kind")} == {
+            k: bare[k] for k in ("title", "summary", "approve", "rationale", "kind")}
+
+    def test_a_preview_coming_up_is_listed_after_the_reading_and_lands_nothing(self):
+        """rail-cards "A kit that declares a preview": each address under the name the kit gives it, after the
+        reading's link and its sentence, in the links and on the face after the reading's and before the pull
+        request, saying the preview is coming up and lands nothing; the rest of the card as without."""
+        bare, c = landing(link=self.READ)["card"], landing(link=self.READ, preview=self.PREVIEW)["card"]
+        reading = (f"Read the bolt in one session: {self.READ}\n\nIt lands nothing: approving this card is the word to land.\n\n")
+        assert c["context"]["background"] == (
+            reading + "Try it running: a preview of 4581216 sluice brings up, at these addresses once it is up. It lands "
+            f"nothing; approving this card is the word to land.\nweb: {self.WEB}\napi: {self.API}\n\n"
+            + bare["context"]["background"].removeprefix(reading))
+        assert c["context"]["links"] == [{"label": "Read bolt a-deploy-holds-at-a-failure", "url": self.READ},
+                                         {"label": "Preview: web", "url": self.WEB}, {"label": "Preview: api", "url": self.API},
+                                         {"label": self.PR["title"], "url": self.PR["ref"]}]
+        assert c["artifacts"] == [bare["artifacts"][0], bare["artifacts"][1], {"kind": "url", "title": "Preview: web", "ref": self.WEB},
+                                  {"kind": "url", "title": "Preview: api", "ref": self.API}, self.PR]
+        self.same_but_details(c, bare)
+
+    def test_a_preview_up_is_listed_as_up(self):
+        c = landing(link=self.READ, preview=dict(self.PREVIEW, state="up"))["card"]
+        assert ("Try it running: a preview of 4581216, up at these addresses. It lands nothing; approving this card is the "
+                f"word to land.\nweb: {self.WEB}\napi: {self.API}\n\n") in c["context"]["background"]
+        assert [a["title"] for a in c["artifacts"][2:4]] == ["Preview: web", "Preview: api"]
+
+    def test_a_preview_that_failed_says_so_with_the_end_of_its_output_and_lists_no_address(self):
+        """rail-cards "The stack fails to come up"."""
+        output = "".join(f"step {i}: building the stack's images, which takes its time\n" for i in range(8)) + "error: port 4321 in use\n"
+        bare = landing(link=self.READ)["card"]
+        c = landing(link=self.READ, preview=dict(self.PREVIEW, state="failed", output=output))["card"]
+        said = c["context"]["background"].split("\n\n")[2]
+        assert said == ("A preview of 4581216 was asked for and is not there: step 6: building the stack's images, which takes "
+                        "its time / step 7: building the stack's images, which takes its time / error: port 4321 in use. Nothing "
+                        "waits on it.")
+        assert "Preview:" not in json.dumps(c) and c["artifacts"] == bare["artifacts"]
+        self.same_but_details(c, bare)
+
+    def test_a_preview_not_asked_says_why_and_the_card_is_raised_all_the_same(self):
+        """rail-cards "The host's sluice has no preview command"."""
+        why = "sluice exited 2: unrecognized subcommand 'preview'"
+        bare, c = landing()["card"], landing(preview={"head": "4581216abcdef", "why": why})["card"]
+        assert c["context"]["background"] == (f"A preview of 4581216 was asked for and is not there: {why}. Nothing waits on it.\n\n"
+                                              + bare["context"]["background"])
+        assert c["artifacts"] == bare["artifacts"] and c["context"]["links"] == bare["context"]["links"]
+        self.same_but_details(c, bare)
+
+    def test_a_preview_of_nine_addresses_keeps_the_cards_face_at_eight_artifacts(self):
+        many = {f"site{i}": f"http://site{i}-4581216.localhost:{4320 + i}" for i in range(9)}
+        c = landing(link=self.READ, preview=dict(self.PREVIEW, addresses=many))["card"]
+        assert len(c["artifacts"]) == 8
+        assert [a["title"] for a in c["artifacts"]] == (["What lands: 6 units, no chores", "Read bolt a-deploy-holds-at-a-failure"]
+                                                        + [f"Preview: site{i}" for i in range(5)] + [self.PR["title"]])
+        assert [l["label"] for l in c["context"]["links"]][1:10] == [f"Preview: site{i}" for i in range(9)]
+        assert all(f"site{i}: {u}" in c["context"]["background"] for i, u in enumerate(many.values()))
+
+    def test_a_card_built_with_no_preview_is_as_before(self):
+        """rail-cards "A kit that declares none": no preview and no word of one."""
+        c = landing(link=self.READ, preview=None)["card"]
+        assert c == landing(link=self.READ)["card"] and "preview" not in json.dumps(c).lower()
+
 
 class TestDeploy:
     def test_three_landings_since_srvs_last_deploy(self):
