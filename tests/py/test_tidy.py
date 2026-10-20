@@ -1,6 +1,7 @@
 """What a team's read frees and removes (teams.1, plan.9): plan.slot_stage for the work each slot holds,
 plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
-plan.wt_left_branch for what the kit's wt remove said, and plan.unread_plans for a tidy that removes nothing. How
+plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
+goes with its place (plan.10), and plan.unread_plans for a tidy that removes nothing. How
 worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
 settles, the journey's (t-journey-merge, t-journey-fix)."""
 import pytest
@@ -175,3 +176,40 @@ class TestBoltBranch:
     def test_a_planned_bolt_or_one_a_worktree_holds_stays(self):
         assert plan.bolt_branch_over("b", {"b"}, False) is None
         assert plan.bolt_branch_over("b", set(), True) is None
+
+
+class TestBranch:
+    """A unit's, chore's or fix's branch goes with its place only when git cherry finds nothing on it whose patch its
+    target lacks: a unit's or chore's bolt while the bolt's branch stands, else the kit's main now; a fix's bolt or
+    nothing (plan.10, record 0003, record 0028). Else it is kept, counted for the run record."""
+    NOW = "refs/remotes/origin/main"
+
+    @pytest.mark.parametrize("kind", ["unit", "chore"])
+    def test_a_units_or_chores_is_compared_with_its_bolt_while_the_bolts_branch_stands(self, kind):
+        assert plan.branch_target(kind, "bolt/t", True, self.NOW) == "bolt/t"
+
+    @pytest.mark.parametrize("kind", ["unit", "chore"])
+    def test_once_the_bolts_branch_is_gone_it_is_compared_with_the_kits_main_now(self, kind):
+        assert plan.branch_target(kind, "bolt/gone", False, self.NOW) == self.NOW
+        assert plan.branch_target(kind, "", False, "refs/heads/main") == "refs/heads/main"
+
+    def test_a_fix_tracking_no_bolt_has_nothing_to_compare_with(self):
+        assert plan.branch_target("fix", "", False, self.NOW) is None
+
+    def test_only_plus_lines_are_counted_and_keep_it(self):
+        assert plan.branch_kept("bolt/t", (0, "+ 1a2b3c\n- 4d5e6f\n+ 7a8b9c\n", "")) == (
+            "it holds 2 commits whose patch bolt/t lacks (git cherry), the user's to keep or delete", 2)
+
+    def test_minus_lines_or_nothing_let_it_go(self):
+        assert plan.branch_kept("bolt/t", (0, "- 1a2b3c\n- 4d5e6f\n", "")) is None
+        assert plan.branch_kept(self.NOW, (0, "", "")) is None
+
+    def test_main_is_named_as_its_branch_not_its_ref(self):
+        assert plan.branch_kept(self.NOW, (0, "+ 1a2b3c\n", ""))[0] == (
+            "it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete")
+        assert plan.branch_kept("refs/heads/main", (0, "+ 1a2b3c\n", ""))[0].startswith("it holds 1 commit whose patch main lacks")
+
+    def test_a_non_zero_exit_keeps_it_in_gits_words_uncounted(self):
+        assert plan.branch_kept("bolt/gone", (128, "", "fatal: unknown commit bolt/gone\n")) == (
+            "git cannot compare it with bolt/gone: fatal: unknown commit bolt/gone", None)
+        assert plan.branch_kept("bolt/t", (1, "", "")) == ("git cannot compare it with bolt/t: exit 1", None)

@@ -4854,31 +4854,47 @@ def fixes_dropped(main):
     return {k[len("branch."):-len(".crew")] for k, _, v in (l.partition(" ") for l in out.splitlines()) if v == "dropped"}
 
 
-def fix_branch_kept(up, cherry):
-    """Why a dropped fix's branch is kept when its place goes (plan.10, record 0028), or None when it goes: it holds
-    commits whose patch its bolt (up, the branch it tracks) lacks, as git cherry (exit, output, error) against the bolt
-    says, or it can't be compared with one."""
-    if not up:
-        return "it tracks no bolt to compare it with"
+def branch_target(kind, up, up_exists, main_ref):
+    """What a branch whose place goes is compared with by git cherry (plan.10, record 0003), from plain facts: a unit's
+    or a chore's bolt, the branch it tracks (up), while that branch exists (up_exists), else the kit's main now
+    (main_ref, gather.now_ref), the only place its work could have arrived once its bolt has landed or been dropped; a
+    fix's bolt, or None when it tracks none, which keeps it (record 0028). Whether the bolt exists is read apart from
+    the upstream, which git still names once the branch is gone."""
+    if kind == "fix":
+        return up or None
+    return up if up and up_exists else main_ref
+
+
+def branch_kept(target, cherry):
+    """Why a branch is kept when its place goes (plan.10, record 0003, record 0028), with how many commits it holds whose
+    patch its target lacks, for the run record, None when git could not count them; or None when it goes: git cherry
+    (exit, output, error) of the branch against target finds a commit whose patch target lacks (a + line), or can't
+    compare the two, or there is no target, a fix tracking no bolt. A - line is a commit whose patch target holds under
+    another hash, rebased as it merged, and a merge commit is not listed, so a branch that took another's head by a
+    merge counts only its own."""
+    if not target:
+        return "it tracks no bolt to compare it with", None
+    named = target.split("/", 2)[-1] if target.startswith("refs/") else target
     code, out, err = cherry
     if code:
-        return f"git cannot compare it with {up}: {' '.join(err.split()) or f'exit {code}'}"
+        return f"git cannot compare it with {named}: {' '.join(err.split()) or f'exit {code}'}", None
     n = sum(1 for l in out.splitlines() if l.startswith("+"))
-    return f"it holds {n} commit{'' if n == 1 else 's'} whose patch {up} lacks (git cherry), the user's to keep or delete" if n else None
+    return (f"it holds {n} commit{'' if n == 1 else 's'} whose patch {named} lacks (git cherry), the user's to keep or "
+            "delete", n) if n else None
 
 
 def fix_branch_gone(main, branch, up, path=None):
     """A dropped fix's branch once no worktree is on it, its place (path) removed now or before: deleted when it holds
-    nothing beyond its bolt, else kept, named and its mark unset, so the user's from then on (fix_branch_kept); what
+    nothing beyond its bolt, else kept, named and its mark unset, so the user's from then on (branch_kept); what
     crew says of it."""
     git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
     sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
     r = git("cherry", up, branch) if up else None
-    why = fix_branch_kept(up, r and (r.returncode, r.stdout, r.stderr))
+    kept = branch_kept(up, r and (r.returncode, r.stdout, r.stderr))
     lead = f"{path} is removed, and {branch}" if path else branch
-    if why:
+    if kept:
         git("config", "--unset", f"branch.{branch}.crew")
-        return f"{lead} is kept at {sha}: it was dropped, and {why}"
+        return f"{lead} is kept at {sha}: it was dropped, and {kept[0]}"
     r = git("branch", "-q", "-D", branch)
     if r.returncode:
         return f"{lead} is kept: {r.stderr.strip()}"
