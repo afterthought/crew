@@ -12,7 +12,7 @@
 ## 3. A row owing its card
 
 - [x] 3.1 The board's text, its JSON and every agent's view say that a row with no card open owes its card because its last post was refused; proved by cases in `tests/py/test_board.py` (design, *Decisions* 3 and *Task notes* 3.1).
-- [ ] 3.2 The page's marker says the same, with Pending You's words in its title; proved by a case in `tests/py/test_page.py` (design, *Decisions* 3 and *Task notes* 3.2).
+- [x] 3.2 The page's marker says the same, with Pending You's words in its title; proved by a case in `tests/py/test_page.py` (design, *Decisions* 3 and *Task notes* 3.2).
 
 ## 4. The words
 

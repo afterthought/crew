@@ -176,6 +176,13 @@ class TestMore:
         for sample in ("atlas", "plan-decisions", "books", "Manrope", "JetBrains Mono"):
             assert sample not in rest
 
+    def test_a_marker_whose_rows_post_was_refused_says_so_with_pending_yous_words_in_its_title(self):
+        """board-page "A deploy whose card was refused": the marker says it has no card, its post refused, and pointing
+        at it shows the words the board's read gives it (board.marker's refused)."""
+        rest = re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D), flags=re.S)
+        assert 'k.refused ? "no card, its post refused" : "no card"' in rest
+        assert 's.title = !k.card && k.refused ? k.key + ": " + k.refused : k.key;' in rest
+
     def test_the_page_is_written_whole_over_the_last_one_leaving_no_temporary_file(self, tmp_path):
         out = tmp_path / "wldn" / "page.html"
         page.write(out, "one")
