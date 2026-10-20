@@ -50,6 +50,21 @@ def declared(text, where=DECLARATION):
     return {"toolchain": toolchain, "runner": runner, "command": command}
 
 
+def previewed(text, where=DECLARATION):
+    """Whether a kit's DECLARATION, as a revision holds it, declares a preview of that revision, as sluice reads it
+    there (sluice record 0021): True when its TOML holds a [preview] table, False when there is no file or no table.
+    Refused, naming the file, when it is not TOML or `preview` is not a table (read.1)."""
+    if text is None:
+        return False
+    try:
+        preview = tomllib.loads(text).get("preview")
+    except tomllib.TOMLDecodeError as e:
+        crew.fail(f"{where} is not TOML, so crew can't read whether the kit declares a preview: {e}")
+    if preview is not None and not isinstance(preview, dict):
+        crew.fail(f"{where}: [preview] is a table, not {type(preview).__name__}")
+    return preview is not None
+
+
 def in_toolchain(script, argv):
     """argv run inside the kept toolchain: sourced by the bash on PATH, anything it prints sent to stderr, so a
     command's stdout is its own. With no toolchain, argv as it is."""

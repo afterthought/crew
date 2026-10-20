@@ -97,6 +97,29 @@ def test_a_failed_step_names_the_place_the_step_and_its_last_lines():
     assert "line 39" in why and "line 24" not in why and why.endswith("Running the command again sets it up.")
 
 
+class TestPreviewed:
+    """Whether a kit's policy at the bolt's head declares a preview, as sluice reads it from the previewed revision
+    (rail-cards, "A landing's card lists the addresses of a preview of its head")."""
+
+    def test_a_policy_with_a_preview_table_declares_one(self):
+        assert kit.previewed('[preview]\ncommand = ["devenv", "up"]\n\n[preview.addresses]\nweb = "http://{name.web}"\n')
+
+    def test_a_policy_with_no_preview_table_declares_none(self):
+        assert kit.previewed(FULL) is False
+
+    def test_a_kit_with_no_policy_declares_none(self):
+        assert kit.previewed(None) is False
+
+    @pytest.mark.parametrize("text, said", [
+        ("[preview\n", "is not TOML"),
+        ('preview = "x"\n', "[preview] is a table, not str"),
+    ])
+    def test_a_policy_crew_cannot_read_is_refused_naming_the_file_at_the_head(self, text, said):
+        with pytest.raises(Refusal) as e:
+            kit.previewed(text, ".config/sluice.toml at abc1234")
+        assert ".config/sluice.toml at abc1234" in str(e.value) and said in str(e.value)
+
+
 POLICY = '[tests]\nrunner = "moon"\n\n[branches."bolt/*"]\nrequired = ["#check-full"]\n\n[branches.main]\nrequired = ["#check-full"]\n'
 
 

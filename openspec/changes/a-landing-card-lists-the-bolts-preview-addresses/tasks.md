@@ -2,7 +2,7 @@
 
 ## 1. The decisions
 
-- [ ] 1.1 Whether a kit's policy at a head declares `[preview]` is read by a function of its text, refusing what is not TOML; proved by new cases in `tests/py/test_kit.py` (design, *Decisions* 1 and *Task notes* 1.1).
+- [x] 1.1 Whether a kit's policy at a head declares `[preview]` is read by a function of its text, refusing what is not TOML; proved by new cases in `tests/py/test_kit.py` (design, *Decisions* 1 and *Task notes* 1.1).
 - [ ] 1.2 What crew does with a bolt's preview at each raise, what change note a preview's end puts on the card, and which entry of sluice's list is the head's are functions of facts; proved by new cases in `tests/py/test_landing.py` (design, *Decisions* 3, 5 and *Task notes* 1.2).
 
 ## 2. The card
