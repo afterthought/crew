@@ -12,9 +12,17 @@ import plan
 KD = "/kit"
 
 
-def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix_merged=False, dropped=()):
+# A fix branch's facts as gather.fix_facts reads them: in flight, merged into its bolt, landed with it, or cut at a
+# commit main holds and never moved.
+GOING = {"bolt": "t", "merged": False, "on_main": False, "moved": None}
+MERGED = dict(GOING, merged=True, moved=True)
+LANDED = dict(GOING, on_main=True, moved=True)
+CUT = dict(GOING, on_main=True, moved=False)
+
+
+def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix=GOING, dropped=()):
     return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), set(units), set(on_main),
-                          lambda bolt: set(merged), lambda fix, bolt: fix_merged, dropped=set(dropped))
+                          lambda bolt: set(merged), lambda b: fix, dropped=set(dropped))
 
 
 class TestOver:
@@ -34,16 +42,57 @@ class TestOver:
         assert over("places/planned", "unit/planned", "bolt/t") == ("planned", None)
 
     def test_a_fixs_place_is_over_once_it_merged_was_dropped_or_its_bolt_left_every_plan(self):
-        assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix_merged=True) == ("fix/t/y", "fix/t/y has merged into bolt/t")
+        assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")
         assert over("places/fix-t--y", "fix/t/y", "bolt/t", dropped={"fix/t/y"}) == ("fix/t/y", "fix/t/y was dropped")
         assert over("places/fix-gone--y", "fix/gone/y", "bolt/gone") == ("fix/gone/y", "bolt gone, which fix/gone/y was made from, is in no plan")
         assert over("places/fix-t--y", "fix/t/y", "bolt/t") == ("fix/t/y", None)
 
+    def test_a_landed_fixs_place_is_over_with_its_bolt_planned_or_gone(self):
+        # wldn, swb-3, 2026-10-20: fixes of landed bolts held their slots and branches (teams.3).
+        assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=LANDED) == ("fix/t/y", "fix/t/y has landed on main")
+        assert over("places/fix-gone--y", "fix/gone/y", "bolt/gone", fix=LANDED) == ("fix/gone/y", "fix/gone/y has landed on main")
+        assert over("places/fix-gone--y", "fix/gone/y", "bolt/gone", fix=CUT) == ("fix/gone/y", "fix/gone/y has landed on main")
+        assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=CUT) == ("fix/t/y", None)
+
+    def test_a_fix_tracking_its_bolt_on_github_is_crews_and_over_once_merged(self):
+        # plan.19: a place cut from origin/bolt/<bolt> tracks the remote-tracking branch.
+        assert over("places/fix-t--y", "fix/t/y", "origin/bolt/t", fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")
+        assert over("places/fix-t--y", "fix/t/y", "origin/bolt/t") == ("fix/t/y", None)
+        assert over("places/fix-gone--y", "fix/gone/y", "origin/bolt/gone") == (
+            "fix/gone/y", "bolt gone, which fix/gone/y was made from, is in no plan")
+
     @pytest.mark.parametrize("path, branch, up", [
-        ("mine", "mine", ""), ("x", "unit/x", "bolt/t"), ("bolts/not-elsewhere", "bolt/elsewhere", ""),
+        ("mine", "mine", ""), ("places/fix-t--y", "fix/t/y", "origin/main"), ("x", "unit/x", "bolt/t"), ("bolts/not-elsewhere", "bolt/elsewhere", ""),
         ("places/detached", "", ""), ("places/fix-t--y", "fix/t/y", ""), ("main", "main", "")])
     def test_a_worktree_crew_did_not_make_is_never_touched(self, path, branch, up):
         assert over(path, branch, up, units=()) is None
+
+
+class TestFixBranchesOver:
+    """A fix's branch whose place is gone goes once main or its bolt holds its tip and no slot or worktree holds it
+    (teams.3, plan.10): read on the box on 2026-10-20, more than forty fix/ branches of long-gone bolts in
+    switchboard-kit, each one's tip on origin/main."""
+
+    def gone(self, facts, held=(), dropped=(), bolts=("t",)):
+        return plan.fix_branches_over(facts, set(held), set(dropped), set(bolts))
+
+    def test_a_merged_or_landed_branch_goes_saying_why(self):
+        facts = {"fix/t/merged": MERGED, "fix/gone/landed": dict(LANDED, bolt="gone"), "fix/gone/cut": dict(CUT, bolt="gone"),
+                 "fix/t/landed": LANDED}
+        assert self.gone(facts) == [("fix/gone/cut", "it has landed on main"), ("fix/gone/landed", "it has landed on main"),
+                                    ("fix/t/landed", "it has landed on main"), ("fix/t/merged", "it has merged into bolt/t")]
+
+    def test_one_a_slot_or_a_worktree_holds_stays(self):
+        assert self.gone({"fix/t/merged": MERGED, "fix/t/landed": LANDED}, held={"fix/t/merged", "fix/t/landed"}) == []
+
+    def test_one_its_conductor_dropped_is_left_to_the_dropped_sweep(self):
+        assert self.gone({"fix/t/merged": MERGED}, dropped={"fix/t/merged"}) == []
+
+    def test_one_holding_work_main_and_its_bolt_lack_stays(self):
+        assert self.gone({"fix/gone/kept": dict(GOING, bolt="gone"), "fix/none/kept": dict(GOING, bolt=None, on_main=True, moved=False)}) == []
+
+    def test_one_whose_bolt_is_planned_and_not_merged_stays(self):
+        assert self.gone({"fix/t/y": GOING, "fix/t/cut": CUT}) == []
 
 
 class TestLegacyBolt:
