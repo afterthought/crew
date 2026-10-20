@@ -109,6 +109,10 @@ OPS = [entry("bolt.land", 95, bolt="atlas-maps", Repo="atlas-kit", Head=S1), ent
        entry("ops.step", 30, Head=S1, Key="restart-teams/1", State="handed", Doer="dispatcher", Agent="wldn-dispatch-mac-studio"),
        entry("ops.step", 20, Key="rotate-key", State="waiting", Doer="user", Text="Rotate the key.")]
 DEPLOY_CARD = dict(label="wldn", card="req_9", key="deploy/mac-studio", by="wldn-ops", host="mac-studio", at=NOW)
+# The deploy's card, posted in wldn-ops's name when the offer was made, refused by Pending You (rail-cards "A row's card
+# that Pending You refused is owed until it posts").
+REFUSED_POST = entry("card.post", 39, Key="deploy/mac-studio", By="wldn-ops",
+                     Refused="Pending You refused post_request: This is atl-1-conductor’s card; leave it.")
 
 
 SIGS = [{"signal": "2026-10-01-planning/01-zones", "home": "blueprints", "captured_by": "wldn-planner", "at": "2026-10-01", "kind": "ask",
@@ -179,6 +183,22 @@ class TestText:
         env, = data(entries=OPS)["partitions"][0]["environments"]
         assert (env["env"], env["teams"], [d["row"] for d in env["deploys"]], [w["row"] for w in env["waiting"]]) == (
             "mac-studio", ["atl-1"], ["deploy/mac-studio", None], [None, "op/mac-studio/2"])
+
+    def test_a_deploy_whose_only_post_was_refused_owes_its_card_and_a_row_with_no_post_has_none_open(self):
+        """crew-board "A row whose card post was refused": the row's last post under its key, refused, with no card
+        open; the rotate-key step, never posted, has none open and says no more."""
+        logs = OPS + [REFUSED_POST]
+        op = lane(board.board_text(data(entries=OPS, logs=logs)), "Operation")
+        assert op[0] == f"✓ mac-studio  deploy {S2[:7]} from {S1[:7]}  waits on the user's word  carrying atlas-zones  no card open, its post refused"
+        assert op[-1] == "✓ mac-studio  rotate-key  waits on the user  Rotate the key.  no card open"
+        env, = data(entries=OPS, logs=logs)["partitions"][0]["environments"]
+        assert env["deploys"][0]["markers"][0]["refused"] == REFUSED_POST["Refused"]
+        assert env["waiting"][1]["markers"][0]["refused"] is None
+
+    def test_a_card_posted_after_a_refused_post_is_open_and_owes_nothing(self):
+        d = data(entries=OPS, logs=OPS + [REFUSED_POST], cards=[DEPLOY_CARD])
+        assert d["partitions"][0]["environments"][0]["deploys"][0]["markers"][0]["refused"] is None
+        assert lane(board.board_text(d), "Operation")[0].endswith("card open, asked by wldn-ops")
 
     def test_a_deploy_that_failed_says_at_which_step_and_one_whose_commit_no_landing_holds_says_so(self):
         es = [entry("ops.deploy", 30, Head=S2, Base=S1, Phase="start"), entry("ops.deploy", 20, Head=S2, Phase="step", Step="machine", Outcome="failed"),
@@ -356,6 +376,11 @@ class TestViews:
             f"  mac-studio  restart-teams/1  after {S1[:7]}  handed  doer dispatcher, wldn-dispatch-mac-studio",
             "✓ mac-studio  rotate-key  waiting  doer user  no card open",
             f"  swancloud-srv  deploy {S1[:7]}  deploying since {board.local(ago(10))}"]
+
+    def test_main_level_ops_reads_a_deploy_whose_card_post_was_refused_as_owing_its_card(self):
+        """crew-board "A deploy whose card was refused", in main-level ops's view."""
+        assert view("wldn-ops", entries=OPS, logs=OPS + [REFUSED_POST])[1] == (
+            f"✓ mac-studio  deploy {S2[:7]}  waits on the user's word  no card open, its post refused")
 
     def test_a_step_held_for_the_users_word_is_marked_held_and_waits_on_its_card(self):
         held = entry("ops.step", 10, Head=S1, Key="restart-herdr/1", State="waiting", Doer="main-ops", Agent="wldn-ops", When="quiet held")
