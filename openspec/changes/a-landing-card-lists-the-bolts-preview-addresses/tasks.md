@@ -25,4 +25,4 @@
 
 ## 6. Checks
 
-- [ ] 6.1 The logic tier and the end-to-end tests this change affects are green (design, *Task notes* 6.1).
+- [x] 6.1 The logic tier and the end-to-end tests this change affects are green (design, *Task notes* 6.1).
