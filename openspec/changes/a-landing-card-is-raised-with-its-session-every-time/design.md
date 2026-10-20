@@ -100,7 +100,7 @@ The crew skill's `crew card wait` row, the usage in `plugin/bin/crew` and `plan.
 
 ## After deploy
 
-- The next real landing card raised on mac-studio after this lands carries its reading's link, or the run record's `card.post` entry for its key holds `Unread` with why. The doer is swancloud-ops, once a landing card is raised, reading the entry with `crew events` or `recsel`. No check in crew's tiers reaches a real plannotator on a loaded host.
+- The next real landing card raised after this lands, on whichever host raises it, carries its reading's link, or the run record's `card.post` entry for its key holds `Unread` with why. The doer is swancloud-ops, once a landing card is raised, reading the entry with `crew events` or `recsel`. No check in crew's tiers reaches a real plannotator on a loaded host.
 
 ## Task notes
 
