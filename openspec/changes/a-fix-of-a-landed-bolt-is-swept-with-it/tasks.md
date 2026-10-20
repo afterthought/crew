@@ -12,4 +12,4 @@
 
 ## 3. The command, end to end
 
-- [ ] 3.1 A fix whose place was removed after its merge has its slot freed and its branch removed by the team's next `crew status` (design.md, Task notes 3.1). Verify `tests/suite t-journey-land t-journey-fix` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
+- [x] 3.1 A fix whose place was removed after its merge has its slot freed and its branch removed by the team's next `crew status` (design.md, Task notes 3.1). Verify `tests/suite t-journey-land t-journey-fix` ends with "0 failed", then `tests/suite --affected` ends with "0 failed".
