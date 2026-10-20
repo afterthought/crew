@@ -509,12 +509,13 @@ def high(action):
 # ---------------------------------------------------------------------------------------- the six builders
 
 def landing_card(f):
-    """A bolt's landing card (record 0031 §5): an approval of risk high, the units and chores that land as a list on
-    its face, the counts, the batches, sluice's verdict and how far main moved in its summary, what follows as its
-    rationale, sluice's pull request linked when the submission has one, and in its details only the batches.
-    f: bolt, kit, units, chores, batches ({unit: the batch it was read in}), head, at (sluice's time), moved (landings
-    on main since the bolt was cut), pr ({number, url}) or None, offers (the environments whose deploy will be offered
-    on a card), follows."""
+    """A bolt's landing card (record 0031 §5, briefs.9): an approval of risk high, the units and chores that land as a
+    list on its face, the counts, the batches, sluice's verdict and how far main moved in its summary, what follows as
+    its rationale; its details opening with the one link to the landing's reading session, which lands nothing, then
+    the batches; the reading linked first, then sluice's pull request when the submission has one. f: bolt, kit,
+    units, chores, batches ({unit: the batch it was read in}), head, at (sluice's time), moved (landings on main since
+    the bolt was cut), pr ({number, url}) or None, offers (the environments whose deploy will be offered on a card),
+    link (the reading session's) or None, follows."""
     units, chores, batches = list(f["units"]), list(f.get("chores") or []), f.get("batches") or {}
     parts = ([plural(len(units), "unit")] if units else []) + ([plural(len(chores), "chore")] if chores else [])
     what = joined(parts) if parts else "nothing"
@@ -534,12 +535,15 @@ def landing_card(f):
                       f"{plural(len(chores), 'chore') if chores else 'no chores'}", f"land-{f['bolt']}.txt",
                       units + [f"{c} (chore)" for c in chores])
     counted = [f"batch {b}: {plural(sum(1 for u in units if batches.get(u) == b), 'unit')}" for b in read]
-    background = (("Read in its batches:\n" + "\n".join(counted) + "\n\n" if counted else "")
+    reading = (f"Read the bolt in one session: {f['link']}\n\n"
+               "It lands nothing: approving this card is the word to land.\n\n") if f.get("link") else ""
+    background = (reading + ("Read in its batches:\n" + "\n".join(counted) + "\n\n" if counted else "")
                   + "A note naming a defect holds the landing: crew withdraws this card, and raises it again, "
                     "following this one, once the bolt is green again.")
     pr_title = f"Pull request #{pr['number']} on GitHub, opened by sluice" if pr else None
+    links = ([(f"Read bolt {f['bolt']}", f["link"])] if f.get("link") else []) + ([(pr_title, pr["url"])] if pr else [])
     return built(f"land/{f['bolt']}", f"Land the bolt {f['bolt']} on {f['kit']}'s main", " ".join(said), background,
-                 [(pr_title, pr["url"])] if pr else (), [lands] + ([link(pr_title, pr["url"])] if pr else []),
+                 links, [lands] + [link(title, url) for title, url in links],
                  f.get("follows"), kind="approve", intent="approve", approve=high(f"Land {f['bolt']} on {f['kit']}'s main"),
                  recommendedIds=["approve"], rationale=by_words(then, DETAIL))
 

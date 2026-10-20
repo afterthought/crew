@@ -619,10 +619,32 @@ class TestLanding:
         assert bare["summary"] == ("1 unit and 1 chore land, every one merged and every unit read in a batch (3). sluice is green "
                                    "at abc1234. main has not moved since the bolt was cut.")
 
-    def test_a_card_with_nothing_to_show_carries_the_units_and_the_link_and_no_reading_session(self):
+    def test_a_card_built_without_a_reading_carries_the_units_and_the_pull_request_and_no_session(self):
         c = landing()["card"]
         assert [(a["kind"], a.get("lang")) for a in c["artifacts"]] == [("code", "text"), ("url", None)]
         assert "plannotator" not in json.dumps(c) and "session" not in c
+
+    READ = "http://mac-studio.ts.swancloud.net:19433"
+
+    def test_a_card_built_with_its_reading_opens_its_details_with_it_and_leads_its_links_with_it(self):
+        """rail-cards "A landing card links its reading": the link first in its details and among its links, before
+        sluice's pull request, saying the reading lands nothing; the face, the summary and the approval as without."""
+        bare, c = landing()["card"], landing(link=self.READ)["card"]
+        assert c["context"]["background"] == (f"Read the bolt in one session: {self.READ}\n\nIt lands nothing: approving this "
+                                              "card is the word to land.\n\n" + bare["context"]["background"])
+        assert c["context"]["links"] == [{"label": "Read bolt a-deploy-holds-at-a-failure", "url": self.READ},
+                                         {"label": "Pull request #23 on GitHub, opened by sluice", "url": "https://github.com/agentplot/crew/pull/23"}]
+        assert c["artifacts"][0] == bare["artifacts"][0]
+        assert c["artifacts"][1:] == [{"kind": "url", "title": "Read bolt a-deploy-holds-at-a-failure", "ref": self.READ},
+                                      bare["artifacts"][1]]
+        assert {k: c[k] for k in ("title", "summary", "approve", "rationale", "kind")} == {
+            k: bare[k] for k in ("title", "summary", "approve", "rationale", "kind")}
+
+    def test_a_card_with_its_reading_and_no_pull_request_links_the_reading_alone(self):
+        c = built.landing_card(dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches={"v1": 3}, head="abc1234",
+                                    at=None, moved=0, pr=None, link=self.READ))["card"]
+        assert c["context"]["links"] == [{"label": "Read bolt b1", "url": self.READ}]
+        assert [a["kind"] for a in c["artifacts"]] == ["code", "url"]
 
 
 class TestDeploy:
