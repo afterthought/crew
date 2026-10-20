@@ -9,8 +9,8 @@
 # place by the process that waited on it; a fix started on the bolt withdraws the card, held for it, ending its
 # reading and releasing its preview, and once the fix merges and the bolt reads proven again a new card follows it
 # with a new reading and a preview of the new head; the landing then lands, leaving the kit's detached main checkout
-# as it was; the bolt lands in the plan once every unit has, recording the commit main holds and removing its branch,
-# its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
+# as it was and marking the bolt's branch landed; the bolt lands in the plan once every unit has, recording the commit
+# main holds and removing its branch, since main holds every commit of it, its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
 # preview, and its conductor told; a bolt no team holds lands once its unit's change is on main; and dropping a held
 # bolt removes its branch and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
@@ -174,7 +174,8 @@ eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchb
 eq "$(git -C "$k" status --porcelain)" ""
 [[ ! -e $land ]] || fail "the landing's worktree is still there"
 eq "$(field mac-studio bolt.submit On)" "bolt/tenant-environments"
-ok "the landing then lands, its worktree removed and the detached main checkout left as it was"
+eq "$(git -C "$k" config branch.bolt/tenant-environments.crew)" "landed"
+ok "the landing then lands, its worktree removed, the detached main checkout left as it was and the bolt's branch marked landed"
 git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
 
 # The user approves the landing card raised again.
@@ -191,14 +192,14 @@ eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid2"
 gone "$pid2"; eq "$(listed)" ""
 [[ ! -e $reading ]] || fail "the landing's reading outlived its card"
-has "$out" "bolt/tenant-environments is removed: bolt tenant-environments is in no plan; it was at"
+has "$out" "bolt/tenant-environments is removed: bolt tenant-environments has landed, and main holds every commit of it (git cherry); it was at"
 grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio)'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told of the landing:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch, which main holds every commit of, and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null
