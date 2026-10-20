@@ -203,3 +203,66 @@ class TestTheLandingsPoint:
         assert plan.landing_act("fix", words="The zone list misses one zone.") == ("close", None, "held for a fix: The zone list misses one zone.")
         assert plan.landing_act("landed", words="landed on GitHub's main at c0ffee1 (#3); every host's folder follows") == (
             "close", "landed on GitHub's main at c0ffee1 (#3); every host's folder follows", None)
+
+
+class TestThePreview:
+    """A landing's card lists the addresses of a preview of the bolt's head when the kit declares one, follows the head
+    with it, says one that failed, and releases it when the card closes (rail-cards, record 0031 §3)."""
+    HEAD, NEW = "abc1234" + "0" * 33, "def5678" + "0" * 33
+
+    @pytest.mark.parametrize("declared, recorded, listed, alive, step", [
+        (False, None, False, False, "none"),
+        (True, None, False, False, "ask"),
+        (True, HEAD, True, False, "keep"),
+        (True, HEAD, False, True, "keep"),
+        (True, HEAD, False, False, "ask"),
+        (True, NEW, True, True, "replace"),
+        (False, HEAD, True, False, "release"),
+        (False, NEW, False, False, "release"),
+    ])
+    def test_what_crew_does_with_the_preview_at_each_raise(self, declared, recorded, listed, alive, step):
+        """"Asked again with nothing changed": the recorded preview of the head kept, nothing asked; "The head moves":
+        the old head's replaced; a kit that declares none asks nothing."""
+        assert plan.preview_step(declared, recorded, self.HEAD, listed, alive) == step
+
+    @pytest.mark.parametrize("shown, outcome, note", [
+        ("addresses", "failed", "Its preview of abc1234 did not come up"),
+        ("reason", "up", "Its preview of abc1234 is up"),
+        ("addresses", "up", None),
+        ("reason", "failed", None),
+    ])
+    def test_a_previews_end_changes_the_card_only_when_it_changes_what_the_card_says(self, shown, outcome, note):
+        """"The stack fails to come up" and "The host is busy when the card is raised"."""
+        assert plan.preview_change(shown, outcome, self.HEAD) == note
+
+    def test_a_previews_end_is_a_change_of_the_card_in_its_words(self):
+        assert plan.landing_act("preview", head=self.HEAD, words="Its preview of abc1234 is up") == ("change", "Its preview of abc1234 is up")
+
+    LISTED = [
+        {"name": "preview/0123456789ab", "branch": "main", "revision": HEAD, "state": "up", "addresses": {"web": "http://w"}},
+        {"name": "preview/aaaaaaaaaaaa", "branch": "bolt/y", "revision": NEW, "state": "up", "addresses": {"web": "http://n"}},
+        {"name": "preview/bbbbbbbbbbbb", "branch": "bolt/y", "revision": HEAD, "state": "starting", "made": "2026-10-19T10:00:00Z",
+         "addresses": {"web": "http://web-abc1234--bolt-y--kit.localhost:4321", "api": "http://api-abc1234--bolt-y--kit.localhost:4322"}},
+    ]
+
+    def test_the_heads_preview_is_the_entry_sluice_lists_for_the_bolts_branch_and_its_head(self):
+        assert plan.preview_listed(self.LISTED, "bolt/y", self.HEAD) == dict(
+            head=self.HEAD, name="preview/bbbbbbbbbbbb", state="starting",
+            addresses={"web": "http://web-abc1234--bolt-y--kit.localhost:4321", "api": "http://api-abc1234--bolt-y--kit.localhost:4322"})
+        assert plan.preview_listed(self.LISTED, "bolt/z", self.HEAD) is None and plan.preview_listed([], "bolt/y", self.HEAD) is None
+
+    def test_a_failed_preview_carries_sluices_output(self):
+        failed = [dict(self.LISTED[2], state="failed", output="building web\nerror: port 4321 in use\n")]
+        assert plan.preview_listed(failed, "bolt/y", self.HEAD)["output"] == "building web\nerror: port 4321 in use\n"
+        assert plan.preview_listed([dict(failed[0], output=None)], "bolt/y", self.HEAD)["output"] == ""
+
+    @pytest.mark.parametrize("doc, said", [
+        ({"previews": []}, "sluice's previews are no list crew reads"),
+        ([dict(LISTED[2], state="booting")], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
+        ([dict(LISTED[2], name=7)], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
+        ([dict(LISTED[2], addresses={"web": None})], "sluice lists a preview of bolt/y at abc1234 crew can't read"),
+    ])
+    def test_a_list_crew_cannot_read_is_refused(self, doc, said):
+        with pytest.raises(plan.Refusal) as e:
+            plan.preview_listed(doc, "bolt/y", self.HEAD)
+        assert str(e.value).startswith(said)

@@ -1406,7 +1406,64 @@ def landing_act(event, head=None, words=None):
         return ("change", f"Its head is now {head[:7]}")
     if event == "fix":
         return ("close", None, f"held for a fix: {words}")
+    if event == "preview":
+        return ("change", words)
     return ("close", words, None)
+
+
+# A preview of a bolt's head as sluice lists it (sluice record 0021, read in sluice 0.29.3): its states, the first while
+# it waits for room on the host.
+PREVIEW_STATES = ("waiting", "starting", "up", "failed")
+
+
+def preview_step(declared, recorded, head, listed, alive):
+    """What crew does with the bolt's preview as its landing card is raised (rail-cards, record 0031 §3), from facts
+    alone: declared, whether the kit's policy at the head declares [preview] (kit.previewed); recorded, the head crew's
+    record of its ask names, or None when none stands; listed, whether sluice lists the recorded preview; alive, whether
+    the process crew handed the ask to still runs. "none" with nothing declared or recorded; "release" when one is
+    recorded and the head's policy declares none; "replace" when the recorded one is another head's, released before
+    one is asked at this; "keep" when it is this head's and listed or still being asked, read again and nothing asked;
+    "ask" otherwise, sluice's one preview of a revision the second guard against asking twice."""
+    if recorded is None:
+        return "ask" if declared else "none"
+    if not declared:
+        return "release"
+    if recorded != head:
+        return "replace"
+    return "keep" if listed or alive else "ask"
+
+
+def preview_change(shown, outcome, head):
+    """The change note a preview's end puts on its landing card while it waits on the user, or None (rail-cards "A
+    preview that fails is said on the card"): shown, what the card was raised with, "addresses" or "reason"; outcome,
+    how sluice's preview of head ended, "up" or "failed", a refusal among the failures. Addresses shown and the preview
+    failed: the card says it did not come up; a reason shown and the preview up: the card lists its addresses; anything
+    else changes nothing the card says."""
+    if shown == "addresses" and outcome != "up":
+        return f"Its preview of {head[:7]} did not come up"
+    if shown == "reason" and outcome == "up":
+        return f"Its preview of {head[:7]} is up"
+    return None
+
+
+def preview_listed(doc, branch, head):
+    """The preview of head on branch as `sluice previews --json` lists it (doc), its fields checked as sluice 0.29.3
+    gives them (read.2): {head, name, addresses, state}, with sluice's output when it failed; None when none is listed.
+    Refused when the document is no list, or the entry's fields are not sluice's."""
+    isinstance(doc, list) or fail(f"sluice's previews are no list crew reads: {cut(json.dumps(doc), 200)}")
+    for e in doc:
+        rev = e.get("revision") if isinstance(e, dict) else None
+        if not (e.get("branch") == branch and isinstance(rev, str) and len(rev) >= 7 and (head.startswith(rev) or rev.startswith(head))):
+            continue
+        name, addresses, state = e.get("name"), e.get("addresses"), e.get("state")
+        (isinstance(name, str) and name.startswith("preview/") and isinstance(addresses, dict)
+         and all(isinstance(k, str) and k and isinstance(v, str) and v for k, v in addresses.items())
+         and state in PREVIEW_STATES) or fail(f"sluice lists a preview of {branch} at {head[:7]} crew can't read: {cut(json.dumps(e), 200)}")
+        out = dict(head=head, name=name, addresses=dict(addresses), state=state)
+        if state == "failed":
+            out["output"] = e["output"] if isinstance(e.get("output"), str) else ""
+        return out
+    return None
 
 
 def fixes_in_flight(fixes, bolt):
