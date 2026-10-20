@@ -8102,7 +8102,7 @@ def row_owner(fleet, plan, row):
     return f"{l}-{'ops' if row['group'] == 'operations' else 'planner'}", fleet["partitions"][l]["machine"]
 
 
-def sweep_judged(here, rows, cards_, entries, owners, blind, now):
+def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None)):
     """What the rail's read does with one partition's cards, of those posted on this host (here), the only ones its
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
     be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
@@ -8110,10 +8110,13 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now):
     left for the deploy's end to close (ops.word_stands). Then each row in record 0031's
     form with no card open on any host, whose owner runs here (owners, {row key: (owner, host)}), to post through its
     kind's raise. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is left for a
-    later read. Returns {gone: [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row]}."""
+    later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a batch), each
+    batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why, once: none is
+    under its key yet, and the user's answer has not closed it (batch_closed). Returns {gone: [(card, outcome,
+    reason)], questions: [card], held: [(card, row)], none: [row], settled: [(key, why)]}."""
     import ops  # its decision of a deploy's card alone
     rowed = {r["key"]: r for r in rows}
-    out = {"gone": [], "questions": [], "held": [], "none": []}
+    out = {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
     for c in cards_:
         kind = card_kind(c["key"])
         if c["host"] != here or kind == "record":
@@ -8128,6 +8131,9 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now):
     carded = {c["key"] for c in cards_}
     out["none"] = [r for r in rows if r["key"] not in carded and cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
                    and not refused_lately(entries, now, key=r["key"])]
+    if planner[1] == here:
+        done = {e.get("Key") for e in entries if e.get("Act") == "batch.close" and not e.get("Refused")} | batch_closed(entries)
+        out["settled"] = [(k, why) for k, why in batch_settled(entries).items() if k not in done]
     return out
 
 
@@ -10131,12 +10137,16 @@ def sweep_cards(fleet, read, acts=None):
     (sweep_judged, row_gone), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
     card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
-    command that raised it, and a row of one is left as it is. It first asks Pending You in crew's own name
+    command that raised it, and a row of one is left as it is. Before any of it, where the partition's planner runs,
+    it records crew's close of each batch that waits on nothing, once, as batch.close on batch/<n> in the planner's
+    name with its card key and why (briefs.12), so a host not signed in still records it; a card open under its key is
+    withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
     (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
     that assistant's, and for a card this host's sign-in no longer reaches with "not found"; a host not signed in,
-    or a bridge that fails, changes nothing, and is said, as is a partition whose record did not answer there
-    (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
-    card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left."""
+    or a bridge that fails, changes nothing more, and is said, as is a partition whose record did not answer there,
+    which records no close either (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
+    card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left, a batch's close
+    by crew with card and new None."""
     acts = acts or SweepActs(fleet)
     here, now = acts.host(), acts.now()
     out, judged = {"done": [], "unswept": []}, []
@@ -10152,7 +10162,13 @@ def sweep_cards(fleet, read, acts=None):
         rows = [r for r in read["rows"] if r["label"] == l]
         owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
         blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now)
+        planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner)
+        for key, why in j.pop("settled"):
+            got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
+                            Key=key, Outcome=why)
+            out["done"].append(dict(label=l, key=key, card=None, by=planner[0], did="closed" if got else "left",
+                                    words=why if got else "crew's close was not recorded, as said above", new=None))
         j["none"] = [r for r in j["none"] if acts.raise_of(r["key"].split("/")[0])]
         if any(j.values()):
             judged.append((l, owners, j))
