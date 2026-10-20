@@ -198,6 +198,23 @@ class TestTheLandingsPoint:
         assert plan.batch_waits(["a"], set(), {"a": 7}) == "the user has not answered batch 7"
         assert plan.batch_waits(["a"], set(), {"q": 7}) is None
 
+    FRESH = dict(bolt="y", head="def5678", host="mac-studio")
+
+    def test_a_first_refused_reading_is_tried_again_with_the_landing_read_afresh(self):
+        """card-sessions "The first start fails and the second opens": the fresh facts are the card's from then."""
+        assert plan.landing_retry("plannotator did not list land/y's session within 10 seconds", (self.FRESH, None), None) == (
+            "again", self.FRESH)
+
+    def test_a_bolt_that_no_longer_reads_proven_raises_nothing(self):
+        """card-sessions "The bolt no longer reads proven at the second try"."""
+        assert plan.landing_retry("plannotator ended before land/y's session was ready", (None, "fix/y/gap is in flight on it"),
+                                  None) == ("none", None)
+
+    def test_a_fresh_read_that_is_refused_leaves_the_first_reason_standing(self):
+        """read.1: what the second read could not read is not guessed past."""
+        why = "plannotator did not list land/y's session within 10 seconds"
+        assert plan.landing_retry(why, None, "bolt y's kit could not be read: ssh: timed out") == ("stand", why)
+
     def test_which_act_follows_each_event(self):
         assert plan.landing_act("proven", head="abc1234" + "0" * 33) == ("change", "Its head is now abc1234")
         assert plan.landing_act("fix", words="The zone list misses one zone.") == ("close", None, "held for a fix: The zone list misses one zone.")

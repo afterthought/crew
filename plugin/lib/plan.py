@@ -26,7 +26,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
-                                             in it, waited for; and its end, which a card's close brings too
+                                             in it, waited for, a landing's reading started first when none runs while
+                                             its conductor holds the card; and its end, which a card's close brings too
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
@@ -1567,17 +1568,67 @@ def land_facts(fleet, label, plan, b, t):
     return dict(card, team=t["name"], host=t["machine"], base=base), None
 
 
+def landing_retry(why, fresh, fresh_why):
+    """What follows a first refusal of a landing's reading at a raise (card-sessions "A landing's raise tries its
+    reading again before raising without it"), from that refusal (why), the landing read afresh once the kit's main was
+    fetched, as land_facts gives it (fresh, (facts, why it does not read proven)), or why that read was refused
+    (fresh_why, fresh None): ("again", facts) to open the reading once more with the fresh facts, the card's from then;
+    ("none", None) when the bolt no longer reads proven, so the raise posts and changes nothing; ("stand", why) when
+    the fresh read was refused, the first facts and the first reason standing (read.1)."""
+    if fresh_why:
+        return "stand", why
+    facts, unproven = fresh
+    return ("none", None) if unproven else ("again", facts)
+
+
+def landing_opened(fleet, label, plan, b, t, card, acts):
+    """A landing card's facts with its reading opened by the raise (raise_land), before the card is built: its link,
+    or on a refusal one more try as crew card session land/<bolt> makes it, the kit's main fetched on the team's host,
+    this one, a fetch that failed said and the try going on (plan.18), the landing read afresh (land_facts) and its
+    reading opened again with those facts (landing_retry). The facts the card is built from, carrying the reading's
+    link or why it could not be opened (unread, the second try's reason, or the first's when the fresh read was
+    refused); None when, read afresh, the bolt no longer reads proven, so the raise posts and changes nothing."""
+    key, main = f"land/{card['bolt']}", t["kit"]["main"]
+    try:
+        return dict(card, link=acts.reading(label, key, card)[0])
+    except Refusal as e:
+        why = str(e)
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}; crew fetches {t['kit']['name']}'s main "
+          "and tries once more", file=sys.stderr)
+    try:
+        if gather.has_origin(main):
+            kit_git(fleet, t, main, "fetch", "-q", "origin")
+    except Refusal as e:
+        print(f"card {key}: {e}; the reading is tried again all the same", file=sys.stderr)
+    fresh, fresh_why = None, None
+    try:
+        with READ.fresh():
+            fresh = land_facts(fleet, label, plan, b, t)
+    except Refusal as e:
+        fresh_why = str(e)
+    step, got = landing_retry(why, fresh, fresh_why)
+    if step == "none":
+        return None
+    if step == "stand":
+        return dict(card, unread=got)
+    try:
+        return dict(got, link=acts.reading(label, key, got)[0])
+    except Refusal as e:
+        return dict(got, unread=str(e))
+
+
 def raise_land(fleet, row, acts=None, note=None):
     """A bolt's landing card raised (record 0031 §1, plan.16), for its rail row land/<bolt>, on the host of the team
     holding the bolt, where its conductor's cards are: once the bolt reads proven (land_facts), in the conductor's name,
     following its own card a fix held (follows_of), posted through row_card_change, so a card the conductor holds is
     changed in place, its head moved, or followed by a new one once the user answered it, and one Pending You no longer
-    finds is posted again; its reading session, on what the bolt brings to main, is started first on this host and its
-    link put on the card (card_built), a session on an older head ended (reading_open); a preview of its head, in a kit
-    whose policy at the head declares one, is asked for before it and its addresses put on the card (landing_preview).
-    Nothing, and nothing said, while the bolt does not read proven. The merge's end calls it, the rail's sweep for a
-    row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or None; what
-    crew can't read is refused (read.1), refusing nothing of the bolt."""
+    finds is posted again; its reading session, on what the bolt brings to main, is opened first on this host, twice if
+    it must be, the second time on the landing read afresh, and its link or why it could not be opened put on the card
+    (landing_opened), a session on an older head ended (reading_open); a preview of its head, in a kit whose policy at
+    the head declares one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and
+    nothing said, while the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's
+    sweep for a row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or
+    None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
     m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", row.get("key") or "")
     if not m:
         return None
@@ -1588,6 +1639,9 @@ def raise_land(fleet, row, acts=None, note=None):
     t["machine"] == acts.host() or fail(f"bolt {bolt}'s landing card is raised on {t['machine']}, where {t['name']}-conductor's cards are")
     card, why = land_facts(fleet, label, plan, b, t)
     if why:
+        return None
+    card = landing_opened(fleet, label, plan, b, t, card, acts)
+    if not card:
         return None
     owner = f"{t['name']}-conductor"
     card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
@@ -8442,7 +8496,7 @@ def land_session(fleet, label, key, acts=None):
     except Refusal as e:
         words = str(e)
     if relinks(started, got):
-        facts = dict(facts, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
+        facts = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
         facts["preview"] = landing_preview(fleet, t, label, bolt, facts, acts)
         row_card_change(fleet, label, owner, cards.landing_card, facts, RELINKED, card_where(t["kit"]), acts)
     elif got is not None:
@@ -8790,7 +8844,9 @@ def card_wait(fleet, a):
     card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. A landing's, land/<bolt>, waits on
     its reading alone, on the team's host: its decision is notes on the landing card and never the word to land
     (land_waited), and once it is printed the session is forgotten (reading_decided), so the next crew card session
-    starts it anew; the card is left as it is. Refused for a key with no session started."""
+    starts it anew; the card is left as it is. With no session of its own while the bolt's conductor holds its card,
+    the raise having failed to open it or a wait having forgotten it, it starts the reading as crew card session does
+    and waits on it (land_start). Refused for any other key with no session started."""
     label, d = card_of(fleet, a)
     if a.key.startswith("batch/") and not old_batch(a.key):
         return batch_wait(fleet, label, a.key, d)
@@ -8800,6 +8856,8 @@ def card_wait(fleet, a):
             return forward_card(fleet, t, a, label)
     name = f"{a.key} {a.unit}" if a.unit else a.key
     say = land_waited if a.key.startswith("land/") else waited
+    if say is land_waited and not card_recorded(d):
+        land_start(fleet, label, a.key)
     card_recorded(d) or fail(f"no session was started for card {name}: crew card session {name} starts one")
     while True:
         decided = card_result(d)
@@ -8818,6 +8876,38 @@ def card_wait(fleet, a):
                 reading_decided(d, decided)
             return
         time.sleep(CARD_POLL)
+
+
+def land_unstarted(key, recorded, held, refused=None):
+    """What crew card wait land/<bolt> does before it waits (card-sessions "A wait on a landing card starts its reading
+    when none runs"), from whether a session of the key is recorded on this host, whether the bolt's conductor holds its
+    landing card open here (held), and why the start it made refused (refused): ("wait", None) on a session recorded;
+    ("start", None) with none and the card held, to start it as crew card session does; ("refuse", words) when the
+    start refused, naming crew card session to start it once that is mended, or no card is held."""
+    if recorded:
+        return "wait", None
+    if not held:
+        return "refuse", f"no session was started for card {key}, and no landing card of {key.split('/', 1)[1]} is held on this host"
+    if refused:
+        return "refuse", f"{key}'s reading could not be opened: {refused}; crew card session {key} starts it once that is mended"
+    return "start", None
+
+
+def land_start(fleet, label, key, acts=None):
+    """A landing's reading started for its wait when none is recorded (land_unstarted): while the conductor of the
+    team holding the bolt holds its landing card on this host, opened as crew card session opens it, its link printed
+    and the card changed in place to carry it while it waits on the user (land_session); refused naming why and crew
+    card session when it could not open, and when no card is held."""
+    acts = acts or CardActs(fleet)
+    _, _, t = land_held(fleet, label, key.split("/", 1)[1])
+    held = bool(t) and bool(cards.card_under(acts.entries(label), key, f"{t['name']}-conductor"))
+    step, words = land_unstarted(key, False, held)
+    if step == "start":
+        try:
+            land_session(fleet, label, key, acts)
+        except Refusal as e:
+            step, words = land_unstarted(key, False, held, str(e))
+    not words or fail(words)
 
 
 CARD_READ = 30  # seconds between a batch wait's reads of its card in Pending You, the poll its post's answer asks for
@@ -9490,11 +9580,18 @@ def card_uploaded(acts, key, b, got):
         print(f"card {key}: its picture did not reach the card: {why}", file=sys.stderr)
 
 
+def unread_of(b):
+    """A built card's post or change entry's Unread: why its reading could not open (unopened), crew's own message
+    (record.3), or nothing when it opened or the card links none."""
+    return {"Unread": b["unread"]} if b.get("unread") else {}
+
+
 def card_posted(acts, label, owner, b, where, entries=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
     posted under the row's key, or the key with its revision once a card of the owner's under it closed, either filled
     out to Pending You's eight characters when shorter (post_key, from entries, this host's run record unless given),
-    and recorded under the row's key. A post Pending You answers
+    and recorded under the row's key, with why its reading could not open when it did not (unread_of). A post Pending
+    You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
     this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
     that card, printed with the line that adopts it and recorded once, by the command that recorded it first. A post
@@ -9516,7 +9613,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
             again = cards.card_under(acts.entries(label), key, owner) == card
             read = followed_read(py, follows, owner) if held and not again else None
     except Refusal as e:
-        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
+        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key, **unread_of(b))
         print(f"card {key} not posted: {e}", file=sys.stderr)
         return None
     url = got.get("url")
@@ -9525,7 +9622,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
         print(f"card {key}: {card}{url}, its post recorded already")
         print(cards.adopt_line(card, owner))
         return card
-    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key, **unread_of(b))
     print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
     if held:
@@ -9573,28 +9670,43 @@ def reading_of(b):
 
 def unopened(b, why):
     """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
-    its first paragraph, cut again to Pending You's budget, and its details opening with why, where the link would be."""
+    its first paragraph, cut again to Pending You's budget, a landing's naming crew card session land/<bolt> as how the
+    bolt's conductor starts it, the card then carrying its link (briefs.13: the conductor's act, nothing for the user to
+    run); its details opening with why, where the link would be; and why kept on the built card (unread), for its post's
+    or change's entry in the run record."""
+    key = b["key"]
+    said = (f"Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session {key}, "
+            "and this card then carries its link." if key.startswith("land/")
+            else "Its reading could not be opened on the tailnet.")
     first, _, rest = b["card"]["summary"].partition("\n\n")
-    summary = cards.prose("\n\n".join(x for x in (first, "Its reading could not be opened on the tailnet.", rest) if x))
+    summary = cards.prose("\n\n".join(x for x in (first, said, rest) if x))
     context = dict(b["card"]["context"], background=f"The reading could not be opened on the tailnet: {why}\n\n"
                    + b["card"]["context"]["background"])
-    return dict(b, card=dict(b["card"], summary=summary, context=context))
+    return dict(b, card=dict(b["card"], summary=summary, context=context), unread=why)
 
 
 def card_built(acts, label, build, facts):
     """A card of crew's own built from its facts, with its reading session's link among them when it links one: the
-    session started, or given again while it serves, before the card is built (reading_of); a session that could not
-    open said, and the card built without it, saying so (unopened)."""
+    session started, or given again while it serves, before the card is built (reading_of); facts that carry the
+    link already, or why it could not be opened (unread), as a landing's raise opens it (landing_opened), used as they
+    are, nothing started; a session that could not open said, naming crew card session for a landing, and the card
+    built without it, saying so (unopened)."""
     b = build(facts)
     kind = reading_of(b)
-    if not kind:
+    if not kind or facts.get(READING[kind]):
         return b
-    try:
-        url = acts.session(label, b["key"], facts)
-    except Refusal as e:
-        print(f"card {b['key']}: its reading could not be opened on the tailnet: {e}", file=sys.stderr)
-        return unopened(b, str(e))
-    return build(dict(facts, **{READING[kind]: url}))
+    why = facts.get("unread")
+    if not why:
+        try:
+            url = acts.session(label, b["key"], facts)
+        except Refusal as e:
+            why = str(e)
+        else:
+            return build(dict(facts, **{READING[kind]: url}))
+    key = b["key"]
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}"
+          + (f"; crew card session {key} starts it" if key.startswith("land/") else ""), file=sys.stderr)
+    return unopened(b, why)
 
 
 def row_card_post(fleet, label, owner, build, facts, where, acts=None):
@@ -9628,8 +9740,9 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     update_request ever changes, is followed the same way, withdrawn with note while it waits. Posted instead when the
     owner holds none, and posted again, its summary saying the older copy is dead, when Pending You no longer finds it.
     A landing's card and a long proposal's are built with their reading session's link, as a post's is (card_built),
-    a landing's session on a moved head started anew there, so the card changed carries the new link. A refusal is said
-    and recorded as the change refused, refusing nothing of the event. The card's id, the new card's when one was
+    a landing's session on a moved head started anew there, so the card changed carries the new link, and its entry
+    why it could not open when it did not (unread_of). A refusal is said and recorded as the change refused, refusing
+    nothing of the event. The card's id, the new card's when one was
     posted, or None."""
     acts = acts or CardActs(fleet)
     b = card_built(acts, label, build, facts)
@@ -9659,7 +9772,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
             if lost is None and how == "change":
                 card_uploaded(acts, key, b, got)
     except Refusal as e:
-        acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key)
+        acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key, **unread_of(b))
         print(f"card {key} not changed: {e}", file=sys.stderr)
         return None
     closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner)]
@@ -9677,7 +9790,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
         print(f"card {key}: {card} " + ("closed, the user having answered it" if state == "closed" else f"withdrawn, {why}")
               + ", and its new version follows it")
         return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
-    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key)
+    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key, **unread_of(b))
     v = got.get("version")
     print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
     return card

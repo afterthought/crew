@@ -416,10 +416,27 @@ class TestSessions:
         why = "plannotator is not on this host's path, and a card's session is a plannotator session"
         b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
         c, bare = b["card"], built.landing_card(LANDING)["card"]
-        assert c["summary"] == bare["summary"] + "\n\nIts reading could not be opened on the tailnet."
+        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: the bolt's conductor starts "
+                                                  "it with crew card session land/b1, and this card then carries its link.")
         assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
         assert (c["kind"], c["approve"], c["context"]["links"]) == ("approve", bare["approve"], [])
-        assert capsys.readouterr().err == f"card land/b1: its reading could not be opened on the tailnet: {why}\n"
+        assert b["unread"] == why
+        assert capsys.readouterr().err == (f"card land/b1: its reading could not be opened on the tailnet: {why}; "
+                                           "crew card session land/b1 starts it\n")
+
+    def test_facts_carrying_the_readings_link_or_why_it_could_not_open_start_no_session(self, capsys):
+        """A landing's raise opens the reading itself (landing_opened): the card is built from what it found."""
+        link = "http://mac-studio.ts.swancloud.net:19432"
+        acts = ReadingActs()
+        opened = plan.card_built(acts, "wldn", built.landing_card, dict(LANDING, link=link))
+        assert opened["card"]["context"]["links"] == [{"label": "Read bolt b1", "url": link}] and "unread" not in opened
+        why = "plannotator did not list land/b1's session within 10 seconds, so crew ended it"
+        unread = plan.card_built(acts, "wldn", built.landing_card, dict(LANDING, unread=why))
+        assert unread["unread"] == why and unread["card"]["context"]["links"] == []
+        assert "crew card session land/b1" in unread["card"]["summary"]
+        assert acts.sessions == []
+        assert capsys.readouterr().err == (f"card land/b1: its reading could not be opened on the tailnet: {why}; "
+                                           "crew card session land/b1 starts it\n")
 
     def test_crews_close_ends_the_keys_session_and_a_refused_close_keeps_it(self, capsys):
         held = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
@@ -499,11 +516,13 @@ LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="ab
 
 class ReadingActs:
     """A stand-in for the act's reach (plan.CardActs) where a card's reading session starts and ends, and a landing's
-    preview is asked for and released: a session's link given, or its start refused with why; the preview given
-    (preview), and its release said (released); Pending You's tools answered from answers, a (got, words) pair."""
+    preview is asked for and released: a session's link given, or its start refused with why, always (refused) or for
+    each start in turn (refusals, None for a start that opens); the preview given (preview), and its release said
+    (released); Pending You's tools answered from answers, a (got, words) pair."""
 
-    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None):
+    def __init__(self, answers=None, entries=(), refused=None, started=True, preview=None, released=None, refusals=()):
         self.answers, self.held, self.refused, self.started = dict(answers or {}), list(entries), refused, started
+        self.refusals = list(refusals)
         self.given, self.said = preview, released
         self.sessions, self.ended, self.emitted, self.calls, self.previews, self.releases = [], [], [], [], [], []
 
@@ -524,8 +543,9 @@ class ReadingActs:
 
     def reading(self, label, key, facts):
         self.sessions.append((label, key))
-        if self.refused:
-            raise crew.Refusal(self.refused)
+        why = self.refusals.pop(0) if self.refusals else self.refused
+        if why:
+            raise crew.Refusal(why)
         return "http://mac-studio.ts.swancloud.net:19432", False, self.started
 
     def end(self, label, key):
@@ -632,6 +652,39 @@ class TestLandingSession:
             self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
         assert acts.sessions == []
 
+    def started(self, monkeypatch, acts, team=TEAM):
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
+        monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (False, None))
+        plan.land_start(FLEET, "wldn", "land/b1", acts)
+
+    def test_a_wait_with_no_session_starts_the_reading_and_changes_the_held_card_to_carry_it(self, monkeypatch, capsys):
+        """card-sessions "A card raised without its reading" and "Waiting again after a decision"."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, self.HELD)
+        self.started(monkeypatch, acts)
+        assert acts.sessions == [("wldn", "land/b1")]
+        change = next(a for t, a in acts.calls if t == "update_request")
+        assert change["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card land/b1: req_l1 changed"]
+
+    def test_a_wait_whose_reading_still_will_not_open_is_refused_naming_crew_card_session(self, monkeypatch):
+        """card-sessions "The reading still will not open": the card is not changed."""
+        acts = ReadingActs(entries=self.HELD, refused="plannotator is not on this host's path, and a card's session is a plannotator session")
+        with pytest.raises(plan.Refusal, match=r"^land/b1's reading could not be opened: plannotator is not on this host's path, "
+                                               r"and a card's session is a plannotator session; crew card session land/b1 starts "
+                                               r"it once that is mended$"):
+            self.started(monkeypatch, acts)
+        assert acts.calls == [] and acts.emitted == []
+
+    def test_a_wait_with_no_card_held_is_refused_and_starts_nothing(self, monkeypatch):
+        """card-sessions "No landing card held"."""
+        acts = ReadingActs(entries=[])
+        with pytest.raises(plan.Refusal, match="^no session was started for card land/b1, and no landing card of b1 is held on this host$"):
+            self.started(monkeypatch, acts)
+        assert acts.sessions == []
+        with pytest.raises(plan.Refusal, match="no landing card of b1 is held"):
+            self.started(monkeypatch, ReadingActs(entries=self.HELD), team=None)
+
     def opened(self, monkeypatch, tmp_path, on):
         """reading_open of land/b1 at head def5678, its recorded session serving the bolt as it stood at on: what it
         ended, and the folder of the session it opened."""
@@ -718,6 +771,134 @@ class TestLandingPreview:
         assert {"label": "Preview: web", "url": "http://web.example"} in change["context"]["links"]
 
 
+class TestLandingReading:
+    """A landing's raise opens its reading itself, and tries once more when it refuses, as crew card session would
+    (card-sessions "A landing's raise tries its reading again before raising without it"): the kit's main fetched on
+    the team's host, the landing read afresh and its reading opened again with those facts."""
+    TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    POSTED = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+              "post_request": ({"requestId": "req_l2", "version": 1}, None)}
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+    SLOW = "plannotator did not list land/b1's session within 10 seconds, so crew ended it"
+    ENDED = "plannotator ended before land/b1's session was ready: stub: refused to start"
+
+    def raised(self, monkeypatch, acts, fresh=None, fetched=None):
+        """raise_land of land/b1: the first read proven at abc1234, the second as fresh gives it, (facts, why), or
+        refused with fresh's words, proven at def5678 when None; the card, whether each read was a fresh one, and what
+        was fetched."""
+        reads, fetches = [], []
+        first = dict(LANDING, team="swb-1", host="mac-studio", base="abc0000")
+
+        def facts(fleet, label, p, b, t):
+            reads.append(plan.READ.bypass > 0)
+            if len(reads) > 1 and isinstance(fresh, str):
+                raise plan.Refusal(fresh)
+            return (first, None) if len(reads) == 1 else fresh or (dict(first, head="def5678"), None)
+
+        def fetch(fleet, t, where, *args):
+            fetches.append((where, *args))
+            if fetched:
+                raise plan.Refusal(fetched)
+            return 0, ""
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), self.TEAM))
+        monkeypatch.setattr(plan, "land_facts", facts)
+        monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (False, None))
+        monkeypatch.setattr(plan.gather, "has_origin", lambda main: True)
+        monkeypatch.setattr(plan, "kit_git", fetch)
+        card = plan.raise_land(FLEET, {"label": "wldn", "key": "land/b1"}, acts)
+        return card, reads, fetches
+
+    def sent(self, acts):
+        return next((a for t, a in acts.calls if t == "post_request"), None)
+
+    def test_a_reading_that_opens_at_once_is_started_once_and_nothing_is_fetched(self, monkeypatch):
+        acts = ReadingActs(dict(self.POSTED))
+        assert self.raised(monkeypatch, acts) == ("req_l2", [False], [])
+        assert acts.sessions == [("wldn", "land/b1")]
+        assert self.sent(acts)["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+
+    def test_the_first_start_fails_and_the_second_opens(self, monkeypatch, capsys):
+        """card-sessions "The first start fails and the second opens": the card carries the second try's link, built
+        from the landing read afresh after the kit's main was fetched."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        assert self.raised(monkeypatch, acts) == ("req_l2", [False, True], [("/kit/main", "fetch", "-q", "origin")])
+        assert acts.sessions == [("wldn", "land/b1"), ("wldn", "land/b1")]
+        card = self.sent(acts)
+        assert card["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+        assert "sluice is green at def5678" in card["summary"] and "could not be opened" not in card["summary"]
+        assert capsys.readouterr().err == (f"card land/b1: its reading could not be opened on the tailnet: {self.SLOW}; crew "
+                                           "fetches switchboard-kit's main and tries once more\n")
+
+    def test_both_starts_fail(self, monkeypatch, capsys):
+        """card-sessions "Both starts fail": the card says so with the second start's reason and names crew card
+        session."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW, self.ENDED])
+        assert self.raised(monkeypatch, acts)[0] == "req_l2"
+        card = self.sent(acts)
+        assert "the bolt's conductor starts it with crew card session land/b1, and this card then carries its link." in card["summary"]
+        assert card["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
+        assert card["context"]["links"] == []
+        assert capsys.readouterr().err.splitlines()[-1] == (
+            f"card land/b1: its reading could not be opened on the tailnet: {self.ENDED}; crew card session land/b1 starts it")
+
+    def test_a_fetch_that_fails_is_said_and_the_reading_is_tried_again(self, monkeypatch, capsys):
+        why = "git fetch in /kit/main on mac-studio failed: fatal: unable to access GitHub"
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        assert self.raised(monkeypatch, acts, fetched=why)[0] == "req_l2"
+        assert len(acts.sessions) == 2 and self.sent(acts)["context"]["links"][0]["url"] == self.LINK
+        assert f"card land/b1: {why}; the reading is tried again all the same" in capsys.readouterr().err
+
+    def test_the_bolt_no_longer_reads_proven_at_the_second_try(self, monkeypatch):
+        """card-sessions "The bolt no longer reads proven at the second try": nothing posted or changed."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        card, reads, _ = self.raised(monkeypatch, acts, fresh=(None, "fix/b1/gap is in flight on it"))
+        assert (card, reads) == (None, [False, True])
+        assert acts.sessions == [("wldn", "land/b1")] and acts.calls == [] and acts.emitted == []
+
+    # Why is kept in the run record, on the card's own entry (card-sessions "Why is kept in the run record").
+    def test_a_post_whose_reading_could_not_open_records_why(self, monkeypatch):
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW, self.ENDED])
+        self.raised(monkeypatch, acts)
+        post, = acts.emitted
+        assert (post["Act"], post["Card"], post["Key"], post["Unread"]) == ("card.post", "req_l2", "land/b1", self.ENDED)
+
+    def test_a_change_whose_reading_could_not_open_records_why(self, monkeypatch):
+        """A merge that moves the head changes the card the conductor holds, without its reading."""
+        held = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}, held, refused=self.ENDED)
+        assert self.raised(monkeypatch, acts)[0] == "req_l1"
+        change, = acts.emitted
+        assert (change["Act"], change["Card"], change["Unread"]) == ("card.update", "req_l1", self.ENDED)
+
+    def test_a_card_whose_reading_opened_records_no_reason(self, monkeypatch):
+        """card-sessions "A card whose reading opened records no reason"."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        self.raised(monkeypatch, acts)
+        post, = acts.emitted
+        assert post["Act"] == "card.post" and post.get("Unread") is None
+
+    def test_the_run_record_takes_why_on_a_cards_entry_and_leaves_an_empty_one_out(self, monkeypatch, tmp_path):
+        import record
+        monkeypatch.setattr(record, "ROOT", tmp_path / "crew")
+        monkeypatch.setattr(record, "_session", None)
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        record.emit("wldn", "card.post", ["bolt/b1"], by="swb-1-conductor", Card="req_l2", Key="land/b1", Unread=self.ENDED)
+        record.emit("wldn", "card.post", ["bolt/b2"], by="swb-1-conductor", Card="req_l3", Key="land/b2", Unread=None)
+        f, = (tmp_path / "crew" / "wldn" / "runs" / "mac-studio").glob("*.rec")
+        assert " Unread " in f.read_text().split("%allowed:")[1].splitlines()[0] + " "
+        unread, opened = record.parse(f.read_text())
+        assert unread["Unread"] == self.ENDED and "Unread" not in opened
+
+    def test_a_fresh_read_that_is_refused_raises_the_first_facts_with_the_first_reason(self, monkeypatch):
+        """read.1: what the second read could not read is not guessed past."""
+        acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW])
+        assert self.raised(monkeypatch, acts, fresh="bolt b1's kit could not be read: ssh: timed out")[0] == "req_l2"
+        assert acts.sessions == [("wldn", "land/b1")]
+        card = self.sent(acts)
+        assert "sluice is green at abc1234" in card["summary"]
+        assert card["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.SLOW}\n\n")
+
+
 class TestSessionWords:
     def test_a_landings_session_runs_on_its_bolts_teams_host_and_a_batch_cards_on_the_main_levels(self):
         """card-sessions "A landing's session on another host": refused naming the team's host, the main level's
@@ -758,6 +939,17 @@ class TestSessionWords:
         assert plan.land_waited("land/y", None, True) is None
         assert plan.land_waited("land/y", None, True, gone=True) == "land/y: the session ended with no decision"
         assert plan.land_waited("land/y", None, False) == "land/y: crew ended its session, as its card closed or crew card end was run"
+
+    @pytest.mark.parametrize("recorded, held, refused, step, words", [
+        (True, False, None, "wait", None),
+        (False, True, None, "start", None),
+        (False, True, "plannotator is not on this host's path, and a card's session is a plannotator session", "refuse",
+         "land/y's reading could not be opened: plannotator is not on this host's path, and a card's session is a plannotator "
+         "session; crew card session land/y starts it once that is mended"),
+        (False, False, None, "refuse", "no session was started for card land/y, and no landing card of y is held on this host")])
+    def test_a_wait_on_a_landing_with_no_session_starts_its_reading_while_its_card_is_held(self, recorded, held, refused, step, words):
+        """card-sessions "A wait on a landing card starts its reading when none runs"."""
+        assert plan.land_unstarted("land/y", recorded, held, refused) == (step, words)
 
     def test_a_decided_landing_reading_is_set_aside_and_forgotten_and_an_undecided_one_kept(self, tmp_path):
         s = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio.ts.swancloud.net:19432", "started": "2026-10-19T10:00:00Z"}
