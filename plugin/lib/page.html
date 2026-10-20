@@ -378,15 +378,17 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
     return x;
   }
 
-  // Each marker on its object: ✓ an approval, with whether its card is open and who asked it; ! for attention.
+  // Each marker on its object: ✓ an approval, with whether its card is open and who asked it, or, with none open,
+  // that Pending You refused its last post, its words in the marker's title after its key; ! for attention.
   // Nothing here answers anything.
   var MARK = { "✓": "approve" };
   function marks(x, ms, attention) {
     var row = el("div", "marks");
     (ms || []).forEach(function (k) {
       var s = el("span", "mark " + (MARK[k.glyph] || ""));
-      s.append(el("span", null, k.glyph), el("span", "mk-t", k.card ? "card open, asked by " + k.card.by : "no card"));
-      s.title = k.key;
+      s.append(el("span", null, k.glyph), el("span", "mk-t", k.card ? "card open, asked by " + k.card.by
+                                                            : k.refused ? "no card, its post refused" : "no card"));
+      s.title = !k.card && k.refused ? k.key + ": " + k.refused : k.key;
       row.append(s);
     });
     if (attention) row.append(el("span", "mark attention", "! " + attention));
