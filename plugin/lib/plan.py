@@ -7731,14 +7731,15 @@ def batch_facts(n, entries, summary, subjects):
     level's host, oldest first, and the reviewer's summary: n, the batch before it, and each unit in the batch's order
     with its team, the commit the batch read it at, what it is about (subjects, else its name in words) and the
     paragraph the reviewer opened its section with, or a line saying the summary has none. None while the batch's point
-    has not come or has passed: the run record holds no batch n, its summary is not there (None), or its key is closed
-    (batch_closed), the last card act under it a close, but as lost to its owner. A card of it the owner holds open is
-    no reason: the act changes it, or posts it again once lost."""
+    has not come or has passed: the run record holds no batch n, its summary is not there (None), its key is closed
+    (batch_closed), the last card act under it a close, but as lost to its owner, or the batch waits on nothing
+    (batch_settled), so crew review --wait raises no card for it. A card of it the owner holds open is no reason: the
+    act changes it, or posts it again once lost."""
     key = f"batch/{n}"
     held = [e for e in entries if e.get("Act") == "review.batch" and not e.get("Refused") and e.get("Batch") == str(n)]
     if not held or summary is None:
         return None
-    if key in batch_closed(entries):
+    if key in batch_closed(entries) or key in batch_settled(entries):
         return None
     previous = max((m for m, _, _ in batches(entries) if m < n), default=None)
     units = [dict(unit=u, team=team, commit=sha, subject=subjects.get(u) or u.replace("-", " "),
@@ -7863,8 +7864,9 @@ def record_reading(l, entries, plan, fresh, missing=None):
     older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
     None while a host of the record did not answer (missing), as are the units whose latest change waits on the user's
     answer to its batch's card (awaiting_answer). A close refused leaves its card open; a card's close as lost to its
-    owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed only
-    while its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row."""
+    owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed while
+    its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row, or once its
+    batch waits on nothing (batch_settled), whose words are held as settled."""
     times, posted, closed, landings, gives = {}, {}, set(), [], {}
     for e in entries:
         act = e.get("Act")
@@ -7892,8 +7894,9 @@ def record_reading(l, entries, plan, fresh, missing=None):
             team = next((o[5:] for o in e["On"] if o.startswith("team/")), None)
             if bolt and team:
                 gives[(l, bolt)] = team
-    closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries)  # a batch card posted again reopens its row
-    held = dict(batches=batches(entries), closed=closed, posts=batch_posts(entries),
+    settled = batch_settled(entries)
+    closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries) | set(settled)  # a batch card posted again reopens its row
+    held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
                 due=None if missing else {u for u, *_ in due_changes(plan, entries)},
                 unanswered=None if missing else awaiting_answer(entries))
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
@@ -7907,8 +7910,9 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     card, whose units, their teams and the commits the batch read them at the row holds too, None for a landing. A
     proposal's row is keyed by its chain's card, proposal/<first>, the first proposal it was rewritten from. A
     verify report is no row: its findings are fixed in one round with no card (teams.17). A batch is one row, keyed
-    batch/<n>, holding every unit, until its card closes; a batch posted as cards of five before a batch was one card is
-    a row for each card posted, keyed batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row,
+    batch/<n>, holding every unit, until its card closes or it waits on nothing (batch_settled); a batch posted as cards
+    of five before a batch was one card is a row for each card posted, keyed batch/<n>-<k>, until it closes or the units
+    it holds wait on nothing. A bolt with every unit merged is a landing row,
     offered for landing only once its verification is green, sluice's verdict on its last landing (kit.verification,
     record 0025), and every unit's latest change has been in a batch whose card the user has answered: until then the
     row says which units no batch has held and which batches wait on the user's answer, and offers nothing
@@ -8042,7 +8046,8 @@ CARD_RETRY = 600
 def row_gone(key, entries):
     """Why a row's card has no row now, from the run record's entries, oldest first: (outcome, None) when the event
     that ends its row was recorded, so its card is closed with what was done, a proposal applied or a bolt landed;
-    else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them."""
+    else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them, and a batch that waits on
+    nothing with the words of crew's close (batch_settled)."""
     kind, _, rest = (key or "").partition("/")
     thing, _, head = rest.partition("/")
 
@@ -8057,6 +8062,9 @@ def row_gone(key, entries):
         return (("its bolt landed", None) if act == "bolt.land" else
                 (None, "its bolt was dropped" if act == "bolt.drop" else
                  "its bolt no longer waits to land" + (f" at {head}" if head else "")))
+    settled = batch_settled(entries) if kind == "batch" else {}
+    if key in settled:
+        return None, settled[key]
     return None, {"batch": "its batch no longer waits to be read", "deploy": "its deploy no longer waits on your word",
                   "op": "its step no longer waits on you",
                   "verify": "a verify report has no card, its findings fixed in one round"}.get(kind, "its row is gone")

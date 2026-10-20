@@ -253,6 +253,13 @@ class TestBatchFacts:
         again = dict(posted, Card="req_9")
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, closed, again, dict(closed, Card="req_9", State="lost")], SUMMARY, {})["n"] == 3
 
+    def test_no_card_is_raised_for_a_batch_that_waits_on_nothing(self):
+        """review-batches: crew review --wait raises no card for a batch whose every unit has landed."""
+        held = [reviewed(3, UNITS), {"Act": "bolt.land", "On": ["bolt/b1"] + [f"unit/{u}" for u, *_ in UNITS[:2]]}]
+        assert plan.batch_facts(3, held, SUMMARY, {})["n"] == 3
+        held[1]["On"].append("unit/z1")
+        assert plan.batch_facts(3, held, SUMMARY, {}) is None
+
 
 @pytest.mark.parametrize("stage, fix, then", [
     ("construct", False, ["batch"]),

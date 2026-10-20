@@ -283,6 +283,23 @@ class TestRecord:
                        post("req_2", "batch/1", act="card.close", minutes=3)])
         assert r["held"]["closed"] == {"batch/1"} and not [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
 
+    def test_a_batch_that_waits_on_nothing_is_no_row_and_one_with_a_unit_still_waiting_is(self):
+        """review-batches, "Every unit has landed" and "One unit still waits on the user"; rail-cards, "An old batch card
+        whose units have landed": batch 1's unit has landed, batch 2's second card's units have landed and one of its
+        first's has not, and batch 9 holds a unit that has neither landed nor been held again."""
+        def batch(n, units, minutes):
+            return {"Act": "review.batch", "Batch": str(n), "Units": " ".join(f"{u}:swb-2@{i:04x}" for i, u in enumerate(units)),
+                    "At": f"2026-10-12T09:{minutes:02d}:00Z", "On": []}
+        seven = [f"u{i}" for i in range(7)]
+        entries = [batch(1, ["zone-one"], 0), batch(2, seven, 1), post("req_21", "batch/2-1"), post("req_22", "batch/2-2"),
+                   batch(9, ["early", "stale"], 2),
+                   {"Act": "bolt.land", "On": ["bolt/b"] + [f"unit/{u}" for u in ["zone-one", "early"] + seven[1:]], "At": "2026-10-12T10:30:00Z"}]
+        r = self.read(entries)
+        assert r["held"]["settled"] == {"batch/1": "its batch waits on nothing: zone-one has landed",
+                                        "batch/2-2": "its batch waits on nothing: u5 and u6 have landed"}
+        assert {"batch/1", "batch/2-2"} <= r["held"]["closed"]
+        assert [x["key"] for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"] == ["batch/2-1", "batch/9"]
+
     def test_a_card_its_owner_posts_again_under_a_key_replaces_the_older_but_another_agents_does_not(self):
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]
@@ -351,7 +368,10 @@ class TestSweepJudged:
         ("land/y/abc1234", [{"Act": "bolt.land", "On": ["bolt/y"], "Refused": "x"}], (None, "its bolt no longer waits to land at abc1234")),
         ("verify/c/20261012-1200", [], (None, "a verify report has no card, its findings fixed in one round")),
         ("deploy/dev", [], (None, "its deploy no longer waits on your word")),
-        ("op/dev/2", [], (None, "its step no longer waits on you"))])
+        ("op/dev/2", [], (None, "its step no longer waits on you")),
+        ("batch/3", [], (None, "its batch no longer waits to be read")),
+        ("batch/3", [{"Act": "review.batch", "Batch": "3", "Units": "x1:swb-1@aaa1", "At": iso(60), "On": []}, {"Act": "bolt.land", "On": ["bolt/b", "unit/x1"]}],
+         (None, "its batch waits on nothing: x1 has landed"))])
     def test_why_a_rows_card_has_no_row_is_read_from_the_run_record(self, key, entries, why):
         assert plan.row_gone(key, entries) == why
 
