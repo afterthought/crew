@@ -12,7 +12,7 @@
 
 ## 3. The commands say it
 
-- [ ] 3.1 `crew unit drop` and `crew unit free` on a unit whose branch holds its own commit keep and name the branch in their output and the run record, and a unit added again under its name starts on it; the journey in `tests/t-journey-fix.sh` (or the one that fits) proves it, with every expectation of a removed branch that now holds a commit updated, and `tests/suite --affected` ends with "0 failed" (design: Task notes 3.1; `tests.4`, `tests.10`).
+- [x] 3.1 `crew unit drop` and `crew unit free` on a unit whose branch holds its own commit keep and name the branch in their output and the run record, and a unit added again under its name starts on it; the journey in `tests/t-journey-fix.sh` (or the one that fits) proves it, with every expectation of a removed branch that now holds a commit updated, and `tests/suite --affected` ends with "0 failed" (design: Task notes 3.1; `tests.4`, `tests.10`).
 
 ## 4. The docs say it
 
