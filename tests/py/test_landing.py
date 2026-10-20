@@ -10,8 +10,8 @@ import plan
 OLD, NEW = "a" * 40, "b" * 40
 
 
-def said(rc, new=NEW, kept="''", level="yes"):
-    return f"RC={rc} OLD={OLD} NEW={new} KEPT={kept} LEVEL={level}\n"
+def said(rc, new=NEW, kept="''", level="yes", marked="yes"):
+    return f"RC={rc} OLD={OLD} NEW={new} KEPT={kept} LEVEL={level} MARKED={marked}\n"
 
 
 def test_a_landing_says_where_main_is_and_what_comes_next():
@@ -23,6 +23,21 @@ def test_a_main_checkout_not_brought_level_is_named_with_the_command():
     landed, words = plan.landing_said("b", "k", said(0, level="'git read-tree could not bring it level'"))
     assert landed and words.endswith("k's main checkout was not brought level (git read-tree could not bring it level): "
                                      "git read-tree -m -u aaaaaaa main there.")
+
+
+def test_a_bolt_branch_with_no_mark_of_crews_is_named_and_lands_all_the_same():
+    """bolt-teams "A landing leaves only what main lacks" (record 0003, read.4): the landing marks the bolt's branch
+    landed only when it carries crew's mark, and says when it could not; a landing is a landing either way."""
+    assert plan.landing_said("b", "k", said(0, marked="no")) == (
+        True, "bolt/b landed on k's main at bbbbbbb: now crew bolt land b. crew could not mark bolt/b landed: its branch "
+              "carries no mark of crew's.")
+    assert plan.landing_said("b", "k", said(0, marked="'git config could not set it'"))[1].endswith(
+        "crew could not mark bolt/b landed: git config could not set it.")
+
+
+def test_a_landing_that_did_not_land_says_nothing_of_the_mark():
+    assert "mark" not in plan.landing_said("b", "k", said(2, new=OLD, marked="''"))[1]
+    assert "mark" not in plan.landing_said("b", "k", f"RC=0 OLD={OLD} NEW={NEW} KEPT='' LEVEL=yes\n")[1]
 
 
 def test_a_conflict_lands_nothing_and_is_the_bolts_to_take():

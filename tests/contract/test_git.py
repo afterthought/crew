@@ -379,22 +379,41 @@ def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(rep
     landing makes one on bolt/<bolt>, runs `wt submit main` there, which the real worktrunk runs as wt-submit from the
     path, removes it, and brings the kit's main checkout level with what sluice moved while it is on branch main,
     keeping an untracked file there. With no wt-submit on the path the landing is refused, naming it, with nothing
-    made."""
+    made. Once sluice has landed it and main moved, the bolt's branch crew marked given is marked landed in the kit's
+    git config, which a refused landing leaves as it was and git drops with the branch (record 0003)."""
     import plan
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/b")
+    repo.git("config", "branch.bolt/b.crew", "given")
     (repo.path / "notes.txt").write_text("the user's own\n")
     land, unready, stand_in = landing(repo, tmp_path)
     r = unready()
     assert r.returncode == 2 and "wt submit needs sluice's wt-submit, which is not on" in r.stderr, r.stderr
     assert not land.exists()
+    assert repo.git("config", "branch.bolt/b.crew") == "given"
     r = stand_in()()
     landed, words = plan.landing_said("b", "kit", r.stdout)
-    assert landed, r.stdout + r.stderr
+    assert landed and "MARKED=yes" in r.stdout and "mark" not in words, r.stdout + r.stderr
+    assert repo.git("config", "branch.bolt/b.crew") == "landed"
     assert (tmp_path / "agent").read_text().strip() == "wldn-ops"
     assert not land.exists() and "land-b" not in repo.git("worktree", "list")
     assert (repo.path / "landed.txt").read_text() == "x\n"
     assert repo.git("status", "--porcelain") == "?? notes.txt"
+    repo.git("branch", "-q", "-D", "bolt/b")
+    assert subprocess.run(["git", "-C", str(repo.path), "config", "--get", "branch.bolt/b.crew"]).returncode == 1
+
+
+def test_a_landing_of_a_bolt_branch_crew_did_not_mark_leaves_it_unmarked(repo, tmp_path):
+    """plan.LANDING and plan.landing_said (read.4): a bolt's branch with no mark of crew's is not crew's, so its landing
+    sets none and says so."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    _, _, stand_in = landing(repo, tmp_path)
+    r = stand_in()()
+    assert "MARKED=no" in r.stdout, r.stdout + r.stderr
+    assert plan.landing_said("b", "kit", r.stdout)[1].endswith("crew could not mark bolt/b landed: its branch carries no mark of crew's.")
+    assert subprocess.run(["git", "-C", str(repo.path), "config", "--get", "branch.bolt/b.crew"]).returncode == 1
 
 
 def test_a_landing_against_a_detached_main_checkout_leaves_it_untouched_and_says_nothing_of_levelling(repo, tmp_path):

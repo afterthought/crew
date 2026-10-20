@@ -1723,11 +1723,14 @@ def bolt_land(fleet, a):
 # and, when main moved, the kit's main checkout brought level with it while it is on branch main, since sluice moves the
 # branch and not that checkout's files, and left as it is when it is detached, the anchor the fleet's timer moves
 # (plan.18); the submission is in the name of whoever asked for it, and while sluice has it the worktree's git dir holds
-# this script's process id in crew-landing, emptied once sluice's outcome is in (landing_now). Prints what it did as
-# shell assignments: RC, the
+# this script's process id in crew-landing, emptied once sluice's outcome is in (landing_now); once sluice has landed
+# it and main moved, the bolt's branch is marked landed in the kit's git config, branch.bolt/<bolt>.crew, when it
+# carries crew's mark, so every later read of the team judges the bolt's work against main (record 0003, read.4).
+# Prints what it did as shell assignments: RC, the
 # submission's exit (sluice's: 0 landed, 1 its checks failed, 2 a conflict or a refusal, 130 stopped); OLD and NEW,
 # main's commit before and after; KEPT, the worktree when git could not remove it; LEVEL, "yes", "no", "detached" or why
-# it was not tried.
+# it was not tried; MARKED, "yes", "no" when the branch carries no mark of crew's, or why git could not set it, and
+# empty when nothing landed.
 LANDING = r"""main=$1 path=$2 bolt=$3
 export SLUICE_AGENT=$4
 cd "$main" || exit 2
@@ -1739,14 +1742,19 @@ mark=$(git -C "$path" rev-parse --absolute-git-dir)/crew-landing && echo $$ > "$
 (cd "$path" && wt submit main --no-remove) >&2 </dev/null; rc=$?
 : > "$mark"
 kept=; git worktree remove "$path" >/dev/null 2>&1 || kept=$path
-new=$(git rev-parse refs/heads/main) level=no
+new=$(git rev-parse refs/heads/main) level=no marked=
+if [ "$rc" = 0 ] && [ "$new" != "$old" ]; then
+  if ! git config --get "branch.bolt/$bolt.crew" >/dev/null; then marked=no
+  elif git config "branch.bolt/$bolt.crew" landed; then marked=yes
+  else marked="git config could not set it"; fi
+fi
 if [ "$new" != "$old" ]; then
   if ! on=$(git symbolic-ref -q --short HEAD); then level=detached
   elif [ "$on" != main ]; then level="its main checkout is not on main"
   elif git read-tree -m -u "$old" main >&2; then level=yes
   else level="git read-tree could not bring it level"; fi
 fi
-printf 'RC=%s OLD=%s NEW=%s KEPT=%q LEVEL=%q\n' "$rc" "$old" "$new" "$kept" "$level"
+printf 'RC=%s OLD=%s NEW=%s KEPT=%q LEVEL=%q MARKED=%q\n' "$rc" "$old" "$new" "$kept" "$level" "$marked"
 """
 
 
@@ -1756,7 +1764,8 @@ def landing_said(bolt, kit, said):
     (plan.16); a main checkout not brought level is named with the command that levels
     it, and a detached one, which the fleet's timer moves, is said nothing of (plan.18); a conflict or a refusal is the
     team's to resolve by taking main into the bolt by a submission to the bolt (plan.8); words crew can't read land
-    nothing (read.1)."""
+    nothing (read.1). A mark of landed the landing could not set on the bolt's branch is named, and lands it all the
+    same (MARKED)."""
     import shlex as _shlex
     try:
         f = dict(w.split("=", 1) for w in _shlex.split(said.strip().splitlines()[-1] if said.strip() else ""))
@@ -1768,7 +1777,9 @@ def landing_said(bolt, kit, said):
     if f["RC"] == "0" and f["NEW"] != f["OLD"]:
         level = ("" if f.get("LEVEL") in ("yes", "detached") else
                  f" {kit}'s main checkout was not brought level ({f.get('LEVEL')}): git read-tree -m -u {f['OLD'][:7]} main there.")
-        return True, f"bolt/{bolt} landed on {kit}'s main at {f['NEW'][:7]}: now crew bolt land {bolt}.{level}{kept}"
+        why = "its branch carries no mark of crew's" if f.get("MARKED") == "no" else f.get("MARKED")
+        marked = f" crew could not mark bolt/{bolt} landed: {why}." if why and why != "yes" else ""
+        return True, f"bolt/{bolt} landed on {kit}'s main at {f['NEW'][:7]}: now crew bolt land {bolt}.{level}{marked}{kept}"
     why = {"1": "main's checks failed on it", "2": "sluice refused it or found a conflict", "130": "the submission was stopped"}.get(
         f["RC"], f"the submission exited {f['RC']}")
     return False, (f"bolt/{bolt} did not land: {why}, and main is where it was. Tell the bolt's conductor sluice's words above: "
