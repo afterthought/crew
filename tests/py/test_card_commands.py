@@ -263,6 +263,12 @@ class Acts:
         self.puts.append((url, len(data), kind))
         return self.put_said
 
+    def session(self, label, key, facts):  # a landing card's reading, which crew starts before it builds the card
+        return "http://chuck-herdr-alpha.ts.swancloud.net:19432"
+
+    def end(self, label, key):  # no reading recorded on this host, so its close ends none
+        return None
+
     def host(self):
         return "chuck-herdr-alpha"
 
