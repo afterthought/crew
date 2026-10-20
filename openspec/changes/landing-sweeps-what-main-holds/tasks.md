@@ -8,7 +8,7 @@
 
 ## 2. The landing says it
 
-- [ ] 2.1 `tests/t-journey-land.sh` proves the submission's mark and `crew bolt land`'s line that the bolt's branch went because main holds every commit of it, and `tests/suite --affected` ends with "0 failed" (design: Task notes 2.1; `tests.12`).
+- [x] 2.1 `tests/t-journey-land.sh` proves the submission's mark and `crew bolt land`'s line that the bolt's branch went because main holds every commit of it, and `tests/suite --affected` ends with "0 failed" (design: Task notes 2.1; `tests.12`).
 
 ## 3. The docs say it
 
