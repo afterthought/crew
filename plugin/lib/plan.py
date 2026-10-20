@@ -4675,16 +4675,16 @@ def slot_stages(fleet, t):
 def slot_stage(kind, name, kit, plan, bolts, marks):
     """The stage of the work a slot holds, and its tasks done and total where its change has a task list (teams.1):
     read from the kit as gathered (kit, unread unless ok) and the plan (None when it could not be read), bolts the
-    names of those the team holds, marks the plan's Amended marks. A fix has merged, been dropped with its bolt, or is
-    in flight; a unit or a chore has landed, merged into its bolt, been dropped from the plan, left the team's bolts,
+    names of those the team holds, marks the plan's Amended marks. A fix reads its stage from its branch's facts, its
+    place's or, its place gone, its branch's (fix_stage); a unit or a chore has landed, merged into its bolt, been dropped from the plan, left the team's bolts,
     or reads its stage from its place. A unit has merged once its bolt holds its change archived; one whose change the
     bolt holds open, carried there inside another unit's merge, reads its stage from its place, or the bolt's change
     when its place is gone, with a third value, True, for carried (teams.17)."""
     if not kit.get("ok"):
         return "unknown", None
     if kind == "fix":
-        f = next((f for f in kit["fixes"] if f["fix"] == name), None)
-        return ("merged" if f["merged"] else "dropped" if plan and f["bolt"] and not plan.bolt(f["bolt"]) else "fix") if f else "none", None
+        f = next((f for f in kit["fixes"] if f["fix"] == name), None) or kit.get("fix_branches", {}).get(name)
+        return (fix_stage(f, bool(plan.bolt(f["bolt"])) if plan and f["bolt"] else None) if f else "none"), None
     if kind == "chore":
         pl = kit.get("chore_places", {}).get(name)
         bolt = (pl or {}).get("bolt") or (plan.chore(name).get("Bolt") if plan and plan.chore(name) else None)
@@ -4712,6 +4712,21 @@ def slot_stage(kind, name, kit, plan, bolts, marks):
     if pl:
         return (place_stage(pl, marks.get(name)), "{}/{}".format(*pl["tasks"]) if pl["tasks"] else None) + ((True,) if name in carried else ())
     return "none", None
+
+
+def fix_stage(f, planned):
+    """A fix's stage from its branch's facts as gather reads them (gather.fix_facts) and whether its bolt is planned
+    (True, False, or None when the plan could not be read or the fix tracks no bolt) (teams.1): landed once the kit's
+    main holds its own work, its tip and it has moved, as a unit reads landed once main holds its change; merged once
+    its bolt holds it; with its bolt in no plan, landed when main holds its tip, else dropped; else in flight. With the
+    plan unread nothing is read dropped or landed by the plan (read.1)."""
+    if f["on_main"] and f["moved"]:
+        return "landed"
+    if f["merged"]:
+        return "merged"
+    if planned is False:
+        return "landed" if f["on_main"] else "dropped"
+    return "fix"
 
 
 @contextlib.contextmanager

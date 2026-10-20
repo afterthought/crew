@@ -120,8 +120,16 @@ class TestSlotStage:
            "places": {"merged-one": {"bolt": "t"}, "a": {"bolt": "t", "tasks": (1, 4), "planning": True, "head": "h"},
                       "c": {"bolt": "t", "tasks": None, "planning": False, "head": "h"},
                       "carried": {"bolt": "t", "tasks": (3, 3), "planning": True, "head": "h", "open": []}},
-           "fixes": [{"fix": "fix/t/done", "merged": True, "bolt": "t"}, {"fix": "fix/gone/y", "merged": False, "bolt": "gone"},
-                     {"fix": "fix/t/y", "merged": False, "bolt": "t"}]}
+           "fixes": [{"fix": "fix/t/done", "merged": True, "bolt": "t", "on_main": False, "moved": True},
+                     {"fix": "fix/gone/y", "merged": False, "bolt": "gone", "on_main": False, "moved": None},
+                     {"fix": "fix/t/y", "merged": False, "bolt": "t", "on_main": False, "moved": None},
+                     {"fix": "fix/t/cut", "merged": False, "bolt": "t", "on_main": True, "moved": False},
+                     {"fix": "fix/t/landed", "merged": False, "bolt": "t", "on_main": True, "moved": True},
+                     {"fix": "fix/gone/never-moved", "merged": False, "bolt": "gone", "on_main": True, "moved": False}],
+           # Fix branches no worktree holds, their places gone (wldn, swb-3, 2026-10-20: four slots kept, read `none`).
+           "fix_branches": {"fix/gone/landed": {"merged": False, "bolt": "gone", "on_main": True, "moved": True},
+                            "fix/t/merged": {"merged": True, "bolt": "t", "on_main": False, "moved": True},
+                            "fix/gone/kept": {"merged": False, "bolt": "gone", "on_main": False, "moved": None}}}
 
     def stage(self, kind, name, kit=None, plan_=PLAN):
         return plan.slot_stage(kind, name, kit or self.KIT, plan_, {"t"}, {})
@@ -141,9 +149,24 @@ class TestSlotStage:
     def test_one_whose_place_is_gone_reads_its_stage_from_the_change_on_the_bolt(self):
         assert self.stage("unit", "carried-gone") == ("code", "2/3", True)
 
-    @pytest.mark.parametrize("name, stage", [("fix/t/done", "merged"), ("fix/gone/y", "dropped"), ("fix/t/y", "fix"), ("fix/t/z", "none")])
+    @pytest.mark.parametrize("name, stage", [
+        ("fix/t/landed", "landed"), ("fix/gone/never-moved", "landed"), ("fix/t/done", "merged"), ("fix/gone/y", "dropped"),
+        ("fix/t/y", "fix"), ("fix/t/cut", "fix"), ("fix/t/z", "none")])
     def test_a_fixs(self, name, stage):
         assert self.stage("fix", name) == (stage, None)
+
+    @pytest.mark.parametrize("name, stage", [("fix/gone/landed", "landed"), ("fix/t/merged", "merged"), ("fix/gone/kept", "dropped")])
+    def test_a_fix_whose_place_is_gone_is_read_from_its_branch(self, name, stage):
+        assert self.stage("fix", name) == (stage, None)
+
+    @pytest.mark.parametrize("name, stage", [
+        ("fix/gone/y", "fix"), ("fix/gone/never-moved", "fix"), ("fix/gone/kept", "fix"), ("fix/t/landed", "landed"), ("fix/t/done", "merged")])
+    def test_with_the_plan_unread_no_fix_is_read_dropped_or_landed_by_the_plan(self, name, stage):
+        assert self.stage("fix", name, plan_=None) == (stage, None)
+
+    def test_a_fix_tracking_no_bolt_is_never_read_dropped(self):
+        f = {"merged": False, "bolt": None, "on_main": True, "moved": False}
+        assert plan.fix_stage(f, None) == "fix"
 
     def test_a_kit_crew_could_not_read_is_unknown(self):
         assert self.stage("unit", "a", kit={"ok": False}) == ("unknown", None)
