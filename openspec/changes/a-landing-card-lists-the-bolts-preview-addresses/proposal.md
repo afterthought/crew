@@ -44,6 +44,8 @@ README.md
 tests/py/test_landing.py
 tests/py/test_cards.py
 tests/py/test_kit.py
+tests/py/test_rail.py
+tests/py/test_card_commands.py
 tests/t-journey-land.sh
 tests/t-briefs.sh
 tests/stubs/sluice
