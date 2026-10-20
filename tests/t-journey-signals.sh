@@ -3,7 +3,8 @@
 # signal as one commit on the flywheel's branch, the source record banked on the host and nothing in the blueprints; a
 # second signal joins the capture, the same one again writes nothing, and a paraphrase is refused with a refused
 # entry; the session is herdr's for the agent; the user's note at a shell is its own excerpt; crew signal show answers
-# from a host with no team; curation's move and a route are written to moves.rec, the route in the unit's own commit;
+# from a host with no team, by a signal's full id or its short one; curation's move and a route are written to
+# moves.rec, the route in the unit's own commit, each naming the signal by its short id and writing its full one;
 # a meeting's signal in the blueprints is moved and shown as it stands; a proposal shows a signal's excerpt and routes
 # it on approval; crew trace of a signal begins with its capture; and a program's capture lands with crew signal land
 # from the host that banked its raw record, in one commit and once. How an excerpt is graded and who asserted it, how
@@ -22,6 +23,7 @@ at() { git --git-dir "$ws" show "wldn/main:$1"; }
 changed() { git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main | grep -v '^runs/'; }
 runs() { cat "$(home_of "$1")"/.local/state/crew/wldn/runs/*/*.rec 2>/dev/null; }
 id_of() { sed -n 's/^signal \([^: ]*\)[: ].*/\1/p' <<<"$1"; }
+short() { local n=${1#*/}; echo "${1%/*}/${n:0:2}"; }  # a signal's short id, <capture>/<NN>
 conductor() { HOST=$box CREW_AGENT=swb-2-conductor CREW_SESSION=$box:s-1 "$@"; }
 # laptop: a host with crew's files and nothing of any team's
 mkdir -p "$(home_of laptop)"; gitconfig "$(home_of laptop)"; cp -R "$(home_of mac-studio)/.config" "$(home_of laptop)/"
@@ -83,13 +85,15 @@ HOST=laptop expect_ok crew signal show "$id"
 has "$out" "signals/$id, on wldn/main of WilldanGroup/crew-state"
 has "$out" "  excerpt: verified"; has "$out" "No move yet in wldn."
 lacks "$(calls)" "laptop ssh"
-ok "from a host with no team, crew signal show reads a signal captured on the box from the branch alone"
+HOST=laptop expect_ok crew signal show "$cap/02"
+has "$out" "signals/$cap/02-beside-cfn-lint, on wldn/main of WilldanGroup/crew-state"
+ok "from a host with no team, crew signal show reads a signal captured on the box from the branch alone, by its full id or its short one"
 
-CREW_AGENT=wldn-design expect_ok crew signal move "$note" answered --target "books/switchboard-kit/src/buckets.md" --reason "the book says so"
+CREW_AGENT=wldn-design expect_ok crew signal move "$(short "$note")" answered --target "books/switchboard-kit/src/buckets.md" --reason "the book says so"
 eq "$(git --git-dir "$ws" log -1 --format=%s wldn/main)" "signals($note): answered (wldn-design)"
 eq "$(changed)" "moves.rec"
 CREW_AGENT=wldn-design expect_fail "already has its move: answered" crew signal move "$note" drop --reason "twice"
-expect_ok crew unit add templates-get-a-security-check "Templates get a security check." --repo switchboard-kit --signal "$id"
+expect_ok crew unit add templates-get-a-security-check "Templates get a security check." --repo switchboard-kit --signal "$cap/01"
 has "$out" "signal $id routed to unit/templates-get-a-security-check, in the same commit"
 eq "$(changed)" $'moves.rec\nplan.rec'
 HOST=laptop CREW_LABEL= expect_ok crew signal show "$id"
@@ -120,10 +124,10 @@ eq "$(changed)" $'moves.rec\nplan.rec\nproposals.rec'
 eq "$(at moves.rec | recsel -t Move -e "Signal = '$asked'" -P Move,Target)" "route"$'\n'"unit/deploys-dry-run-first"
 ok "a proposal shows a signal's assertion and excerpt with its grade, and its approval routes the signal in its own commit"
 
-expect_ok crew trace "signals/$id"
+expect_ok crew trace "signals/$cap/01"
 first=$(head -1 <<<"$out")
 has "$first" "capture"; has "$first" "swb-2-conductor"; has "$first" "signals/$id"; has "$first" "zoe s-1 on $box"
-ok "crew trace of a signal begins with its capture, naming the capturing agent, its host and its session"
+ok "crew trace of a signal, by its short id, begins with its capture, naming the capturing agent, its host and its session"
 
 # A program's capture, a deployer's failed deploy, landed from the host that ran it and banked its log there.
 dep=$day-deploy-mac-studio-abc1234-103000; d=$T/captures/$dep; log=$(home_of mac-studio)/.local/state/deployer/logs/x.log

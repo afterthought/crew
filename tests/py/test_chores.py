@@ -109,6 +109,14 @@ class TestCommands:
         assert "Target: chore/pin" in w.files["moves.rec"] and op.act == "chore.add"
         assert (op.on, op.frm, op.subject) == (["chore/pin", f"bolt/{TE}"], ["signals/s/01-x"], f"plan({TE}): add chore pin")
 
+    def test_a_signals_short_id_routes_the_signal_it_numbers_by_its_full_id(self, monkeypatch):
+        monkeypatch.setenv("CREW_AGENT", "chuck@mac-studio")
+        w = FactsWrite(plan_text(bolts=BOLTS, units=[]), files={"moves.rec": plan.MOVES, "signals/s/01-x.md": "---\nsignal: s/01-x\n---\n"})
+        op = plan.op_unit_add(known(w), plan.do_args("wldn", f'chore add pin "Pin." --bolt {TE} --signal s/01'))
+        op.change(w)
+        assert "Signal: s/01-x\nMove: route\nTarget: chore/pin" in w.files["moves.rec"] and "Source: signals/s/01-x" in w.plan.text()
+        assert op.frm == ["signals/s/01-x"]
+
 
 class TestWho:
     def may(self, monkeypatch, agent, key, bolt=None):
