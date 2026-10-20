@@ -16,7 +16,7 @@
 
 ## 4. The words
 
-- [ ] 4.1 README says an offer again posts a card that was refused, that a marker says a refused post, and that a deploy card follows no landing card; proved by `tests/t-docs.sh` (design, *Task notes* 4.1).
+- [x] 4.1 README says an offer again posts a card that was refused, that a marker says a refused post, and that a deploy card follows no landing card; proved by `tests/t-docs.sh` (design, *Task notes* 4.1).
 
 ## 5. Checks
 
