@@ -8,7 +8,7 @@
 
 ## 2. A unit added again starts from its kept branch
 
-- [ ] 2.1 A unit's or chore's new place made on an existing branch tracks the bolt it was given and its stage's start names the kept branch and its commit; a contract case in `tests/contract/test_git.py` proves `PLACE` sets the upstream and prints the commit, and `tests/suite contract logic` passes (design: Task notes 2.1; record 0003).
+- [x] 2.1 A unit's or chore's new place made on an existing branch tracks the bolt it was given and its stage's start names the kept branch and its commit; a contract case in `tests/contract/test_git.py` proves `PLACE` sets the upstream and prints the commit, and `tests/suite contract logic` passes (design: Task notes 2.1; record 0003).
 
 ## 3. The commands say it
 

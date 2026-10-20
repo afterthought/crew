@@ -1126,11 +1126,17 @@ def host_run(fleet, host, script, *args):
     return r.stdout.strip()
 
 
+# A worktree at a fixed path, made on its branch, or with the branch made from base, tracking it when asked. A branch
+# already there with no worktree, one a drop kept (plan.10, record 0003), is taken as it stands, then tracks base, and
+# the commit it is at is printed as KEPT.
 PLACE = r"""set -e
 main=$1 path=$2 branch=$3 base=$4 track=$5 file=$6
 cd "$main"
 if [ ! -d "$path" ]; then
-  if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then git worktree add -q "$path" "$branch"
+  if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then
+    git worktree add -q "$path" "$branch"
+    if [ "$track" = track ]; then git branch -q --set-upstream-to="$base" "$branch"; fi
+    echo "KEPT=$(git rev-parse --short "refs/heads/$branch")"
   elif [ "$track" = track ]; then git worktree add -q --track -b "$branch" "$path" "$base"
   else git worktree add -q -b "$branch" "$path" "$base"; fi
 fi
@@ -1155,9 +1161,11 @@ def make_place(fleet, t, path, branch, base, track=False, unready=False):
     declaration (plan.17), whether it is new or was already there: the declared toolchain, its output kept in the
     worktree's git directory, and the runner's setup inside it. A step that fails refuses the command with the
     worktree made; with unready, as a fix's place is made (teams.3, record 0028), it stops the readying instead, and
-    what failed is returned. None once the worktree is ready. The command's next step reads the kit again."""
+    what failed is returned, None once the worktree is ready; with the commit a kept branch the new worktree was made on
+    is at (PLACE's KEPT), else None. The command's next step reads the kit again."""
     said = host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "", kit.DECLARATION)
     gitdir, text = kit.place_said(said)
+    kept = next((l[len("KEPT="):] for l in said.splitlines() if l.startswith("KEPT=")), None)
     why = None
     for what, argv, out in kit.readying(kit.declared(text, f"{path}/{kit.DECLARATION}"), f"{gitdir}/crew/toolchain.sh"):
         r = crew.on_machine(fleet, t["machine"], ["bash", "-c", IN_PLACE, "crew", path, out or "", " ".join(kit.KEEP), *argv])
@@ -1169,7 +1177,7 @@ def make_place(fleet, t, path, branch, base, track=False, unready=False):
             unready or fail(why)
             break
     READ.drop_kit(t["machine"], t["kit"]["main"])
-    return why
+    return why, kept
 
 
 # What a kit's main checkout holds of its mains, on its host, for kit.main_now to decide which is main now (plan.18,
@@ -4167,7 +4175,9 @@ def run_check(fleet, a):
         # The amendment's words, from the mark, so whoever starts the construct sends the same prompt.
         case = proposal(Plan(show(repo, tip, "proposals.rec") or PROPOSALS), mark.split("/", 1)[1], label).get("Case") \
             if amended(mark) and mark != "intent" else None
-        make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        _, kept = make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        if kept:  # a branch an earlier drop kept, which this unit builds on (record 0003)
+            print(f"{place} starts from the kept unit/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], u))
         if marking:
             head = s.get("head") or host_run(fleet, t["machine"], HEAD, place)
@@ -4295,7 +4305,9 @@ def chore_check(fleet, a, label, plan, c):
     not why or fail(why)
     merge = took = ""
     if a.stage == "code":
-        make_place(fleet, t, place, f"chore/{a.unit}", f"bolt/{bolt}", track=True)
+        _, kept = make_place(fleet, t, place, f"chore/{a.unit}", f"bolt/{bolt}", track=True)
+        if kept:  # a branch an earlier drop kept, which this chore builds on (record 0003)
+            print(f"{place} starts from the kept chore/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], c), "chore")
     elif a.stage == "merge":
         loose = untrailed(chore_commits(fleet, t, bolt, a.unit), a.unit)
@@ -4513,7 +4525,7 @@ def fix_place(fleet, t, place, fix, bolt):
     """A fix's place made from the team's bolt, tracking it, and refused unless it is on the fix's own branch made
     from that bolt (teams.3, read.4). A place that could not be made ready is no refusal, since a fix is how a bolt is
     repaired (record 0028): what failed is returned, for the fix's agent to be told; None once it is ready."""
-    unready = make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True, unready=True)
+    unready, _ = make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True, unready=True)
     why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
     not why or fail(why)
     return unready
