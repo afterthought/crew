@@ -8486,7 +8486,7 @@ def land_session(fleet, label, key, acts=None):
     except Refusal as e:
         words = str(e)
     if relinks(started, got):
-        facts = dict(facts, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
+        facts = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
         facts["preview"] = landing_preview(fleet, t, label, bolt, facts, acts)
         row_card_change(fleet, label, owner, cards.landing_card, facts, RELINKED, card_where(t["kit"]), acts)
     elif got is not None:
@@ -9617,28 +9617,43 @@ def reading_of(b):
 
 def unopened(b, why):
     """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
-    its first paragraph, cut again to Pending You's budget, and its details opening with why, where the link would be."""
+    its first paragraph, cut again to Pending You's budget, a landing's naming crew card session land/<bolt> as how the
+    bolt's conductor starts it, the card then carrying its link (briefs.13: the conductor's act, nothing for the user to
+    run); its details opening with why, where the link would be; and why kept on the built card (unread), for its post's
+    or change's entry in the run record."""
+    key = b["key"]
+    said = (f"Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session {key}, "
+            "and this card then carries its link." if key.startswith("land/")
+            else "Its reading could not be opened on the tailnet.")
     first, _, rest = b["card"]["summary"].partition("\n\n")
-    summary = cards.prose("\n\n".join(x for x in (first, "Its reading could not be opened on the tailnet.", rest) if x))
+    summary = cards.prose("\n\n".join(x for x in (first, said, rest) if x))
     context = dict(b["card"]["context"], background=f"The reading could not be opened on the tailnet: {why}\n\n"
                    + b["card"]["context"]["background"])
-    return dict(b, card=dict(b["card"], summary=summary, context=context))
+    return dict(b, card=dict(b["card"], summary=summary, context=context), unread=why)
 
 
 def card_built(acts, label, build, facts):
     """A card of crew's own built from its facts, with its reading session's link among them when it links one: the
-    session started, or given again while it serves, before the card is built (reading_of); a session that could not
-    open said, and the card built without it, saying so (unopened)."""
+    session started, or given again while it serves, before the card is built (reading_of); facts that carry the
+    link already, or why it could not be opened (unread), as a landing's raise opens it (landing_opened), used as they
+    are, nothing started; a session that could not open said, naming crew card session for a landing, and the card
+    built without it, saying so (unopened)."""
     b = build(facts)
     kind = reading_of(b)
-    if not kind:
+    if not kind or facts.get(READING[kind]):
         return b
-    try:
-        url = acts.session(label, b["key"], facts)
-    except Refusal as e:
-        print(f"card {b['key']}: its reading could not be opened on the tailnet: {e}", file=sys.stderr)
-        return unopened(b, str(e))
-    return build(dict(facts, **{READING[kind]: url}))
+    why = facts.get("unread")
+    if not why:
+        try:
+            url = acts.session(label, b["key"], facts)
+        except Refusal as e:
+            why = str(e)
+        else:
+            return build(dict(facts, **{READING[kind]: url}))
+    key = b["key"]
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}"
+          + (f"; crew card session {key} starts it" if key.startswith("land/") else ""), file=sys.stderr)
+    return unopened(b, why)
 
 
 def row_card_post(fleet, label, owner, build, facts, where, acts=None):

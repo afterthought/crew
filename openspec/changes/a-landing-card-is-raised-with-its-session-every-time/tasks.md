@@ -4,7 +4,7 @@
 
 - [x] 1.1 What follows a first refusal of the landing's reading is a function of facts: try again with the fresh landing, raise nothing because the bolt no longer reads proven, or stand on the first reason. Its cases pass in `tests/py/test_landing.py` (design, Decision 1; Task notes 1.1).
 - [x] 1.2 `raise_land` opens the reading itself before it builds the card. On a refusal it fetches the kit's main on the team's host, reads the landing afresh and opens the reading once more, handing the card its link or its reason (design, Decision 1; Task notes 1.2).
-- [ ] 1.3 `card_built` starts nothing when the facts already carry the reading's link or its reason. A landing card without its reading names `crew card session land/<bolt>` as the conductor's act, in its words and in the command's output, with the cases in `tests/py/test_cards.py` updated and added (design, Decision 2; Task notes 1.3).
+- [x] 1.3 `card_built` starts nothing when the facts already carry the reading's link or its reason. A landing card without its reading names `crew card session land/<bolt>` as the conductor's act, in its words and in the command's output, with the cases in `tests/py/test_cards.py` updated and added (design, Decision 2; Task notes 1.3).
 - [ ] 1.4 Through `ReadingActs`, a raise whose first start fails and second opens posts the link, one whose both fail posts a card naming `crew card session`, and one whose fresh read is not proven posts nothing. The cases pass in the logic tier (Task notes 1.4).
 
 ## 2. The run record keeps why

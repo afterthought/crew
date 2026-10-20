@@ -416,10 +416,27 @@ class TestSessions:
         why = "plannotator is not on this host's path, and a card's session is a plannotator session"
         b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
         c, bare = b["card"], built.landing_card(LANDING)["card"]
-        assert c["summary"] == bare["summary"] + "\n\nIts reading could not be opened on the tailnet."
+        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: the bolt's conductor starts "
+                                                  "it with crew card session land/b1, and this card then carries its link.")
         assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
         assert (c["kind"], c["approve"], c["context"]["links"]) == ("approve", bare["approve"], [])
-        assert capsys.readouterr().err == f"card land/b1: its reading could not be opened on the tailnet: {why}\n"
+        assert b["unread"] == why
+        assert capsys.readouterr().err == (f"card land/b1: its reading could not be opened on the tailnet: {why}; "
+                                           "crew card session land/b1 starts it\n")
+
+    def test_facts_carrying_the_readings_link_or_why_it_could_not_open_start_no_session(self, capsys):
+        """A landing's raise opens the reading itself (landing_opened): the card is built from what it found."""
+        link = "http://mac-studio.ts.swancloud.net:19432"
+        acts = ReadingActs()
+        opened = plan.card_built(acts, "wldn", built.landing_card, dict(LANDING, link=link))
+        assert opened["card"]["context"]["links"] == [{"label": "Read bolt b1", "url": link}] and "unread" not in opened
+        why = "plannotator did not list land/b1's session within 10 seconds, so crew ended it"
+        unread = plan.card_built(acts, "wldn", built.landing_card, dict(LANDING, unread=why))
+        assert unread["unread"] == why and unread["card"]["context"]["links"] == []
+        assert "crew card session land/b1" in unread["card"]["summary"]
+        assert acts.sessions == []
+        assert capsys.readouterr().err == (f"card land/b1: its reading could not be opened on the tailnet: {why}; "
+                                           "crew card session land/b1 starts it\n")
 
     def test_crews_close_ends_the_keys_session_and_a_refused_close_keeps_it(self, capsys):
         held = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
