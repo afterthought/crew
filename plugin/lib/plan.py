@@ -8491,6 +8491,31 @@ def batch_folder_write(fleet, label, n, units):
     return [str(folder / name) for name, _ in out]
 
 
+def landing_reading(bolt, kit, head, units, chores, changes, diff):
+    """A landing's reading, the files its one session opens as one review, in order, each (name, text) (card-sessions,
+    briefs.9): 00-<bolt>.md, a page naming the bolt, its kit and its head, the units and chores that land, one a line,
+    and saying that the reading lands nothing, approving the card being the word to land, and that what the user sends
+    from it reaches the bolt's conductor as notes on the card, a note naming a defect holding the landing for a fix;
+    then for the k-th unit each Markdown file of its change as the head holds it, named <kk>-<unit>-<its path under the
+    change, / as ->, in a change's reading order (change_order), as a batch's folder names them; then
+    <nn>-<bolt>-diff.txt, the bolt's diff against main, numbered after the last unit, as text, which plannotator opens
+    beside Markdown in one review where it refuses a .diff (plannotator 0.28.23). changes: [(unit, [(path under the
+    change, text)])] in the plan's order; diff: the diff's text."""
+    cover = "\n".join([f"# Bolt {bolt}, landing on {kit}'s main", "", f"What lands, at its head {head[:7]}:", ""]
+                      + [f"- {u}" for u in units] + [f"- {c} (chore)" for c in chores]
+                      + ["", "This reading lands nothing: approving the landing card is the word to land, and its Approve "
+                             "here lands nothing.", "",
+                         "What you send from it reaches the bolt's conductor as notes on the landing card, and a note "
+                         "naming a defect holds the landing for a fix.", "",
+                         "After this page come each unit's change as the bolt holds it, then what the bolt changes against "
+                         "main, from where it last met main to its head, less its change folders, shown whole before it."])
+    out = [(f"00-{bolt}.md", cover + "\n")]
+    for k, (u, files) in enumerate(changes, 1):
+        out += [(f"{k:02d}-{u}-{p.replace('/', '-')}", text) for p, text in sorted(files, key=lambda f: change_order(f[0]))]
+    said = diff if diff.strip() else "The bolt changes nothing against main outside its change folders.\n"
+    return out + [(f"{len(changes) + 1:02d}-{bolt}-diff.txt", said)]
+
+
 def forward_card(fleet, t, a, label):
     """An old batch card's command for one of its units, run on the host the teams file names for that unit's team
     (code.3), as the one asking here; its output passed on, and its failure this command's."""

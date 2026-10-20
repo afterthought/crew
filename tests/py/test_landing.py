@@ -135,6 +135,30 @@ class TestTheLandingsPoint:
     def test_sluices_pull_request_is_the_one_its_submission_at_the_head_went_through(self):
         assert plan.pull_of("swb-1-unit-2 (unit/a)", "o/k") is None and plan.pull_of("", "o/k") is None
 
+    def test_a_landing_reading_is_its_cover_each_units_change_in_the_plans_order_then_the_diff(self):
+        """card-sessions "A landing's session opens what the bolt brings to main, as one review": two units and a chore,
+        each unit's Markdown named for it in a change's reading order, the diff numbered after the last unit."""
+        a = [("tasks.md", "a's tasks"), ("specs/x/spec.md", "a's spec"), ("proposal.md", "a's proposal"), ("design.md", "a's design")]
+        b = [("proposal.md", "b's proposal")]
+        files = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, ["a", "b"], ["c"], [("a", a), ("b", b)],
+                                     "diff --git a/x b/x\n")
+        assert [n for n, _ in files] == ["00-y.md", "01-a-proposal.md", "01-a-design.md", "01-a-specs-x-spec.md", "01-a-tasks.md",
+                                         "02-b-proposal.md", "03-y-diff.txt"]
+        assert files[1][1] == "a's proposal" and files[-1][1] == "diff --git a/x b/x\n"
+
+    def test_a_bolt_of_chores_alone_reads_as_its_cover_and_its_diff(self):
+        files = plan.landing_reading("y", "k", "def5678", [], ["c", "d"], [], "diff --git a/x b/x\n")
+        assert [n for n, _ in files] == ["00-y.md", "01-y-diff.txt"]
+        assert plan.landing_reading("y", "k", "def5678", [], ["c"], [], "")[-1][1] == (
+            "The bolt changes nothing against main outside its change folders.\n")
+
+    def test_the_cover_names_every_unit_and_chore_and_says_the_reading_lands_nothing(self):
+        cover = plan.landing_reading("y", "switchboard-kit", "def5678" + "0" * 33, ["a", "b"], ["c"],
+                                     [("a", [("proposal.md", "")]), ("b", [("proposal.md", "")])], "")[0][1]
+        assert cover.startswith("# Bolt y, landing on switchboard-kit's main\n\nWhat lands, at its head def5678:\n\n- a\n- b\n- c (chore)\n")
+        assert "This reading lands nothing: approving the landing card is the word to land" in cover
+        assert "reaches the bolt's conductor as notes on the landing card, and a note naming a defect holds the landing for a fix" in cover
+
     def test_which_act_follows_each_event(self):
         assert plan.landing_act("proven", head="abc1234" + "0" * 33) == ("change", "Its head is now abc1234")
         assert plan.landing_act("fix", words="The zone list misses one zone.") == ("close", None, "held for a fix: The zone list misses one zone.")
