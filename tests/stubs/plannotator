@@ -14,12 +14,16 @@ $CREW_TEST_LOG. It then waits for the decision a test writes to $HOME/.stub-plan
 object ({"decision": "approved", "feedback": ...}, "annotated", or "dismissed"), and writes it as plannotator does:
 atomically to the result file and to stdout, then exits. Killed first, it writes no result.
 
+A test makes the next starts fail by writing a count to $HOME/.stub-plannotator/refuse-starts: each `annotate` while
+it is above zero takes one from it and exits 1 before registering, saying `stub: refused to start` on stderr, as a
+plannotator that ends before its session is ready does.
+
 `plannotator sessions --json` lists the registered sessions whose pid is alive, and, for the test alone, adds a line
 to $CREW_TEST_ROOT/plannotator-sessions.log, so a test knows a wait has looked.
 
 It ends by itself when its registry is gone, as when tests/run removes a passed test's scratch directory, or after
 five minutes, so no stub outlives its test for long."""
-import datetime, json, os, pathlib, sys, time
+import datetime, fcntl, json, os, pathlib, sys, time
 
 reg = pathlib.Path(os.environ["HOME"]) / ".stub-plannotator"
 LISTED = ("index", "mode", "target", "url", "port", "pid", "project", "label", "startedAt")
@@ -76,6 +80,18 @@ if result and not ("--gate" in args and "--json" in args):
 if not paths:
     print("Usage: plannotator annotate <file.md | folder/>", file=sys.stderr)
     sys.exit(2)
+
+refuse = reg / "refuse-starts"
+if refuse.exists():
+    with open(refuse, "r+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        left = int(f.read().strip() or 0)
+        if left > 0:
+            f.seek(0)
+            f.truncate()
+            f.write(f"{left - 1}\n")
+            print("stub: refused to start", file=sys.stderr)
+            sys.exit(1)
 
 host = os.environ.get("CREW_TEST_HOST", "localhost")
 url_host = os.environ.get("PLANNOTATOR_URL_HOST") or "localhost"

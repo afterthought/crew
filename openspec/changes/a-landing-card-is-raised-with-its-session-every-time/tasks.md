@@ -22,7 +22,7 @@
 
 ## 5. End to end
 
-- [ ] 5.1 The stub plannotator can refuse its next starts. `tests/t-journey-land.sh` proves the second try's link on the card, a card raised without its reading naming `crew card session` with `Unread` in the box's run record, and the conductor's wait starting the reading and changing the card. `tests/suite t-journey-land` passes, and `tests/moon.yml` is regenerated if the test's reads changed (Task notes 5.1).
+- [x] 5.1 The stub plannotator can refuse its next starts. `tests/t-journey-land.sh` proves the second try's link on the card, a card raised without its reading naming `crew card session` with `Unread` in the box's run record, and the conductor's wait starting the reading and changing the card. `tests/suite t-journey-land` passes, and `tests/moon.yml` is regenerated if the test's reads changed (Task notes 5.1).
 
 ## 6. Checks
 
