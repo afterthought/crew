@@ -1,8 +1,8 @@
 """What a team's read frees and removes (teams.1, plan.9): plan.slot_stage for the work each slot holds,
 plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
 plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
-goes with its place (plan.10) and plan.branch_said for what is said of it, and plan.unread_plans for a tidy that
-removes nothing. How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
+goes with its place (plan.10) and plan.branch_said for what is said of it, plan.bolt_branch_judged for a bolt's own
+branch and plan.kept_record for what a kept one's record says, and plan.unread_plans for a tidy that removes nothing. How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
 settles, the journey's (t-journey-merge, t-journey-fix)."""
 import pytest
 
@@ -240,7 +240,9 @@ class TestTidied:
 
 class TestBoltBranch:
     """A bolt is a branch and no worktree (record 0026): the branch crew marked when it gave the bolt goes once no plan
-    has the bolt and no worktree holds it (plan.9)."""
+    has the bolt and no worktree holds it (plan.9), and a landed bolt's only when git cherry finds nothing on it whose
+    patch main lacks, kept and named otherwise (plan.10, record 0003)."""
+    NOW = "refs/remotes/origin/main"
 
     def test_a_bolt_no_plan_has_goes(self):
         assert plan.bolt_branch_over("b", {"a"}, False) == "bolt b is in no plan"
@@ -249,30 +251,75 @@ class TestBoltBranch:
         assert plan.bolt_branch_over("b", {"b"}, False) is None
         assert plan.bolt_branch_over("b", set(), True) is None
 
+    @pytest.mark.parametrize("mark", ["given", "landed", None])
+    def test_a_bolt_still_planned_or_held_by_a_worktree_is_left_whatever_its_mark(self, mark):
+        assert plan.bolt_branch_judged("b", {"b"}, False, mark, self.NOW, (0, "+ 1a2b3c\n", "")) is None
+        assert plan.bolt_branch_judged("b", set(), True, mark, self.NOW, (0, "+ 1a2b3c\n", "")) is None
+
+    def test_a_landed_bolt_whose_every_commit_main_holds_goes_saying_so(self):
+        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "", "")) == (
+            "bolt b has landed, and origin/main holds every commit of it (git cherry)", None)
+        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "- 1a2b3c\n", ""))[1] is None
+
+    def test_a_landed_bolt_holding_a_commit_main_lacks_is_kept_and_counted(self):
+        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
+            "bolt b has landed", ("it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete", 1))
+
+    def test_a_landed_bolt_git_cannot_compare_with_main_is_kept(self):
+        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (128, "", "fatal: bad revision\n")) == (
+            "bolt b has landed", ("git cannot compare it with origin/main: fatal: bad revision", None))
+
+    @pytest.mark.parametrize("mark", ["given", None])
+    def test_a_dropped_bolts_or_one_landed_before_the_mark_goes_as_before_unread(self, mark):
+        assert plan.bolt_branch_judged("b", set(), False, mark, self.NOW, None) == ("bolt b is in no plan", None)
+
+    def test_what_is_said_of_a_landed_bolts_branch(self):
+        assert plan.branch_said("bolt/b", None, "1a2b3c4", "bolt b has landed, and origin/main holds every commit of it "
+                                "(git cherry)", None) == (
+            "bolt/b is removed: bolt b has landed, and origin/main holds every commit of it (git cherry); it was at 1a2b3c4")
+        kept = ("it holds 2 commits whose patch origin/main lacks (git cherry), the user's to keep or delete", 2)
+        assert plan.branch_said("bolt/b", None, "1a2b3c4", "bolt b has landed", kept) == (
+            "bolt/b is kept at 1a2b3c4: bolt b has landed, and it holds 2 commits whose patch origin/main lacks (git "
+            "cherry), the user's to keep or delete")
+        assert plan.branch_said("bolt/b", "/kit/bolts/b", "1a2b3c4", "bolt b has landed",
+                                ("git cannot compare it with origin/main: fatal: bad revision", None)) == (
+            "/kit/bolts/b is removed, and bolt/b is kept at 1a2b3c4: bolt b has landed, and git cannot compare it with "
+            "origin/main: fatal: bad revision, the user's to keep or delete")
+
+    def test_its_record_names_main_from_names_alone(self):
+        """record.3: the Why of a kept branch's branch.kept entry is composed from names, main named in it since the
+        run record has no kind for a kit's main."""
+        assert plan.kept_record("bolt b has landed", self.NOW, ("it holds 1 commit …", 1)) == (
+            "bolt b has landed, and origin/main lacks its patches")
+        assert plan.kept_record("bolt b has landed", self.NOW, ("git cannot compare it with origin/main: exit 1", None)) == (
+            "bolt b has landed, and git cannot compare it with origin/main: exit 1")
+
 
 class TestBranch:
     """A unit's, chore's or fix's branch goes with its place only when git cherry finds nothing on it whose patch its
-    target lacks: a unit's or chore's bolt while the bolt's branch stands, else the kit's main now; a fix's bolt or
-    nothing, or main now once a landed fix's bolt is gone (plan.10, record 0003, record 0028, teams.3). Else it is kept,
-    counted for the run record."""
+    target lacks: its bolt while the bolt's branch stands unlanded, else the kit's main now, a fix's as a unit's since
+    its bolt goes with its landing; nothing for a fix tracking no bolt (plan.10, record 0003, record 0028, teams.3).
+    Else it is kept, counted for the run record."""
     NOW = "refs/remotes/origin/main"
 
-    @pytest.mark.parametrize("kind", ["unit", "chore"])
-    def test_a_units_or_chores_is_compared_with_its_bolt_while_the_bolts_branch_stands(self, kind):
-        assert plan.branch_target(kind, "bolt/t", True, self.NOW) == "bolt/t"
+    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
+    def test_one_is_compared_with_its_bolt_while_the_bolts_branch_stands_unlanded(self, kind):
+        assert plan.branch_target(kind, "bolt/t", True, False, self.NOW) == "bolt/t"
+
+    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
+    def test_once_its_bolt_is_marked_landed_it_is_compared_with_the_kits_main_now_not_the_bolt(self, kind):
+        assert plan.branch_target(kind, "bolt/t", True, True, self.NOW) == self.NOW
+
+    @pytest.mark.parametrize("kind", ["unit", "chore", "fix"])
+    def test_once_the_bolts_branch_is_gone_it_is_compared_with_the_kits_main_now(self, kind):
+        assert plan.branch_target(kind, "bolt/gone", False, False, self.NOW) == self.NOW
 
     @pytest.mark.parametrize("kind", ["unit", "chore"])
-    def test_once_the_bolts_branch_is_gone_it_is_compared_with_the_kits_main_now(self, kind):
-        assert plan.branch_target(kind, "bolt/gone", False, self.NOW) == self.NOW
-        assert plan.branch_target(kind, "", False, "refs/heads/main") == "refs/heads/main"
+    def test_a_unit_or_chore_tracking_nothing_is_compared_with_main(self, kind):
+        assert plan.branch_target(kind, "", False, False, "refs/heads/main") == "refs/heads/main"
 
     def test_a_fix_tracking_no_bolt_has_nothing_to_compare_with(self):
-        assert plan.branch_target("fix", "", False, self.NOW) is None
-
-    def test_a_landed_fix_is_compared_with_the_kits_main_now_once_its_bolts_branch_is_gone(self):
-        assert plan.branch_target("fix", "bolt/gone", False, self.NOW, landed=True) == self.NOW
-        assert plan.branch_target("fix", "bolt/t", True, self.NOW, landed=True) == "bolt/t"
-        assert plan.branch_target("fix", "", False, self.NOW, landed=True) is None
+        assert plan.branch_target("fix", "", False, False, self.NOW) is None
 
     def test_only_plus_lines_are_counted_and_keep_it(self):
         assert plan.branch_kept("bolt/t", (0, "+ 1a2b3c\n- 4d5e6f\n+ 7a8b9c\n", "")) == (
