@@ -431,3 +431,56 @@ def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_mer
     repo.commit("feat: the bolt's own", {"other": "o\n"})
     repo.git("merge", "-q", "--no-ff", "-m", "chore(land): #1 unit/a", "unit/a")
     assert plan.landed_at(str(repo.path), "b", "a") == made
+
+
+def test_git_cherry_finds_nothing_of_a_units_own_once_its_commits_reached_the_bolt_rebased(repo):
+    """plan.branch_gone and plan.branch_kept (plan.10, record 0003): a unit's commits that reached its bolt under other
+    hashes, rebased or cherry-picked as they merged, are - lines to git cherry, which compares each commit's patch, so
+    the branch goes; a commit whose patch the bolt lacks is a + line, so it is kept."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("checkout", "-q", "-b", "unit/u", "bolt/b")
+    one = repo.commit("feat(u): one", {"u1": "1\n"})
+    two = repo.commit("feat(u): two", {"u2": "2\n"})
+    repo.git("checkout", "-q", "bolt/b")
+    repo.commit("feat: the bolt's own", {"other": "o\n"})
+    repo.git("cherry-pick", one, two)
+    assert repo.git("rev-parse", "bolt/b") != two
+    assert repo.git("cherry", "bolt/b", "unit/u") == f"- {one}\n- {two}"
+    repo.git("checkout", "-q", "unit/u")
+    three = repo.commit("feat(u): three", {"u3": "3\n"})
+    assert repo.git("cherry", "bolt/b", "unit/u").splitlines()[-1] == f"+ {three}"
+
+
+def test_git_cherry_does_not_list_a_merge_commit_on_the_branch(repo):
+    """plan.branch_kept (plan.10): a dependent's branch that took another unit's head by a merge counts only its own
+    commits whose patch the bolt lacks, since git cherry leaves merge commits out."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("checkout", "-q", "-b", "unit/a", "bolt/b")
+    a = repo.commit("feat(a): its own", {"a": "a\n"})
+    repo.git("checkout", "-q", "-b", "unit/d", "bolt/b")
+    repo.git("merge", "-q", "--no-ff", "-m", "chore(d): build on a", "unit/a")
+    merge = repo.git("rev-parse", "HEAD")
+    repo.git("checkout", "-q", "bolt/b")
+    repo.git("merge", "-q", "--no-ff", "-m", "Merge a", "unit/a")
+    assert merge not in repo.git("cherry", "bolt/b", "unit/d")
+    assert repo.git("cherry", "bolt/b", "unit/d") == ""
+    repo.git("checkout", "-q", "unit/d")
+    d = repo.commit("feat(d): its own", {"d": "d\n"})
+    assert repo.git("cherry", "bolt/b", "unit/d") == f"+ {d}" and a not in repo.git("cherry", "bolt/b", "unit/d")
+
+
+def test_a_deleted_bolt_is_still_named_as_the_upstream_but_neither_compared_nor_found(repo, tmp_path):
+    """plan.branch_target, through branch_gone (plan.10): once the bolt's branch is gone, %(upstream:short), which
+    gather.upstreams reads, still names it, so whether the bolt exists is read with rev-parse --verify; git cherry
+    against it exits non-zero, which keeps the branch when nothing else is compared (read.1)."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("worktree", "add", "-q", "--track", "-b", "unit/u", str(tmp_path / "place"), "bolt/b")
+    repo.git("branch", "-q", "-D", "bolt/b")
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/u") == "bolt/b"
+    verify = subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", "refs/heads/bolt/b"], capture_output=True, text=True)
+    assert verify.returncode != 0 and verify.stdout == ""
+    cherry = subprocess.run(["git", "-C", str(repo.path), "cherry", "bolt/b", "unit/u"], capture_output=True, text=True)
+    assert cherry.returncode != 0 and "bolt/b" in cherry.stderr
