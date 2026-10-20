@@ -16,4 +16,4 @@
 
 ## 4. The docs say it
 
-- [ ] 4.1 README and `plugin/roles/planner.md` say a drop keeps, named, a branch holding work its bolt lacks, and that a unit added again under its name starts from it; `tests/suite docs briefs` passes (design: Task notes 4.1; `docs.2`).
+- [x] 4.1 README and `plugin/roles/planner.md` say a drop keeps, named, a branch holding work its bolt lacks, and that a unit added again under its name starts from it; `tests/suite docs briefs` passes (design: Task notes 4.1; `docs.2`).
