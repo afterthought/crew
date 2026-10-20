@@ -3,7 +3,7 @@
 ## 1. The refusal and the check
 
 - [x] 1.1 `crew signal`'s refusal of an excerpt keeps its present opening and names a background task's output, which is in the transcript only once its output file is read, decided by `excerpt_refusal` in `plan.py` and proved by a case in `tests/py/test_signals.py` and `tests/suite t-journey-signals` passing unedited (design: *The refusal's words*; Task notes 1.1; `code.7`, `signals.2`).
-- [ ] 1.2 Logic cases in `tests/py/test_transcript.py` prove, on records shaped as Claude Code 2.1.303 writes them, that a crew command's printed line is verified as a tool's and refused recapitalized, and that a background task's output is refused until a Read of its file puts it in the transcript, then verified as a tool's, two lines together included, with `transcript.py` unchanged (design: *Context*; Task notes 1.2; `signals.2`, `signals.5`).
+- [x] 1.2 Logic cases in `tests/py/test_transcript.py` prove, on records shaped as Claude Code 2.1.303 writes them, that a crew command's printed line is verified as a tool's and refused recapitalized, and that a background task's output is refused until a Read of its file puts it in the transcript, then verified as a tool's, two lines together included, with `transcript.py` unchanged (design: *Context*; Task notes 1.2; `signals.2`, `signals.5`).
 
 ## 2. What the agents and the README say
 
