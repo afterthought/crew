@@ -8233,8 +8233,8 @@ def rail_text(fleet, labels, read, now):
     crew could not read (unread_card_acts); then the decision records waiting on the user, each the design
     agent's open card for one, with when it was asked and by whom, and no command, since the card is where it is
     answered; then any open card whose row is gone that the sweep did not close, with the host whose rail read closes
-    it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, each partition it
-    changed nothing for and why, each card session ended, with its host and why, and each host whose sessions were not
+    it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, and each batch it
+    closed or left with no card, named so, each partition it changed nothing for and why, each card session ended, with its host and why, and each host whose sessions were not
     checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
     (the board's) gives the same text."""
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
@@ -8285,7 +8285,8 @@ def rail_text(fleet, labels, read, now):
         lines.append(when(c) + f"{c['key']} ({c['label']}), asked by {c['by']} on {c['host']}")
         lines.append(f"    {'left:':<8}" + (f"a rail read on {c['host']} closes it, under that host's sign-in" if c["host"] != here
                                             else "a later rail read here closes it"))
-    done = [f"  {d['key'] or 'a question'} ({d['label']}), {d['by']}'s {d['card'] or d['new']}: {d['did']}: {d['words']}" for d in swept["done"]]
+    done = [f"  {d['key'] or 'a question'} ({d['label']}), {d['by']}" + (f"'s {d['card'] or d['new']}" if d["card"] or d["new"] else ", no card")
+            + f": {d['did']}: {d['words']}" for d in swept["done"]]
     lines += (["", "cards swept:"] + done if done else []) + (
         ["", "cards not swept:"] + [f"  {u['label']}: {u['why']}" for u in swept["unswept"]] if swept["unswept"] else [])
     ended = [f"  {e['key']}{' ' + e['unit'] if e['unit'] else ''} ({e['label']}) on {e['host']}: {e['why']}; {e['said']}"

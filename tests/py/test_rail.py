@@ -214,6 +214,18 @@ class TestText:
             "  proposal/17 (wldn), wldn-planner's req_1: lost: posted again as req_2"]
         assert out.endswith("cards not swept:\n  madswan: this host can't ask through Pending You")
 
+    def test_a_batch_crew_closed_with_no_card_is_named_so_beside_its_card_withdrawn(self):
+        """review-batches, "Its card is already open": the read says both what it closed and the card it withdrew."""
+        words = "its batch waits on nothing: x1 and x2 have landed"
+        done = [dict(label="wldn", key="batch/3", card=None, by="wldn-planner", did="closed", words=words, new=None),
+                dict(label="wldn", key="batch/3", card="req_b3", by="wldn-planner", did="withdrawn", words=words, new=None),
+                dict(label="wldn", key="proposal/5", card=None, by="wldn-planner", did="left", words="its raise refused: x", new=None)]
+        out = text([], swept={"done": done, "unswept": []})
+        assert out.split("cards swept:\n")[1].splitlines() == [
+            f"  batch/3 (wldn), wldn-planner, no card: closed: {words}",
+            f"  batch/3 (wldn), wldn-planner's req_b3: withdrawn: {words}",
+            "  proposal/5 (wldn), wldn-planner, no card: left: its raise refused: x"]
+
     def test_a_card_posted_again_under_its_rows_key_is_the_rows_and_the_older_is_listed_lost(self):
         """The rail-cards scenario: req_1 under proposal/17 read not found and the read posted req_2, so the row's card
         line names req_2, and req_1 is listed lost."""
