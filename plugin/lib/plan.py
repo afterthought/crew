@@ -1567,6 +1567,19 @@ def land_facts(fleet, label, plan, b, t):
     return dict(card, team=t["name"], host=t["machine"], base=base), None
 
 
+def landing_retry(why, fresh, fresh_why):
+    """What follows a first refusal of a landing's reading at a raise (card-sessions "A landing's raise tries its
+    reading again before raising without it"), from that refusal (why), the landing read afresh once the kit's main was
+    fetched, as land_facts gives it (fresh, (facts, why it does not read proven)), or why that read was refused
+    (fresh_why, fresh None): ("again", facts) to open the reading once more with the fresh facts, the card's from then;
+    ("none", None) when the bolt no longer reads proven, so the raise posts and changes nothing; ("stand", why) when
+    the fresh read was refused, the first facts and the first reason standing (read.1)."""
+    if fresh_why:
+        return "stand", why
+    facts, unproven = fresh
+    return ("none", None) if unproven else ("again", facts)
+
+
 def raise_land(fleet, row, acts=None, note=None):
     """A bolt's landing card raised (record 0031 §1, plan.16), for its rail row land/<bolt>, on the host of the team
     holding the bolt, where its conductor's cards are: once the bolt reads proven (land_facts), in the conductor's name,
