@@ -574,6 +574,10 @@ def trace_start(found, obj):
 
 # ------------------------------------------------------------------------------------------------- command
 
+OBJECT = ("a typed name, unit/<unit>, bolt/<bolt>, signals/<id> and the rest, where a signal's <id> is its full id, "
+          "<capture>/<NN>-<slug>, or its short one, <capture>/<NN>")
+
+
 def parser():
     ap = argparse.ArgumentParser(prog="crew", add_help=False)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -590,13 +594,13 @@ def parser():
     sub.add_parser("session")
     x = sub.add_parser("events")
     x.add_argument("--label")
-    x.add_argument("--about")
+    x.add_argument("--about", metavar="object", help=OBJECT)
     x.add_argument("--since")
     x.add_argument("--follow", action="store_true")
     x.add_argument("--push", action="store_true")
     x.add_argument("--json", action="store_true")
     x = sub.add_parser("trace")
-    x.add_argument("object")
+    x.add_argument("object", help=OBJECT + "; a bare name is tried as a unit, then a chore, a bolt and a signal")
     x.add_argument("--label")
     return ap
 
