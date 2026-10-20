@@ -17,7 +17,7 @@
 
 ## 4. The words
 
-- [ ] 4.1 The conductor's brief and README say the landing card lists a preview's addresses, which crew asks for, replaces and releases, and which lands nothing; proved by `tests/t-briefs.sh` and `tests/t-docs.sh` (design, *Task notes* 4.1).
+- [x] 4.1 The conductor's brief and README say the landing card lists a preview's addresses, which crew asks for, replaces and releases, and which lands nothing; proved by `tests/t-briefs.sh` and `tests/t-docs.sh` (design, *Task notes* 4.1).
 
 ## 5. The journey
 
