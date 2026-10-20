@@ -1063,6 +1063,62 @@ class TestFollows:
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
 
 
+
+class TestTheRefusedDeployCards:
+    """The run record of 2026-10-19 23:54Z to 2026-10-20 00:16Z on swancloud/main (runs/mac-studio/2026-10-19.rec and
+    2026-10-20.rec, signal 2026-10-20-swancloud-planner-c422e742/01): swc-2-conductor's landing card for
+    the-box-works-in-wldn-prod, the landing leaving swancloud's main at ddcf2cb, and the deployer's offers of ddcf2cb to
+    five environments, whose every card swancloud-ops posted followed that landing card and was refused as another
+    agent's. Each now follows no card; and a post Pending You refuses is recorded refused in its words."""
+    OPS, HEAD = "swancloud-ops", "ddcf2cb4e5ad15281a11fe1e636d17dfed9c66b9"
+    LANDING = "req_5de89eb68b7c495fbb36"
+    ENVS = ("deneb", "mac-studio", "macbook-pro", "chuck-herdr-alpha", "swancloud-srv")
+    WORDS = "This is swc-2-conductor’s card; leave it. You’re “swancloud-ops”: act only on the cards you posted."
+    WHERE = ("/kit/main", "github.com/agentplot/swancloud")
+    ENTRIES = ([dict(Act="card.post", At="2026-10-19T18:02:11Z", On=["env/deneb"], By=OPS, Key="deploy/deneb", Card="req_deneb1"),
+                dict(Act="card.close", At="2026-10-19T18:40:03Z", On=["env/deneb"], By=OPS, Key="deploy/deneb", Card="req_deneb1",
+                     State="closed"),
+                dict(Act="card.post", At="2026-10-19T21:50:41Z", On=["bolt/the-box-works-in-wldn-prod"], By="swc-2-conductor",
+                     Key="land/the-box-works-in-wldn-prod", Card=LANDING),
+                dict(Act="bolt.land", At="2026-10-19T23:36:27Z", On=["bolt/the-box-works-in-wldn-prod"], By="swancloud-ops",
+                     Head=HEAD, Repo="swancloud")]
+               + [dict(Act="ops.offer", At=f"2026-10-19T23:5{4 + i}:39Z", On=[f"env/{env}"], By="swancloud-deployer", Head=head,
+                       Base="d46500a" + "0" * 33) for i, env, head in zip(range(5), ENVS, [HEAD] * 5)]
+               + [dict(Act="card.close", At="2026-10-19T23:57:19Z", On=["bolt/the-box-works-in-wldn-prod"], By="swc-2-conductor",
+                       Key="land/the-box-works-in-wldn-prod", Card=LANDING, State="closed")])
+
+    def facts(self, follows):
+        return dict(env="deneb", head=self.HEAD, base="d46500a" + "0" * 33,
+                    landings=[{"pr": None, "subject": "the-box-works-in-wldn-prod"}], notes=None, steps=[], before=[], after=[],
+                    follows=follows)
+
+    def test_none_of_the_five_environments_deploy_cards_follows_the_conductors_landing_card(self):
+        """rail-cards "Five environments offered that head"."""
+        assert [built.follows_of("deploy", {"env": env, "head": self.HEAD}, self.ENTRIES, self.OPS) for env in self.ENVS] == [None] * 5
+
+    def test_a_post_pending_you_refuses_is_recorded_refused_in_its_words_and_refuses_nothing_else(self, capsys):
+        """rail-cards "Pending You refuses a deploy card"."""
+        from test_card_commands import Acts, MATCHED
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (None, self.WORDS)}, entries=self.ENTRIES, caller=self.OPS)
+        follows = built.follows_of("deploy", {"env": "deneb", "head": self.HEAD}, self.ENTRIES, self.OPS)
+        assert plan.row_card_post(None, "swancloud", self.OPS, built.deploy_card, self.facts(follows), self.WHERE, acts) is None
+        assert acts.emitted == [{"Act": "card.post", "On": ["env/deneb"], "label": "swancloud", "by": self.OPS, "Key": "deploy/deneb",
+                                 "refused": f"Pending You refused post_request: {self.WORDS}"}]
+        assert f"card deploy/deneb not posted: Pending You refused post_request: {self.WORDS}" in capsys.readouterr().err
+
+    def test_the_post_sends_no_follows_and_its_face_names_the_landing(self):
+        """rail-cards "A deploy of the head a landing left"."""
+        from test_card_commands import Acts, MATCHED, POSTED
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_deneb2"), None)},
+                    entries=self.ENTRIES, caller=self.OPS)
+        follows = built.follows_of("deploy", {"env": "deneb", "head": self.HEAD}, self.ENTRIES, self.OPS)
+        assert plan.row_card_post(None, "swancloud", self.OPS, built.deploy_card, self.facts(follows), self.WHERE, acts) == "req_deneb2"
+        sent = next(a for t, a in acts.calls if t == "post_request")
+        assert sent["idempotencyKey"] == "deploy/deneb:2" and "follows" not in sent
+        assert sent["artifacts"][0]["lines"] == ["the-box-works-in-wldn-prod"]
+        assert [(e["Act"], e["Card"], e["Key"], e["by"]) for e in acts.emitted] == [("card.post", "req_deneb2", "deploy/deneb", self.OPS)]
+
+
 class TestStep:
     def test_the_users_step_is_a_do_with_its_commands_whole_where_and_done_when(self):
         b = built.step_card(dict(env="srv", n=1, text="rotate the kanidm admin password", doer="user", held=False,
