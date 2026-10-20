@@ -12,4 +12,4 @@
 
 ## 3. The whole change
 
-- [ ] 3.1 `tests/suite --affected` ends with "0 failed" (Task notes 3.1; `tests.5`).
+- [x] 3.1 `tests/suite --affected` ends with "0 failed" (Task notes 3.1; `tests.5`).
