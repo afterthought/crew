@@ -336,6 +336,9 @@ case $cmd in
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
+  _preview)  # crew _preview <label> <bolt> <head>: a landing card's preview of the bolt's head, asked of sluice and
+    # waited on to its end in a process of its own on the team's host, which the card's raise hands it to (code.9)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   main)
     need_label "${3:-}"
     case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;

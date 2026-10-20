@@ -269,6 +269,9 @@ class Acts:
     def end(self, label, key):  # no reading recorded on this host, so its close ends none
         return None
 
+    def release_preview(self, label, key):  # no preview recorded on this host, so its close releases none
+        return None
+
     def host(self):
         return "chuck-herdr-alpha"
 

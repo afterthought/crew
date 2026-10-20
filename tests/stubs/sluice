@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Stub sluice for crew's tests, answering the reads crew makes of it as sluice 0.18.0 does. `sluice overview --json`
-# prints $CREW_TEST_ROOT/sluice-overview.json while it exists, else the document sluice prints for a repository whose
-# branches have no records yet; `sluice status <id> --json` prints $CREW_TEST_ROOT/sluice-status-<id>.json while it
-# exists, else sluice's not-found error on standard output, exiting 1. Outside a git worktree it fails as sluice does,
-# exiting 3, and anything else is refused, exiting 2. Every call is logged to $CREW_TEST_LOG as `<host> sluice <args>
-# in <the directory it ran in>`.
+# Stub sluice for crew's tests, answering the reads crew makes of it as sluice 0.18.0 does, and its previews as sluice
+# 0.29.3 does. `sluice overview --json` prints $CREW_TEST_ROOT/sluice-overview.json while it exists, else the document
+# sluice prints for a repository whose branches have no records yet; `sluice status <id> --json` prints
+# $CREW_TEST_ROOT/sluice-status-<id>.json while it exists, else sluice's not-found error on standard output, exiting 1.
+# `sluice preview <branch> <revision> [--wait] --json` refuses, as sluice does, a revision whose .config/sluice.toml has
+# no [preview] table, exiting 2; else it gives back the preview of that revision when one is recorded, starting
+# nothing, or records one in $CREW_TEST_ROOT/sluice-previews/<revision>.json, its addresses the table's `addresses`
+# with each {name.<port>} filled as <port>-<rev7>--<branch, its / as ->--kit; it reads `starting` while
+# $CREW_TEST_ROOT/sluice-preview-holds exists, the stack taking its time, then `up`, or `failed` with its command's
+# output while $CREW_TEST_ROOT/sluice-preview-fails exists, --wait then exiting 1. `sluice previews --json` lists the
+# records; `sluice release <name or revision> --json` removes one, {"preview", "released"}, exiting 0 also when there
+# was none. Outside a git worktree it fails as sluice does, exiting 3, and anything else is refused, exiting 2. Every
+# call is logged to $CREW_TEST_LOG as `<host> sluice <args> in <the directory it ran in>`.
 set -uo pipefail
 [[ -n ${CREW_TEST_LOG:-} ]] && printf '%s sluice %s in %s\n' "${CREW_TEST_HOST:-?}" "$*" "$(pwd -P)" >> "$CREW_TEST_LOG"
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
@@ -23,6 +30,62 @@ case "$*" in
     if [[ -e ${CREW_TEST_ROOT:?}/sluice-status-$id.json ]]; then cat "$CREW_TEST_ROOT/sluice-status-$id.json"; exit 0; fi
     printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "$id"
     exit 1
+    ;;
+  "previews --json" | release\ *\ --json | preview\ *\ --json)
+    : "${CREW_TEST_ROOT:?}"
+    exec python3 -c '
+import hashlib, json, os, pathlib, re, subprocess, sys, time, tomllib
+args, root = sys.argv[1:], pathlib.Path(os.environ["CREW_TEST_ROOT"])
+kept = root / "sluice-previews"
+kept.mkdir(exist_ok=True)
+
+
+def say(doc, code=0):
+    print(json.dumps(doc, sort_keys=True))
+    sys.exit(code)
+
+
+def refused(kind, message):
+    say({"error": {"kind": kind, "message": message, "next": []}}, 2)
+
+
+if args[0] == "previews":
+    say([json.loads(p.read_text()) for p in sorted(kept.glob("*.json"))])
+if args[0] == "release":
+    for p in sorted(kept.glob("*.json")):
+        d = json.loads(p.read_text())
+        if args[1] in (d["name"], d["revision"]):
+            p.unlink()
+            say({"preview": d["name"], "released": True})
+    say({"preview": args[1], "released": False})
+branch, rev, wait = args[1], args[2], "--wait" in args
+full = subprocess.run(["git", "rev-parse", "--verify", "-q", rev + "^{commit}"], capture_output=True, text=True).stdout.strip()
+full or refused("not_found", f"{rev} is no revision of this repository")
+policy = subprocess.run(["git", "show", f"{full}:.config/sluice.toml"], capture_output=True, text=True)
+table = tomllib.loads(policy.stdout).get("preview") if policy.returncode == 0 else None
+isinstance(table, dict) or refused("refused", f"{full[:7]} has no [preview] table in .config/sluice.toml")
+p = kept / f"{full}.json"
+if p.exists():  # one preview of a revision, given back unchanged
+    d = json.loads(p.read_text())
+    say(d, 1 if wait and d["state"] == "failed" else 0)
+named = f"{full[:7]}--{branch.replace(chr(47), chr(45))}--kit"
+d = {"name": "preview/" + hashlib.sha1(full.encode()).hexdigest()[:12], "branch": branch, "revision": full,
+     "state": "starting", "made": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "checkout": os.getcwd(),
+     "names": {}, "ports": {},
+     "addresses": {k: re.sub(r"\{name\.([a-z0-9-]+)\}", lambda m: f"{m.group(1)}-{named}", v) for k, v in table.get("addresses", {}).items()}}
+p.write_text(json.dumps(d))
+end = time.monotonic() + 600
+while (root / "sluice-preview-holds").exists() and p.exists() and time.monotonic() < end:
+    time.sleep(0.1)
+if not p.exists():  # released while it came up
+    sys.exit(130)
+if (root / "sluice-preview-fails").exists():
+    d.update(state="failed", output="starting web\nstub: the preview command failed: web did not come up\n")
+else:
+    d["state"] = "up"
+p.write_text(json.dumps(d))
+say(d, 1 if d["state"] == "failed" else 0)
+' "$@"
     ;;
   *) echo "sluice stub: sluice $* is not stubbed" >&2; exit 2 ;;
 esac

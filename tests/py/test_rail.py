@@ -469,6 +469,9 @@ class Acts:
     def end(self, label, key):
         return None
 
+    def release_preview(self, label, key):
+        return None
+
 
 def swept(rows_=(), cards_=(), entries=(), unread=None, **kw):
     """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards."""
