@@ -439,6 +439,66 @@ def test_a_post_pending_you_answers_with_the_card_the_record_already_holds_open_
                                        "call get_request (requestId req_c1, name swb-1-conductor)\n")
 
 
+# A step's card following its deploy's card, which swancloud-ops's run record still holds open (rail-cards: a post
+# that follows an open card reads it).
+DEPLOY_HELD = [post("deploy/srv", "swancloud-ops", "req_d1")]
+
+
+def act_follow(get_request, entries=DEPLOY_HELD, follows="req_d1"):
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s1"), None), "get_request": get_request},
+                entries=entries, caller="swancloud-ops")
+    facts = dict(STEP, follows=follows) if follows else STEP
+    return acts, plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, facts, WHERE, acts)
+
+
+def test_a_post_following_a_card_pending_you_then_reports_resolved_records_the_post_and_then_that_card_closed(capsys):
+    acts, card = act_follow(({"status": "resolved", "version": 4}, None))
+    assert card == "req_s1"
+    assert [t for t, _ in acts.calls] == ["match_area", "post_request", "get_request"]
+    assert acts.calls[1][1]["follows"] == "req_d1" and acts.calls[2][1] == {"requestId": "req_d1", "name": "swancloud-ops"}
+    assert [(e["Act"], e["On"], e["Card"], e["Key"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+        ("card.post", ["env/srv"], "req_s1", "op/srv/1", None, None),
+        ("card.close", ["env/srv"], "req_d1", "deploy/srv", "closed", plan.FOLLOWED)]
+    assert capsys.readouterr().out.splitlines()[-1] == "card deploy/srv: req_d1 picked up in Pending You by req_s1, which follows it"
+    assert cards.card_under(DEPLOY_HELD + [dict(e, By=e["by"]) for e in acts.emitted], "deploy/srv", "swancloud-ops") is None
+
+
+@pytest.mark.parametrize("status", ["pending", "answered"])
+def test_a_post_following_a_card_that_still_waits_or_is_answered_leaves_it_open(status):
+    acts, card = act_follow(({"status": status, "turn": "agent", "version": 3}, None))
+    assert card == "req_s1" and [t for t, _ in acts.calls] == ["match_area", "post_request", "get_request"]
+    assert [e["Act"] for e in acts.emitted] == ["card.post"]
+
+
+@pytest.mark.parametrize("get_request, why", [
+    ((None, "Too many requests."), "Pending You refused get_request: Too many requests."),
+    ((None, "Not found: request:req_d1."), "Pending You refused get_request: Not found: request:req_d1."),
+    (crew.Refusal(f"Pending You did not answer get_request within 60 seconds. {plan.CARD_LATER}"),
+     "Pending You did not answer get_request within 60 seconds.")])
+def test_a_post_whose_read_of_the_card_it_follows_fails_stands_and_says_so(capsys, get_request, why):
+    acts, card = act_follow(get_request)
+    assert card == "req_s1" and [(e["Act"], e.get("refused")) for e in acts.emitted] == [("card.post", None)]
+    assert capsys.readouterr().err == f"card deploy/srv: whether req_d1 was picked up can't be read: {why}\n"
+
+
+@pytest.mark.parametrize("entries, follows", [
+    (DEPLOY_HELD, None),
+    (DEPLOY_HELD + [dict(Act="card.close", Card="req_d1", Key="deploy/srv", By="swancloud-ops", State="closed")], "req_d1"),
+    ([post("deploy/srv", "swb-1-conductor", "req_d1")], "req_d1")])
+def test_a_post_following_nothing_or_a_card_the_record_holds_closed_reads_nothing(entries, follows):
+    acts, card = act_follow(({"status": "resolved", "version": 4}, None), entries, follows)
+    assert card == "req_s1" and [t for t, _ in acts.calls] == ["match_area", "post_request"]
+    assert [e["Act"] for e in acts.emitted] == ["card.post"]
+
+
+def test_a_post_following_a_card_given_back_as_already_recorded_reads_nothing():
+    acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s1"), None)}, caller="swancloud-ops")
+    acts.entries = lambda label: DEPLOY_HELD + ([post("op/srv/1", "swancloud-ops", "req_s1")]
+                                                if any(t == "post_request" for t, _ in acts.calls) else [])
+    plan.row_card_post(None, "swancloud", "swancloud-ops", cards.step_card, dict(STEP, follows="req_d1"), WHERE, acts)
+    assert [t for t, _ in acts.calls] == ["match_area", "post_request"] and acts.emitted == []
+
+
 POST, CLOSE = (lambda card, by="swb-1-conductor", key="land/b1": dict(Act="card.post", Key=key, By=by, Card=card),
                lambda card, state="closed": dict(Act="card.close", Card=card, State=state))
 

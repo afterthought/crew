@@ -74,6 +74,16 @@ class TestRows:
                                    ("decline", "crew ops step mac-studio --key rotate-tailnet-key --state declined --label swancloud")]
         assert ops.rows(None, "swancloud", steps + [e("ops.step", minutes=4, Key="rotate-tailnet-key", State="declined", Doer="user")])[1:] == []
 
+    def test_a_gates_step_is_a_row_saying_the_deploy_waits_at_its_gate_for_the_user_with_its_link(self):
+        row, = ops.rows(None, "wldn", [gate()])
+        assert row["key"] == "op/dev/1"
+        assert row["what"] == [f"the deploy of dev to 4f2a9c1 waits at its gate (wldn), yours to approve there: {RUN}"]
+        assert row["cmds"] == [("done", f"crew ops step dev --to {SHA4} --key gate-38612817613 --state done --label wldn"),
+                               ("decline", f"crew ops step dev --to {SHA4} --key gate-38612817613 --state declined --label wldn")]
+        bare, = ops.rows(None, "wldn", [gate(Head=None)])
+        assert bare["what"] == [f"a deploy of dev waits at its gate (wldn), yours to approve there: {RUN}"]
+        assert ops.rows(None, "wldn", [gate(), gate(State="done")]) == []
+
     def test_a_waiting_steps_row_keeps_its_key_when_an_earlier_steps_state_changes(self):
         steps = [e("ops.step", minutes=1, Key="restart-herdr", State="waiting", Doer="user"),
                  e("ops.step", minutes=2, Key="rotate-tailnet-key", State="waiting", Doer="user")]
@@ -171,6 +181,13 @@ class TestEnvironments:
             ("restart-teams/1", "handed", None, None, False), ("rotate-tailnet-key", "waiting", "op/mac-studio/2", "Rotate the key.", False),
             ("restart-herdr", "failed", None, None, False), ("restart-teams/2", "waiting", "op/mac-studio/5", None, True)]
         assert ops.environments(es)["mac-studio"]["deploys"] == []
+
+    def test_each_operation_waiting_says_whether_it_is_a_gate_and_gives_its_link(self):
+        es = [gate(), e("ops.step", env="dev", minutes=2, Key="rotate-key", State="waiting", Doer="user", Text="Rotate the key."),
+              e("ops.step", env="dev", minutes=3, Key="restart", State="handed", Doer="dispatcher", Text=RUN)]
+        waiting = ops.environments(es)["dev"]["waiting"]
+        assert [(w["key"], w["to"], w["gate"], w["row"]) for w in waiting] == [
+            ("gate-38612817613", SHA4, RUN, "op/dev/1"), ("rotate-key", None, None, "op/dev/2"), ("restart", None, None, None)]
 
 
 class TestCarried:
@@ -398,6 +415,41 @@ class TestStepCard:
         assert ops.step_facts("mac-studio", 2, step, "swancloud", "herdr did not answer")["consequences"]["now"] == (
             "It runs at once, whatever is working on mac-studio: crew could not tell what is (herdr did not answer)")
         assert ops.step_facts("mac-studio", 2, dict(step, Text=None), "swancloud")["text"] == "restart-teams/1"
+
+
+RUN = "https://github.com/WilldanGroup/switchboard-kit/actions/runs/38612817613"
+SHA4 = "4f2a9c1" + "0" * 33
+
+
+def gate(text=RUN + "\n", **f):
+    """swb-4's break-glass stand, 2026-10-14: switchboard-kit's run held at dev's gate, whose one reviewer is the user,
+    recorded as the user's step with the gate's link as its text (plan.14)."""
+    return e("ops.step", env="dev", minutes=1, Key="gate-38612817613", **dict(dict(Head=SHA4, State="waiting", Doer="user", Text=text), **f))
+
+
+class TestGate:
+    def test_a_users_step_whose_words_are_one_link_alone_is_a_gate_its_facts_carrying_the_link_and_the_commit(self):
+        assert ops.gate_of(gate()) == RUN
+        f = ops.step_facts("dev", 1, gate(), "wldn")
+        assert (f["gate"], f["to"], f["text"], f["doer"], f["why"]) == (RUN, SHA4, RUN, "user", None)
+        assert ops.step_facts("dev", 1, gate(Head=None), "wldn")["to"] is None
+
+    def test_a_link_with_a_why_after_it_is_a_gate_with_its_why(self):
+        f = ops.step_facts("dev", 1, gate(RUN + "\n- why: the break-glass stand, while the tenant is down.\n"), "wldn")
+        assert (f["gate"], f["why"]) == (RUN, "the break-glass stand, while the tenant is down.")
+
+    def test_words_around_a_link_or_an_agents_step_are_no_gate(self):
+        assert ops.gate_of(gate("Open https://example.com and rotate the key")) is None
+        assert ops.gate_of(gate(f"{RUN} {RUN}")) is None and ops.gate_of(gate("ftp://example.com/run")) is None
+        assert ops.gate_of(gate(Doer="main-ops", Agent="wldn-ops", When="held")) is None
+        assert ops.step_facts("dev", 1, gate(Text=None), "wldn")["gate"] is None
+
+    def test_the_gates_card_is_the_users_do_to_approve_it_there_and_an_agents_step_held_with_a_link_is_the_choice_of_when(self):
+        c = cards.step_card(ops.step_facts("dev", 1, gate(), "wldn"))["card"]
+        assert (c["title"], c["kind"], c["action"]["steps"], c["action"]["where"]) == (
+            "Approve the deploy of 4f2a9c1 to dev at its gate", "action", [{"text": RUN}], RUN)
+        held = ops.step_facts("dev", 1, gate(Doer="main-ops", Agent="wldn-ops", When="held"), "wldn", [])
+        assert cards.step_card(held)["card"]["kind"] == "choice"
 
 
 def card(act, key, card_id, minutes, **f):

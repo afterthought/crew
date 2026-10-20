@@ -8839,6 +8839,8 @@ RENEWED = "changed in kind: a new card follows it"
 REASKED = "changed with its questions: a new card follows it"
 # A card Pending You had ended already, by another hand than crew's close, as its close is recorded (cards.ended).
 ENDED_ELSEWHERE = "ended in Pending You already"
+# A card Pending You resolved as crew's post of a card following it went in, as its close is recorded (card_posted).
+FOLLOWED = "picked up in Pending You by the card that follows it"
 
 
 def card_where(kit):
@@ -8893,30 +8895,67 @@ def card_posted(acts, label, owner, b, where, entries=None):
     and recorded under the row's key. A post Pending You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
     this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
-    that card, printed with the line that adopts it and recorded once, by the command that recorded it first."""
+    that card, printed with the line that adopts it and recorded once, by the command that recorded it first. A post
+    that follows a card of the owner's those entries still hold open reads that card once it is made, and records it
+    closed when Pending You has ended it, as it picks up an answered card a new card follows (followed_closed); one
+    given back as recorded already reads nothing, the command that recorded it having read it."""
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
     cwd, remote = where
-    asked = cards.post_key(acts.entries(label) if entries is None else entries, key, owner)
+    known = acts.entries(label) if entries is None else entries
+    asked = cards.post_key(known, key, owner)
+    follows = b["card"].get("follows")
+    held = cards.followed_open(known, follows, owner) if follows else None
     try:
         with acts.bridge(owner, CARD_LATER) as py:
             area = card_area(py, label, cwd, remote, owner)
             got = py.call("post_request", cards.post_args(b["card"], asked, owner, acts.host(), cwd, area))
             card = cards.request_id(got, "post_request")
             card_uploaded(acts, key, b, got)
+            again = cards.card_under(acts.entries(label), key, owner) == card
+            read = followed_read(py, follows, owner) if held and not again else None
     except Refusal as e:
         acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
         print(f"card {key} not posted: {e}", file=sys.stderr)
         return None
     url = got.get("url")
     url = f" {url}" if isinstance(url, str) else ""
-    if cards.card_under(acts.entries(label), key, owner) == card:
+    if again:
         print(f"card {key}: {card}{url}, its post recorded already")
         print(cards.adopt_line(card, owner))
         return card
     acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
     print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
+    if held:
+        followed_closed(acts, label, owner, held, follows, card, *read)
     return card
+
+
+def followed_read(py, card, owner):
+    """The card a post followed, read in the post's session once the post is made: (get_request's answer, None), or
+    (None, why) when it could not be read, the session's failure caught here so the post stands."""
+    try:
+        got, words = py.answer("get_request", {"requestId": card, "name": owner})
+    except Refusal as e:
+        return None, str(e).removesuffix(f" {CARD_LATER}")
+    return (None, f"Pending You refused get_request: {words}") if words is not None else (got, None)
+
+
+def followed_closed(acts, label, owner, key, card, by, got, why):
+    """The card a post followed, held open under key, once read: recorded closed when Pending You has ended it, picked
+    up by the card by that follows it when it reports it resolved; left as the run record holds it while it waits or
+    is answered, for the event that ends it to close, and when the read failed, which is said."""
+    if why:
+        print(f"card {key}: whether {card} was picked up can't be read: {why}", file=sys.stderr)
+        return
+    state = cards.ended(got)
+    if not state:
+        return
+    picked = got.get("status") == "resolved"
+    acts.emit(label, "card.close", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key, State=state,
+              Outcome=FOLLOWED if picked else ENDED_ELSEWHERE)
+    print(f"card {key}: {card} picked up in Pending You by {by}, which follows it" if picked else
+          f"card {key}: {card} was {state} in Pending You already")
 
 
 # The fact a builder takes a card's reading session's link as, by the kind of card that links one (briefs.9).
@@ -9001,13 +9040,12 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
         with acts.bridge(owner, CARD_LATER) as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
             if lost is None:
-                how = "ended" if cards.ended(got) else cards.revision(got, kind_changed, "questions" in b["card"])
-            if lost is None and how == "ended":
-                state = "closed" if got.get("status") in cards.ACKED else "withdrawn"
-            elif lost is None and how == "follow":
+                state = cards.ended(got)
+                how = "ended" if state else cards.revision(got, kind_changed, "questions" in b["card"])
+            if lost is None and how == "follow":
                 tool, args, state = cards.close_call(got, card, owner, outcome=cut(note, 120))
                 _, lost = py.answer(tool, args)
-            elif lost is None:
+            elif lost is None and how == "change":
                 change = dict(cards.change_args(b["card"], note), requestId=card, name=owner,
                               expectedVersion=cards.version_of(got, card))
                 got, lost = py.answer("update_request", change)
@@ -9069,8 +9107,8 @@ def card_closed(acts, label, owner, key, outcome, reason):
     try:
         with acts.bridge(owner, "The event stands, and its card stays open.") as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
-            if lost is None and cards.ended(got):
-                state = "closed" if got.get("status") in cards.ACKED else "withdrawn"
+            state = cards.ended(got) if lost is None else None
+            if state:
                 outcome, reason = ENDED_ELSEWHERE, None
             elif lost is None:
                 tool, args, state = cards.close_call(got, card, owner, outcome, reason)
@@ -9254,14 +9292,18 @@ class SweepActs(CardActs):
 def question_close(acts, label, c, words):
     """A question withdrawn by crew once its asker has ended (briefs.11): read in the asker's name, which no session
     holds now, and withdrawn with words, or acked with them when the user answered it to nobody; recorded on the
-    asker. Pending You's "not found" records it lost, and a refusal is said and recorded refused. The close's state,
-    or None."""
+    asker. One Pending You ended already, followed up by its asker or dismissed by the user, is recorded so and sent
+    nothing (cards.ended). Pending You's "not found" records it lost, and a refusal is said and recorded refused. The
+    close's state, or None."""
     who, card, key = c["by"], c["card"], c["key"] or ""
-    lost = None
+    lost, outcome = None, words
     try:
         with acts.bridge(who, "The question stays open.") as py:
             got, lost = py.answer("get_request", {"requestId": card, "name": who})
-            if lost is None:
+            state = cards.ended(got) if lost is None else None
+            if state:
+                outcome = ENDED_ELSEWHERE
+            elif lost is None:
                 tool, args, state = cards.close_call(got, card, who, reason=words)
                 _, lost = py.answer(tool, args)
             if lost is not None and not cards.lost(lost):
@@ -9273,7 +9315,7 @@ def question_close(acts, label, c, words):
     if lost is not None:
         card_lost(acts, label, who, key, card, lost)
         return "lost"
-    acts.emit(label, "card.close", [f"agent/{who}"], by=who, Card=card, Key=key, State=state, Outcome=words)
+    acts.emit(label, "card.close", [f"agent/{who}"], by=who, Card=card, Key=key, State=state, Outcome=outcome)
     return state
 
 

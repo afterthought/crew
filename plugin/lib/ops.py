@@ -131,7 +131,8 @@ def rows(fleet, label, es):
     """The rail's rows for the partition's operations, from its entries: each open deploy offer, deploy/<env>,
     answered by crew ops approve; and each step that waits on the user, theirs to take or an agent's held for their
     word, op/<env>/<n>, its n counting the environment's steps in the order they were first recorded, answered by
-    marking it done or declined. Each row's card is raised by crew in main-level ops's name (briefs.11)."""
+    marking it done or declined; a gate's step (gate_of) said as the deploy waiting at its gate for the user. Each
+    row's card is raised by crew in main-level ops's name (briefs.11)."""
     offers, _, steps = state(es)
     out = []
     for env, e in sorted(offers.items()):
@@ -143,9 +144,14 @@ def rows(fleet, label, es):
     for n, (env, to, key), e in numbered(steps):
         if not waits_on_user(e):
             continue
-        after = f"after the deploy of {env} to {to[:7]}" if to else f"on {env}"
-        whose = "yours to do" if e.get("Doer") == "user" else f"{e.get('Agent') or e.get('Doer')}'s, held for your word"
-        what = [f"an operation {after} ({label}), {whose}: {e.get('Text') or key}"]
+        link = gate_of(e)
+        if link:
+            deploy = f"the deploy of {env} to {to[:7]}" if to else f"a deploy of {env}"
+            what = [f"{deploy} waits at its gate ({label}), yours to approve there: {link}"]
+        else:
+            after = f"after the deploy of {env} to {to[:7]}" if to else f"on {env}"
+            whose = "yours to do" if e.get("Doer") == "user" else f"{e.get('Agent') or e.get('Doer')}'s, held for your word"
+            what = [f"an operation {after} ({label}), {whose}: {e.get('Text') or key}"]
         to_arg = f" --to {to}" if to else ""
         cmds = [(s, f"crew ops step {env}{to_arg} --key {key} --state {'done' if s == 'done' else 'declined'} --label {label}")
                 for s in ("done", "decline")]
@@ -263,8 +269,8 @@ def environments(es, since=None):
     has them), the bolts it carried or why the record can't tell, every after-deploy step recorded against its commit
     with its doer and latest state, its rail row while it waits on the word, and when it last moved; newest first,
     those that last moved before since left out unless still open. Waiting are the operations whose latest state is
-    waiting, handed or failed, each with whether it is held for the user's word and its rail row when it waits on the
-    user."""
+    waiting, handed or failed, each with whether it is held for the user's word, the link of the gate it waits at
+    (gate_of) or None, and its rail row when it waits on the user."""
     lands = landings(es)
     _, _, steps = state(es)
     envs = {}
@@ -320,7 +326,7 @@ def environments(es, since=None):
             deploys.append(dict(d, bolts=bolts, bolts_why=why, after=after, row=row))
         waiting = [{"key": key, "to": t or None, "state": x.get("State"), "doer": x.get("Doer"), "agent": x.get("Agent"), "at": x["At"],
                     "text": next((l.strip() for l in (x.get("Text") or "").splitlines() if l.strip()), None), "note": x.get("Note"),
-                    "held": held(x), "row": f"op/{env}/{n}" if waits_on_user(x) else None}
+                    "held": held(x), "gate": gate_of(x), "row": f"op/{env}/{n}" if waits_on_user(x) else None}
                    for n, (en, t, key), x in numbered(steps) if en == env and x.get("State") in WAITING]
         out[env] = {"deploys": deploys, "waiting": waiting}
     return out
@@ -430,15 +436,26 @@ def step_words(text):
     return parts[0].strip(), fields
 
 
+GATE = re.compile(r"^https?://\S+$")  # a gate's step: its words one link alone (plan.14)
+
+
+def gate_of(e):
+    """The link of the gate a step's latest entry waits at, or None: a step that is the user's whose words, all its
+    text says before its first field (step_words), are one link alone is a deploy a hosted deployer holds at a gate
+    whose reviewer is the user (plan.14). An agent's step is never one, since a gate's reviewer is the user."""
+    words = step_words(e.get("Text"))[0]
+    return words if e.get("Doer") == "user" and GATE.match(words) else None
+
+
 def step_facts(env, n, e, label, working=None):
     """The facts of a step's card (cards.step_card) from its latest entry: its environment and number, its words and
-    fields as its text gives them (step_words), its doer as a card names it, whether it is held, and for a held step
-    what doing it now cuts: working, the stage agents working on its host as the card is raised, or why crew could not
-    tell (a string)."""
+    fields as its text gives them (step_words), its doer as a card names it, whether it is held, the gate it waits at
+    (gate_of) and the deploy it names, and for a held step what doing it now cuts: working, the stage agents working
+    on its host as the card is raised, or why crew could not tell (a string)."""
     words, fields = step_words(e.get("Text"))
     doer = "user" if e.get("Doer") == "user" else doer_of(e.get("Doer"), e.get("Agent"), label, env)
     f = dict(env=env, n=n, text=words or e.get("Key"), doer=doer, held=held(e), why=fields.get("why"), where=fields.get("where"),
-             commands=fields["commands"], done=fields.get("done"))
+             commands=fields["commands"], done=fields.get("done"), gate=gate_of(e), to=e.get("Head") or None)
     if f["held"]:
         if isinstance(working, str):
             now = f"It runs at once, whatever is working on {env}: crew could not tell what is ({working})"

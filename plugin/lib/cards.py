@@ -128,6 +128,21 @@ def card_under(entries, key, by):
     return held
 
 
+def followed_open(entries, card, by):
+    """The key under which the run record still holds open the agent `by`'s card a new post follows: the key of its
+    newest card.post of that card, done, that no later card.close of the card closes, a close naming no key among
+    them; None when it holds none. entries are in the order they were written."""
+    key = None
+    for e in entries:
+        if e.get("Card") != card or e.get("Refused"):
+            continue
+        if e.get("Act") == "card.post" and e.get("By") == by:
+            key = e.get("Key")
+        elif e.get("Act") == "card.close":
+            key = None
+    return key
+
+
 def lost(words):
     """Whether Pending You's refusal says it no longer finds the card: what a card posted under another sign-in reads
     as to its owner once the host has signed in again (ADR 0005 as amended 2026-10-11)."""
@@ -581,9 +596,18 @@ QUIET = {"quiet": ("When the host is quiet", "No stage is cut; it could be hours
 def step_card(f):
     """An after-deploy step's card (record 0031 §5, plan.14): the user's step a `do` with its words, where, each
     command whole and what is seen when it worked, its Done, Skip and Later the app's own; an agent's step held for
-    the user's word a choice of when, quiet recommended, now or skip, each with its consequence. f: env, n, text,
-    doer ("user" or the agent), held, why, where, commands, done, consequences ({quiet, now, skip}), follows."""
+    the user's word a choice of when, quiet recommended, now or skip, each with its consequence; a deploy waiting at
+    its gate (plan.14) the user's `do` to approve it there, its one step, its where and its link the gate's. f: env, n,
+    text, doer ("user" or the agent), held, why, where, commands, done, gate (the gate's link) or None, to (the commit
+    the step names) or None, consequences ({quiet, now, skip}), follows."""
     key, title = f"op/{f['env']}/{f['n']}", f"After {f['env']}'s deploy: {f['text']}"
+    if f.get("gate"):
+        link, of = f["gate"], f" of {f['to'][:7]}" if f.get("to") else ""
+        said = (f"The deploy{of} to {f['env']} waits at its gate for your approval there. Approving it at the gate is the "
+                "word to deploy; nothing else asks for it.")
+        return built(key, f"Approve the deploy{of} to {f['env']} at its gate", said + (f" {f['why']}" if f.get("why") else ""),
+                     links=[("The gate", link)], follows=f.get("follows"), kind="action", intent="do",
+                     action={"steps": [{"text": link}], "where": link, "done": "The run goes on past its gate."})
     if f["doer"] == "user":
         steps = [{"text": c, "command": c} for c in f.get("commands") or []] or [{"text": f["text"]}]
         action = dict({"steps": steps}, **{k: f[k] for k in ("where", "done") if f.get(k)})
@@ -873,19 +897,23 @@ def change_args(card, note):
     return dict({k: card[k] for k in CHANGED if k in card}, changeNote=cut(note, 120))
 
 
-# The statuses get_request gives a card that waits on nobody any more: acked (resolved, or closed), withdrawn or
-# expired. An answered card acked reads resolved (Pending You's ack_answer, read 2026-10-19).
+# The statuses get_request gives a card that waits on nobody any more: picked up or acked (resolved, or closed),
+# withdrawn, or expired. An answered card acked reads resolved (Pending You's ack_answer, read 2026-10-19), and
+# pendingyou 0.35.1 gives no `closed` (its wake mod's CLOSED).
 ENDED = ("resolved", "closed", "cancelled", "expired")
 # Of those, the ones whose close the run record keeps as closed rather than withdrawn.
 ACKED = ("resolved", "closed")
 
 
 def ended(got):
-    """Whether get_request gives a card already ended in Pending You by another hand than crew's close, so crew can
-    neither change nor close it, and the run record must say it closed: the mac-studio deploy card of 2026-10-19,
-    acked when its word was recorded, refused every change and close for seven hours after, and no later offer of
-    mac-studio reached the user."""
-    return isinstance(got, dict) and got.get("status") in ENDED
+    """The state crew records a card in once get_request gives it ended in Pending You by another hand than crew's
+    close, so crew can neither change nor close it, and the run record must say it closed: "closed" when it is
+    resolved, answered and picked up or acked, or closed, "withdrawn" when it is cancelled or expired, and None for any
+    other reply. The
+    mac-studio deploy card of 2026-10-19 was resolved by the after-deploy step's card posted following it, refused
+    every close and change for six hours after, and no later offer of mac-studio reached the user."""
+    status = got.get("status") if isinstance(got, dict) else None
+    return None if status not in ENDED else "closed" if status in ACKED else "withdrawn"
 
 
 def revision(got, kind_changed=False, questions=False):

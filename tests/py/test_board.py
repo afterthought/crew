@@ -364,6 +364,15 @@ class TestViews:
         assert lane(board.board_text(data(entries=OPS + [held])), "Operation")[-1] == (
             "✓ mac-studio  restart-herdr/1  held for the user's word, for wldn-ops  no card open")
 
+    def test_a_deploy_waiting_at_its_gate_is_said_to_wait_there_for_the_user_and_main_level_ops_names_it_the_gate_of_its_commit(self):
+        run = "https://github.com/WilldanGroup/switchboard-kit/actions/runs/38612817613"
+        gate = entry("ops.step", 10, Head=S1, Key="gate-38612817613", State="waiting", Doer="user", Text=run)
+        assert view("wldn-ops", entries=OPS + [gate])[-1] == f"✓ mac-studio  gate-38612817613  gate of {S1[:7]}  waiting  doer user  no card open"
+        assert lane(board.board_text(data(entries=OPS + [gate])), "Operation")[-1] == (
+            f"✓ mac-studio  gate-38612817613  waits at its gate for the user  {run}  no card open")
+        bare = dict(gate, Head=None)
+        assert view("wldn-ops", entries=OPS + [bare])[-1] == "✓ mac-studio  gate-38612817613  gate  waiting  doer user  no card open"
+
     def test_main_level_ops_with_nothing_waiting_reads_its_head_and_no_deploy_done_or_replaced(self):
         done = [entry("ops.offer", 30, Head=S1, Base="none"), entry("ops.offer", 20, Head=S2, Base="none"), entry("ops.approve", 15, Head=S2),
                 entry("ops.deploy", 12, Head=S2, Phase="start"), entry("ops.deploy", 10, Head=S2, Phase="end", Outcome="done")]

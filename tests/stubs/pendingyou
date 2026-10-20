@@ -19,8 +19,9 @@ never given twice. A test signs the host in again by moving cards.json aside: ev
   messages/<id>.json     messages on that card, a list, given back by get_request
 Tools: whoami, match_area (use for a remote an area was made for, else create), create_area (one area a key),
 post_request (a key gives its card back, and one under eight characters is refused in Pending You's words, as its
-schema refuses it in pendingyou 0.35.1), get_request, update_request and ack_answer (at the card's version),
-cancel_request. Any other is a JSON-RPC error."""
+schema refuses it in pendingyou 0.35.1; one that follows an answered card picks that card up, resolving it, as Pending
+You's guide says a post does), get_request, update_request and ack_answer (at the card's version), cancel_request (a
+card already resolved, cancelled or expired refused in Pending You's words). Any other is a JSON-RPC error."""
 import json, os, pathlib, sys
 
 if sys.argv[1:] != ["mcp", "--app", "claude-code"]:
@@ -85,6 +86,10 @@ def tool(name, args):
     if name == "post_request":
         if len(args.get("idempotencyKey") or "") < 8:
             return refused("Some fields need fixing. idempotencyKey: Too small: expected string to have >=8 characters.")
+        followed = cards.get(args.get("follows"))
+        if followed and followed["status"] == "answered":
+            followed.update(status="resolved", version=followed["version"] + 1)
+            save("cards.json", cards)
         known = next((i for i, c in cards.items() if c["key"] == args["idempotencyKey"]), None)
         if not known:
             n = load("counter").get("cards", 0) + 1
@@ -128,6 +133,8 @@ def tool(name, args):
         save("cards.json", cards)
         return said({"requestId": rid, "status": "resolved", "version": c["version"]})
     if name == "cancel_request":
+        if c["status"] in ("resolved", "cancelled", "expired"):
+            return refused("This request is already closed.")
         c.update(status="cancelled", version=c["version"] + 1)
         save("cards.json", cards)
         return said({"requestId": rid, "status": "cancelled", "version": c["version"]})

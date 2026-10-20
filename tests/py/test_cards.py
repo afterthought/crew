@@ -683,6 +683,19 @@ class TestFollows:
         assert built.follows_of("land", {"bolt": "b7"}, lost) is None
         assert [built.follows_of(k, {}, self.E) for k in ("proposal", "batch", "record")] == [None, None, None]
 
+    D1 = dict(Act="card.post", Key="deploy/srv", By="swancloud-ops", Card="req_d1")
+
+    @pytest.mark.parametrize("entries, key", [
+        ([D1], "deploy/srv"),
+        ([D1, dict(Act="card.close", Card="req_d1", Key="deploy/srv", State="closed")], None),
+        ([D1, dict(Act="card.close", Card="req_d1")], None),
+        ([dict(D1, By="swb-1-conductor")], None),
+        ([D1, dict(Act="card.close", Card="req_d1", Refused="Pending You refused the close: This request is already closed.")], "deploy/srv"),
+        ([dict(D1, Card=None, Refused="Pending You refused post_request: x")], None),
+        ([dict(Act="card.post", Key="land/b1", By="swancloud-ops", Card="req_l1")], None)])
+    def test_the_key_a_followed_card_is_still_open_under_is_read_from_the_record_alone(self, entries, key):
+        assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
+
 
 class TestStep:
     def test_the_users_step_is_a_do_with_its_commands_whole_where_and_done_when(self):
@@ -697,6 +710,36 @@ class TestStep:
         assert c["action"]["where"] == "a terminal on mac-studio" and c["action"]["done"] == "kanidm's login page takes the new password."
         assert [s["command"] for s in c["action"]["steps"]] == ["clan vars generate swancloud-srv --generator kanidm-admin --regenerate",
                                                                 "clan machines update swancloud-srv"]
+
+    RUN = "https://github.com/WilldanGroup/switchboard-kit/actions/runs/38612817613"
+
+    def gate(self, **f):
+        """swb-4's break-glass stand at dev's gate, 2026-10-14, as ops.step_facts gives it (plan.14)."""
+        return built.step_card(dict(dict(env="dev", n=1, text=self.RUN, doer="user", held=False, commands=[], gate=self.RUN,
+                                         to="4f2a9c1" + "0" * 33, follows="req_d1"), **f))
+
+    def test_a_deploy_waiting_at_its_gate_is_the_users_do_to_approve_it_there_its_one_step_and_where_the_gates_link(self):
+        b = self.gate()
+        c = b["card"]
+        assert b["key"] == "op/dev/1" and (c["kind"], c["intent"], c["urgency"], c["follows"]) == ("action", "do", "today", "req_d1")
+        assert c["title"] == "Approve the deploy of 4f2a9c1 to dev at its gate"
+        assert c["summary"] == ("The deploy of 4f2a9c1 to dev waits at its gate for your approval there. Approving it at the gate is "
+                                "the word to deploy; nothing else asks for it.")
+        assert c["action"] == {"steps": [{"text": self.RUN}], "where": self.RUN, "done": "The run goes on past its gate."}
+        assert c["context"]["links"] == [{"label": "The gate", "url": self.RUN}] and "approve" not in c
+
+    def test_a_gate_whose_step_names_no_commit_and_one_with_a_why(self):
+        c = self.gate(to=None)["card"]
+        assert c["title"] == "Approve the deploy to dev at its gate"
+        assert c["summary"].startswith("The deploy to dev waits at its gate for your approval there.")
+        c = self.gate(why="The break-glass stand, while the tenant is down.")["card"]
+        assert c["summary"].endswith("nothing else asks for it. The break-glass stand, while the tenant is down.")
+
+    def test_a_users_step_with_no_gate_keeps_its_card(self):
+        c = built.step_card(dict(env="srv", n=1, text="Open https://example.com and rotate the key", doer="user", held=False,
+                                 gate=None, to="4f2a9c1" + "0" * 33))["card"]
+        assert c["title"] == "After srv's deploy: Open https://example.com and rotate the key"
+        assert c["action"] == {"steps": [{"text": "Open https://example.com and rotate the key"}]}
 
     def test_a_held_step_is_a_choice_of_when_quiet_recommended(self):
         c = built.step_card(dict(env="mac-studio", n=2, text="restart crew's teams", doer="swancloud-ops", held=True,
@@ -878,6 +921,55 @@ class TestRecordCommand:
             assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
 
 
+class TestPickedUp:
+    """mac-studio's run record of 2026-10-19 (signal 2026-10-19-swancloud-ops-5b7775dd/01): the user approved
+    deploy/mac-studio's card, its deploy recorded a step that is the user's, and crew posted op/mac-studio/1's card
+    following the deploy's card, which Pending You then resolved. The deploy's end was refused "This request is already
+    closed.", and the offer of d35fbf2 went to the resolved card as a change, refused "This was already answered"."""
+    OWNER, WHERE = "swancloud-ops", ("/kit/main", "github.com/agentplot/swancloud")
+    STEP = dict(env="mac-studio", n=1, text="restart crew's teams on mac-studio", doer="user", held=False, gate=None, follows="req_d1")
+    OFFER = dict(env="mac-studio", head="d35fbf2" + "0" * 33, base="97e54d5" + "0" * 33,
+                 landings=[{"pr": 48, "subject": "A deploy card resolved under its step card reads closed"}],
+                 notes=None, steps=[], before=[{"env": "deneb", "policy": "manual"}], after=[])
+
+    def held(self, entries, acts):
+        """The run record after an act: what it held, and each entry the act emitted, as record.emit writes it."""
+        return entries + [dict({k: v for k, v in e.items() if k not in ("by", "label", "refused")}, By=e["by"],
+                               **({"Refused": e["refused"]} if "refused" in e else {})) for e in acts.emitted]
+
+    def test_a_deploy_card_picked_up_by_its_steps_card_then_the_deploys_end_and_the_next_offer_to_that_environment(self):
+        from test_card_commands import Acts, MATCHED, POSTED
+        entries = [dict(Act="card.post", Key="land/b48", By="crw-2-conductor", Card="req_l48"),
+                   dict(Act="bolt.land", On=["bolt/b48"], Head=self.OFFER["head"]),
+                   dict(Act="card.close", Card="req_l48", Key="land/b48", By="crw-2-conductor", State="closed"),
+                   dict(Act="card.post", Key="deploy/mac-studio", By=self.OWNER, Card="req_d1")]
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_s1"), None),
+                     "get_request": ({"status": "resolved", "version": 5}, None)}, entries=entries, caller=self.OWNER)
+        assert plan.row_card_change(None, "swancloud", self.OWNER, built.step_card, self.STEP, "x", self.WHERE, acts) == "req_s1"
+        assert acts.calls[2] == ("get_request", {"requestId": "req_d1", "name": self.OWNER})
+        assert [(e["Act"], e["Card"], e["Key"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+            ("card.post", "req_s1", "op/mac-studio/1", None, None), ("card.close", "req_d1", "deploy/mac-studio", "closed", plan.FOLLOWED)]
+        entries = self.held(entries, acts)
+        assert built.card_under(entries, "deploy/mac-studio", self.OWNER) is None
+
+        acts = Acts({"get_request": ({"status": "resolved", "version": 5}, None),
+                     "cancel_request": (None, "This request is already closed.")}, entries=entries, caller=self.OWNER)
+        assert plan.row_card_close(None, "swancloud", self.OWNER, "deploy/mac-studio",
+                                   outcome="Deployed 97e54d5 to mac-studio: machine ok, suite ok.", acts=acts) is None
+        assert acts.calls == [] and acts.emitted == []
+
+        follows = built.follows_of("deploy", {"env": "mac-studio", "head": self.OFFER["head"]}, entries)
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_d2"), None),
+                     "update_request": (None, "This was already answered; follow up with reply_in_thread.")},
+                    entries=entries, caller=self.OWNER)
+        assert plan.row_card_change(None, "swancloud", self.OWNER, built.deploy_card, dict(self.OFFER, follows=follows),
+                                    "Now d35fbf2", self.WHERE, acts) == "req_d2"
+        assert [t for t, _ in acts.calls] == ["match_area", "post_request"]
+        assert (acts.calls[1][1]["idempotencyKey"], acts.calls[1][1]["follows"]) == ("deploy/mac-studio:2", "req_l48")
+        entries = self.held(entries, acts)
+        assert built.card_under(entries, "deploy/mac-studio", self.OWNER) == "req_d2"
+
+
 class TestBatch:
     def test_six_units_named_with_their_teams_and_paragraphs_as_prose_and_one_link_to_its_session(self):
         b = built.batch_card(dict(n=2, previous=1, units=BATCH_UNITS, link="http://mac-studio:19432"))
@@ -928,7 +1020,8 @@ class TestWords:
         cards_built = [landing()["card"], deploy()["card"], built.batch_card(dict(n=2, units=BATCH_UNITS, link=None))["card"],
                        built.record_card(dict(kit="k", number=1, title="t", opening="o.", text="r"))["card"],
                        built.step_card(dict(env="srv", n=1, text="do it", doer="user", held=False))["card"],
-                       built.step_card(dict(env="srv", n=2, text="do it", doer="ops", held=True))["card"]]
+                       built.step_card(dict(env="srv", n=2, text="do it", doer="ops", held=True))["card"],
+                       TestStep().gate(why="A why. " * 60)["card"]]
         assert not [c["title"] for c in cards_built if words_asked(c)]
         assert all(len(c["summary"]) <= 400 and 8 <= len(c["title"]) <= 140 for c in cards_built)
 
@@ -961,6 +1054,16 @@ class TestActDecisions:
             "ack_answer", {"requestId": "req_a", "name": "wldn-ops", "expectedVersion": 3, "outcome": "Deployed at 14:20"}, "closed")
         assert built.close_call({"status": "pending", "version": 1}, "req_a", "wldn-ops", reason="A newer head") == (
             "cancel_request", {"requestId": "req_a", "name": "wldn-ops", "reason": "A newer head"}, "withdrawn")
+
+    @pytest.mark.parametrize("got, state", [
+        ({"status": "resolved"}, "closed"), ({"status": "cancelled"}, "withdrawn"), ({"status": "expired"}, "withdrawn"),
+        ({"status": "pending"}, None), ({"status": "snoozed"}, None), ({"status": "delegated"}, None),
+        ({"status": "answered"}, None), ({"status": "closed"}, "closed"), ({}, None), (None, None), ("resolved", None)])
+    def test_a_card_pending_you_resolved_reads_closed_and_one_it_cancelled_or_expired_withdrawn(self, got, state):
+        """Pending You 0.35.1 ends a card as resolved, cancelled or expired, and gives no `closed` (its wake mod's
+        CLOSED), which reads closed all the same: mac-studio's deploy card of 2026-10-19 was resolved by its step's
+        card, which followed it."""
+        assert built.ended(got) == state
 
     def test_a_change_carries_only_what_update_request_takes_and_a_card_posted_again_says_its_older_copy_is_dead(self):
         c = landing()["card"]
