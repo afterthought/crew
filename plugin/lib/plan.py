@@ -26,7 +26,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
-                                             in it, waited for; and its end, which a card's close brings too
+                                             in it, waited for, a landing's reading started first when none runs while
+                                             its conductor holds the card; and its end, which a card's close brings too
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last

@@ -18,7 +18,7 @@
 ## 4. Briefs and docs
 
 - [x] 4.1 `conductor.md`'s landing paragraph says the wait starts a missing reading, and what a card or a wait that could not open it says and which command starts it. `tests/suite t-briefs` passes (design, Decision 5; Task notes 4.1).
-- [ ] 4.2 The crew skill's wait row, the usage in `plugin/bin/crew` and `plan.py`, and README's card-session paragraph say the same together. `tests/suite t-docs` passes (Task notes 4.2).
+- [x] 4.2 The crew skill's wait row, the usage in `plugin/bin/crew` and `plan.py`, and README's card-session paragraph say the same together. `tests/suite t-docs` passes (Task notes 4.2).
 
 ## 5. End to end
 
