@@ -1375,6 +1375,7 @@ def reaped(agent, team, name, stage, status):
                         "left": f"{agent} still holds {name}, which has left {team}'s bolt: its agent is working; it is freed once that "
                                 "settles"}.get(stage)
     return "free", {"dropped": f"{agent} is free: {name} was dropped from the plan",
+                    "landed": f"{agent} is free: {name} has landed on main",
                     "left": f"{agent} is free: {name} has left {team}'s bolt"}.get(stage, f"{agent} is free: {name} has merged into its bolt")
 
 

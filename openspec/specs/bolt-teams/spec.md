@@ -24,7 +24,7 @@ crew SHALL read its teams from `~/.config/crew/teams.json` version 2, which the 
 - **THEN** `swb-1-conductor` and `swb-1-ops` start, and no other agent of the team is running
 
 ### Requirement: Units run in slots
-A team SHALL have at most `units` units in flight, each held by a slot named `<team>-unit-<n>` with its own pane. A slot SHALL be taken when a unit's first stage starts, and freed when the unit merges into the bolt or is dropped. A slot whose unit or fix has merged into its bolt, or whose work the plan no longer has (a dropped unit, or a fix whose bolt was dropped), SHALL be freed the next time crew reads the team (`crew status`, `crew unit run`, `crew fix`), once the slot's agent is not working.
+A team SHALL have at most `units` units in flight, each held by a slot named `<team>-unit-<n>` with its own pane. A slot SHALL be taken when a unit's first stage starts, and freed when the unit merges into the bolt or is dropped. A slot whose unit or fix has merged into its bolt or landed on main, or whose work the plan no longer has (a dropped unit, or a fix whose bolt was dropped), SHALL be freed the next time crew reads the team (`crew status`, `crew unit run`, `crew fix`), once the slot's agent is not working. A fix SHALL read landed once the kit's main holds its branch's tip and the branch has moved since it was made, or, for one that never moved, once its bolt is in no plan and main holds its tip; a fix SHALL be read from its branch whether or not its place still stands.
 
 #### Scenario: Every slot is taken
 - **WHEN** the conductor starts a fifth unit on a team with `units = 4`, all four in flight
@@ -33,6 +33,18 @@ A team SHALL have at most `units` units in flight, each held by a slot named `<t
 #### Scenario: A unit dropped while its stage works
 - **WHEN** the planner drops a unit while its slot's agent is working, and that agent later settles
 - **THEN** the next `crew status` of the team frees the slot, and the unit's worktree and branch go as for any work that is over
+
+#### Scenario: A fix whose bolt has landed
+- **WHEN** a slot holds a fix that merged into its bolt, the bolt has landed, and the kit's main holds the fix's tip
+- **THEN** the next `crew status` of the team reads the fix landed and frees the slot once its agent is not working
+
+#### Scenario: A fix whose place is gone
+- **WHEN** a slot holds a fix whose place was removed while its branch stands, and the fix has merged into its bolt or landed with it
+- **THEN** the next `crew status` of the team reads it merged or landed from its branch and frees the slot, as it would with its place standing
+
+#### Scenario: A fix just made is not landed
+- **WHEN** a fix's branch was cut from its bolt at a commit main already holds, has no commit of its own, and its bolt is still planned
+- **THEN** the fix reads in flight, and its slot is kept
 
 ### Requirement: A unit is built stage by stage, each by a fresh agent
 `crew unit run <unit> <stage>` SHALL start the stage in the unit's slot with a new agent, after ending the one there. The new agent gets that stage's brief and effort, starts in the unit's worktree, and is sent its command. The stages are:
@@ -219,7 +231,7 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 - **THEN** it is refused; a defect is a fix, and a new need is a new unit
 
 ### Requirement: A worktree goes when its work is over
-crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once its bolt holds its change archived or it has landed, or no plan has it, never while the bolt holds its change open; a chore's once its bolt or main holds its trailer, or no plan has it; a fix's once it has merged into its bolt, its conductor dropped it, or no plan has its bolt. A unit's or chore's branch SHALL go with its place only when `git cherry` finds no commit on it whose patch its bolt lacks, or, once the bolt has landed or the bolt's branch is gone, whose patch the kit's main as crew reads it now lacks; it SHALL never be judged by which commits are ancestors, since a unit's commits are rebased as they merge. A branch with such commits, or one git cannot compare, SHALL be kept, and the command SHALL name it with the commit it is at, how many commits it holds whose patch its bolt or main lacks, and that it is the user's to keep or delete. A dropped fix's branch SHALL be kept and named when `git cherry` finds commits whose patch its bolt lacks, or cannot compare it with its bolt, and SHALL then be the user's; one holding nothing beyond its bolt SHALL go. A fix's branch whose bolt has landed, or whose bolt's branch is gone, SHALL be judged against the kit's main as a unit's is. Each branch kept SHALL be recorded once, in a run-record entry on the team's host naming the branch, the commit it is at and how many commits it holds of its own. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it, and a landed bolt's only when `git cherry` finds no commit on it whose patch the kit's main lacks, being otherwise kept, named, recorded and the user's; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, and at once after `crew bolt drop`, `crew unit drop`, `crew chore drop`, `crew unit free`, `crew chore free` or `crew bolt land`.
+crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once its bolt holds its change archived or it has landed, or no plan has it, never while the bolt holds its change open; a chore's once its bolt or main holds its trailer, or no plan has it; a fix's once it has merged into its bolt or landed on main, its conductor dropped it, or no plan has its bolt. A fix's bolt SHALL be the one its branch tracks, the host's `bolt/<bolt>` or GitHub's `origin/bolt/<bolt>`, and whether it has merged SHALL be read against that same branch; once that branch is gone, whether the fix has landed SHALL be read from the kit's main. A fix's branch that no worktree and no slot holds SHALL go once the fix has merged or landed, or its bolt is in no plan and the kit's main holds its tip; such a branch holding anything its bolt and main lack SHALL be left as it is. A unit's or chore's branch SHALL go with its place only when `git cherry` finds no commit on it whose patch its bolt lacks, or, once the bolt has landed or the bolt's branch is gone, whose patch the kit's main as crew reads it now lacks; it SHALL never be judged by which commits are ancestors, since a unit's commits are rebased as they merge. A branch with such commits, or one git cannot compare, SHALL be kept, and the command SHALL name it with the commit it is at, how many commits it holds whose patch its bolt or main lacks, and that it is the user's to keep or delete. A dropped fix's branch SHALL be kept and named when `git cherry` finds commits whose patch its bolt lacks, or cannot compare it with its bolt, and SHALL then be the user's; one holding nothing beyond its bolt SHALL go. A fix's branch whose bolt has landed, or whose bolt's branch is gone, SHALL be judged against the kit's main as a unit's is. Each branch kept SHALL be recorded once, in a run-record entry on the team's host naming the branch, the commit it is at and how many commits it holds of its own. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it, and a landed bolt's only when `git cherry` finds no commit on it whose patch the kit's main lacks, being otherwise kept, named, recorded and the user's; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, and at once after `crew bolt drop`, `crew unit drop`, `crew chore drop`, `crew unit free`, `crew chore free` or `crew bolt land`.
 
 #### Scenario: A dropped bolt
 - **WHEN** the planner drops a bolt that swb-2 holds, none of whose units' or fixes' branches holds a commit of its own
@@ -272,6 +284,22 @@ crew SHALL remove each worktree it made, with its branch, once its work is over 
 #### Scenario: A dropped fix's place with uncommitted changes
 - **WHEN** a fix is dropped while its place holds a file nobody committed
 - **THEN** its place and branch are kept, and every read names them until the place is clean, when crew removes them
+
+#### Scenario: A landed fix's place and branch
+- **WHEN** a fix's place stands, no slot holds it, and its bolt has landed with the kit's main holding the fix's tip
+- **THEN** the next read of a team building in that checkout removes the place and the branch, saying the fix has landed on main
+
+#### Scenario: A landed fix's branch with no place
+- **WHEN** a kit checkout holds a `fix/` branch whose place is gone, which no slot holds, whose bolt has landed and been removed, and whose tip the kit's main holds
+- **THEN** the next read of a team building in that checkout removes the branch, saying the commit it was at
+
+#### Scenario: A fix branch with work nobody holds
+- **WHEN** a `fix/` branch with no place and no slot holds a commit neither its bolt nor the kit's main has, and its bolt is in no plan
+- **THEN** crew leaves the branch as it is
+
+#### Scenario: A fix that tracks its bolt on GitHub
+- **WHEN** a fix's branch tracks `origin/bolt/<bolt>` and that branch holds the fix's tip
+- **THEN** crew reads the fix's bolt as `<bolt>` and the fix as merged, and frees its slot and removes its place and branch as for one tracking the host's `bolt/<bolt>`
 
 ### Requirement: Uncommitted changes keep a worktree
 A worktree whose work is over SHALL be kept, with its branch, while it has uncommitted changes: modified tracked files, or untracked files git does not ignore. Each read of the team SHALL name it, what its work was and that its changes are the user's to keep or discard, until it is clean, when crew removes it, or gone. Files git ignores SHALL NOT keep a worktree, and go with it.

@@ -34,7 +34,7 @@ class TestSlotFor:
 class TestReaped:
     @pytest.mark.parametrize("stage, said", [
         ("merged", "swb-1-unit-1 is free: a has merged into its bolt"),
-        ("landed", "swb-1-unit-1 is free: a has merged into its bolt"),
+        ("landed", "swb-1-unit-1 is free: a has landed on main"),
         ("dropped", "swb-1-unit-1 is free: a was dropped from the plan"),
         ("left", "swb-1-unit-1 is free: a has left swb-1's bolt"),
     ])
