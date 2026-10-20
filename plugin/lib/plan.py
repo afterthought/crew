@@ -1126,11 +1126,17 @@ def host_run(fleet, host, script, *args):
     return r.stdout.strip()
 
 
+# A worktree at a fixed path, made on its branch, or with the branch made from base, tracking it when asked. A branch
+# already there with no worktree, one a drop kept (plan.10, record 0003), is taken as it stands, then tracks base, and
+# the commit it is at is printed as KEPT.
 PLACE = r"""set -e
 main=$1 path=$2 branch=$3 base=$4 track=$5 file=$6
 cd "$main"
 if [ ! -d "$path" ]; then
-  if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then git worktree add -q "$path" "$branch"
+  if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then
+    git worktree add -q "$path" "$branch"
+    if [ "$track" = track ]; then git branch -q --set-upstream-to="$base" "$branch"; fi
+    echo "KEPT=$(git rev-parse --short "refs/heads/$branch")"
   elif [ "$track" = track ]; then git worktree add -q --track -b "$branch" "$path" "$base"
   else git worktree add -q -b "$branch" "$path" "$base"; fi
 fi
@@ -1155,9 +1161,11 @@ def make_place(fleet, t, path, branch, base, track=False, unready=False):
     declaration (plan.17), whether it is new or was already there: the declared toolchain, its output kept in the
     worktree's git directory, and the runner's setup inside it. A step that fails refuses the command with the
     worktree made; with unready, as a fix's place is made (teams.3, record 0028), it stops the readying instead, and
-    what failed is returned. None once the worktree is ready. The command's next step reads the kit again."""
+    what failed is returned, None once the worktree is ready; with the commit a kept branch the new worktree was made on
+    is at (PLACE's KEPT), else None. The command's next step reads the kit again."""
     said = host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "", kit.DECLARATION)
     gitdir, text = kit.place_said(said)
+    kept = next((l[len("KEPT="):] for l in said.splitlines() if l.startswith("KEPT=")), None)
     why = None
     for what, argv, out in kit.readying(kit.declared(text, f"{path}/{kit.DECLARATION}"), f"{gitdir}/crew/toolchain.sh"):
         r = crew.on_machine(fleet, t["machine"], ["bash", "-c", IN_PLACE, "crew", path, out or "", " ".join(kit.KEEP), *argv])
@@ -1169,7 +1177,7 @@ def make_place(fleet, t, path, branch, base, track=False, unready=False):
             unready or fail(why)
             break
     READ.drop_kit(t["machine"], t["kit"]["main"])
-    return why
+    return why, kept
 
 
 # What a kit's main checkout holds of its mains, on its host, for kit.main_now to decide which is main now (plan.18,
@@ -4167,7 +4175,9 @@ def run_check(fleet, a):
         # The amendment's words, from the mark, so whoever starts the construct sends the same prompt.
         case = proposal(Plan(show(repo, tip, "proposals.rec") or PROPOSALS), mark.split("/", 1)[1], label).get("Case") \
             if amended(mark) and mark != "intent" else None
-        make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        _, kept = make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        if kept:  # a branch an earlier drop kept, which this unit builds on (record 0003)
+            print(f"{place} starts from the kept unit/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], u))
         if marking:
             head = s.get("head") or host_run(fleet, t["machine"], HEAD, place)
@@ -4295,7 +4305,9 @@ def chore_check(fleet, a, label, plan, c):
     not why or fail(why)
     merge = took = ""
     if a.stage == "code":
-        make_place(fleet, t, place, f"chore/{a.unit}", f"bolt/{bolt}", track=True)
+        _, kept = make_place(fleet, t, place, f"chore/{a.unit}", f"bolt/{bolt}", track=True)
+        if kept:  # a branch an earlier drop kept, which this chore builds on (record 0003)
+            print(f"{place} starts from the kept chore/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], c), "chore")
     elif a.stage == "merge":
         loose = untrailed(chore_commits(fleet, t, bolt, a.unit), a.unit)
@@ -4513,7 +4525,7 @@ def fix_place(fleet, t, place, fix, bolt):
     """A fix's place made from the team's bolt, tracking it, and refused unless it is on the fix's own branch made
     from that bolt (teams.3, read.4). A place that could not be made ready is no refusal, since a fix is how a bolt is
     repaired (record 0028): what failed is returned, for the fix's agent to be told; None once it is ready."""
-    unready = make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True, unready=True)
+    unready, _ = make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True, unready=True)
     why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
     not why or fail(why)
     return unready
@@ -4735,8 +4747,10 @@ def silenced():
 
 def tidy(fleet, a):
     """Each worktree crew made in the team's kit checkout, on this host, whose work is over and that no slot holds:
-    removed with its branch, saying the commit the branch was at; or kept and named, with its branch, while it is
-    locked or has uncommitted changes. The removal goes through the kit's own `wt remove`, run from the kit's main
+    removed with its branch, saying the commit the branch was at, a unit's, chore's or fix's branch kept, named and
+    recorded instead when git cherry finds work on it its bolt, or main once the bolt is gone, lacks (branch_gone,
+    plan.10); or kept and named, with its branch, while it is locked or has uncommitted changes. The removal goes
+    through the kit's own `wt remove`, run from the kit's main
     checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having failed or
     waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is kept
     and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
@@ -4801,8 +4815,6 @@ def tidy(fleet, a):
         if why:
             print(f"{path} is kept{held_too}: {why}")
             continue
-        sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
-                             capture_output=True, text=True, env=gitenv()).stdout.strip()
         kept = f"{path} is kept{held_too}: {over}, and "
         try:  # the clean check above is the guard, so --force; the branch is crew's, so --no-delete-branch
             r = subprocess.run(["wt", "-C", main, "remove", path, "--foreground", "--no-delete-branch", "--force", "--format", "json"],
@@ -4824,9 +4836,11 @@ def tidy(fleet, a):
         if not wt_left_branch(r.stdout, path):
             print(f"{path} is removed, and {branch} is kept: crew could not read what wt remove said of the branch")
             continue
-        if branch in dropped:
-            print(fix_branch_gone(main, branch, ups.get(branch, ""), path))
+        if branch.startswith(("unit/", "chore/", "fix/")):  # judged by git cherry (plan.10)
+            print(branch_gone(t, main, branch, ups.get(branch, ""), now, path, "it was dropped" if branch in dropped else over))
             continue
+        sha = subprocess.run(["git", "-C", main, "rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}"],
+                             capture_output=True, text=True, env=gitenv()).stdout.strip()
         r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
         print(f"{path} and {branch} are removed; the branch was at {sha}" if r.returncode == 0 else
               f"{path} is removed, and {branch} is kept: {r.stderr.strip()}")
@@ -4834,7 +4848,7 @@ def tidy(fleet, a):
     # and no worktree holds it; a deletion sluice's guard refuses, while a submission to it waits, is kept and named.
     worked = {w.get("branch") for w in trees}
     for branch in sorted(dropped - worked - held):  # a dropped fix's branch no worktree holds, its place gone already
-        print(fix_branch_gone(main, branch, ups.get(branch, "")))
+        print(branch_gone(t, main, branch, ups.get(branch, ""), now))
     for line in (gather.run(["git", "config", "--get-regexp", r"^branch\.bolt/.*\.crew$"], main) or "").splitlines():
         name = line.split()[0][len("branch.bolt/"):-len(".crew")]
         over = bolt_branch_over(name, bolts, f"bolt/{name}" in worked)
@@ -4854,35 +4868,74 @@ def fixes_dropped(main):
     return {k[len("branch."):-len(".crew")] for k, _, v in (l.partition(" ") for l in out.splitlines()) if v == "dropped"}
 
 
-def fix_branch_kept(up, cherry):
-    """Why a dropped fix's branch is kept when its place goes (plan.10, record 0028), or None when it goes: it holds
-    commits whose patch its bolt (up, the branch it tracks) lacks, as git cherry (exit, output, error) against the bolt
-    says, or it can't be compared with one."""
-    if not up:
-        return "it tracks no bolt to compare it with"
+def branch_target(kind, up, up_exists, main_ref):
+    """What a branch whose place goes is compared with by git cherry (plan.10, record 0003), from plain facts: a unit's
+    or a chore's bolt, the branch it tracks (up), while that branch exists (up_exists), else the kit's main now
+    (main_ref, gather.now_ref), the only place its work could have arrived once its bolt has landed or been dropped; a
+    fix's bolt, or None when it tracks none, which keeps it (record 0028). Whether the bolt exists is read apart from
+    the upstream, which git still names once the branch is gone."""
+    if kind == "fix":
+        return up or None
+    return up if up and up_exists else main_ref
+
+
+def branch_kept(target, cherry):
+    """Why a branch is kept when its place goes (plan.10, record 0003, record 0028), with how many commits it holds whose
+    patch its target lacks, for the run record, None when git could not count them; or None when it goes: git cherry
+    (exit, output, error) of the branch against target finds a commit whose patch target lacks (a + line), or can't
+    compare the two, or there is no target, a fix tracking no bolt. A - line is a commit whose patch target holds under
+    another hash, rebased as it merged, and a merge commit is not listed, so a branch that took another's head by a
+    merge counts only its own."""
+    if not target:
+        return "it tracks no bolt to compare it with", None
+    named = target.split("/", 2)[-1] if target.startswith("refs/") else target
     code, out, err = cherry
     if code:
-        return f"git cannot compare it with {up}: {' '.join(err.split()) or f'exit {code}'}"
+        return f"git cannot compare it with {named}: {' '.join(err.split()) or f'exit {code}'}", None
     n = sum(1 for l in out.splitlines() if l.startswith("+"))
-    return f"it holds {n} commit{'' if n == 1 else 's'} whose patch {up} lacks (git cherry), the user's to keep or delete" if n else None
+    return (f"it holds {n} commit{'' if n == 1 else 's'} whose patch {named} lacks (git cherry), the user's to keep or "
+            "delete", n) if n else None
 
 
-def fix_branch_gone(main, branch, up, path=None):
-    """A dropped fix's branch once no worktree is on it, its place (path) removed now or before: deleted when it holds
-    nothing beyond its bolt, else kept, named and its mark unset, so the user's from then on (fix_branch_kept); what
-    crew says of it."""
+def branch_gone(t, main, branch, up, now, path=None, over="it was dropped"):
+    """A unit's, chore's or fix's branch once no worktree is on it, its place (path) removed now or before, its work
+    over (over): compared by git cherry, in the kit's main checkout, with its bolt (up, the branch it tracks) while
+    that branch stands, else with the kit's main now (now), a fix with its bolt alone (branch_target); deleted when it
+    holds nothing its target lacks, else kept and named, a dropped fix's mark unset, so the user's from then on
+    (branch_kept, plan.10, record 0003), and recorded once on the team's host as branch.kept, since no later read
+    reaches a branch no worktree is on. What crew says of it (branch_said)."""
     git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
+    kind = branch.split("/", 1)[0]
     sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
-    r = git("cherry", up, branch) if up else None
-    why = fix_branch_kept(up, r and (r.returncode, r.stdout, r.stderr))
-    lead = f"{path} is removed, and {branch}" if path else branch
-    if why:
+    target = branch_target(kind, up, bool(up) and git("rev-parse", "--verify", "-q", f"refs/heads/{up}").returncode == 0, now)
+    r = git("cherry", target, branch) if target else None
+    kept = branch_kept(target, r and (r.returncode, r.stdout, r.stderr))
+    if kept:
+        why, n = kept
         git("config", "--unset", f"branch.{branch}.crew")
-        return f"{lead} is kept at {sha}: it was dropped, and {why}"
+        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [target] if target == up else [],
+                    why=over if n else f"{over}, and {why}", Head=sha, Count=n)
+        return branch_said(branch, path, sha, over, kept)
     r = git("branch", "-q", "-D", branch)
-    if r.returncode:
-        return f"{lead} is kept: {r.stderr.strip()}"
-    return f"{path} and {branch} are removed; the branch was at {sha}" if path else f"{branch} is removed: it was dropped; it was at {sha}"
+    return branch_said(branch, path, sha, over, None, (r.stderr.strip() or f"exit {r.returncode}") if r.returncode else None)
+
+
+def branch_said(branch, path, sha, over, kept, refused=None):
+    """What the tidy says of a branch whose place (path, None when it went before) is removed, its work over (over):
+    removed, saying the commit it was at; kept as git refused its deletion (refused); or kept (kept, branch_kept's
+    (why, count)) at its commit, the user's to keep or delete, and, for a unit's or a chore's, that the next of its
+    name starts from it (plan.10, record 0003). A fix's keeps the words it had (record 0028)."""
+    kind, name = branch.split("/", 1)
+    lead = f"{path} is removed, and {branch}" if path else branch
+    if refused:
+        return f"{lead} is kept: {refused}"
+    if not kept:
+        return f"{path} and {branch} are removed; the branch was at {sha}" if path else f"{branch} is removed: {over}; it was at {sha}"
+    why, n = kept
+    said = f"{lead} is kept at {sha}: {over}, and {why}"
+    if kind == "fix":
+        return said
+    return said + ("" if n else ", the user's to keep or delete") + f"; a {kind} added as {name} starts from it"
 
 
 def bolt_branch_over(bolt, bolts, worktree):
