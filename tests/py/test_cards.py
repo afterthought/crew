@@ -499,9 +499,13 @@ class ReadingActs:
 
 
 class TestSessionWords:
-    def test_a_landing_key_has_no_session_and_a_batch_cards_runs_on_the_main_levels_host(self):
-        assert plan.session_refusal("land/b/abc1234", "wldn", "box", "box") == (
-            "a landing card has nothing to read: it has no document to read, so it has no session")
+    def test_a_landings_session_runs_on_its_bolts_teams_host_and_a_batch_cards_on_the_main_levels(self):
+        """card-sessions "A landing's session on another host": refused naming the team's host, the main level's
+        being no matter."""
+        assert plan.session_refusal("land/y", "wldn", "mac-studio", "mac-studio", "box") == (
+            "land/y's reading session runs on box, the host of the team holding its bolt, where its landing card is raised: "
+            "run crew card session land/y there")
+        assert plan.session_refusal("land/y", "wldn", "mac-studio", "box", "box") is None
         assert plan.session_refusal("batch/1", "wldn", "chuck-herdr-alpha", "mac-studio") == (
             "batch/1's reading session runs on chuck-herdr-alpha, where wldn's main level writes the batch's summary: run crew card session batch/1 there")
         assert plan.session_refusal("batch/2-1", "wldn", "chuck-herdr-alpha", "mac-studio") is None

@@ -3,7 +3,7 @@
 ## 1. The landing's reading
 
 - [x] 1.1 The files of a landing's session, a cover page, each unit's change and the bolt's diff against main as text, are a function of facts; proved by new cases in `tests/py/test_landing.py` (design, *Decisions* 2 and *Task notes* 1.1).
-- [ ] 1.2 A landing's session is written from the kit on the team's host into its head's folder and opened there, the same facts read for it as for the card, and refused off that host naming it; proved by the rewritten session-words case in `tests/py/test_cards.py` (design, *Decisions* 1, 2, 4 and *Task notes* 1.2).
+- [x] 1.2 A landing's session is written from the kit on the team's host into its head's folder and opened there, the same facts read for it as for the card, and refused off that host naming it; proved by the rewritten session-words case in `tests/py/test_cards.py` (design, *Decisions* 1, 2, 4 and *Task notes* 1.2).
 
 ## 2. The card
 

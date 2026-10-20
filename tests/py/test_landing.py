@@ -1,6 +1,8 @@
 """A bolt lands by main-level ops's submission of its branch to main through sluice (plan.16, record 0026): what
 plan.landing_said makes of what the landing's submission did on the team's host; and its landing card, raised by crew
 once the bolt reads proven, held by a fix and closed at the landing (record 0031 §1)."""
+import pathlib
+
 import pytest
 
 import plan
@@ -158,6 +160,43 @@ class TestTheLandingsPoint:
         assert cover.startswith("# Bolt y, landing on switchboard-kit's main\n\nWhat lands, at its head def5678:\n\n- a\n- b\n- c (chore)\n")
         assert "This reading lands nothing: approving the landing card is the word to land" in cover
         assert "reaches the bolt's conductor as notes on the landing card, and a note naming a defect holds the landing for a fix" in cover
+
+    def test_a_landings_reading_is_written_into_its_heads_folder_from_the_kit_at_the_head(self, monkeypatch, tmp_path):
+        """card-sessions "A bolt of two units and a chore": each unit's change read at the head, and the diff from where
+        the bolt last met main to its head, less the change folders."""
+        held = {"a": [("proposal.md", "a's proposal")], "b": [("tasks.md", "b's tasks"), ("proposal.md", "b's proposal")]}
+        asked = []
+        monkeypatch.setattr(plan, "change_held", lambda main, ref, u: asked.append((main, ref, u)) or held.get(u))
+        monkeypatch.setattr(plan, "kit_git", lambda fleet, t, where, *args: asked.append((where, *args)) or (0, "diff --git a/x b/x"))
+        fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main"}}}}
+        f = dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], head="def5678" + "0" * 33, base="abc1234",
+                 team="swb-1", host="box")
+        folder = tmp_path / "def5678"
+        folder.mkdir()
+        (folder / "01-old-proposal.md").write_text("an older head's")
+        paths = plan.landing_write(fleet, f, folder)
+        assert [pathlib.Path(p).name for p in paths] == ["00-y.md", "01-a-proposal.md", "02-b-proposal.md", "02-b-tasks.md", "03-y-diff.txt"]
+        assert sorted(p.name for p in folder.iterdir()) == sorted(pathlib.Path(p).name for p in paths)
+        assert (folder / "03-y-diff.txt").read_text() == "diff --git a/x b/x\n"
+        assert asked[:2] == [("/kit/main", f["head"], "a"), ("/kit/main", f["head"], "b")]
+        assert asked[2] == ("/kit/main", "diff", "--no-color", "--no-ext-diff", "abc1234", f["head"], "--", ".", ":(exclude)openspec/changes")
+
+    def test_a_unit_whose_change_the_head_does_not_hold_refuses_and_nothing_is_written(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(plan, "change_held", lambda main, ref, u: None)
+        monkeypatch.setattr(plan, "kit_git", lambda *a: pytest.fail("the diff was read after a change crew could not read"))
+        fleet = {"teams": {"swb-1": {"name": "swb-1", "machine": "box", "kit": {"main": "/kit/main"}}}}
+        f = dict(bolt="y", kit="k", units=["a"], chores=[], head="def5678" + "0" * 33, base="abc1234", team="swb-1", host="box")
+        with pytest.raises(plan.Refusal, match="unit a's change is not on bolt y at def5678, open or archived, in /kit/main on box"):
+            plan.landing_write(fleet, f, tmp_path / "def5678")
+        assert not (tmp_path / "def5678").exists()
+
+    def test_a_proven_bolts_card_waits_on_its_batches_and_says_which(self):
+        """briefs.12, as crew card session land/<bolt> says why the bolt has no card yet."""
+        assert plan.batch_waits(["a", "b", "c"], {"a"}, {"b": 7, "c": 8}) == (
+            "a has not been in a batch, which is due; the user has not answered batches 7 and 8")
+        assert plan.batch_waits(["a", "b"], {"a", "b"}, {}) == "a or b have not been in a batch, which is due"
+        assert plan.batch_waits(["a"], set(), {"a": 7}) == "the user has not answered batch 7"
+        assert plan.batch_waits(["a"], set(), {"q": 7}) is None
 
     def test_which_act_follows_each_event(self):
         assert plan.landing_act("proven", head="abc1234" + "0" * 33) == ("change", "Its head is now abc1234")
