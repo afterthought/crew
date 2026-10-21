@@ -6859,10 +6859,13 @@ def carried_units(fleet, t, slotted):
 
 def team_tidy(fleet, a):
     """crew _tidy <team> [--landed <bolt> --outcome <words>], on the team's host: the team's read (reap), which a plan
-    write that ends work asks for there, and crew rebuild runs once its agents are ended; after a landing, its card
-    closed there with the words (landing_cards_closed)."""
+    write that ends work asks for there, and crew rebuild runs once its agents are ended; the conductor's and ops's
+    panes told the branch they work for now, none once the bolt has landed or been dropped (teams.20); after a landing,
+    its card closed there with the words (landing_cards_closed)."""
     t = at_work(fleet, a.team)
-    reap(fleet, on_team_host(fleet, t, a.force))
+    team = on_team_host(fleet, t, a.force)
+    reap(fleet, team)
+    team.hint_standing(crew.team_bolt(t))
     if a.landed:
         landing_cards_closed(fleet, t, a.landed, a.outcome or "")
 
