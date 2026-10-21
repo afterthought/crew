@@ -4143,10 +4143,11 @@ def take(fleet, t, place, unit, bolt, deps, kind="unit"):
 
 
 def merge_command(bolt):
-    """How a unit, chore or fix merges into its bolt (teams.5, record 0026): only by `wt submit bolt/<bolt>`, sluice's
-    verdict its gate, the place kept for crew to remove (plan.9). sluice queues and orders the submissions, so several
-    may wait at once."""
-    return f"wt submit bolt/{bolt} --no-remove"
+    """How a unit, chore or fix merges into its bolt (teams.5, record 0026): only by a submission to sluice, sluice's
+    verdict its gate, made without waiting so that the agent waits on it with `sluice wait`, a call at a time, which no
+    capped command outlasts; sluice keeps the place, for crew to remove (plan.9). sluice queues and orders the
+    submissions, so several may wait at once."""
+    return f"sluice submit bolt/{bolt} --no-wait --json"
 
 
 def run_check(fleet, a):

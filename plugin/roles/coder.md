@@ -56,12 +56,18 @@ When the prompt says to merge a unit, archive its change first, so the bolt's sp
 You merge only when the prompt says to. Then, from this worktree, run the command the prompt names, with the bolt it names:
 
 ```
-wt submit bolt/<bolt> --no-remove
+sluice submit bolt/<bolt> --no-wait --json
 ```
 
-It submits this branch's head to sluice, which tests the bolt with your work merged on the checks the kit's policy requires and lands it there as a merge commit only when they pass. The checks can take longer than a command is allowed to run, so run `wt submit` in the background and wait for it to end; never start it again while it runs, and never shorten it. Never run `wt submit --help` in a worktree: with sluice 0.3.1 it prints its help and then removes the worktree it ran in as if the submission had landed; read the usage from `sluice submit --help` or `wt --help`, which remove nothing. If {{CREW}} says how to commit in a worktree of this repository, commit that way.
+It submits this branch's head to sluice and returns at once with the submission's number, `{"id":<n>,...}`. sluice tests the bolt with your work merged on the checks the kit's policy requires and lands it there as a merge commit only when they pass, which takes from a minute to most of an hour, longer than a command may run. So wait on it a call at a time, giving the command its full ten minutes:
 
-`wt submit` ends with sluice's outcome: it exits 0 when your work landed, 1 when a check failed, and 2 when sluice refused it or your work conflicts with the bolt. A failed check is on your branch: read the log sluice names, fix it here, then submit again. A conflict means other work landed on the bolt in the same place: take the bolt into this place (`git rebase bolt/<bolt>`), resolve each conflicting path keeping both intents, run your unit tests again, commit, submit again, and say so. Report the landing commit when it is on the bolt; crew removes this worktree once the bolt holds the work.
+```
+sluice wait <n> --timeout 9m --json
+```
+
+Run it again for as long as it exits 5, still waiting, and end no turn while the submission is undecided: a wait also runs sluice's rounds, which move the queue. Never submit again to move it, since a second submission from this worktree replaces the first; never read the outcome from `sluice status bolt/<bolt>`'s listing, which a decided submission leaves; never shorten a wait. Without the number, `sluice wait bolt/<bolt> --timeout 9m --json` from this worktree waits on its last submission. If {{CREW}} says how to commit in a worktree of this repository, commit that way.
+
+`sluice wait` ends with sluice's outcome, its JSON the submission's record: it exits 0 when your work landed, 1 when a check failed, 2 when sluice refused it or your work conflicts with the bolt, and 4 when it was withdrawn. A failed check is on your branch: read the log sluice names, fix it here, then submit again. A conflict means other work landed on the bolt in the same place: take the bolt into this place (`git rebase bolt/<bolt>`), resolve each conflicting path keeping both intents, run your unit tests again, commit, submit again, and say so. A withdrawn submission is not yours to submit again: say so through crew, as *When you can't finish* says. Report the landing commit when it is on the bolt; crew removes this worktree once the bolt holds the work.
 
 ## When you can't finish
 

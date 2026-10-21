@@ -68,7 +68,7 @@ class TestMerge:
     def test_a_unit_merges_into_its_bolt_only_by_a_submission_to_sluice(self):
         merge = plan.merge_command("tenant-environments")
         assert plan.stage_prompt("merge", "a", bolt="tenant-environments", merge=merge) == (
-            "Merge a into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove")
+            "Merge a into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json")
 
 
 def test_what_reached_the_unit_is_carried_last():

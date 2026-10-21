@@ -31,8 +31,8 @@ echo steady > "$fp/banner"; commit_all "$fp" "fix: the banner holds still"
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered fix $fb: its branch is at $(short $fb)"
 expect_ok crew fix swb-1 tidy --merge
-eq "$(prompt_to swb-1-unit-1)" "'Merge $fb into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
-(cd "$fp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of the fix failed"
+eq "$(prompt_to swb-1-unit-1)" "'Merge $fb into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
+merge_as swb-1-unit-1 "$fp" bolt/tenant-environments || fail "the fix's submission failed"
 echo stray > "$fp/note"  # a file nobody committed, which keeps the merged fix's place
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered merge of $fb: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"

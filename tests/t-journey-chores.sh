@@ -66,9 +66,9 @@ crew chore run bump code "Fix every finding the verify report at $report marks f
 git -C "$cp" commit -q --amend --no-edit --trailer "Chore: bump"
 crew chore wait bump >/dev/null
 expect_ok crew chore run bump merge
-eq "$(prompt_to swb-1-unit-1)" "'Merge bump into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
+eq "$(prompt_to swb-1-unit-1)" "'Merge bump into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 lacks "$out" "Pending You card"
-(cd "$cp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of the chore failed"
+merge_as swb-1-unit-1 "$cp" bolt/tenant-environments || fail "the chore's submission failed"
 expect_ok crew chore wait bump
 has "$out" "swb-1-unit-1 delivered merge on chore bump: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 eq "$(stage_of)" "chore merged"

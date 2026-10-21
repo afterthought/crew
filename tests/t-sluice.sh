@@ -1,7 +1,7 @@
 # A kit merges and lands only through sluice (teams.5, record 0026): crew gives a bolt only in a kit whose
 # .config/sluice.toml on main names the checks its bolt branches require, refusing, with the plan unchanged and no
 # branch made, a kit with no policy or one naming no bolt branch checks, naming the file; and a unit's and a fix's merge
-# stage submits with wt submit bolt/<bolt>; and crew's own policy requires its check-full tasks of a bolt and of main,
+# stage submits with sluice submit bolt/<bolt> --no-wait, waited on with sluice wait; and crew's own policy requires its check-full tasks of a bolt and of main,
 # run open on the host and taking no replay (tests.5, tests.10). Each scenario of the bolt-teams spec on merging; which table and checks a
 # policy names for a bolt branch is a logic case (tests/py/test_kit.py), and that the policy is read from main's
 # commit, a contract case (tests/contract/test_git.py).
@@ -29,15 +29,15 @@ export CREW_AGENT=swb-1-conductor
 prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
 crew unit run a construct >/dev/null; change "$kd/places/a" a 2 2; commit_all "$kd/places/a" "feat(a): done"
 expect_ok crew unit run a merge
-eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
+eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 crew fix swb-1 edge-sign-in "The edge sign-in answers an object." >/dev/null
 fp=$kd/places/fix-tenant-environments--edge-sign-in
 echo fixed > "$fp/sign-in"; commit_all "$fp" "fix: the edge sign-in answers a string"
 : > "$CREW_TEST_LOG"
 expect_ok crew fix swb-1 edge-sign-in --merge
-grep -q "agent prompt .* 'Merge fix/tenant-environments/edge-sign-in into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'" "$CREW_TEST_LOG" \
+grep -q "agent prompt .* 'Merge fix/tenant-environments/edge-sign-in into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'" "$CREW_TEST_LOG" \
   || fail "the fix was not submitted:"$'\n'"$(calls)"
-ok "a unit's and a fix's merge into the bolt is a submission, wt submit bolt/<bolt>"
+ok "a unit's and a fix's merge into the bolt is a submission, sluice submit bolt/<bolt> --no-wait"
 
 policy() { python3 -c 'import sys, tomllib; sys.path.insert(0, sys.argv[1]); import kit
 text = open(sys.argv[2]).read(); b = tomllib.loads(text)["branches"]
