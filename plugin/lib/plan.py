@@ -5720,6 +5720,110 @@ def reach(fleet, t):
                 record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
                             why=f"unit({name}): forecast to conflict with {other}", Heads=heads, Paths=" ".join(paths), Reached=way)
                 done.add(heads)
+    # The bolt itself against its kit's main and what is queued there, by sluice's forecast (teams.19).
+    for b in bolts:
+        k, _ = st.kit(b)
+        if not k:
+            continue  # said above
+        doc, why = bolt_forecast_read(*sluice_check(k["team"]["kit"]["main"], b.name()))
+        if why:
+            said = unread_said(b.name(), k["bolts"].get(b.name(), {}).get("head"), why, done)
+            if said:
+                heads, words = said
+                say(words)
+                if heads:
+                    record.emit(label, "forecast", [f"bolt/{b.name()}"], why=f"bolt({b.name()}): no forecast against main",
+                                Heads=heads, Reached="wait")
+                    done.add(heads)
+            continue
+        told = bolt_forecast(t["name"], label, b.name(), doc, done)
+        if told:
+            heads, paths, words = told
+            say(words)
+            record.emit(label, "forecast", [f"bolt/{b.name()}"], why=f"bolt({b.name()}): forecast to conflict with main",
+                        Heads=heads, Paths=" ".join(paths), Reached="wait")
+            done.add(heads)
+
+
+def sluice_check(main, bolt):
+    """`sluice submit main --check --head bolt/<bolt> --json` run in the kit's main checkout on this host, which needs
+    no worktree on the bolt's branch (sluice's ADR 0039): (its exit, its output, its standard error), the exit None when
+    it could not be run, the error then its why."""
+    try:
+        r = subprocess.run(["sluice", "submit", "main", "--check", "--head", f"bolt/{bolt}", "--json"], cwd=main,
+                           capture_output=True, text=True, timeout=POLL)
+    except FileNotFoundError:
+        return None, "", "this host has no sluice on its path"
+    except subprocess.TimeoutExpired:
+        return None, "", f"it did not answer within {POLL} seconds"
+    except OSError as e:
+        return None, "", str(e)
+    return r.returncode, r.stdout, r.stderr
+
+
+def bolt_forecast_read(code, out, err):
+    """sluice's forecast of a bolt against main, as sluice_check gives it: (the document, None), or (None, why it can't
+    be read). sluice exits 0 when the bolt merges with no conflict and 2 when it would conflict, printing
+    {"conflict": null or {"paths", "with"}, "head", "onto", "ahead"}; a refusal is an error document; a sluice older
+    than the forecast of a branch refuses `--head` on standard error. Every field read is checked (read.2)."""
+    if code is None:
+        return None, err
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        doc = None
+    if isinstance(doc, dict) and "conflict" in doc and code in (0, 2):
+        c = doc["conflict"]
+        if not isinstance(doc.get("head"), str) or not isinstance(doc.get("onto"), str):
+            return None, "its answer names no head or no revision of main"
+        if c is not None and not (isinstance(c, dict) and isinstance(c.get("paths"), list) and c["paths"]
+                                  and all(isinstance(x, str) for x in c["paths"]) and isinstance(c.get("with", []), list)):
+            return None, "its conflict names no paths"
+        return doc, None
+    if isinstance(doc, dict) and isinstance(doc.get("error"), dict) and isinstance(doc["error"].get("message"), str):
+        return None, f"it exited {code}: {doc['error']['message']}"
+    if "--head" in err:
+        return None, "this host's sluice can't forecast a branch no worktree holds (sluice submit --check --head), which a newer sluice can"
+    line = next((l.strip() for l in err.splitlines() if l.strip()), "")
+    return None, f"it exited {code}" + (f": {line}" if line else "")
+
+
+def bolt_forecast(team, label, bolt, doc, done):
+    """What the forecast of a bolt against its kit's main tells the conductor, once (teams.19): doc as
+    bolt_forecast_read gives it, done the Heads already recorded. None when the bolt merges with no conflict onto main
+    and everything queued there, or when the same forecast, for the same bolt head, revision of main and submissions
+    queued on main it meets, was said; else (heads, paths, words). A conflict with what main has landed is taken into
+    the bolt now, by the fix the conductor starts when main-ops says a landing conflicts (plan.8); one with a
+    submission queued on main is waited out, since that submission may yet fail and leave the queue."""
+    c = doc.get("conflict")
+    if not c:
+        return None
+    paths = c["paths"]
+    met = [w for w in c.get("with") or [] if isinstance(w, dict) and isinstance(w.get("id"), int)]
+    heads = f"bolt/{bolt}@{doc['head'][:7]} main@{doc['onto'][:7]}" + "".join(f" #{w['id']}" for w in met)
+    if heads in done:
+        return None
+    on = ", ".join(paths)
+    if not met:
+        return heads, paths, (
+            f"bolt/{bolt} is forecast to conflict with main on {on}: main has landed work on them since the bolt took it. "
+            f"Take main into the bolt now, while the conflict is small, by a fix as when {label}-ops says a landing "
+            f'conflicts: crew fix {team} take-main-{doc["onto"][:7]} "Take main into the bolt: it is forecast to conflict '
+            f'on {on}"')
+    who = ", ".join(f"#{w['id']}" + (f" ({w['from']['worktree']})" if isinstance(w.get("from"), dict)
+                                     and isinstance(w["from"].get("worktree"), str) else "") for w in met)
+    return heads, paths, (
+        f"bolt/{bolt} is forecast to conflict on {on} with {who}, queued on main ahead of it. Take nothing in for it: "
+        "it may yet fail and leave the queue, and crew forecasts the bolt again when main or its queue moves.")
+
+
+def unread_said(bolt, bolt_head, why, done):
+    """What a wait says when sluice could not forecast the bolt against main: once for the bolt's head (heads, the
+    words), or every wait when the head is not known (None, the words); None once said (read.1)."""
+    heads = f"bolt/{bolt}@{bolt_head[:7]}" if bolt_head else None
+    if heads and heads in done:
+        return None
+    return heads, f"no forecast of bolt/{bolt} against main: {why}"
 
 
 def forecasts_due(live, bolt, bolt_head, conflicts, done, took, after_of=None):

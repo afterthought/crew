@@ -4,7 +4,9 @@ which pairs a settle orders and which of crew's own orders it lifts, plan.reach_
 a forecast or an amendment reaches the later unit, plan.verified for whether it waits to merge, plan.amended_afters for each After unit constructed again since its
 dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent
 whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
-amendment_words for what it is told. That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
+amendment_words for what it is told; and a bolt against its kit's main (teams.19), plan.bolt_forecast_read for sluice's
+answer, plan.bolt_forecast for what it tells the conductor once and plan.unread_said for a forecast sluice can't give.
+That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
 rebase replays its commits, are contract cases (tests/contract/test_git.py); the wait that tells, starts a settle or
 carries, and the rebase at a merge, the journey's."""
 import pytest
@@ -360,3 +362,75 @@ class TestWords:
             "a, which you come after, was constructed again, and you are not held for it: build on its revised change, keeping "
             "yours true to it. Your place holds its work as it stood when your place was made, and is rebased onto the bolt "
             f"once it merges. a's change is {tmp_path}/a/openspec/changes/a/. Its Why: x What it changes: y.")
+
+
+class TestBoltAgainstMain:
+    """sluice's forecast of the bolt against main on each conductor's wait (teams.19, sluice's ADR 0039)."""
+    H, M = "1" * 40, "2" * 40
+    CLEAR = '{"conflict": null, "head": "%s", "onto": "%s", "ahead": []}' % ("1" * 40, "2" * 40)
+    LANDED = ('{"conflict": {"paths": ["docs/builds.md"], "with": []}, "head": "%s", "onto": "%s", "ahead": [217]}'
+              % ("1" * 40, "2" * 40))
+    QUEUED = ('{"conflict": {"paths": ["docs/builds.md", "docs/identity.md"], "with": [{"id": 217, "from": {"agent": '
+              '"wldn-design", "worktree": "design/runner-credential"}}]}, "head": "%s", "onto": "%s", "ahead": [217]}'
+              % ("1" * 40, "2" * 40))
+
+    def read(self, code, out, err=""):
+        return plan.bolt_forecast_read(code, out, err)
+
+    def told(self, out, code=2, done=()):
+        doc, why = self.read(code, out)
+        assert why is None
+        return plan.bolt_forecast("swb-1", "wldn", "tenant-environments", doc, set(done))
+
+    def test_a_bolt_that_merges_cleanly_is_told_nothing(self):
+        assert self.told(self.CLEAR, code=0) is None
+
+    def test_a_conflict_with_what_main_landed_is_taken_in_now_by_a_fix(self):
+        heads, paths, words = self.told(self.LANDED)
+        assert heads == f"bolt/tenant-environments@{self.H[:7]} main@{self.M[:7]}"
+        assert paths == ["docs/builds.md"]
+        assert words == (
+            "bolt/tenant-environments is forecast to conflict with main on docs/builds.md: main has landed work on them "
+            "since the bolt took it. Take main into the bolt now, while the conflict is small, by a fix as when wldn-ops "
+            f'says a landing conflicts: crew fix swb-1 take-main-{self.M[:7]} "Take main into the bolt: it is forecast to '
+            'conflict on docs/builds.md"')
+
+    def test_a_conflict_with_a_submission_queued_on_main_is_waited_out(self):
+        heads, paths, words = self.told(self.QUEUED)
+        assert heads == f"bolt/tenant-environments@{self.H[:7]} main@{self.M[:7]} #217"
+        assert words == (
+            "bolt/tenant-environments is forecast to conflict on docs/builds.md, docs/identity.md with #217 "
+            "(design/runner-credential), queued on main ahead of it. Take nothing in for it: it may yet fail and leave "
+            "the queue, and crew forecasts the bolt again when main or its queue moves.")
+
+    def test_the_same_forecast_is_told_once(self):
+        heads, _, _ = self.told(self.LANDED)
+        assert self.told(self.LANDED, done=[heads]) is None
+
+    def test_main_moving_tells_it_again(self):
+        heads, _, _ = self.told(self.LANDED)
+        moved = self.LANDED.replace(self.M, "3" * 40)
+        assert self.told(moved, done=[heads])[0] == f"bolt/tenant-environments@{self.H[:7]} main@3333333"
+
+    def test_a_refusal_is_said_with_sluices_words(self):
+        assert self.read(2, '{"error": {"kind": "refused", "message": "no branch bolt/x to forecast", "next": []}}') == (
+            None, "it exited 2: no branch bolt/x to forecast")
+
+    def test_a_sluice_without_head_is_named(self):
+        assert self.read(2, "", "error: unexpected argument '--head' found\n") == (
+            None, "this host's sluice can't forecast a branch no worktree holds (sluice submit --check --head), which a "
+                  "newer sluice can")
+
+    def test_an_answer_with_an_absent_field_is_not_read(self):
+        # read.2: no head or revision of main becomes text.
+        assert self.read(2, '{"conflict": {"paths": ["a"], "with": []}}') == (
+            None, "its answer names no head or no revision of main")
+        assert self.read(2, '{"conflict": {"with": []}, "head": "h", "onto": "o"}') == (None, "its conflict names no paths")
+        assert self.read(1, "", "") == (None, "it exited 1")
+        assert self.read(None, "", "this host has no sluice on its path") == (None, "this host has no sluice on its path")
+
+    def test_a_forecast_sluice_cant_give_is_said_once_for_the_bolts_head(self):
+        assert plan.unread_said("t", self.H, "it exited 1", set()) == (
+            f"bolt/t@{self.H[:7]}", "no forecast of bolt/t against main: it exited 1")
+        assert plan.unread_said("t", self.H, "it exited 1", {f"bolt/t@{self.H[:7]}"}) is None
+        assert plan.unread_said("t", None, "it exited 1", set()) == (None, "no forecast of bolt/t against main: it exited 1")
