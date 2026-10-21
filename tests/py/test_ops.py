@@ -5,6 +5,8 @@ facts, whether its card is posted or changed, what it closes with, a step's card
 step's card is raised, one at a time. That each act is an entry of the run record on the partition's main level's
 host, that crew ops word and steps read them back, that quiet reads the host's agents and test slots, that each card
 is posted, changed and closed, and that a command run elsewhere runs there are the ops journey's (t-journey-ops)."""
+import io
+
 import pytest
 
 from facts import FLEET
@@ -356,6 +358,29 @@ class TestForwarded:
         assert ops.forwarded(ops.parser().parse_args(word), word, None, None) == (word, None)
         bare = self.ARGV[:8]
         assert ops.forwarded(ops.parser().parse_args(bare), bare, None, None) == (bare, None)
+
+    def test_a_record_run_away_from_the_main_level_carries_its_rows_and_no_path(self):
+        rows = '[{"name":"deployer","state":"ok"}]'
+        for given in (["--rows", "/tmp/r.json"], ["--rows=/tmp/r.json"]):
+            argv = ["record", "deneb", "--label", "swancloud", "--to", S2, "--act", "step", "--step", "suite", *given, "--outcome", "ok"]
+            assert ops.forwarded(ops.parser().parse_args(argv), argv, None, None, rows=rows) == (
+                ["record", "deneb", "--label", "swancloud", "--to", S2, "--act", "step", "--step", "suite", "--outcome", "ok", "--rows", "-"], rows)
+        end = ["record", "deneb", "--label", "swancloud", "--to", S2, "--act", "end", "--outcome", "done"]
+        assert ops.forwarded(ops.parser().parse_args(end), end, None, None) == (end, None)
+
+    def test_a_records_rows_are_read_where_it_was_given_and_what_cant_be_read_is_named(self, tmp_path, monkeypatch):
+        (tmp_path / "r.json").write_text('[ {"name": "deployer"} ]')
+        a = ops.parser().parse_args(["record", "deneb", "--label", "swancloud", "--to", S2, "--act", "step", "--rows", str(tmp_path / "r.json")])
+        assert ops.recorded_rows(a) == '[{"name":"deployer"}]'
+        a.rows = str(tmp_path / "gone.json")
+        with pytest.raises(ops.Refusal, match="the rows file .*gone.json can't be read as JSON"):
+            ops.recorded_rows(a)
+        a.rows = "-"
+        monkeypatch.setattr(ops.sys, "stdin", io.StringIO("not json"))
+        with pytest.raises(ops.Refusal, match="the rows carried on the stdin can't be read as JSON"):
+            ops.recorded_rows(a)
+        a.rows = None
+        assert ops.recorded_rows(a) is None
 
     def test_what_crew_cant_read_on_the_stdin_is_said(self):
         assert ops.carried_texts('{"notes": null, "steps": "x"}') == (None, "x", None)
