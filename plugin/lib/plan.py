@@ -1272,9 +1272,13 @@ def bolt_give(fleet, a):
     (kit.main_now, plan.18), and no
     worktree (plan.8, record 0026); the conductor and ops start in the kit's main checkout. Refused, with the plan
     unchanged, while the team holds a bolt, and when the kit's policy names no checks for its bolt branches, since a
-    bolt merges and lands only through sluice (teams.5, read.1)."""
+    bolt merges and lands only through sluice (teams.5, read.1), and while the team's host is held (teams.19), since a
+    give starts the team's agents again."""
     t = crew.team_of(fleet, a.team)
     label, kits = t["label"], [k["name"] for k in crew.kits_of(t)]
+    CONTEXT["label"] = label
+    h = crew.held_on(fleet, t["machine"])
+    not h or fail(crew.held_said(t["machine"], h))
     repo, ref = state_of(fleet, label)
     CONTEXT["label"] = label
     tip = fetch(repo, ref)
@@ -6374,6 +6378,18 @@ def on_team_host(fleet, t, force=False):
     return team
 
 
+def not_held(label=None, act=None, on=()):
+    """A command that would start an agent refused while this host is held (teams.19): said, and for an act that moves
+    work recorded refused (stopped); nothing when it is not held."""
+    h = crew.held()
+    if not h:
+        return
+    said = crew.held_said(crew.this_host(), h)
+    if label and act:
+        stopped(label, act, list(on), said)
+    fail(said)
+
+
 def stopped(label, act, on, said):
     """A team's command refused: said on standard error, recorded as the act refused (record.1), and stopped."""
     print(said, file=sys.stderr)
@@ -6464,6 +6480,7 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
     on = [f"stage/{unit}/{stage}", f"{kind}/{unit}"]
     if team.down():
         stopped(label, "stage.start", on, crew.down_said(t["name"]))
+    not_held(label, "stage.start", on)
     reap(fleet, team)
     free_elsewhere(fleet, t, unit)
     try:
@@ -6630,6 +6647,7 @@ def fix_run(fleet, a):
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     if a.mode not in ("wait", "drop"):
+        not_held()
         reap(fleet, team)
     said = fix_cmd(fleet, argparse.Namespace(team=t["name"], name=a.name, mode=a.mode))
     slot, fix, place, bolt = said["SLOT"], said["FIX"], said["PLACE"], said["BOLT"]
@@ -6866,6 +6884,8 @@ def team_cmd(fleet, a):
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force or a.act in ("close", "rebuild"))
     end, name = ending(fleet, t), t["name"]
+    if a.act in ("up", "rebuild", "restart", "resume"):
+        not_held()
     if a.act == "up":
         for role in team.standing:
             not team.status(role) or fail(crew.already_up_said(team.agent_of(role), name))
@@ -6960,6 +6980,7 @@ def needs_cmd(fleet, a):
 def dispatch_up(fleet, label):
     """This host's dispatcher of a partition started when it is not up, in a workspace of its own, recorded: its Agents
     and the roles started, for the caller to greet."""
+    not_held()
     d = crew.standing(fleet, "dispatch", label)
     d.ensure()
     d.mark(down=False)
@@ -7021,6 +7042,7 @@ def main_cmd(fleet, a):
     here, label = crew.this_host(), p["label"]
     hosts = crew.partition_hosts(fleet, label)
     if a.act == "up":
+        not_held()
         moved = moved_role(fleet, label, ms)
         not moved or fail(moved)
         started_in = []
@@ -7095,6 +7117,7 @@ def review_cmd(fleet, a):
             m.drop("layout", "tab:review")
         print(f"batch summary: {summary}")
         return
+    not_held()
     not m.status("reviewer") or fail(f"{agent} is still reviewing a batch: crew review {label} --wait waits for its summary")
     m.get("layout", crew.ws_key(label)) or fail(f"{label}'s main level is not up in session {m.session}: crew main up {label}")
     b = review_start(fleet, argparse.Namespace(label=label))
@@ -7181,7 +7204,9 @@ def revive_cmd(fleet, a):
     standing role whose pane came back with no agent in it, or dead, closed and opened again in its layout first (crew.revived,
     teams.2), picked up from its last conversation, a team's conductor greeted, and its ops when it had none to pick up
     (crew.greeted_roles), and every agent brought back outside a team greeted; one taken down with crew down stays
-    down. What can't be revived is said, and the rest still are."""
+    down. What can't be revived is said, and the rest still are. Nothing is revived while this host is held (teams.19):
+    crew go revives it."""
+    not_held()
     greetings = []
     every = [(kind, scope, a) for kind, scope in crew.here(fleet)
              for a in ([None] if kind == "team" else crew.mains(fleet, scope) if kind == "main" else [crew.standing(fleet, kind, scope)])]

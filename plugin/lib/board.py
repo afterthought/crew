@@ -686,7 +686,11 @@ def card_line(c, now):
 def agent_views(data):
     """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
     prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
-    the partition's operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
+    the partition's operator's, every line a list of (text, style) segments. With what this host's agents run of crew
+    (data's `here`, here_read), each standing agent here with a recorded start has the crew it started on at the end of
+    its view's first line, or as its one line when it has no view, a team's ops and a dispatcher, with the version it is
+    restarted on at its next stop once an update made it due; and while this host is held every view opens with the
+    hold (teams.19). Any other agent has no view, and its mod draws nothing.
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
     the lines the mod draws above its view. With them, the line the mod adds once the frame is stale_after_ms old: the
     day and time it was read, since a frame a restart left can be days old, and that the rail tab has not refreshed it
@@ -701,10 +705,43 @@ def agent_views(data):
         views[f"{p['label']}-operator"] = operator_view(p)
         for c in p.get("cards", []):
             cards.setdefault(c["by"], []).append(card_line(c, now))
+    here = data.get("here")
+    if here:
+        for name, f in here["agents"].items():
+            said = [(crew_said(f, here["version"]), "dim")]
+            views[name] = [views[name][0] + [("  ", None)] + said] + views[name][1:] if views.get(name) else [row(said)]
+        if here["held"]:
+            views = {name: [held_row(here["host"], here["held"])] + v for name, v in views.items()}
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
             "stale": row([(f"read at {local(data['read_at'])}; the rail tab on {data['from']} has not refreshed it since", "dim")]),
             "views": views, "cards": {a: lines for a, lines in cards.items() if a in views}}
 
+
+def crew_said(f, now):
+    """The crew an agent runs, as its band says it (teams.19): the version it started on, or that it started on a crew
+    older than crew's versions in its bands; and once an update made it due a restart, the version it is restarted on
+    at its next stop."""
+    was = f"crew {f['version']}" if f["version"] else "an older crew"
+    return f"{was} \u2192 {now or 'crew as it now is'} at its next stop" if f["due"] else was
+
+
+def held_row(host, h):
+    """The line every band on a held host opens with (teams.19): who held it, since when, and why."""
+    since = f" since {h['at']}" if h.get("at") else ""
+    return row([(f"{host} is held", "bold"), (f" by {h['by']}{since}: {h['why']}. Start nothing new; crew go {host} lifts it", None)])
+
+
+def here_read(fleet, label):
+    """What this host's agents of a partition run of crew, for their bands (agent_views): this host, its crew's
+    version, its hold, and each standing agent of the partition here with a recorded start, by name: the version it
+    started on, and whether an update has made it due a restart (crew.due_of)."""
+    commit, version = crew.crew_version()
+    started, agents = crew.starts(), {}
+    for name in crew.agents_here(fleet, label):
+        if name in started:
+            due, _, _ = crew.due_of(fleet, name, started[name], commit)
+            agents[name] = {"version": started[name]["version"], "due": due}
+    return {"host": crew.this_host(), "version": version, "held": crew.held(), "agents": agents}
 
 # ------------------------------------------------------------------------------------------------- the board tab
 
@@ -809,7 +846,7 @@ def main(argv):
         print(plan.rail_text(fleet, labels, read, now))
         try:
             write_frame(labels[0], data)
-            write_frame(labels[0], agent_views(data), agents_path(labels[0]))
+            write_frame(labels[0], agent_views(dict(data, here=here_read(fleet, labels[0]))), agents_path(labels[0]))
         except OSError as e:
             print(f"crew could not write the board's frame in {FRAMES}: {e.strerror or e}", file=sys.stderr)
     elif a.json:

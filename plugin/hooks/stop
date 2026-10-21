@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""crew's Stop hook: at the end of each turn of a standing crew agent, one that an update of crew, or of its brief, has
+made due a restart (crew.due_of, teams.19) is handed to crew _renew on its host, which restarts it on crew as it now is
+once herdr reads it idle, with no question to the user open and nothing of its own running in the background but crew's
+waits. The end of a turn is the agent's own good point to stop: whatever it was doing is done or handed to the
+background, and nothing it says is cut off.
+
+A unit slot's agent, which starts fresh at every stage and so always runs crew as it now is, the reviewer, started fresh
+for each batch, and any session crew never started cost one file lookup and are left alone; so is every agent while its
+host is held, whose crew go restarts what is due. The hook never fails a turn and says nothing to the agent."""
+import json
+import pathlib
+import re
+import sys
+
+LIB = pathlib.Path(__file__).resolve().parent.parent / "lib"
+
+
+def main():
+    try:
+        hook = json.load(sys.stdin)
+    except ValueError:
+        return
+    sid = hook.get("session_id")
+    if not isinstance(sid, str) or not re.fullmatch(r"[A-Za-z0-9-]+", sid) or hook.get("agent_id"):
+        return
+    record = pathlib.Path.home() / ".local/state/crew/sessions" / sid
+    if not record.is_file():
+        return
+    name = dict(l.split("=", 1) for l in record.read_text().splitlines() if "=" in l).get("CREW_AGENT")
+    if not name or re.search(r"-unit-[0-9]+$|-reviewer$", name):
+        return
+    sys.path.insert(0, str(LIB))
+    import crew
+    fleet = crew.load()
+    if crew.held() or crew.standing_role(fleet, name) is None:
+        return
+    due, _, started = crew.due_of(fleet, name)
+    if due and started and started["session"] == sid:  # an older session of the agent's is not the one that runs
+        import hold
+        hold.hand(name)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:  # a turn is never held up by crew's bookkeeping
+        print(f"crew stop: {e}", file=sys.stderr)

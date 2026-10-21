@@ -18,7 +18,7 @@ Agents and Team here.
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import collections, functools, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+import collections, functools, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -1041,14 +1041,16 @@ def bolt_place(t):
 
 # A unit's stages and the definition each is started from.
 STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "settle": "coder", "merge": "coder", "fix": "coder"}
-def launch(fleet, scope, role, extra=None):
+def launch(fleet, scope, role, extra=None, where=True):
     """How crew-role starts a role: its folder, agent name, partition, the definition it comes from, the
-    folders it may also reach, and the model and effort after the teams file's override."""
+    folders it may also reach, and the model and effort after the teams file's override. With where false, a team's
+    conductor and ops are given the kit's main checkout without reading the plan for a bolt's worktree, as what an
+    agent's start is made of reads them (launch_now)."""
     if scope in fleet["teams"]:
         t = held_team(fleet, fleet["teams"][scope])
         label, roles, kit, bp = t["label"], t["roles"], t["kit"], t["blueprints"]
         if role in ("conductor", "ops"):
-            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=bolt_place(t) or kit["main"], dirs=[kit["dir"], bp["main"]])
+            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=(where and bolt_place(t)) or kit["main"], dirs=[kit["dir"], bp["main"]])
         elif re.match(r"^unit-[1-9][0-9]*$", role):
             int(role[5:]) <= t["units"] or fail(f"{t['name']} has {t['units']} unit slots, so no {role}")
             extra in STAGES or fail(f"{t['name']}-{role}: which stage? stages: " + " ".join(STAGES))
@@ -1361,6 +1363,176 @@ def brief_back_said(name, text):
             f"holding the whole of it, read that file whole now, before anything else.\n\n{text}")
 
 
+# ------------------------------------------------------------------------- a host's hold, and what an agent loaded
+
+# A host's hold (teams.19): while `crew hold` holds it, crew starts no agent there until `crew go`.
+HOLD = pathlib.Path.home() / ".local/state/crew/hold"
+# What a Claude session loads of crew's plugin once, at its start, besides its brief (teams.19): a change to any of
+# these reaches a standing agent only when it starts again. The hooks' own scripts and crew's code run afresh at each
+# call, so a change to them alone is live at once.
+LOADED = ("plugin/hooks/hooks.json", "plugin/hooks/status.js", "plugin/skills", "plugin/.claude-plugin")
+
+
+def held():
+    """This host's hold, {"by", "why", "at"} and whether it was --now, while crew hold holds it, else None; a hold file
+    crew can't read holds the host all the same, its why saying so (read.1)."""
+    try:
+        text = HOLD.read_text()
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        return {"by": "?", "why": f"crew can't read its hold file {HOLD}: {e.strerror or e}", "at": None}
+    try:
+        h = json.loads(text)
+    except ValueError:
+        h = None
+    if isinstance(h, dict) and all(isinstance(h.get(k), str) for k in ("by", "why", "at")):
+        return h
+    return {"by": "?", "why": f"crew can't read its hold file {HOLD}", "at": None}
+
+
+def held_on(fleet, host):
+    """A host's hold, read where it is (held): None when it is not held, or when the host does not answer, whose own
+    crew then refuses what would start an agent there."""
+    if host == this_host():
+        return held()
+    r = on_machine(fleet, host, ["cat", ".local/state/crew/hold"])
+    if r.returncode:
+        return None
+    try:
+        h = json.loads(r.stdout)
+    except ValueError:
+        h = None
+    return h if isinstance(h, dict) and all(isinstance(h.get(k), str) for k in ("by", "why", "at")) else \
+        {"by": "?", "why": f"crew can't read {host}'s hold file", "at": None}
+
+def held_said(host, h):
+    """What crew says of a start a host's hold refuses."""
+    since = f" since {h['at']}" if h.get("at") else ""
+    return f"{host} is held by {h['by']}{since}: {h['why']}. crew starts no agent there until crew go {host}"
+
+
+def crew_version(root=None):
+    """This host's crew: (its checkout's commit, its version), the version being the release tag at or before the
+    commit, with `+<n>` for the commits past it; the version None when no release tag is reachable, and both None when
+    git can't read the checkout."""
+    root = str(root or HOME)
+    r = subprocess.run(["git", "-C", root, "describe", "--tags", "--long", "--match", "v[0-9]*", "--abbrev=40", "HEAD"],
+                       capture_output=True, text=True)
+    m = re.fullmatch(r"(v[0-9]\S*)-([0-9]+)-g([0-9a-f]{40})", r.stdout.strip()) if r.returncode == 0 else None
+    if m:
+        return m.group(3), m.group(1) + ("" if m.group(2) == "0" else f"+{m.group(2)}")
+    r = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"], capture_output=True, text=True)
+    return (r.stdout.strip() or None, None) if r.returncode == 0 else (None, None)
+
+
+def loaded_changed(old, new, root=None):
+    """Whether what a session loads of crew's plugin at its start (LOADED) differs between two commits of crew: True,
+    False, or None when git can't tell, as when the older commit is not in this checkout."""
+    r = subprocess.run(["git", "-C", str(root or HOME), "diff", "--quiet", old, new, "--", *LOADED],
+                       capture_output=True, text=True)
+    return {0: False, 1: True}.get(r.returncode)
+
+
+def launch_digest(l, text):
+    """What an agent's start is made of besides crew's plugin, as one short digest: its model, effort, folders and
+    brief (teams.6), so that a change to any of them reads as due (update_due)."""
+    return hashlib.sha256(json.dumps([l["model"], l["effort"], sorted(l["dirs"]), text]).encode()).hexdigest()[:16]
+
+
+def launch_now(fleet, scope, role):
+    """The digest of what crew-role would start a standing role with now (launch_digest), read without the plan."""
+    l = launch(fleet, scope, role, where=False)
+    return launch_digest(l, brief(fleet, scope, l["defn"], l["name"]))
+
+
+def standing_role(fleet, name):
+    """The scope and role crew-role starts a standing agent as, from its name alone: (team, conductor|ops), (label,
+    design|planner|ops|operator) or (label, dispatcher); None for a unit slot, the reviewer, or a name crew starts no
+    agent by. Only a standing agent outlives a stage, so only it is restarted for an update (teams.19)."""
+    t = team_of_agent(fleet, name)
+    if t:
+        role = name[len(t["name"]) + 1:]
+        return (t["name"], role) if role in ("conductor", "ops") else None
+    label = label_of_agent(fleet, name)
+    role = name[len(label) + 1:] if label else ""
+    if role in MAIN_STANDING:
+        return label, role
+    return (label, "dispatcher") if role.startswith("dispatch-") else None
+
+
+def agents_here(fleet, label=None):
+    """The standing agents crew runs on this host, by name, of one partition or of every one: each team's conductor
+    and ops, the main level's roles whose machine this is, and this host's dispatchers."""
+    host, out = this_host(), []
+    for l, p in sorted(fleet["partitions"].items()):
+        if label not in (None, l):
+            continue
+        out += [f"{t}-{r}" for t in sorted(p["teams"]) if fleet["teams"][t]["machine"] == host for r in ("conductor", "ops")]
+        out += [f"{l}-{r}" for r in MAIN_STANDING if p["machine"] == host]
+        out += [f"{l}-dispatch-{host}"] if host in partition_hosts(fleet, l) else []
+    return out
+
+
+def starts():
+    """What each agent's last start on this host recorded (hooks/session-start), by the agent's name: its session, the
+    commit and version of crew it loaded, and the digest of the launch it was started with, each None when the start
+    did not record it, as one before crew kept them."""
+    found = {}
+    for p in (SESSIONS.iterdir() if SESSIONS.is_dir() else []):
+        try:
+            kv = dict(l.split("=", 1) for l in p.read_text().splitlines() if "=" in l)
+            at = p.stat().st_mtime
+        except OSError:
+            continue
+        name = kv.get("CREW_AGENT")
+        if name and (name not in found or (at, p.name) > found[name][0]):
+            found[name] = ((at, p.name), {"session": p.name, "commit": kv.get("CREW_COMMIT") or None,
+                                          "version": kv.get("CREW_VERSION") or None, "launch": kv.get("CREW_LAUNCH") or None})
+    return {name: s for name, (_, s) in found.items()}
+
+
+def start_of(name):
+    """What an agent's last start on this host recorded (starts), or None when it has no record."""
+    return starts().get(name)
+
+
+def update_due(started, commit, launch, loaded):
+    """Whether a standing agent is due a restart for crew's update (teams.19), and why, from facts: what its last start
+    recorded (start_of), this checkout's commit, the digest of the launch it would be started with now, and whether
+    what a session loads of crew's plugin changed between its start's commit and this one (loaded_changed, None when
+    git can't tell). Returns (due, why): due when it started before crew kept what it loaded, when its brief, model,
+    effort or folders changed, or when what it loaded of crew's plugin did; never for a change to crew's code alone,
+    which is live at once; and not when crew can't tell, which it says (read.1)."""
+    if started is None:
+        return False, None
+    if not started["commit"] or not started["launch"]:
+        return True, "it started before crew kept what an agent loads"
+    if started["launch"] != launch:
+        return True, "its brief, model, effort or folders changed"
+    if started["commit"] == commit:
+        return False, None
+    if loaded is None:
+        return False, f"crew can't tell whether its plugin changed since {started['commit'][:7]}"
+    return (True, "crew's plugin changed") if loaded else (False, None)
+
+
+def due_of(fleet, name, started=None, commit=None):
+    """Whether a standing agent of this host is due a restart for crew's update, read: (due, why, what its start
+    recorded). A name that is no standing agent's is never due."""
+    started = started or start_of(name)
+    role = standing_role(fleet, name)
+    if started is None or role is None:
+        return False, None, started
+    commit = commit or crew_version()[0]
+    try:
+        now = launch_now(fleet, *role)
+    except Refusal as e:
+        return False, f"crew can't build its brief: {e}", started
+    loaded = loaded_changed(started["commit"], commit) if started["commit"] and commit and started["commit"] != commit else None
+    return (*update_due(started, commit, now, loaded), started)
+
+
 def resolve(fleet, scope, role, extra):
     """How a role starts, and with "resume" the session it picks up: its last conversation, in the folder that began
     it, which since a conductor moves into its bolt's worktree need not be where the role starts today."""
@@ -1370,8 +1542,8 @@ def resolve(fleet, scope, role, extra):
 
 
 def launch_shell(fleet, scope, role, extra):
-    """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from) and the
-    claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
+    """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
+    (what the start is made of besides crew's plugin, launch_digest) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
@@ -1379,9 +1551,10 @@ def launch_shell(fleet, scope, role, extra):
     args += ["--name", l["name"]]
     if session:
         args += ["--resume", session]
-    args += ["--append-system-prompt", brief(fleet, scope, l["defn"], l["name"])]
+    text = brief(fleet, scope, l["defn"], l["name"])
+    args += ["--append-system-prompt", text]
     return (f"CWD={shlex.quote(l['cwd'])}\nNAME={shlex.quote(l['name'])}\nLABEL={shlex.quote(l['label'])}\n"
-            f"ROLE={shlex.quote(l['defn'])}\nargs=({' '.join(shlex.quote(a) for a in args)})")
+            f"ROLE={shlex.quote(l['defn'])}\nLAUNCH={launch_digest(l, text)}\nargs=({' '.join(shlex.quote(a) for a in args)})")
 
 
 def here(fleet):
@@ -1750,10 +1923,15 @@ class Agents:
         (teams.2, teams.6): never over an agent still running. Its shell is cleared and moved to the folder the role
         runs in, which herdr keeps for the pane and Claude finds its conversation from; crew-role starts it there, it is
         given its name, and Claude's folder-trust question alone is answered for it, never the Bypass Permissions
-        warning (teams.8). Nothing is started in a pane herdr lists with no terminal behind it (dead_said): what opens
+        warning (teams.8). Nothing is started on a host crew hold holds (teams.19), nor in a pane herdr lists with no
+        terminal behind it (dead_said): what opens
         a role's pane closes such a pane and opens it again (mend). Returns whether it started, said on standard error
         when not."""
         pane, name = self.pane(role), self.agent_of(role)
+        h = held()
+        if h:
+            print(held_said(this_host(), h), file=sys.stderr)
+            return False
         if self.herdr.status(pane):
             print(f"{name} is still running; not starting another over it", file=sys.stderr)
             return False
