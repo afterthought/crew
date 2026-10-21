@@ -27,6 +27,10 @@ for brief in "swb-1 coder" "wldn design" "wldn operator"; do
   done
 done
 ok "the coder, the design agent and the operator submit without waiting and wait on the submission with sluice wait, never a listing"
+expect_ok crewpy brief swb-1 coder; has "$out" "if the host was slow, submit the same head again"
+has "$out" "if the fail looks like the host's doing, a time limit or an overloaded host, stop and say so through crew"
+has "$out" "Never change what a test reads only to get it tested again."
+ok "the coder submits the same head again after a slow host's time limit, and takes a flaky fail the host caused to the user, never changing what a test reads"
 
 # sluice 0.3.1's `wt submit --help` removes the worktree it ran in as if the submission had landed (teams.5's
 # details), so every brief that names `wt submit` says never to run it, and where the usage is read instead.
