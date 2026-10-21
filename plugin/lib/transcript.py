@@ -267,6 +267,29 @@ def pending(path):
     return [t for t in started if t not in told]
 
 
+def started_commands(path):
+    """The command of each background task the session started, by the task's id: the Bash call's command whose result
+    names the task (toolUseResult's backgroundTaskId, its tool_result's tool_use_id the call's id), None for a task whose
+    call can't be found or ran no command. None, never an empty dict, when the transcript is missing or can't be read."""
+    found = lines(path) if path else None
+    if found is None or isinstance(found, str):
+        return None
+    calls, out = {}, {}
+    for _, _, v in found:
+        content = (v.get("message") or {}).get("content") if isinstance(v, dict) and isinstance(v.get("message"), dict) else None
+        for c in content if isinstance(content, list) else []:
+            if isinstance(c, dict) and c.get("type") == "tool_use" and isinstance(c.get("id"), str):
+                command = (c.get("input") or {}).get("command") if isinstance(c.get("input"), dict) else None
+                calls[c["id"]] = command if isinstance(command, str) else None
+        r = v.get("toolUseResult") if isinstance(v, dict) else None
+        tid = r.get("backgroundTaskId") if isinstance(r, dict) else None
+        if not (isinstance(tid, str) and tid):
+            continue
+        used = [c.get("tool_use_id") for c in (content if isinstance(content, list) else [])
+                if isinstance(c, dict) and c.get("type") == "tool_result"]
+        out[tid] = next((calls.get(u) for u in used if u in calls), None)
+    return out
+
 def last_at(path):
     """When the session last wrote its transcript: the newest timestamp of any of its records, as a UTC time. None when
     the transcript is missing or can't be read, or no record carries a time crew can read."""
