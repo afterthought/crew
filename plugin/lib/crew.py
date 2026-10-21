@@ -7,6 +7,8 @@
                                       a definition's brief for a team or a partition's main level; name is the agent's own
   crew.py launch <team|label> <role> [stage|resume]
                                       how crew-role starts the role, as shell assignments
+  crew.py hint <agent> <pane>         tell a team's conductor's or ops's pane again the branch it works for, for
+                                      sluice's plugins, as after herdr resumed it bare
   crew.py tell <agent> "<text>" [--taken]
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
@@ -1023,34 +1025,73 @@ def slot_of(t, slot):
     fail(f"{t['name']}-{slot} holds no unit or fix")
 
 
-def bolt_place(t):
-    """The worktree of the bolt a team holds, from the plan, where its conductor and ops start while a bolt given
-    before bolts were branches alone keeps one (plan.9); None when it holds none or its bolt is a branch, and the role
-    starts in the kit's main checkout. A plan that can't be read is reported, and the role starts there too."""
+def team_bolt(t, then=""):
+    """The bolt a team holds, from the plan; None when it holds none. A plan that can't be read is reported, with what
+    crew does then, and taken as no bolt."""
     import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
     try:
-        bolt = plan.bolt_of_team(this.load(), t)
+        return plan.bolt_of_team(this.load(), t)
     except this.Refusal as e:
         why = str(e).strip()
         if "holds no bolt" not in why:
-            print(f"{t['name']}'s bolt could not be read ({why}); starting in {t['kit']['main']}", file=sys.stderr)
+            print(f"{t['name']}'s bolt could not be read ({why}){then}", file=sys.stderr)
         return None
+
+
+def bolt_place(t, bolt):
+    """The worktree of the bolt a team holds, where its conductor and ops start while a bolt given before bolts were
+    branches alone keeps one (plan.9); None when it holds none or its bolt is a branch, and the role starts in the kit's
+    main checkout."""
     path = f"{t['kit']['dir']}/bolts/{bolt}"
     return path if bolt and pathlib.Path(path).is_dir() else None
+
+
+# The pane token sluice's plugins read for the branch an agent works for when its folder names none (sluice ADR 0038).
+HINT = "sluice_branch"
+
+
+def hint_branch(role, bolt):
+    """The branch sluice's plugins are told a team's agent works for (teams.20): its bolt's, bolt/<bolt>, for the
+    conductor and ops of a team that holds one, whose folder, the kit's main checkout or a bolt's detached worktree,
+    names no branch; None when the team holds none, and for a unit slot, which submits from a place on its own branch
+    and whose forecast of what it holds ahead a hint would hide."""
+    return f"bolt/{bolt}" if role in ("conductor", "ops") and bolt else None
+
+
+def hint_args(pane, branch):
+    """herdr's report of the branch on a pane, or of none: the token from crew's source with no time to live, so it
+    stands until crew replaces or clears it, and no sequence number, which herdr would hold a crew started afresh
+    below (read 2026-10-21 on herdr 0.9.5's `pane report-metadata`)."""
+    return ["pane", "report-metadata", pane, "--source", "crew"] + (["--token", f"{HINT}={branch}"] if branch else ["--clear-token", HINT])
+
+
+def hint_agent(fleet, name, pane):
+    """crew.py hint <agent> <pane>: a team's conductor's or ops's pane told again the branch it works for, as the plan
+    has it now (hint_branch), once herdr has resumed it bare: herdr keeps no token across its server's restart, and the
+    session's start is the first crew hears of it (hooks/session-start). Any other agent's pane is left alone."""
+    t = team_of_agent(fleet, name)
+    role = name[len(t["name"]) + 1:] if t else ""
+    if role not in ("conductor", "ops"):
+        return
+    r = subprocess.run([os.environ.get("HERDR_BIN_PATH") or "herdr", *hint_args(pane, hint_branch(role, team_bolt(t)))],
+                       capture_output=True, text=True)
+    r.returncode == 0 or fail(f"herdr did not take {name}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}")
 
 
 # A unit's stages and the definition each is started from.
 STAGES = {"construct": "construct", "code": "coder", "verify": "verify", "settle": "coder", "merge": "coder", "fix": "coder"}
 def launch(fleet, scope, role, extra=None, where=True):
     """How crew-role starts a role: its folder, agent name, partition, the definition it comes from, the
-    folders it may also reach, and the model and effort after the teams file's override. With where false, a team's
-    conductor and ops are given the kit's main checkout without reading the plan for a bolt's worktree, as what an
-    agent's start is made of reads them (launch_now)."""
+    folders it may also reach, the model and effort after the teams file's override, and the branch sluice's plugins
+    are told it works for (hint_branch). With where false, a team's conductor and ops are given the kit's main checkout
+    and no branch without reading the plan for its bolt, as what an agent's start is made of reads them (launch_now)."""
     if scope in fleet["teams"]:
         t = held_team(fleet, fleet["teams"][scope])
         label, roles, kit, bp = t["label"], t["roles"], t["kit"], t["blueprints"]
         if role in ("conductor", "ops"):
-            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=(where and bolt_place(t)) or kit["main"], dirs=[kit["dir"], bp["main"]])
+            bolt = team_bolt(t, f"; starting in {kit['main']}") if where else None
+            spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=bolt_place(t, bolt) or kit["main"], dirs=[kit["dir"], bp["main"]],
+                        branch=hint_branch(role, bolt))
         elif re.match(r"^unit-[1-9][0-9]*$", role):
             int(role[5:]) <= t["units"] or fail(f"{t['name']} has {t['units']} unit slots, so no {role}")
             extra in STAGES or fail(f"{t['name']}-{role}: which stage? stages: " + " ".join(STAGES))
@@ -1073,7 +1114,7 @@ def launch(fleet, scope, role, extra=None, where=True):
             fail(f"no role '{role}' at {label}'s main level. roles: design planner ops reviewer dispatcher operator")
     meta, _ = definition(spec["defn"])
     o = roles.get(spec["defn"], {})
-    return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]))
+    return dict(spec, label=label, model=o.get("model", meta["model"]), effort=o.get("effort", meta["effort"]), branch=spec.get("branch"))
 
 
 def operator_session(fleet, label, host):
@@ -1543,7 +1584,8 @@ def resolve(fleet, scope, role, extra):
 
 def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
-    (what the start is made of besides crew's plugin, launch_digest) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
+    (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
+    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
@@ -1554,7 +1596,8 @@ def launch_shell(fleet, scope, role, extra):
     text = brief(fleet, scope, l["defn"], l["name"])
     args += ["--append-system-prompt", text]
     return (f"CWD={shlex.quote(l['cwd'])}\nNAME={shlex.quote(l['name'])}\nLABEL={shlex.quote(l['label'])}\n"
-            f"ROLE={shlex.quote(l['defn'])}\nLAUNCH={launch_digest(l, text)}\nargs=({' '.join(shlex.quote(a) for a in args)})")
+            f"ROLE={shlex.quote(l['defn'])}\nLAUNCH={launch_digest(l, text)}\nBRANCH={shlex.quote(l.get('branch') or '')}\n"
+            f"args=({' '.join(shlex.quote(a) for a in args)})")
 
 
 def here(fleet):
@@ -1955,6 +1998,7 @@ class Agents:
                                             f"{self.scope} {role}" + (f" {stage}" if stage else ""))
         if not self.give_name(pane, name):
             return False
+        self.hint(pane, l.get("branch"))
         for _ in range(15):
             nap(2)
             r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
@@ -1977,6 +2021,21 @@ class Agents:
             nap(1)
         print(f"{name} did not come up in {pane}; look at that pane.", file=sys.stderr)
         return False
+
+    def hint(self, pane, branch):
+        """A pane told the branch its agent works for, or that it works for none (hint_args, teams.20), so a slot's pane
+        keeps no conductor's branch; a hint herdr does not take is said, and starts or stops nothing."""
+        r = self.herdr.run(*hint_args(pane, branch))
+        if r.returncode:
+            print(f"herdr did not take {pane}'s {HINT} token: {(r.stderr or r.stdout).strip()[-200:]}", file=sys.stderr)
+
+    def hint_standing(self, bolt):
+        """Each standing role's pane that is up told the branch it works for now, its team holding bolt or none, after
+        a plan write that ends the team's bolt, which restarts neither role (teams.20)."""
+        for role in self.standing:
+            pane = self.pane(role)
+            if self.herdr.live(pane):
+                self.hint(pane, hint_branch(role, bolt))
 
     def start_standing(self):
         """Each standing role started that is not up, said when one is: the roles started. One that can't start stops
@@ -2157,6 +2216,8 @@ def main(a):
         sys.stdout.write(brief(fleet, a[1], a[2], a[3] if len(a) > 3 else ""))
     elif a[:1] == ["launch"] and len(a) >= 3:
         print(launch_shell(fleet, a[1], a[2], a[3] if len(a) > 3 else None))
+    elif a[:1] == ["hint"] and len(a) == 3:
+        hint_agent(fleet, a[1], a[2])
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
         import record as rec  # record imports this module
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)

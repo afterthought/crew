@@ -29,8 +29,12 @@ eq "$(field $box greet On agent/swb-1-ops)" "agent/swb-1-ops team/swb-1"
 expect_fail "swb-1-conductor is already up" crew up swb-1
 expect_ok crew status swb-1
 has "$out" "swb-1-conductor"; has "$out" "swb-1-ops"; eq "$(grep -c ' free ' <<<"$out")" "4"
-pane_cwd() { herdr_state $box wldn-1 ".panes[\"$(awk -v r="$1" '$1==r{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].cwd"; }
+pane_of() { awk -v r="$1" '$1==r{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes"; }
+pane_cwd() { herdr_state $box wldn-1 ".panes[\"$(pane_of "$1")\"].cwd"; }
+# The branch a role's pane tells sluice's plugins it works for (teams.20), "none" when its pane carries none.
+pane_branch() { herdr_state $box wldn-1 ".panes[\"$(pane_of "$1")\"].tokens.sluice_branch // \"none\""; }
 eq "$(pane_cwd conductor)" "$k"
+eq "$(pane_branch conductor) $(pane_branch ops)" "none none"
 ok "crew up starts a team's conductor and ops on its host, in one workspace with a conductor tab and in the kit's main checkout, greets each once and records it; status lists them and four free slots"
 
 crew bolt new smoke "Prove the loop." --repo switchboard-kit >/dev/null
@@ -46,7 +50,18 @@ has "$(grep "agent prompt swb-1-conductor '" "$CREW_TEST_LOG")" "Your team now h
 eq "$(greetings $box wldn-1 swb-1-ops)" "1"
 has "$(grep "agent prompt swb-1-ops '" "$CREW_TEST_LOG")" "You are swb-1'\"'\"'s ops; your team holds the bolt smoke."
 eq "$(field $box agent.restart By agent/swb-1-ops)" "$me@mac-studio"
-ok "a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and restarts its conductor and ops in the kit's main checkout, then greets each once, told the bolt"
+eq "$(pane_branch conductor) $(pane_branch ops)" "bolt/smoke bolt/smoke"
+eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/smoke"
+ok "a bolt given to a team that is up is cut from GitHub's main as it stands, with no worktree, and restarts its conductor and ops in the kit's main checkout, carrying the bolt's branch for sluice, then greets each once, told the bolt"
+
+# herdr's server restarts, keeping no token, and resumes the conductor bare, without crew's environment.
+cp=$(pane_of conductor); sid=$(jq -r 'select(.agent == "swb-1-conductor") | .session' "$CREW_TEST_CLAUDE_LOG" | tail -1)
+as $box herdr --session wldn-1 pane report-metadata "$cp" --source crew --clear-token sluice_branch >/dev/null
+as $box env HERDR_ENV=1 HERDR_SESSION=wldn-1 HERDR_PANE_ID="$cp" HERDR_BIN_PATH="$TESTS/stubs/herdr" \
+  python3 "$CREW/plugin/hooks/session-start" <<<"{\"session_id\":\"$sid\",\"source\":\"resume\"}"
+branch_is() { [[ $(pane_branch "$1") == "$2" ]]; }
+until_ok branch_is conductor bolt/smoke || fail "the resumed conductor's pane did not get its bolt's branch back: $(pane_branch conductor)"
+ok "a conductor herdr resumes bare gets its bolt's branch back on its pane"
 
 first=$(jq -r 'select(.agent == "swb-1-ops") | .session' "$CREW_TEST_CLAUDE_LOG" | tail -1)
 expect_ok crew down swb-1
