@@ -33,17 +33,20 @@ has "$out" "swb-1-unit-1 delivered fix $fb: its branch is at $(short $fb)"
 expect_ok crew fix swb-1 tidy --merge
 eq "$(prompt_to swb-1-unit-1)" "'Merge $fb into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
 (cd "$fp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of the fix failed"
+echo stray > "$fp/note"  # a file nobody committed, which keeps the merged fix's place
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered merge of $fb: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
+# The merge's wait frees the slot as it lands, and removes the place and branch but for the stray file.
+has "$out" "swb-1-unit-1 is free: $fb has merged into its bolt"
+has "$out" "$fp is kept, and $fb with it: $fb has merged into bolt/tenant-environments, and it has uncommitted changes, which are the user's to keep or discard"
 expect_fail "$fb has merged into bolt/tenant-environments, so it is not dropped" crew fix swb-1 tidy --drop
 has "$(field $box fix.drop Refused "$fb")" "so it is not dropped"
 [[ $(record_of $box) != *ZQXS* ]] || fail "a fix's words are in the run record"
-ok "a fix takes a slot in its own place from the bolt and writes no plan, starts again there, ends at its commit, merges through sluice as a stage does and ends once the bolt holds it, and is not dropped then"
+ok "a fix takes a slot in its own place from the bolt and writes no plan, starts again there, ends at its commit, merges through sluice as a stage does and ends once the bolt holds it, its slot freed as it lands, and is not dropped then"
 
 # The user moves c to another team's bolt and drops d while its agent works, with the merged fix's place holding a file
 # nobody committed: the reads that follow free each slot once its agent settles, remove d's place, and keep the fix's.
 unset CREW_AGENT
-echo stray > "$fp/note"
 expect_ok crew bolt give swb-2 console-pages
 said=$out
 expect_ok crew unit move c console-pages
@@ -65,7 +68,6 @@ export CREW_AGENT=swb-1-conductor
 expect_ok crew status swb-1
 said+=$'\n'$out
 has "$said" "swb-1-unit-3 is free: c has left swb-1's bolt"
-has "$said" "swb-1-unit-1 is free: $fb has merged into its bolt"
 has "$said" "$fp is kept, and $fb with it: $fb has merged into bolt/tenant-environments, and it has uncommitted changes, which are the user's to keep or discard"
 [[ -d $kd/places/c ]] || fail "c's place went with the slot it left"
 [[ -d $fp ]] || fail "the fix's place went with its stray file"
