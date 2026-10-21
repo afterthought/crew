@@ -67,6 +67,79 @@ class TestLoad:
         assert t["blueprints"]["main"] == f"{tmp_path}/mac/agentplot/blueprints/main"
 
 
+class TestRoleSessions:
+    """A main-level role may run in a session of its own, named in its partition's roles (record 0035): so a
+    partition's design agent and planner, both Fable, sit in two sessions on two Claude accounts."""
+
+    def load(self, tmp_path, monkeypatch, roles, extra=None):
+        def sess(space, partition, repos, account):
+            return {"dir": f"{tmp_path}/{space}", "partition": partition, "repos": repos, "account": account}
+        bp = ["afterthought/blueprints", "afterthought/crew"]
+        hosts = {"deneb": {"ssh": "deneb", "kind": "darwin", "sessions": dict({
+            "swancloud-1": sess("deneb/madswan", "personal", bp, "madswan"),
+            "swancloud-2": sess("deneb/madswan", "personal", bp, "madswan-2"),
+            "madswan-1": sess("deneb/madswan", "business", bp, "madswan-2")}, **(extra or {}))}}
+        teams = {"version": 2, "partitions": [{"label": "swancloud", "partition": "personal", "blueprints": ["afterthought/blueprints"],
+                                               "state": "afterthought/crew-state", "review": {"every": 5, "hours": 4},
+                                               "machine": "deneb", "session": "swancloud-1", "roles": roles}], "teams": []}
+        (tmp_path / "herdr-hosts.json").write_text(json.dumps({"version": 1, "hosts": hosts}))
+        (tmp_path / "teams.json").write_text(json.dumps(teams))
+        monkeypatch.setattr(crew, "HOSTS", tmp_path / "herdr-hosts.json")
+        monkeypatch.setattr(crew, "TEAMS", tmp_path / "teams.json")
+        crew.load.cache_clear()
+        try:
+            return crew.load()
+        finally:
+            crew.load.cache_clear()
+
+    def test_a_role_named_a_session_runs_there_the_reviewer_beside_the_planner_and_the_rest_in_the_main_levels(self, tmp_path, monkeypatch):
+        fleet = self.load(tmp_path, monkeypatch, {"planner": {"session": "swancloud-2", "effort": "max"}})
+        p = crew.partition_of(fleet, "swancloud")
+        assert p["sessions"] == {"design": "swancloud-1", "planner": "swancloud-2", "ops": "swancloud-1", "operator": "swancloud-1",
+                                 "reviewer": "swancloud-2"}
+        assert crew.place_of_agent(fleet, "swancloud-planner") == ("deneb", "swancloud-2")
+        assert crew.place_of_agent(fleet, "swancloud-operator") == ("deneb", "swancloud-1")
+        assert crew.main_sessions(p) == [("swancloud-1", ("design", "ops", "operator")), ("swancloud-2", ("planner",))]
+
+    def test_with_none_named_every_role_is_in_the_main_levels_session(self, tmp_path, monkeypatch):
+        p = crew.partition_of(self.load(tmp_path, monkeypatch, {}), "swancloud")
+        assert crew.main_sessions(p) == [("swancloud-1", ("design", "planner", "ops", "operator"))]
+
+    @pytest.mark.parametrize("roles, said", [
+        ({"planner": {"session": "madswan-1"}}, "partition swancloud's planner runs in deneb's session madswan-1, which is in partition business, not personal"),
+        ({"planner": {"session": "swancloud-9"}}, "partition swancloud's planner uses herdr session swancloud-9, which .* does not list on deneb"),
+        ({"dispatcher": {"session": "swancloud-2"}}, "roles.dispatcher.session can't be named: a dispatcher runs on each host"),
+        ({"planner": {"session": ""}}, "roles.planner.session must name a session of the main level's machine"),
+        ({"planner": {"seat": "x"}}, "roles.planner sets only 'model', 'effort' or 'session'")])
+    def test_a_session_of_another_partition_or_none_and_a_dispatchers_are_refused(self, tmp_path, monkeypatch, roles, said):
+        with pytest.raises(crew.Refusal, match=said):
+            self.load(tmp_path, monkeypatch, roles)
+
+    def test_a_brief_names_where_each_main_level_role_runs_and_on_which_account(self, tmp_path, monkeypatch):
+        fleet = self.load(tmp_path, monkeypatch, {"planner": {"session": "swancloud-2"}})
+        monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+        tok = crew.main_tokens(fleet, crew.partition_of(fleet, "swancloud"), "planner", "")
+        assert ("`swancloud-design` in session swancloud-1 (account madswan); `swancloud-planner` in session swancloud-2 "
+                "(account madswan-2)") in tok["MAIN_SESSIONS"]
+        assert tok["MAIN_SESSIONS"] in tok["ROSTER"] and tok["OPERATORS"] == "`swancloud-operator` on deneb"
+
+    def test_a_team_overrides_no_session(self, tmp_path, monkeypatch):
+        with pytest.raises(crew.Refusal, match="roles.coder sets only 'model' or 'effort'"):
+            crew.roles_of({"roles": {"coder": {"session": "x"}}}, "team swb-1", crew.TEAM_ROLES)
+
+
+class TestMoved:
+    """A state folder's panes recorded in another session than its agents run in now name nothing there, so crew sets
+    them aside rather than taking another agent at the same pane id for its own (teams.2; deneb, 2026-10-20: a stale
+    swancloud-main panes file made crew main up take crw-5's agents for the design agent and planner)."""
+
+    def test_a_folder_that_names_another_session_is_said_and_one_that_names_this_or_none_is_not(self):
+        assert crew.moved_said("swancloud", "swancloud-2", "swancloud-1") == (
+            "swancloud's panes were recorded in session swancloud-2, and it runs in swancloud-1 now; their ids name nothing here")
+        assert crew.moved_said("swancloud", "swancloud-1", "swancloud-1") is None
+        assert crew.moved_said("swancloud", "", "swancloud-1") is None
+
+
 class TestGreetWaits:
     def look(self, status, asking=False, asked=False, out_of_time=False):
         return crew.greet_waits("wldn-planner", status, asking, asked, out_of_time, "crew main up wldn starts and greets it", "Read where wldn stands.")
@@ -91,15 +164,15 @@ class TestStandingGreeting:
     @pytest.mark.parametrize("name, says", [
         ("wldn-design", "curate the signals that have no move"), ("wldn-planner", "crew plan proposed"),
         ("wldn-ops", "land nothing until it comes"), ("wldn-dispatch-mac-studio", "Read where wldn stands on mac-studio with"),
-        ("wldn-operator-mac-studio", "what is moving and what waits on me")])
+        ("wldn-operator", "what is moving and what waits on me")])
     def test_each_role_has_its_greeting(self, name, says):
         label, text, why, hint = crew.standing_greeting(FLEET, name)
         assert label == "wldn" and says in text
 
-    def test_its_entry_and_its_hint_name_the_main_level_or_the_operator(self):
+    def test_its_entry_and_its_hint_name_the_main_level_the_operators_among_it(self):
         assert crew.standing_greeting(FLEET, "wldn-design")[2:] == ("main(wldn): greet wldn-design", "crew main up wldn starts and greets it")
-        assert crew.standing_greeting(FLEET, "wldn-operator-mac-studio")[2:] == (
-            "operator(wldn): greet wldn-operator-mac-studio", "crew operator up wldn starts and greets it")
+        assert crew.standing_greeting(FLEET, "wldn-operator")[2:] == (
+            "main(wldn): greet wldn-operator", "crew main up wldn starts and greets it")
 
     @pytest.mark.parametrize("name, said", [
         ("swb-1-ops", "swb-1-ops is one of team swb-1's agents, not one crew starts outside a team"),
@@ -175,7 +248,7 @@ def running(*argvs):
 
 
 class TestOperatorTabs:
-    """What crew operator up finds in a tab's pane it opened before (crew.tab_holds, code.7): its loop running, the
+    """What crew console up finds in a tab's pane it opened before (crew.tab_holds, code.7): its loop running, the
     shell alone a restart left, which runs the loop again, or something else, which crew leaves (read.4)."""
 
     def test_a_pane_a_restart_left_holds_its_shell_alone_and_its_loop_runs_again(self):
@@ -315,7 +388,7 @@ class TestBriefBack:
         ("swb-1-conductor", ("swb-1", "conductor")), ("swb-1-ops", ("swb-1", "ops")), ("atl-1-ops", ("atl-1", "ops")),
         ("wldn-design", ("wldn", "design")), ("wldn-planner", ("wldn", "planner")), ("wldn-ops", ("wldn", "main-ops")),
         ("wldn-reviewer", ("wldn", "reviewer")), ("wldn-dispatch-chuck-herdr-alpha", ("wldn", "dispatcher")),
-        ("wldn-operator-mac-studio", ("wldn", "operator"))])
+        ("wldn-operator", ("wldn", "operator"))])
     def test_a_session_recorded_before_crew_role_named_its_definition_is_given_the_one_its_name_gives(self, name, found):
         assert crew.brief_role(FLEET, name, "") == found
         assert crew.brief_role(FLEET, name, None) == found

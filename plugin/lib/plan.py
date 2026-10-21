@@ -1834,7 +1834,7 @@ def role(fleet, name):
                 return kind, label
         if name.startswith(f"{label}-dispatch-"):
             return "dispatcher", label
-        if name.startswith(f"{label}-operator-"):
+        if name == f"{label}-operator" or name.startswith(f"{label}-operator-"):  # the latter, a host's before record 0035
             return "operator", label
     for t in fleet["teams"]:
         if name == f"{t}-conductor":
@@ -3514,12 +3514,10 @@ def quoted(excerpt, position):
 
 def where_of(fleet, name, plan):
     """Where an agent was working, read without asking it: its team, the bolt the team holds and, for a slot's stage,
-    the unit or fix its slot holds; the main level, or the operator session; None for an agent crew has no role for."""
+    the unit or fix its slot holds; the main level; None for an agent crew has no role for."""
     kind, of = role(fleet, name)
-    if kind in ("planner", "design", "main-ops", "dispatcher"):
+    if kind in ("planner", "design", "main-ops", "dispatcher", "operator"):
         return "main level"
-    if kind == "operator":
-        return "operator session"
     if kind not in ("conductor", "team"):
         return None
     out = [f"team {of}"] + [f"bolt {b.name()}" for b in held_by(plan, of)[:1]]
@@ -6946,22 +6944,40 @@ def elsewhere(fleet, host, *argv):
                             stdin=subprocess.DEVNULL)
 
 
+def moved_role(fleet, label, ms):
+    """What refuses a main level's up while one of its roles' agents still runs in a session the role no longer stands
+    in, its pane recorded there, so up would start it a second time in its own: None when none does."""
+    for m in ms:
+        for role, *_ in m.lines("panes"):
+            if role in crew.MAIN_STANDING and role not in m.standing and m.status(role):
+                return (f"{label}-{role} still runs in session {m.session} ({m.pane(role)}), and its partition names it another session "
+                        f"now: crew main down {label} ends it, then crew main up {label} starts it there")
+    return None
+
+
 def main_cmd(fleet, a):
-    """crew main up|down|status <label>, on the main level's host: its design agent, planner and ops, one tab each in
-    the <label> workspace, started and greeted, ended, or listed; and the dispatcher on each host the partition's teams
-    run on, that host's own, side by side, so one waiting on a question holds back no other host's. A dispatcher that
-    fails fails main up once the rest are up."""
+    """crew main up|down|status <label>, on the main level's host: its design agent, planner, ops and operator, one tab
+    each in the <label> workspace of the session each runs in (record 0035), started and greeted, ended, or listed; and
+    the dispatcher on each host the partition's teams run on, that host's own, side by side, so one waiting on a
+    question holds back no other host's. A dispatcher that fails fails main up once the rest are up. Up refuses while a
+    role's agent still runs in a session it no longer stands in (moved_role), which down ends."""
     p = crew.partition_of(fleet, a.label)
     arrived(fleet, p["machine"])
-    m = crew.standing(fleet, "main", a.label, a.force)
-    m.ensure()
+    ms = crew.mains(fleet, a.label, a.force)
+    for m in ms:
+        m.ensure()
     here, label = crew.this_host(), p["label"]
     hosts = crew.partition_hosts(fleet, label)
     if a.act == "up":
-        m.mark(down=False)
-        m.panes()
-        started = m.start_standing()
-        m.record("main.up", f"main({label}): up", started)
+        moved = moved_role(fleet, label, ms)
+        not moved or fail(moved)
+        started_in = []
+        for m in ms:
+            m.mark(down=False)
+            m.panes()
+            started = m.start_standing()
+            m.record("main.up", f"main({label}): up", started)
+            started_in.append((m, started))
         rc, greetings, away = 0, [], [(h, elsewhere(fleet, h, "_dispatch", "up", label)) for h in hosts if h != here]
         if here in hosts:
             try:
@@ -6971,19 +6987,23 @@ def main_cmd(fleet, a):
                 rc = 1
             except Stopped as e:
                 rc = e.code
-        greetings += greeting(fleet, m, started)
+        for m, started in started_in:
+            greetings += greeting(fleet, m, started)
         for _, proc in away:
             rc = proc.wait() or rc
         greeted(greetings)
         if rc:
             raise Stopped(rc)
     elif a.act == "down":
-        for role in m.standing:
-            why = m.stop(role)
-            if why:
-                print(why, file=sys.stderr)
-        m.mark(down=True)
-        m.record("main.down", f"main({label}): down", m.ended)
+        for m in ms:
+            # Every agent its panes file names, a role that stood here before its partition named it a session apart
+            # among them, so down ends what up would refuse over.
+            for role in [r for r, *_ in m.lines("panes") if r in crew.MAIN_STANDING]:
+                why = m.stop(role)
+                if why:
+                    print(why, file=sys.stderr)
+            m.mark(down=True)
+            m.record("main.down", f"main({label}): down", m.ended)
         print(f"{label}'s main level is down; its panes are still there.")
         for host in hosts:
             if host == here:
@@ -6991,8 +7011,9 @@ def main_cmd(fleet, a):
             elif elsewhere(fleet, host, "_dispatch", "down", label).wait():
                 raise Stopped(1)
     else:
-        for role in m.standing:
-            print("%-34s %-8s %s" % (m.agent_of(role), m.pane(role), m.status(role) or "not up"))
+        for m in ms:
+            for role in m.standing:
+                print("%-34s %-8s %-14s %s" % (m.agent_of(role), m.pane(role), m.session, m.status(role) or "not up"))
         for host in hosts:
             if host == here:
                 dispatch_cmd(fleet, argparse.Namespace(act="status", label=label))
@@ -7007,7 +7028,7 @@ def review_cmd(fleet, a):
     ended and its tab closed. Refused while a reviewer still reviews, or the main level is not up."""
     p = crew.partition_of(fleet, a.label)
     arrived(fleet, p["machine"])
-    m = crew.standing(fleet, "main", a.label)
+    m = crew.main_holding(fleet, a.label, "reviewer")
     m.ensure()
     label, agent = p["label"], m.agent_of("reviewer")
     if a.wait:
@@ -7023,7 +7044,7 @@ def review_cmd(fleet, a):
         print(f"batch summary: {summary}")
         return
     not m.status("reviewer") or fail(f"{agent} is still reviewing a batch: crew review {label} --wait waits for its summary")
-    m.get("layout", crew.ws_key(label)) or fail(f"{label}'s main level is not up: crew main up {label}")
+    m.get("layout", crew.ws_key(label)) or fail(f"{label}'s main level is not up in session {m.session}: crew main up {label}")
     b = review_start(fleet, argparse.Namespace(label=label))
     if not m.herdr.live(m.pane("reviewer")):  # the tab is kept in the layout, so the batch's end closes it
         made = m.tab(label, "review", m.cwd, "reviewer")
@@ -7036,34 +7057,33 @@ def review_cmd(fleet, a):
     print(f"{agent} is reviewing batch {b['N']} of {label}, into {b['FILE']}: crew review {label} --wait waits for it")
 
 
-def operator_cmd(fleet, a):
-    """crew operator up <label>: the operator agent in this host's operator session of the partition, started and
-    greeted when it is not up, and its tabs, each opened once: flow, following the run record; rail, what waits on the
-    user above and a shell below with this crew on its path; and board, drawn from what the rail's loop read. A tab whose
-    pane holds its shell alone, as herdr brings each pane back after a restart, runs its command there again, and one
-    running anything else is left and said (crew.tab_holds, read.4); swancloud's timer runs this every five minutes, so
-    a restart leaves the agents' bands unrefreshed no longer than that. The agent is greeted once its rail is open."""
-    o = crew.standing(fleet, "operator", a.label)
-    o.ensure()
-    label, crew_cmd, started = a.label, shlex.quote(str(crew.HOME / "plugin/bin/crew")), []
-    o.panes()
-    if o.status("operator"):
-        print(f"{o.agent_of('operator')} is already up")
-    else:
-        if not o.start("operator"):
-            raise Stopped(1)
-        started = ["operator"]
-        o.record("operator.up", f"operator({label}): up {o.agent_of('operator')}", started)
+def console_cmd(fleet, a):
+    """crew console up|down <label>: the partition's console on this host, the flow, rail and board tabs in the
+    `console` workspace of this host's `<label>` session, starting no agent (record 0035): flow, following the run
+    record; rail, what waits on the user above and a shell below with this crew on its path; and board, drawn from what
+    the rail's loop read. Up opens each tab once, and a tab whose pane holds its shell alone, as herdr brings each pane
+    back after a restart, runs its command there again, while one running anything else is left and said
+    (crew.tab_holds, read.4); swancloud's timer runs it every five minutes, so a restart leaves the agents' bands
+    unrefreshed no longer than that. An operator agent this host's console held before the operator was a main-level
+    role is ended and its workspace closed once it is not working (retire_operator). Down closes the console's tabs."""
+    c = crew.standing(fleet, "console", a.label)
+    c.ensure()
+    label, crew_cmd = a.label, shlex.quote(str(crew.HOME / "plugin/bin/crew"))
+    if a.act == "down":
+        c.teardown()
+        print(f"{label}'s console on {crew.this_host()} is closed")
+        return
+    retire_operator(fleet, label)
 
     def keep(tab, words):
-        run, pane = f"bash {crew_cmd} {shlex.join(words)}", o.pane(tab)
-        if not o.herdr.live(pane):
-            o.tab("operator", tab, o.cwd, tab)
-            o.herdr.run("pane", "run", o.pane(tab), run)
+        run, pane = f"bash {crew_cmd} {shlex.join(words)}", c.pane(tab)
+        if not c.herdr.live(pane):
+            c.opened("console", tab, c.cwd, tab)
+            c.herdr.run("pane", "run", c.pane(tab), run)
             return
-        held, what = crew.tab_holds(o.herdr.process_info(pane), words)
+        held, what = crew.tab_holds(c.herdr.process_info(pane), words)
         if held == "shell":
-            o.herdr.run("pane", "run", pane, run)
+            c.herdr.run("pane", "run", pane, run)
             print(f"{label}'s {tab} tab ({pane}) held its shell alone; its {tab} runs there again")
         elif held == "other":
             print(f"{label}'s {tab} tab ({pane}) runs {what}, not crew's {tab}; crew left it", file=sys.stderr)
@@ -7071,23 +7091,51 @@ def operator_cmd(fleet, a):
             print(f"{label}'s {tab} tab ({pane}): {what}; crew left it", file=sys.stderr)
     keep("flow", ["events", "--follow", "--label", label])
     keep("rail", ["_rail", label])
-    if not o.herdr.live(o.pane("rail-shell")):
-        o.put("panes", "rail-shell", o.split(o.pane("rail"), "down", o.cwd))
-        o.herdr.run("pane", "run", o.pane("rail-shell"), f"export PATH={shlex.quote(str(crew.HOME / 'plugin/bin'))}:$PATH")
+    if not c.herdr.live(c.pane("rail-shell")):
+        c.put("panes", "rail-shell", c.split(c.pane("rail"), "down", c.cwd))
+        c.herdr.run("pane", "run", c.pane("rail-shell"), f"export PATH={shlex.quote(str(crew.HOME / 'plugin/bin'))}:$PATH")
     keep("board", ["_board", label])
-    greeted(greeting(fleet, o, started))
+
+
+def retire_operator(fleet, label):
+    """The operator agent this host ran in its operator session before record 0035, `<label>-operator-<host>`, ended,
+    and the panes crew recorded in its `operator` workspace closed, once it is not working; one working, or one that
+    did not exit, is left and said, and its console opens beside it. Nothing to do once it is gone."""
+    state = pathlib.Path.home() / f".local/state/crew/{label}-operator"
+    if not (state / "panes").exists():
+        return
+    host = crew.this_host()
+    old = crew.Agents(fleet, "retired", label, label, label, state, ("operator",), str(state), host, host)
+    old.agent_of = lambda role: f"{label}-operator-{host}"
+    if old.status("operator") == "working":
+        print(f"{label}-operator-{host} is working; it is no longer started (the operator is {label}-operator, at the main level), "
+              f"and once it is not working the console ends it", file=sys.stderr)
+        return
+    why = old.stop("operator")
+    if why:
+        print(why, file=sys.stderr)
+        return
+    # Only the panes crew recorded there: a tab the user opened in that workspace stays, and the workspace goes with
+    # its last pane.
+    for _, pane, *_ in old.lines("panes"):
+        if old.herdr.live(pane):
+            old.herdr.run("pane", "close", pane)
+    os.replace(state, state.with_name(f"{label}-operator.retired-{int(time.time())}"))
+    print(f"{label}-operator-{host} is ended and its operator tabs closed: the operator is {label}-operator, at {label}'s main level")
 
 
 def revive_cmd(fleet, a):
-    """crew revive, after a restart: on this host, each team's, main level's, dispatcher's and operator agent's standing
-    role whose pane came back with no agent in it, or dead, closed and opened again in its layout first (crew.revived,
+    """crew revive, after a restart: on this host, each team's, main level's in each of its sessions, and dispatcher's
+    standing role whose pane came back with no agent in it, or dead, closed and opened again in its layout first (crew.revived,
     teams.2), picked up from its last conversation, a team's conductor greeted, and its ops when it had none to pick up
     (crew.greeted_roles), and every agent brought back outside a team greeted; one taken down with crew down stays
     down. What can't be revived is said, and the rest still are."""
     greetings = []
-    for kind, scope in crew.here(fleet):
+    every = [(kind, scope, a) for kind, scope in crew.here(fleet)
+             for a in ([None] if kind == "team" else crew.mains(fleet, scope) if kind == "main" else [crew.standing(fleet, kind, scope)])]
+    for kind, scope, agents in every:
         try:
-            agents = crew.Team(fleet, crew.team_of(fleet, scope)) if kind == "team" else crew.standing(fleet, kind, scope)
+            agents = agents or crew.Team(fleet, crew.team_of(fleet, scope))
             if not agents.lines("panes"):
                 continue
             if agents.down():
@@ -8181,7 +8229,7 @@ def card_refusal(fleet, name, label, tool, key):
         elif kind == "operator":
             left = "The user is in your pane: ask them there."
         else:
-            left = "Tell the partition's operator agents what you wait on, as your brief says."
+            left = "Tell the partition's operator what you wait on, as your brief says."
         return (f"crew refuses {what} from {name}: only a conductor, the planner, main-level ops and the design agent ask "
                 f"the user on a card. {left}")
     if tool == "create_area":
@@ -10413,7 +10461,8 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("--wait", action="store_true")
     x.add_argument("--timeout", type=int, default=3600000)
-    x = sub.add_parser("_operator")
+    x = sub.add_parser("_console")
+    x.add_argument("act", choices=("up", "down"))
     x.add_argument("label")
     sub.add_parser("_revive")
     return ap
@@ -10435,7 +10484,7 @@ COMMANDS = {
     ("_construct-again", None): construct_hand, ("_preview", None): preview_handed,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
-    ("_review", None): review_cmd, ("_operator", None): operator_cmd, ("_revive", None): revive_cmd,
+    ("_review", None): review_cmd, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
     ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show, ("signal-land", None): signal_land,
     ("_needs", None): needs_cmd,
@@ -10444,7 +10493,7 @@ COMMANDS = {
 }
 # The commands on a team and on a main level, each one process on the host its agents run on.
 TEAM_COMMANDS = {(c, None) for c in ("_status", "_unit-run", "_unit-wait", "_fix-run", "_construct-again", "_tidy", "_unit-free",
-                                      "_team", "_needs", "_main", "_dispatch", "_review", "_operator", "_revive")}
+                                      "_team", "_needs", "_main", "_dispatch", "_review", "_console", "_revive")}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",

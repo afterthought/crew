@@ -169,9 +169,10 @@
 #                                      landed on the flywheel's branch from the host that banked its raw record
 #   (crew bolt|unit|chore|plan|signal --help says more)
 #
-# Each partition's main level, and the operator agent in each operator session:
-#   crew main     up|down|status <label>  the design agent, the planner and ops in the <label> workspace of the
-#                                      main level's session, and a dispatcher on each host the partition's teams run on;
+# Each partition's main level, and its console in each operator session:
+#   crew main     up|down|status <label>  the design agent, the planner, ops and the operator in the <label> workspace
+#                                      of the session each runs in, the main level's unless its partition's roles name
+#                                      another, and a dispatcher on each host the partition's teams run on;
 #                                      each agent up starts is greeted to read where the partition stands and carry on;
 #                                      a pane herdr brought back dead is closed and opened again in its workspace, said
 #   crew review   <label> [--wait [--timeout <ms>]]
@@ -187,10 +188,10 @@
 #                                      user said yes in the pane; --alternatives <file> makes it a choice, loosen the
 #                                      rules as drafted, accept as ruled or send back; --accepted or --rejected closes
 #                                      it with the commit. A status the file does not hold is refused
-#   crew operator up <label>           the operator agent in this host's operator session <label>, with a flow tab
-#                                      following the run record, a rail tab (crew rail above, a shell below) and a
-#                                      board tab drawn from the rail tab's read, each tab's command run again where a
-#                                      restart left its pane a shell; the agent it starts is greeted the same way
+#   crew console  up|down <label>      the partition's console in this host's operator session <label>, starting no
+#                                      agent: a flow tab following the run record, a rail tab (crew rail above, a shell
+#                                      below) and a board tab drawn from the rail tab's read, each tab's command run
+#                                      again where a restart left its pane a shell; down closes them
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
@@ -353,9 +354,14 @@ case $cmd in
     one _review "$2" ;;
   _dispatch) one _dispatch "${2:?usage: crew _dispatch up|down|status <label>}" "${3:?usage: crew _dispatch up|down|status <label>}" ;;
   revive) one _revive ;;
-  operator)
-    [[ ${2:-} == up ]] || { echo "usage: crew operator up <label>" >&2; exit 2; }
-    one _operator "${3:?usage: crew operator up <label>}" ;;
+  console)
+    need_label "${3:-}"
+    case ${2:-} in up | down) one _console "$2" "$3" ;; *) echo "usage: crew console up|down <label>" >&2; exit 2 ;; esac ;;
+  operator)  # the console's name before record 0035, which a host's timer may still run: it opens the console
+    [[ ${2:-} == up ]] || { echo "usage: crew console up|down <label> (crew operator up is crew console up now)" >&2; exit 2; }
+    echo "crew operator up is crew console up now; the operator is <label>-operator, at the main level" >&2
+    need_label "${3:-}"
+    one _console up "$3" ;;
   _rail)  # crew _rail <label>: the rail tab's list, printed again every 30 seconds and as soon as the run record gains
     # an entry; a burst of entries refreshes it once. Once the follow ends, it refreshes on the clock alone. Each refresh
     # is one read (crew _views), which prints the rail as crew rail does, ending the card sessions crew rail ends, and

@@ -42,3 +42,10 @@ With the same landing swancloud bumps sluice to 0.32.0 and Claude Code to 2.1.30
 - **The operator goes, the user talks to the planner or the design agent:** record 0013's reason stands, one door for whatever comes from outside, and the planner and the design agent are not for carrying.
 - **A main-level role, the console tabs on their own** (chosen, the user's): the door is one agent per partition in the session the main level already has; the tabs a person reads need no agent.
 - **For kits: a team per kit** (today), which the user declined for weir; **a team holds its kits** (chosen).
+
+## Amendment, 2026-10-20: a main-level role in a session of its own
+
+The user, on their card req_3da02d33 the same day, asked how to balance the partitions' Fable use: "since designer and planner are both fable, it probably is best to split those between both sessions for a given partition", and answered "Yes, so design and planner sit on two accounts"; and in the fleet-releases session, of wldn, "i want to split wldn main as well". So a partition's `roles.<role>` in the teams file may name a `session` of the main level's machine in the partition, and that role runs there, the reviewer beside the planner unless named apart; a dispatcher's can't be named. The main level is a `<label>` workspace in each of its sessions. swancloud's `herdr.3` is amended with it: a role override is a model, an effort or a session.
+
+The user then asked, of proposal 200 that would have built this record's three parts and the amendment as a crew bolt for crw-4: "i don't want to setup the crew to run one change then have to rebuild it. i want you to fix it and close out that proposal". The fleet-releases session built them outside the plan, as four OpenSpec changes archived with their code, and the planner drops proposal 200 with that reason.
+

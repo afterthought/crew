@@ -6,7 +6,7 @@ Above a partition's bolt teams: a design agent that elaborates on main, a planne
 ## Requirements
 
 ### Requirement: Partitions are declared in the teams file
-`teams.json` SHALL list each partition with a main level. Each entry gives the partition's label (`wldn`, `madswan`, `swancloud`), its swancloud name, its blueprints repos, its state repository (`state`, as `<owner>/<name>`), and the machine and session its main level runs in. The first blueprints repo listed SHALL be the one the partition's signals and elaboration go to by default. A partition with no `state` SHALL be an error naming the field and the machine's configuration as the fix, never a default.
+`teams.json` SHALL list each partition with a main level. Each entry gives the partition's label (`wldn`, `madswan`, `swancloud`), its swancloud name, its blueprints repos, its state repository (`state`, as `<owner>/<name>`), and the machine and session its main level runs in. The first blueprints repo listed SHALL be the one the partition's signals and elaboration go to by default. A partition with no `state` SHALL be an error naming the field and the machine's configuration as the fix, never a default. A partition's `roles.<role>` MAY name a `session` for a main-level role other than the dispatcher, a session of the main level's machine in the partition, where that role runs; any other session SHALL be an error naming it.
 
 #### Scenario: clients/willdan
 - **WHEN** `teams.json` lists `wldn` as `clients/willdan` with willdan-blueprints and `WilldanGroup/crew-state`, running on the box in `wldn-2`
@@ -16,18 +16,26 @@ Above a partition's bolt teams: a design agent that elaborates on main, a planne
 - **WHEN** a partition's entry has no `state`
 - **THEN** crew refuses to load the teams file, naming the partition and the missing field
 
-### Requirement: The main level is one herdr workspace
-`crew main up <label>` SHALL open a herdr workspace named `<label>` in the main level's session. It SHALL hold a `design` tab with the design agent, a `planner` tab with the planner, and an `ops` tab with the main-level ops, and start each. It SHALL then start a dispatcher on every host where the partition's teams run.
+#### Scenario: The planner in a session of its own
+- **WHEN** swancloud's entry names `roles.planner.session` as `swancloud-2`, a session of deneb in partition personal
+- **THEN** `swancloud-planner` runs in `swancloud-2` and its other main-level roles in the main level's session
 
-Every agent crew starts outside a team, the main level's three, each dispatcher and the operator agent, SHALL be greeted once it is up, exactly once per start, as a team's conductor is: told to read where the partition stands and carry on with what is its role's. The greeting SHALL be marked as crew's. An agent brought back by `crew revive` or `crew main up` after the main level was taken down SHALL be greeted the same way, so none sits idle until someone tells it what to do.
+#### Scenario: A session of another partition
+- **WHEN** swancloud's `roles.planner.session` names `madswan-1`, a session of partition business
+- **THEN** crew refuses to load the teams file, naming the planner, the session and its partition
+
+### Requirement: The main level is one herdr workspace
+`crew main up <label>` SHALL open a herdr workspace named `<label>` in the main level's session. It SHALL hold a `design` tab with the design agent, a `planner` tab with the planner, an `ops` tab with the main-level ops and an `operator` tab with the partition's operator, and start each. It SHALL then start a dispatcher on every host where the partition's teams run.
+
+Every agent crew starts outside a team, the main level's four and each dispatcher, SHALL be greeted once it is up, exactly once per start, as a team's conductor is: told to read where the partition stands and carry on with what is its role's. The greeting SHALL be marked as crew's. An agent brought back by `crew revive` or `crew main up` after the main level was taken down SHALL be greeted the same way, so none sits idle until someone tells it what to do.
 
 #### Scenario: The main level comes up
 - **WHEN** `crew main up wldn` runs
-- **THEN** `wldn-design`, `wldn-planner` and `wldn-ops` start in the `wldn` workspace, and `wldn-dispatch-chuck-herdr-alpha` starts on the box, and each is greeted once it is up
+- **THEN** `wldn-design`, `wldn-planner`, `wldn-ops` and `wldn-operator` start in the `wldn` workspace, and `wldn-dispatch-chuck-herdr-alpha` starts on the box, and each is greeted once it is up
 
 #### Scenario: The main level comes back
 - **WHEN** the user runs `crew main down swancloud` and then `crew main up swancloud`
-- **THEN** each of its agents starts and is greeted, and picks up its role from the rail and the bolts without the user or the operator agent telling it to
+- **THEN** each of its agents starts and is greeted, and picks up its role from the rail and the bolts without the user or the operator telling it to
 
 #### Scenario: Brought up again while it is up
 - **WHEN** `crew main up wldn` runs while its agents and dispatchers are up
@@ -319,3 +327,21 @@ A gate's step SHALL be recorded done when the deployer's run shows the gate pass
 #### Scenario: The gate rejected
 - **WHEN** the user rejects the deployment at the gate and taps Skip on the card
 - **THEN** main-level ops runs the row's decline command, and the card closes as declined
+
+### Requirement: The main level is a workspace in each of its sessions
+`crew main up <label>` SHALL open a `<label>` workspace in each session the main level's roles run in, each role's tab in its session's, and start each role there; `crew main down`, `crew main status`, `crew review` and `crew revive` SHALL find each role in its session.
+
+#### Scenario: Design and planner on two accounts
+- **WHEN** swancloud's planner runs in `swancloud-2` and the rest of its main level in `swancloud-1`, and `crew main up swancloud` runs
+- **THEN** `swancloud-planner` starts in the `swancloud` workspace of `swancloud-2`, and the design agent, ops and the operator in `swancloud-1`'s
+
+### Requirement: A role is never started twice when its session changes
+`crew main up` SHALL refuse while a role's agent still runs in a session it no longer stands in, naming it, and `crew main down` SHALL end it there. Panes a state folder recorded in another session than the one its agents run in now SHALL be set aside and said, never taken for that session's.
+
+#### Scenario: A role moved while it runs
+- **WHEN** wldn's teams file names a session for its planner while `wldn-planner` still runs in `wldn-2`, and `crew main up wldn` runs
+- **THEN** it refuses, naming `wldn-planner`, its session and pane, and that `crew main down wldn` ends it
+
+#### Scenario: Panes recorded in another session
+- **WHEN** swancloud's main level moves from `swancloud-2` to `swancloud-1` and a main-level command runs
+- **THEN** the panes recorded in `swancloud-2` are set aside and said, and no agent of `swancloud-1` at the same pane id is taken for one of the main level's

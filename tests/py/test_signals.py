@@ -137,7 +137,7 @@ class TestWhere:
         assert plan.where_of(FLEET, "swb-2-conductor", self.PLAN) == "team swb-2, bolt smoke-2"
         assert plan.where_of(FLEET, "swb-1-ops", self.PLAN) == "team swb-1"
         assert plan.where_of(FLEET, "wldn-planner", self.PLAN) == "main level"
-        assert plan.where_of(FLEET, "wldn-operator-chuck", self.PLAN) == "operator session"
+        assert plan.where_of(FLEET, "wldn-operator", self.PLAN) == "main level"
         assert plan.where_of(FLEET, "stranger", self.PLAN) is None
 
     def test_a_slot_agent_is_also_at_the_unit_or_fix_its_slot_holds(self, monkeypatch):
