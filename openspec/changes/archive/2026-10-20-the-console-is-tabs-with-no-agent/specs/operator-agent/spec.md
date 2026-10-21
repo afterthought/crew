@@ -58,7 +58,7 @@
 - **THEN** the board tab is drawn again within a few seconds, with that unit's marker gone
 
 ### Requirement: The console's old name opens it and retires the host's operator agent
-`crew operator up <label>` SHALL open the console as `crew console up <label>` does, saying it is `crew console up` now. The console's up SHALL end the operator agent the host's operator session held before the operator was a main-level role, `<label>-operator-<host>`, and close its `operator` workspace, once that agent is not working; one working SHALL be left and said.
+`crew operator up <label>` SHALL open the console as `crew console up <label>` does, saying it is `crew console up` now. The console's up SHALL end the operator agent the host's operator session held before the operator was a main-level role, `<label>-operator-<host>`, and close the panes crew recorded in its `operator` workspace, once that agent is not working; one working SHALL be left and said.
 
 #### Scenario: The host's timer still runs the old name
 - **WHEN** swancloud's timer runs `crew operator up wldn` on mac-studio

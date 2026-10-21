@@ -47,11 +47,21 @@ for a in wldn-design wldn-planner wldn-ops wldn-operator wldn-dispatch-chuck-her
 crew tell wldn-planner "Secret words ZQXR" >/dev/null
 eq "$(field mac-studio tell Chars)" "17"
 [[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *ZQXR* ]] || fail "a tell's text is in the run record"
+# The operator agent mac-studio ran before record 0035, in an operator workspace beside a tab of the user's own: the
+# console's up ends it and closes the panes crew recorded, leaving the user's tab.
+as mac-studio herdr --session wldn workspace create --cwd /tmp --label operator --no-focus >/dev/null
+op=$(as mac-studio herdr --session wldn pane list | jq -r '.result.panes[-1].pane_id')
+as mac-studio herdr --session wldn stub agent "$op" wldn-operator-mac-studio >/dev/null
+mine=$(as mac-studio herdr --session wldn tab create --workspace "$(as mac-studio herdr --session wldn workspace list | jq -r '.result.workspaces[-1].workspace_id')" --cwd /tmp --label mine --no-focus | jq -r .result.root_pane.pane_id)
+as mac-studio bash -c "mkdir -p ~/.local/state/crew/wldn-operator && printf 'operator $op\n' > ~/.local/state/crew/wldn-operator/panes"
 : > "$CREW_TEST_LOG"
 expect_ok crew console up wldn
+has "$out" "wldn-operator-mac-studio is ended and its operator tabs closed: the operator is wldn-operator, at wldn's main level"
+eq "$(herdr_state mac-studio wldn '[.agents[].name] | map(select(. == "wldn-operator-mac-studio")) | length') $(herdr_state mac-studio wldn "[.panes | keys[] | select(. == \"$mine\")] | length")" "0 1"
+as mac-studio herdr --session wldn pane close "$mine" >/dev/null
 eq "$(herdr_state mac-studio wldn '[.workspaces[].label] | join(",")') $(herdr_state mac-studio wldn '[.tabs[].label] | join(",")')" "console flow,rail,board"
 grep -q "^mac-studio wldn pane run .*/crew _rail wldn'" "$CREW_TEST_LOG" || fail "the rail tab does not run wldn's rail"
-grep -q "agent prompt\|crew-role" "$CREW_TEST_LOG" && fail "the console started or greeted an agent"
+grep -q "crew-role\|agent prompt [^ ]* '\[crew\]" "$CREW_TEST_LOG" && fail "the console started or greeted an agent"
 : > "$CREW_TEST_LOG"
 expect_ok crew console up wldn
 grep -q "workspace create\|tab create\|pane run\|agent prompt" "$CREW_TEST_LOG" && fail "a second console up made, ran or greeted something"

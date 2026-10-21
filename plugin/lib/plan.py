@@ -7099,8 +7099,8 @@ def console_cmd(fleet, a):
 
 def retire_operator(fleet, label):
     """The operator agent this host ran in its operator session before record 0035, `<label>-operator-<host>`, ended,
-    and its `operator` workspace closed with its tabs, once it is not working; one working is left and said, and its
-    console opens beside it. Nothing to do once it is gone."""
+    and the panes crew recorded in its `operator` workspace closed, once it is not working; one working, or one that
+    did not exit, is left and said, and its console opens beside it. Nothing to do once it is gone."""
     state = pathlib.Path.home() / f".local/state/crew/{label}-operator"
     if not (state / "panes").exists():
         return
@@ -7111,9 +7111,17 @@ def retire_operator(fleet, label):
         print(f"{label}-operator-{host} is working; it is no longer started (the operator is {label}-operator, at the main level), "
               f"and once it is not working the console ends it", file=sys.stderr)
         return
-    old.teardown()
+    why = old.stop("operator")
+    if why:
+        print(why, file=sys.stderr)
+        return
+    # Only the panes crew recorded there: a tab the user opened in that workspace stays, and the workspace goes with
+    # its last pane.
+    for _, pane, *_ in old.lines("panes"):
+        if old.herdr.live(pane):
+            old.herdr.run("pane", "close", pane)
     os.replace(state, state.with_name(f"{label}-operator.retired-{int(time.time())}"))
-    print(f"{label}-operator-{host} is ended and its operator workspace closed: the operator is {label}-operator, at {label}'s main level")
+    print(f"{label}-operator-{host} is ended and its operator tabs closed: the operator is {label}-operator, at {label}'s main level")
 
 
 def revive_cmd(fleet, a):
