@@ -4,7 +4,7 @@ which pairs a settle orders and which of crew's own orders it lifts, plan.reach_
 a forecast or an amendment reaches the later unit, plan.verified for whether it waits to merge, plan.amended_afters for each After unit constructed again since its
 dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent
 whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
-amendment_words for what it is told; and a bolt against its kit's main (teams.19), plan.bolt_forecast_read for sluice's
+amendment_words for what it is told; and a bolt against its kit's main (teams.20), plan.bolt_forecast_read for sluice's
 answer, plan.bolt_forecast for what it tells the conductor once and plan.unread_said for a forecast sluice can't give.
 That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
 rebase replays its commits, are contract cases (tests/contract/test_git.py); the wait that tells, starts a settle or
@@ -365,7 +365,7 @@ class TestWords:
 
 
 class TestBoltAgainstMain:
-    """sluice's forecast of the bolt against main on each conductor's wait (teams.19, sluice's ADR 0039)."""
+    """sluice's forecast of the bolt against main on each conductor's wait (teams.20, sluice's ADR 0039)."""
     H, M = "1" * 40, "2" * 40
     CLEAR = '{"conflict": null, "head": "%s", "onto": "%s", "ahead": []}' % ("1" * 40, "2" * 40)
     LANDED = ('{"conflict": {"paths": ["docs/builds.md"], "with": []}, "head": "%s", "onto": "%s", "ahead": [217]}'

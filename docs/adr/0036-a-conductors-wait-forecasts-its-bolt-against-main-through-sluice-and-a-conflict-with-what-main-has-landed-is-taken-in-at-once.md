@@ -12,7 +12,7 @@ decision-makers:
 Status: proposed on 2026-10-20 by the sluice design session that wrote sluice's early-conflicts change, on the user's approval of its design; awaiting the user's word.
 
 Deciders: the user, approving the design ("Finding a worktree's conflicts before it is submitted", 2026-10-20); written by that session.
-Amends: `plan.8`; adds `teams.19`.
+Amends: `plan.8`; adds `teams.20`.
 Sources: switchboard-kit's main records on chuck-herdr-alpha, `log.jsonl`'s conflict events of 2026-10-19 to 10-21; sluice's ADR 0039 and its `sluice submit --check --head`; the sluice statement's clauses 64, 65, 47a and its C.5 crew row, amended on blueprints branch `crew-forecast` (eaef7e9), not yet ratified; `plan.py` `reach`, `forecasts_due`; `conductor.md` *Forecasts and settling* and *Fixes*.
 
 ## Context and problem statement
@@ -29,7 +29,7 @@ On each conductor's wait, after the units' forecasts, crew runs `sluice submit m
 - **A conflict with a submission queued on main**: nothing is taken in, since that submission may yet fail and leave the queue. The next forecast follows main and its queue.
 - **A forecast sluice can't give**, as on a host whose sluice has no `--head`: named once for the bolt's head, not on every wait.
 
-`plan.8` is amended to let a bolt meet main before its landing on such a forecast; `teams.19` holds the rest.
+`plan.8` is amended to let a bolt meet main before its landing on such a forecast; `teams.20` holds the rest.
 
 ## Considered options
 

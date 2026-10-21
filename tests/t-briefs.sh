@@ -378,7 +378,7 @@ ok "ops, every stage and the dispatcher post no card, the four that ask carry on
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
 # a unit; crew orders and lifts its own forecast orders, which neither the conductor nor the planner asks anyone to lift
 # (plan.13); the conductor takes main into the bolt on a forecast against main, and waits out one against a submission
-# queued there (teams.19); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
+# queued there (teams.20); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
 # one reading session on the batch, posts and closes no batch card, and sends the notes the card's wait prints from the
 # session and the card to each unit they speak of (briefs.9, briefs.12, briefs.13);
 # construct writes Touches as a block crew reads;

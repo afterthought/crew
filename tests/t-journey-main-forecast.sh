@@ -1,7 +1,7 @@
 # The bolt forecast against its kit's main on each conductor's wait, through the crew command on the stubs (tests.11,
 # record 0022), a part of the units journey (t-journey-units): with a sluice that can't forecast a branch no worktree
 # holds, the wait says so once for the bolt's head; with one that can, a conflict with what main has landed is said once,
-# with the take-main fix to start now, and one with a submission queued on main as one to wait out (teams.19, record
+# with the take-main fix to start now, and one with a submission queued on main as one to wait out (teams.20, record
 # 0036). What each forecast says and when it is said again are logic cases (tests/py/test_forecast.py); this checks the
 # command's wiring once.
 # Reads: plugin/hooks/ tests/units.sh

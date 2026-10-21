@@ -82,7 +82,7 @@ shim python3 '[[ ${1:-} == - && ${2:-} == "{"* ]]' gather
 shim openspec true openspec
 reads() { grep -c "^$box $1\$" "$T/reads.log" || true; }
 # units_world <python>: swb-1 up, holding tenant-environments, whose units by_hand's python adds; the stub sluice
-# forecasts the bolt against main with no conflict (teams.19) until a part writes another forecast or removes it
+# forecasts the bolt against main with no conflict (teams.20) until a part writes another forecast or removes it
 units_world() {
   crew up swb-1 >/dev/null
   by_hand 'p.insert(plan.Rec("Bolt", [("Bolt", "tenant-environments"), ("Repo", "switchboard-kit"), ("Goal", "Tenants hold environments.")]))

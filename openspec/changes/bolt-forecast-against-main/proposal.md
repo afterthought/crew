@@ -9,7 +9,7 @@ A bolt meets main only when main-level ops submits it (`plan.8`), so a conflict 
 - **The wait forecasts the bolt against main.** After the units' forecasts, each conductor's wait runs `sluice submit main --check --head bolt/<bolt> --json` in the kit's main checkout for each bolt the team holds.
 - **Said once.** A forecast is said on the wait once for the same bolt head, revision of main and submissions queued on main it meets, and recorded as a `forecast` on the bolt with `Reached: wait`. A conflict with what main has landed gives the take-main fix to start now; one with a submission queued on main is one to wait out; one sluice can't give is named once for the bolt's head.
 - **The conductor's brief** starts the take-main fix on such a forecast, as on main-ops's word that a landing conflicts, and waits out one against a queued submission.
-- **Rules:** `teams.19` added; `plan.8` amended so a bolt may meet main before its landing on such a forecast.
+- **Rules:** `teams.20` added; `plan.8` amended so a bolt may meet main before its landing on such a forecast.
 - **The stub sluice** answers the forecast from a file, and refuses `--head` as sluice 0.32.0 does without one.
 
 ## Capabilities
