@@ -1,7 +1,7 @@
 ---
 number: 36
 title: A conductor's wait forecasts its bolt against main through sluice, and a conflict with what main has landed is taken in at once
-status: proposed
+status: accepted
 date: 2026-10-20
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # A conductor's wait forecasts its bolt against main through sluice, and a conflict with what main has landed is taken in at once
 
-Status: proposed on 2026-10-20 by the sluice design session that wrote sluice's early-conflicts change, on the user's approval of its design; awaiting the user's word.
+Status: accepted by the user on 2026-10-21 in the sluice design session that wrote sluice's early-conflicts change and proposed this record on 2026-10-20 ("yes: mark crew record 0036 accepted, push the blueprints C.5 row, and land crew with wt submit main"); their card req_8d4eaee655104222a6cd asked the same.
 
 Deciders: the user, approving the design ("Finding a worktree's conflicts before it is submitted", 2026-10-20); written by that session.
 Amends: `plan.8`; adds `teams.20`.
