@@ -31,6 +31,7 @@ eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team)" "swb-1"
 eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
 [[ ! -e $kd/bolts ]] || fail "give made a worktree for the bolt"
 eq "$(field mac-studio bolt.give On) $(field mac-studio bolt.give Commit)" "bolt/tenant-environments team/swb-1 WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
+clean_forecast
 ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give makes the bolt's branch from main on the team's host and no worktree"
 
 # The conductor runs the stages on the team's host.

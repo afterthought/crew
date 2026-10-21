@@ -51,8 +51,9 @@ DESCRIPTOR = """\
 # Fields beyond the common ones: a stage.end's Result, Tasks, Head, Ended (delivered, short or stopped), Delivered (what
 # it delivered, as an object) and Observed, a tell's Chars, the Amended of a construct's start that marked its unit
 # amended, the After units' heads a construct's place Took and a dependent's rebase left out (a forecast's Took), a
-# forecast's Heads (the later unit's and the other's, <name>@<sha>), its conflicting Paths and how it Reached the later
-# unit (told, prompt or settle), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
+# forecast's Heads (the later unit's and the other's, <name>@<sha>; a bolt's against main, bolt/<bolt>@<sha> main@<sha>
+# and #<id> for each submission queued on main it meets, or bolt/<bolt>@<sha> alone when sluice gave none), its
+# conflicting Paths and how it Reached the later unit (told, prompt or settle) or the conductor (wait), a stage start's Forecast (the forecast entries its prompt carries), a review batch's
 # Batch (its number) and Units (each unit as <unit>:<team>@<the commit its change was read at>), a batch due's Count, a
 # card act's Card (the Pending You card's id) and Key (the rail row's card key), a landing's Repo (the kit it landed on)
 # and Head (the commit that kit's main holds afterwards, plan.14), crew's own order of two units a forecast found in

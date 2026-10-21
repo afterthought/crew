@@ -377,7 +377,8 @@ ok "ops, every stage and the dispatcher post no card, the four that ask carry on
 # Units build at once and are reviewed in batches (teams.12 to teams.14, briefs.1, briefs.2, briefs.4, briefs.12): the
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
 # a unit; crew orders and lifts its own forecast orders, which neither the conductor nor the planner asks anyone to lift
-# (plan.13); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
+# (plan.13); the conductor takes main into the bolt on a forecast against main, and waits out one against a submission
+# queued there (teams.21); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
 # one reading session on the batch, posts and closes no batch card, and sends the notes the card's wait prints from the
 # session and the card to each unit they speak of (briefs.9, briefs.12, briefs.13);
 # construct writes Touches as a block crew reads;
@@ -396,7 +397,9 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
   "the card waits for them: crew makes a batch due for them at once" \
   "every unit's latest change in a batch whose card the user has answered" \
   "When it names a batch the user has not answered, the card waits for their answer on that batch's card" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches" \
-  "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it"; do
+  "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it" \
+  "crew also forecasts the bolt itself against the kit's main" "start the take-main fix it gives at once, as when \`wldn-ops\` tells you a landing conflicts" \
+  "when it says the bolt would conflict with a submission queued on main, take nothing in"; do
   has "$out" "$want"
 done
 for gone in "build them one after the other" "When in doubt, don't" "## Review with the user" \
