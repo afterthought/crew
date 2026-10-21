@@ -17,25 +17,27 @@ ok "the plugin's hooks.json runs the session-start hook"
 commit=$(git -C "$CREW" rev-parse HEAD)
 described=$(git -C "$CREW" describe --tags --long --match 'v[0-9]*' --abbrev=40 HEAD)
 version=${described%-*-g*}; past=${described%-g*}; past=${past##*-}; [[ $past == 0 ]] || version+="+$past"
-echo '{"session_id":"sid-1","source":"startup","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn CREW_ROLE=conductor CREW_LAUNCH=d1 hook
+echo '{"session_id":"sid-1","source":"startup","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn CREW_ROLE=conductor CREW_LAUNCH=d1 SLUICE_BRANCH=bolt/b hook
 eq "$(cat "$record")" "CREW_AGENT=swb-1-conductor
 CREW_LABEL=wldn
 CREW_CWD=/work/kit/bolts/b
 CREW_ROLE=conductor
+CREW_BRANCH=bolt/b
 CREW_COMMIT=$commit
 CREW_VERSION=$version
 CREW_LAUNCH=d1"
-ok "a crew agent's start records its session, the definition its brief comes from, the folder it began in, and the crew and launch it loaded"
+ok "a crew agent's start records its session, the definition its brief comes from, the folder it began in, the branch it carries for sluice, and the crew and launch it loaded"
 
 rewrite "$record" "s/^CREW_COMMIT=.*/CREW_COMMIT=old/; s/^CREW_VERSION=.*/CREW_VERSION=v0.1.0/"
-echo '{"session_id":"sid-1","source":"compact","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn CREW_ROLE=conductor CREW_LAUNCH=d1 hook
-has "$(cat "$record")" $'CREW_COMMIT=old\nCREW_VERSION=v0.1.0\nCREW_LAUNCH=d1'
+echo '{"session_id":"sid-1","source":"compact","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn CREW_ROLE=conductor CREW_LAUNCH=d1 SLUICE_BRANCH=bolt/b hook
+has "$(cat "$record")" $'CREW_BRANCH=bolt/b\nCREW_COMMIT=old\nCREW_VERSION=v0.1.0\nCREW_LAUNCH=d1'
 echo '{"session_id":"sid-1","source":"resume"}' | hook
-has "$(cat "$record")" "CREW_COMMIT=$commit
+has "$(cat "$record")" "CREW_BRANCH=
+CREW_COMMIT=$commit
 CREW_VERSION=$version
 CREW_LAUNCH=d1"
 has "$(cat "$record")" "CREW_ROLE=conductor"
-ok "a compaction keeps the crew the session loaded, and herdr's bare resume records the crew it loads anew with the launch it began with"
+ok "a compaction keeps the crew the session loaded, and herdr's bare resume records the crew it loads anew with the launch it began with and no branch, crew's environment being gone"
 
 out=$(echo '{"session_id":"sid-1","source":"compact","cwd":"/work/kit/bolts/b"}' | CREW_AGENT=swb-1-conductor CREW_LABEL=wldn CREW_ROLE=conductor hook)
 eq "$out" ""

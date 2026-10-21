@@ -22,7 +22,8 @@ back, and it comes with `crew resume` or `crew revive`. Such a session keeps its
 until its first compaction, so at each compaction it is given its brief back as context, built by crew.py as
 crew-role builds it, from the definition the record names (crew.brief_due, crew.brief_role). Any other session costs
 one file lookup. A start that loads crew's plugin, a new session's or a resume's, records the commit and version of
-crew the session loaded, and a session crew-role started the digest of its launch (CREW_LAUNCH), which tell crew's mod
+crew the session loaded, and a session crew-role started the digest of its launch (CREW_LAUNCH) and the branch it carries
+for sluice (CREW_BRANCH, empty once herdr has resumed it bare), which tell crew's mod
 the version an agent runs and crew whether an update has made it due a restart (crew.update_due, teams.19); a
 compaction or a /clear loads nothing anew and keeps what the record says. At every start it also removes the session's question mark
 (hooks/questions), so a session resumed after its pane died with a question open carries no mark whose answer will
@@ -76,15 +77,16 @@ def main():
         record.parent.mkdir(parents=True, exist_ok=True)
         cwd = hook.get("cwd") if isinstance(hook.get("cwd"), str) else os.getcwd()
         record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\nCREW_CWD={cwd}\n"
-                          f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\n"
+                          f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\nCREW_BRANCH={os.environ.get('SLUICE_BRANCH', '')}\n"
                           + loaded(hook.get("source"), saved, os.environ.get("CREW_LAUNCH", "")))
         return
     agent = saved.get("CREW_AGENT")
     if not agent:
         return
-    if hook.get("source") in LOADS:  # herdr's resume loads crew's plugin anew, its launch the one it began with
-        record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH"))
-                          + loaded(hook.get("source"), saved, saved.get("CREW_LAUNCH", "")))
+    if hook.get("source") in LOADS:  # herdr's resume loads crew's plugin anew, its launch the one it began with,
+        # and the process has no SLUICE_BRANCH, crew's environment being gone (teams.20)
+        record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH", "CREW_BRANCH"))
+                          + "CREW_BRANCH=\n" + loaded(hook.get("source"), saved, saved.get("CREW_LAUNCH", "")))
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:
         with open(env_file, "a") as f:

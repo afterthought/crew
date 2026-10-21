@@ -343,7 +343,8 @@ def holding(fleet, name):
 
 
 def renew(fleet, a):
-    """crew _renew <agent>: an agent an update made due (crew.due_of) restarted on crew as it now is, once herdr reads it
+    """crew _renew <agent>: an agent an update made due (crew.due_of), or whose team's bolt changed under it (teams.20),
+    restarted on crew as it now is, once herdr reads it
     idle with no question open and no background work of its own but crew's waits (renew_ready), within a.wait seconds;
     a conductor fresh, as its restart always is, and every other role with its conversation; greeted, or told what
     changed, and recorded. One process at a time per agent; nothing while the host is held."""
@@ -358,11 +359,12 @@ def renew(fleet, a):
         print(f"{name} is already being restarted")
         return
     deadline = time.monotonic() + a.wait
+    branch = crew.branch_now(fleet, name)  # read once: it reads the plan
     while True:
         if crew.held():
             print(f"{host} is held; crew go {host} restarts {name}")
             return
-        due, why, started = crew.due_of(fleet, name)
+        due, why, started = crew.due_of(fleet, name, branch=branch)
         if not due:
             print(f"{name} is not due a restart" + (f": {why}" if why else ""))
             return
@@ -387,7 +389,8 @@ def renew(fleet, a):
         raise Stopped(1)
     agents.record("agent.renew", f"update({host}): restart {name}", [role])
     started = started or {}
-    notice = renew_notice(started.get("version"), version, changes_for(started.get("commit"), commit))
+    moved = crew.branch_due(started, branch)[1] if branch is not crew.UNREAD else None
+    notice = renew_notice(started.get("version"), version, changes_for(started.get("commit"), commit) + ([moved] if moved else []))
     if isinstance(agents, crew.Team) and role == "conductor":
         try:
             amended = plan.amended_units(fleet, agents.t)
