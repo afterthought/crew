@@ -35,7 +35,7 @@ class TestLoad:
         hosts = {BOX: {"ssh": BOX, "sessions": {s: sess("box/willdan", "clients/willdan", willdan) for s in ("wldn-1", "wldn-3")}},
                  "mac-studio": {"ssh": "mac-studio", "sessions": {
                      "madswan-1": sess("mac/madswan", "business", ["afterthought/blueprints", "afterthought/crew"]),
-                     "madswan-2": sess("mac/agentplot", "business", ["agentplot/blueprints", "agentplot/flywheel-next"])}}}
+                     "madswan-2": sess("mac/agentplot", "business", ["agentplot/blueprints", "agentplot/flywheel-next", "agentplot/weir"])}}}
         part = {"state": "afterthought/crew-state", "review": {"every": 5, "hours": 4}}
         teams = {"version": 2,
                  "partitions": [dict(part, label="wldn", partition="clients/willdan", blueprints=["WilldanGroup/willdan-blueprints"],
@@ -45,7 +45,9 @@ class TestLoad:
                  "teams": [{"name": "swb-1", "system": "Switchboard", "machine": BOX, "session": "wldn-1", "units": 4,
                             "repos": ["switchboard-kit", "willdan-blueprints"]},
                            {"name": "apk-1", "system": "Flywheel", "machine": "mac-studio", "session": "madswan-2", "units": 4,
-                            "repos": ["flywheel-next", "blueprints"]}]}
+                            "repos": ["flywheel-next", "blueprints"]},
+                           {"name": "fwn-2", "system": "Flywheel", "machine": "mac-studio", "session": "madswan-2", "units": 2,
+                            "repos": ["flywheel-next", "weir", "blueprints"]}]}
         (tmp_path / "herdr-hosts.json").write_text(json.dumps({"version": 1, "hosts": hosts}))
         (tmp_path / "teams.json").write_text(json.dumps(teams))
         monkeypatch.setattr(crew, "HOSTS", tmp_path / "herdr-hosts.json")
@@ -60,6 +62,20 @@ class TestLoad:
         box = f"{tmp_path}/box/willdan"
         assert (t["kit"]["main"], t["kit"]["dir"]) == (f"{box}/switchboard-kit/main", f"{box}/switchboard-kit")
         assert t["blueprints"]["main"] == f"{box}/willdan-blueprints/main"
+
+    def test_a_team_holds_its_kits_its_first_its_kit_until_it_works_on_a_bolt_of_another(self, fleet, tmp_path):
+        """A team holds its kits, one or more (record 0035): slc-1 and flm-1 both hold agentplot/weir."""
+        t = crew.team_of(fleet, "fwn-2")
+        mac = f"{tmp_path}/mac/agentplot"
+        assert [(k["name"], k["repo"], k["main"]) for k in t["kits"]] == [
+            ("flywheel-next", "agentplot/flywheel-next", f"{mac}/flywheel-next/main"), ("weir", "agentplot/weir", f"{mac}/weir/main")]
+        assert t["kit"]["name"] == "flywheel-next" and t["blueprints"]["repo"] == "agentplot/blueprints"
+        weir = crew.with_kit(t, "weir")
+        assert (weir["kit"]["main"], weir["name"], weir["machine"]) == (f"{mac}/weir/main", "fwn-2", "mac-studio")
+        assert crew.with_kit(t, "agentplot/flywheel-next") is t and crew.builds(t, "weir") and not crew.builds(t, "sluice")
+        with pytest.raises(crew.Refusal, match="fwn-2 builds flywheel-next and weir, not sluice"):
+            crew.with_kit(t, "sluice")
+        assert [k["name"] for k in crew.team_of(fleet, "apk-1")["kits"]] == ["flywheel-next"]
 
     def test_a_repos_name_is_resolved_to_owner_and_name_through_the_teams_session(self, fleet, tmp_path):
         t = crew.team_of(fleet, "apk-1")

@@ -78,8 +78,15 @@ class TestDrop:
 class TestGive:
     def test_the_team_gets_its_kits_first_bolt_no_team_holds_or_the_one_named(self):
         p = fresh().plan
-        assert plan.to_give(p, None, "swb-2", KIT, "wldn").name() == "console-pages"
-        assert plan.to_give(p, p.bolt("board-builds"), "brd-1", BOARD, "wldn").name() == "board-builds"
+        assert plan.to_give(p, None, "swb-2", [KIT], "wldn").name() == "console-pages"
+        assert plan.to_give(p, p.bolt("board-builds"), "brd-1", [BOARD], "wldn").name() == "board-builds"
+
+    def test_a_team_holding_two_kits_takes_a_bolt_of_either_the_first_free_in_the_plans_order(self):
+        """A team holds its kits (record 0035): slc-1 and flm-1 both hold agentplot/weir."""
+        p = fresh().plan
+        first = next(b.name() for b in p.bolts() if b.get("Repo") in (KIT, BOARD) and not b.get("Team"))
+        assert plan.to_give(p, None, "swb-2", [KIT, BOARD], "wldn").name() == first
+        assert plan.to_give(p, p.bolt("board-builds"), "swb-2", [KIT, BOARD], "wldn").name() == "board-builds"
 
     @pytest.mark.parametrize("bolt, team, said", [
         ("board-builds", "swb-2", "bolt board-builds is in breadboard-kit, and swb-2 builds switchboard-kit"),
@@ -87,11 +94,11 @@ class TestGive:
     def test_a_bolt_of_another_kit_or_held_is_refused(self, bolt, team, said):
         p = fresh().plan
         with pytest.raises(plan.Refusal, match=said):
-            plan.to_give(p, p.bolt(bolt), team, KIT, "wldn")
+            plan.to_give(p, p.bolt(bolt), team, [KIT], "wldn")
 
     def test_with_none_free_it_says_so(self):
         with pytest.raises(plan.Refusal, match="wldn/main has no planned bolt in rocs-kit for rcs-1"):
-            plan.to_give(fresh().plan, None, "rcs-1", "rocs-kit", "wldn")
+            plan.to_give(fresh().plan, None, "rcs-1", ["rocs-kit"], "wldn")
 
     def test_a_team_holding_a_bolt_is_given_none_until_it_lands(self):
         p = fresh().plan

@@ -187,27 +187,63 @@ def load():
         units = need(t, what, "units", int)
         units > 0 or fail(f"{what}: 'units' must be at least 1")
         repos = need(t, what, "repos", list)
-        if len(repos) != 2 or not all(isinstance(r, str) and "/" not in r for r in repos):
-            fail(f"{what}: 'repos' is two names, its kit then its partition's blueprints repo, not {json.dumps(repos)}")
+        if len(repos) < 2 or not all(isinstance(r, str) and "/" not in r for r in repos) or len(set(repos)) != len(repos):
+            fail(f"{what}: 'repos' is its kits, one or more, then its partition's blueprints repo, each named once, not {json.dumps(repos)}")
         for gone in ("coders", "base"):
             gone not in t or fail(f"{what} in {TEAMS} still has '{gone}', which version {VERSION} has no place for")
         host, sess = session_of(hosts, what, machine, session)
         pname = sess.get("partition") or fail(f"{what} runs in {machine}'s session {session}, which {HOSTS} puts in no partition")
         part = by_name.get(pname) or fail(f"{what} runs in {machine}'s session {session}, of partition {pname}, which {TEAMS} does not list")
-        kit, bp = (repo_in(sess, what, machine, session, r) for r in repos)
+        *held, bp = (repo_in(sess, what, machine, session, r) for r in repos)
         if bp not in part["blueprints"]:
             fail(f"{what} names {bp} as its blueprints repo, which is not one of {pname}'s: " + " ".join(part["blueprints"]))
-        kname = kit.split("/")[-1]
+        # A team holds its kits, one or more (record 0035): a bolt is of one of them, and the team works in that one's
+        # checkout while it holds the bolt (with_kit, held_team); its first is its kit when it holds none.
+        kits = [{"name": k.split("/")[-1], "repo": k, "dir": f"{sess['dir']}/{k.split('/')[-1]}", "main": checkout(sess, k)} for k in held]
         teams[name] = dict(t, name=name, system=system, machine=machine, session=session, units=units, label=part["label"],
                            partition=pname, ssh=host["ssh"], kind=host.get("kind", ""), dir=sess["dir"], roles=roles_of(t, what, TEAM_ROLES),
-                           kit={"name": kname, "repo": kit, "dir": f"{sess['dir']}/{kname}", "main": checkout(sess, kit)},
-                           blueprints={"name": bp.split("/")[-1], "repo": bp, "main": checkout(sess, bp)})
+                           kits=kits, kit=kits[0], blueprints={"name": bp.split("/")[-1], "repo": bp, "main": checkout(sess, bp)})
         part["teams"].append(name)
     return {"hosts": hosts, "partitions": parts, "teams": teams}
 
 
 def team_of(fleet, name):
     return fleet["teams"].get(name) or fail(f"no team '{name}'. teams: " + " ".join(fleet["teams"]))
+
+
+def kits_of(t):
+    """A team's kits, one or more; none for a team crew holds no kit of."""
+    return t.get("kits") or ([t["kit"]] if t.get("kit") else [])
+
+
+def with_kit(t, kit):
+    """A team as it works on a bolt of one of its kits (record 0035): the team with that kit, by name or owner/name, as
+    its kit; refused when it holds several and none by that name. A team of one kit, or none, is as it is, as it was
+    before a team held several."""
+    ks = kits_of(t)
+    if len(ks) < 2:
+        return t
+    k = next((k for k in ks if kit in (k.get("name"), k.get("repo"))), None)
+    k or fail(f"{t['name']} builds " + " and ".join(x.get("name", "?") for x in ks) + f", not {kit}")
+    return t if k == t.get("kit") else dict(t, kit=k)
+
+
+def builds(t, kit):
+    """Whether a team holds a kit, by name or owner/name."""
+    return any(kit in (k.get("name"), k.get("repo")) for k in kits_of(t))
+
+
+def held_team(fleet, t):
+    """A team as it works on the bolt it holds: with that bolt's kit as its kit when it holds several kits; a team of
+    one kit, one holding no bolt, and one whose plan can't be read, as it is."""
+    if len(kits_of(t)) < 2:
+        return t
+    import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
+    try:
+        repo = plan.held_repo(this.load(), t)
+    except this.Refusal:
+        return t
+    return with_kit(t, repo) if repo else t
 
 
 def partition_of(fleet, label):
@@ -953,9 +989,10 @@ def kits_on(fleet, label, host):
     """The main checkouts on a host of the kits the partition's teams build, each once."""
     out = []
     for t in sorted(partition_of(fleet, label)["teams"]):
-        c = kept_on(fleet, host, fleet["teams"][t]["kit"]["repo"])
-        if c and c not in out:
-            out.append(c)
+        for k in kits_of(fleet["teams"][t]):
+            c = kept_on(fleet, host, k["repo"])
+            if c and c not in out:
+                out.append(c)
     return out
 
 
@@ -1008,7 +1045,7 @@ def launch(fleet, scope, role, extra=None):
     """How crew-role starts a role: its folder, agent name, partition, the definition it comes from, the
     folders it may also reach, and the model and effort after the teams file's override."""
     if scope in fleet["teams"]:
-        t = fleet["teams"][scope]
+        t = held_team(fleet, fleet["teams"][scope])
         label, roles, kit, bp = t["label"], t["roles"], t["kit"], t["blueprints"]
         if role in ("conductor", "ops"):
             spec = dict(defn=role, name=f"{t['name']}-{role}", cwd=bolt_place(t) or kit["main"], dirs=[kit["dir"], bp["main"]])
@@ -1164,7 +1201,7 @@ def team_tokens(fleet, t, role, self_name):
         "TEAM_CMD": f"{HOME}/plugin/bin/crew", "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner",
         "MAIN_OPS": f"{label}-ops", "DISPATCHER": f"{label}-dispatch-{t['machine']}",
         "REPORTS": f"~/.local/state/{n}-team/reports", "SIGNAL": signal_how(f"{HOME}/plugin/bin/crew", label, p["state"]),
-        "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named([kit])), "RESULTS": RESULTS,
+        "CARDS": cards_how(f"{HOME}/plugin/bin/crew", label, kits_named(kits_of(t))), "RESULTS": RESULTS,
         "NEEDS": needs_how(f"{HOME}/plugin/bin/crew", "stage"),
         "CREW": f"the `## Crew` section of {kit['name']}'s CLAUDE.md (`{kit['main']}/CLAUDE.md`)",
     }
@@ -1175,7 +1212,9 @@ def team_tokens(fleet, t, role, self_name):
         f"is a fresh agent in its own worktree, a chore's being code, verify and merge. Above the team, at {label}'s main level: `{label}-design`, the design agent, "
         f"answers design questions; `{label}-planner` plans the partition's bolts; `{label}-dispatch-{t['machine']}` gives this "
         f"host's teams their bolts; `{label}-ops` lands a proven bolt on main; and `{label}-operator` is the partition's door "
-        f"to the user. Agents outside the team are reached with "
+        f"to the user. " + (f"The team holds the kits {', '.join(k['name'] for k in kits_of(t))}, and takes a bolt of any of them; "
+                            f"the kit this brief names, {kit['name']}, is its bolt's. " if len(kits_of(t)) > 1 else "")
+        + f"Agents outside the team are reached with "
         f"`{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run. {SENDERS}")
     return tok
 
@@ -1185,10 +1224,10 @@ def main_tokens(fleet, p, role, self_name):
     teams = [fleet["teams"][n] for n in sorted(p["teams"])]
     hosts = partition_hosts(fleet, label)
     here = [t for t in teams if t["machine"] == host]
-    team_line = lambda t: (f"- `{t['name']}` builds {t['system']} in {t['kit']['name']}, from {t['blueprints']['repo']}'s plan, on "
+    team_line = lambda t: (f"- `{t['name']}` builds {t['system']} in {' and '.join(k['name'] for k in kits_of(t))}, from {t['blueprints']['repo']}'s plan, on "
                            f"{t['machine']} in session {t['session']} (account {fleet['hosts'][t['machine']]['sessions'][t['session']]['account']}), "
                            f"with {t['units']} unit slots; its conductor is `{t['name']}-conductor`")
-    kits = sorted({t["kit"]["name"] for t in teams})
+    kits = sorted({k["name"] for t in teams for k in kits_of(t)})
     names = {"design": f"{label}-design", "planner": f"{label}-planner", "main-ops": f"{label}-ops",
              "dispatcher": f"{label}-dispatch-{host}", "operator": f"{label}-operator", "reviewer": f"{label}-reviewer"}
     account = lambda s: fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account", "")
@@ -1202,7 +1241,7 @@ def main_tokens(fleet, p, role, self_name):
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
         "BLUEPRINTS_REPOS": ", ".join(f"`{b}`" for b in p["blueprints"]), "SIGNALS_REPO": p["blueprints"][0],
         "PLANS": f"`{label}/main` of {p['state']}", "STATE_REPO": p["state"], "SIGNAL": signal_how(cmd, label, p["state"]),
-        "CARDS": cards_how(cmd, label, kits_named({t["kit"]["repo"]: t["kit"] for t in teams}.values())), "RESULTS": RESULTS,
+        "CARDS": cards_how(cmd, label, kits_named({k["repo"]: k for t in teams for k in kits_of(t)}.values())), "RESULTS": RESULTS,
         "CHECKOUT": p["checkout"], "MAIN_PLACE": f"session {p['session']} on {p['machine']}", "MAIN_SESSIONS": places,
         "DESIGN_AGENT": f"{label}-design", "PLANNER": f"{label}-planner", "MAIN_OPS": f"{label}-ops",
         "REVIEWER": f"{label}-reviewer", "REVIEWS": f"~/.local/state/crew/{label}-main/reports",
@@ -1233,7 +1272,7 @@ def brief(fleet, scope, role, self_name=""):
     """A definition's body, filled from the teams file for a team or for a partition's main level."""
     if scope in fleet["teams"]:
         role in TEAM_ROLES or fail(f"no definition '{role}' for a team. definitions: " + " ".join(TEAM_ROLES))
-        tok = team_tokens(fleet, fleet["teams"][scope], role, self_name)
+        tok = team_tokens(fleet, held_team(fleet, fleet["teams"][scope]), role, self_name)
     else:
         role in MAIN_ROLES or fail(f"no definition '{role}' for a main level. definitions: " + " ".join(MAIN_ROLES))
         tok = main_tokens(fleet, partition_of(fleet, scope), role, self_name)
