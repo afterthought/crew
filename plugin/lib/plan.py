@@ -1286,7 +1286,8 @@ def bolt_give(fleet, a):
         fail(holding(t["name"], held[0], plan, lambda n: st.of(n)["stage"]))
     # The bolt's kit, one of the team's (record 0035), decides the policy read and the branch made; the write gives
     # the same bolt, read again at the tip it replays on.
-    chosen = to_give(plan, plan.bolt(a.bolt) if a.bolt else None, t["name"], kits, label).name()
+    named = (plan.bolt(a.bolt) or fail(f"{label}/main has no bolt {a.bolt}")) if a.bolt else None
+    chosen = to_give(plan, named, t["name"], kits, label).name()
     t = crew.with_kit(t, plan.bolt(chosen).get("Repo"))
     kit = t["kit"]["name"]
     _, ref, now = kit_policy(fleet, t)
