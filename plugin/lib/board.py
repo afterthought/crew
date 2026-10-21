@@ -208,10 +208,11 @@ def board_data(fleet, labels, read, now):
         found = next(((repo, tip, pl) for x, repo, tip, pl in read["found"] if x == l), None)
         repo, tip, pl = found or (plan.state_of(fleet, l)[0], None, None)
         unread, logs = read["unread"].get(l, {}), read.get("logs", {}).get(l, [])
-        teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
+        teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "kits": [k["name"] for k in crew.kits_of(fleet["teams"][t])],
+                  "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
 
         def building(repo):
-            return [t["team"] for t in teams if repo and t["kit"] == repo]
+            return [t["team"] for t in teams if repo and repo in t["kits"]]
 
         def ordered(ts):
             return [t for t in p["teams"] if t in ts]
@@ -230,8 +231,8 @@ def board_data(fleet, labels, read, now):
         attention += [{"what": "signals", "name": n, "why": why} for n, why in sunread.items()]
 
         explorations = []
-        for kit in dict.fromkeys(fleet["teams"][t]["kit"]["name"] for t in sorted(p["teams"])):
-            for t in (fleet["teams"][x] for x in sorted(p["teams"]) if fleet["teams"][x]["kit"]["name"] == kit):
+        for kit in dict.fromkeys(k["name"] for t in sorted(p["teams"]) for k in crew.kits_of(fleet["teams"][t])):
+            for t in (crew.with_kit(fleet["teams"][x], kit) for x in sorted(p["teams"]) if crew.builds(fleet["teams"][x], kit)):
                 k = (sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}
                 if k.get("ok") and "explorations" in k:
                     explorations += [{"kit": kit, "name": e["name"], "first": e["first"], "teams": building(kit)} for e in k["explorations"]]
