@@ -6331,6 +6331,11 @@ def stage_wait(fleet, a):
                     landing_after_merge(fleet, t)
                 if "batch" in then and "landing" in then:  # its last unit merged may make a batch due at once
                     batch_reckoned(fleet, t)
+                if "tidy" in then:  # its slot, place and branch go as it lands, not at the next read
+                    try:
+                        reap(fleet, on_team_host(fleet, t))
+                    except Refusal as e:
+                        print(f"its place is not removed yet: {e}; the team's next read removes it", file=sys.stderr)
                 return
             time.sleep(min(POLL, remaining))
 
@@ -6339,10 +6344,12 @@ def after_delivery(stage, fix):
     """What crew does once a stage a wait watched has delivered (briefs.12, plan.16): "batch", reckon whether a batch is
     due (batch_check), after a construct's change, not a fix's, which is due itself, and after a merge, whose last unit
     merged makes a batch due at once for the bolt's units in none; "landing", raise or change the bolt's landing card,
-    after a merge, which moved the bolt's head. A bolt whose last unit merged left no wait to reckon its batch, since
-    its conductor waits on nothing more (every-deploy-has-its-live-card and every-host-reaches-every-other-by-its-
-    tailnet-name on 2026-10-19, every unit merged and the planner never told, for two hours)."""
-    return (["batch"] if stage == "construct" and not fix else []) + (["landing", "batch"] if stage == "merge" else [])
+    after a merge, which moved the bolt's head; "tidy", the team's read (reap), after a merge, so the slot is freed and
+    the place and its branch removed as the merge lands rather than at the conductor's next read (teams.1, plan.9). A
+    bolt whose last unit merged left no wait to reckon its batch, since its conductor waits on nothing more
+    (every-deploy-has-its-live-card and every-host-reaches-every-other-by-its-tailnet-name on 2026-10-19, every unit
+    merged and the planner never told, for two hours), and no read to remove its places."""
+    return (["batch"] if stage == "construct" and not fix else []) + (["landing", "batch", "tidy"] if stage == "merge" else [])
 
 
 def batch_reckoned(fleet, t):
@@ -6860,12 +6867,15 @@ def carried_units(fleet, t, slotted):
 def team_tidy(fleet, a):
     """crew _tidy <team> [--landed <bolt> --outcome <words>], on the team's host: the team's read (reap), which a plan
     write that ends work asks for there, and crew rebuild runs once its agents are ended; the conductor's and ops's
-    panes told the branch they work for now, none once the bolt has landed or been dropped (teams.20); after a landing,
+    panes told the branch they work for now, none once the bolt has landed or been dropped, and each whose session
+    carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing,
     its card closed there with the words (landing_cards_closed)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     reap(fleet, team)
-    team.hint_standing(crew.team_bolt(t))
+    import hold  # hold imports this module
+    for name in team.hint_standing(crew.team_bolt(t)):
+        hold.hand(name)
     if a.landed:
         landing_cards_closed(fleet, t, a.landed, a.outcome or "")
 

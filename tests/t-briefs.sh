@@ -188,8 +188,9 @@ expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
 expect_ok crewpy brief wldn operator
 for want in "swancloud's main moves only through sluice (\`state.3\`), so never edit or commit in its main checkout" \
-  "wt submit main --no-remove" "~/Code/github_afterthought/swancloud/places/crew-teams-<team> origin/main\`" \
-  "you level and push nothing"; do has "$out" "$want"; done
+  "run \`wt submit main\` in the background" "~/Code/github_afterthought/swancloud/places/crew-teams-<team> origin/main\`" \
+  "you level and push nothing" "\`wt submit\` removes your worktree and its branch itself"; do has "$out" "$want"; done
+lacks "$out" "wt submit main --no-remove"
 lacks "$out" "read-tree"; lacks "$out" "push swancloud's main"
 expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
@@ -513,7 +514,8 @@ for want in "Every decision record you write, and every amendment you make to on
   "run \`crew record … --proposed\` again: the card you were answered on is closed, naming the new commit, and the revised record goes on a new card that follows it" \
   "run \`crew record … --accepted\`, which closes the card" "run \`crew record … --rejected\`, which closes the card" \
   "set \`status: rejected\` with the user's words, and take out each rule drawn from it" \
-  "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "wt submit main --no-remove" \
+  "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "run \`wt submit main\` in the background" \
+  "\`wt submit\` removes the worktree and its branch itself" \
   "<the kit's folder>/places/design-<topic> origin/main\`" "you level nothing" "then \`git merge origin/main\`" \
   "once its \`.config/sluice.toml\` names a policy for main" \
   "Run \`crew record … --proposed\` for each proposed record or amendment on your kits' main that has none open" \
@@ -522,6 +524,7 @@ for want in "Every decision record you write, and every amendment you make to on
   "A record you write or amend is proposed until the user accepts it" "quotes the user's words as their decision"; do
   has "$out" "$want"
 done
+lacks "$out" "wt submit main --no-remove"; lacks "$out" "branch -d design/<topic>"
 for gone in "record/<kit>/<number>/<commit>" "The record's card is the one card you post" "post a new card for the new version" \
   "Close the card with \`ack_answer\`" "Accept decision record <number>"; do
   lacks "$out" "$gone"

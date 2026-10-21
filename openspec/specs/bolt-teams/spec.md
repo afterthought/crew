@@ -219,7 +219,7 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 - **THEN** it is refused; a defect is a fix, and a new need is a new unit
 
 ### Requirement: A worktree goes when its work is over
-crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once its bolt holds its change archived or it has landed, or no plan has it, never while the bolt holds its change open; a fix's once it has merged into its bolt, its conductor dropped it, or no plan has its bolt. A dropped fix's branch SHALL be kept and named when `git cherry` finds commits whose patch its bolt lacks, or cannot compare it with its bolt, and SHALL then be the user's; one holding nothing beyond its bolt SHALL go. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, and at once after `crew bolt drop`, `crew unit drop` or `crew bolt land`.
+crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once its bolt holds its change archived or it has landed, or no plan has it, never while the bolt holds its change open; a fix's once it has merged into its bolt, its conductor dropped it, or no plan has its bolt. A dropped fix's branch SHALL be kept and named when `git cherry` finds commits whose patch its bolt lacks, or cannot compare it with its bolt, and SHALL then be the user's; one holding nothing beyond its bolt SHALL go. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, at once after `crew bolt drop`, `crew unit drop` or `crew bolt land`, and at once when a wait sees a unit's, chore's or fix's merge into its bolt delivered.
 
 #### Scenario: A dropped bolt
 - **WHEN** the planner drops a bolt that swb-2 holds
@@ -248,6 +248,10 @@ crew SHALL remove each worktree it made, with its branch, once its work is over 
 #### Scenario: A dropped fix's place with uncommitted changes
 - **WHEN** a fix is dropped while its place holds a file nobody committed
 - **THEN** its place and branch are kept, and every read names them until the place is clean, when crew removes them
+
+#### Scenario: A merge lands
+- **WHEN** the conductor's `crew unit wait a` sees unit `a`'s merge into its bolt delivered, its agent idle
+- **THEN** the wait's answer says its slot is free and its place and branch removed, before the conductor reads the team again
 
 ### Requirement: Uncommitted changes keep a worktree
 A worktree whose work is over SHALL be kept, with its branch, while it has uncommitted changes: modified tracked files, or untracked files git does not ignore. Each read of the team SHALL name it, what its work was and that its changes are the user's to keep or discard, until it is clean, when crew removes it, or gone. Files git ignores SHALL NOT keep a worktree, and go with it.
@@ -788,7 +792,7 @@ When crew starts or brings back a team's conductor with `crew up`, `crew rebuild
 - **THEN** it is refused, naming the kits slc-1 builds
 
 ### Requirement: A conductor carries its bolt for sluice
-A team's conductor and ops that crew starts while the team holds a bolt SHALL have `SLUICE_BRANCH` in its environment set to the bolt's branch, and its herdr pane SHALL carry the token `sluice_branch` with the same value, reported from the source `crew` with no time to live. The token SHALL be reported again when herdr resumes the agent, and cleared when the team's bolt lands or is dropped. A unit slot SHALL carry neither.
+A team's conductor and ops that crew starts while the team holds a bolt SHALL have `SLUICE_BRANCH` in its environment set to the bolt's branch, and its herdr pane SHALL carry the token `sluice_branch` with the same value, reported from the source `crew` with no time to live. The token SHALL be reported again when herdr resumes the agent, and cleared when the team's bolt lands or is dropped; a conductor or ops whose session then carries the old branch SHALL be restarted at its next stop, as an agent an update made due is, told why. A unit slot SHALL carry neither.
 
 #### Scenario: A conductor starts on a bolt
 - **WHEN** crew starts `swb-1-conductor` in `/workspace/switchboard-kit/main` while team swb-1 holds bolt `b7`
@@ -800,7 +804,7 @@ A team's conductor and ops that crew starts while the team holds a bolt SHALL ha
 
 #### Scenario: The bolt lands
 - **WHEN** `crew bolt land b7` closes swb-1's bolt
-- **THEN** the conductor's and ops's panes carry no `sluice_branch` token
+- **THEN** the conductor's and ops's panes carry no `sluice_branch` token, and once each is idle it is restarted without `SLUICE_BRANCH`, the conductor fresh and ops with its conversation, told that its team no longer holds `bolt/b7`
 
 #### Scenario: A unit
 - **WHEN** crew starts `swb-1-unit-2` in its own worktree

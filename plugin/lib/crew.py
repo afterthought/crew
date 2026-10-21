@@ -1517,8 +1517,8 @@ def agents_here(fleet, label=None):
 
 def starts():
     """What each agent's last start on this host recorded (hooks/session-start), by the agent's name: its session, the
-    commit and version of crew it loaded, and the digest of the launch it was started with, each None when the start
-    did not record it, as one before crew kept them."""
+    commit and version of crew it loaded, the digest of the launch it was started with, and the branch it carries for
+    sluice (teams.20), each None when the start did not record it, as one before crew kept them."""
     found = {}
     for p in (SESSIONS.iterdir() if SESSIONS.is_dir() else []):
         try:
@@ -1529,7 +1529,8 @@ def starts():
         name = kv.get("CREW_AGENT")
         if name and (name not in found or (at, p.name) > found[name][0]):
             found[name] = ((at, p.name), {"session": p.name, "commit": kv.get("CREW_COMMIT") or None,
-                                          "version": kv.get("CREW_VERSION") or None, "launch": kv.get("CREW_LAUNCH") or None})
+                                          "version": kv.get("CREW_VERSION") or None, "launch": kv.get("CREW_LAUNCH") or None,
+                                          "branch": kv.get("CREW_BRANCH")})  # "" when it carries none
     return {name: s for name, (_, s) in found.items()}
 
 
@@ -1558,13 +1559,44 @@ def update_due(started, commit, launch, loaded):
     return (True, "crew's plugin changed") if loaded else (False, None)
 
 
-def due_of(fleet, name, started=None, commit=None):
+def branch_due(started, branch):
+    """Whether a team's conductor or ops is due a restart for the branch it carries for sluice (teams.20), and why, from
+    what its start recorded and the branch it would carry now: sluice's board reads SLUICE_BRANCH once, at the session's
+    start, so a running agent whose team's bolt landed, was dropped or changed shows the old one until it starts again.
+    Never due when it started before crew kept the branch, since it carries none."""
+    if started is None or started.get("branch") is None:
+        return False, None
+    was = started["branch"]
+    if (was or None) == (branch or None):
+        return False, None
+    return True, (f"its team's bolt is now {branch}, which sluice's board names" if branch else
+                  f"its team no longer holds {was}, which sluice's board still named")
+
+
+# What due_of compares a start's branch with when it is not given: nothing, since reading it reads the plan.
+UNREAD = object()
+
+
+def branch_now(fleet, name):
+    """The branch a standing agent would carry for sluice if it started now (hint_branch), read from the plan; UNREAD
+    for an agent outside a team, which carries none."""
+    t = team_of_agent(fleet, name)
+    role = name[len(t["name"]) + 1:] if t else ""
+    return hint_branch(role, team_bolt(t)) if role in ("conductor", "ops") else UNREAD
+
+
+def due_of(fleet, name, started=None, commit=None, branch=UNREAD):
     """Whether a standing agent of this host is due a restart for crew's update, read: (due, why, what its start
-    recorded). A name that is no standing agent's is never due."""
+    recorded). A name that is no standing agent's is never due. With the branch it would carry now (branch_now), one
+    whose team's bolt changed under it is due too (branch_due)."""
     started = started or start_of(name)
     role = standing_role(fleet, name)
     if started is None or role is None:
         return False, None, started
+    if branch is not UNREAD:
+        due, why = branch_due(started, branch)
+        if due:
+            return True, why, started
     commit = commit or crew_version()[0]
     try:
         now = launch_now(fleet, *role)
@@ -2031,11 +2063,17 @@ class Agents:
 
     def hint_standing(self, bolt):
         """Each standing role's pane that is up told the branch it works for now, its team holding bolt or none, after
-        a plan write that ends the team's bolt, which restarts neither role (teams.20)."""
+        a plan write that ends the team's bolt (teams.20): the names of those whose session carries another, which only
+        a restart changes (branch_due)."""
+        due = []
         for role in self.standing:
             pane = self.pane(role)
             if self.herdr.live(pane):
-                self.hint(pane, hint_branch(role, bolt))
+                branch = hint_branch(role, bolt)
+                self.hint(pane, branch)
+                if branch_due(start_of(self.agent_of(role)), branch)[0]:
+                    due.append(self.agent_of(role))
+        return due
 
     def start_standing(self):
         """Each standing role started that is not up, said when one is: the roles started. One that can't start stops

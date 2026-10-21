@@ -75,14 +75,15 @@ eq "$(stage_of)" "chore merged"
 has "$out" "b is rebased onto bolt/tenant-environments, now that bump merged"
 git -C "$k" merge-base --is-ancestor bolt/tenant-environments unit/b || fail "b was not rebased onto the bolt"
 eq "$(field $box unit.rebase From unit/b)" "chore/bump"
+has "$out" "swb-1-unit-1 is free: bump has merged into its bolt"
+has "$out" "$cp and chore/bump are removed; the branch was at"
 ok "a merge is refused while a commit lacks the chore's trailer; once its one round of fixes adds it, it merges with no verify again, through sluice, and its wait ends once the bolt holds the trailer"
 
 expect_ok crew status swb-1
-has "$out" "swb-1-unit-1 is free: bump has merged into its bolt"
-has "$out" "$cp and chore/bump are removed; the branch was at"
+lacks "$out" "swb-1-unit-1 is free"
 [[ ! -d $cp ]] || fail "the chore's place is still there"
 eq "$(field $box slot.free On)" "agent/swb-1-unit-1 chore/bump"
 [[ $(record_of $box)$(record_of mac-studio) != *ZQXT* ]] || fail "a chore's words are in the run record"
 expect_ok crew trace bump
 has "$out" "chore.add"; has "$out" "stage/bump/merge chore/bump"
-ok "the team's read frees a merged chore's slot and removes its place; the record holds none of its words, and crew trace finds it by its bare name"
+ok "the merge's wait freed the chore's slot and removed its place before the team's next read; the record holds none of its words, and crew trace finds it by its bare name"

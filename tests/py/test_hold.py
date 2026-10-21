@@ -79,8 +79,8 @@ class TestStarts:
         (tmp_path / "other").write_text("CREW_AGENT=wldn-design\n")
         import os
         os.utime(tmp_path / "old", (1, 1))
-        assert crew.start_of("wldn-ops") == {"session": "new", "commit": C2, "version": "v0.13.0", "launch": "abc"}
-        assert crew.start_of("wldn-design") == {"session": "other", "commit": None, "version": None, "launch": None}
+        assert crew.start_of("wldn-ops") == {"session": "new", "commit": C2, "version": "v0.13.0", "launch": "abc", "branch": None}
+        assert crew.start_of("wldn-design") == {"session": "other", "commit": None, "version": None, "launch": None, "branch": None}
         assert crew.start_of("wldn-planner") is None
 
 

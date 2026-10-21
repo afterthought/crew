@@ -187,6 +187,14 @@ eq "$(branch)" "bolt/tenant-environments"
 expect_ok crew bolt land tenant-environments
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
 eq "$(branch)" "none"
+# Each carried the bolt's branch in its session, which only a start changes, so each is restarted at its next stop.
+for a in swb-1-conductor swb-1-ops; do
+  log=$(home_of $box)/.local/state/crew/renew/$a.log
+  until_ok grep -q "$a is restarted on crew" "$log" || fail "$a was not restarted for its landed bolt: $(cat "$log" 2>/dev/null)"
+done
+eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "null"
+grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on crew .*its team no longer holds bolt/tenant-environments" "$CREW_TEST_LOG" ||
+  fail "ops was not told why it was restarted:"$'\n'"$(calls)"
 n=$(git -C "$k" log -1 --format='%(trailers:key=Sluice-Submission,valueonly)' main)
 has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"landed on GitHub's main at $(short main) (#$n); every host's folder follows by swancloud's timer within minutes\""
 has "$out" "card land/tenant-environments: $again closed"
@@ -202,7 +210,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice and its conductor and ops restarted at their next stop without it"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null
