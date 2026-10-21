@@ -71,8 +71,8 @@ class TestKeys:
         ("swb-1-unit-2", f"Say what you need with `{ASK} needs`, and your conductor gets it and asks if it must."),
         ("swb-1-ops", f"Tell swb-1-conductor what you wait on with `{ASK} tell`."),
         ("wldn-dispatch-mac-studio", f"Ask through wldn-planner with `{ASK} tell`."),
-        ("wldn-operator-mac-studio", "The user is in your pane: ask them there."),
-        ("crw-9-unit-1", "Tell the partition's operator agents what you wait on, as your brief says.")])
+        ("wldn-operator", "The user is in your pane: ask them there."),
+        ("crw-9-unit-1", "Tell the partition's operator what you wait on, as your brief says.")])
     def test_any_other_role_asks_nothing_on_a_card_and_is_told_whom_to_ask(self, name, words):
         """rail-cards: a coder asks; the agent's role cannot be read, as for crw-9-unit-1, whose team the teams file
         does not name."""

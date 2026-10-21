@@ -685,7 +685,7 @@ def card_line(c, now):
 def agent_views(data):
     """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
     prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
-    each host's operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
+    the partition's operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
     the lines the mod draws above its view. With them, the line the mod adds once the frame is stale_after_ms old: the
     day and time it was read, since a frame a restart left can be days old, and that the rail tab has not refreshed it
@@ -697,7 +697,7 @@ def agent_views(data):
     for p in data["partitions"]:
         views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
         views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p), f"{p['label']}-ops": ops_view(p)})
-        views.update({f"{p['label']}-operator-{h}": operator_view(p) for h in p["hosts"]})
+        views[f"{p['label']}-operator"] = operator_view(p)
         for c in p.get("cards", []):
             cards.setdefault(c["by"], []).append(card_line(c, now))
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
@@ -732,8 +732,8 @@ def write_frame(label, data, path=None):
 
 def no_frame(label):
     return (f"No board for {label} yet: the rail tab's loop writes it each time it refreshes, and has not written one. A rail tab "
-            f"opened before crew board existed draws no board: close the operator workspace's rail tab and run "
-            f"crew operator up {label}, which opens the rail tab and this board tab afresh.")
+            f"opened before crew board existed draws no board: close the console's rail tab and run "
+            f"crew console up {label}, which opens the rail tab and this board tab afresh.")
 
 
 def frame_text(label, data, width, color, now):

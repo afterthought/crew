@@ -244,7 +244,7 @@ class TestFrame:
     def test_with_no_frame_the_board_tab_says_how_to_open_both_tabs_afresh(self):
         said = board.frame_text("wldn", None, None, False, NOW)
         assert said.startswith("No board for wldn yet: the rail tab's loop writes it each time it refreshes")
-        assert "close the operator workspace's rail tab and run crew operator up wldn" in said
+        assert "close the console's rail tab and run crew console up wldn" in said
 
     def test_a_frame_read_five_minutes_ago_is_headed_with_its_age(self):
         d = data()
@@ -355,7 +355,7 @@ class TestViews:
         assert view("wldn-design")[1:] == ["  switchboard-kit command-cost  Reading: what each crew command costs."]
 
     def test_an_operator_reads_the_partitions_board_in_brief_and_what_waits_on_the_user(self):
-        mine = view(f"wldn-operator-{BOX}", props=WAITS, signals=SIGS)
+        mine = view("wldn-operator", props=WAITS, signals=SIGS)
         assert mine[:4] == [f"wldn board  read from {BOX}, mac-studio", "Inception  3 signals not moved  1 exploration",
                             "Bolt plan  1 proposal open  1 planned  1 queued", "Construction"]
         assert mine[4:8] == ["  atlas-kit  atl-1  holds no bolt", "! breadboard-kit  brd-1  ●  board-done  landed  1 of 1 merged",
@@ -363,7 +363,7 @@ class TestViews:
         assert "Operation  0 landed in seven days" in mine and "waits on the user  ✓ 1 to approve" in mine
 
     def test_an_operator_reads_each_environment_with_a_deploy_or_an_operation_waiting_and_counts_their_cards(self):
-        mine = view(f"wldn-operator-{BOX}", entries=OPS)
+        mine = view("wldn-operator", entries=OPS)
         at = mine.index("Operation  0 landed in seven days")
         assert mine[at + 1] == f"✓ mac-studio  deploy {S2[:7]}  waits on the user's word  2 operations waiting"
         assert "waits on the user  ✓ 2 to approve" in mine
@@ -413,10 +413,10 @@ class TestViews:
         assert lane(board.board_text(data(entries=moved)), "Operation")[-1].startswith(
             f"  mac-studio  deploy {S1[:7]} from nothing deployed  approved, then the word went to a newer offer  carrying")
 
-    def test_each_conductor_the_planner_the_design_agent_main_level_ops_and_each_hosts_operator_has_a_view_and_no_other_agent(self):
+    def test_each_conductor_the_planner_the_design_agent_main_level_ops_and_the_operator_has_a_view_and_no_other_agent(self):
         v = board.agent_views(data())
         assert sorted(v["views"]) == sorted(["swb-1-conductor", "swb-2-conductor", "brd-1-conductor", "atl-1-conductor", "wldn-planner", "wldn-design",
-                                             "wldn-ops", f"wldn-operator-{BOX}", "wldn-operator-mac-studio"])
+                                             "wldn-ops", "wldn-operator"])
         assert v["read_at"] == data()["read_at"] and v["stale_after_ms"] == board.STALE * 1000
         assert v["stale"] == [(f"read at {board.local(data()['read_at'])}; the rail tab on mac-studio has not refreshed it since", "dim")]
         assert re.fullmatch(r"read at [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}; .*", v["stale"][0][0])  # a day with it: a restart can leave it days old
