@@ -5724,7 +5724,7 @@ def reach(fleet, t):
                 record.emit(label, "forecast", [f"unit/{name}", other if other.startswith("bolt/") else f"unit/{other}"],
                             why=f"unit({name}): forecast to conflict with {other}", Heads=heads, Paths=" ".join(paths), Reached=way)
                 done.add(heads)
-    # The bolt itself against its kit's main and what is queued there, by sluice's forecast (teams.20).
+    # The bolt itself against its kit's main and what is queued there, by sluice's forecast (teams.21).
     for b in bolts:
         k, _ = st.kit(b)
         if not k:
@@ -5793,7 +5793,7 @@ def bolt_forecast_read(code, out, err):
 
 
 def bolt_forecast(team, label, bolt, doc, done):
-    """What the forecast of a bolt against its kit's main tells the conductor, once (teams.20): doc as
+    """What the forecast of a bolt against its kit's main tells the conductor, once (teams.21): doc as
     bolt_forecast_read gives it, done the Heads already recorded. None when the bolt merges with no conflict onto main
     and everything queued there, or when the same forecast, for the same bolt head, revision of main and submissions
     queued on main it meets, was said; else (heads, paths, words). A conflict with what main has landed is taken into
