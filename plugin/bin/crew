@@ -339,12 +339,21 @@ case $cmd in
     esac ;;
   fix)
     need_team "${2:-}"
-    name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --drop | --wait}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --drop | --wait}
+    usage='usage: crew fix <team> <name> "<what is wrong>" | --merge | --drop | --wait, each with [--bolt <bolt>]'
+    team=$2 name=${3:?$usage} bolt=() rest=()
+    set -- "${args[@]:3}"
+    while (( $# )); do  # --bolt <bolt> may follow the words or a mode flag (teams.16)
+      case $1 in
+        --bolt) [[ -n ${2:-} ]] || { echo "--bolt takes the bolt the fix is of" >&2; exit 2; }; bolt=(--bolt "$2"); shift 2 ;;
+        *) rest+=("$1"); shift ;;
+      esac
+    done
+    words=${rest[0]:?$usage}
     case $words in
-      --wait) limits "${@:5}"; one _fix-run "$2" "$name" wait ${limit[@]+"${limit[@]}"} ;;
-      --merge) one _fix-run "$2" "$name" merge ${forced[@]+"${forced[@]}"} ;;
-      --drop) one _fix-run "$2" "$name" drop ${forced[@]+"${forced[@]}"} ;;
-      *) one _fix-run "$2" "$name" start ${forced[@]+"${forced[@]}"} -- "$words" ;;
+      --wait) limits "${rest[@]:1}"; one _fix-run "$team" "$name" wait ${limit[@]+"${limit[@]}"} ${bolt[@]+"${bolt[@]}"} ;;
+      --merge) one _fix-run "$team" "$name" merge ${forced[@]+"${forced[@]}"} ${bolt[@]+"${bolt[@]}"} ;;
+      --drop) one _fix-run "$team" "$name" drop ${forced[@]+"${forced[@]}"} ${bolt[@]+"${bolt[@]}"} ;;
+      *) one _fix-run "$team" "$name" start ${forced[@]+"${forced[@]}"} ${bolt[@]+"${bolt[@]}"} -- "$words" ;;
     esac ;;
   needs)  # run by a stage's agent: the team and slot are its own name's
     words=${2:-}

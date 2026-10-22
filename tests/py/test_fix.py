@@ -1,11 +1,10 @@
 """A fix (teams.3, teams.5, plan.8, teams.15): plan.fix_in_slot for what crew fix <name> acts on, plan.leftover and
 plan.own_place for a fix refused its place, plan.fix_prompt for what its agent starts with, told of a place that could
-not be made ready (record 0028), plan.fix_drop_why and plan.fix_branch_kept for a fix dropped, plan.bolt_held for the bolt a fix is of, and crew.never_started for a fix's or unit's
+not be made ready (record 0028), plan.fix_drop_why and plan.fix_branch_kept for a fix dropped, plan.fix_bolt for the bolt a fix is of, of the two a team may hold (teams.16), and crew.never_started for a fix's or unit's
 stage whose prompt was never taken. A fix merges as a unit does, by a submission to sluice (teams.5); the fix's place
 and stage through the command are the journey's (t-journey-fix)."""
 import pytest
 
-from facts import plan_of
 
 import crew
 import kit
@@ -36,9 +35,34 @@ class TestWhich:
         assert crew.NAME.match("edge-sign-in") and not crew.NAME.match("Edge_Sign")
 
     def test_a_team_holding_no_bolt_has_no_fix(self):
-        assert plan.bolt_held(plan_of({"t": "swb-1"}), "swb-1") == "t"
         with pytest.raises(plan.Refusal, match="swb-2 holds no bolt: crew bolt give swb-2"):
-            plan.bolt_held(plan_of({"t": "swb-1"}), "swb-2")
+            plan.fix_bolt("swb-2", [], None, [], "edge")
+
+
+class TestFixBolt:
+    """A team may hold a bolt that waits to land beside the one it builds (teams.16), so a fix names its bolt."""
+    TWO = ["doctor-rows", "ssh-fix"]
+
+    def test_the_bolt_named_and_held(self):
+        assert plan.fix_bolt("swc-1", self.TWO, "doctor-rows", [], "take-main") == "doctor-rows"
+
+    def test_a_bolt_named_and_not_held_is_refused(self):
+        with pytest.raises(plan.Refusal, match="swc-1 holds no bolt other: it holds doctor-rows and ssh-fix"):
+            plan.fix_bolt("swc-1", self.TWO, "other", [], "take-main")
+
+    def test_one_held_and_none_named_is_that_one(self):
+        assert plan.fix_bolt("swc-1", ["ssh-fix"], None, [], "gap") == "ssh-fix"
+
+    def test_a_new_fix_naming_no_bolt_while_two_are_held_is_refused_naming_both_and_bolt(self):
+        with pytest.raises(plan.Refusal, match="swc-1 holds doctor-rows and ssh-fix: name the fix's bolt with --bolt"):
+            plan.fix_bolt("swc-1", self.TWO, None, [], "gap")
+
+    def test_a_fix_in_flight_is_found_by_its_name_among_the_bolts(self):
+        assert plan.fix_bolt("swc-1", self.TWO, None, ["unit/a", "fix/doctor-rows/x"], "x") == "doctor-rows"
+
+    def test_a_name_in_flight_on_both_is_refused_without_bolt(self):
+        with pytest.raises(plan.Refusal, match="fix x is in flight on doctor-rows and ssh-fix: name its bolt with --bolt"):
+            plan.fix_bolt("swc-1", self.TWO, None, ["fix/doctor-rows/x", "fix/ssh-fix/x"], "x")
 
 
 class TestPlace:

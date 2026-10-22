@@ -4753,10 +4753,21 @@ def bolt_of_team(fleet, t):
     return team_building(fleet, read(repo, ref, tip), t) or fail(f"{t['name']} holds no bolt: crew bolt give {t['name']}")
 
 
-def bolt_held(plan, team):
-    """The bolt a team holds, which its fixes are of; refused when it holds none."""
-    held = held_by(plan, team)
-    return held[0].name() if held else fail(f"{team} holds no bolt: crew bolt give {team}")
+def fix_bolt(team, held, named, slotted, name):
+    """The bolt a fix is of (teams.3, teams.16), from facts: held, the bolts the team holds, by name; named, the one
+    --bolt names, or None; slotted, the fixes the team's slots hold (fix/<bolt>/<name>). The bolt named, refused when
+    the team does not hold it; else the bolt of the fix by that name a slot holds, refused when one of each bolt does;
+    else the one bolt held, refused when it holds none, or two, which a new fix names with --bolt."""
+    if named:
+        named in held or fail(f"{team} holds no bolt {named}: it holds " + (" and ".join(held) or "none"))
+        return named
+    mine = [b for b in held if f"fix/{b}/{name}" in slotted]
+    len(mine) < 2 or fail(f"fix {name} is in flight on {' and '.join(mine)}: name its bolt with --bolt")
+    if mine:
+        return mine[0]
+    held or fail(f"{team} holds no bolt: crew bolt give {team}")
+    len(held) < 2 or fail(f"{team} holds {' and '.join(held)}: name the fix's bolt with --bolt")
+    return held[0]
 
 
 def fix_place(fleet, t, place, fix, bolt):
@@ -4832,8 +4843,9 @@ def place_branch(fleet, t, place):
 
 
 def fix_cmd(fleet, a):
-    """What crew fix decides before its stage, a.mode start, merge, drop or wait: the bolt the team holds (BOLT), the
-    fix (FIX), its place (PLACE) and the slot holding it, if any (SLOT); for a merge, how it merges into the bolt
+    """What crew fix decides before its stage, a.mode start, merge, drop or wait: the fix's bolt (BOLT, fix_bolt, by
+    a.bolt while the team holds two) and its kit (REPO), the fix (FIX), its place (PLACE) and the slot holding it, if
+    any (SLOT); for a merge, how it merges into the bolt
     (MERGE), by a submission to sluice as a unit's does; for a drop, its branch when it is there (BRANCH). A name crew
     does not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
     already there (fix.start), a merge from a place not the fix's own (fix.merge), and a drop of a merged fix, of one
@@ -4844,12 +4856,15 @@ def fix_cmd(fleet, a):
     CONTEXT["label"] = t["label"]
     repo, ref = state_of(fleet, t["label"])
     tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
-    bolt = bolt_held(read(repo, ref, tip), t["name"])
+    plan = read(repo, ref, tip)
     f = team_state(t) / "slots"
-    slot, fix, place = fix_in_slot([l.split() for l in (f.read_text().splitlines() if f.exists() else []) if l.strip()],
-                                   bolt, a.name, t["kit"]["dir"])
+    lines = [l.split() for l in (f.read_text().splitlines() if f.exists() else []) if l.strip()]
+    bolt = fix_bolt(t["name"], [b.name() for b in held_by(plan, t["name"])], getattr(a, "bolt", None),
+                    [l[2] for l in lines if len(l) >= 3], a.name)
+    t = crew.with_kit(t, plan.bolt(bolt).get("Repo"))  # a fix of a bolt in another of the team's kits is made in that kit
+    slot, fix, place = fix_in_slot(lines, bolt, a.name, t["kit"]["dir"])
     a.mode in ("start", "drop") or slot or fail(f"{t['name']} has no fix {a.name} in flight")
-    said = dict(BOLT=bolt, FIX=fix, PLACE=place, SLOT=slot or "")
+    said = dict(BOLT=bolt, FIX=fix, PLACE=place, SLOT=slot or "", REPO=plan.bolt(bolt).get("Repo") or "")
     act = {"start": "fix.start", "merge": "fix.merge", "drop": "fix.drop"}.get(a.mode)
     try:
         if a.mode == "start" and not slot:
@@ -5935,7 +5950,7 @@ def reach(fleet, t):
                                 Heads=heads, Reached="wait")
                     done.add(heads)
             continue
-        told = bolt_forecast(t["name"], label, b.name(), doc, done)
+        told = bolt_forecast(t["name"], label, b.name(), doc, done, len(bolts) > 1)
         if told:
             heads, paths, words = told
             say(words)
@@ -5987,13 +6002,14 @@ def bolt_forecast_read(code, out, err):
     return None, f"it exited {code}" + (f": {line}" if line else "")
 
 
-def bolt_forecast(team, label, bolt, doc, done):
+def bolt_forecast(team, label, bolt, doc, done, two=False):
     """What the forecast of a bolt against its kit's main tells the conductor, once (teams.21): doc as
     bolt_forecast_read gives it, done the Heads already recorded. None when the bolt merges with no conflict onto main
     and everything queued there, or when the same forecast, for the same bolt head, revision of main and submissions
     queued on main it meets, was said; else (heads, paths, words). A conflict with what main has landed is taken into
     the bolt now, by the fix the conductor starts when main-ops says a landing conflicts (plan.8); one with a
-    submission queued on main is waited out, since that submission may yet fail and leave the queue."""
+    submission queued on main is waited out, since that submission may yet fail and leave the queue. While the team
+    holds two bolts (two), the fix's command names its bolt (teams.16)."""
     c = doc.get("conflict")
     if not c:
         return None
@@ -6008,7 +6024,7 @@ def bolt_forecast(team, label, bolt, doc, done):
             f"bolt/{bolt} is forecast to conflict with main on {on}: main has landed work on them since the bolt took it. "
             f"Take main into the bolt now, while the conflict is small, by a fix as when {label}-ops says a landing "
             f'conflicts: crew fix {team} take-main-{doc["onto"][:7]} "Take main into the bolt: it is forecast to conflict '
-            f'on {on}"')
+            f'on {on}"' + (f" --bolt {bolt}" if two else ""))
     who = ", ".join(f"#{w['id']}" + (f" ({w['from']['worktree']})" if isinstance(w.get("from"), dict)
                                      and isinstance(w["from"].get("worktree"), str) else "") for w in met)
     return heads, paths, (
@@ -6955,8 +6971,11 @@ def fix_run(fleet, a):
     if a.mode not in ("wait", "drop"):
         not_held()
         reap(fleet, team)
-    said = fix_cmd(fleet, argparse.Namespace(team=t["name"], name=a.name, mode=a.mode))
+    said = fix_cmd(fleet, argparse.Namespace(team=t["name"], name=a.name, mode=a.mode, bolt=a.bolt))
     slot, fix, place, bolt = said["SLOT"], said["FIX"], said["PLACE"], said["BOLT"]
+    if said["REPO"] and crew.with_kit(t, said["REPO"]) is not t:  # the fix's bolt is in another of the team's kits
+        t = crew.with_kit(t, said["REPO"])
+        team = crew.Team(fleet, t, a.force)
     obj = f"fix/{bolt}/{a.name}"
     on = [obj, f"bolt/{bolt}"]
     if a.mode == "wait":
@@ -10925,6 +10944,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("name")
     x.add_argument("mode", choices=("start", "merge", "drop", "wait"))
     x.add_argument("words", nargs="?", default="")
+    x.add_argument("--bolt")
     x.add_argument("--timeout", type=int, default=3600000)
     x.add_argument("--stuck", type=int, default=900000)
     x.add_argument("--force", action="store_true")

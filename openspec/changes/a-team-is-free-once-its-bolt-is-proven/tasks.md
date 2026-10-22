@@ -11,7 +11,7 @@
 
 ## 3. A fix names its bolt
 
-- [ ] 3.1 `crew fix` takes `--bolt`, refuses a new fix that names none while two bolts are held, finds a fix in flight by name, and the forecast's take-main command names the bolt when two are held (design, Decision 4; Task notes 3.1). Verify `tests/suite logic t-journey-fix` ends with "0 failed".
+- [x] 3.1 `crew fix` takes `--bolt`, refuses a new fix that names none while two bolts are held, finds a fix in flight by name, and the forecast's take-main command names the bolt when two are held (design, Decision 4; Task notes 3.1). Verify `tests/suite logic t-journey-fix` ends with "0 failed".
 
 ## 4. A give beside a waiting bolt restarts at the next stop
 
