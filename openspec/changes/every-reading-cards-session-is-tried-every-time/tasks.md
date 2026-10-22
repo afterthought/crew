@@ -22,7 +22,7 @@
 
 ## 5. The run record
 
-- [ ] 5.1 `card.reading` is named among the card acts in `record.py`, and any case pinning the acts is updated. `tests/suite logic` passes (design, Decision 5; Task notes 5.1).
+- [x] 5.1 `card.reading` is named among the card acts in `record.py`, and any case pinning the acts is updated. `tests/suite logic` passes (design, Decision 5; Task notes 5.1).
 
 ## 6. Briefs and docs
 

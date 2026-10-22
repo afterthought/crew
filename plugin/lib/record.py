@@ -9,7 +9,10 @@ said on standard error and never changes what the command does or how it exits.
 
 crew's PostToolUse hook (plugin/hooks/cards) appends three acts of its own, one for each Pending You card a crew agent
 posts (card.post), updates (card.update), or withdraws or closes (card.close): each names the rail row's object in On,
-the card's id in Card and the row's key in Key, and nothing written on the card.
+the card's id in Card and the row's key in Key, and nothing written on the card. crew appends the same three for the
+cards it raises itself, with why a card's reading could not be opened in Unread, and a fourth, card.reading, for each
+try of a batch's or a long proposal's reading made after its card was raised, by crew card session, the batch's wait or
+the rail's read: done when it started the reading, refused with crew's own message when it could not.
 
 Each write to a flywheel's branch of its state repository also carries the host's entries there, to the same path
 under runs/<host>/: the branch's file becomes the union by Id of what it had and what the host has, so a host only
