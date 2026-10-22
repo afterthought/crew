@@ -2,7 +2,7 @@
 
 ## 1. crew finds the user's own record of the words
 
-- [ ] 1.1 `transcript.check` with `want="user"` grades the words by the newest received record the user wrote, so a later echo in a tool's output or a tell does not hide it (design, Decision 2; Task notes 1.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_transcript.py`.
+- [x] 1.1 `transcript.check` with `want="user"` grades the words by the newest received record the user wrote, so a later echo in a tool's output or a tell does not hide it (design, Decision 2; Task notes 1.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_transcript.py`.
 
 ## 2. A pane answer closes its batch for good
 
