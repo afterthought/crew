@@ -28,6 +28,12 @@ five times. A write that changes several files is one commit, and it carries the
                                              a batch card's one per unit on that unit's team's host; the user's decision
                                              in it, waited for, a landing's reading started first when none runs while
                                              its conductor holds the card; and its end, which a card's close brings too
+  crew card answer batch/<n> --excerpt "<words>"
+                                             the user's answer to a batch in their own words in the planner's or the
+                                             operator's pane, recorded once crew reads the words in that agent's own
+                                             transcript as the user's, no words in the run record: the batch's card
+                                             closed with them, the planner's wait on it ended, and the planner told
+                                             them when the operator ran it
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
