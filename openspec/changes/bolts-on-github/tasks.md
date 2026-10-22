@@ -11,7 +11,7 @@
 
 ## 2. A land deletes the bolt on GitHub
 
-- [ ] 2.1 `crew bolt land` has sluice delete `bolt/<bolt>` after the plan write, names a refusal in sluice's words with the bolt out of the plan, and the tidy unsets the mark of a bolt branch already gone (Decision 5, Task notes 2.1). Logic: `tests/py/test_landing.py`, `tests/py/test_tidy.py`. Journey: `tests/suite t-journey-land` ends with "0 failed".
+- [ ] 2.1 `crew bolt land` has sluice delete `bolt/<bolt>` after the plan write, names a refusal in sluice's words with the bolt out of the plan, deletes a bolt made before wherever its tip's policy routes it, and the tidy unsets the mark of a bolt branch already gone (Decision 5, Task notes 2.1). Logic: `tests/py/test_landing.py`, `tests/py/test_tidy.py`. Journey: `tests/suite t-journey-land` ends with "0 failed".
 
 ## 3. A bolt made before stays local
 

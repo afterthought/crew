@@ -91,7 +91,7 @@ At the end of a team's read (`rebase_and_tidy`), for each bolt the team holds th
 
 **1.6** The fixture and stubs as Decision 7. Then `t-journey-teams.sh` holds a give on GitHub (the branch on the kit's bare remote at main's commit, the local branch marked), the remote refusal and the version refusal; `t-journey-units.sh` holds a place cut from `origin/bolt/<bolt>` after a merge pushed to the remote from another clone. Every other `t-journey-*.sh` passes on the new fixture as it is, its expectations moved only where a branch is now on the remote.
 
-**2.1** The delete's words, deleted and refused, in `tests/py/test_landing.py` "The bolt's branch is deleted at its land" and "A delete sluice refuses"; a mark whose branch is gone unset with nothing said, in `test_tidy.py`; `t-journey-land.sh` holds the branch gone from the bare remote after `crew bolt land`, and a refused delete's words.
+**2.1** The delete's words, deleted and refused, in `tests/py/test_landing.py` "The bolt's branch is deleted at its land" and "A delete sluice refuses"; a mark whose branch is gone unset with nothing said, in `test_tidy.py`; `t-journey-land.sh` holds the branch gone from the bare remote after `crew bolt land`, and a refused delete's words. A bolt made before, in `t-journey-land.sh`: made with git on the kit's host, its last merge bringing the policy naming `origin`, landed through the stub `wt submit main` with the branch pushed to the bare remote as sluice's pull request pushes it; `crew bolt land` has the stub delete it there, and no `branch create` is in the stub's log.
 
 **3.1** `bolt_local_said` cases in `test_tidy.py`: a local bolt while main names a remote says the line once; a bolt on GitHub says nothing; a local bolt while main names none says nothing. `t-journey-teams.sh` holds a bolt made with git before the give went through sluice, on a kit whose main then names `origin`: the read says the line, no `branch create` is in the stub's log, and a unit's place is cut from the local branch.
 
@@ -110,8 +110,9 @@ At the end of a team's read (`rebase_and_tidy`), for each bolt the team holds th
 
 ## After deploy
 
-Steps no check in crew's tiers can prove, since each needs GitHub, sluice's app and a live kit:
+Steps no check in crew's tiers can prove, since each needs GitHub, sluice's app and a live kit, all in crew's own repository on mac-studio (`docs.6`):
 
 1. The first give on a kit whose policy on GitHub's main names `origin` for its bolts: `bolt/<bolt>` appears on GitHub, pushed by sluice's app, and the first unit's place is cut from it. Doer: the team's ops, once the bolt lands and the kit's policy chore is on main, on the first `crew bolt give` after.
 2. That bolt's land: the branch is gone from GitHub, or sluice's refusal is named. Doer: main-level ops, at that bolt's landing, reading GitHub's branch list.
-3. The user sets each kit's `bolt/*` ruleset naming sluice's app as its one writer for create, update and delete, before the first give on that kit.
+3. This bolt's own landing, crw-4's being a bolt made before: its last merge is the chore that puts `remote = "origin"` on crew's bolt policy, its landing's pull request pushes `bolt/<bolt>` to GitHub as sluice's app, and `crew bolt land` deletes it there. Doer: main-level ops, at the landing, reading GitHub's branch list.
+4. The user sets each kit's `bolt/*` ruleset naming sluice's app as its one writer for create, update and delete, before the first give on that kit.
