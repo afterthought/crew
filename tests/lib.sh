@@ -52,6 +52,13 @@ has() { [[ $1 == *"$2"* ]] || fail "expected '$2' in:"$'\n'"$1"; }
 lacks() { [[ $1 != *"$2"* ]] || fail "did not expect '$2' in:"$'\n'"$1"; }
 eq() { [[ $1 == "$2" ]] || fail "expected '$2', got '$1'"; }
 calls() { cat "$CREW_TEST_LOG"; }
+# merge_as <agent> <place> <branch>: what a stage's agent does to merge, as its brief has it: submits the place's head
+# without waiting, then waits on the submission with sluice wait, returning its exit
+merge_as() {
+  local id
+  id=$(cd "$2" && SLUICE_AGENT=$1 sluice submit "$3" --no-wait --json 2>/dev/null | jq -r .id) && [[ $id =~ ^[0-9]+$ ]] || return 2
+  (cd "$2" && sluice wait "$id" --timeout 9m --json >/dev/null 2>&1)
+}
 launches() { cat "$CREW_TEST_CLAUDE_LOG"; }
 
 fixtures() {  # the teams file (version $1, default 2) and the hosts file, written into every host's HOME

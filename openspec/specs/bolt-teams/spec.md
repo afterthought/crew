@@ -45,7 +45,7 @@ A team SHALL have at most `units` units in flight, each held by a slot named `<t
 - code: `/opsx:apply`;
 - verify: `/opsx:verify`;
 - settle: the coder's brief, with the forecast or amendment that reached a unit waiting to merge;
-- merge: a submission to the bolt, `wt submit bolt/<bolt> --no-remove`, which sluice lands only when the checks the kit's policy requires of its bolt branches pass on the bolt with the unit merged.
+- merge: a submission to the bolt made without waiting, `sluice submit bolt/<bolt> --no-wait --json`, which its agent waits on a call at a time with `sluice wait <n> --timeout 9m --json` until it exits other than 5, still waiting, and which sluice lands only when the checks the kit's policy requires of its bolt branches pass on the bolt with the unit merged.
 
 Code SHALL start as soon as the unit's change is committed, with no review between.
 
@@ -67,7 +67,11 @@ Code SHALL start as soon as the unit's change is committed, with no review betwe
 
 #### Scenario: Merging
 - **WHEN** a verified unit's merge stage runs
-- **THEN** its agent is told to run `wt submit bolt/<bolt> --no-remove` in the unit's place, and sluice's verdict decides whether the unit lands on the bolt
+- **THEN** its agent is told to run `sluice submit bolt/<bolt> --no-wait --json` in the unit's place and to wait on the submission with `sluice wait`, and sluice's verdict decides whether the unit lands on the bolt
+
+#### Scenario: A slow gate
+- **WHEN** a unit's merge has been testing for twenty minutes
+- **THEN** its agent's calls of `sluice wait <n> --timeout 9m --json` have each exited 5 within ten minutes, and its next call ends with sluice's verdict, exiting 0 when the unit landed
 
 ### Requirement: Work happens in fixed places
 A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.

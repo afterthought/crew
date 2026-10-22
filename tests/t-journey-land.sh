@@ -30,7 +30,7 @@ commit_all "$pa" "chore: the kit declares a preview"
 echo "# switchboard-kit, the bolt's" > "$pa/README.md"; commit_all "$pa" "docs(a): the bolt's title"
 mkdir -p "$pa/openspec/changes/archive"; git -C "$pa" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
 git -C "$pa" commit -qm "docs(openspec): archive a"
-(cd "$pa" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "a's submission failed"
+merge_as swb-1-unit-1 "$pa" bolt/tenant-environments || fail "a's submission failed"
 git -C "$k" worktree remove "$pa"; git -C "$k" branch -qD unit/a
 # While the bolt's landing is in flight, its worktree standing with LANDING's process alive in it, no unit starts on it.
 land=$kd/places/land-tenant-environments
@@ -86,7 +86,7 @@ echo "# switchboard-kit, main's and the bolt's" > "$tmp/README.md"; git -C "$tmp
 GIT_EDITOR=true git -C "$tmp" commit -q --no-edit || fail "the merge of main did not commit"
 expect_ok crew fix swb-1 take-main --wait
 expect_ok crew fix swb-1 take-main --merge
-(cd "$tmp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "the fix's submission failed"
+merge_as swb-1-unit-1 "$tmp" bolt/tenant-environments || fail "the fix's submission failed"
 : > "$CREW_TEST_LOG"
 touch "$CREW_TEST_ROOT/sluice-preview-holds"  # the preview's stack takes its time to come up
 expect_ok crew fix swb-1 take-main --wait
@@ -149,7 +149,7 @@ gp=$kd/places/fix-tenant-environments--gap
 echo four >> "$gp/shared.txt"; commit_all "$gp" "fix(a): the zone list holds every zone"
 expect_ok crew fix swb-1 gap --wait
 expect_ok crew fix swb-1 gap --merge
-(cd "$gp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "the gap fix's submission failed"
+merge_as swb-1-unit-1 "$gp" bolt/tenant-environments || fail "the gap fix's submission failed"
 : > "$CREW_TEST_LOG"
 expect_ok crew fix swb-1 gap --wait
 again=$(grep -o "^card land/tenant-environments: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)

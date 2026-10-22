@@ -255,7 +255,7 @@ class TestRun:
         ("code", "", "Chore bump: Biome follows the shell."),
         ("code", "Fix the finding: x.", "Chore bump: Biome follows the shell. Fix the finding: x."),
         ("verify", "", "Verify chore bump: Biome follows the shell."),
-        ("merge", "", f"Merge bump into bolt/{TE}: wt submit bolt/{TE} --no-remove")])
+        ("merge", "", f"Merge bump into bolt/{TE}: sluice submit bolt/{TE} --no-wait --json")])
     def test_its_prompts(self, stage, words, prompt):
         assert plan.chore_prompt(stage, "bump", "Biome follows the shell.", words, TE, plan.merge_command(TE)) == prompt
 

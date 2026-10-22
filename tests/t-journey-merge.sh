@@ -47,11 +47,11 @@ expect_ok crew unit wait a
 has "$out" "swb-1-unit-1 delivered settle on a: its branch is at $(short unit/a), ready to merge"
 eq "$(field $box forecast Heads unit/b unit/a)" ""
 expect_ok crew unit run a merge
-eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
+eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 lacks "$out" "Pending You card"
 mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
 git -C "$kd/places/a" commit -qm "docs(openspec): archive a"
-(cd "$kd/places/a" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit failed"
+merge_as swb-1-unit-1 "$kd/places/a" bolt/tenant-environments || fail "a's submission failed"
 eq "$(git -C "$k" log -1 --format='%an %(trailers:key=Sluice-Result,valueonly)' bolt/tenant-environments)" "sluice passed (stub)"
 b_before=$(git -C "$k" rev-parse unit/b) c_before=$(git -C "$k" rev-parse unit/c)
 expect_ok crew unit wait a
