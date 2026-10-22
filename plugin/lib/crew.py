@@ -314,6 +314,23 @@ def label_of_agent(fleet, name):
     return None
 
 
+def send_door(fleet, name, caller):
+    """Where crew send delivers (briefs.10, record 0035): a team's partition, or a partition named by its label, as
+    (label, its operator, the team or None). A name that is neither is refused, never placed by a guess (read.1), and so
+    is the operator sending to its own partition, which it carries on with crew tell."""
+    if name in fleet["teams"]:
+        label, team = fleet["teams"][name]["label"], name
+    elif name in fleet["partitions"]:
+        label, team = name, None
+    else:
+        fail(f"crew send takes a team or a partition, not '{name}': teams {' '.join(sorted(fleet['teams'])) or 'none'}; "
+             f"partitions {' '.join(sorted(fleet['partitions'])) or 'none'}")
+    door = f"{label}-operator"
+    if caller == door:
+        fail(f"you are {label}'s door: carry it on with `crew tell <agent>`")
+    return label, door, team
+
+
 def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again=""):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
