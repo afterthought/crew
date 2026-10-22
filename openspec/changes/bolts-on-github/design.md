@@ -2,9 +2,11 @@
 
 ## Context
 
-Part 1 of `no-worktree-holds-main-or-a-bolt-branch` (its tasks 1.1 to 1.5), built to `plan.19` as crew's main has it at dd9fadd4, with record 0032 §2 and its amendment of 2026-10-22 (proposed, on the user's card): a bolt made before stays local until it lands, and no create puts it on GitHub. Parts 2 to 5 are built; part 7 is `how-crew-reaches-a-host`, in this bolt.
+Part 1 of `no-worktree-holds-main-or-a-bolt-branch` (its tasks 1.1 to 1.5), built to `plan.19` as crew's main has it at 5da90463, with record 0032 §2 and its amendment of 2026-10-22, accepted on the user's card: a bolt made before stays local until it lands, and no create puts it on GitHub; and with `plan.19`'s reading of 2026-10-22 on a drop (crew 040d948e, batch 17's reviewer through the planner, proposal 224): a drop ends the bolt's branch on GitHub as a landing does, by crew asking sluice's `branch delete`, which refuses while the tip is not in main; the branch is then kept and named as the drop's unmerged work, as record 0003 and `plan.9` keep the host's, and the landing sweep asks the delete again once main holds its work; never main-level ops's hand, never a push of crew's (`state.5`). Parts 2 to 5 are built; part 7 is `how-crew-reaches-a-host`, in this bolt.
 
 Today `bolt_give` writes the plan, then makes `bolt/<bolt>` with git at the commit `kit_policy` read `origin/main`'s policy at (`BOLT_BRANCH`), and marks it `branch.bolt/<bolt>.crew`. `make_place` cuts every place from the local `bolt/<bolt>`, tracking it. `bolt_land` writes the plan and tidies, and the tidy removes the marked branch once no plan has the bolt (`plan.9`). Every merge is `sluice submit bolt/<bolt> --no-wait --json` from the place, and a landing is `wt submit main` from `places/land-<bolt>`.
+
+On the bolt, since this place was cut, `a-drop-keeps-unmerged-work` and `landing-sweeps-what-main-holds` have merged: a unit's, chore's or fix's branch goes only when `git cherry` finds nothing its bolt (or, once the bolt landed or is gone, main) lacks, and is otherwise kept, named and recorded as `branch.kept`; the landing marks the bolt's branch `branch.bolt/<bolt>.crew landed`, and the tidy's last loop judges a bolt branch by its mark (`bolt_branch_judged`, `bolt_branch_gone`): one marked `landed` against main by `git cherry`, one marked `given`, a dropped bolt's among them, deleted with `git branch -D` once no plan has it, whatever it holds. `op_bolt_drop` writes the plan and asks the team's host for that tidy (`tidy_after`).
 
 What sluice does, read in sluice 0.36.4 at its main 2e98fbd (`crates/sluice/src/branch.rs`, `crates/sluice-core/src/branches.rs`, `crates/sluice/src/profiles/branches.rs`, `pushed_refs.rs`, `local_refs.rs`, `told.rs`), unchanged since v0.20.0, the first release with the commands (its commit 69bd844, ADR 0026):
 
@@ -15,13 +17,13 @@ What sluice does, read in sluice 0.36.4 at its main 2e98fbd (`crates/sluice/src/
 - **`sluice --version`** prints `sluice 0.36.4`.
 - **A landing on a remote branch** pushes it leased and sets the local branch to the landing commit, so the team's host's `bolt/<bolt>` follows every merge sluice lands there.
 
-It relies on `plan.19`, `plan.9`, `plan.17` (crew only reads a kit's policy, never writes `remote` into it), `plan.18` (reads of main now), `state.5` (crew pushes nothing), `read.1`, `read.2` (sluice's output read by facts checked against it), `read.4`, `code.1`, `code.7`, `code.9`, `docs.2`, `docs.3`, `tests.4`, `tests.10`, `tests.11`. It touches the areas of `plan.md`, `tests.md` and `docs.md`.
+It relies on `plan.19`, `plan.9`, `plan.10`, record 0003, `plan.17` (crew only reads a kit's policy, never writes `remote` into it), `plan.18` (reads of main now), `state.5` (crew pushes nothing), `read.1`, `read.2` (sluice's output read by facts checked against it), `read.4`, `code.1`, `code.7`, `code.9`, `docs.2`, `docs.3`, `tests.4`, `tests.10`, `tests.11`. It touches the areas of `plan.md`, `tests.md` and `docs.md`.
 
 ## Goals / Non-Goals
 
-**Goals:** a new bolt has one copy, on GitHub, written only by sluice; every place holds what landed on the bolt from any host; a give that can't put the bolt on GitHub changes nothing; a bolt made before keeps working, untouched, until it lands.
+**Goals:** a new bolt has one copy, on GitHub, written only by sluice; every place holds what landed on the bolt from any host; a give that can't put the bolt on GitHub changes nothing; a dropped bolt's branch is ended where it lives, or kept and named while main lacks its work; a bolt made before keeps working, untouched, until it lands.
 
-**Non-Goals:** the `bolt/*` rulesets (the user's, per repository); each kit's own `remote = "origin"` line (crew's is the chore `crews-sluice-policy-names-origin-for-bolts`); deleting a dropped bolt's branch on GitHub, which neither the intent nor `plan.19` names; moving the bolt's stage reads, `ONTO` or `landed_at` off the local branch (Decision 4); any change to `crew bolt submit`.
+**Non-Goals:** the `bolt/*` rulesets (the user's, per repository); each kit's own `remote = "origin"` line (crew's is the chore `crews-sluice-policy-names-origin-for-bolts`); moving the bolt's stage reads, `ONTO` or `landed_at` off the local branch (Decision 4); any change to `crew bolt submit`.
 
 ## Decisions
 
@@ -77,6 +79,32 @@ At the end of a team's read (`rebase_and_tidy`), for each bolt the team holds th
 
 `no-worktree-holds-main-or-a-bolt-branch` stays open for part 6 and archives after this change, so its deltas would otherwise put back what this change replaces. Its part 1 tasks are ticked as built here; its 1.4, its Decision 6's sentence on a bolt made before, and its `bolt-plan` and `bolt-teams` blocks for the two requirements this change modifies are made to read as this change's (`docs.3`). Its `--from origin/main` becomes `--from main`, which is sluice's argument.
 
+### 9. A drop has sluice delete the bolt's branch
+
+`op_bolt_drop`'s `after`, when a team held the bolt, with or without `--requeue`, runs a drop's delete on the team's host before `tidy_after`: `BOLT_DELETE` as the land runs it, `sluice branch delete bolt/<bolt> --into main --json` in the kit's main checkout, and, when sluice refuses and the host still has the local branch, `git config branch.bolt/<bolt>.crew dropped` in the same script, so the tidy knows the branch as a drop's kept work and not as one to delete (`read.4`). What the drop prints, from a pure `dropped_said`, which shares `deleted_said`'s reading of sluice's document:
+
+- **Deleted**, when sluice finds the tip in main, as for a bolt with no merge: "sluice deleted bolt/<bolt> from GitHub at <sha>", or from the host for a bolt made before, which sluice routes there by its tip's policy.
+- **Gone already** (`not_found`): said, refusing nothing.
+- **Refused**, the tip not in main or a submission still queued on it: "bolt/<bolt> is kept on GitHub at <sha>: bolt <bolt> was dropped, and sluice did not delete it: <sluice's message>; it is the drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip", "on <host>" for a bolt made before. One run-record entry, `branch.kept`, under the team's label, as `a-drop-keeps-unmerged-work` writes one: `On` `bolt/<bolt>` and `team/<team>`, `Head` the tip, `Why` "bolt <bolt> was dropped, and main does not hold its tip (sluice)". It is written by the drop's own process, which already writes `bolt.drop`, after the delete's answer.
+- **The host did not answer**, or crew can't read what sluice said: named, with the command, and "the team's next read asks it" (Decision 10).
+
+The delete goes after the plan write, as the land's does: the user's word is the drop, and a refused delete keeps the work rather than the bolt. The host's branch follows GitHub's by sluice's own delete, which removes the local ref with the remote one, so the two are kept or ended together, as `plan.19`'s reading has it.
+
+Considered: leaving a dropped bolt's branch to the tidy's `git branch -D`, as today. Rejected: it deletes the host's copy of unmerged work, against record 0003, and leaves GitHub's standing unnamed.
+
+### 10. The team's reads ask again once main holds a dropped bolt's tip
+
+The tidy's last loop, reading each bolt branch's mark as it does, gains two cases in `bolt_branch_judged`, for a branch no plan has and no worktree holds:
+
+- **Marked `dropped`**: crew asks sluice's delete again, by the same script, only when the branch's tip is in the kit's main now (`git merge-base --is-ancestor bolt/<bolt> <main now>`, main now as `gather.now_ref` reads it). That is sluice's own condition for the delete, read so that a read asks sluice nothing it would refuse; whether the work is kept stays sluice's answer, never crew's ancestry judgment (`a-drop-keeps-unmerged-work`'s rule is for what crew deletes, and here crew deletes nothing). Main moves only by landings, so in effect this is the landing sweep: `crew bolt land` fetches main on the team's host before its tidy, and the tidy that follows asks. Deleted: "bolt/<bolt> is removed: main now holds bolt <bolt>'s tip, and sluice deleted it from GitHub at <sha>". Refused again: "bolt/<bolt> is still kept: <sluice's message>", the mark left. While the tip is not in main, nothing is run and nothing said: the drop named it once, and the run record holds it.
+- **Marked `given`** with no plan holding the bolt, a drop whose host did not answer: crew asks sluice's delete as the drop would have, and on a refusal marks it `dropped`, records it and names it as Decision 9 says, in place of today's `git branch -D`. A landed bolt marked `given` by a crew older than the landed mark is deleted by sluice the same way, its tip being in main.
+
+The decision stays pure: `bolt_branch_judged` takes the mark and whether the tip is in main, and returns ask, keep or leave; the act runs the script and says what sluice said. A bolt branch marked `landed` keeps `landing-sweeps-what-main-holds`'s judgment unchanged.
+
+### 11. The place takes what its bolt merged first
+
+This place was cut from `bolt/bolts-live-on-github` at 2f4de4eb; Decisions 9 and 10 build on the bolt's tidy as `a-drop-keeps-unmerged-work` and `landing-sweeps-what-main-holds` left it, and crew forecasts conflicts with the bolt in `README.md`, `plugin/lib/gather.py`, `plugin/lib/plan.py`, `tests/py/test_tidy.py` and `tests/t-journey-land.sh`. So the code stage first rebases the place onto the bolt, `git rebase bolt/bolts-live-on-github`, resolving each conflict keeping both changes' intents: in the tidy, this change's unset of a mark whose branch is gone (Decision 5) beside the bolt's judgment by mark; in `gather.py`, `bolt_of` read wherever the bolt's code reads a place's upstream, its `branch_target` and `up_landed` among them; in `bolt_land`, sluice's delete before the bolt's tidy, whose landed judgment then finds the branch gone; in the README, both sentences' facts in one.
+
 ## Task notes
 
 **1.1** `kit.bolt_remote(text, branch)`: parse with `tomllib`, match as `bolt_checks` does, return the table's `remote` when it is a non-empty string, else None; text None (no policy) is None. The give's refusal: "<kit> gives bolts only on GitHub, and its .config/sluice.toml on origin/main names no remote for its bolt branches: its [branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change (plan.17), then give the bolt again". Logic cases in `tests/py/test_kit.py`; contract case in `tests/contract/test_kit.py` reading the remote from a real `git show` of a committed policy.
@@ -99,12 +127,25 @@ At the end of a team's read (`rebase_and_tidy`), for each bolt the team holds th
 
 **5.1** As Decision 8. `openspec validate no-worktree-holds-main-or-a-bolt-branch` and `openspec validate bolts-on-github` pass.
 
-**6.1** `tests/moon-tasks`, then commit `tests/moon.yml`; then `tests/suite --affected` once.
+**6.1** As Decision 11. After the rebase, each task of 1 to 5 still holds on the rebased code: run the logic tier and `tests/suite t-journey-teams t-journey-units t-journey-land t-docs`, and fix what the bolt's merges moved under them; those tasks stay ticked.
+
+**7.1** `BOLT_DELETE` gains the `dropped` mark on a refusal (a mode argument, or a sibling `BOLT_DROP` sharing its text). `dropped_said(bolt, host, code, out, err)` beside `deleted_said`, both reading through one helper. Logic cases in `tests/py/test_bolt_commands.py` (or `test_landing.py`, beside the land's): deleted from GitHub, deleted from the host for a bolt made before, gone already, refused as not landed (`tests/py/sluice-0.36.4/delete-not-landed.json`) and as queued (`delete-queued.json`), each naming the branch kept and the user's, the host silent, an unreadable document. The `branch.kept` entry: assert it in the journey (`record_of`).
+
+**7.2** `bolt_branch_judged(bolt, bolts, worktree, mark, in_main, target, cherry)`: logic cases in `tests/py/test_tidy.py`: `dropped` and not in main left with nothing said; `dropped` and in main asked; `given` with no plan asked; `given` while planned left; `landed` as today. The act's words for each sluice answer. The tip-in-main read joins the marks' one read before the loop.
+
+**7.3** `tests/t-journey-land.sh`: the dropped `console-pages`, whose branch holds no merge, has the stub sluice delete it from the bare remote, the drop's output saying so in place of "is in no plan"; a dropped bolt holding a merge is kept on the bare remote and the host, marked `dropped`, named in the drop's output with the stub's words, and recorded; after a landing that brings its tip into main (submit it to main through the stub), the team's next read has the stub delete it from both.
+
+**7.4** README's sentence on bolt branches going ("a dropped bolt's whatever it holds") and its `crew bolt drop` paragraph, the crew skill, `crew`'s usage header for `bolt drop`, and the planner's role ("A drop removes the worktrees and branches of what it drops"): a drop has sluice delete the bolt's branch, kept and named while main lacks its tip, deleted once main holds it. `tests/t-docs.sh` and `tests/t-briefs.sh` pin the words where they pin these sentences now.
+
+**7.5** As Decision 8, for the requirement this revision changes again: the parent's `bolt-plan` block reads as this change's.
+
+**8.1** `tests/moon-tasks`, then commit `tests/moon.yml`; then `tests/suite --affected` once.
 
 ## Risks / Trade-offs
 
 - [Sluice chooses which main to read by the policy on the host's own `main`, which may lag GitHub's] → crew's main has named `origin` for main since swancloud ADR 0027, so a lagging `main` there still routes to GitHub; a kit whose local `main` predates that would have its bolt made locally, which Decision 6's line then names on the first read.
-- [A dropped bolt's branch stays on GitHub] → sluice refuses to delete a branch whose tip is not in main, and nothing in `plan.19` deletes it; named for the planner.
+- [A dropped bolt's work reaches main only by patch, as when its units are queued again and land through another bolt] → its tip is never in main, so sluice never deletes it; it stays kept and named, the user's to delete, as record 0003's kept branches are.
+- [A landed bolt whose delete sluice refused keeps its GitHub branch while the tidy's landed judgment may delete the host's copy with git] → unchanged here (`landing-sweeps-what-main-holds`); named for the design agent.
 - [A bolt made before whose last merge brought `origin` and which then needs a fix finds no branch on GitHub] → the planner orders the policy chore last and the bolt lands next (record 0032's amendment); a place cut then is refused naming the fetch, not made from a stale branch.
 - [Two hosts' queues for one bolt] → accepted until sluice shares its records (`plan.19`).
 
@@ -115,4 +156,5 @@ Steps no check in crew's tiers can prove, since each needs GitHub, sluice's app 
 1. The first give on a kit whose policy on GitHub's main names `origin` for its bolts: `bolt/<bolt>` appears on GitHub, pushed by sluice's app, and the first unit's place is cut from it. Doer: the team's ops, once the bolt lands and the kit's policy chore is on main, on the first `crew bolt give` after.
 2. That bolt's land: the branch is gone from GitHub, or sluice's refusal is named. Doer: main-level ops, at that bolt's landing, reading GitHub's branch list.
 3. This bolt's own landing, crw-4's being a bolt made before: its last merge is the chore that puts `remote = "origin"` on crew's bolt policy, its landing's pull request pushes `bolt/<bolt>` to GitHub as sluice's app, and `crew bolt land` deletes it there. Doer: main-level ops, at the landing, reading GitHub's branch list.
-4. The user sets each kit's `bolt/*` ruleset naming sluice's app as its one writer for create, update and delete, before the first give on that kit.
+4. The first drop of a bolt given on GitHub: with no merge on it, the branch is gone from GitHub; with a merge, it stands there, named in the drop's output as kept, until a landing brings its tip into main. Doer: the planner's drop's applier, reading the drop's output and GitHub's branch list; the team's ops at the next landing after.
+5. The user sets each kit's `bolt/*` ruleset naming sluice's app as its one writer for create, update and delete, before the first give on that kit.
