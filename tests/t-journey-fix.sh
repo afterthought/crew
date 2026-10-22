@@ -1,9 +1,11 @@
 # A fix and the plan moving under a team, through the crew command on the stubs (tests.11, record 0022), a part of the
 # units journey (t-journey-units): a fix takes a slot in its own place from the bolt, writes no plan and merges through
 # sluice as a stage does; a moved unit's branch is rebased onto its new bolt; the team's reads free the slots a
-# moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file; a fix whose place could
-# not be made ready starts all the same, told what failed; and a fix not wanted is dropped, its branch kept when it
-# holds a commit of its own, while a merged one is not.
+# moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file; a dropped unit's branch
+# that holds a commit of its own is kept, named and recorded, and a unit added again under its name starts from it; a
+# fix whose place could not be made ready starts all the same, told what failed; a fix not wanted is dropped, its
+# branch kept when it holds a commit of its own, while a merged one is not; and a merged fix whose place was removed by
+# hand is read from its branch, its slot freed and its branch removed.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -14,7 +16,13 @@ units_world '[unit(u, "tenant-environments") for u in "abcd"]
 p.insert(plan.Rec("Bolt", [("Bolt", "console-pages"), ("Repo", "switchboard-kit"), ("Goal", "The console lists them.")]))'
 export CREW_AGENT=swb-1-conductor
 for u in a b c d; do crew unit run $u construct >/dev/null; done
-CREW_AGENT= crew unit drop a "not this one" >/dev/null; mkdir -p "$reports"
+echo "a's own" > "$kd/places/a/own"; commit_all "$kd/places/a" "feat(a): written before the drop"; aat=$(short unit/a)
+CREW_AGENT= expect_ok crew unit drop a "not this one"; mkdir -p "$reports"
+has "$out" "$kd/places/a is removed, and unit/a is kept at $aat: unit a is in no plan, and it holds 1 commit whose patch bolt/tenant-environments lacks (git cherry), the user's to keep or delete; a unit added as a starts from it"
+eq "$(short unit/a)" "$aat"
+eq "$(field $box branch.kept Head unit/a team/swb-1)" "$aat"
+eq "$(field $box branch.kept Count unit/a)" "1"
+eq "$(field $box branch.kept From unit/a)" "bolt/tenant-environments"
 fb=fix/tenant-environments/tidy fp=$kd/places/fix-tenant-environments--tidy
 expect_ok crew fix swb-1 tidy "The banner flickers ZQXS."
 has "$out" "swb-1-unit-1 has $fb: code, in $fp"
@@ -61,9 +69,11 @@ said+=$'\n'$out
 [[ -d $kd/places/d ]] || fail "d's place went with its agent working"
 expect_fail "is working; add --force to end it anyway" crew unit free d --team swb-1
 status swb-1-unit-4 idle
+echo "d's own" > "$kd/places/d/own"; commit_all "$kd/places/d" "feat(d): its own"; dat=$(short unit/d)
 HOST=$box expect_ok crew unit free d
 has "$out" "swb-1-unit-4 is free"
-has "$out" "$kd/places/d and unit/d are removed; the branch was at"
+has "$out" "$kd/places/d is removed, and unit/d is kept at $dat: unit d is in no plan, and it holds 1 commit whose patch bolt/tenant-environments lacks (git cherry)"
+eq "$(field $box branch.kept Head unit/d)" "$dat"
 export CREW_AGENT=swb-1-conductor
 expect_ok crew status swb-1
 said+=$'\n'$out
@@ -73,7 +83,7 @@ has "$said" "$fp is kept, and $fb with it: $fb has merged into bolt/tenant-envir
 [[ -d $fp ]] || fail "the fix's place went with its stray file"
 eq "$(awk '{print $1, $3}' "$slots")" "unit-2 b"
 rm "$fp/note"
-ok "a moved unit's branch is rebased onto its new bolt; the team's reads free the slot it left and a merged fix's, keeping a merged place holding a stray file, and crew unit free a dropped unit's once its agent settles"
+ok "a moved unit's branch is rebased onto its new bolt; the team's reads free the slot it left and a merged fix's, keeping a merged place holding a stray file, and crew unit free a dropped unit's once its agent settles, keeping and naming its branch holding a commit of its own"
 
 # A bolt whose own toolchain fails: a fix's agent starts in its place all the same, told the step that failed, since a
 # fix is how the bolt is repaired (teams.3, record 0028).
@@ -116,3 +126,35 @@ eq "$(short "$of")" "$at"
 eq "$(git -C "$k" config "branch.$of.crew")" ""
 expect_fail "swb-1 has no fix fix/tenant-environments/gone: no slot, place or branch holds it" crew fix swb-1 gone --drop
 ok "a fix not wanted is dropped, its slot freed and its working agent ended only with --force, its place and branch removed, a place with a stray file kept until it goes, and a branch with a commit of its own kept and named"
+
+# A fix merged into its bolt whose place was removed by hand, its branch left, as swb-3's were on the box on 2026-10-20:
+# the merge's wait, which reads the team as the merge lands, reads it merged from its branch, frees its slot and
+# removes the branch (teams.1, teams.3).
+gb=fix/tenant-environments/gap gp=$kd/places/fix-tenant-environments--gap
+expect_ok crew fix swb-1 gap "The gap shows."
+gs=swb-1-$(awk -v f="$gb" '$3 == f {print $1}' "$slots")
+echo shut > "$gp/gap"; commit_all "$gp" "fix: the gap is shut"
+expect_ok crew fix swb-1 gap --wait
+expect_ok crew fix swb-1 gap --merge
+merge_as $gs "$gp" bolt/tenant-environments || fail "the gap fix's submission failed"
+at=$(short "$gb")
+git -C "$k" worktree remove "$gp" || fail "the gap fix's place was not removed"
+expect_ok crew fix swb-1 gap --wait
+has "$out" "$gs delivered merge of $gb"
+has "$out" "$gs is free: $gb has merged into its bolt"
+has "$out" "$gb is removed: it has merged into bolt/tenant-environments; it was at $at"
+lacks "$(cat "$slots")" "$gb"
+git -C "$k" rev-parse --verify -q "refs/heads/$gb" >/dev/null && fail "the gap fix's branch stayed"
+ok "a merged fix whose place was removed by hand is read from its branch: the merge's wait frees its slot and removes its branch, saying the commit it was at"
+
+# The dropped unit a, added again under its name to another team's bolt: its place is made on the kept unit/a as it
+# stood, which then tracks the new bolt, and its construct's start says so (record 0003, plan.10).
+unset CREW_AGENT
+crew up swb-2 >/dev/null
+expect_ok crew unit add a "Unit a, again." --bolt console-pages
+CREW_AGENT=swb-2-conductor expect_ok crew unit run a construct
+has "$out" "$kd/places/a starts from the kept unit/a, at $aat"
+eq "$(git -C "$kd/places/a" rev-parse --short HEAD)" "$aat"
+eq "$(cat "$kd/places/a/own")" "a's own"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "bolt/console-pages"
+ok "a dropped unit's branch holding a commit of its own is kept, named and recorded, and a unit added again under its name starts from it, tracking its new bolt"

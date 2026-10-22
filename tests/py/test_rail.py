@@ -214,6 +214,18 @@ class TestText:
             "  proposal/17 (wldn), wldn-planner's req_1: lost: posted again as req_2"]
         assert out.endswith("cards not swept:\n  madswan: this host can't ask through Pending You")
 
+    def test_a_batch_crew_closed_with_no_card_is_named_so_beside_its_card_withdrawn(self):
+        """review-batches, "Its card is already open": the read says both what it closed and the card it withdrew."""
+        words = "its batch waits on nothing: x1 and x2 have landed"
+        done = [dict(label="wldn", key="batch/3", card=None, by="wldn-planner", did="closed", words=words, new=None),
+                dict(label="wldn", key="batch/3", card="req_b3", by="wldn-planner", did="withdrawn", words=words, new=None),
+                dict(label="wldn", key="proposal/5", card=None, by="wldn-planner", did="left", words="its raise refused: x", new=None)]
+        out = text([], swept={"done": done, "unswept": []})
+        assert out.split("cards swept:\n")[1].splitlines() == [
+            f"  batch/3 (wldn), wldn-planner, no card: closed: {words}",
+            f"  batch/3 (wldn), wldn-planner's req_b3: withdrawn: {words}",
+            "  proposal/5 (wldn), wldn-planner, no card: left: its raise refused: x"]
+
     def test_a_card_posted_again_under_its_rows_key_is_the_rows_and_the_older_is_listed_lost(self):
         """The rail-cards scenario: req_1 under proposal/17 read not found and the read posted req_2, so the row's card
         line names req_2, and req_1 is listed lost."""
@@ -283,6 +295,23 @@ class TestRecord:
                        post("req_2", "batch/1", act="card.close", minutes=3)])
         assert r["held"]["closed"] == {"batch/1"} and not [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
 
+    def test_a_batch_that_waits_on_nothing_is_no_row_and_one_with_a_unit_still_waiting_is(self):
+        """review-batches, "Every unit has landed" and "One unit still waits on the user"; rail-cards, "An old batch card
+        whose units have landed": batch 1's unit has landed, batch 2's second card's units have landed and one of its
+        first's has not, and batch 9 holds a unit that has neither landed nor been held again."""
+        def batch(n, units, minutes):
+            return {"Act": "review.batch", "Batch": str(n), "Units": " ".join(f"{u}:swb-2@{i:04x}" for i, u in enumerate(units)),
+                    "At": f"2026-10-12T09:{minutes:02d}:00Z", "On": []}
+        seven = [f"u{i}" for i in range(7)]
+        entries = [batch(1, ["zone-one"], 0), batch(2, seven, 1), post("req_21", "batch/2-1"), post("req_22", "batch/2-2"),
+                   batch(9, ["early", "stale"], 2),
+                   {"Act": "bolt.land", "On": ["bolt/b"] + [f"unit/{u}" for u in ["zone-one", "early"] + seven[1:]], "At": "2026-10-12T10:30:00Z"}]
+        r = self.read(entries)
+        assert r["held"]["settled"] == {"batch/1": "its batch waits on nothing: zone-one has landed",
+                                        "batch/2-2": "its batch waits on nothing: u5 and u6 have landed"}
+        assert {"batch/1", "batch/2-2"} <= r["held"]["closed"]
+        assert [x["key"] for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"] == ["batch/2-1", "batch/9"]
+
     def test_a_card_its_owner_posts_again_under_a_key_replaces_the_older_but_another_agents_does_not(self):
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]
@@ -351,7 +380,10 @@ class TestSweepJudged:
         ("land/y/abc1234", [{"Act": "bolt.land", "On": ["bolt/y"], "Refused": "x"}], (None, "its bolt no longer waits to land at abc1234")),
         ("verify/c/20261012-1200", [], (None, "a verify report has no card, its findings fixed in one round")),
         ("deploy/dev", [], (None, "its deploy no longer waits on your word")),
-        ("op/dev/2", [], (None, "its step no longer waits on you"))])
+        ("op/dev/2", [], (None, "its step no longer waits on you")),
+        ("batch/3", [], (None, "its batch no longer waits to be read")),
+        ("batch/3", [{"Act": "review.batch", "Batch": "3", "Units": "x1:swb-1@aaa1", "At": iso(60), "On": []}, {"Act": "bolt.land", "On": ["bolt/b", "unit/x1"]}],
+         (None, "its batch waits on nothing: x1 has landed"))])
     def test_why_a_rows_card_has_no_row_is_read_from_the_run_record(self, key, entries, why):
         assert plan.row_gone(key, entries) == why
 
@@ -367,7 +399,7 @@ class TestSweepJudged:
     def test_only_the_cards_posted_on_this_host_are_judged_and_a_decision_records_never(self):
         there = card("proposal/4", "req_p4", "wldn-planner", host=BOX)
         rec = card("record/atlas-kit/0021", "req_r1", "wldn-design")
-        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": []}
+        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
 
     def test_a_question_is_asked_after_and_a_rows_card_with_its_row_checked(self):
         q, p4 = card(None, "req_q1", "crw-3-conductor"), card("proposal/4", "req_p4", "wldn-planner")
@@ -383,7 +415,8 @@ class TestSweepJudged:
         p4 = card("proposal/4", "req_p4", "wldn-planner")
         recent = [did("card.close", 5, Card="req_p4", Refused="Pending You refused the close: Too many requests."),
                   did("card.post", 5, Key="deploy/dev", Refused="Pending You refused post_request: x")]
-        assert self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=recent) == {"gone": [], "questions": [], "held": [], "none": []}
+        assert self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=recent) == {"gone": [], "questions": [], "held": [], "none": [],
+                                                                                                "settled": []}
         old = [dict(e, At=iso(plan.CARD_RETRY // 60 + 1)) for e in recent]
         j = self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=old)
         assert ([c for c, *_ in j["gone"]], j["none"]) == ([p4], [row("deploy/dev", "operations")])
@@ -428,16 +461,18 @@ class Py:
 class Acts:
     """A stand-in for what the sweep reaches: Pending You, this host's run record, herdr's listing and the raises."""
 
-    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None, here="mac-studio"):
+    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None, here="mac-studio", writes=True):
         self.answers, self.held, self.listing, self.raises, self.opening = dict(answers or {}), list(entries), listed or {}, raises or {}, opening
-        self.here = here
+        self.here, self.writes = here, writes
         self.calls, self.emitted, self.raised = [], [], []
 
     def bridge(self, name, later, held=None):
         return Py(self, name)
 
     def emit(self, label, act, on, **fields):
+        """The entry's id, as record.emit gives it, or None as when it could not be written (writes)."""
         self.emitted.append(dict(fields, Act=act, On=on))
+        return f"e{len(self.emitted)}" if self.writes else None
 
     def entries(self, label):
         return self.held
@@ -618,6 +653,73 @@ class TestSweep:
         assert acts.calls == []
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"macbook-pro": "x"}})
         assert out["unswept"] == [] and acts.calls
+
+
+LANDED = [did("review.batch", 60, Batch="3", Units="x1:swb-1@aaa1 x2:swb-1@bbb1"), did("bolt.land", 40, On=["bolt/b", "unit/x1", "unit/x2"])]
+WORDS = "its batch waits on nothing: x1 and x2 have landed"
+CLOSE = dict(by="wldn-planner", why="batch: closed by crew, it waits on nothing", Key="batch/3", Outcome=WORDS, Act="batch.close", On=["batch/3"])
+
+
+class TestSettledSweep:
+    """review-batches: the rail's sweep, on the partition's main-level host, records crew's close of a batch that waits
+    on nothing once, in the planner's name, before it reaches Pending You, and withdraws a card open under its key with
+    the same words."""
+
+    def test_a_batch_that_waits_on_nothing_with_no_card_is_closed_by_crew_and_nothing_is_posted(self):
+        out, acts = swept(entries=LANDED, raises={"batch": lambda *a, **k: pytest.fail("raised")})
+        assert acts.emitted == [CLOSE] and acts.calls == []
+        assert out == {"done": [dict(label="wldn", key="batch/3", card=None, by="wldn-planner", did="closed", words=WORDS, new=None)], "unswept": []}
+
+    def test_its_card_open_here_is_withdrawn_with_the_words_of_crews_close(self):
+        """review-batches, "Its card is already open"."""
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(cards_=[b3], entries=LANDED)
+        assert acts.calls[-1] == ("wldn-planner", "cancel_request", {"requestId": "req_b3", "name": "wldn-planner", "reason": WORDS})
+        assert [(e["Act"], e.get("Card"), e.get("State"), e["Outcome"]) for e in acts.emitted] == [
+            ("batch.close", None, None, WORDS), ("card.close", "req_b3", "withdrawn", WORDS)]
+        assert [(d["card"], d["did"], d["words"]) for d in out["done"]] == [(None, "closed", WORDS), ("req_b3", "withdrawn", WORDS)]
+
+    def test_its_card_open_here_is_withdrawn_once_its_last_unit_is_dropped(self):
+        """review-batches, "A unit dropped"."""
+        words = "its batch waits on nothing: x1 has landed; x2 was dropped"
+        entries = [did("review.batch", 60, Batch="3", Units="x1:swb-1@aaa1 x2:swb-1@bbb1"), did("bolt.land", 40, On=["bolt/b", "unit/x1"])]
+        out, acts = swept(cards_=[card("batch/3", "req_b3", "wldn-planner")], entries=entries + [did("unit.drop", 35, On=["unit/x2", "bolt/b"])])
+        assert acts.calls[-1] == ("wldn-planner", "cancel_request", {"requestId": "req_b3", "name": "wldn-planner", "reason": words})
+        assert [(e["Act"], e.get("Card"), e.get("State"), e["Outcome"]) for e in acts.emitted] == [
+            ("batch.close", None, None, words), ("card.close", "req_b3", "withdrawn", words)]
+
+    def test_a_batch_crew_closed_or_the_user_answered_records_nothing_more(self):
+        """review-batches, "Read again after the close": no second close is recorded, and nothing is posted."""
+        again = LANDED + [did("batch.close", 30, On=["batch/3"], Key="batch/3", Outcome=WORDS)]
+        out, acts = swept(entries=again, raises={"batch": lambda *a, **k: pytest.fail("raised")})
+        assert (out, acts.emitted) == ({"done": [], "unswept": []}, [])
+        refused = LANDED + [did("batch.close", 30, On=["batch/3"], Key="batch/3", Refused="x")]
+        assert swept(entries=refused)[1].emitted == [CLOSE]
+        answered = LANDED + [did("card.post", 50, Card="req_b3", Key="batch/3", On=["batch/3"]),
+                             did("card.close", 45, Card="req_b3", Key="batch/3", On=["batch/3"], State="closed")]
+        assert swept(entries=answered)[1].emitted == []
+
+    def test_the_sweep_on_a_host_other_than_the_main_levels_records_nothing(self):
+        out, acts = swept(entries=LANDED, here=BOX)
+        assert (out, acts.emitted) == ({"done": [], "unswept": []}, [])
+
+    def test_a_host_not_signed_in_still_records_the_close_and_leaves_the_card_for_a_later_read(self):
+        said = "this host can't ask through Pending You: it is not signed in. " + plan.SWEEP_LATER
+        out, acts = swept(cards_=[card("batch/3", "req_b3", "wldn-planner")], entries=LANDED, opening=said)
+        assert acts.emitted == [CLOSE] and acts.calls == []
+        assert out == {"done": [dict(label="wldn", key="batch/3", card=None, by="wldn-planner", did="closed", words=WORDS, new=None)],
+                       "unswept": [dict(label="wldn", why=said)]}
+
+    def test_a_partition_whose_record_did_not_answer_whole_records_no_close(self):
+        """review-batches, "The record did not answer whole"."""
+        out, acts = swept(entries=LANDED, unread={"wldn": {"mac-studio": "x"}})
+        assert acts.emitted == [] and out["done"] == [] and out["unswept"][0]["label"] == "wldn"
+
+    def test_a_close_the_run_record_could_not_take_is_said_and_tried_again_on_the_next_read(self):
+        out, acts = swept(entries=LANDED, writes=False)
+        assert acts.emitted == [CLOSE]
+        assert out["done"] == [dict(label="wldn", key="batch/3", card=None, by="wldn-planner", did="left",
+                                    words="crew's close was not recorded, as said above", new=None)]
 
 
 class TestBolts:
