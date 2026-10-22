@@ -10,8 +10,16 @@
 # $CREW_TEST_ROOT/sluice-preview-holds exists, the stack taking its time, then `up`, or `failed` with its command's
 # output while $CREW_TEST_ROOT/sluice-preview-fails exists, --wait then exiting 1. `sluice previews --json` lists the
 # records; `sluice release <name or revision> --json` removes one, {"preview", "released"}, exiting 0 also when there
-# was none. Outside a git worktree it fails as sluice does, exiting 3, and anything else is refused, exiting 2. Every
-# call is logged to $CREW_TEST_LOG as `<host> sluice <args> in <the directory it ran in>`.
+# was none. `sluice submit main --check --head bolt/<bolt> --json`, a bolt's forecast against main, prints
+# $CREW_TEST_ROOT/sluice-check-<bolt, its / as ->.json while it exists, exiting 2 when its conflict is not null and 0
+# when it is, as sluice's forecast of a branch no worktree holds does (its ADR 0039); without that file it refuses
+# `--head` on standard error, exiting 64, as sluice 0.32.0, which has no such forecast, does. `sluice submit <branch>
+# --no-wait --json` lands this worktree's head at once, as the stub wt-submit does, and prints {id, branch, ahead}; its
+# outcome waits for `sluice wait <id> --timeout <duration> --json`, which prints the submission's record, its state
+# landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; `sluice wait` of an id it never gave exits 1
+# with sluice's not-found error. Outside a git worktree it
+# fails as sluice does, exiting 3, and anything else is refused, exiting 2. Every call is logged to $CREW_TEST_LOG as
+# `<host> sluice <args> in <the directory it ran in>`.
 set -uo pipefail
 [[ -n ${CREW_TEST_LOG:-} ]] && printf '%s sluice %s in %s\n' "${CREW_TEST_HOST:-?}" "$*" "$(pwd -P)" >> "$CREW_TEST_LOG"
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
@@ -19,6 +27,37 @@ common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
   exit 3
 }
 case "$*" in
+  submit\ main\ --check\ --head\ bolt/*\ --json)
+    f=${CREW_TEST_ROOT:?}/sluice-check-${5//\//-}.json
+    if [[ -e $f ]]; then
+      cat "$f"
+      [[ $(jq -r '.conflict == null' "$f") == true ]] && exit 0
+      exit 2
+    fi
+    printf "error: unexpected argument '--head' found\n\n  tip: to pass '--head' as a value, use '-- --head'\n\nUsage: sluice submit --check <BRANCH>\n\nFor more information, try '--help'.\n" >&2
+    exit 64
+    ;;
+  submit\ *\ --no-wait\ --json)
+    target=$2 here=$(git rev-parse --show-toplevel)
+    said=$(CREW_TEST_LOG= wt-submit "$target" --no-remove 2>&1); rc=$?
+    count=$common/stub-sluice-submissions
+    if (( rc == 0 )); then n=$(cat "$count"); else n=$(( $(cat "$count" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$count"; fi
+    state=landed; (( rc == 1 )) && state=failed; (( rc == 2 )) && state=conflict
+    jq -n --argjson id "$n" --arg branch "$target" --arg state "$state" --arg path "$here" --arg said "$said" --argjson rc "$rc" \
+      '{schema: "sluice/submission@1", id: $id, branch: $branch, state: $state, from: {path: $path}, said: $said, rc: $rc}' \
+      > "$common/stub-sluice-wait-$n.json"
+    jq -nc --argjson id "$n" --arg branch "$target" '{id: $id, branch: $branch, ahead: []}'
+    ;;
+  wait\ *\ --timeout\ *\ --json)
+    f=$common/stub-sluice-wait-${2:-}.json
+    if [[ ! -e $f ]]; then
+      printf '{"error":{"kind":"not_found","message":"no submission %s","next":["sluice overview"]}}\n' "${2:-}"
+      exit 1
+    fi
+    jq -r .said "$f" >&2
+    jq -c 'del(.said, .rc)' "$f"
+    exit "$(jq -r .rc "$f")"
+    ;;
   "overview --json")
     if [[ -e ${CREW_TEST_ROOT:?}/sluice-overview.json ]]; then cat "$CREW_TEST_ROOT/sluice-overview.json"; exit 0; fi
     jq -n --arg host "${CREW_TEST_HOST:-?}" --arg repository "$common" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

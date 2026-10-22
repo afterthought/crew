@@ -1,5 +1,5 @@
 // crew's mod: each crew agent's view of its partition's board, drawn in the band above its prompt. The views are
-// crew's (board.py agent_views): the operator workspace's rail tab writes them beside the board's frame each time it
+// crew's (board.py agent_views): the console's rail tab writes them beside the board's frame each time it
 // refreshes (crew _views), and this module finds its own agent's and draws it, deciding nothing itself (code.7). It
 // starts no process and costs no tokens: every few seconds it looks at the file's time, and reads the file only when
 // that has moved (state.4: a frame is one redraw, not state).
@@ -59,7 +59,7 @@ async function look($) {
 function lines() {
   if (!live.path) return undefined
   if (!live.frame) {
-    return [[['crew: no board for ' + live.label + ' on this host yet; its operator workspace writes it (crew operator up ' + live.label + ')', 'dim']]]
+    return [[['crew: no board for ' + live.label + ' on this host yet; its console writes it (crew console up ' + live.label + ')', 'dim']]]
   }
   const view = live.frame.views[live.agent]
   if (!view) return undefined

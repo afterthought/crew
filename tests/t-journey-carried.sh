@@ -35,7 +35,7 @@ ok "a merge whose branch holds another unit's change open, which the bolt does n
 # s merged by hand, as the old crew let it: its own change archived, d's carried onto the bolt open.
 mkdir -p "$kd/places/s/openspec/changes/archive"; git -C "$kd/places/s" mv openspec/changes/s openspec/changes/archive/2026-10-13-s
 git -C "$kd/places/s" commit -qm "docs(openspec): archive s"
-(cd "$kd/places/s" && SLUICE_AGENT="swb-1-$s_slot" wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of s failed"
+merge_as "swb-1-$s_slot" "$kd/places/s" bolt/tenant-environments || fail "s's submission failed"
 git -C "$k" cat-file -e "bolt/tenant-environments:openspec/changes/d/tasks.md" || fail "d's change is not open on the bolt"
 expect_ok crew status swb-1
 has "$out" "d  verify 2/2  carried by another's merge, its own merge owed"
@@ -50,10 +50,10 @@ has "$out" "d  verify 2/2  carried by another's merge, its own merge owed"
 expect_ok crew unit run d merge
 [[ -d $kd/places/d ]] || fail "d's place was not made again"
 eq "$(git -C "$kd/places/d" rev-parse HEAD)" "$(git -C "$k" rev-parse bolt/tenant-environments)"
-eq "$(prompt_to "swb-1-$d_slot")" "'Merge d into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
+eq "$(prompt_to "swb-1-$d_slot")" "'Merge d into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 mkdir -p "$kd/places/d/openspec/changes/archive"; git -C "$kd/places/d" mv openspec/changes/d openspec/changes/archive/2026-10-13-d
 git -C "$kd/places/d" commit -qm "docs(openspec): archive d"
-(cd "$kd/places/d" && SLUICE_AGENT="swb-1-$d_slot" wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit of d failed"
+merge_as "swb-1-$d_slot" "$kd/places/d" bolt/tenant-environments || fail "d's submission failed"
 expect_ok crew unit wait d
 has "$out" "delivered merge on d: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 eq "$(crew bolts | awk '$1 == "d" {print $2}')" "merged"

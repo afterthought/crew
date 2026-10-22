@@ -20,7 +20,8 @@ process-info` answers as herdr 0.9.3 does: the pane's shell alone at its prompt,
 tab's last pane closed closes the tab, and a workspace's last tab the workspace, as herdr 0.9.3 closes them.
 
 Only for tests: `herdr --session S stub status <pane|name> <status>` sets an agent's status,
-`herdr --session S stub agent <pane> [name]` puts an agent in a pane, `herdr --session S stub restore <pane>` brings
+`herdr --session S stub agent <pane> [name]` puts an agent in a pane (with no --session, the session a pane's
+HERDR_SESSION names, as herdr reads its own server from a pane's environment, else default), `herdr --session S stub restore <pane>` brings
 a pane back as herdr does after a restart, its shell alone with nothing running in it, and `herdr --session S stub dead
 <pane> [cwd]` brings it back as herdr 0.9.3 does when the pane's saved folder (cwd, else its own) is gone at the restart:
 listed with a restore_error and no terminal, so its read, run, send-keys and process-info answer pane_not_found, while
@@ -61,7 +62,7 @@ def dumps(o, indent=None, at=""):
     return "null" if o is None else "true" if o is True else "false" if o is False else str(int(o))
 
 args = sys.argv[1:]
-session = "default"
+session = os.environ.get("HERDR_SESSION") or "default"  # a pane's own server, as herdr reads it from the pane's environment
 if args[:1] == ["--session"]:
     session, args = args[1], args[2:]
 host = os.environ.get("CREW_TEST_HOST", "?")
@@ -240,6 +241,16 @@ elif group == "pane" and cmd == "get":
 elif group == "pane" and cmd == "list":
     ws = opt("--workspace")
     out({"panes": [listed(p) for p, v in st["panes"].items() if ws in (None, v["workspace"])]})
+elif group == "pane" and cmd == "report-metadata":  # as herdr 0.9.5 takes crew's: a token set or cleared, which pane list gives
+    rest[0] in st["panes"] or die(f"no pane {rest[0]}")
+    opt("--source") or die("error: the following required arguments were not provided: --source <ID>", 2)
+    tokens = st["panes"][rest[0]].setdefault("tokens", {})
+    if opt("--token"):
+        name, _, value = opt("--token").partition("=")
+        tokens[name] = value
+    if opt("--clear-token"):
+        tokens.pop(opt("--clear-token"), None)
+    out({})
 elif group == "pane" and cmd == "close":
     rest[0] in st["panes"] or die(f"no pane {rest[0]}")
     close_pane(rest[0])
@@ -256,7 +267,7 @@ elif group == "pane" and cmd == "run":
         save()
         fcntl.flock(lock, fcntl.LOCK_UN)
         r = subprocess.run(["bash", "-c", line], cwd=st["panes"][p]["cwd"], capture_output=True, text=True,
-                           env=dict(os.environ, HERDR_PANE_ID=p))
+                           env=dict(os.environ, HERDR_PANE_ID=p, HERDR_SESSION=session))
         fcntl.flock(lock, fcntl.LOCK_EX)
         st = load()
         st["panes"][p]["output"] = r.stdout + r.stderr

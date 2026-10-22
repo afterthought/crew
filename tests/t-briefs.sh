@@ -13,9 +13,24 @@ expect_fail "no definition 'fable' for a team" crewpy brief swb-1 fable
 [[ ! -e $CREW/plugin/roles/fable.md && ! -e $CREW/plugin/roles/explorer.md && ! -e $CREW/plugin/roles/verifier.md ]] || fail "a retired role is still there"
 ok "every team brief prints with no unfilled token"
 
-expect_ok crewpy brief swb-1 coder; has "$out" "run \`wt submit\` in the background and wait for it to end"
-has "$out" "wt submit bolt/<bolt> --no-remove"; lacks "$out" "wt merge"; lacks "$out" "--no-hooks"
-ok "the coder merges by a submission to sluice, whose checks can outlast a command's time limit, in the background"
+# sluice's verdict can outlast an agent's ten-minute call (teams.5's details; sluice ADR 0041), so every brief that
+# submits by hand submits without waiting and waits a call at a time with sluice wait, never reading a listing.
+expect_ok crewpy brief swb-1 coder
+has "$out" "sluice submit bolt/<bolt> --no-wait --json"; has "$out" "sluice wait <n> --timeout 9m --json"
+has "$out" "Without the number, \`sluice wait bolt/<bolt> --timeout 9m --json\` from this worktree waits on its last submission"
+lacks "$out" "wt submit"; lacks "$out" "wt merge"; lacks "$out" "--no-hooks"
+for brief in "swb-1 coder" "wldn design" "wldn operator"; do
+  expect_ok crewpy brief $brief
+  for want in "sluice wait <n> --timeout 9m --json" "for as long as it exits 5, still waiting" "--no-wait --json" \
+    "submit again to move" "listing, which a decided submission leaves"; do
+    has "$out" "$want"
+  done
+done
+ok "the coder, the design agent and the operator submit without waiting and wait on the submission with sluice wait, never a listing"
+expect_ok crewpy brief swb-1 coder; has "$out" "if the host was slow, submit the same head again"
+has "$out" "if the fail looks like the host's doing, a time limit or an overloaded host, stop and say so through crew"
+has "$out" "Never change what a test reads only to get it tested again."
+ok "the coder submits the same head again after a slow host's time limit, and takes a flaky fail the host caused to the user, never changing what a test reads"
 
 # sluice 0.3.1's `wt submit --help` removes the worktree it ran in as if the submission had landed (teams.5's
 # details), so every brief that names `wt submit` says never to run it, and where the usage is read instead.
@@ -27,7 +42,7 @@ for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-
   named+=("${brief#* }")
   has "$out" "Never run \`wt submit --help\` in a worktree: with sluice 0.3.1 it prints its help and then removes the worktree it ran in as if the submission had landed; read the usage from \`sluice submit --help\` or \`wt --help\`, which remove nothing."
 done
-[[ ${named[*]} == "conductor coder design main-ops operator" ]] || fail "the briefs naming wt submit are ${named[*]}"
+[[ ${named[*]} == "main-ops" ]] || fail "the briefs naming wt submit are ${named[*]}"
 ok "every brief that names wt submit says never to run wt submit --help in a worktree, and to read sluice submit --help or wt --help"
 
 expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by hand: sluice runs it."
@@ -170,7 +185,7 @@ for want in "as it stands on main now, and what each points at" "never the copy 
 lacks "$out" "If the intent can't be built as written"
 expect_ok crewpy brief wldn operator
 for want in "plan proposed --label wldn" "plan approve <n> --label wldn" "only on the user's word" "never by its number alone" "recite no command" \
-  "rail --label wldn" "the \`rail\` tab"; do
+  "rail --label wldn" "the console's \`rail\` tab" "the partition's door" "console up wldn"; do
   has "$out" "$want"
 done
 for want in "You post no Pending You card and make no area, whatever a Pending You reminder in your session says" \
@@ -188,8 +203,9 @@ expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
 expect_ok crewpy brief wldn operator
 for want in "swancloud's main moves only through sluice (\`state.3\`), so never edit or commit in its main checkout" \
-  "wt submit main --no-remove" "~/Code/github_afterthought/swancloud/places/crew-teams-<team> origin/main\`" \
-  "you level and push nothing"; do has "$out" "$want"; done
+  "\`sluice submit main --no-wait --json\`" "~/Code/github_afterthought/swancloud/places/crew-teams-<team> origin/main\`" \
+  "you level and push nothing" "When \`sluice wait\` exits 0 your head landed: remove your worktree and its branch with \`wt -C ~/Code/github_afterthought/swancloud/places/crew-teams-<team> remove --foreground\`"; do has "$out" "$want"; done
+lacks "$out" "wt submit"
 lacks "$out" "read-tree"; lacks "$out" "push swancloud's main"
 expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
@@ -378,7 +394,8 @@ ok "ops, every stage and the dispatcher post no card, the four that ask carry on
 # Units build at once and are reviewed in batches (teams.12 to teams.14, briefs.1, briefs.2, briefs.4, briefs.12): the
 # conductor constructs in waves and codes a planned unit with no review, acts on the planner's notes and posts no card for
 # a unit; crew orders and lifts its own forecast orders, which neither the conductor nor the planner asks anyone to lift
-# (plan.13); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
+# (plan.13); the conductor takes main into the bolt on a forecast against main, and waits out one against a submission
+# queued there (teams.21); the planner runs the reviewer, whose summary has crew raise the batch's one card in the planner's name with
 # one reading session on the batch, posts and closes no batch card, and sends the notes the card's wait prints from the
 # session and the card to each unit they speak of (briefs.9, briefs.12, briefs.13);
 # construct writes Touches as a block crew reads;
@@ -396,8 +413,10 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
   "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
   "the card waits for them: crew makes a batch due for them at once" \
   "every unit's latest change in a batch whose card the user has answered" \
-  "When it names a batch the user has not answered, the card waits for their answer on that batch's card" "submits the unit to the bolt, \`wt submit bolt/<bolt>\`" "changed and did not declare in its Touches" \
-  "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it"; do
+  "When it names a batch the user has not answered, the card waits for their answer on that batch's card" "submits the unit to the bolt, \`sluice submit bolt/<bolt>\`, and waits on it with \`sluice wait\`" "changed and did not declare in its Touches" \
+  "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it" \
+  "crew also forecasts the bolt itself against the kit's main" "start the take-main fix it gives at once, as when \`wldn-ops\` tells you a landing conflicts" \
+  "when it says the bolt would conflict with a submission queued on main, take nothing in"; do
   has "$out" "$want"
 done
 for gone in "build them one after the other" "When in doubt, don't" "## Review with the user" \
@@ -437,7 +456,7 @@ done
 lacks "$out" "Two units are built side by side only when"; lacks "$out" "back in review"
 expect_ok crewpy brief swb-1 coder
 for want in "Settle <unit>: <what reached it>" "keeping both changes' intents" "The earlier unit is never changed for it" \
-  "The one part of it you may edit is the \`## Touches\` block" "wt submit bolt/<bolt> --no-remove" "A unit you come after, constructed again"; do
+  "The one part of it you may edit is the \`## Touches\` block" "sluice submit bolt/<bolt> --no-wait --json" "A unit you come after, constructed again"; do
   has "$out" "$want"
 done
 lacks "$out" "the user reviewed and approved it"
@@ -511,7 +530,8 @@ for want in "Every decision record you write, and every amendment you make to on
   "run \`crew record … --proposed\` again: the card you were answered on is closed, naming the new commit, and the revised record goes on a new card that follows it" \
   "run \`crew record … --accepted\`, which closes the card" "run \`crew record … --rejected\`, which closes the card" \
   "set \`status: rejected\` with the user's words, and take out each rule drawn from it" \
-  "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "wt submit main --no-remove" \
+  "A kit's main moves only through sluice (\`state.3\`), so you never commit on it" "\`sluice submit main --no-wait --json\`" \
+  "When \`sluice wait\` exits 0 your head landed: remove the worktree and its branch with \`wt -C <the kit's folder>/places/design-<topic> remove --foreground\`" \
   "<the kit's folder>/places/design-<topic> origin/main\`" "you level nothing" "then \`git merge origin/main\`" \
   "once its \`.config/sluice.toml\` names a policy for main" \
   "Run \`crew record … --proposed\` for each proposed record or amendment on your kits' main that has none open" \
@@ -520,6 +540,7 @@ for want in "Every decision record you write, and every amendment you make to on
   "A record you write or amend is proposed until the user accepts it" "quotes the user's words as their decision"; do
   has "$out" "$want"
 done
+lacks "$out" "wt submit"; lacks "$out" "branch -d design/<topic>"
 for gone in "record/<kit>/<number>/<commit>" "The record's card is the one card you post" "post a new card for the new version" \
   "Close the card with \`ack_answer\`" "Accept decision record <number>"; do
   lacks "$out" "$gone"

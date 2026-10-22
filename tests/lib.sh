@@ -12,7 +12,7 @@ set -euo pipefail
 CREW=$(cd "$TESTS/.." && pwd -P)
 export CREW_TEST_ROOT=$T CREW_TEST_LOG=$T/calls.log CREW_TEST_CLAUDE_LOG=$T/claude.log
 export PATH="$TESTS/stubs:$PATH" GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
-unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH GIT_DIR GIT_WORK_TREE
+unset CREW_AGENT CREW_LABEL HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_ENV HERDR_BIN_PATH HERDR_SOCKET_PATH HERDR_SESSION SLUICE_BRANCH GIT_DIR GIT_WORK_TREE
 # A wt run that starts the suite, a hook's, hands it worktrunk's own variables, among them the file its shell wrapper
 # reads a cd from: a test's wt never writes there, or the run ends trying to cd into a removed scratch dir.
 unset $(env | sed -n 's/^\(WORKTRUNK_[A-Za-z0-9_]*\)=.*/\1/p')
@@ -52,6 +52,13 @@ has() { [[ $1 == *"$2"* ]] || fail "expected '$2' in:"$'\n'"$1"; }
 lacks() { [[ $1 != *"$2"* ]] || fail "did not expect '$2' in:"$'\n'"$1"; }
 eq() { [[ $1 == "$2" ]] || fail "expected '$2', got '$1'"; }
 calls() { cat "$CREW_TEST_LOG"; }
+# merge_as <agent> <place> <branch>: what a stage's agent does to merge, as its brief has it: submits the place's head
+# without waiting, then waits on the submission with sluice wait, returning its exit
+merge_as() {
+  local id
+  id=$(cd "$2" && SLUICE_AGENT=$1 sluice submit "$3" --no-wait --json 2>/dev/null | jq -r .id) && [[ $id =~ ^[0-9]+$ ]] || return 2
+  (cd "$2" && sluice wait "$id" --timeout 9m --json >/dev/null 2>&1)
+}
 launches() { cat "$CREW_TEST_CLAUDE_LOG"; }
 
 fixtures() {  # the teams file (version $1, default 2) and the hosts file, written into every host's HOME

@@ -33,7 +33,7 @@ commit_all "$pa" "chore: the kit declares a preview"
 echo "# switchboard-kit, the bolt's" > "$pa/README.md"; commit_all "$pa" "docs(a): the bolt's title"
 mkdir -p "$pa/openspec/changes/archive"; git -C "$pa" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
 git -C "$pa" commit -qm "docs(openspec): archive a"
-(cd "$pa" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "a's submission failed"
+merge_as swb-1-unit-1 "$pa" bolt/tenant-environments || fail "a's submission failed"
 git -C "$k" worktree remove "$pa"; git -C "$k" branch -qD unit/a
 # While the bolt's landing is in flight, its worktree standing with LANDING's process alive in it, no unit starts on it.
 land=$kd/places/land-tenant-environments
@@ -89,7 +89,7 @@ echo "# switchboard-kit, main's and the bolt's" > "$tmp/README.md"; git -C "$tmp
 GIT_EDITOR=true git -C "$tmp" commit -q --no-edit || fail "the merge of main did not commit"
 expect_ok crew fix swb-1 take-main --wait
 expect_ok crew fix swb-1 take-main --merge
-(cd "$tmp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "the fix's submission failed"
+merge_as swb-1-unit-1 "$tmp" bolt/tenant-environments || fail "the fix's submission failed"
 : > "$CREW_TEST_LOG"
 touch "$CREW_TEST_ROOT/sluice-preview-holds"  # the preview's stack takes its time to come up
 expect_ok crew fix swb-1 take-main --wait
@@ -152,7 +152,7 @@ gp=$kd/places/fix-tenant-environments--gap
 echo four >> "$gp/shared.txt"; commit_all "$gp" "fix(a): the zone list holds every zone"
 expect_ok crew fix swb-1 gap --wait
 expect_ok crew fix swb-1 gap --merge
-(cd "$gp" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "the gap fix's submission failed"
+merge_as swb-1-unit-1 "$gp" bolt/tenant-environments || fail "the gap fix's submission failed"
 : > "$CREW_TEST_LOG"
 expect_ok crew fix swb-1 gap --wait
 again=$(grep -o "^card land/tenant-environments: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
@@ -188,8 +188,20 @@ echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answer
 git -C "$k" worktree add -q "$land" bolt/tenant-environments
 sh -c 'echo $$' > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
 : > "$CREW_TEST_LOG"
+# The branch the conductor's pane tells sluice's plugins it works for (teams.20), "none" when it carries none.
+branch() { herdr_state $box wldn-1 ".panes[\"$(awk '$1=="conductor"{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].tokens.sluice_branch // \"none\""; }
+eq "$(branch)" "bolt/tenant-environments"
 expect_ok crew bolt land tenant-environments
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
+eq "$(branch)" "none"
+# Each carried the bolt's branch in its session, which only a start changes, so each is restarted at its next stop.
+for a in swb-1-conductor swb-1-ops; do
+  log=$(home_of $box)/.local/state/crew/renew/$a.log
+  until_ok grep -q "$a is restarted on crew" "$log" || fail "$a was not restarted for its landed bolt: $(cat "$log" 2>/dev/null)"
+done
+eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "null"
+grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on crew .*its team no longer holds bolt/tenant-environments" "$CREW_TEST_LOG" ||
+  fail "ops was not told why it was restarted:"$'\n'"$(calls)"
 n=$(git -C "$k" log -1 --format='%(trailers:key=Sluice-Submission,valueonly)' main)
 has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"landed on GitHub's main at $(short main) (#$n); every host's folder follows by swancloud's timer within minutes\""
 has "$out" "card land/tenant-environments: $again closed"
@@ -207,7 +219,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch, the place a stopped landing left and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch, the place a stopped landing left and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice and its conductor and ops restarted at their next stop without it"
 
 # A bolt whose branch takes a commit after its landing: crew bolt land keeps the branch at its commit, the user's, its
 # mark unset and the keeping recorded on the team's host, and the team's next read leaves it.

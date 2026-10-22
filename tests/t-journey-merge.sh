@@ -47,11 +47,11 @@ expect_ok crew unit wait a
 has "$out" "swb-1-unit-1 delivered settle on a: its branch is at $(short unit/a), ready to merge"
 eq "$(field $box forecast Heads unit/b unit/a)" ""
 expect_ok crew unit run a merge
-eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: wt submit bolt/tenant-environments --no-remove'"
+eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 lacks "$out" "Pending You card"
 mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
 git -C "$kd/places/a" commit -qm "docs(openspec): archive a"
-(cd "$kd/places/a" && SLUICE_AGENT=swb-1-unit-1 wt submit bolt/tenant-environments --no-remove >/dev/null 2>&1) || fail "wt submit failed"
+merge_as swb-1-unit-1 "$kd/places/a" bolt/tenant-environments || fail "a's submission failed"
 eq "$(git -C "$k" log -1 --format='%an %(trailers:key=Sluice-Result,valueonly)' bolt/tenant-environments)" "sluice passed (stub)"
 b_before=$(git -C "$k" rev-parse unit/b) c_before=$(git -C "$k" rev-parse unit/c)
 expect_ok crew unit wait a
@@ -67,13 +67,15 @@ eq "$(field $box unit.rebase From unit/b)" "unit/a"
 # c's own line meets a's settled one: its rebase, which left out a's work as c's place took it, conflicts there.
 c_took=$(field $box stage.start Took stage/c/construct); c_took=${c_took#a@}
 eq "$(field $box forecast Took unit/c bolt/tenant-environments)" "a@$c_took"
-ok "a forecast against the bolt starts the settle stage of a unit verified and fixed once, a dependent is forecast nothing for the unit's own work its place took, and the unit merges with its change archived, each a fresh agent ended at its deliverable; no card is named, and the merge's wait rebases a dependent onto the bolt, leaving out the unit's work as it took it, and undoes a rebase that conflicts"
-
-expect_ok crew status swb-1
+# The merge's wait frees its slot and removes its place and branch as it lands, not at the conductor's next read.
 has "$out" "swb-1-unit-1 is free: a has merged into its bolt"
 has "$out" "$kd/places/a and unit/a are removed; the branch was at"
 [[ ! -d $kd/places/a ]] || fail "a's place is still there"
-ok "the next read frees a merged unit's slot and removes its place"
+ok "a forecast against the bolt starts the settle stage of a unit verified and fixed once, a dependent is forecast nothing for the unit's own work its place took, and the unit merges with its change archived, each a fresh agent ended at its deliverable; no card is named, and the merge's wait rebases a dependent onto the bolt, leaving out the unit's work as it took it, undoes a rebase that conflicts, and frees the slot and removes the place and branch"
+
+expect_ok crew status swb-1
+lacks "$out" "swb-1-unit-1 is free"; lacks "$out" "places/a"
+ok "the next read finds a merged unit's slot freed and its place gone already"
 
 # c's next prompt carries its rebase's conflict, naming the upstream that rebase used, made again by the command given,
 # and not c's older forecast against the bolt, read before a merged, which this one replaces.

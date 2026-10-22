@@ -99,7 +99,7 @@ def describe(fleet, label, repo, tip, d, pl=None, sv=None):
         return {r.get(key): r for r in plan.Plan(text).recs(kind)} if text else {}
     proposals, items, moves = recs("proposals.rec", "Proposal", "Proposal"), recs("agenda.rec", "Item", "Item"), recs("moves.rec", "Move", "Signal")
     if sv is None:
-        sv = plan.survey(fleet, [(b.get("Team"), b.name()) for b in pl.bolts() if b.get("Team")])
+        sv = plan.survey(fleet, [(b.get("Team"), b.name(), b.get("Repo")) for b in pl.bolts() if b.get("Team")])
     labelled(d, pl, plan.Stages(fleet, pl, sv), proposals, items, moves, lambda name: plan.signal_text(fleet, label, name)[0])
     return {h: f"its kits: {v['error']}" for h, v in sv.items() if not v["ok"]}
 
