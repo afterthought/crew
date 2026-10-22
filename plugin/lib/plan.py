@@ -8428,6 +8428,20 @@ def row_gone(key, entries):
                   "verify": "a verify report has no card, its findings fixed in one round"}.get(kind, "its row is gone")
 
 
+def record_settled(key, entries):
+    """The outcome a decision record's card closes with, under its key in either form (cards.row_object), from the run
+    record's entries, oldest first: the record's last status crew record recorded, "Accepted at <commit>" or "Rejected
+    at <commit>" as crew record closes it, the commit left out when the entry names none; None while it is proposed,
+    or none is recorded."""
+    obj = cards.row_object(key or "")
+    last = next((e for e in reversed(entries) if obj and e.get("Act") in ("record.proposed", "record.accepted", "record.rejected")
+                 and not e.get("Refused") and obj in (e.get("On") or [])), None)
+    if not last or last["Act"] == "record.proposed":
+        return None
+    commit = next((c.rsplit("@", 1)[-1][:7] for c in last.get("Commit") or [] if "@" in c), None)
+    return last["Act"].split(".")[1].capitalize() + (f" at {commit}" if commit else "")
+
+
 def refused_lately(entries, now, key=None, card=None):
     """Whether crew's last post under a row's key, or its last close of a card, was refused under CARD_RETRY seconds
     before now, so the sweep leaves it for a later read."""
@@ -8465,7 +8479,9 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
     be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
     each row's card with its row, which Pending You is asked whether it still finds; a deploy's card whose word stands
-    left for the deploy's end to close (ops.word_stands). Then each row in record 0031's
+    left for the deploy's end to close (ops.word_stands); and each decision record's card, under either key form,
+    whose record crew record has recorded accepted or rejected since, to close with its status (record_settled). Then
+    each row in record 0031's
     form with no card open on any host, whose owner runs here (owners, {row key: (owner, host)}), to post through its
     kind's raise. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is left for a
     later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a batch), each
@@ -8477,9 +8493,13 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     out = {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
     for c in cards_:
         kind = card_kind(c["key"])
-        if c["host"] != here or kind == "record":
+        if c["host"] != here:
             continue
-        if kind == "question":
+        if kind == "record":
+            settled = record_settled(c["key"], entries)
+            if settled and not refused_lately(entries, now, card=c["card"]):
+                out["gone"].append((c, settled, None))
+        elif kind == "question":
             out["questions"].append(c)
         elif c["key"] in rowed:
             out["held"].append((c, rowed[c["key"]]))
@@ -8695,7 +8715,9 @@ CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"land/[a-z0-9][a-
 VERIFY_KEY = r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}"
 # A decision record's card key, the design agent's: the kit and the record's four digits, one card per record however
 # often it is revised (briefs.15, record 0031 §1), raised by crew record. It is no rail row's: the rail lists its open
-# cards apart.
+# cards apart. A card the design agent posted before record 0031, under the key with the commit after it,
+# record/<kit>/<number>/<commit>, is the record's too (cards.row_object), closed at the record's status as one under
+# this key is.
 RECORD_KEY = r"record/([a-z0-9][a-z0-9-]*)/(\d{4})"
 CARD_START = 10  # seconds a start waits for plannotator to list its session
 CARD_POLL = 5  # seconds between a wait's reads
@@ -10423,6 +10445,15 @@ def raise_record(fleet, label, facts, where, note, acts=None):
     return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts)
 
 
+def record_card_close(fleet, label, owner, obj, outcome, acts=None):
+    """A decision record's cards closed at its accepted or rejected status with outcome: each the owner holds open on
+    this host under the record's key, obj, in either form, record 0031's or the one with the commit after it
+    (cards.record_keys), closed as row_card_close closes a row's, and said when it holds none. The ids closed."""
+    acts = acts or CardActs(fleet)
+    keys = cards.record_keys(acts.entries(label), obj, owner) or [obj]
+    return [c for c in (row_card_close(fleet, label, owner, k, outcome=outcome, acts=acts) for k in keys) if c]
+
+
 def record_status(fleet, a):
     """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
     [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031 §1). The kit is one of
@@ -10434,7 +10465,7 @@ def record_status(fleet, a):
     record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
     changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane,
     which is recorded and raises nothing; --alternatives makes the card the choice a rule decided; and --accepted or
-    --rejected closes the card with the commit."""
+    --rejected closes the card with the commit, under either key form (record_card_close)."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
     p = crew.partition_of(fleet, label)
     kits = {k["name"]: k for t in p["teams"] for k in crew.kits_of(fleet["teams"][t])}
@@ -10475,7 +10506,7 @@ def record_status(fleet, a):
     record.emit(label, f"record.{a.status}", [key], commit=[f"{k['repo']}@{sha}"], State="settled in the pane" if settled else None)
     print(f"record {n} in {a.kit}: {a.status} at {sha[:7]}" + (", the user's yes given in the pane; no card is raised" if settled else ""))
     if a.status != "proposed":
-        row_card_close(fleet, label, f"{label}-design", key, outcome=f"{a.status.capitalize()} at {sha[:7]}")
+        record_card_close(fleet, label, f"{label}-design", key, f"{a.status.capitalize()} at {sha[:7]}")
     elif not settled:
         raise_record(fleet, label, facts, card_where(dict(k, main=checkout)), f"Revised at {sha[:7]}: {subject}")
 
@@ -10552,7 +10583,8 @@ def sweep_cards(fleet, read, acts=None):
     """The rail read's sweep of the cards on this host, under its sign-in (record 0031 §1, §2, read.4): for each
     partition whose plan was read, and whose run record answered on its branch, on this host and on its main level's
     host, where its cards and rows are written, it closes each card of a row that is gone with why
-    (sweep_judged, row_gone), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
+    (sweep_judged, row_gone), and each decision record's card, under either key form, at the record's status
+    (record_settled), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
     card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
     command that raised it, and a row of one is left as it is. Before any of it, where the partition's planner runs,
@@ -10617,7 +10649,8 @@ def sweep_cards(fleet, read, acts=None):
             words = found[c["card"]][1]
             if cards.lost(words):
                 card_lost(acts, l, c["by"], c["key"], c["card"], words)
-                did(l, c["key"], c["card"], c["by"], "lost", "its row is gone, so nobody posts it again")
+                did(l, c["key"], c["card"], c["by"], "lost", ("its row is gone" if card_kind(c["key"]) == "row" else "its record is settled")
+                    + ", so nobody posts it again")
             elif row_card_close(fleet, l, c["by"], c["key"], outcome, reason, acts):
                 did(l, c["key"], c["card"], c["by"], "closed" if outcome else "withdrawn", outcome or reason)
             else:

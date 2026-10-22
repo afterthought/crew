@@ -1534,6 +1534,26 @@ class TestRecordCommand:
             assert [c[0] for c in acts.calls] == ["get_request"]
             assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
 
+    def test_a_record_accepted_or_rejected_closes_its_card_under_either_key_form(self, capsys):
+        """swancloud's record 0029, rejected on 2026-10-22 by crew record, whose card the design agent had posted
+        before record 0031 under record/swancloud/0029/5eba218 stayed open: crew record closes each card its design
+        agent holds open under the record's key or the key with the commit after it, and none of another record's."""
+        from test_card_commands import Acts
+        held = [dict(Act="card.post", Key="record/switchboard-kit/0032/5eba218", By="wldn-design", Card="req_c0"),
+                dict(Act="card.post", Key="record/switchboard-kit/0031/abc1234", By="wldn-design", Card="req_c9"),
+                dict(Act="card.post", Key="record/switchboard-kit/0032/def5678", By="wldn-design", Card="req_c8"),
+                dict(Act="card.close", Key="record/switchboard-kit/0032/def5678", By="wldn-design", Card="req_c8"),
+                dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
+        acts = Acts({"get_request": ({"status": "pending", "version": 2}, None)}, entries=held, caller="wldn-design")
+        assert plan.record_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", "Rejected at 447980b", acts) == ["req_c0", "req_c1"]
+        assert [(e["Act"], e["On"], e["Card"], e["Key"], e["State"], e["Outcome"]) for e in acts.emitted] == [
+            ("card.close", ["record/switchboard-kit/0032"], "req_c0", "record/switchboard-kit/0032/5eba218", "withdrawn", "Rejected at 447980b"),
+            ("card.close", ["record/switchboard-kit/0032"], "req_c1", "record/switchboard-kit/0032", "withdrawn", "Rejected at 447980b")]
+        acts = Acts(entries=held[1:4], caller="wldn-design")
+        assert plan.record_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", "Accepted at 447980b", acts) == []
+        assert (acts.calls, capsys.readouterr().out.splitlines()[-1]) == (
+            [], "card record/switchboard-kit/0032: wldn-design holds none open on this host, so none is closed")
+
 
 class TestPickedUp:
     """mac-studio's run record of 2026-10-19 (signal 2026-10-19-swancloud-ops-5b7775dd/01): the user approved
@@ -1653,6 +1673,7 @@ class TestActDecisions:
 
     @pytest.mark.parametrize("key, obj", [("proposal/4", "proposal/4"), ("batch/7", "batch/7"), ("land/b1", "bolt/b1"),
                                           ("deploy/srv", "env/srv"), ("op/srv/2", "env/srv"), ("record/crew/0031", "record/crew/0031"),
+                                          ("record/crew/0029/e6fa15f", "record/crew/0029"), ("record/crew/0029/x", None),
                                           ("land/b1/abc1234", None), ("agent-note", None), ("verify/x/20261007-1412", None)])
     def test_each_of_crews_six_keys_is_recorded_on_its_rows_object_and_a_verify_report_has_none(self, key, obj):
         assert built.row_object(key) == obj
