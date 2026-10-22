@@ -8,4 +8,4 @@
 ## 2. The documents say it
 
 - [x] 2.1 README says a card's session takes the first free port of the environment's range or crew's own, proved by `tests/suite docs` passing (design, Task notes 2.1).
-- [ ] 2.2 `tests/suite --affected` passes once the change is done.
+- [x] 2.2 `tests/suite --affected` passes once the change is done.
