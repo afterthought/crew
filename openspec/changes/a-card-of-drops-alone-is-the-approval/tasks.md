@@ -2,7 +2,7 @@
 
 ## 1. The card asks only its new units
 
-- [ ] 1.1 A proposal's card has a box only for each unit or chore new to a bolt or the queue, and a proposal with none is a hold-to-approve whose summary says how to keep what it drops or amends (design, Decisions 1 to 3; Task notes 1.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_proposal_card.py`.
+- [x] 1.1 A proposal's card has a box only for each unit or chore new to a bolt or the queue, and a proposal with none is a hold-to-approve whose summary says how to keep what it drops or amends (design, Decisions 1 to 3; Task notes 1.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_proposal_card.py`.
 - [ ] 1.2 Whether a proposal's card links its reading session is read from its new units alone (design, Decision 2; Task notes 1.2). Verify `tests/py/test_cards.py` passes in the logic tier.
 
 ## 2. Answers carry no kept drop or amendment
