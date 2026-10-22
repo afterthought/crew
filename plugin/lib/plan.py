@@ -3185,9 +3185,9 @@ def plan_answer(fleet, a):
     (proposal_facts, cards.proposal_card), and kept on this host, the planner's, beside the card's session files: a
     card's working state, never the plan's (state.2). Once it holds every question's answer, the change is applied with
     the boxes as they stand, as crew plan approve applies it, and the answers go: a new unit unticked left out; a note
-    beside it is then printed as the user's word for the planner's next proposal. A decline applies nothing, and its answers go. Refused for a question the card does
-    not ask, a box its question does not hold, an answer that differs from the one held, and a closed proposal,
-    recording nothing."""
+    beside it is then printed as the user's word for the planner's next proposal. A decline applies nothing, and its
+    answers go. Refused for a question the card does not ask, a box its question does not hold, an answer that differs
+    from the one held, and a closed proposal, recording nothing."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
     w, _, p, _ = at_tip(fleet, label, a.n)
@@ -3238,8 +3238,8 @@ def card_asks(card):
 
 def card_answer(asks, lone, n, question, given):
     """One question of proposal n's card answered, checked against the questions the card asks now (asks, each
-    question's box ids): plan, approve or decline; a lone new unit's, the one side the user picked; rows-<k>, the boxes the
-    user left ticked of those it holds. Returns the answer as kept."""
+    question's box ids): plan, approve or decline; a lone new unit's, the one side the user picked; rows-<k>, the boxes
+    the user left ticked of those it holds. Returns the answer as kept."""
     question in asks or fail(f"proposal {n}'s card asks {either(list(asks))}, not {question}")
     given, boxes = list(dict.fromkeys(given)), asks[question]
     if question == "plan":
