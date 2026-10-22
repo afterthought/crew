@@ -19,8 +19,9 @@
 # link again and refusing a unit, a landing's key while its bolt does not read proven and a short proposal's, and,
 # started from a shell naming no port while another session holds 19432, a link on the next port of crew's range; crew card wait closing the card on the tap,
 # with its note, and on the session's send, with every annotation, each ending the session; a session whose link only
-# the host could open ended, and the card raised all the same, saying so; and a wait with neither card nor session
-# refused. Then the rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when
+# the host could open ended, and the card raised all the same, saying so; a wait with neither card nor session
+# refused; and a session sent with no card held, or with its card's close refused, recording crew's close of the
+# batch, read, in the planner's name. Then the rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when
 # Pending You no longer finds it, and a question whose asker ended withdrawn, a question whose asker runs listed with
 # its asker and age, crew board acting on none; a deploy's card, raised by crew ops offer, read not found, recorded
 # lost and raised again through its kind's raise; a row whose post was refused showing the refusal, left while the
@@ -419,8 +420,34 @@ echo '{"answer": {}}' > "$stub/answered/req_stub-13.json"
 expect_ok planner wait batch/3
 eq "$out" "batch/3: sent back on its card, with no note
 card batch/3: req_stub-13 closed"
-expect_fail "no card and no session of batch/4 is open on $box" planner wait batch/4
+expect_fail "no card and no session of batch/5 is open on $box" planner wait batch/5
 ok "a session whose link only the host could open is ended and the card raised all the same, saying so, its wait on the card alone; a wait with neither is refused"
+
+# A batch's session sent with no card of it held on the main level's host, as when its card was posted from a host the
+# main level has left: the wait records crew's close of the batch, read, in the planner's name, and ends the session.
+batch 4
+expect_ok planner session batch/4; p4=$(jq -r .pid "$cards_dir/batch/4/session.json")
+decide "$p4" '{"decision": "approved"}'
+: > "$CREW_TEST_LOG"
+expect_ok planner wait batch/4
+eq "$out" "batch/4: approved
+batch/4: recorded read, Read; no notes
+batch/4's session had ended as the user sent it, and batch/4 is forgotten"
+eq "$(py_calls)" ""
+eq "$(entries batch.close | jq -r 'select(.Key == "batch/4") | [.Key, .State, .Outcome, .By] | join(" ")')" "batch/4 read Read; no notes wldn-planner"
+# Sent while Pending You refuses its card's close: the card stays open, and crew records the batch read all the same.
+batch 6
+raise 6 >/dev/null; c6=$(entries card.post | jq -r 'select(.Key == "batch/6") | .Card'); p6=$(jq -r .pid "$cards_dir/batch/6/session.json")
+decide "$p6" '{"decision": "approved"}'
+echo "cancel_request Too many requests." > "$stub/refuse"
+expect_ok planner wait batch/6
+: > "$stub/refuse"
+has "$out" "card batch/6 not closed: Pending You refused the close: Too many requests."
+has "$out" "batch/6: recorded read, Read; no notes"
+eq "$(entries card.close | jq -r "select(.Card == \"$c6\") | .Refused")" "Pending You refused the close: Too many requests."
+eq "$(entries batch.close | jq -r 'select(.Key == "batch/6") | [.Key, .State, .Outcome, .By] | join(" ")')" "batch/6 read Read; no notes wldn-planner"
+planner end batch/6 >/dev/null
+ok "a batch's session sent with no card held, or with its card's close refused, records crew's close of the batch, read, in the planner's name"
 
 # A proposal's card, crew's own (plan-proposals, record 0031 §1, change crew-raises-a-proposals-card): raised by crew plan
 # propose in the planner's name on its own host, withdrawn by a rewrite that moves it from one list to lists of
