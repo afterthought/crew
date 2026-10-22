@@ -184,7 +184,7 @@ before=$(tip)
 expect_fail "rebasing the-deploy-names-its-host-tenant onto bolt/console-pages conflicts" crew plan approve "$n"
 eq "$(tip)" "$before"; eq "$(props -t Proposal -e "Proposal = $n" -P State)" "open"
 eq "$(git -C "$k" rev-parse unit/zone-first)" "$ztip"; eq "$(git -C "$k" rev-parse unit/the-deploy-names-its-host-tenant)" "$ttip"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/zone-first)" "bolt/tenant-environments"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/zone-first)" "origin/bolt/tenant-environments"
 CREW_AGENT= crew plan drop "$n" "they stay" >/dev/null
 ok "an approval's rebases are prepared before its push, and a conflict undoes them and writes nothing"
 

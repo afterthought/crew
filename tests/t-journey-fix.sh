@@ -28,7 +28,7 @@ expect_ok crew fix swb-1 tidy "The banner flickers ZQXS."
 has "$out" "swb-1-unit-1 has $fb: code, in $fp"
 eq "$(prompt_to swb-1-unit-1)" "'Fix: The banner flickers ZQXS.'"
 eq "$(field $box fix.start On)" "$fb bolt/tenant-environments agent/swb-1-unit-1"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$fb")" "bolt/tenant-environments"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$fb")" "origin/bolt/tenant-environments"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $fp"
 plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
 expect_ok crew fix swb-1 tidy "It flickers still."
@@ -60,7 +60,7 @@ said=$out
 expect_ok crew unit move c console-pages
 has "$out" "plan(console-pages): move c from tenant-environments"
 said+=$'\n'$out
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/c)" "bolt/console-pages"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/c)" "origin/bolt/console-pages"
 git -C "$k" merge-base --is-ancestor bolt/console-pages unit/c || fail "c was not rebased onto console-pages"
 status swb-1-unit-4 working
 expect_ok crew unit drop d "not wanted"

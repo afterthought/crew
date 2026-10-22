@@ -52,7 +52,7 @@ unset CREW_AGENT
 git -C "$k" worktree remove "$land"
 ok "no unit starts on a bolt while its landing is in flight, and one starts once the outcome is in though the landing's worktree stands"
 crew bolt give swb-2 console-pages >/dev/null 2>&1; place "$k" console-pages c >/dev/null
-echo "# switchboard-kit, main's" > "$k/README.md"; commit_all "$k" "docs: main's title"
+echo "# switchboard-kit, main's" > "$k/README.md"; commit_all "$k" "docs: main's title"; push "$k"
 expect_ok crew bolts --label wldn
 has "$out" "verification: green, sluice's verdict on its last landing, $(short bolt/tenant-environments): passed (stub)"
 ok "a unit merges into the bolt by a submission, and crew bolts reads the bolt's verification from sluice's verdict on it"
@@ -278,7 +278,7 @@ crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/
 crew unit add done-x "Unit done-x." --bolt done-outside >/dev/null
 expect_fail "unit done-x has not landed on main: it is ready" crew bolt land done-outside
 mkdir -p "$k/openspec/changes/archive/2026-10-12-done-x"; echo "# done-x" > "$k/openspec/changes/archive/2026-10-12-done-x/proposal.md"
-commit_all "$k" "chore(openspec): archive done-x"
+commit_all "$k" "chore(openspec): archive done-x"; push "$k"
 expect_ok crew bolt land done-outside
 eq "$(tail -1 <<<"$out")" "done-outside has landed at switchboard-kit's $(git -C "$k" rev-parse main | cut -c1-7); no team held it"
 eq "$(field mac-studio bolt.land Head bolt/done-outside) $(plan -t Bolt -e "Bolt = 'done-outside'" -c)" "$(git -C "$k" rev-parse main) 0"

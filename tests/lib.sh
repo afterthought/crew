@@ -183,16 +183,27 @@ commit_all() { git -C "$1" add -A && git -C "$1" commit -qm "${2:-wip}"; }
 rewrite() { sed -e "$2" "$1" > "$1.new" && mv "$1.new" "$1"; }
 
 # kit <host> <space> <name>: a kit's main checkout at <space>/<name>/main, with OpenSpec set up and a sluice policy
-# naming the checks its bolt branches require, which a bolt is given only with (teams.5)
+# naming the checks its bolt branches and main require, which a bolt is given only with (teams.5), and origin, GitHub,
+# for both (plan.19): its origin is a bare remote under the test's remotes, as https://github.com/<owner>/<name>, its
+# owner the one the hosts file's sessions name it under, its main pushed there. A kit already standing on its remote,
+# made again on another host, is cloned from it.
 kit() {
-  local d; d=$(space "$1" "$2")/$3/main
+  local d r own; d=$(space "$1" "$2")/$3/main
+  own=$(jq -r --arg n "$3" 'first(.hosts[].sessions[].repos[] | select(endswith("/" + $n))) // empty' \
+    "$(home_of "$1")/.config/swancloud/herdr-hosts.json" 2>/dev/null); own=${own:-kits/$3}
+  r=$(remote "$own")
+  if [ -d "$r" ]; then git clone -q "https://github.com/$own" "$d"; echo "$d"; return; fi
   mkdir -p "$d/openspec/changes/archive" "$d/openspec/specs" "$d/.config"
   git init -q "$d"; printf 'schema: spec-driven\n' > "$d/openspec/config.yaml"
-  printf '[branches."bolt/*"]\nrequired = ["#check-full"]\n' > "$d/.config/sluice.toml"
+  printf '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n\n[branches.main]\nrequired = ["#check-full"]\nremote = "origin"\n' > "$d/.config/sluice.toml"
   touch "$d/openspec/changes/archive/.keep" "$d/openspec/specs/.keep"; echo "# $3" > "$d/README.md"
   commit_all "$d" "chore: start $3"
+  mkdir -p "$(dirname "$r")"; git clone -q --bare "$d" "$r"
+  git -C "$d" remote add origin "https://github.com/$own"; git -C "$d" fetch -q origin
   echo "$d"
 }
+# push <checkout>: its main pushed to its origin, as a landing on GitHub's main leaves it, so crew reads it as main now
+push() { git -C "$1" push -q origin main; }
 
 # blueprints <owner/name>: a bare remote with signals/moves.rec and .gitattributes on main
 blueprints() {
