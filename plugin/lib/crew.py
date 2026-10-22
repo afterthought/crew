@@ -1246,6 +1246,11 @@ SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sen
            "the user when the name is `<user>@<host>`; one that begins `[crew]` is crew's own; anything else typed there "
            "is the user.")
 
+# How anything for another team or partition is sent, beside every brief's roster (briefs.10): to that partition's
+# operator, its one door, and to nobody else.
+SENDS = (f"`{HOME}/plugin/bin/crew send <team or partition> \"<text>\"`, which reaches that partition's operator, its "
+         "one door, and to nobody else")
+
 # How an agent reports results, the same in every brief that reports them.
 RESULTS = ("## Test, check and proof results\n\n"
            "Whenever you report how tests, checks or proofs went (a suite you ran, a merge's checks, the bolt's verification, "
@@ -1291,8 +1296,8 @@ def team_tokens(fleet, t, role, self_name):
         f"host's teams their bolts; `{label}-ops` lands a proven bolt on main; and `{label}-operator` is the partition's door "
         f"to the user. " + (f"The team holds the kits {', '.join(k['name'] for k in kits_of(t))}, and takes a bolt of any of them; "
                             f"the kit this brief names, {kit['name']}, is its bolt's. " if len(kits_of(t)) > 1 else "")
-        + f"Agents outside the team are reached with "
-        f"`{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run. {SENDERS}")
+        + f"The agents named here are reached with `{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run; "
+        f"anything for another team, of this partition or another, or for another partition, is sent with {SENDS}. {SENDERS}")
     return tok
 
 
@@ -1340,8 +1345,8 @@ def main_tokens(fleet, p, role, self_name):
         f"bolts and posts its review batches; `{label}-reviewer`, started fresh for each batch, summarizes its changes; `{label}-ops` lands "
         f"proven bolts on the user's approval of their landing cards; and `{label}-operator`, the partition's door, works for the user. "
         f"A dispatcher on each host the partition's teams run on gives that host's teams their bolts: {tok['DISPATCHERS']}. "
-        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs. "
-        f"{SENDERS}")
+        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
+        f"anything for another partition or one of its teams is sent with {SENDS}. {SENDERS}")
     return tok
 
 
