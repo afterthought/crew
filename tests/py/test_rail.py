@@ -396,10 +396,36 @@ class TestSweepJudged:
         assert self.judged(cards_=[d], entries=ended)["gone"] == [(d, None, "its deploy no longer waits on your word")]
         assert "deploy/dev (wldn), asked by wldn-ops on mac-studio" in text(rows(), cards=[d], logs={"wldn": ended})
 
-    def test_only_the_cards_posted_on_this_host_are_judged_and_a_decision_records_never(self):
+    def test_only_the_cards_posted_on_this_host_are_judged_and_a_decision_records_only_once_it_is_settled(self):
         there = card("proposal/4", "req_p4", "wldn-planner", host=BOX)
         rec = card("record/atlas-kit/0021", "req_r1", "wldn-design")
         assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
+        proposed = [did("record.proposed", On=["record/atlas-kit/0021"], Commit=["WilldanGroup/atlas-kit@" + "a" * 40], By="wldn-design")]
+        assert self.judged(cards_=[rec], entries=proposed)["gone"] == []
+
+    def test_a_decision_records_card_under_either_key_form_is_closed_at_its_status_wherever_crew_record_ran(self):
+        """swancloud's record 0029, rejected on 2026-10-22 by crew record on deneb, whose card the design agent had
+        posted on mac-studio before record 0031 under record/swancloud/0029/5eba218, which stayed open: the sweep on
+        the card's host closes it, and one under record 0031's key, at the record's last status."""
+        old, new = card("record/atlas-kit/0021/5eba218", "req_r0", "wldn-design"), card("record/atlas-kit/0021", "req_r1", "wldn-design")
+        other = card("record/atlas-kit/0022", "req_r2", "wldn-design")
+        status = [did("record.proposed", 60, On=["record/atlas-kit/0021"], By="wldn-design"),
+                  dict(did("record.rejected", On=["record/atlas-kit/0021"], Commit=["WilldanGroup/atlas-kit@447980bd615c"], By="wldn-design"),
+                       Host=BOX)]
+        assert self.judged(cards_=[old, new, other], entries=status)["gone"] == [(old, "Rejected at 447980b", None), (new, "Rejected at 447980b", None)]
+        again = status + [did("record.proposed", 10, On=["record/atlas-kit/0021"], By="wldn-design")]
+        assert self.judged(cards_=[old, new], entries=again)["gone"] == []
+        refused = status + [did("card.close", 5, Card="req_r0", Refused="Pending You refused the close: Too many requests.")]
+        assert self.judged(cards_=[old, new], entries=refused)["gone"] == [(new, "Rejected at 447980b", None)]
+
+    @pytest.mark.parametrize("key, entries, outcome", [
+        ("record/atlas-kit/0021", [], None),
+        ("record/atlas-kit/0021/abc1234", [{"Act": "record.accepted", "On": ["record/atlas-kit/0021"], "Commit": ["r@0123456789"]}], "Accepted at 0123456"),
+        ("record/atlas-kit/0021", [{"Act": "record.accepted", "On": ["record/atlas-kit/0021"], "Commit": []}], "Accepted"),
+        ("record/atlas-kit/0021", [{"Act": "record.rejected", "On": ["record/atlas-kit/0021"], "Commit": ["r@0123456789"], "Refused": "x"}], None),
+        ("record/atlas-kit/0021", [{"Act": "record.rejected", "On": ["record/atlas-kit/0022"], "Commit": ["r@0123456789"]}], None)])
+    def test_a_records_status_is_read_from_the_run_record_under_either_key_form(self, key, entries, outcome):
+        assert plan.record_settled(key, entries) == outcome
 
     def test_a_question_is_asked_after_and_a_rows_card_with_its_row_checked(self):
         q, p4 = card(None, "req_q1", "crw-3-conductor"), card("proposal/4", "req_p4", "wldn-planner")
