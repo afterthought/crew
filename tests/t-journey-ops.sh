@@ -12,10 +12,10 @@
 # either way, and closes when it is marked; an offer on a host not signed in stands with no card; main-level ops posts
 # no card under an operations row's key, crew's, and asks under a key of its own; quiet reads the host's agents and
 # test slots; and an ops command run away from the partition's main level runs there, an offer carrying its files'
-# text. Which offer is open, the word, each step's latest state, the rows and their words, each card's facts, whether
-# it is posted or changed, which step's card is raised, what a step recorded again or an offer handed again changes,
-# and what a forwarded offer carries are logic cases (tests/py/test_ops.py); each step here checks a command's wiring
-# once.
+# text and a step its text. Which offer is open, the word, each step's latest state, the rows and their words, each
+# card's facts, whether it is posted or changed, which step's card is raised, what a step recorded again or an offer
+# handed again changes, and what a forwarded offer or step carries are logic cases (tests/py/test_ops.py); each step
+# here checks a command's wiring once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 blueprints afterthought/blueprints >/dev/null; blueprints WilldanGroup/willdan-blueprints >/dev/null
@@ -242,4 +242,7 @@ eq "$(cat "$(home_of "$box")/.local/state/crew/wldn/ops/$box/$s1/notes.md")" "$(
 eq "$(cat "$(home_of "$box")/.local/state/crew/wldn/ops/$box/$s1/steps.txt")" "$(cat "$T/steps.txt")"
 eq "$(acts mac-studio wldn ops.offer)" "0"
 expect_fail "no word is given for a deploy of $box" crew ops word "$box" --label wldn
-ok "an ops command run away from the partition's main level is run there, an offer carrying its files' text"
+expect_ok crew ops step "$box" --label wldn --key restart-teams/1 --state handed --doer dispatcher --text "$T/held.txt"
+has "$(grep "ssh $box .*ops step" "$CREW_TEST_LOG")" "--text -"; lacks "$(grep "ssh $box" "$CREW_TEST_LOG")" "$T/held.txt"
+eq "$(runs "$box" wldn | grep -c "^Text: Restart crew's teams. - why: It ends a stage mid-unit.$")" "1"
+ok "an ops command run away from the partition's main level is run there, an offer carrying its files' text and a step its text"
