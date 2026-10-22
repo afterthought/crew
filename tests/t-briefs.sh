@@ -64,11 +64,15 @@ for want in "The card links a reading of the bolt, first in its details" "crew s
   "crew card wait land/<bolt>\` as a background command" "crew card session land/<bolt>\` prints its link, or starts the reading again" \
   "Notes the user sends from the reading are notes on the landing card" "An approval in the reading lands nothing" \
   "the card also lists the addresses of a preview of that head, which crew asks sluice for, replaces when a merge moves the head and releases when the card closes" \
-  "the preview lands nothing, and one that failed is said on the card and holds nothing"; do
+  "the preview lands nothing, and one that failed is said on the card and holds nothing" \
+  "a card raised without its reading says so and why, and names" "crew card session land/<bolt>\` as your act, never the user's" \
+  "When no reading runs, because the raise could not open it or an earlier wait returned, the wait starts one first" \
+  "When the wait says the reading could not be opened, the card says so too:" \
+  "crew card session land/<bolt>\` starts it once what the wait named is mended"; do
   has "$out" "$want"
 done
 for gone in "answeredHere" "plannotator"; do lacks "$out" "$gone"; done
-ok "a conductor opens nothing, posts no landing card, starts no batch's session, and waits on its landing card's reading, whose notes are the card's and whose approval lands nothing, and whose preview crew asks for, replaces and releases"
+ok "a conductor opens nothing, posts no landing card, starts no batch's session, and waits on its landing card's reading, which its wait starts when none runs, whose notes are the card's and whose approval lands nothing, and whose preview crew asks for, replaces and releases"
 # The question discipline each of the four that ask carries (record 0031, briefs.11): who asks and after whom, Pending
 # You's test for what is the user's, a question's fields and its key of its own, how its answer is heard, and every
 # row's card as crew's.
@@ -257,6 +261,7 @@ for brief in "swb-1 conductor" "swb-1 ops" "wldn main-ops" "wldn design" "wldn p
   expect_ok crewpy brief $brief
   has "$out" 'signal <slug> "<what it asserts, in a sentence>" --excerpt "<the exact words the user said or the tool printed>"'
   has "$out" "Copy the excerpt, never reword it"; has "$out" "a refusal means the words were reworded"
+  has "$out" "or are a background task's output you have not read"
   has "$out" "When the words point at something made elsewhere"; has "$out" "A conversation's id alone is not enough"
   has "$out" '`signals/` on `wldn/main` of WilldanGroup/crew-state'
   lacks "$out" "signal in WilldanGroup/willdan-blueprints"

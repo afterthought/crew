@@ -356,9 +356,9 @@ class TestWhichAct:
         assert plan.proposal_act("agree", 4, mine=True, held=True, home=False, agreed=["swb-1"])[0] == "change"
         assert plan.proposal_act("agree", 4, mine=True, held=False, home=True, agreed=["swb-1"])[0] == "change"
 
-    def test_an_approval_closes_it_with_what_was_applied_and_a_drop_withdraws_it_with_the_reason(self):
+    def test_an_approval_closes_it_with_what_was_applied_and_a_drop_with_the_reason_or_as_dropped_on_the_users_note(self):
         assert plan.proposal_act("approve", 4, mine=True, outcome="Applied: added b.") == ("close", "Applied: added b.", None)
-        assert plan.proposal_act("drop", 4, mine=True, reason="Not now.") == ("close", None, "Not now.")
+        assert plan.proposal_act("drop", 4, mine=True, reason="Not now.") == ("close", plan.DROPPED, "Not now.")
         assert plan.proposal_act("approve", 4, mine=False, outcome="x") is None
 
 
@@ -508,6 +508,42 @@ def test_a_rewrite_after_the_users_note_acks_the_card_they_answered_and_its_new_
     assert (post["idempotencyKey"], post["follows"], [o["id"] for o in post["options"]]) == ("proposal/1:2", "req_p1", ["add:b-new", "unticked"])
     assert [(e["Act"], e["Key"], e.get("Card")) for e in acts.emitted] == [("card.close", "proposal/1", "req_p1"), ("card.post", "proposal/1", "req_p2")]
     assert "update_request" not in [t for t, _ in acts.calls]
+
+
+ASKS = "Why is this a unit at all? Isn't it the chore we already have?"
+
+
+def dropped(status, cancelled=None):
+    """Proposal 1 dropped with ASKS, the user's note, as its reason, while the chain's card req_p1 is in the status
+    given, through the act's close on its stand-in for Pending You (test_card_commands.Acts): the calls it made and
+    what it recorded."""
+    from test_card_commands import Acts
+    pl = proposals_with(("Console first.", TestRaise.DOS))
+    plan.close(plan.proposal(pl, 1, "wldn"), "dropped", TODAY, ASKS)
+    w = write()
+    w.files["proposals.rec"] = pl.text()
+    held = [{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": "req_p1"}]
+    acts = Acts({"get_request": ({"status": status, "turn": "agent" if status == "answered" else "you", "version": 3}, None),
+                 "ack_answer": ({"version": 4}, None), "cancel_request": ({"version": 4}, None)}, held, caller="wldn-planner")
+    assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "drop", acts, reason=ASKS) == "req_p1"
+    assert plan.Plan(w.files["proposals.rec"]).recs("Proposal")[0].get("Reason") == ASKS
+    return acts.calls[1:], [(e["Act"], e.get("State"), e.get("Outcome")) for e in acts.emitted]
+
+
+def test_a_drop_acks_the_card_the_user_answered_as_dropped_on_their_note_whatever_their_note_asks():
+    """Read on 2026-10-19: proposal 161 was dropped with the user's own note on its card as the reason, a question, and
+    crew acked the card with it, which Pending You refused, "Your outcome asks your person something; put it on a new
+    card with follows instead.", the card left answered and open on the rail with its proposal gone. The note stays
+    whole on the proposal's record, and the card is acked saying it was dropped on it."""
+    calls, emitted = dropped("answered")
+    assert calls == [("ack_answer", {"requestId": "req_p1", "name": "wldn-planner", "expectedVersion": 3, "outcome": plan.DROPPED})]
+    assert "?" not in plan.DROPPED and emitted == [("card.close", "closed", plan.DROPPED)]
+
+
+def test_a_drop_withdraws_the_card_that_still_waits_with_the_reason():
+    calls, emitted = dropped("pending")
+    assert calls == [("cancel_request", {"requestId": "req_p1", "name": "wldn-planner", "reason": ASKS})]
+    assert emitted == [("card.close", "withdrawn", ASKS)]
 
 
 def rewritten_while_waiting(monkeypatch, first, second):

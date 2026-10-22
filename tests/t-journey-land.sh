@@ -4,11 +4,14 @@
 # bolt by a submission to main from a short-lived worktree, naming a conflict for the team and moving nothing; a fix
 # takes main into the bolt by a submission to the bolt, and its merge's end raises the bolt's landing card, keyed by
 # the bolt, in its conductor's name, with its reading of what the bolt brings to main started first on the team's
-# host and linked from it, which crew card session gives again, and the address of a preview of its head, which the
+# host, tried a second time when its first start fails, and linked from it, which crew card session gives again, and
+# the address of a preview of its head, which the
 # kit's policy there declares, asked of sluice first; the preview's stack failing is said on the card, changed in
 # place by the process that waited on it; a fix started on the bolt withdraws the card, held for it, ending its
 # reading and releasing its preview, and once the fix merges and the bolt reads proven again a new card follows it
-# with a new reading and a preview of the new head; the landing then lands, leaving the kit's detached main checkout
+# with a preview of the new head, raised without its reading when both its starts fail, naming crew card session and
+# keeping why in the run record, whose reading the conductor's wait then starts, changing the card to carry its link,
+# and waits on until the landing ends it; the landing then lands, leaving the kit's detached main checkout
 # as it was and marking the bolt's branch landed; the bolt lands in the plan once every unit has, recording the commit
 # main holds and removing its branch, since main holds every commit of it, and the place a stopped landing left on it,
 # its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
@@ -92,6 +95,8 @@ expect_ok crew fix swb-1 take-main --merge
 merge_as swb-1-unit-1 "$tmp" bolt/tenant-environments || fail "the fix's submission failed"
 : > "$CREW_TEST_LOG"
 touch "$CREW_TEST_ROOT/sluice-preview-holds"  # the preview's stack takes its time to come up
+refusals=$(home_of $box)/.stub-plannotator/refuse-starts
+mkdir -p "${refusals%/*}"; echo 1 > "$refusals"  # the reading's first start fails
 expect_ok crew fix swb-1 take-main --wait
 has "$out" "delivered merge of $tm: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 # The merge's end finds the bolt proven, and raises its landing card in its conductor's name, keyed by the bolt, with a
@@ -112,6 +117,9 @@ ok "a fix takes main into the bolt by a submission to the bolt, and the merge's 
 url=$(jq -r .url "$reading/session.json"); pid=$(jq -r .pid "$reading/session.json")
 [[ $url =~ ^http://chuck-herdr-alpha\.ts\.swancloud\.net:194[3-5][0-9]$ ]] || fail "the landing's reading is not on the box's tailnet name: $url"
 eq "$(listed)" "$pid"
+eq "$(cat "$refusals")" "0"
+has "$out" "card land/tenant-environments: its reading could not be opened on the tailnet: plannotator ended before land/tenant-environments's session was ready: stub: refused to start; crew fetches switchboard-kit's main and tries once more"
+lacks "$(field $box card.post Unread bolt/tenant-environments)" "refused"
 folder=$(cd "$reading/$(git -C "$k" rev-parse --short=7 bolt/tenant-environments)" && pwd -P)
 eq "$(jq -r '.argv | map(select(startswith("/") and (endswith("/result.json") | not))) | map(sub(".*/"; "")) | join(" ")' \
   "$(home_of $box)/.stub-plannotator/$pid.json")" \
@@ -123,7 +131,7 @@ has "$(calls | grep "^$box pendingyou post_request " | tail -1)" "\"url\": \"$ur
 on_box() { HOST=$box crew "$@"; }
 expect_ok on_box card session land/tenant-environments
 eq "$out" "$url"; eq "$(listed)" "$pid"
-ok "the landing card's reading is started with it on the team's host, the bolt's page, each unit's change and the bolt's diff against main as one review, its link on the card, and crew card session gives it again, starting nothing"
+ok "the landing card's reading is started with it on the team's host, a second time when its first start fails, the bolt's page, each unit's change and the bolt's diff against main as one review, its link on the card, and crew card session gives it again, starting nothing"
 
 # The preview's stack fails: the process crew handed the ask to changes the card in place while it waits on the user.
 previews=$(home_of $box)/.local/state/crew/previews/wldn
@@ -154,19 +162,38 @@ expect_ok crew fix swb-1 gap --wait
 expect_ok crew fix swb-1 gap --merge
 merge_as swb-1-unit-1 "$gp" bolt/tenant-environments || fail "the gap fix's submission failed"
 : > "$CREW_TEST_LOG"
+echo 2 > "$refusals"  # both of the reading's starts fail
 expect_ok crew fix swb-1 gap --wait
 again=$(grep -o "^card land/tenant-environments: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
 [[ -n $again && $again != "$card" ]] || fail "the landing card was not raised again:"$'\n'"$out"
 h2=$(git -C "$k" rev-parse bolt/tenant-environments)
 posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
 has "$posted" "\"follows\": \"$card\""
-pid2=$(jq -r .pid "$reading/session.json"); url2=$(jq -r .url "$reading/session.json")
-[[ $pid2 != "$pid" ]] || fail "the landing card raised again has its old reading"
-eq "$(listed)" "$pid2"
-has "$posted" "\"url\": \"$url2\""
+refused="plannotator ended before land/tenant-environments's session was ready: stub: refused to start"
+has "$posted" "Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session land/tenant-environments, and this card then carries its link."
+has "$posted" "The reading could not be opened on the tailnet: $refused"
+has "$out" "card land/tenant-environments: its reading could not be opened on the tailnet: $refused; crew card session land/tenant-environments starts it"
+[[ ! -e $reading/session.json ]] || fail "a reading is recorded though both its starts failed"
+eq "$(listed)" ""; eq "$(cat "$refusals")" "0"
+eq "$(field $box card.post Card bolt/tenant-environments) $(field $box card.post Unread bolt/tenant-environments)" "$again $refused"
 has "$posted" "web: http://web-${h2:0:7}--bolt-tenant-environments--kit"
 eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h2 --wait --json in $(cd "$k" && pwd -P)"
-ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a new reading and a preview of the new head"
+ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record"
+
+# The conductor's wait finds no reading and starts it, changing the card to carry its link, then waits on it until the
+# landing's close ends it.
+HOST=$box crew card wait land/tenant-environments > "$T/land-wait.out" 2>&1 &
+waiting=$!
+until_ok test -s "$reading/session.json" || fail "the wait started no reading:"$'\n'"$(cat "$T/land-wait.out")"
+pid2=$(jq -r .pid "$reading/session.json"); url2=$(jq -r .url "$reading/session.json")
+[[ $pid2 != "$pid" ]] || fail "the landing card raised again has its old reading"
+relinked() { calls | grep "^$box pendingyou update_request " | grep -q "$url2"; }
+until_ok relinked || fail "the card was not changed to carry the reading's link:"$'\n'"$(cat "$T/land-wait.out")"
+changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
+has "$changed" "\"requestId\": \"$again\""; has "$changed" "\"changeNote\": \"Its reading is open again at a new link\""
+eq "$(listed)" "$pid2"
+kill -0 "$waiting" 2>/dev/null || fail "the wait returned rather than waiting on the reading:"$'\n'"$(cat "$T/land-wait.out")"
+ok "the conductor's wait on a landing card with no reading starts it, prints its link, changes the card to carry it and waits on it"
 unset CREW_AGENT
 git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)
 expect_ok crew bolt submit tenant-environments
@@ -209,6 +236,9 @@ has "$out" "released land/tenant-environments's preview of ${h2:0:7}"
 eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid2"
 gone "$pid2"; eq "$(listed)" ""
+wait "$waiting" || fail "the conductor's wait failed:"$'\n'"$(cat "$T/land-wait.out")"
+eq "$(head -1 "$T/land-wait.out")" "$url2"
+eq "$(tail -1 "$T/land-wait.out")" "land/tenant-environments: crew ended its session, as its card closed or crew card end was run"
 [[ ! -e $reading ]] || fail "the landing's reading outlived its card"
 has "$out" "$land is removed: bolt tenant-environments is in no plan"
 [[ ! -e $land ]] || fail "the landing's worktree outlived the landing"
