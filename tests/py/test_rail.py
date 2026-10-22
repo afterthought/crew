@@ -449,7 +449,7 @@ class TestSweepJudged:
     def test_only_the_cards_posted_on_this_host_are_judged_and_a_decision_records_only_once_it_is_settled(self):
         there = card("proposal/4", "req_p4", "wldn-planner", host=BOX)
         rec = card("record/atlas-kit/0021", "req_r1", "wldn-design")
-        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
+        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": []}
         proposed = [did("record.proposed", On=["record/atlas-kit/0021"], Commit=["WilldanGroup/atlas-kit@" + "a" * 40], By="wldn-design")]
         assert self.judged(cards_=[rec], entries=proposed)["gone"] == []
 
@@ -492,7 +492,7 @@ class TestSweepJudged:
         recent = [did("card.close", 5, Card="req_p4", Refused="Pending You refused the close: Too many requests."),
                   did("card.post", 5, Key="deploy/dev", Refused="Pending You refused post_request: x")]
         assert self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=recent) == {"gone": [], "questions": [], "held": [], "none": [],
-                                                                                                "settled": []}
+                                                                                                "again": [], "settled": []}
         old = [dict(e, At=iso(plan.CARD_RETRY // 60 + 1)) for e in recent]
         j = self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=old)
         assert ([c for c, *_ in j["gone"]], j["none"]) == ([p4], [row("deploy/dev", "operations")])
