@@ -1646,7 +1646,11 @@ def resolve(fleet, scope, role, extra):
 def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
     (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
-    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
+    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
+    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said)."""
+    if scope not in fleet["teams"] and role in MAIN_STANDING + ("reviewer",):
+        p, here = partition_of(fleet, scope), this_host()
+        p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:

@@ -79,3 +79,9 @@ expect_fail "swb-1-unit-1 holds no unit or fix" as chuck-herdr-alpha "$CREW/plug
 expect_fail "which stage?" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" swb-1 unit-2 apply
 expect_fail "no role 'conductor' at wldn's main level" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" wldn conductor
 ok "an unknown role, slot or stage is refused"
+
+: > "$CREW_TEST_CLAUDE_LOG"
+expect_fail "wldn's main level runs on chuck-herdr-alpha, not mac-studio, and crew starts wldn-planner only there" as mac-studio "$CREW/plugin/bin/crew-role" wldn planner
+expect_fail "wldn's main level runs on chuck-herdr-alpha, not mac-studio, and crew starts wldn-design only there" as mac-studio "$CREW/plugin/bin/crew-role" wldn design resume
+eq "$(launches)" ""
+ok "a main level's role, fresh or resumed, is refused off its main level's host, naming that host, and no Claude starts"
