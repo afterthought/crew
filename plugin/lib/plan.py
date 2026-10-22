@@ -2036,6 +2036,42 @@ bolt=$2 file=$3
 """ + BOLT_AT
 
 
+# Where a bolt lives (BOLT_LIVES), and AT_MAIN, the policy at the kit's main now as this host last fetched it, with no
+# fetch (plan.18): origin/main for a kit with an origin, else its own main, base64, or - when it holds none.
+BOLT_HOME = BOLT_LIVES + r"""now=refs/heads/main; if git remote get-url origin >/dev/null 2>&1; then now=refs/remotes/origin/main; fi
+echo "AT_MAIN=$(pol "$(ref "$now")")"
+"""
+
+
+def bolt_local_said(bolt, lives, main_remote):
+    """What a team's read says, once, of a bolt the team holds (plan.19, record 0032's amendment): that it is local
+    until it lands, when it lives on its host only (lives None, kit.bolt_lives) while the policy at the kit's main now
+    names a remote for its bolt branches (main_remote); else None, a bolt on GitHub, or every bolt local while main's
+    policy names none. Nothing is run for it: sluice has no command that puts a local branch's tip on GitHub, and its
+    landing's pull request puts it there."""
+    if lives is None and main_remote:
+        return (f"bolt/{bolt} is local until it lands: it was made before bolts were on GitHub, so its places are cut "
+                "from the local branch, and its landing puts it on GitHub")
+    return None
+
+
+def bolts_local_said(fleet, t, plan):
+    """The line a team's read says of each bolt the team holds that is local until it lands (bolt_local_said), read on
+    the team's host in each bolt's kit (BOLT_HOME); a bolt whose home crew can't read says nothing."""
+    out = []
+    for b in held_by(plan, t["name"]):
+        k = crew.with_kit(t, b.get("Repo"))
+        r = crew.on_machine(fleet, k["machine"], ["bash", "-c", BOLT_HOME, "crew", k["kit"]["main"], b.name(), kit.DECLARATION])
+        try:
+            lives, main_remote = kit.bolt_home(r.stdout, b.name()) if r.returncode == 0 else (None, None)
+        except Refusal:
+            continue
+        said = bolt_local_said(b.name(), lives, main_remote)
+        if said:
+            out.append(said)
+    return out
+
+
 def bolt_upstream(fleet, t, bolt):
     """The ref a place of the bolt tracks, read on the team's host where the bolt lives (kit.place_base, plan.19):
     origin/bolt/<bolt> for a bolt on GitHub, bolt/<bolt> for one made before gives went through sluice."""
@@ -6001,7 +6037,9 @@ def rebase_waits(unit, bolt, due, status, is_clean, path):
 def rebase_and_tidy(fleet, t):
     """The end of a team's read: each dependent whose After unit has merged is rebased (rebase_dependents), a conflict
     waiting for the conductor's next wait, which tells the dependent; then the team's tidy runs, whether or not the
-    rebase was refused. What either refuses is said on standard error."""
+    rebase was refused; then each bolt the team holds that is local until it lands is said, once (bolts_local_said,
+    plan.19). What any of them refuses is said on standard error."""
+    plan = None
     try:
         plan = plan_of(fleet, t["label"])
         if plan:
@@ -6010,6 +6048,11 @@ def rebase_and_tidy(fleet, t):
         print(e, file=sys.stderr)
     try:
         tidy(fleet, argparse.Namespace(team=t["name"]))
+    except Refusal as e:
+        print(e, file=sys.stderr)
+    try:
+        for said in bolts_local_said(fleet, t, plan) if plan else []:
+            print(said)
     except Refusal as e:
         print(e, file=sys.stderr)
 

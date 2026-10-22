@@ -200,6 +200,51 @@ class TestBoltRemote:
             "(plan.17), then give the bolt again")
 
 
+def b64(text):
+    return base64.b64encode(text.encode()).decode()
+
+
+def at(local="-", tracked="-", at_local="-", at_tracked="-", main=None):
+    """What BOLT_AT prints, and BOLT_HOME's AT_MAIN after it when given."""
+    return (f"LOCAL={local}\nTRACKED={tracked}\nAT_LOCAL={at_local}\nAT_TRACKED={at_tracked}\n"
+            + (f"AT_MAIN={main}\n" if main is not None else ""))
+
+
+class TestWhereABoltLives:
+    """Where a bolt's branch lives, read as sluice routes it (plan.19, design Decision 1): by the policy at the host's
+    own branch, or at origin's tracking ref of it when the host has none."""
+    SHA = "c" * 40
+
+    def test_by_the_policy_at_the_hosts_own_branch(self):
+        assert kit.bolt_lives(at(self.SHA, self.SHA, b64(ON_GITHUB), b64(POLICY)), "b") == "origin"
+        assert kit.bolt_lives(at(self.SHA, self.SHA, b64(POLICY), b64(ON_GITHUB)), "b") is None
+        assert kit.bolt_lives(at(self.SHA, at_local="-"), "b") is None
+
+    def test_by_origins_when_the_host_has_none(self):
+        assert kit.bolt_lives(at(tracked=self.SHA, at_tracked=b64(ON_GITHUB)), "b") == "origin"
+
+    def test_a_place_is_cut_where_it_lives(self):
+        assert kit.place_base(at(self.SHA, at_local=b64(ON_GITHUB)), "b") == "origin/bolt/b"
+        assert kit.place_base(at(self.SHA, at_local=b64(POLICY)), "b") == "bolt/b"
+
+    @pytest.mark.parametrize("said, why", [
+        (at(), "crew can't tell where bolt/b lives: this host has neither bolt/b nor origin/bolt/b"),
+        ("fatal: bad\n", "crew can't read where bolt/b lives from: fatal: bad"),
+        (at("c" * 40, at_local="%%%"), "crew can't read bolt/b's .config/sluice.toml as it was sent"),
+    ])
+    def test_a_bolt_crew_cannot_place_is_refused(self, said, why):
+        with pytest.raises(Refusal) as e:
+            kit.bolt_lives(said, "b")
+        assert str(e.value).startswith(why)
+
+    def test_a_bolts_home_and_the_remote_main_names_for_bolts(self):
+        assert kit.bolt_home(at(self.SHA, at_local=b64(POLICY), main=b64(ON_GITHUB)), "b") == (None, "origin")
+        assert kit.bolt_home(at(self.SHA, at_local=b64(ON_GITHUB), main=b64(ON_GITHUB)), "b") == ("origin", "origin")
+        assert kit.bolt_home(at(self.SHA, at_local=b64(POLICY), main="-"), "b") == (None, None)
+        with pytest.raises(Refusal, match="crew can't read the policy at main"):
+            kit.bolt_home(at(self.SHA, at_local=b64(POLICY)), "b")
+
+
 GITHUB, OWN = "a" * 40, "b" * 40
 
 

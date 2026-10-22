@@ -250,12 +250,26 @@ def bolt_lives(said, bolt):
     where or crew.fail(f"crew can't tell where bolt/{bolt} lives: this host has neither bolt/{bolt} nor origin/bolt/{bolt}")
     at = f[f"AT_{where}"]
     try:
-        text = None if at == "-" else base64.b64decode(at).decode()
+        text = None if at == "-" else base64.b64decode(at, validate=True).decode()
     except (binascii.Error, UnicodeDecodeError) as e:
         crew.fail(f"crew can't read bolt/{bolt}'s {DECLARATION} as it was sent: {e}")
     return bolt_remote(text, f"bolt/{bolt}", f"{DECLARATION} at bolt/{bolt}")
 
 
+
+
+def bolt_home(said, bolt):
+    """Where a bolt lives (bolt_lives) and the remote the policy at its kit's main now names for its bolt branches
+    (bolt_remote), from what BOLT_HOME printed: (the bolt's remote or None, main's remote or None). Refused as
+    bolt_lives refuses, and when AT_MAIN is not there or can't be read (read.2)."""
+    lives = bolt_lives(said, bolt)
+    at = said_of(said).get("AT_MAIN")
+    at is not None or crew.fail(f"crew can't read the policy at main from: {(said or '').strip()[:200] or 'nothing'}")
+    try:
+        text = None if at == "-" else base64.b64decode(at, validate=True).decode()
+    except (binascii.Error, UnicodeDecodeError) as e:
+        crew.fail(f"crew can't read main's {DECLARATION} as it was sent: {e}")
+    return lives, bolt_remote(text, f"bolt/{bolt}", f"{DECLARATION} at main")
 
 
 def place_base(said, bolt):

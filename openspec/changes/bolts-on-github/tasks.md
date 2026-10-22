@@ -15,7 +15,7 @@
 
 ## 3. A bolt made before stays local
 
-- [ ] 3.1 Each read of a team that holds a bolt on its host only, while the kit's main names a remote for bolts, says once that the bolt is local until it lands and runs no create (Decision 6, Task notes 3.1). Logic: `tests/py/test_tidy.py`. Journey: `tests/suite t-journey-teams` ends with "0 failed".
+- [x] 3.1 Each read of a team that holds a bolt on its host only, while the kit's main names a remote for bolts, says once that the bolt is local until it lands and runs no create (Decision 6, Task notes 3.1). Logic: `tests/py/test_tidy.py`. Journey: `tests/suite t-journey-teams` ends with "0 failed".
 
 ## 4. The docs say it
 

@@ -120,6 +120,22 @@ def test_a_places_bolt_is_read_from_either_upstream(up, bolt):
     assert gather.bolt_of(up) == bolt
 
 
+class TestBoltMadeBefore:
+    """bolt-plan "A bolt made before stays local" (plan.19, record 0032's amendment): each read of a team holding a bolt
+    on its host only, while the kit's main names a remote for its bolts, says once that it is local until it lands."""
+    LINE = ("bolt/b is local until it lands: it was made before bolts were on GitHub, so its places are cut from the "
+            "local branch, and its landing puts it on GitHub")
+
+    def test_a_local_bolt_while_main_names_a_remote_is_said(self):
+        assert plan.bolt_local_said("b", None, "origin") == self.LINE
+
+    def test_a_bolt_on_github_is_not(self):
+        assert plan.bolt_local_said("b", "origin", "origin") is None
+
+    def test_a_local_bolt_while_main_names_none_is_not_since_every_bolt_is(self):
+        assert plan.bolt_local_said("b", None, None) is None
+
+
 class TestLegacyBolt:
     """crew removes only its own worktrees (bolt-teams): a bolt's worktree from before record 0026, still on its
     branch, is detached at the bolt's tip by the team's read while the bolt lasts when it is clean, and named as kept on

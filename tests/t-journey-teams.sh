@@ -4,8 +4,9 @@
 # host's sluice has no branch create; a bolt given to a team that is up is made on GitHub by sluice from main as it
 # stands, with no worktree, and restarts them in the kit's main checkout, greeting each; a role resumes where its
 # conversation began, and one with none is started fresh and greeted; crew up opens again in the team's workspace a
-# pane herdr brought back dead; a conductor brought back is told a unit waits amended; and a landing records GitHub's
-# main, however far the host's own lags. The main level's agents are t-journey-main's. Which agents a command greets,
+# pane herdr brought back dead; a conductor brought back is told a unit waits amended; a landing records GitHub's
+# main, however far the host's own lags; and a team holding a bolt made before gives went through sluice is told once
+# a read that it is local until it lands, its places cut from the host's own branch. The main level's agents are t-journey-main's. Which agents a command greets,
 # what each is greeted with, where it runs and resumes, whether a pane is dead and where it opens again, and what a
 # conductor brought back is told are logic cases (tests/py/test_teams.py); what a give checks and says around sluice's
 # create, logic cases too (tests/py/test_bolt_commands.py).
@@ -181,3 +182,31 @@ git -C "$k" push -q origin main; pushed later-from-a-mac
 expect_ok crew bolt land later
 eq "$(field mac-studio bolt.land Head bolt/later)" "$(git -C "$other" rev-parse main)"
 ok "a landing records the commit GitHub's main holds after a fetch, and refuses nothing for the host's own main lagging it"
+
+# A bolt made before gives went through sluice: its branch made with git on the kit's host, at a commit whose policy
+# names no remote for bolts, while the kit's main now names origin. Each read of its team says once that it is local
+# until it lands, no create is run for it, and a unit's place is cut from the host's own branch.
+w=$T/hand-before; git clone -q -b wldn/main "$ws" "$w"
+python3 - "$CREW/plugin/lib" "$w/plan.rec" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import plan
+f = sys.argv[2]; p = plan.Plan(open(f).read())
+p.insert(plan.Rec("Bolt", [("Bolt", "made-before"), ("Repo", "switchboard-kit"), ("Goal", "Made before."), ("Team", "swb-2")]))
+p.insert(plan.Rec("Unit", [("Unit", "mb"), ("Repo", "switchboard-kit"), ("Bolt", "made-before"), ("Intent", "Unit mb.")]))
+open(f, "w").write(p.text())
+PY
+commit_all "$w" "plan: a bolt made before"; git -C "$w" push -q origin wldn/main
+git -C "$k" branch -q --no-track bolt/made-before main; git -C "$k" config branch.bolt/made-before.crew given
+on_branch "$k" bolt/made-before "chore: bolts kept on the host" .config/sluice.toml $'[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+: > "$CREW_TEST_LOG"
+expect_ok crew status swb-2
+eq "$(grep -c "is local until it lands" <<<"$out")" "1"
+has "$out" "bolt/made-before is local until it lands: it was made before bolts were on GitHub, so its places are cut from the local branch, and its landing puts it on GitHub"
+export CREW_AGENT=swb-2-conductor
+expect_ok crew unit run mb construct
+unset CREW_AGENT
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/mb)" "bolt/made-before"
+calls | grep -q " sluice branch create " && fail "crew ran a create for a bolt made before"
+git --git-dir "$r" rev-parse --verify -q bolt/made-before >/dev/null && fail "a bolt made before was put on GitHub"
+ok "a team's read says once that a bolt made before is local until it lands, runs no create for it, and cuts its places from the host's own branch"
