@@ -1863,7 +1863,10 @@ def team_freed(fleet, t, plan, bolt):
     planned = next_planned(plan, t)
     if proven.get(bolt):
         for other in (b for b in proven if b != bolt and proven[b]):
-            raise_land(fleet, {"label": t["label"], "key": f"land/{other}"}, note=frees_note(t["name"], planned))
+            try:
+                raise_land(fleet, {"label": t["label"], "key": f"land/{other}"}, note=frees_note(t["name"], planned))
+            except Refusal as e:
+                print(f"bolt {other}'s landing card is not changed: {e}", file=sys.stderr)
     if free_now(give_refusal(t["name"], facts), planned):
         tell_dispatchers(fleet, t["label"], f"{t['name']} can take its next bolt: bolt {bolt} reads proven. Give a free team its next bolt.")
 
@@ -7292,14 +7295,15 @@ def conductor_bolts(fleet, t):
     keys = landing_card_keys(entries, old, owner)
     card = (keys[-1], cards.card_under(entries, keys[-1], owner)) if keys else None
     k, why = stages_for(fleet, plan, [plan.bolt(old)]).kit(plan.bolt(old))
-    return two_bolts_said(t["name"], new, old, card, fixes_in_flight(k.get("fixes", []), old) if k else None, why)
+    fixes = [f.rsplit("/", 1)[-1] for f in fixes_in_flight(k.get("fixes", []), old)] if k else None  # fix/<bolt>/<name>
+    return two_bolts_said(t["name"], new, old, card, fixes, why)
 
 
 def two_bolts_said(team, new, old, card, fixes, unread=None):
     """What a conductor started afresh while its team holds two bolts is told first (teams.16): the bolt it builds
     (new), the one that waits to land (old), its landing card it holds, (key, id), with the line that adopts it, and
-    each fix in flight on it (fixes), with how to wait on it; when its kit could not be read (unread), that, rather
-    than name no fix (read.1)."""
+    each fix in flight on it (fixes, by the name crew fix takes), with how to wait on it; when its kit could not be read
+    (unread), that, rather than name no fix (read.1)."""
     said = f"Your team now builds the bolt {new}. Bolt {old} waits to land"
     if card:
         said += (f"; its landing card {card[0]} is yours: {cards.adopt_line(card[1], f'{team}-conductor')}, then run "
