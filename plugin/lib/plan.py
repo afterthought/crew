@@ -4560,6 +4560,61 @@ def carried_refusal(kind, name, bolt, carried, after_of):
                            if first else [])))
 
 
+def archives_owed(name, units, opened, ticked, specs):
+    """The archives a unit's merge makes itself before its own (teams.17, record 0006): while its branch holds its own
+    change open (opened), each other change it holds open that no unit of the plan has (units), every task ticked
+    (ticked, change: bool), whose deltas touch a capability its own change's do, or one such change's do (specs,
+    change: its capabilities), since openspec folds a delta only over the requirements the specs already hold. Another
+    unit's change is that unit's own merge's to archive (carried_in). [] once its own is archived."""
+    if name not in opened:
+        return []
+    can = {c for c in opened if c != name and c not in units and ticked.get(c)}
+    caps, owed = set(specs.get(name, ())), set()
+    while more := {c for c in can - owed if caps & set(specs.get(c, ()))}:
+        owed |= more
+        caps |= {cap for c in more for cap in specs.get(c, ())}
+    return sorted(owed)
+
+
+def archives_refusal(name, owed):
+    """Why a unit's merge does not stop short while its branch holds archives it can make itself (archives_owed),
+    naming each, and what it does instead: archives them, then its own, and submits."""
+    both = lambda xs: xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+    one = len(owed) == 1
+    return (f"merge on {name} does not stop short for archives it can make: unit/{name} holds {both(owed)} open, "
+            + ("every task ticked, no unit's of the plan, and touching specs its change does" if one else
+               "each with every task ticked, no unit's of the plan, and touching specs its change does")
+            + "; a merge archives what its own archive needs first: archive " + ("it" if one else "each, oldest first,")
+            + " with `openspec archive <change> --yes`, committed as `docs(openspec): archive <change>`, then "
+            f"{name}'s own, and submit. If openspec refuses one of them, say so again with its words, and crew passes "
+            "it on")
+
+
+def merge_owes(fleet, t, name):
+    """The archives a unit's merge stage could make itself (archives_owed), read on the team's host: the plan's units,
+    and in git the changes its branch holds open, the tasks of each no unit of the plan has, and the capabilities each
+    one's deltas touch. Refused when either can't be read (read.1)."""
+    label = t["label"]
+    plan = plan_of(fleet, label) or fail(f"can't tell which archives the merge on {name} can make: {label}/main could not be read")
+    kt = unit_kit_team(fleet, label, t, name)
+    main, ref = kt["kit"]["main"], f"refs/heads/unit/{name}"
+    _, out = kit_git(fleet, kt, main, "ls-tree", "-r", "--name-only", ref, "openspec/changes/")
+    files = {}
+    for path in out.splitlines():
+        c, _, rest = path[len("openspec/changes/"):].partition("/")
+        if path.startswith("openspec/changes/") and rest and c != "archive":
+            files.setdefault(c, []).append(rest)
+    units = {u.name() for u in plan.units()}
+    specs = {c: {r.split("/")[1] for r in rs if r.startswith("specs/") and r.count("/") > 1} for c, rs in files.items()}
+    ticked = {}
+    for c in sorted(set(files) - units - {name}):
+        if "tasks.md" in files[c]:
+            _, text = kit_git(fleet, kt, main, "show", f"{ref}:openspec/changes/{c}/tasks.md")
+            tasks = gather.tasks_of(text)
+            ticked[c] = bool(tasks) and all(done for done, _ in tasks)
+    return archives_owed(name, units, sorted(files), ticked, specs)
+
+
 def run_kind_refusal(kind, chore, name, stage):
     """Why a stage asked of a unit or chore is refused for its kind (plan.11), or None: crew unit run on a chore, which
     has no construct and no settle, or crew chore run (chore) on a unit, said with the command that runs it."""
@@ -6901,7 +6956,10 @@ def owed_of(t, slot, lines, held):
 def stage_needs(fleet, a):
     """crew needs: the caller's stage ends short, recorded with Ended short and never the words (record.3), and the
     words go to the conductor: to the wait running on the stage when there is one, through needs/<slot>, else in a
-    tell marked as from the agent (roles.4). Only the agent of a stage crew owes an end may say it."""
+    tell marked as from the agent (roles.4). Only the agent of a stage crew owes an end may say it. A unit's merge that
+    stops short while its branch holds archives it can make itself (merge_owes) is refused once in the stage, naming
+    them, so no stopped merge reaches the conductor for work its own stage does (teams.17, roles.3); told, it says so
+    again only when openspec refuses one of them, and that stop-short is passed on."""
     t = at_work(fleet, a.team)
     agent, conductor = f"{t['name']}-{a.slot}", f"{t['name']}-conductor"
     a.words.strip() or fail('say what you need: crew needs "<what you tried and what you need>"')
@@ -6919,6 +6977,13 @@ def stage_needs(fleet, a):
     with stages_file(t, shared=True) as lines:
         owed += owed_of(t, a.slot, lines, held)
     o = owed[0]
+    told = needs.with_name(f".{a.slot}.archives")
+    if o.stage == "merge" and o.kind == "unit" and not o.fix and not (told.exists() and told.read_text().strip() == o.eid):
+        archives = merge_owes(fleet, t, o.name)
+        if archives:
+            told.parent.mkdir(parents=True, exist_ok=True)
+            told.write_text(f"{o.eid}\n")
+            fail(archives_refusal(o.name, archives))
     end_owed(fleet, t, o, "short", then=hand) or fail(f"{agent} runs no stage crew is waiting on")
     # The words are the wait's once it takes the file; when no wait holds its lock, or the one there ends without
     # taking them, they are told. A wait takes the file only while it holds the lock, so a free lock with the file

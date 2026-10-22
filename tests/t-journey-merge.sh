@@ -49,7 +49,15 @@ eq "$(field $box forecast Heads unit/b unit/a)" ""
 expect_ok crew unit run a merge
 eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 lacks "$out" "Pending You card"
-mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
+# a's place holds a change no unit has, every task ticked and touching a's specs, as main's left open: a's merge
+# archives it first, and a stop-short for it is refused, the stage still owed.
+change "$kd/places/a" left 3 3; commit_all "$kd/places/a" "docs(left): a change main left open"
+CREW_AGENT=swb-1-unit-1 expect_fail "merge on a does not stop short for archives it can make: unit/a holds left open" \
+  crew needs "openspec archive a refuses: its delta modifies a requirement left adds"
+eq "$(field $box stage.end Ended stage/a/merge)" ""
+mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/left openspec/changes/archive/2026-10-13-left
+git -C "$kd/places/a" commit -qm "docs(openspec): archive left"
+git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
 git -C "$kd/places/a" commit -qm "docs(openspec): archive a"
 merge_as swb-1-unit-1 "$kd/places/a" bolt/tenant-environments || fail "a's submission failed"
 eq "$(git -C "$k" log -1 --format='%an %(trailers:key=Sluice-Result,valueonly)' bolt/tenant-environments)" "sluice passed (stub)"
