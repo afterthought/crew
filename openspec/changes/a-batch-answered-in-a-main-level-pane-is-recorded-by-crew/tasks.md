@@ -17,4 +17,4 @@
 ## 4. The briefs and the docs say it
 
 - [x] 4.1 The planner's and the operator's briefs say when to run `crew card answer` and what becomes of the words, and the usage, README and SKILL.md name the command (design, Decision 6; Task notes 4.1). Verify `tests/suite t-briefs t-docs` ends with "0 failed".
-- [ ] 4.2 The tests this change affects pass. Verify `tests/suite --affected` ends with "0 failed".
+- [x] 4.2 The tests this change affects pass. Verify `tests/suite --affected` ends with "0 failed".
