@@ -13,6 +13,8 @@
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
                                       --taken, read back from its transcript and sent once more when not taken
+  crew.py send <team|label> "<text>"  send the text to the partition's operator, the door of the team's partition or
+                                      the label's, marked [crew tell from <sender>] (sent to <team|label>)
 
 The agents themselves, a team's and a main level's, are started, greeted and ended by plan.py's commands, through
 Agents and Team here.
@@ -358,6 +360,19 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     if sent and record:
         import record as rec  # record imports this module
         rec.emit(label_of_agent(fleet, name), "tell", on=[f"agent/{name}"], why=f"tell {name}", Chars=len(text))
+    return sent
+
+
+def send(fleet, name, text):
+    """Send the text to the door of the team or partition named (briefs.10): a tell to its operator, marked with who
+    sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
+    the receiving partition's record, with its length and never its text, and no tell entry; one that typed nothing
+    records nothing."""
+    import record as rec  # record imports this module
+    label, door, team = send_door(fleet, name, os.environ.get("CREW_AGENT"))
+    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who())
+    if sent:
+        rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
     return sent
 
 
@@ -2310,6 +2325,8 @@ def main(a):
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
         import record as rec  # record imports this module
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)
+    elif a[:1] == ["send"] and len(a) == 3:
+        sys.exit(0 if send(fleet, a[1], a[2]) else 1)
     else:
         sys.exit(__doc__)
 

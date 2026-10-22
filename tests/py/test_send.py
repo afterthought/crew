@@ -44,3 +44,42 @@ class TestDoor:
 
     def test_another_partitions_operator_may_send(self):
         assert crew.send_door(FLEET, "wldn", "swancloud-operator") == ("wldn", "wldn-operator", None)
+
+
+class TestSend:
+    """A send is a tell to the door, the addressee before the text, and one `send` entry in the receiving partition's
+    record holding its length and never its text; a send that typed nothing records nothing."""
+
+    @pytest.fixture
+    def acts(self, monkeypatch):
+        told, emitted, sent = [], [], {"ok": True}
+        monkeypatch.setenv("CREW_AGENT", "crw-5-unit-1")
+        monkeypatch.setattr(crew, "tell", lambda fleet, name, text, **kw: told.append((name, text, kw)) or sent["ok"])
+        monkeypatch.setattr(record, "emit", lambda label, act, on=(), **f: emitted.append((label, act, list(on), f)))
+        return told, emitted, sent
+
+    def test_a_delivered_send_is_a_tell_to_the_door_and_one_send_entry(self, acts):
+        told, emitted, _ = acts
+        text = "The zone check fails on tenants with no region"
+        assert crew.send(FLEET, "swb-1", text) is True
+        assert told == [("wldn-operator", f"(sent to swb-1) {text}", {"record": False, "sender": "crw-5-unit-1"})]
+        assert emitted == [("wldn", "send", ["agent/wldn-operator", "team/swb-1"], {"why": "send swb-1", "Chars": 46})]
+        assert text not in repr(emitted)
+
+    def test_a_send_to_a_partition_names_no_team(self, acts):
+        told, emitted, _ = acts
+        assert crew.send(FLEET, "wldn", "hello") is True
+        assert told[0][:2] == ("wldn-operator", "(sent to wldn) hello")
+        assert emitted == [("wldn", "send", ["agent/wldn-operator", None], {"why": "send wldn", "Chars": 5})]
+
+    def test_a_send_that_typed_nothing_records_nothing(self, acts):
+        told, emitted, sent = acts
+        sent["ok"] = False
+        assert crew.send(FLEET, "swb-1", "hello") is False
+        assert len(told) == 1 and emitted == []
+
+    def test_a_refused_send_types_and_records_nothing(self, acts):
+        told, emitted, _ = acts
+        with pytest.raises(crew.Refusal):
+            crew.send(FLEET, "swb-1-conductor", "hello")
+        assert told == [] and emitted == []
