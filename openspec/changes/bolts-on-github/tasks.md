@@ -34,7 +34,7 @@
 - [x] 7.1 `crew bolt drop` of a bolt a team holds has sluice delete its branch after the plan write, says it deleted or gone, and when sluice refuses keeps it where it lives, marked `dropped`, named as the drop's unmerged work in sluice's words and recorded once as `branch.kept` (Decision 9, Task notes 7.1). Logic: `tests/py/test_bolt_commands.py`.
 - [x] 7.2 The team's reads ask sluice's delete again for a dropped bolt's kept branch once main holds its tip, saying nothing while it does not, and ask it for a bolt branch marked `given` that no plan has in place of git's delete (Decision 10, Task notes 7.2). Logic: `tests/py/test_tidy.py`.
 - [x] 7.3 A dropped bolt with no merge is deleted from the kit's remote, one holding a merge is kept there and on the host and named, and a landing that brings its tip into main has the next read delete it (Task notes 7.3). Journey: `tests/suite t-journey-land` ends with "0 failed".
-- [ ] 7.4 README, the crew skill, `crew`'s usage header and the planner's role say a drop has sluice delete the bolt's branch, kept and named while main lacks its tip (Task notes 7.4, `docs.2`). Journey: `tests/suite t-docs t-briefs` ends with "0 failed".
+- [x] 7.4 README, the crew skill, `crew`'s usage header and the planner's role say a drop has sluice delete the bolt's branch, kept and named while main lacks its tip (Task notes 7.4, `docs.2`). Journey: `tests/suite t-docs t-briefs` ends with "0 failed".
 - [ ] 7.5 `no-worktree-holds-main-or-a-bolt-branch`'s `bolt-plan` block reads as this change's again (Decision 8, Task notes 7.5). Check: `openspec validate no-worktree-holds-main-or-a-bolt-branch` passes.
 
 ## 8. The suite

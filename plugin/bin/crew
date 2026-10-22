@@ -110,9 +110,11 @@
 #                                      team's host), with no worktree, before the plan write; refused, nothing changed,
 #                                      in a kit whose .config/sluice.toml on origin/main names no checks or no remote
 #                                      for its bolt branches, on a host whose sluice is older than 0.20.0, and in
-#                                      sluice's words when it makes none. land has sluice delete it
-#                                      (sluice branch delete), a refusal named in sluice's words. A bolt made before
-#                                      gives went through sluice stays local until it lands
+#                                      sluice's words when it makes none. land and drop have sluice delete it
+#                                      (sluice branch delete) once its worktrees are gone, a refusal named in sluice's
+#                                      words; a dropped bolt's is kept and named while main lacks its tip, and deleted
+#                                      once main holds it. A bolt made before gives went through sluice
+#                                      stays local until it lands
 #   crew bolt  submit <bolt> [--label L]
 #                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
 #                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
