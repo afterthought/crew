@@ -229,6 +229,10 @@ class TestTeamGreetings:
             "one line, then wait until your conductor or I tell you what is needed.")
         assert "your team holds no bolt. Nothing is asked of you now" in crew.ops_greeting("crw-2", None)
 
+    def test_ops_of_a_team_holding_two_bolts_is_told_the_one_it_builds_and_the_one_waiting(self):
+        assert crew.ops_greeting("swc-1", "ssh-fix", waiting="doctor-rows").startswith(
+            "You are swc-1's ops; your team builds the bolt ssh-fix. Bolt doctor-rows waits to land. Nothing is asked of you now")
+
     def test_a_plan_crew_could_not_read_is_said_rather_than_no_bolt(self):
         said = crew.ops_greeting("crw-2", None, "wldn/main of afterthought/crew-state could not be read:\nfatal: unable to access")
         assert "crew could not read which bolt your team holds (wldn/main of afterthought/crew-state could not be read: fatal: " \

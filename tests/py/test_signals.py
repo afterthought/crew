@@ -155,6 +155,10 @@ class TestWhere:
         assert plan.where_of(FLEET, "swb-2-unit-1", self.PLAN) == "team swb-2, bolt smoke-2, unit cfn-lint-treefmt"
         assert plan.where_of(FLEET, "swb-2-unit-2", self.PLAN) == "team swb-2, bolt smoke-2, fix edge"
 
+    def test_a_team_holding_two_bolts_is_at_both(self):
+        p = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2"), ("smoke-3", "switchboard-kit", "swb-2")]))
+        assert plan.where_of(FLEET, "swb-2-conductor", p) == "team swb-2, bolt smoke-2, bolt smoke-3"
+
     def test_a_slot_agents_own_stage_prompts_are_its_conductors_and_no_one_elses_are(self):
         assert plan.stage_by(FLEET, "swb-2-unit-1") == "swb-2-conductor"
         assert [plan.stage_by(FLEET, n) for n in ("swb-2-ops", "swb-2-conductor", "wldn-planner")] == [None, None, None]

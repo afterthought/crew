@@ -1269,6 +1269,38 @@ def held_by(plan, team):
     return [b for b in plan.bolts() if b.get("Team") == team]
 
 
+def building(team, held, gives):
+    """The bolt a team builds (teams.16): of the bolts it holds (held, by name), the one given last, the other waiting to
+    land. One held is that one, with no record read; none is None; of two, the one whose newest give is later in gives,
+    the bolts given to the team as the run record's gives name them, oldest first (given_to). Refused when the record
+    holds a give of neither, rather than guess (read.1)."""
+    if len(held) < 2:
+        return held[0] if held else None
+    last = {b: i for i, b in enumerate(gives)}
+    known = [b for b in held if b in last]
+    known or fail(f"can't tell which bolt {team} builds: the run record holds no give of {either(held)}")
+    return max(known, key=last.get)
+
+
+def given_to(entries, team):
+    """The bolts the run record's gives handed a team, oldest first: each unrefused bolt.give on team/<team>."""
+    return [o[len("bolt/"):] for e in entries if e.get("Act") == "bolt.give" and not e.get("Refused")
+            and f"team/{team}" in (e.get("On") or []) for o in e["On"] if o.startswith("bolt/")]
+
+
+def team_building(fleet, plan, t):
+    """The bolt a team builds, by name, from its plan (building): the run record read, from the partition's branch
+    (read.5), only when it holds two."""
+    held = [b.name() for b in held_by(plan, t["name"])]
+    gives = given_to(partition_entries(fleet, t["label"]), t["name"]) if len(held) > 1 else []
+    return building(t["name"], held, gives)
+
+
+def waiting_bolt(plan, team, built):
+    """The bolt a team holds beside the one it builds (built), which waits to land, or None."""
+    return next((b.name() for b in held_by(plan, team) if b.name() != built), None)
+
+
 def bolt_give(fleet, a):
     """crew bolt give <team> [<bolt>]: the bolt given to the team in the plan, then bolt/<bolt> made from the kit's main
     as it stands now on the team's host, at the commit the policy was read at, GitHub's for a kit with an origin
@@ -3635,14 +3667,14 @@ def quoted(excerpt, position):
 
 
 def where_of(fleet, name, plan):
-    """Where an agent was working, read without asking it: its team, the bolt the team holds and, for a slot's stage,
+    """Where an agent was working, read without asking it: its team, each bolt the team holds and, for a slot's stage,
     the unit or fix its slot holds; the main level; None for an agent crew has no role for."""
     kind, of = role(fleet, name)
     if kind in ("planner", "design", "main-ops", "dispatcher", "operator"):
         return "main level"
     if kind not in ("conductor", "team"):
         return None
-    out = [f"team {of}"] + [f"bolt {b.name()}" for b in held_by(plan, of)[:1]]
+    out = [f"team {of}"] + [f"bolt {b.name()}" for b in held_by(plan, of)]
     slot = re.fullmatch(rf"{re.escape(of)}-(unit-[1-9][0-9]*)", name)
     if slot:
         try:
@@ -4636,11 +4668,13 @@ def bolt_team(fleet, b):
 
 
 def held_repo(fleet, t):
-    """The kit of the bolt a team holds, from its plan; None when it holds none. Refused when the plan can't be read."""
+    """The kit of the bolt a team builds (team_building), from its plan; None when it holds none. Refused when the plan
+    can't be read, or which of two bolts it builds can't be told."""
     repo, ref = state_of(fleet, t["label"])
     tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
-    held = held_by(read(repo, ref, tip), t["name"])
-    return held[0].get("Repo") if held else None
+    plan = read(repo, ref, tip)
+    built = team_building(fleet, plan, t)
+    return plan.bolt(built).get("Repo") if built else None
 
 
 def at_work(fleet, name):
@@ -4661,10 +4695,11 @@ def unit_kit_team(fleet, label, t, unit):
 
 
 def bolt_of_team(fleet, t):
-    """The bolt a team holds, from its plan; refused when it holds none, or the plan can't be read."""
+    """The bolt a team builds (team_building), from its plan; refused when it holds none, the plan can't be read, or
+    which of two bolts it builds can't be told."""
     repo, ref = state_of(fleet, t["label"])
     tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {t['label']}")
-    return bolt_held(read(repo, ref, tip), t["name"])
+    return team_building(fleet, read(repo, ref, tip), t) or fail(f"{t['name']} holds no bolt: crew bolt give {t['name']}")
 
 
 def bolt_held(plan, team):
@@ -5248,13 +5283,12 @@ def newest_saved(t, pattern, name, since):
 
 def bolt_of_unit(fleet, t, main, unit, kind="unit"):
     """The bolt a unit's or chore's branch was made from and merges into, from its upstream; else the bolt the team
-    holds."""
+    builds (team_building)."""
     up = gather.upstreams(main).get(f"{kind}/{unit}", "")
     if up.startswith("bolt/"):
         return up[5:]
     plan = plan_of(fleet, t["label"])
-    held = held_by(plan, t["name"]) if plan else []
-    return held[0].name() if held else None
+    return team_building(fleet, plan, t) if plan else None
 
 
 def deliverable(fleet, t, o, place=None):
@@ -7059,10 +7093,10 @@ def greet_team(fleet, t, roles, bolt=None):
         sends.append(lambda first=first: crew.greet(fleet, t["name"], first=f"{first} " if first else ""))
     if "ops" in roles:
         try:
-            held, unread = (bolt, None) if bolt else team_holds(fleet, t)
+            held, waiting, unread = (bolt, None, None) if bolt else team_holds(fleet, t)
         except Refusal as e:
-            held, unread = None, str(e)
-        sends.append(lambda: crew.greet_ops(fleet, t["name"], held, unread))
+            held, waiting, unread = None, None, str(e)
+        sends.append(lambda: crew.greet_ops(fleet, t["name"], held, unread, waiting=waiting))
 
     def send(greet):
         try:
@@ -7076,14 +7110,21 @@ def greet_team(fleet, t, roles, bolt=None):
 
 
 def team_holds(fleet, t):
-    """The bolt a team holds, for its ops's greeting, or None when it holds none; and what crew could not read of its
-    plan, else None, which the greeting says rather than name no bolt (read.1)."""
+    """The bolt a team builds (team_building), for its ops's greeting, or None when it holds none, and the bolt that
+    waits to land beside it, or None; and what crew could not read of its plan or of which bolt it builds, else None,
+    which the greeting says rather than name no bolt (read.1)."""
     CONTEXT["label"] = t["label"]
     errors = {}
     found = plans(fleet, [t["label"]], errors)
     plan = found[0][3] if found else None
-    held = held_by(plan, t["name"]) if plan else []
-    return (held[0].name() if held else None), ("; ".join(f"{k} could not be read: {v}" for k, v in errors.items()) or None)
+    built = None
+    if plan:
+        try:
+            built = team_building(fleet, plan, t)
+        except Refusal as e:
+            errors[f"which bolt {t['name']} builds"] = str(e)
+    return (built, waiting_bolt(plan, t["name"], built) if built else None,
+            "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()) or None)
 
 
 def picked(team, roles):

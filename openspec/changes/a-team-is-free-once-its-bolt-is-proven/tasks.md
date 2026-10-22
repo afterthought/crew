@@ -7,7 +7,7 @@
 
 ## 2. The bolt a team builds is the one given last
 
-- [ ] 2.1 `plan.building` picks the bolt given last, and the branch hint, a team's kit, a unit's fallback bolt, ops's greeting and `where_of` use it or name both (design, Decision 3; Task notes 2.1). Verify `tests/suite logic` ends with "0 failed".
+- [x] 2.1 `plan.building` picks the bolt given last, and the branch hint, a team's kit, a unit's fallback bolt, ops's greeting and `where_of` use it or name both (design, Decision 3; Task notes 2.1). Verify `tests/suite logic` ends with "0 failed".
 
 ## 3. A fix names its bolt
 
