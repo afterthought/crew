@@ -210,6 +210,9 @@ has "$out" "swb-1 holds ssh-fix: bolt/ssh-fix from switchboard-kit's"
 given=$out
 expect_ok crew bolts --label wldn
 eq "$(grep -c "  swb-1 @ $box  " <<<"$out")" "2"
+has "$out" "tenant-environments  switchboard-kit  swb-1 @ $box  waits"
+expect_ok crew status swb-1
+has "$out" "swb-1 builds ssh-fix; tenant-environments waits to land"
 crew bolt new third-one "The bolt after." --repo switchboard-kit >/dev/null
 expect_fail "swb-1 holds tenant-environments and ssh-fix; tenant-environments waits to land, and its landing frees swb-1" crew bolt give swb-1
 ok "a team whose bolt reads proven is given its next bolt beside it, and a third is refused, naming the bolt whose landing frees the team"

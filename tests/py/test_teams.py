@@ -241,6 +241,9 @@ class TestTeamGreetings:
         assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", None, None, "box did not answer").endswith(
             "waits to land. crew could not read its fixes (box did not answer): read crew status swc-1.")
 
+    def test_status_names_the_bolt_a_team_builds_and_the_one_waiting_to_land(self):
+        assert plan.two_held_said("swc-1", "ssh-fix", "doctor-rows") == "swc-1 builds ssh-fix; doctor-rows waits to land"
+
     def test_a_give_beside_a_waiting_bolt_says_its_roles_start_again_at_their_next_stop(self):
         assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 0, "") == (
             "swc-1-conductor and swc-1-ops start again on bolt/ssh-fix at their next stop")

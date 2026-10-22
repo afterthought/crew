@@ -1043,13 +1043,22 @@ class Stages:
         return res
 
     def bolt_state(self, b):
+        """A bolt's state: planned while no team holds it; unknown when its kit can't be read; landed once every unit
+        and chore has landed; waits, to land, once every one has merged and sluice is green at its head (teams.16);
+        else active."""
         if not b.get("Team"):
             return "planned"
         k, _ = self.kit(b)
         if not k:
             return "unknown"
         units = self.plan.work_of(b.name())
-        return "landed" if units and all(self.of(u.name())["stage"] == "landed" for u in units) else "active"
+        stages = [self.of(u.name())["stage"] for u in units]
+        if units and all(x == "landed" for x in stages):
+            return "landed"
+        facts = k["bolts"].get(b.name(), {})
+        if units and all(x in ("merged", "landed") for x in stages) and kit.verification(facts.get("head"), facts.get("verdict"))[0] == "green":
+            return "waits"
+        return "active"
 
 
 def stages_for(fleet, plan, bolts):
@@ -7108,8 +7117,9 @@ def fix_drop(fleet, team, said, on):
 def team_status(fleet, a):
     """crew status <team>, on the team's host: the team's read (reap); then its conductor and ops, each with its pane,
     its state as herdr lists it, and its context, compactions and start read from its transcript (crew.context_of);
-    each slot with its pane, its agent's state and what it holds (crew.holds_said); and each unit of the team's bolt
-    carried onto it inside another unit's merge that no slot holds, its merge owed (carried_units, teams.17)."""
+    each slot with its pane, its agent's state and what it holds (crew.holds_said); each unit of the team's bolt
+    carried onto it inside another unit's merge that no slot holds, its merge owed (carried_units, teams.17); and,
+    while the team holds two bolts, the one it builds and the one that waits to land (two_held_said, teams.16)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
     reap(fleet, team)
@@ -7142,6 +7152,16 @@ def team_status(fleet, a):
             print(crew.carried_said(unit, bolt, stage))
     except Refusal as e:
         print(e, file=sys.stderr)
+    built, waiting, unread = team_holds(fleet, t)
+    if unread:
+        print(f"which bolts {t['name']} holds can't be told: {unread}", file=sys.stderr)
+    elif waiting:
+        print(two_held_said(t["name"], built, waiting))
+
+
+def two_held_said(team, built, waiting):
+    """What crew status says of a team holding two bolts (teams.16): the one it builds and the one that waits to land."""
+    return f"{team} builds {built}; {waiting} waits to land"
 
 
 def carried_units(fleet, t, slotted):

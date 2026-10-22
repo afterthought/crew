@@ -27,7 +27,7 @@
 
 ## 7. The board and the bands draw a waiting bolt
 
-- [ ] 7.1 A proven bolt's ledger says it waits to land, beside the bolt its team builds, in the board and the conductor's band (design, Decision 8; Task notes 7.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_board.py`, and `tests/suite mod` ends with "0 failed".
+- [x] 7.1 A proven bolt's ledger says it waits to land, beside the bolt its team builds, in the board and the conductor's band (design, Decision 8; Task notes 7.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_board.py`, and `tests/suite mod` ends with "0 failed".
 
 ## 8. A landing leaves the team its other bolt
 
