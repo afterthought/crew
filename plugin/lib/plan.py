@@ -81,7 +81,7 @@ signal's id takes its full id, <capture>/<NN>-<slug>, or its short one, <capture
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
+import argparse, base64, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
 # getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
 # module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
@@ -1966,97 +1966,144 @@ def bolt_land(fleet, a):
 # A landing's submission (plan.16, record 0026), on the team's host, refused there when sluice's wt-submit, which
 # worktrunk runs as `wt submit`, is not on its path: a short-lived worktree on the bolt's branch, the one place sluice
 # takes a submission from, nothing moving the branch there; `wt submit main` from it, waiting for sluice's outcome,
-# whatever sluice says passed through on standard error and nothing of it stopping the landing; the worktree removed;
-# and, when main moved, the kit's main checkout brought level with it while it is on branch main, since sluice moves the
-# branch and not that checkout's files, and left as it is when it is detached, the anchor the fleet's timer moves
-# (plan.18); the submission is in the name of whoever asked for it, and while sluice has it the worktree's git dir holds
-# this script's process id in crew-landing, emptied once sluice's outcome is in (landing_now); once sluice has landed
-# it and main moved, the bolt's branch is marked landed in the kit's git config, branch.bolt/<bolt>.crew, when it
-# carries crew's mark, so every later read of the team judges the bolt's work against main (record 0003, read.4).
-# Prints what it did as shell assignments: RC, the
-# submission's exit (sluice's: 0 landed, 1 its checks failed, 2 a conflict or a refusal, 130 stopped); OLD and NEW,
-# main's commit before and after; KEPT, the worktree when git could not remove it, and WHY, git's words for it, which
-# the tidy at the bolt's landing sweeps or names (tidy_over); LEVEL, "yes", "no", "detached" or why it was not tried;
-# MARKED, "yes", "no" when the branch carries no mark of crew's, or why git could not set it, and empty when nothing
-# landed.
+# whatever sluice says passed through on standard error once its outcome is in and nothing of it stopping the landing;
+# the worktree removed; and, when the host's own main moved, the kit's main checkout brought level with it while it is
+# on branch main, since sluice moves the branch and not that checkout's files, and left as it is when it is detached,
+# the anchor the fleet's timer moves (plan.18); the submission is in the name of whoever asked for it, and while sluice
+# has it the worktree's git dir holds this script's process id in crew-landing, emptied once sluice's outcome is in
+# (landing_now). It decides nothing (code.7): after sluice's outcome it prints the kit's mains after a fresh fetch
+# (MAINS), whether each holds the bolt's tip that was submitted, HELD_GITHUB and HELD_OWN, "yes", "no", or - when that
+# main is absent, for landing_said to judge by main now; then, as shell assignments: RC, the submission's exit
+# (sluice's: 0 landed, 1 its checks failed, 2 a conflict or a refusal, 3 sluice itself failed, 4 withdrawn, 64 a bad
+# command line, 130 stopped); TIP, the bolt's tip that was submitted; OLD, the host's own main before, empty when it has
+# none; KEPT, the worktree when git could not remove it, and WHY, git's words for it, which the tidy at the bolt's
+# landing sweeps or names (tidy_over); LEVEL, "yes", "detached", why it was not tried, or empty when the host's own main
+# did not move; SAID, the last line sluice printed, base64, since bash's %q garbles what is not ASCII in the C locale.
 LANDING = r"""main=$1 path=$2 bolt=$3
 export SLUICE_AGENT=$4
 cd "$main" || exit 2
 command -v wt-submit >/dev/null || { echo "wt submit needs sluice's wt-submit, which is not on $(hostname -s)'s path" >&2; exit 2; }
-old=$(git rev-parse --verify -q refs/heads/main) || { echo "$main has no branch main" >&2; exit 2; }
+old=$(git rev-parse --verify -q refs/heads/main) || old=
 git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main has no branch bolt/$bolt" >&2; exit 2; }
 [ -d "$path" ] || git worktree add -q "$path" "bolt/$bolt" >&2 || exit 2
+tip=$(git -C "$path" rev-parse HEAD) || exit 2
 mark=$(git -C "$path" rev-parse --absolute-git-dir)/crew-landing && echo $$ > "$mark" || exit 2
-(cd "$path" && wt submit main --no-remove) >&2 </dev/null; rc=$?
+out=$(mktemp) || exit 2
+(cd "$path" && wt submit main --no-remove) >"$out" 2>&1 </dev/null; rc=$?
 : > "$mark"
+cat "$out" >&2
+said=$(grep -v '^[[:space:]]*$' "$out" | tail -n 1 | base64 | tr -d '\n'); rm -f "$out"
 kept= why=; why=$(git worktree remove "$path" 2>&1 >/dev/null) || kept=$path
-new=$(git rev-parse refs/heads/main) level=no marked=
-if [ "$rc" = 0 ] && [ "$new" != "$old" ]; then
-  if ! git config --get "branch.bolt/$bolt.crew" >/dev/null; then marked=no
-  elif git config "branch.bolt/$bolt.crew" landed; then marked=yes
-  else marked="git config could not set it"; fi
-fi
-if [ "$new" != "$old" ]; then
+new=$(git rev-parse --verify -q refs/heads/main) || new=
+level=
+if [ -n "$old" ] && [ -n "$new" ] && [ "$new" != "$old" ]; then
   if ! on=$(git symbolic-ref -q --short HEAD); then level=detached
   elif [ "$on" != main ]; then level="its main checkout is not on main"
   elif git read-tree -m -u "$old" main >&2; then level=yes
   else level="git read-tree could not bring it level"; fi
 fi
 [ -n "$kept" ] || why=
-printf 'RC=%s OLD=%s NEW=%s KEPT=%q WHY=%q LEVEL=%q MARKED=%q\n' "$rc" "$old" "$new" "$kept" "$why" "$level" "$marked"
+""" + MAINS + r"""held() { if ! git rev-parse --verify -q "$1^{commit}" >/dev/null; then echo -; elif git merge-base --is-ancestor "$tip" "$1"; then echo yes; else echo no; fi; }
+echo "HELD_GITHUB=$(held refs/remotes/origin/main)"
+echo "HELD_OWN=$(held refs/heads/main)"
+printf 'RC=%s TIP=%s OLD=%s KEPT=%q WHY=%q LEVEL=%q SAID=%s\n' "$rc" "$tip" "$old" "$kept" "$why" "$level" "$said"
+"""
+
+# The bolt's branch marked landed in the kit's git config, branch.bolt/<bolt>.crew, when it carries crew's mark, so
+# every later read of the team judges the bolt's work against main (record 0003, read.4), run on the team's host once
+# landing_said has read that the bolt landed (code.7): MARKED, "yes", "no" when the branch carries no mark of crew's,
+# or why git could not set it.
+LANDED_MARK = r"""main=$1 bolt=$2
+cd "$main" || exit 2
+if ! git config --get "branch.bolt/$bolt.crew" >/dev/null; then marked=no
+elif git config "branch.bolt/$bolt.crew" landed; then marked=yes
+else marked="git config could not set it"; fi
+printf 'MARKED=%q\n' "$marked"
 """
 
 
-def landing_said(bolt, kit, said):
-    """What a landing's submission came to, from LANDING's assignments (code.7): (landed, the words crew says). Landed
-    only when sluice said so and main moved, sluice having pushed it, so what comes next is crew bolt land and no push
-    (plan.16); a main checkout not brought level is named with the command that levels
-    it, and a detached one, which the fleet's timer moves, is said nothing of (plan.18); a conflict or a refusal is the
-    team's to resolve by taking main into the bolt by a submission to the bolt (plan.8); a worktree git could not remove
-    is named with git's words, and goes with the bolt at crew bolt land or is named there (tidy_over); words crew can't
-    read land nothing (read.1). A mark of landed the landing could not set on the bolt's branch is named, and lands it
-    all the same (MARKED)."""
-    import shlex as _shlex
+def landing_said(bolt, name, host, said, before, marked=""):
+    """What a landing's submission came to, from LANDING's report on the team's host and the commit main now was at
+    before it (code.7): (landed, the words crew says). Main now is GitHub's after the landing's fetch for a kit with an
+    origin, its own main for one with none (kit.main_now, plan.18). Landed when main now moved and holds the bolt's tip
+    that was submitted, whatever sluice exited, sluice having pushed it, so what comes next is crew bolt land and no
+    push (plan.16); a non-zero exit is named with sluice's last words as what came after its push, sluice's to report
+    apart; a main checkout not brought level is named with the command that levels it, and a detached one, which the
+    fleet's timer moves, is said nothing of (plan.18); a mark of landed crew could not set on the bolt's branch is named
+    (marked, mark_said), and lands it all the same. Not landed when main now did not move, "main is where it was", or
+    moved without the bolt's tip, named where it is; a conflict or a refusal is the team's to resolve by taking main
+    into the bolt by a submission to the bolt (plan.8). A main now crew can't read after the submission says it can't
+    tell, naming why and sluice's exit, and words crew can't read land nothing (read.1, read.2). A worktree git could
+    not remove is named with git's words, and goes with the bolt at crew bolt land or is named there (tidy_over)."""
     try:
-        f = dict(w.split("=", 1) for w in _shlex.split(said.strip().splitlines()[-1] if said.strip() else ""))
+        f = dict(w.split("=", 1) for w in shlex.split(said.strip().splitlines()[-1] if said.strip() else ""))
+        words = " ".join(base64.b64decode(f.get("SAID", ""), validate=True).decode(errors="replace").split())
     except ValueError:
         f = {}
-    if not {"RC", "OLD", "NEW"} <= set(f):
-        return False, f"crew can't read what the submission of bolt/{bolt} to {kit}'s main came to: {said.strip()[-200:] or 'nothing'}"
+    held = kit.said_of(said)
+    if not {"RC", "TIP", "OLD", "SAID"} <= set(f) or not all(held.get(k) in ("yes", "no", "-") for k in ("HELD_GITHUB", "HELD_OWN")):
+        return False, f"crew can't read what the submission of bolt/{bolt} to {name}'s main came to: {said.strip()[-200:] or 'nothing'}"
     kept = (f" Its worktree {f['KEPT']} is kept, git refusing to remove it: {' '.join(f.get('WHY', '').split()) or 'git said nothing'}. "
             "crew bolt land removes it with the bolt, or names it with why it stays." if f.get("KEPT") else "")
-    if f["RC"] == "0" and f["NEW"] != f["OLD"]:
-        level = ("" if f.get("LEVEL") in ("yes", "detached") else
-                 f" {kit}'s main checkout was not brought level ({f.get('LEVEL')}): git read-tree -m -u {f['OLD'][:7]} main there.")
-        why = "its branch carries no mark of crew's" if f.get("MARKED") == "no" else f.get("MARKED")
-        marked = f" crew could not mark bolt/{bolt} landed: {why}." if why and why != "yes" else ""
-        return True, f"bolt/{bolt} landed on {kit}'s main at {f['NEW'][:7]}: now crew bolt land {bolt}.{level}{marked}{kept}"
-    why = {"1": "main's checks failed on it", "2": "sluice refused it or found a conflict", "130": "the submission was stopped"}.get(
-        f["RC"], f"the submission exited {f['RC']}")
-    return False, (f"bolt/{bolt} did not land: {why}, and main is where it was. Tell the bolt's conductor sluice's words above: "
-                   f"a conflict is the bolt's, and the team takes main into it by a submission to the bolt, then you submit "
-                   f"again.{kept}")
+    ref, now, why = kit.main_now(said, name, host)
+    if why:
+        return False, f"crew can't tell whether bolt/{bolt} landed on {name}'s main: {why}; the submission exited {f['RC']}.{kept}"
+    if now != before and held["HELD_GITHUB" if ref == "origin/main" else "HELD_OWN"] == "yes":
+        after = ("" if f["RC"] == "0" else
+                 f" sluice exited {f['RC']} after its push: {words or 'sluice said nothing'}. That is sluice's to report, apart from the landing.")
+        level = ("" if f.get("LEVEL") in ("", "yes", "detached") else
+                 f" {name}'s main checkout was not brought level ({f['LEVEL']}): git read-tree -m -u {f['OLD'][:7]} main there.")
+        why = "its branch carries no mark of crew's" if marked == "no" else marked
+        mark = f" crew could not mark bolt/{bolt} landed: {why}." if why and why != "yes" else ""
+        return True, f"bolt/{bolt} landed on {name}'s main at {now[:7]}: now crew bolt land {bolt}.{after}{level}{mark}{kept}"
+    why = {"1": "main's checks failed on it", "2": "sluice refused it or found a conflict", "3": "sluice itself failed",
+           "4": "it was withdrawn while it waited", "64": "sluice could not read its command line",
+           "130": "the submission was stopped"}.get(f["RC"], f"the submission exited {f['RC']}")
+    where = ", and main is where it was" if now == before else f"; {name}'s main moved to {now[:7]} without it"
+    return False, (f"bolt/{bolt} did not land: {why}{where}. Tell the bolt's conductor sluice's words above: a conflict is the "
+                   f"bolt's, and the team takes main into it by a submission to the bolt, then you submit again.{kept}")
+
+
+def mark_said(code, out, err):
+    """What LANDED_MARK said of the landed bolt's branch, for landing_said: MARKED's value, "yes", "no" or why git could
+    not set it, or the host's own words when it did not run there (read.2)."""
+    try:
+        f = dict(w.split("=", 1) for w in shlex.split(out.strip()))
+    except ValueError:
+        f = {}
+    if code == 0 and "MARKED" in f:
+        return f["MARKED"]
+    return ((err or out).strip().splitlines() or [f"exit {code}"])[-1].strip() or f"exit {code}"
 
 
 def bolt_submit(fleet, a):
     """crew bolt submit <bolt>: main-level ops's landing of a bolt, its branch submitted to its kit's main through
     sluice from a short-lived worktree on the team's host, waiting for sluice's outcome, then the kit's main checkout
-    brought level with what landed while it is on branch main (plan.16, record 0026). Nothing is refused for the
-    host's own main lagging GitHub's: sluice forms the landing on GitHub's main and pushes it with a lease (plan.8). It
-    moves no branch itself."""
+    brought level with what landed while it is on branch main (plan.16, record 0026). Whether it landed is read from
+    main now, GitHub's after a fetch for a kit with an origin, before the submission and after it (landing_said,
+    plan.18), the bolt's branch marked landed only once it has (LANDED_MARK), and the landing recorded at the commit main
+    now holds; a main now crew can't read before refuses, nothing submitted. Nothing is refused for the host's own main
+    lagging GitHub's: sluice forms the landing on GitHub's main and pushes it with a lease (plan.8). It moves no branch
+    itself."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     CONTEXT["label"] = label
     b = plan.bolt(a.bolt)
     t = bolt_team(fleet, b) or fail(f"bolt {a.bolt} is held by no team, so it has no branch to submit")
+    name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
+    before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
+    not why or fail(why)
     path = f"{t['kit']['dir']}/places/land-{a.bolt}"
-    r = crew.on_machine(fleet, t["machine"], ["bash", "-c", LANDING, "crew", t["kit"]["main"], path, a.bolt, record.who()])
-    READ.drop_kit(t["machine"], t["kit"]["main"])
+    r = crew.on_machine(fleet, host, ["bash", "-c", LANDING, "crew", main, path, a.bolt, record.who()])
+    READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.rstrip(), file=sys.stderr)
-    r.returncode == 0 or fail(f"on {t['machine']}: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
-    landed, words = landing_said(a.bolt, t["kit"]["name"], r.stdout)
+    r.returncode == 0 or fail(f"on {host}: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
+    landed, words = landing_said(a.bolt, name, host, r.stdout, before)
     landed or fail(words)
-    record.emit(label, "bolt.submit", [f"bolt/{a.bolt}"], why=f"bolt({a.bolt}): landed on main at {r.stdout.split('NEW=')[-1][:7]}")
+    m = crew.on_machine(fleet, host, ["bash", "-c", LANDED_MARK, "crew", main, a.bolt])
+    _, words = landing_said(a.bolt, name, host, r.stdout, before, mark_said(m.returncode, m.stdout, m.stderr))
+    now, _ = main_held(name, host, r.stdout)
+    record.emit(label, "bolt.submit", [f"bolt/{a.bolt}"], why=f"bolt({a.bolt}): landed on main at {now[:7]}")
     print(words)
 
 # ---------------------------------------------------------------------------------------------------- units

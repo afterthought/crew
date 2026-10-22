@@ -1,7 +1,7 @@
 """A bolt lands by main-level ops's submission of its branch to main through sluice (plan.16, record 0026): what
-plan.landing_said makes of what the landing's submission did on the team's host; what plan.deleted_said makes of
-sluice's delete of the bolt's branch at crew bolt land (plan.19); and its landing card, raised by crew once the bolt
-reads proven, held by a fix and closed at the landing (record 0031 §1)."""
+plan.landing_said makes of what the landing's submission did on the team's host, read from main now (plan.18); what
+plan.deleted_said makes of sluice's delete of the bolt's branch at crew bolt land (plan.19); and its landing card,
+raised by crew once the bolt reads proven, held by a fix and closed at the landing (record 0031 §1)."""
 import base64
 import pathlib
 
@@ -9,20 +9,32 @@ import pytest
 
 import plan
 
-OLD, NEW = "a" * 40, "b" * 40
+OLD, NEW, TIP = "a" * 40, "b" * 40, "c" * 40
+SIGNAL = "sluice: releasing try/abc1234: its command failed"
 
 
-def said(rc, new=NEW, kept="''", why="''", level="yes", marked="yes"):
-    return f"RC={rc} OLD={OLD} NEW={new} KEPT={kept} WHY={why} LEVEL={level} MARKED={marked}\n"
+def said(rc, new=NEW, kept="''", why="''", level="yes", sluice="", github=None, fetched="ok", held="yes"):
+    """What LANDING prints after sluice's outcome: the kit's mains after a fresh fetch (MAINS), whether each holds the
+    tip that was submitted, then its assignments, sluice's last line base64. With github, a kit with an origin whose
+    GitHub main is then at github, judged by HELD_GITHUB, the host's own main at new; else one with none, its own main at
+    new, judged by HELD_OWN."""
+    mains = (f"ORIGIN=yes\nFETCHED={fetched}\nGITHUB={github}\nOWN={new}\nHELD_GITHUB={held}\nHELD_OWN=no\n" if github else
+             f"ORIGIN=no\nGITHUB=-\nOWN={new}\nHELD_GITHUB=-\nHELD_OWN={held}\n")
+    words = base64.b64encode(sluice.encode()).decode()
+    return mains + f"RC={rc} TIP={TIP} OLD={OLD} KEPT={kept} WHY={why} LEVEL={level} SAID={words}\n"
+
+
+def landing(out, marked="", name="k"):
+    return plan.landing_said("b", name, "h", out, OLD, marked)
 
 
 def test_a_landing_says_where_main_is_and_what_comes_next():
-    assert plan.landing_said("b", "switchboard-kit", said(0)) == (
+    assert landing(said(0), name="switchboard-kit") == (
         True, "bolt/b landed on switchboard-kit's main at bbbbbbb: now crew bolt land b.")
 
 
 def test_a_main_checkout_not_brought_level_is_named_with_the_command():
-    landed, words = plan.landing_said("b", "k", said(0, level="'git read-tree could not bring it level'"))
+    landed, words = landing(said(0, level="'git read-tree could not bring it level'"))
     assert landed and words.endswith("k's main checkout was not brought level (git read-tree could not bring it level): "
                                      "git read-tree -m -u aaaaaaa main there.")
 
@@ -30,27 +42,28 @@ def test_a_main_checkout_not_brought_level_is_named_with_the_command():
 def test_a_bolt_branch_with_no_mark_of_crews_is_named_and_lands_all_the_same():
     """bolt-teams "A landing leaves only what main lacks" (record 0003, read.4): the landing marks the bolt's branch
     landed only when it carries crew's mark, and says when it could not; a landing is a landing either way."""
-    assert plan.landing_said("b", "k", said(0, marked="no")) == (
+    assert landing(said(0), "no") == (
         True, "bolt/b landed on k's main at bbbbbbb: now crew bolt land b. crew could not mark bolt/b landed: its branch "
               "carries no mark of crew's.")
-    assert plan.landing_said("b", "k", said(0, marked="'git config could not set it'"))[1].endswith(
+    assert landing(said(0), "git config could not set it")[1].endswith(
         "crew could not mark bolt/b landed: git config could not set it.")
+    assert landing(said(0), "yes") == landing(said(0))
 
 
 def test_a_landing_that_did_not_land_says_nothing_of_the_mark():
-    assert "mark" not in plan.landing_said("b", "k", said(2, new=OLD, marked="''"))[1]
-    assert "mark" not in plan.landing_said("b", "k", f"RC=0 OLD={OLD} NEW={NEW} KEPT='' LEVEL=yes\n")[1]
+    assert "mark" not in landing(said(2, new=OLD))[1]
+    assert "mark" not in landing(said(0))[1]
 
 
 def test_a_conflict_lands_nothing_and_is_the_bolts_to_take():
-    landed, words = plan.landing_said("b", "k", said(2, new=OLD))
+    landed, words = landing(said(2, new=OLD))
     assert not landed
     assert words.startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was.")
     assert "the team takes main into it by a submission to the bolt" in words
 
 
 def test_checks_that_failed_land_nothing():
-    assert plan.landing_said("b", "k", said(1, new=OLD))[1].startswith("bolt/b did not land: main's checks failed on it")
+    assert landing(said(1, new=OLD))[1].startswith("bolt/b did not land: main's checks failed on it")
 
 
 def test_a_worktree_git_could_not_remove_is_named_with_gits_words_and_goes_with_the_bolt():
@@ -58,22 +71,153 @@ def test_a_worktree_git_could_not_remove_is_named_with_gits_words_and_goes_with_
     and crew bolt land sweeps it with the bolt or names it there."""
     why = "\"fatal: '/k/places/land-b' contains modified or untracked files, use --force to delete it\""
     for rc, new in ((2, OLD), (0, NEW)):
-        assert plan.landing_said("b", "k", said(rc, new=new, kept="/k/places/land-b", why=why))[1].endswith(
+        assert landing(said(rc, new=new, kept="/k/places/land-b", why=why))[1].endswith(
             "Its worktree /k/places/land-b is kept, git refusing to remove it: fatal: '/k/places/land-b' contains modified "
             "or untracked files, use --force to delete it. crew bolt land removes it with the bolt, or names it with why it stays.")
-    assert plan.landing_said("b", "k", said(0))[1].endswith("now crew bolt land b.")
+    assert landing(said(0))[1].endswith("now crew bolt land b.")
 
 
 def test_words_crew_cannot_read_land_nothing():
-    assert plan.landing_said("b", "k", "wt: command not found\n") == (
+    assert landing("wt: command not found\n") == (
         False, "crew can't read what the submission of bolt/b to k's main came to: wt: command not found")
+    for out in (said(0).replace("HELD_OWN=yes", "HELD_OWN=maybe"), said(0).replace("SAID=", "SAID=%%%"),
+                f"RC=0 OLD={OLD} NEW={NEW} KEPT='' LEVEL=yes MARKED=yes\n"):
+        assert landing(out)[1].startswith("crew can't read what the submission of bolt/b to k's main came to: "), out
 
 
 def test_the_anchor_is_detached_and_the_landing_says_nothing_of_levelling_it():
     """bolt-teams "The anchor is detached" (plan.18): the fleet's timer moves a detached main checkout, so a landing
     neither levels it nor says anything of it."""
-    landed, words = plan.landing_said("b", "k", said(0, level="detached"))
+    landed, words = landing(said(0, level="detached"))
     assert landed and "level" not in words and "read-tree" not in words
+
+
+class TestALandingIsReadFromGitHubsMain:
+    """bolt-teams "A landing is read from GitHub's main" (plan.18, plan.16, code.7): whether the bolt landed is read
+    from main now after sluice's outcome, moved from where it was before and holding the bolt's tip, whatever sluice
+    exited; sluice's exit only shapes the words."""
+
+    def test_sluice_fails_after_its_push(self):
+        """"sluice fails after its push": swancloud's a-landed-places-preview-is-released landed on GitHub's main at
+        bf8ae5d, and crew bolt submit said "did not land: the submission exited 3, and main is where it was", having read
+        only the host's own main, which sluice had not moved, and trusted only an exit of 0 (signal
+        2026-10-22-swancloud-ops-b237b51b/01)."""
+        assert landing(said(3, new=OLD, github=NEW, level="''", sluice=SIGNAL), "yes") == (
+            True, f"bolt/b landed on k's main at bbbbbbb: now crew bolt land b. sluice exited 3 after its push: {SIGNAL}. "
+                  "That is sluice's to report, apart from the landing.")
+
+    def test_sluice_saying_nothing_after_its_push_is_named_so(self):
+        assert "sluice exited 3 after its push: sluice said nothing." in landing(said(3, new=OLD, github=NEW, level="''"))[1]
+
+    def test_sluice_lands_it_and_exits_0(self):
+        """"sluice lands it and exits 0": the words name no exit."""
+        assert landing(said(0, github=NEW), "yes") == (True, "bolt/b landed on k's main at bbbbbbb: now crew bolt land b.")
+
+    def test_the_host_lagging_github_levels_nothing_and_says_nothing_of_it(self):
+        """The host's own main unmoved by sluice has nothing to level (LEVEL empty), and the landing says nothing of it."""
+        words = landing(said(0, new=OLD, github=NEW, level="''"))[1]
+        assert "level" not in words and "read-tree" not in words
+
+    @pytest.mark.parametrize("rc, why", [
+        (0, "the submission exited 0"), (1, "main's checks failed on it"), (2, "sluice refused it or found a conflict"),
+        (3, "sluice itself failed"), (4, "it was withdrawn while it waited"), (64, "sluice could not read its command line"),
+        (130, "the submission was stopped"), (5, "the submission exited 5")])
+    def test_githubs_main_did_not_move(self, rc, why):
+        """"GitHub's main did not move": the bolt did not land and main is where it was, whatever sluice exited."""
+        landed, words = landing(said(rc, new=OLD, github=OLD, held="no", level="''"))
+        assert not landed and words.startswith(f"bolt/b did not land: {why}, and main is where it was. Tell the bolt's conductor")
+
+    def test_main_moved_but_not_with_the_bolt(self):
+        """"Main moved, but not with the bolt": another landing moved it; where main is now is named, and not that it
+        is where it was."""
+        landed, words = landing(said(2, new=OLD, github=NEW, held="no", level="''"))
+        assert not landed
+        assert words.startswith("bolt/b did not land: sluice refused it or found a conflict; k's main moved to bbbbbbb without it. "
+                                "Tell the bolt's conductor sluice's words above")
+        assert "main is where it was" not in words
+
+    def test_github_cant_be_read_after_the_submission(self):
+        """"GitHub can't be read after the submission": crew can't tell, naming the fetch's words and sluice's exit,
+        and says neither that the bolt landed nor that main is where it was."""
+        fetched = "fatal: unable to access 'https://github.com/o/k/': Could not resolve host: github.com"
+        landed, words = landing(said(3, new=OLD, github=OLD, fetched=fetched, level="''"))
+        assert (landed, words) == (False, f"crew can't tell whether bolt/b landed on k's main: cannot fetch k from GitHub on h, "
+                                          f"so cannot read its main now: {fetched}; the submission exited 3.")
+        assert landing(said(3, new=OLD, github="-", level="''"))[1] == (
+            "crew can't tell whether bolt/b landed on k's main: k's GitHub has no main, fetched on h; the submission exited 3.")
+
+    def test_a_kit_with_no_origin_is_judged_by_its_own_main(self):
+        """"A kit with no origin": its own main, before and after, and whether it holds the bolt's tip."""
+        assert landing(said(0))[0]
+        assert landing(said(3, sluice=SIGNAL))[1].startswith(
+            f"bolt/b landed on k's main at bbbbbbb: now crew bolt land b. sluice exited 3 after its push: {SIGNAL}.")
+        assert landing(said(0, held="no"))[1].startswith("bolt/b did not land: the submission exited 0; k's main moved to bbbbbbb without it.")
+
+
+class TestTheSubmission:
+    """crew bolt submit (plan.16, plan.18): main now read before the submission, refusing when it can't be, the bolt
+    decided by landing_said against it, its branch marked only once it landed, and the landing recorded at main now."""
+    T = {"name": "swb-1", "machine": "box", "kit": {"name": "k", "main": "/k/main", "dir": "/k"}}
+    BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\nSUBMISSION_OWN=\n"
+
+    def submit(self, monkeypatch, before, outs):
+        """bolt_submit of bolt b on the team's host box, MAIN saying before there, and each script crew runs there
+        answering in turn from outs; what ran, and what was recorded, kept as self.ran and self.emitted when it refuses."""
+        ran, emitted = self.ran, self.emitted = [], []
+        monkeypatch.setattr(plan, "CONTEXT", {})
+        monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
+        monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, type("P", (), {"bolt": lambda s, n: {"Bolt": n}})()))
+        monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: self.T)
+        monkeypatch.setattr(plan, "READ", type("R", (), {"drop_kit": lambda s, h, m: None})())
+        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: ran.append(("host_run", script, host)) or before)
+        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: ran.append(("on_machine", argv[2], host)) or outs.pop(0))
+        monkeypatch.setattr(plan.record, "emit", lambda label, act, on, why: emitted.append((label, act, on, why)))
+        monkeypatch.setenv("CREW_AGENT", "wldn-ops")
+        plan.bolt_submit({}, type("A", (), {"bolt": "b"})())
+        return ran, emitted
+
+    def test_github_cant_be_read_before_the_submission(self, monkeypatch):
+        """"GitHub can't be read before the submission": refused with the fetch's words, nothing submitted and no
+        landing worktree made, since LANDING never runs."""
+        before = f"ORIGIN=yes\nFETCHED=fatal: could not read from remote repository\nGITHUB={OLD}\nOWN={OLD}\n"
+        ran = []
+        monkeypatch.setattr(plan.crew, "on_machine", lambda *a: ran.append(a) or pytest.fail("crew ran a script past the refusal"))
+        with pytest.raises(plan.Refusal, match="cannot fetch k from GitHub on box, so cannot read its main now: fatal: could not "
+                                               "read from remote repository"):
+            self.submit(monkeypatch, before, [])
+        assert ran == []
+
+    def test_a_bolt_that_landed_is_marked_and_recorded_at_main_now(self, monkeypatch, capsys):
+        """The signal's case through the command: the mark is set once crew has read the bolt landed, and the landing
+        recorded at GitHub's commit, not the host's own."""
+        out = said(3, new=OLD, github=NEW, level="''", sluice=SIGNAL)
+        done = lambda o: type("R", (), {"returncode": 0, "stdout": o, "stderr": ""})()
+        ran, emitted = self.submit(monkeypatch, self.BEFORE, [done(out), done("MARKED=yes\n")])
+        assert ran == [("host_run", plan.MAIN, "box"), ("on_machine", plan.LANDING, "box"), ("on_machine", plan.LANDED_MARK, "box")]
+        assert emitted == [("wldn", "bolt.submit", ["bolt/b"], "bolt(b): landed on main at bbbbbbb")]
+        assert capsys.readouterr().out.startswith("bolt/b landed on k's main at bbbbbbb: now crew bolt land b. sluice exited 3")
+
+    def test_a_mark_crew_could_not_set_is_named_in_the_hosts_words_and_the_landing_stands(self, monkeypatch, capsys):
+        out = said(0, github=NEW)
+        r = lambda code, o, e="": type("R", (), {"returncode": code, "stdout": o, "stderr": e})()
+        _, emitted = self.submit(monkeypatch, self.BEFORE, [r(0, out), r(255, "", "ssh: connect to host box port 22: timed out\n")])
+        assert capsys.readouterr().out.strip() == (
+            "bolt/b landed on k's main at bbbbbbb: now crew bolt land b. crew could not mark bolt/b landed: ssh: connect to host "
+            "box port 22: timed out.")
+        assert emitted
+
+    def test_a_bolt_that_did_not_land_is_neither_marked_nor_recorded(self, monkeypatch):
+        done = type("R", (), {"returncode": 0, "stdout": said(2, new=OLD, github=OLD, held="no", level="''"), "stderr": ""})()
+        with pytest.raises(plan.Refusal, match="bolt/b did not land: sluice refused it or found a conflict, and main is where it was"):
+            self.submit(monkeypatch, self.BEFORE, [done])
+        assert [s for _, s, _ in self.ran] == [plan.MAIN, plan.LANDING] and self.emitted == []
+
+
+def test_what_the_mark_said_is_its_value_or_the_hosts_words():
+    assert [plan.mark_said(0, f"MARKED={v}\n", "") for v in ("yes", "no", "'git config could not set it'")] == [
+        "yes", "no", "git config could not set it"]
+    assert plan.mark_said(255, "", "ssh: connect to host box port 22: timed out\n") == "ssh: connect to host box port 22: timed out"
+    assert plan.mark_said(2, "", "") == "exit 2"
 
 
 def test_the_hosts_main_lags_githubs_and_nothing_is_refused_for_it():
