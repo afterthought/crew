@@ -19,7 +19,7 @@
 
 ## 4. The docs say it
 
-- [ ] 4.1 README, the crew skill and `crew`'s usage header say a give and a land go through sluice on GitHub (Task notes 4.1, `docs.2`). Journey: `tests/suite t-docs` ends with "0 failed".
+- [x] 4.1 README, the crew skill and `crew`'s usage header say a give and a land go through sluice on GitHub (Task notes 4.1, `docs.2`). Journey: `tests/suite t-docs` ends with "0 failed".
 
 ## 5. The parent change says the same
 
