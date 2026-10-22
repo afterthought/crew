@@ -42,6 +42,7 @@ plugin/lib/crew.py
 plugin/lib/cards.py
 plugin/lib/board.py
 plugin/lib/hold.py
+plugin/lib/page.py
 plugin/bin/crew
 plugin/roles/conductor.md
 plugin/roles/ops.md
