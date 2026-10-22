@@ -18,4 +18,4 @@
 
 ## 4. The docs say so
 
-- [ ] 4.1 README, the crew skill and `crew`'s usage header say a batch's card the main level's host can't reach is posted again there, and a session sent records the batch read with no card closed, and `tests/suite --affected` ends with "0 failed" (Task notes 4.1; `docs.2`).
+- [x] 4.1 README, the crew skill and `crew`'s usage header say a batch's card the main level's host can't reach is posted again there, and a session sent records the batch read with no card closed, and `tests/suite --affected` ends with "0 failed" (Task notes 4.1; `docs.2`).
