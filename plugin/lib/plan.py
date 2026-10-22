@@ -680,11 +680,15 @@ def notify(fleet, seen, subject):
     for line in shown:
         print(line)
     if dispatch:
-        label = seen["label"]
-        for host in crew.partition_hosts(fleet, label):
-            d = f"{label}-dispatch-{host}"
-            if d != agent() and crew.agent_status(fleet, d):
-                crew.tell(fleet, d, f"{subject}. Give a free team its next bolt.")
+        tell_dispatchers(fleet, seen["label"], f"{subject}. Give a free team its next bolt.")
+
+
+def tell_dispatchers(fleet, label, text):
+    """Each of the partition's dispatchers that is up told the text, unless it is the one asking."""
+    for host in crew.partition_hosts(fleet, label):
+        d = f"{label}-dispatch-{host}"
+        if d != agent() and crew.agent_status(fleet, d):
+            crew.tell(fleet, d, text)
 
 
 def notices(teams, seen, me, subject):
@@ -1819,17 +1823,56 @@ def landing_held(fleet, t, bolt, words):
         row_card_close(fleet, t["label"], owner, key, outcome=outcome, reason=reason)
 
 
-def landing_after_merge(fleet, t):
-    """The merge's end, on the team's host: the bolt the team holds raises its landing card once it reads proven, or
-    changes it, its head moved (raise_land); what crew can't read is said, and the merge stands."""
+def landing_after_merge(fleet, t, bolt):
+    """The merge's end, on the team's host: the bolt the merge went into raises its landing card once it reads proven,
+    or changes it, its head moved (raise_land); then what that frees of the team (team_freed). What crew can't read is
+    said, and the merge stands."""
     plan = plan_of(fleet, t["label"])
-    b = held_by(plan, t["name"]) if plan else []
-    if not b:
+    if not plan or not plan.bolt(bolt) or plan.bolt(bolt).get("Team") != t["name"]:
         return
     try:
-        raise_land(fleet, {"label": t["label"], "key": f"land/{b[0].name()}"})
+        raise_land(fleet, {"label": t["label"], "key": f"land/{bolt}"})
     except Refusal as e:
-        print(f"bolt {b[0].name()}'s landing card is not raised: {e}", file=sys.stderr)
+        print(f"bolt {bolt}'s landing card is not raised: {e}", file=sys.stderr)
+    try:
+        team_freed(fleet, t, plan, bolt)
+    except Refusal as e:
+        print(f"whether {t['name']} is free for its next bolt can't be told: {e}", file=sys.stderr)
+
+
+def team_freed(fleet, t, plan, bolt):
+    """What a merge into a bolt frees of its team (teams.16), from one read of its kits: once the bolt reads proven for
+    a give and the team holds another that is proven too, that other's landing card changed to say what a yes now
+    frees (raise_land, yes_frees); and once the team may take its next bolt and one is planned for it (free_now), the
+    partition's dispatchers that are up told so, as a landing tells them."""
+    held = held_by(plan, t["name"])
+    facts = proven_facts(stages_for(fleet, plan, held), plan, held)
+    proven = {f[0]: give_refusal(t["name"], [f]) is None for f in facts}
+    planned = next_planned(plan, t)
+    if proven.get(bolt):
+        for other in (b for b in proven if b != bolt and proven[b]):
+            raise_land(fleet, {"label": t["label"], "key": f"land/{other}"}, note=frees_note(t["name"], planned))
+    if free_now(give_refusal(t["name"], facts), planned):
+        tell_dispatchers(fleet, t["label"], f"{t['name']} can take its next bolt: bolt {bolt} reads proven. Give a free team its next bolt.")
+
+
+def next_planned(plan, t):
+    """The bolt a give would hand the team now (to_give), by name, or None when none is planned for it."""
+    try:
+        return to_give(plan, None, t["name"], [k["name"] for k in crew.kits_of(t)], t["label"]).name()
+    except Refusal:
+        return None
+
+
+def free_now(refusal, planned):
+    """Whether a merge's end tells the dispatchers a team can take its next bolt (teams.16): the give would not be
+    refused (give_refusal) and a bolt is planned for the team (planned, its name or None)."""
+    return refusal is None and planned is not None
+
+
+def frees_note(team, planned):
+    """The change note on a landing card whose yes now frees its team, its other bolt read proven (teams.16)."""
+    return f"A yes now frees {team} for {planned}" if planned else f"A yes now frees {team}, and nothing is planned for it"
 
 
 def landing_cards_closed(fleet, t, bolt, outcome):
@@ -6538,8 +6581,8 @@ def stage_wait(fleet, a):
                 said = settle_said(fleet, t, o.name, said)
             if how:
                 print(said, flush=True)
-                if "landing" in then:  # the bolt's head moved: its landing card (raise_land)
-                    landing_after_merge(fleet, t)
+                if "landing" in then:  # the head of the bolt it merged into moved: its landing card (raise_land)
+                    landing_after_merge(fleet, t, got.split("@")[0][len("bolt/"):])
                 if "batch" in then and "landing" in then:  # its last unit merged may make a batch due at once
                     batch_reckoned(fleet, t)
                 if "tidy" in then:  # its slot, place and branch go as it lands, not at the next read

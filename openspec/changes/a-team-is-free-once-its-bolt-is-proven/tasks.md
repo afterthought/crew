@@ -19,7 +19,7 @@
 
 ## 5. A merge's end frees the team
 
-- [ ] 5.1 A merge's end raises the landing card of the bolt it merged into, changes the other's card when a yes now frees the team, and tells the dispatchers when the team is free and a bolt is planned for it (design, Decision 6; Task notes 5.1). Verify `tests/suite logic t-journey-land` ends with "0 failed".
+- [x] 5.1 A merge's end raises the landing card of the bolt it merged into, changes the other's card when a yes now frees the team, and tells the dispatchers when the team is free and a bolt is planned for it (design, Decision 6; Task notes 5.1). Verify `tests/suite logic t-journey-land` ends with "0 failed".
 
 ## 6. The rail and the card say what a yes frees
 

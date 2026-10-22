@@ -8,7 +8,8 @@
 # the address of a preview of its head, which the
 # kit's policy there declares, asked of sluice first; the preview's stack failing is said on the card, changed in
 # place by the process that waited on it; a fix started on the bolt withdraws the card, held for it, ending its
-# reading and releasing its preview, and once the fix merges and the bolt reads proven again a new card follows it
+# reading and releasing its preview, and once the fix merges and the bolt reads proven again, the dispatcher told its
+# team is free for its next bolt, a new card follows it
 # with a preview of the new head, raised without its reading when both its starts fail, naming crew card session and
 # keeping why in the run record, whose reading the conductor's wait then starts, changing the card to carry its link,
 # and waits on until the landing ends it; the bolt read proven, its team is given its next bolt beside it and refused
@@ -161,6 +162,8 @@ expect_ok crew fix swb-1 gap --wait
 expect_ok crew fix swb-1 gap --merge
 merge_as swb-1-unit-1 "$gp" bolt/tenant-environments || fail "the gap fix's submission failed"
 (unset CREW_AGENT; crew bolt new ssh-fix "Hosts reach each other over ssh." --repo switchboard-kit >/dev/null)  # swb-1's next
+p=$(as $box herdr --session wldn-3 workspace create --cwd / --label "wldn dispatch" | jq -r .result.root_pane.pane_id)
+as $box herdr --session wldn-3 stub agent "$p" wldn-dispatch-chuck-herdr-alpha
 : > "$CREW_TEST_LOG"
 echo 2 > "$refusals"  # both of the reading's starts fail
 expect_ok crew fix swb-1 gap --wait
@@ -178,7 +181,10 @@ eq "$(listed)" ""; eq "$(cat "$refusals")" "0"
 eq "$(field $box card.post Card bolt/tenant-environments) $(field $box card.post Unread bolt/tenant-environments)" "$again $refused"
 has "$posted" "web: http://web-${h2:0:7}--bolt-tenant-environments--kit"
 eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h2 --wait --json in $(cd "$k" && pwd -P)"
-ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record"
+# The merge that makes the bolt proven frees its team for its next bolt, planned for it: the dispatcher is told (teams.16).
+has "$(grep "^$box wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha " "$CREW_TEST_LOG")" \
+  "swb-1 can take its next bolt: bolt tenant-environments reads proven. Give a free team its next bolt."
+ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
 
 # The conductor's wait finds no reading and starts it, changing the card to carry its link, then waits on it until the
 # landing's close ends it.
