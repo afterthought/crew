@@ -2,7 +2,7 @@
 
 ## 1. A give makes the bolt on GitHub, and every place is cut from it
 
-- [ ] 1.1 crew reads the remote a kit's policy names for a bolt branch, and `crew bolt give` refuses a kit whose policy at `origin/main` names none, naming the file and the key (design, Decision 1 and 2, Task notes 1.1). Logic: `tests/py/test_kit.py`. Contract: `tests/contract/test_kit.py`.
+- [x] 1.1 crew reads the remote a kit's policy names for a bolt branch, and `crew bolt give` refuses a kit whose policy at `origin/main` names none, naming the file and the key (design, Decision 1 and 2, Task notes 1.1). Logic: `tests/py/test_kit.py`. Contract: `tests/contract/test_kit.py`.
 - [ ] 1.2 crew reads the host's sluice version and sluice's `branch create` and `branch delete` documents by facts recorded from sluice 0.36.4 (Decision 2, Task notes 1.2). Logic: `tests/py/test_kit.py` on `tests/py/sluice-0.36.4/`.
 - [ ] 1.3 `crew bolt give` refuses a host's sluice below 0.20.0 or one it can't read, has sluice make `bolt/<bolt>` from main before the plan write, refuses in sluice's words with the plan unchanged, marks the local branch as crew's, and deletes the new branch again when the write is refused (Decision 2, Task notes 1.3). Logic: `tests/py/test_bolt_commands.py`.
 - [ ] 1.4 Every unit, chore and fix place of a bolt on GitHub is cut from `origin/bolt/<bolt>` after a fetch, tracking it, a bolt made before is cut from its local branch, and a moved unit tracks its new bolt the same way (Decision 3, Task notes 1.4). Contract: `tests/contract/test_git.py`.

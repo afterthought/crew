@@ -163,6 +163,42 @@ class TestBoltChecks:
             kit.policy_said(out, "k", "h")
 
 
+ON_GITHUB = POLICY.replace('required = ["#check-full"]\n', 'required = ["#check-full"]\nremote = "origin"\n')
+
+
+class TestBoltRemote:
+    """Where sluice keeps a branch, as the policy routes it (plan.19, sluice's core.15): the `remote` of the table that
+    matches the branch, which a give needs for a bolt's branch, since crew gives bolts only on GitHub."""
+
+    def test_the_bolt_branches_remote(self):
+        assert kit.bolt_remote(ON_GITHUB, "bolt/b") == "origin"
+
+    def test_the_most_specific_pattern_wins(self):
+        text = '[branches."*"]\nremote = "origin"\n[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+        assert kit.bolt_remote(text, "bolt/b") is None
+        assert kit.bolt_remote(text, "feature/x") == "origin"
+
+    @pytest.mark.parametrize("text", [None, "", POLICY, '[branches."bolt/*"]\nremote = ""\n', '[branches."bolt/*"]\nremote = 1\n'])
+    def test_no_remote_keeps_the_branch_in_the_hosts_own_refs(self, text):
+        assert kit.bolt_remote(text, "bolt/b") is None
+
+    def test_a_policy_crew_cannot_read_is_refused_naming_the_file(self):
+        with pytest.raises(Refusal, match=r"^\.config/sluice\.toml at bolt/b is not TOML"):
+            kit.bolt_remote("[branches\n", "bolt/b", ".config/sluice.toml at bolt/b")
+
+    def test_a_give_takes_the_remote_the_policy_at_main_now_names(self):
+        assert kit.give_remote(ON_GITHUB, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b") == "origin"
+
+    def test_a_give_in_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
+        """bolt-plan "A kit whose bolts have no remote"."""
+        with pytest.raises(Refusal) as e:
+            kit.give_remote(POLICY, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b", ref="origin/main")
+        assert str(e.value) == (
+            "switchboard-kit gives bolts only on GitHub, and its /k/main/.config/sluice.toml on origin/main names no remote "
+            "for its bolt branches: its [branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change "
+            "(plan.17), then give the bolt again")
+
+
 GITHUB, OWN = "a" * 40, "b" * 40
 
 

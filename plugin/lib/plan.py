@@ -1305,7 +1305,7 @@ def bolt_give(fleet, a):
     chosen = to_give(plan, named, t["name"], kits, label).name()
     t = crew.with_kit(t, plan.bolt(chosen).get("Repo"))
     kit = t["kit"]["name"]
-    _, ref, now = kit_policy(fleet, t)
+    _, ref, now = kit_policy(fleet, t, chosen)
 
     def change(w):
         again = held_by(w.plan, t["name"])
@@ -1337,13 +1337,17 @@ def bolt_give(fleet, a):
     greeted(greet_team(fleet, t, crew.greeted_roles("give", up, up), bolt=b))
 
 
-def kit_policy(fleet, t):
-    """The checks the team's kit's policy requires of its bolt branches, read from its main now on the team's host,
-    origin/main after a fetch for a kit with an origin (POLICY, kit.main_now, plan.18), with the ref and the commit it
-    was read at (kit.bolt_checks); refused, naming the file and the ref, when it names none."""
+def kit_policy(fleet, t, bolt):
+    """The team's kit's policy as its main holds it now, read on the team's host, origin/main after a fetch for a kit
+    with an origin (POLICY, kit.main_now, plan.18), with the ref and the commit it was read at; refused, naming the file
+    and the ref, when it names no checks for the bolt's branch (kit.bolt_checks, teams.5) or no remote to make it on
+    (kit.give_remote, plan.19)."""
     text, ref, sha = kit.policy_said(host_run(fleet, t["machine"], POLICY, t["kit"]["main"], kit.DECLARATION),
                                      t["kit"]["name"], t["machine"])
-    return kit.bolt_checks(text, t["kit"]["name"], f"{t['kit']['main']}/{kit.DECLARATION}", ref=ref), ref, sha
+    where = f"{t['kit']['main']}/{kit.DECLARATION}"
+    kit.bolt_checks(text, t["kit"]["name"], where, f"bolt/{bolt}", ref=ref)
+    kit.give_remote(text, t["kit"]["name"], where, f"bolt/{bolt}", ref=ref)
+    return text, ref, sha
 
 
 def holding(team, b, plan, stage_of):
