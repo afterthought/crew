@@ -9,5 +9,5 @@
 
 ## 2. The documents say it
 
-- [ ] 2.1 README's resume paragraph and `crew-role`'s usage comment say a main level's agent starts and gets its identity back only on its main level's host, proved by `tests/suite docs` passing (design, Task notes 2.1).
+- [x] 2.1 README's resume paragraph and `crew-role`'s usage comment say a main level's agent starts and gets its identity back only on its main level's host, proved by `tests/suite docs` passing (design, Task notes 2.1).
 - [ ] 2.2 `tests/suite --affected` passes once the change is done.
