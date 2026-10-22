@@ -4774,7 +4774,7 @@ def fix_place(fleet, t, place, fix, bolt):
     from that bolt (teams.3, read.4). A place that could not be made ready is no refusal, since a fix is how a bolt is
     repaired (record 0028): what failed is returned, for the fix's agent to be told; None once it is ready."""
     unready, _ = make_place(fleet, t, place, fix, bolt, unready=True)
-    why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
+    why = own_place(place, *place_branch(fleet, t, place), fix, bolt)
     not why or fail(why)
     return unready
 
@@ -4806,13 +4806,14 @@ def leftover(fix, place, team, place_there, branch_there):
     return None
 
 
-def own_place(place, on, up, branch, base, does="starts a fix"):
+def own_place(place, on, up, branch, bolt, does="starts a fix"):
     """Why a fix's place is not its own, or None (teams.3): it must be on the fix's branch (on: the one it is on, or is
-    rebasing when a merge stopped partway through its rebase) made from the team's bolt (up: that branch's upstream).
-    does is what crew does only in a fix's own place: starts or drops a fix."""
-    if on == branch and up == base:
+    rebasing when a merge stopped partway through its rebase) made from the team's bolt (up: that branch's upstream,
+    bolt/<bolt> or, for a bolt on GitHub, origin/bolt/<bolt>, gather.bolt_of). does is what crew does only in a fix's
+    own place: starts or drops a fix."""
+    if on == branch and gather.bolt_of(up) == bolt:
         return None
-    return f"{place} is on {on or 'no branch'}, made from {up or 'no bolt'}, not {branch} from {base}: crew {does} only in its own place"
+    return f"{place} is on {on or 'no branch'}, made from {up or 'no bolt'}, not {branch} from bolt/{bolt}: crew {does} only in its own place"
 
 
 def fix_drop_why(fix, bolt, team, slot, place_there, branch_there, merged):
@@ -4867,7 +4868,7 @@ def fix_cmd(fleet, a):
                            kit_git(fleet, t, t["kit"]["main"], "rev-parse", "--verify", "-q", f"refs/heads/{fix}", ok=(0, 1))[0] == 0)
             not why or fail(why)
         elif a.mode == "merge":
-            why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
+            why = own_place(place, *place_branch(fleet, t, place), fix, bolt)
             not why or fail(why)
             said["MERGE"] = merge_command(bolt)
         elif a.mode == "drop":
@@ -4875,7 +4876,7 @@ def fix_cmd(fleet, a):
             branch = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"refs/heads/{fix}", ok=(0, 1))[0] == 0
             why = fix_drop_why(fix, bolt, t["name"], slot, there, branch, branch and gather.fix_merged(main, fix, bolt))
             not why or fail(why)
-            why = there and own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}", "drops a fix")
+            why = there and own_place(place, *place_branch(fleet, t, place), fix, bolt, "drops a fix")
             not why or fail(why)
             said["BRANCH"] = fix if branch else ""
     except Refusal as e:
@@ -5350,7 +5351,7 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
     bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
     it (chores); a fix's once it has landed on main or merged into its bolt (fix_stage, on its branch's facts,
     fix_of(branch)), its conductor dropped it (its branch in dropped, record 0028) or no plan has its bolt."""
-    folder, bolt = os.path.basename(path), up[5:] if up.startswith("bolt/") else None
+    folder, bolt = os.path.basename(path), gather.bolt_of(up)
     if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch in (f"bolt/{folder}", ""):
         return None, None if folder in bolts else f"bolt {folder} is in no plan"
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("bolt/") and folder == f"land-{branch[5:]}":
@@ -5507,9 +5508,9 @@ def newest_saved(t, pattern, name, since):
 def bolt_of_unit(fleet, t, main, unit, kind="unit"):
     """The bolt a unit's or chore's branch was made from and merges into, from its upstream; else the bolt the team
     holds."""
-    up = gather.upstreams(main).get(f"{kind}/{unit}", "")
-    if up.startswith("bolt/"):
-        return up[5:]
+    bolt = gather.bolt_of(gather.upstreams(main).get(f"{kind}/{unit}"))
+    if bolt:
+        return bolt
     plan = plan_of(fleet, t["label"])
     held = held_by(plan, t["name"]) if plan else []
     return held[0].name() if held else None

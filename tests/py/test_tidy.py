@@ -69,6 +69,12 @@ class TestOver:
         assert over("places/land-gone", "bolt/gone") == ("land-gone", "bolt gone is in no plan")
         assert over("places/land-t", "bolt/t") == ("land-t", None)
 
+    def test_a_units_place_tracking_its_bolt_on_github_is_a_place_of_that_bolt(self):
+        """plan.19: a unit's place cut from origin/bolt/<bolt> is read as a place of that bolt, merged and over as any."""
+        assert over("places/merged-one", "unit/merged-one", "origin/bolt/t", merged={"merged-one"}) == (
+            "merged-one", "unit merged-one has merged into bolt/t")
+        assert over("places/planned", "unit/planned", "origin/bolt/t") == ("planned", None)
+
     @pytest.mark.parametrize("path, branch, up", [
         ("mine", "mine", ""), ("places/fix-t--y", "fix/t/y", "origin/main"), ("x", "unit/x", "bolt/t"), ("bolts/not-elsewhere", "bolt/elsewhere", ""),
         ("places/detached", "", ""), ("places/fix-t--y", "fix/t/y", ""), ("main", "main", ""),
@@ -102,6 +108,16 @@ class TestFixBranchesOver:
 
     def test_one_whose_bolt_is_planned_and_not_merged_stays(self):
         assert self.gone({"fix/t/y": GOING, "fix/t/cut": CUT}) == []
+
+
+@pytest.mark.parametrize("up, bolt", [
+    ("bolt/b", "b"), ("origin/bolt/b", "b"), ("origin/bolt/tenant-environments", "tenant-environments"),
+    ("", None), (None, None), ("main", None), ("origin/main", None), ("unit/x", None), ("bolt/", None), ("upstream/bolt/b", None)])
+def test_a_places_bolt_is_read_from_either_upstream(up, bolt):
+    """gather.bolt_of (plan.19): every read of a place's bolt from its upstream takes bolt/<bolt>, a bolt made before,
+    and origin/bolt/<bolt>, a bolt on GitHub, alike."""
+    import gather
+    assert gather.bolt_of(up) == bolt
 
 
 class TestLegacyBolt:

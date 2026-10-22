@@ -6,7 +6,7 @@
 - [x] 1.2 crew reads the host's sluice version and sluice's `branch create` and `branch delete` documents by facts recorded from sluice 0.36.4 (Decision 2, Task notes 1.2). Logic: `tests/py/test_kit.py` on `tests/py/sluice-0.36.4/`.
 - [x] 1.3 `crew bolt give` refuses a host's sluice below 0.20.0 or one it can't read, has sluice make `bolt/<bolt>` from main before the plan write, refuses in sluice's words with the plan unchanged, marks the local branch as crew's, and deletes the new branch again when the write is refused (Decision 2, Task notes 1.3). Logic: `tests/py/test_bolt_commands.py`.
 - [x] 1.4 Every unit, chore and fix place of a bolt on GitHub is cut from `origin/bolt/<bolt>` after a fetch, tracking it, a bolt made before is cut from its local branch, and a moved unit tracks its new bolt the same way (Decision 3, Task notes 1.4). Contract: `tests/contract/test_git.py`.
-- [ ] 1.5 A place tracking `origin/bolt/<bolt>` is read as a place of that bolt wherever crew reads a place's upstream (Decision 4, Task notes 1.5). Logic: `tests/py/test_tidy.py` and the stage reads' cases.
+- [x] 1.5 A place tracking `origin/bolt/<bolt>` is read as a place of that bolt wherever crew reads a place's upstream (Decision 4, Task notes 1.5). Logic: `tests/py/test_tidy.py` and the stage reads' cases.
 - [ ] 1.6 The test kits stand on a bare remote with a policy naming `origin` for bolts and main, the stub sluice answers `--version`, `branch create` and `branch delete`, and the stubs land on the remote a branch's policy names (Decision 7, Task notes 1.6). Journey: `tests/suite t-journey-teams t-journey-units` ends with "0 failed".
 
 ## 2. A land deletes the bolt on GitHub

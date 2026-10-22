@@ -51,15 +51,20 @@ class TestPlace:
         assert plan.leftover("fix/t/new", "/p", "swb-1", False, False) is None
 
     def test_a_place_on_its_own_branch_from_the_bolt_is_its_own_mid_rebase_too(self):
-        assert plan.own_place("/p", "fix/t/x", "bolt/t", "fix/t/x", "bolt/t") is None
+        assert plan.own_place("/p", "fix/t/x", "bolt/t", "fix/t/x", "t") is None
+
+    def test_a_place_cut_from_the_bolt_on_github_is_its_own(self):
+        """plan.19: a fix's place of a bolt on GitHub tracks origin/bolt/<bolt>."""
+        assert plan.own_place("/p", "fix/t/x", "origin/bolt/t", "fix/t/x", "t") is None
 
     @pytest.mark.parametrize("on, up, said", [
         ("elsewhere", "", "/p is on elsewhere, made from no bolt, not fix/t/x from bolt/t"),
         ("fix/t/x", "bolt/other", "/p is on fix/t/x, made from bolt/other, not fix/t/x from bolt/t"),
+        ("fix/t/x", "origin/main", "/p is on fix/t/x, made from origin/main, not fix/t/x from bolt/t"),
         ("", "", "/p is on no branch, made from no bolt, not fix/t/x from bolt/t")])
     def test_any_other_is_refused(self, on, up, said):
-        assert plan.own_place("/p", on, up, "fix/t/x", "bolt/t") == said + ": crew starts a fix only in its own place"
-        assert plan.own_place("/p", on, up, "fix/t/x", "bolt/t", "drops a fix") == said + ": crew drops a fix only in its own place"
+        assert plan.own_place("/p", on, up, "fix/t/x", "t") == said + ": crew starts a fix only in its own place"
+        assert plan.own_place("/p", on, up, "fix/t/x", "t", "drops a fix") == said + ": crew drops a fix only in its own place"
 
 
 class TestNeverStarted:
