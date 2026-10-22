@@ -40,6 +40,7 @@ None.
 plugin/lib/plan.py
 plugin/lib/kit.py
 plugin/lib/gather.py
+plugin/lib/crew.py
 plugin/bin/crew
 plugin/skills/crew/SKILL.md
 README.md
