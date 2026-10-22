@@ -86,6 +86,33 @@ def wrote(uuid, text):
     return {"type": "assistant", "uuid": uuid, "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}
 
 
+# A Bash call's result, a background task's notice and a Read's result, as Claude Code 2.1.303 writes them (read on
+# mac-studio, 2026-10-20): a call's output in its tool_result block and as toolUseResult's stdout, a background call's
+# stdout empty and its task named; the notice names the task's output file and not the output; a Read's tool_result
+# numbers each line of the file, and its toolUseResult holds the file's text as it is.
+def ran(uuid, content, stdout, **more):
+    return dict(tool(uuid, content), toolUseResult={"stdout": stdout, "stderr": "", "interrupted": False, "isImage": False,
+                                                    "noOutputExpected": False, **more})
+
+
+def told(task, output, description):
+    return {"type": "queue-operation", "operation": "enqueue",
+            "content": f"<task-notification>\n<task-id>{task}</task-id>\n<tool-use-id>t</tool-use-id>\n<output-file>{output}</output-file>\n"
+                       f"<status>completed</status>\n<summary>Background command \"{description}\" completed (exit code 0)</summary>\n</task-notification>"}
+
+
+def read(uuid, path, text):
+    lines = text.splitlines()
+    return dict(tool(uuid, "\n".join(f"{n}\t{s}" for n, s in enumerate(lines, 1))),
+                toolUseResult={"type": "text", "file": {"filePath": path, "content": text, "numLines": len(lines), "startLine": 1, "totalLines": len(lines)}})
+
+
+LINE = "no session was started for card land/every-deploy-offer-reaches-the-user"
+OUTPUT = "/private/tmp/claude-501/-work/s-bg/tasks/bbsbed1vr.output"
+BACKGROUND = [ran("u-40", f"Command running in background with ID: bbsbed1vr. Output is being written to: {OUTPUT}", "", backgroundTaskId="bbsbed1vr"),
+              told("bbsbed1vr", OUTPUT, "Wait for the landing card")]
+
+
 CMD = {"type": "assistant", "uuid": "a-9", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash", "input": {
     "command": '/w/crew/main/plugin/bin/crew signal open-groups "Templates need a check." --excerpt "open security groups"'}}]}}
 
@@ -101,6 +128,19 @@ class TestCheck:
             tool("u-3", [{"type": "text", "text": "WARN open security groups in stack edge"}]))
         assert said("s-tool", "open security groups in 3 templates") == "verified tool 1 u-2"
         assert said("s-tool", "open security groups in stack edge") == "verified tool 2 u-3"
+
+    def test_a_crew_commands_printed_line_is_verified_as_a_tools_and_refused_recapitalized(self, put):
+        put("s-printed", ran("u-41", LINE, LINE))
+        assert said("s-printed", LINE) == "verified tool 1 u-41"
+        assert said("s-printed", "No session was started for card land/every-deploy-offer-reaches-the-user") == "refused unknown None None"
+
+    def test_a_background_tasks_output_is_refused_until_a_read_of_its_file_puts_it_in_the_transcript(self, put):
+        put("s-unread", *BACKGROUND)
+        assert said("s-unread", LINE) == "refused unknown None None"
+        put("s-read", *BACKGROUND, read("u-42", OUTPUT, f"waiting for card land/every-deploy-offer-reaches-the-user\n{LINE}\n"))
+        assert said("s-read", LINE) == "verified tool 3 u-42"
+        assert said("s-read", "waiting for card land/every-deploy-offer-reaches-the-user") == "verified tool 3 u-42"
+        assert said("s-read", f"waiting for card land/every-deploy-offer-reaches-the-user\n{LINE}") == "verified tool 3 u-42"
 
     def test_a_tell_is_its_senders_the_users_own_tell_the_users_and_crews_notice_crews(self, put):
         put("s-tell", user("u-4", "[crew tell from swb-2-conductor] The deploy left open security groups behind."),

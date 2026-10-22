@@ -103,6 +103,15 @@ class TestFiles:
     def test_a_slug_that_is_no_name_or_a_subcommand_and_an_empty_assertion_are_refused(self, slug, asserts, said):
         assert plan.signal_refusal(slug, asserts) == said
 
+    def test_a_refused_excerpt_is_named_as_received_or_a_background_tasks_output_not_yet_read(self):
+        said = plan.excerpt_refusal(transcript.Verdict("refused"))
+        assert said.startswith("the excerpt is not in your session's transcript: quote the words as you received them, "
+                               "from the user or from a tool's output.")
+        assert "A background task's output reaches your transcript only once you read the output file its task notification names" in said
+        assert said.endswith("read that file, then record the signal again")
+        for v in (verdict("verified"), verdict("found", asserted_by="unknown"), transcript.unverified("herdr names no session")):
+            assert plan.excerpt_refusal(v) is None
+
 
 class TestCaptureText:
     PLAN = plan.Plan(plan_text(bolts=[("smoke-2", "switchboard-kit", "swb-2")]))
