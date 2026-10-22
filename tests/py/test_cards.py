@@ -381,13 +381,13 @@ class TestSessions:
         assert plan.reading_of({"key": "proposal/4", "session": False}) is None
         assert plan.reading_of({"key": "deploy/srv"}) is None and plan.reading_of({"key": "record/crew/0031"}) is None
 
-    def test_a_proposal_of_more_than_fifteen_new_units_or_more_rows_than_its_lists_hold_has_a_reading(self):
+    def test_a_proposal_of_more_than_fifteen_new_units_has_a_reading_whatever_else_it_changes(self):
         def args(*dos):
             return [plan.do_args("wldn", d) for d in dos]
         adds = [f'unit add u{i} "U{i}." --bolt t' for i in range(16)]
         assert plan.proposal_reads(args(*adds)) and not plan.proposal_reads(args(*adds[:15]))
-        drops = [f'unit drop d{i} "Gone."' for i in range(6)]
-        assert plan.proposal_reads(args(*adds[:15], *drops)) and not plan.proposal_reads(args(*adds[:14], *drops))
+        drops = [f'unit drop d{i} "Gone."' for i in range(20)]
+        assert not plan.proposal_reads(args(*adds[:15], *drops)) and not plan.proposal_reads(args(*drops))
 
     def test_the_session_is_started_before_the_card_is_built_and_its_link_handed_to_the_builder(self, capsys):
         acts = ReadingActs()

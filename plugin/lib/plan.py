@@ -8738,10 +8738,9 @@ def land_session(fleet, label, key, acts=None):
 
 def proposal_reads(argvs):
     """Whether a proposal's card links a reading session, as cards.proposal_card decides it from the proposal's
-    commands (briefs.9): more units new to a bolt than its boxes take, or more rows than its lists hold."""
-    new = new_units(argvs)
-    rows = len(new) + sum(1 for a in argvs if a.cmd in ("unit", "chore") and a.sub in ("drop", "amend"))
-    return len(new) > cards.CARD_NEW or rows > cards.BOXES * cards.GROUPS
+    commands (briefs.9): more units and chores new to a bolt or the queue than its boxes take, whatever else it
+    changes, since only those are boxes."""
+    return len(new_units(argvs)) > cards.CARD_NEW
 
 
 def session_open(d, name, write):
