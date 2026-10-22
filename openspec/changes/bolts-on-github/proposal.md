@@ -45,6 +45,7 @@ plugin/bin/crew
 plugin/skills/crew/SKILL.md
 README.md
 tests/lib.sh
+tests/teams.sh
 tests/stubs/sluice
 tests/stubs/wt-submit
 tests/stubs/route.py
