@@ -536,6 +536,26 @@ class TestSessions:
         assert plan.raise_batch(FLEET, dict(row, key="batch/3-1"), acts) is None
         assert plan.raise_batch(FLEET, dict(row, key="batch/4"), acts) is None
 
+    def test_the_sweeps_raise_of_a_batch_handed_an_older_copy_this_host_cant_reach_posts_it_saying_that_copy_is_dead(self, monkeypatch, tmp_path):
+        """rail-cards, "The main level moved to another host": batch 3's card is held under another host's sign-in, so
+        this host holds none and its raise, handed the older copy, posts one card saying it is dead and closes nothing;
+        a raise handed none posts the batch's card as it is."""
+        (tmp_path / "batch-wldn-3.md").write_text("## x1 (swb-1)\n\nx1 gives each tenant its own zone.\n")
+        monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        held = [{"Act": "review.batch", "Batch": "3", "Units": "x1:swb-1@aaa1", "On": ["batch/3"], "At": "2026-10-12T10:00:00Z"}]
+        answers = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                   "post_request": ({"requestId": "req_b4", "version": 1}, None)}
+        row = {"label": "wldn", "key": "batch/3", "group": "batches"}
+        acts = ReadingActs(answers, held)
+        assert plan.raise_batch(FLEET, dict(row, dead="req_b3"), acts) == "req_b4"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_b4")]
+        assert [t for t, _ in acts.calls if t != "tell"] == ["match_area", "post_request"]
+        assert acts.calls[[t for t, _ in acts.calls].index("post_request")][1]["summary"].startswith(f"{built.DEAD}\n\n1 change to read")
+        acts = ReadingActs(answers, held)
+        assert plan.raise_batch(FLEET, row, acts) == "req_b4"
+        assert next(a for t, a in acts.calls if t == "post_request")["summary"].startswith("1 change to read")
+
 LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="abc1234", at=None, moved=0, pr=None)
 
 
