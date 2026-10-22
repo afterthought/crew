@@ -1308,7 +1308,8 @@ def bolt_give(fleet, a):
     worktree (plan.8, record 0026); the conductor and ops start in the kit's main checkout. Refused, with the plan
     unchanged, while a bolt the team holds is not proven or it holds two (teams.16, give_refusal), when the kit's policy
     names no checks for its bolt branches, since a bolt merges and lands only through sluice (teams.5, read.1), and
-    while the team's host is held (teams.19), since a give starts the team's agents again."""
+    while the team's host is held (teams.19), since a give starts the team's agents again: at once for a team that held
+    no bolt, and at their next stop beside a bolt that waits to land (team_handed)."""
     t = crew.team_of(fleet, a.team)
     label, kits = t["label"], [k["name"] for k in crew.kits_of(t)]
     CONTEXT["label"] = label
@@ -1345,7 +1346,7 @@ def bolt_give(fleet, a):
         b = to_give(w.plan, w.bolt(chosen), t["name"], [kit], label)
         b.set("Team", t["name"])
         w.subject = f"plan({b.name()}): give to {t['name']}"
-        w.quiet = {t["name"]}  # greeted below, once its bolt's branch exists
+        w.quiet = {t["name"]}  # greeted below once its bolt's branch exists, or at its restart beside a waiting bolt
         seen["bolt"] = b.name()
         return [b.name()]
     seen = {}
@@ -1356,9 +1357,16 @@ def bolt_give(fleet, a):
     print(f"{t['name']} holds {b}: bolt/{b} from {kit}'s {ref} at {at} on {t['machine']}, merged into only through sluice")
     record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
                 eid=CONTEXT["eid"])
-    # A team takes a bolt only once its last one has landed or been dropped, so nothing is in flight: a conductor
-    # or ops that is up starts again, with fresh context, and each is greeted here, told the bolt (teams.7).
     up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
+    if checked:
+        # The team still holds a proven bolt, its landing card and any carrying fix the conductor waits on, so neither
+        # role is cut off: the team's host tells their panes the bolt they now work for and hands each whose session
+        # carries the old branch its restart at its next stop, once idle (teams.16, teams.20), greeted there with both
+        # bolts (greet_team).
+        print(given_beside(t["name"], b, up, *team_handed(fleet, t)))
+        return
+    # The team held no bolt, so nothing is in flight: a conductor or ops that is up starts again, with fresh context,
+    # and each is greeted here, told the bolt (teams.7).
     if up:
         r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "restart", t["name"], *up, "--no-greet"))
         said = (r.stdout + r.stderr).strip()
@@ -1367,6 +1375,30 @@ def bolt_give(fleet, a):
     if "conductor" not in up:
         print(f"{t['name']}-conductor is not up: crew up {t['name']} starts and greets it", file=sys.stderr)
     greeted(greet_team(fleet, t, crew.greeted_roles("give", up, up), bolt=b))
+
+
+def team_handed(fleet, t):
+    """crew _tidy on the team's host after a give beside a bolt the team still holds: its read, its standing panes told
+    the bolt they now work for and each due handed its restart at its next stop (team_tidy). (code, what it said)."""
+    r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"]))
+    READ.drop_kit(t["machine"], t["kit"]["main"])
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def given_beside(team, bolt, up, code, said):
+    """What a give to a team that still holds a proven bolt says of its conductor and ops (teams.16): what the team's
+    host said, then that each that is up starts again on the new bolt at its next stop, or, when the host did not
+    answer or its tidy failed, that they start again on it only at their next start."""
+    lines = [said] if said else []
+    roles = " and ".join(f"{team}-{r}" for r in up)
+    if code:
+        why = "did not answer" if code == 255 else "could not hand them their restart"
+        lines.append(f"{team}'s host {why}: {roles or 'its conductor and ops'} carry bolt/{bolt} once next started")
+    elif up:
+        lines.append(f"{roles} start{'s' if len(up) == 1 else ''} again on bolt/{bolt} at {'its' if len(up) == 1 else 'their'} next stop")
+    else:
+        lines.append(f"{team}-conductor is not up: crew up {team} starts and greets it")
+    return "\n".join(lines)
 
 
 def kit_policy(fleet, t):
@@ -7095,20 +7127,24 @@ def greeted(greetings):
         th.join()
 
 
-def greet_team(fleet, t, roles, bolt=None):
+def greet_team(fleet, t, roles, bolt=None, notice=""):
     """Each of a team's roles a command greets (crew.greeted_roles), side by side, so neither waits on the other
     (teams.7): the conductor told to read where its bolt stands and carry on, before anyone asks it anything, the
-    greeting opening with the bolt a give has just given it, else with the units of its bolt that wait amended, for it
-    to start their construct (plan.15); ops told who it is, the bolt its team holds, and to wait to be told. What each
-    is told is read before either is sent; a greeting that can't be sent fails nothing. Returns the greetings, for the
-    command to wait on before it ends (greeted)."""
+    greeting opening with the notice of its restart when there is one, then the bolt a give has just given it, else,
+    when its team holds two, the bolt it builds and the one waiting to land with its landing card and fixes
+    (conductor_bolts, teams.16), and the units of its bolts that wait amended, for it to start their construct
+    (plan.15); ops told who it is, the bolt its team holds, and to wait to be told. What each is told is read before
+    either is sent; a greeting that can't be sent fails nothing. Returns the greetings, for the command to wait on
+    before it ends (greeted)."""
     import threading
     sends = []
     if "conductor" in roles:
+        said = [notice]
         try:
-            first = f"Your team now holds the bolt {bolt}." if bolt else amended_units(fleet, t)
-        except Refusal:
-            first = ""
+            said += [f"Your team now holds the bolt {bolt}."] if bolt else [conductor_bolts(fleet, t), amended_units(fleet, t)]
+        except Refusal as e:
+            said.append(f"crew could not read what your team holds ({e}): read crew bolts.")
+        first = " ".join(x for x in said if x)
         sends.append(lambda first=first: crew.greet(fleet, t["name"], first=f"{first} " if first else ""))
     if "ops" in roles:
         try:
@@ -7126,6 +7162,39 @@ def greet_team(fleet, t, roles, bolt=None):
     for th in out:
         th.start()
     return out
+
+
+def conductor_bolts(fleet, t):
+    """What a team's conductor started afresh is told of the two bolts its team holds (two_bolts_said), read on the
+    team's host, where its cards are: "" when it holds one or none."""
+    plan = plan_of(fleet, t["label"])
+    if plan is None or len(held_by(plan, t["name"])) < 2:
+        return ""
+    new = team_building(fleet, plan, t)
+    old = waiting_bolt(plan, t["name"], new)
+    owner = f"{t['name']}-conductor"
+    entries = cards.host_entries(record, t["label"], crew.this_host())
+    keys = landing_card_keys(entries, old, owner)
+    card = (keys[-1], cards.card_under(entries, keys[-1], owner)) if keys else None
+    k, why = stages_for(fleet, plan, [plan.bolt(old)]).kit(plan.bolt(old))
+    return two_bolts_said(t["name"], new, old, card, fixes_in_flight(k.get("fixes", []), old) if k else None, why)
+
+
+def two_bolts_said(team, new, old, card, fixes, unread=None):
+    """What a conductor started afresh while its team holds two bolts is told first (teams.16): the bolt it builds
+    (new), the one that waits to land (old), its landing card it holds, (key, id), with the line that adopts it, and
+    each fix in flight on it (fixes), with how to wait on it; when its kit could not be read (unread), that, rather
+    than name no fix (read.1)."""
+    said = f"Your team now builds the bolt {new}. Bolt {old} waits to land"
+    if card:
+        said += (f"; its landing card {card[0]} is yours: {cards.adopt_line(card[1], f'{team}-conductor')}, then run "
+                 f"crew card wait {card[0]} in the background")
+    said += "."
+    if unread:
+        said += f" crew could not read its fixes ({unread}): read crew status {team}."
+    for f in fixes or []:
+        said += f" Fix {f} is in flight on it: wait on it with crew fix {team} {f} --wait --bolt {old}."
+    return said
 
 
 def team_holds(fleet, t):

@@ -15,7 +15,7 @@
 
 ## 4. A give beside a waiting bolt restarts at the next stop
 
-- [ ] 4.1 A give to a team holding a proven bolt hands its conductor and ops to their restart at the next stop, and the conductor's greeting names both bolts, the open landing card with its adopting line and each fix in flight (design, Decision 5; Task notes 4.1). Verify `tests/suite logic t-journey-land` ends with "0 failed".
+- [x] 4.1 A give to a team holding a proven bolt hands its conductor and ops to their restart at the next stop, and the conductor's greeting names both bolts, the open landing card with its adopting line and each fix in flight (design, Decision 5; Task notes 4.1). Verify `tests/suite logic t-journey-land` ends with "0 failed".
 
 ## 5. A merge's end frees the team
 

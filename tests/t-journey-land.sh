@@ -198,13 +198,29 @@ unset CREW_AGENT
 
 # The bolt reads proven, so its team is free for its next bolt while it waits to land (teams.16): the give hands swb-1
 # ssh-fix beside it, and a third is refused, naming the bolt whose landing frees the team.
+: > "$CREW_TEST_LOG"
 expect_ok crew bolt give swb-1
 has "$out" "swb-1 holds ssh-fix: bolt/ssh-fix from switchboard-kit's"
+given=$out
 expect_ok crew bolts --label wldn
 eq "$(grep -c "  swb-1 @ $box  " <<<"$out")" "2"
 crew bolt new third-one "The bolt after." --repo switchboard-kit >/dev/null
 expect_fail "swb-1 holds tenant-environments and ssh-fix; tenant-environments waits to land, and its landing frees swb-1" crew bolt give swb-1
 ok "a team whose bolt reads proven is given its next bolt beside it, and a third is refused, naming the bolt whose landing frees the team"
+
+# The give restarts neither the conductor, which waits on its landing card, nor ops at once: each starts again at its
+# next stop, once idle, the conductor fresh and greeted with both bolts and the line that adopts its landing card.
+has "$given" "swb-1-conductor and swb-1-ops start again on bolt/ssh-fix at their next stop"
+lacks "$given" "swb-1-conductor started"
+for a in swb-1-conductor swb-1-ops; do
+  log=$(home_of $box)/.local/state/crew/renew/$a.log
+  until_ok grep -q "$a is restarted on crew" "$log" || fail "$a was not restarted at its next stop: $(cat "$log" 2>/dev/null)"
+done
+greeted=$(calls | grep "^$box wldn-1 agent prompt swb-1-conductor '\[crew\] crew restarted you")
+has "$greeted" "bolt is now bolt/ssh-fix, which sluice"
+has "$greeted" "Your team now builds the bolt ssh-fix. Bolt tenant-environments waits to land; its landing card land/tenant-environments is yours: call get_request (requestId $again, name swb-1-conductor), then run crew card wait land/tenant-environments in the background."
+eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
+ok "a give beside a waiting bolt restarts its conductor and ops at their next stop, the conductor greeted with both bolts and its landing card"
 git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)
 expect_ok crew bolt submit tenant-environments
 has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
