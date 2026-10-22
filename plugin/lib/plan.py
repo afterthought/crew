@@ -3608,8 +3608,9 @@ DROPPED = "Dropped on your note, nothing of it applied"
 
 def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=(), outcome=None, reason=None, by=None):
     """Which act proposal n's card takes at its event (record 0031 §1), from facts alone: ("post",) when it is
-    accepted, ("change", note) when it is rewritten (replace), a conductor agrees, or the rail's sweep finds its card
-    missing or lost (sweep), ("close", outcome, reason) when it is approved, or dropped, its card acked with DROPPED
+    accepted, ("change", note) when it is rewritten (replace), a conductor agrees, the rail's sweep finds its card
+    missing or lost (sweep), or its reading opens after the card was raised without it (relink, reading_again),
+    ("close", outcome, reason) when it is approved, or dropped, its card acked with DROPPED
     once the user answered it and withdrawn with the reason while it waits, or None when it has no card of
     crew's. mine, whether the planner wrote it, the card's owner, whose proposals alone crew raises a card for;
     was_mine, at a rewrite, whether the planner wrote the one it replaces, whose card a rewrite of anyone else's
@@ -3624,6 +3625,8 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
         return ("post",)
     if event == "sweep":
         return ("change", SWEPT)
+    if event == "relink":
+        return ("change", RELINKED)
     if event in ("replace", "agree"):
         if not held and not home:
             return ("skip",)
@@ -3632,22 +3635,28 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
     return ("close", outcome, None) if event == "approve" else ("close", DROPPED, reason)
 
 
-def raise_proposal(fleet, row, acts=None):
-    """The rail's sweep's raise of a proposal row's card (record 0031 §1), for a row whose card is missing or lost:
-    the open proposal of the chain its key names, read at the branch's tip from the row's label and key, raised through
-    row_card_change, which posts it when none is held and posts it again, its summary saying the older copy is dead,
-    when Pending You no longer finds it. None, raising nothing, when the key is no proposal chain's or the chain has
-    no proposal open. The card's id, or None."""
-    label, m = row["label"], re.fullmatch(r"proposal/(\d+)", row.get("key") or "")
-    if not m:
-        return None
+def chain_read(fleet, label, first):
+    """The open proposal of the chain keyed proposal/<first>, read at the branch's tip: (w, n), the write as the tip
+    holds it and the proposal's number; None when the branch has no tip or the chain has no proposal open."""
     repo, ref = state_of(fleet, label)
     tip = fetch(repo, ref)
     if not tip:
         return None
     w = Write(repo, label, tip, read(repo, ref, tip))
-    n = chain_open(proposals(w), int(m.group(1)))
-    return raise_proposal_at(fleet, label, w, n, "sweep", acts) if n is not None else None
+    n = chain_open(proposals(w), first)
+    return (w, n) if n is not None else None
+
+
+def raise_proposal(fleet, row, acts=None, event="sweep"):
+    """The rail's sweep's raise of a proposal row's card (record 0031 §1), for a row whose card is missing or lost:
+    the open proposal of the chain its key names, read at the branch's tip from the row's label and key (chain_read),
+    raised through row_card_change, which posts it when none is held and posts it again, its summary saying the older
+    copy is dead, when Pending You no longer finds it; or, with event relink, its card changed to carry its reading's
+    link (reading_again). None, raising nothing, when the key is no proposal chain's or the chain has no proposal open.
+    The card's id, or None."""
+    label, m = row["label"], re.fullmatch(r"proposal/(\d+)", row.get("key") or "")
+    got = chain_read(fleet, label, int(m.group(1))) if m else None
+    return raise_proposal_at(fleet, label, *got, event, acts) if got else None
 
 
 def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None):
@@ -8414,30 +8423,42 @@ def batch_facts(n, entries, summary, subjects):
     return dict(n=n, previous=previous, units=units, link=None)
 
 
-def raise_batch(fleet, row, acts=None):
-    """A batch's raise (record 0031 §1, briefs.12), for its rail row, of which it reads the label and the key: once the
-    reviewer's summary is there, its one card, asked in the planner's name, filed in the kit of its first unit's team,
-    its reading session started by the act, and posted through row_card_change, so a card the planner holds that
-    Pending You no longer finds is recorded lost and posted again saying its older copy is dead; nothing while
-    batch_facts finds its point not come or passed, and nothing for a key not batch/<n>, an old batch card's among
-    them. crew review --wait calls it once the batch is recorded, and the rail's sweep for a row whose card is missing
-    or lost, and for one whose card this host can't reach, handed that older copy as the row's dead, when the card is
-    posted saying first that an older copy was lost and to dismiss it in the app (cards.posted_again). Run on the main
-    level's host, where the batch and its card are recorded and its summary written. What crew can't read is said and
-    refuses nothing, since the batch stands. The card's id, or None."""
-    m = re.fullmatch(r"batch/(\d+)", row["key"] or "")
-    if not m:
-        return None
-    acts, label, n = acts or CardActs(fleet), row["label"], int(m.group(1))
-    owner, f = f"{label}-planner", batch_file(label, n)
+def batch_read(fleet, label, n, acts):
+    """Batch n's card's facts as its raise reads them, on the main level's host: from this host's run record, the
+    reviewer's summary and the plan's goals (batch_facts); None while its point has not come or has passed. A summary
+    crew can't read is refused, naming it."""
+    f = batch_file(label, n)
     try:
         summary = f.read_text()
     except FileNotFoundError:
         summary = None
     except OSError as e:
-        print(f"batch {n}'s card is not raised: crew can't read its summary {f}: {e.strerror or e}", file=sys.stderr)
+        fail(f"crew can't read batch {n}'s summary {f}: {e.strerror or e}")
+    return batch_facts(n, acts.entries(label), summary, batch_subjects(plan_of(fleet, label)))
+
+
+def raise_batch(fleet, row, acts=None, note=None):
+    """A batch's raise (record 0031 §1, briefs.12), for its rail row, of which it reads the label and the key: once the
+    reviewer's summary is there, its one card, asked in the planner's name, filed in the kit of its first unit's team,
+    its reading session started by the act, and posted through row_card_change, so a card the planner holds that
+    Pending You no longer finds is recorded lost and posted again saying its older copy is dead, and one it holds is
+    changed with note, by default that crew could not find its earlier copy, RELINKED when its reading opened after it
+    was raised (reading_again); nothing while batch_facts finds its point not come or passed, and nothing for a key not
+    batch/<n>, an old batch card's among them. crew review --wait calls it once the batch is recorded, and the rail's
+    sweep for a row whose card is missing or lost, and for one whose card this host can't reach, handed that older copy
+    as the row's dead, when the card is posted saying first that an older copy was lost and to dismiss it in the app
+    (cards.posted_again). Run on the main level's host, where the batch and its card are recorded and its summary
+    written. What crew can't read is said and refuses nothing, since the batch stands. The card's id, or None."""
+    m = re.fullmatch(r"batch/(\d+)", row["key"] or "")
+    if not m:
         return None
-    facts = batch_facts(n, acts.entries(label), summary, batch_subjects(plan_of(fleet, label)))
+    acts, label, n = acts or CardActs(fleet), row["label"], int(m.group(1))
+    owner = f"{label}-planner"
+    try:
+        facts = batch_read(fleet, label, n, acts)
+    except Refusal as e:
+        print(f"batch {n}'s card is not raised: {e}", file=sys.stderr)
+        return None
     if not facts:
         return None
     t = next((fleet["teams"][u["team"]] for u in facts["units"] if u["team"] in fleet["teams"]), None)
@@ -8446,7 +8467,7 @@ def raise_batch(fleet, row, acts=None):
               file=sys.stderr)
         return None
     build = built_again(cards.batch_card) if row.get("dead") else cards.batch_card
-    return row_card_change(fleet, label, owner, build, facts, "Raised again: crew could not find its earlier copy",
+    return row_card_change(fleet, label, owner, build, facts, note or "Raised again: crew could not find its earlier copy",
                            card_where(t["kit"]), acts)
 
 
@@ -9359,16 +9380,17 @@ def card_session(fleet, a):
               "the decision", file=sys.stderr)
 
 
-# The change note of a landing card changed to carry its reading's new link (card-sessions).
+# The change note of a card changed to carry its reading's new link (card-sessions).
 RELINKED = "Its reading is open again at a new link"
 
 
-def relinks(started, got):
-    """Whether crew card session land/<bolt> changes the landing card to carry its reading's new link (card-sessions
-    "A landing's session follows the bolt's head"): only when it started the session anew, and the card, as
-    get_request gives it (got, None when none is held or it could not be read), still waits on the user; a card the user
-    has answered is left as it is, since a new card following it would ask for the landing again."""
-    return bool(started) and card_waiting(got)
+def relinks(due, got):
+    """Whether crew changes a card to carry its reading's new link (card-sessions "A landing's session follows the
+    bolt's head", "Starting a batch's or a proposal's reading changes its card"): only when it is due, the session
+    started anew or the card standing without its reading, and the card, as get_request gives it (got, None when none is
+    held or it could not be read), still waits on the user; a card the user has answered is left as it is, since a new
+    card following it would ask again."""
+    return bool(due) and card_waiting(got)
 
 
 def card_waiting(got):
@@ -9398,7 +9420,20 @@ def land_session(fleet, label, key, acts=None):
     if decided:
         print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
     owner = f"{t['name']}-conductor"
-    card = cards.card_under(acts.entries(label), key, owner) if started else None
+
+    def change():
+        f = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
+        f["preview"] = landing_preview(fleet, t, label, bolt, f, acts)
+        row_card_change(fleet, label, owner, cards.landing_card, f, RELINKED, card_where(t["kit"]), acts)
+    relink(acts, label, key, owner, started, change)
+
+
+def relink(acts, label, key, owner, due, change):
+    """The card owner holds under key on this host changed to carry its reading's link, when due (relinks): read in the
+    owner's name, and changed in place by change(), the kind's change with RELINKED as its note, while it waits on the
+    user; left as it is, said, once the user has answered it; not changed, said, when whether it waits can't be read.
+    Nothing when none is held or it is not due."""
+    card = cards.card_under(acts.entries(label), key, owner) if due else None
     if not card:
         return
     got = None
@@ -9407,15 +9442,56 @@ def land_session(fleet, label, key, acts=None):
             got, words = py.answer("get_request", {"requestId": card, "name": owner})
     except Refusal as e:
         words = str(e)
-    if relinks(started, got):
-        facts = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
-        facts["preview"] = landing_preview(fleet, t, label, bolt, facts, acts)
-        row_card_change(fleet, label, owner, cards.landing_card, facts, RELINKED, card_where(t["kit"]), acts)
+    if relinks(due, got):
+        change()
     elif got is not None:
         print(f"card {key}: {card} is left as it is: " + ("the user has answered it" if got.get("status") == "answered"
                                                           else f"Pending You shows it {got.get('status')}"))
     else:
         print(f"card {key}: {card} is not changed, since whether it waits on the user can't be read: {words}", file=sys.stderr)
+
+
+def reading_facts(fleet, label, key, acts):
+    """The facts a batch's or a long proposal's card is built from, read as its raise reads them, its reading opened
+    on: a batch's from this host's run record and the reviewer's summary (batch_read), a proposal's from the open
+    proposal of its chain at the branch's tip (chain_read, proposal_facts). Refused when its point has passed."""
+    kind, n = key.split("/")[0], int(key.split("/")[1])
+    if kind == "batch":
+        return batch_read(fleet, label, n, acts) or fail(
+            f"{key}'s card has nothing to read: this host's run record holds no batch {n} waiting on the user, or its "
+            "summary is not there")
+    got = chain_read(fleet, label, n) or fail(f"{key}'s card has nothing to read: no proposal of its chain is open")
+    return proposal_facts(fleet, label, *got)
+
+
+def reading_again(fleet, label, key, acts=None, say=None):
+    """A batch's or a long proposal's reading, batch/<n> or proposal/<n>, opened after its card's raise
+    (card-sessions "Starting a batch's or a proposal's reading changes its card"): its facts read as its raise reads
+    them (reading_facts), and its reading opened as the raise opens it (reading_open), said by say(link, decided) when
+    given; the try recorded as one card.reading entry on the row's object in the planner's name, with the card held
+    under the key, done when the session started anew and refused with crew's message when it could not open, a
+    session given again recording nothing (record.1); then the card the planner holds under the key changed in place
+    to carry the link, while it waits on the user, when the session started anew or the run record shows the card
+    standing without its reading (reading_unread), by the kind's raise with RELINKED as its note (relink). As
+    reading_open returns it: its link, whether the user decided in it, and whether it was started anew; a refusal,
+    recorded, is raised again."""
+    acts = acts or CardActs(fleet)
+    owner, obj = f"{label}-planner", cards.row_object(key)
+    card = cards.card_under(acts.entries(label), key, owner)
+    held = {"Card": card} if card else {}
+    try:
+        url, decided, started = acts.reading(label, key, reading_facts(fleet, label, key, acts))
+    except Refusal as e:
+        acts.emit(label, "card.reading", [obj], by=owner, refused=str(e), Key=key, **held)
+        raise
+    if started:
+        acts.emit(label, "card.reading", [obj], by=owner, Key=key, **held)
+    if say:
+        say(url, decided)
+    row = {"label": label, "key": key, "group": "proposals" if key.startswith("proposal/") else "batches"}
+    relink(acts, label, key, owner, started or reading_unread(acts.entries(label), key, card),
+           lambda: raise_proposal(fleet, row, acts, "relink") if key.startswith("proposal/") else raise_batch(fleet, row, acts, RELINKED))
+    return url, decided, started
 
 
 def proposal_reads(argvs):

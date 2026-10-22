@@ -214,3 +214,10 @@ def test_a_move_into_a_bolt_is_a_box_to_move_it_in():
 def test_a_closed_proposal_has_no_card_drawn_again():
     with pytest.raises(plan.Refusal, match="proposal 9 is dropped: it is closed, so it has no card"):
         built(9, "x", "unit order d-fourth --first", state="dropped")
+
+
+def test_a_reading_opened_after_the_card_was_raised_changes_the_planners_card_to_carry_its_link():
+    """card-sessions "Starting a batch's or a proposal's reading changes its card": proposal_act answers a relink with
+    a change noting the reading is open again, for the planner's own proposal alone."""
+    assert plan.proposal_act("relink", 4, mine=True) == ("change", plan.RELINKED)
+    assert plan.proposal_act("relink", 4, mine=False) is None

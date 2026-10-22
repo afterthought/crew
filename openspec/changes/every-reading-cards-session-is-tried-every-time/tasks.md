@@ -8,7 +8,7 @@
 
 ## 2. Starting a reading changes its card
 
-- [ ] 2.1 One function opens a batch's or a proposal's reading, records the try, and changes the waiting card to carry the link, sharing the landing's relink. `proposal_act` answers a relink, and its case passes (design, Decision 3; Task notes 2.1).
+- [x] 2.1 One function opens a batch's or a proposal's reading, records the try, and changes the waiting card to carry the link, sharing the landing's relink. `proposal_act` answers a relink, and its case passes (design, Decision 3; Task notes 2.1).
 - [ ] 2.2 `crew card session batch/<n>` and `proposal/<n>` go through it: a start anew changes a waiting card and records `card.reading`, an answered card is left, a link given again changes and records nothing, and a refusal is recorded. The cases pass in `tests/py/test_cards.py` (design, Decisions 3 and 5; Task notes 2.2).
 
 ## 3. The batch's wait starts a missing reading
