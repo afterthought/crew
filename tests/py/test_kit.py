@@ -1,6 +1,7 @@
 """A kit's declaration of its toolchain and tests, and the steps that make a worktree ready from it (kit-toolchain
 spec; plan.17; record 0023)."""
 import base64
+import pathlib
 
 import pytest
 
@@ -245,3 +246,66 @@ class TestVerification:
     def test_nothing_else_reads_green(self):
         assert kit.verification(None, "passed (1 run, 0 replayed)")[0] == "unknown"
         assert kit.verification("abc1234", "failed (1 run, 0 replayed)")[0] == "unknown"
+
+
+RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
+
+
+def recorded(name):
+    """A document sluice 0.36.4 printed, and the exit it printed it with, as its README lists them."""
+    codes = dict(l.split("\t")[:2] for l in (RECORDED / "README").read_text().splitlines() if "\texit " in l)
+    return (RECORDED / name).read_text(), int(codes[name].split()[1])
+
+
+class TestSluiceVersion:
+    """A give needs sluice's `branch create`, first in sluice 0.20.0 (plan.19, sluice ADR 0026)."""
+
+    def test_the_version_sluice_prints(self):
+        assert kit.sluice_version(recorded("version.txt")[0]) == (0, 36, 4)
+
+    @pytest.mark.parametrize("out", ["sluice 0.36.4\n", "sluice 0.20.0", "sluice 1.0.0\n"])
+    def test_a_sluice_with_branch_create_gives(self, out):
+        assert kit.sluice_refusal(out, "chuck-herdr-alpha") is None
+
+    @pytest.mark.parametrize("out, said", [
+        ("sluice 0.19.9\n", "sluice 0.19.9"),
+        ("sluice 0.3.1", "sluice 0.3.1"),
+        ("bash: line 1: sluice: command not found\n", "bash: line 1: sluice: command not found"),
+        ("", "nothing"),
+        ("sluice version unknown", "sluice version unknown"),
+    ])
+    def test_an_older_sluice_or_one_crew_cannot_read_is_refused_naming_the_version_needed_and_the_hosts_words(self, out, said):
+        """bolt-plan "A host whose sluice cannot make a branch" (read.1)."""
+        assert kit.sluice_refusal(out, "chuck-herdr-alpha") == (
+            "a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice --version on "
+            f"chuck-herdr-alpha said: {said}")
+
+
+class TestBranchSaid:
+    """What sluice's `branch create` and `branch delete` said with --json, read by facts recorded from sluice 0.36.4
+    (read.2)."""
+
+    def test_a_branch_made_is_its_commit(self):
+        assert kit.branch_said(*recorded("create.json")) == ("c0da39bae0a5d89da0febc3f46f58607c2ad08a7", None)
+
+    def test_a_branch_removed_is_the_commit_it_was_at(self):
+        assert kit.branch_said(*recorded("delete.json")) == ("22eef8585855b2ef8feb0e08177e34d15f131182", None)
+
+    @pytest.mark.parametrize("name, message", [
+        ("create-present.json", "bolt/b is already there, at c0da39bae0a5d89da0febc3f46f58607c2ad08a7"),
+        ("create-from-absent.json", "no branch nope"),
+        ("delete-queued.json", "#1 still queued on bolt/b; wait for them to land, or withdraw them"),
+        ("delete-not-landed.json", "bolt/b at 22eef8585855b2ef8feb0e08177e34d15f131182 has not landed into main; submit it there first"),
+        ("delete-not-found.json", "no branch bolt/b"),
+    ])
+    def test_a_refusal_is_sluices_message(self, name, message):
+        assert kit.branch_said(*recorded(name)) == (None, message)
+
+    @pytest.mark.parametrize("out, code", [
+        ("", 0), ("error: unexpected argument '--json' found\n", 2), ('{"branch": "bolt/b"}', 0),
+        ('{"branch": "bolt/b", "created": "not-a-sha"}', 0), (recorded("create.json")[0], 2),
+        ('{"error": {"kind": "refused", "message": ""}}', 2), (recorded("create-present.json")[0], 0),
+    ])
+    def test_anything_else_is_refused_naming_what_sluice_said(self, out, code):
+        with pytest.raises(Refusal, match=f"crew can't read what sluice's branch command said \\(exit {code}\\)"):
+            kit.branch_said(out, code)

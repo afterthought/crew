@@ -189,6 +189,51 @@ def give_remote(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="origin/
         f"[branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change (plan.17), then give the bolt again")
 
 
+# The first sluice with `branch create` and `branch delete` (sluice ADR 0026, v0.20.0), which a give and a land need.
+SLUICE_BRANCHES = (0, 20, 0)
+
+
+def sluice_version(out):
+    """The version `sluice --version` printed, as (major, minor, patch), or None when it printed nothing crew can read as
+    `sluice X.Y.Z` (sluice 0.36.4 prints `sluice 0.36.4`, tests/py/sluice-0.36.4/version.txt)."""
+    m = re.fullmatch(r"sluice (\d+)\.(\d+)\.(\d+)", (out or "").strip())
+    return tuple(int(n) for n in m.groups()) if m else None
+
+
+def sluice_refusal(out, host):
+    """Why a give can't go through the host's sluice, or None (plan.19, read.1): its version is below SLUICE_BRANCHES,
+    which has no `branch create`, or `sluice --version` printed nothing crew can read; naming the version needed and
+    the host's own words."""
+    v = sluice_version(out)
+    if v is not None and v >= SLUICE_BRANCHES:
+        return None
+    said = " ".join((out or "").split())[:120] or "nothing"
+    return (f"a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice --version on {host} "
+            f"said: {said}")
+
+
+def branch_said(out, code):
+    """What sluice's `branch create` or `branch delete` said with --json (read.2, as sluice 0.36.4 says it,
+    tests/py/sluice-0.36.4/): (the commit it made the branch at or removed it from, None) for its document of a branch
+    made or removed, exit 0; (None, its message) for its refusal, {"error": {"kind", "message"}}, exit 1 when the
+    branch or the one it is made from is not there, 2 when it refused, 3 on its own failure. Refused, naming what it
+    said, on anything else."""
+    import json
+    try:
+        doc = json.loads(out or "")
+    except ValueError:
+        doc = None
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    if code == 0 and isinstance(doc, dict) and isinstance(doc.get("branch"), str):
+        made = doc.get("created", doc.get("deleted"))
+        if isinstance(made, str) and sha.fullmatch(made):
+            return made, None
+    err = doc.get("error") if isinstance(doc, dict) else None
+    if code in (1, 2, 3) and isinstance(err, dict) and isinstance(err.get("message"), str) and err["message"]:
+        return None, err["message"]
+    crew.fail(f"crew can't read what sluice's branch command said (exit {code}): {(out or '').strip()[:200] or 'nothing'}")
+
+
 def verification(head, result):
     """A bolt's verification (tests.5, record 0025): sluice's verdict on the bolt's last landing, read from its head's
     VERDICT trailer, as (state, words): "green" when the head is a landing sluice made, which it makes only on a pass;
