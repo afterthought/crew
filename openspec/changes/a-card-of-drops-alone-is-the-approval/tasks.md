@@ -7,7 +7,7 @@
 
 ## 2. Answers carry no kept drop or amendment
 
-- [ ] 2.1 `crew plan answer` and `crew plan approve` apply a proposal with only its cleared new units left out, and nothing of keeping a drop or an amendment is left in `plan.py` (design, Decision 4; Task notes 2.1). Verify `tests/py/test_proposal_life.py` passes in the logic tier.
+- [x] 2.1 `crew plan answer` and `crew plan approve` apply a proposal with only its cleared new units left out, and nothing of keeping a drop or an amendment is left in `plan.py` (design, Decision 4; Task notes 2.1). Verify `tests/py/test_proposal_life.py` passes in the logic tier.
 
 ## 3. The planner, the skill and README say the card's shape
 
