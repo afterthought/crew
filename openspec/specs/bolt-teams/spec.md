@@ -1,7 +1,7 @@
 # bolt-teams Specification
 
 ## Purpose
-A bolt team builds one bolt at a time: a standing conductor and ops, and units built stage by stage by fresh agents. The bolt is a branch that moves only through sluice, and lands on main once its verification is green.
+A bolt team builds one bolt at a time and holds at most one more that waits to land: a standing conductor and ops, and units built stage by stage by fresh agents. The bolt is a branch that moves only through sluice, and lands on main once its verification is green.
 
 ## Requirements
 

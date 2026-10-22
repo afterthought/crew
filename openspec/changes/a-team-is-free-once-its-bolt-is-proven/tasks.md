@@ -36,7 +36,7 @@
 ## 9. The briefs and the docs
 
 - [x] 9.1 The conductor's, ops's and dispatcher's briefs say a team builds one bolt and may hold one more that waits to land, when to give, and `--bolt` for a fix (design, Decision 10; Task notes 9.1). Verify `tests/suite t-briefs` ends with "0 failed".
-- [ ] 9.2 README, the crew skill, `crew`'s usage and the `bolt-teams` spec's purpose say the same (design, Decision 10; Task notes 9.2). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 9.2 README, the crew skill, `crew`'s usage and the `bolt-teams` spec's purpose say the same (design, Decision 10; Task notes 9.2). Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 10. Integration
 
