@@ -3,7 +3,7 @@
 ## 1. A give waits only for the held bolt's proof
 
 - [x] 1.1 `plan.give_refusal` refuses a give only while the team holds two bolts or a held bolt is unread, empty, has a unit or chore not merged, or a verification not green, and `holding` is gone (design, Decision 1; Task notes 1.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_bolt_commands.py`.
-- [ ] 1.2 `crew bolt give` gives a team holding a proven bolt its next one and refuses a third (design, Decision 2; Task notes 1.2). Verify `tests/suite t-journey-land t-journey-teams` ends with "0 failed".
+- [x] 1.2 `crew bolt give` gives a team holding a proven bolt its next one and refuses a third (design, Decision 2; Task notes 1.2). Verify `tests/suite t-journey-land t-journey-teams` ends with "0 failed".
 
 ## 2. The bolt a team builds is the one given last
 

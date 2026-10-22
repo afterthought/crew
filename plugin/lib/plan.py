@@ -1306,9 +1306,9 @@ def bolt_give(fleet, a):
     as it stands now on the team's host, at the commit the policy was read at, GitHub's for a kit with an origin
     (kit.main_now, plan.18), and no
     worktree (plan.8, record 0026); the conductor and ops start in the kit's main checkout. Refused, with the plan
-    unchanged, while the team holds a bolt, and when the kit's policy names no checks for its bolt branches, since a
-    bolt merges and lands only through sluice (teams.5, read.1), and while the team's host is held (teams.19), since a
-    give starts the team's agents again."""
+    unchanged, while a bolt the team holds is not proven or it holds two (teams.16, give_refusal), when the kit's policy
+    names no checks for its bolt branches, since a bolt merges and lands only through sluice (teams.5, read.1), and
+    while the team's host is held (teams.19), since a give starts the team's agents again."""
     t = crew.team_of(fleet, a.team)
     label, kits = t["label"], [k["name"] for k in crew.kits_of(t)]
     CONTEXT["label"] = label
@@ -1319,10 +1319,15 @@ def bolt_give(fleet, a):
     tip = fetch(repo, ref)
     tip or fail(f"{repo} has no {ref} yet: crew state init {label}")
     plan = read(repo, ref, tip)
+    # The bolts the team holds, oldest first, read once on its host (plan.12): a give waits only for their proof.
     held = held_by(plan, t["name"])
+    if len(held) > 1:
+        built = team_building(fleet, plan, t)
+        held = sorted(held, key=lambda b: b.name() == built)
     if held:
         why = give_refusal(t["name"], proven_facts(stages_for(fleet, plan, held), plan, held))
         not why or fail(why)
+    checked = {b.name() for b in held}
     # The bolt's kit, one of the team's (record 0035), decides the policy read and the branch made; the write gives
     # the same bolt, read again at the tip it replays on.
     named = (plan.bolt(a.bolt) or fail(f"{label}/main has no bolt {a.bolt}")) if a.bolt else None
@@ -1332,8 +1337,11 @@ def bolt_give(fleet, a):
     _, ref, now = kit_policy(fleet, t)
 
     def change(w):
-        again = held_by(w.plan, t["name"])
-        not again or fail(f"{t['name']} holds bolt {again[0].name()} since {tip[:7]}")
+        # The kit's proof was read only for the bolts held then.
+        again = [b.name() for b in held_by(w.plan, t["name"])]
+        new = [b for b in again if b not in checked]
+        not new or fail(f"{t['name']} was given {new[0]} since {tip[:7]}")
+        len(again) < 2 or fail(f"{t['name']} holds {again[0]} and {again[1]}")
         b = to_give(w.plan, w.bolt(chosen), t["name"], [kit], label)
         b.set("Team", t["name"])
         w.subject = f"plan({b.name()}): give to {t['name']}"
