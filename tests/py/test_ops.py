@@ -382,6 +382,28 @@ class TestForwarded:
         a.rows = None
         assert ops.recorded_rows(a) is None
 
+    def test_a_step_run_away_from_the_main_level_carries_its_text_and_no_path(self):
+        text = "https://github.com/WilldanGroup/switchboard-kit/actions/runs/38612817613\n"
+        for given in (["--text", "/tmp/gate.txt"], ["--text=/tmp/gate.txt"]):
+            argv = ["step", "deneb", "--label", "swancloud", "--to", S2, "--key", "gate-1", *given, "--doer", "user", "--state", "waiting"]
+            assert ops.forwarded(ops.parser().parse_args(argv), argv, None, None, text=text) == (
+                ["step", "deneb", "--label", "swancloud", "--to", S2, "--key", "gate-1", "--doer", "user", "--state", "waiting", "--text", "-"], text)
+        done = ["step", "deneb", "--label", "swancloud", "--key", "gate-1", "--state", "done"]
+        assert ops.forwarded(ops.parser().parse_args(done), done, None, None) == (done, None)
+
+    def test_a_steps_text_is_read_where_it_was_given_and_what_cant_be_read_is_named(self, tmp_path, monkeypatch):
+        (tmp_path / "gate.txt").write_text("- why: the gate is yours\n")
+        a = ops.parser().parse_args(["step", "deneb", "--label", "swancloud", "--key", "gate-1", "--state", "waiting", "--text", str(tmp_path / "gate.txt")])
+        assert ops.stepped_text(a) == "- why: the gate is yours\n"
+        a.text = str(tmp_path / "gone.txt")
+        with pytest.raises(ops.Refusal, match="the step's text .*gone.txt can't be read"):
+            ops.stepped_text(a)
+        a.text = "-"
+        monkeypatch.setattr(ops.sys, "stdin", io.StringIO("carried\n"))
+        assert ops.stepped_text(a) == "carried\n"
+        a.text = None
+        assert ops.stepped_text(a) is None
+
     def test_what_crew_cant_read_on_the_stdin_is_said(self):
         assert ops.carried_texts('{"notes": null, "steps": "x"}') == (None, "x", None)
         assert ops.carried_texts("")[2].startswith("it is not JSON")

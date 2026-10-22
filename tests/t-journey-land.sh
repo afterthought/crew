@@ -12,9 +12,12 @@
 # with a preview of the new head, raised without its reading when both its starts fail, naming crew card session and
 # keeping why in the run record, whose reading the conductor's wait then starts, changing the card to carry its link,
 # and waits on until the landing ends it; the landing then lands, leaving the kit's detached main checkout
-# as it was; the bolt lands in the plan once every unit has, recording the commit main holds and removing its branch,
+# as it was and marking the bolt's branch landed; the bolt lands in the plan once every unit has, recording the commit
+# main holds and removing its branch, since main holds every commit of it, and the place a stopped landing left on it,
 # its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
-# preview, and its conductor told; a bolt no team holds lands once its unit's change is on main; and dropping a held
+# preview, and its conductor told; a landed bolt's branch holding a commit main lacks is kept and named instead, its
+# mark unset and the keeping recorded, and the team's next read leaves it; a bolt no team holds lands once its unit's
+# change is on main; and dropping a held
 # bolt removes its branch and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
@@ -201,12 +204,16 @@ eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchb
 eq "$(git -C "$k" status --porcelain)" ""
 [[ ! -e $land ]] || fail "the landing's worktree is still there"
 eq "$(field mac-studio bolt.submit On)" "bolt/tenant-environments"
-ok "the landing then lands, its worktree removed and the detached main checkout left as it was"
+eq "$(git -C "$k" config branch.bolt/tenant-environments.crew)" "landed"
+ok "the landing then lands, its worktree removed, the detached main checkout left as it was and the bolt's branch marked landed"
 git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
 
-# The user approves the landing card raised again.
+# The user approves the landing card raised again. A landing stopped before it removed its worktree left one on the
+# bolt's branch, its process gone, which the landing sweeps with the bolt's branch.
 mkdir -p "$(home_of $box)/.stub-pendingyou/answered"
 echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answered/$again.json"
+git -C "$k" worktree add -q "$land" bolt/tenant-environments
+sh -c 'echo $$' > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
 : > "$CREW_TEST_LOG"
 # The branch the conductor's pane tells sluice's plugins it works for (teams.20), "none" when it carries none.
 branch() { herdr_state $box wldn-1 ".panes[\"$(awk '$1=="conductor"{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].tokens.sluice_branch // \"none\""; }
@@ -233,14 +240,38 @@ wait "$waiting" || fail "the conductor's wait failed:"$'\n'"$(cat "$T/land-wait.
 eq "$(head -1 "$T/land-wait.out")" "$url2"
 eq "$(tail -1 "$T/land-wait.out")" "land/tenant-environments: crew ended its session, as its card closed or crew card end was run"
 [[ ! -e $reading ]] || fail "the landing's reading outlived its card"
-has "$out" "bolt/tenant-environments is removed: bolt tenant-environments is in no plan; it was at"
+has "$out" "$land is removed: bolt tenant-environments is in no plan"
+[[ ! -e $land ]] || fail "the landing's worktree outlived the landing"
+has "$out" "bolt/tenant-environments is removed: bolt tenant-environments has landed, and main holds every commit of it (git cherry); it was at"
 grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio)'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told of the landing:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice and its conductor and ops restarted at their next stop without it"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch, the place a stopped landing left and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice and its conductor and ops restarted at their next stop without it"
+
+# A bolt whose branch takes a commit after its landing: crew bolt land keeps the branch at its commit, the user's, its
+# mark unset and the keeping recorded on the team's host, and the team's next read leaves it.
+crew bolt new zone-lists "The zone list grows." --repo switchboard-kit >/dev/null
+crew bolt give swb-1 zone-lists >/dev/null
+on_bolt() { git -C "$k" worktree add -q "$T/zone-lists" bolt/zone-lists && echo "$1" >> "$T/zone-lists/zones.txt" &&
+  commit_all "$T/zone-lists" "$2" && git -C "$k" worktree remove "$T/zone-lists"; }
+on_bolt north "feat: the zone list" || fail "the bolt took no commit"
+expect_ok crew bolt submit zone-lists
+eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" "landed"
+on_bolt south "feat: one zone more, after the landing" || fail "the bolt took no commit after its landing"
+at=$(short bolt/zone-lists)
+expect_ok crew bolt land zone-lists
+has "$out" "bolt/zone-lists is kept at $at: bolt zone-lists has landed, and it holds 1 commit whose patch main lacks (git cherry), the user's to keep or delete"
+eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" ""
+eq "$(field $box branch.kept Head bolt/zone-lists) $(field $box branch.kept Count bolt/zone-lists)" "$at 1"
+eq "$(field $box branch.kept From bolt/zone-lists) | $(field $box branch.kept Why bolt/zone-lists)" \
+  "bolt/zone-lists | bolt zone-lists has landed, and main lacks its patches"
+expect_ok crew status swb-1
+lacks "$out" "bolt/zone-lists"
+eq "$(short bolt/zone-lists)" "$at"
+ok "a landed bolt's branch holding a commit main lacks is kept at its commit and named, its mark unset and the keeping recorded, and the team's next read leaves it"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null

@@ -92,13 +92,26 @@ class TestKeys:
         ("wldn-ops", "deploy/dev", "a deploy's card is crew's, raised by crew ops offer"),
         ("wldn-ops", "op/dev/1", "a step's card is crew's, raised by crew ops step"),
         ("wldn-design", "record/atlas-kit/0021", "a record's card is crew's, raised by crew record"),
-        ("wldn-design", "proposal/1", "a proposal's card is crew's"),
-        ("swb-1-conductor", "verify/x/20261007-1412", "a verify report has no card")])
+        ("wldn-design", "proposal/1", "a proposal's card is crew's")])
     def test_none_of_the_four_posts_changes_or_closes_crews_own_card(self, name, k, said):
         for tool, verb in (("post_request", "post"), ("update_request", "change"), ("ack_answer", "close"), ("cancel_request", "close")):
             why = key(name, k, tool)
             assert why.startswith(f"crew refuses {name}'s {verb} of the card under {k}: {said}"), why
             assert why.endswith(f"Ask a question of your own under a key of your own, ask/{name}/<what it is about>.")
+
+    @pytest.mark.parametrize("name", ["swb-1-conductor", "wldn-planner", "wldn-ops", "wldn-design"])
+    def test_an_asker_closes_an_answered_verify_card_and_posts_changes_or_withdraws_none(self, name):
+        """A card under verify/<unit>/<stamp>, a row form crew no longer raises (teams.17), was a conductor's own, and
+        no event of crew's closes it: its ack passes, so its asker closes it with the user's outcome, and its post,
+        change and withdrawal are refused, as is any other role's close (crw-2-conductor's three cards of 2026-10-11,
+        signal 2026-10-19-crw-2-conductor-2bec975e/01)."""
+        k = "verify/a-card-lost-to-its-owner-is-posted-again/20261011-2238"
+        assert key(name, k, "ack_answer", label="wldn") is None
+        for tool, verb in (("post_request", "post"), ("update_request", "change"), ("cancel_request", "close")):
+            assert key(name, k, tool).startswith(f"crew refuses {name}'s {verb} of the card under {k}: a verify report has no card")
+        for other in ("verify/x", "verify/x/abc1234", "verify/x/20261007-1412/y"):
+            assert key(name, other, "ack_answer").startswith(f"crew refuses {name}'s close of the card under {other}: a verify report")
+        assert key("swb-1-unit-2", k, "ack_answer").startswith("crew refuses a card from swb-1-unit-2")
 
     def test_the_planner_closes_an_old_batch_card_it_posted_and_posts_or_changes_none(self):
         """rail-cards: the planner closes an old batch card. A card under batch/<n>-<k> was the planner's own, posted
@@ -259,6 +272,18 @@ class TestNames:
         assert cards.refusal(hooked("cancel_request", {"requestId": "req_q1", "reason": "x"})) is None
         assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold", "kind": "text"})) is None
 
+    def test_the_hook_lets_a_conductor_ack_its_answered_verify_card_by_the_key_its_record_holds(self, monkeypatch):
+        """crw-2-conductor's ack of req_6d9cca5680a84e08abb2, refused on 2026-10-19 under the key its run record holds
+        (signal 2026-10-19-crw-2-conductor-2bec975e/01), goes through; its withdrawal is still refused."""
+        monkeypatch.setenv("CREW_LABEL", "wldn")
+        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+        monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
+        k = "verify/a-card-lost-to-its-owner-is-posted-again/20261011-2238"
+        monkeypatch.setattr(cards, "posted", lambda record, label, card: k if card == "req_v1" else None)
+        assert cards.refusal(hooked("ack_answer", {"requestId": "req_v1", "expectedVersion": 2, "outcome": "Fixed"})) is None
+        assert f"close of the card under {k}: a verify report has no card" in cards.refusal(
+            hooked("cancel_request", {"requestId": "req_v1", "reason": "x"}))
+
     @pytest.mark.parametrize("agent, row, said", [
         ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a landing card is crew's"),
         ("wldn-ops", "op/a/1", "a step's card is crew's")])
@@ -381,13 +406,13 @@ class TestSessions:
         assert plan.reading_of({"key": "proposal/4", "session": False}) is None
         assert plan.reading_of({"key": "deploy/srv"}) is None and plan.reading_of({"key": "record/crew/0031"}) is None
 
-    def test_a_proposal_of_more_than_fifteen_new_units_or_more_rows_than_its_lists_hold_has_a_reading(self):
+    def test_a_proposal_of_more_than_fifteen_new_units_has_a_reading_whatever_else_it_changes(self):
         def args(*dos):
             return [plan.do_args("wldn", d) for d in dos]
         adds = [f'unit add u{i} "U{i}." --bolt t' for i in range(16)]
         assert plan.proposal_reads(args(*adds)) and not plan.proposal_reads(args(*adds[:15]))
-        drops = [f'unit drop d{i} "Gone."' for i in range(6)]
-        assert plan.proposal_reads(args(*adds[:15], *drops)) and not plan.proposal_reads(args(*adds[:14], *drops))
+        drops = [f'unit drop d{i} "Gone."' for i in range(20)]
+        assert not plan.proposal_reads(args(*adds[:15], *drops)) and not plan.proposal_reads(args(*drops))
 
     def test_the_session_is_started_before_the_card_is_built_and_its_link_handed_to_the_builder(self, capsys):
         acts = ReadingActs()
@@ -1534,6 +1559,26 @@ class TestRecordCommand:
             assert [c[0] for c in acts.calls] == ["get_request"]
             assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", plan.ENDED_ELSEWHERE)
 
+    def test_a_record_accepted_or_rejected_closes_its_card_under_either_key_form(self, capsys):
+        """swancloud's record 0029, rejected on 2026-10-22 by crew record, whose card the design agent had posted
+        before record 0031 under record/swancloud/0029/5eba218 stayed open: crew record closes each card its design
+        agent holds open under the record's key or the key with the commit after it, and none of another record's."""
+        from test_card_commands import Acts
+        held = [dict(Act="card.post", Key="record/switchboard-kit/0032/5eba218", By="wldn-design", Card="req_c0"),
+                dict(Act="card.post", Key="record/switchboard-kit/0031/abc1234", By="wldn-design", Card="req_c9"),
+                dict(Act="card.post", Key="record/switchboard-kit/0032/def5678", By="wldn-design", Card="req_c8"),
+                dict(Act="card.close", Key="record/switchboard-kit/0032/def5678", By="wldn-design", Card="req_c8"),
+                dict(Act="card.post", Key="record/switchboard-kit/0032", By="wldn-design", Card="req_c1")]
+        acts = Acts({"get_request": ({"status": "pending", "version": 2}, None)}, entries=held, caller="wldn-design")
+        assert plan.record_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", "Rejected at 447980b", acts) == ["req_c0", "req_c1"]
+        assert [(e["Act"], e["On"], e["Card"], e["Key"], e["State"], e["Outcome"]) for e in acts.emitted] == [
+            ("card.close", ["record/switchboard-kit/0032"], "req_c0", "record/switchboard-kit/0032/5eba218", "withdrawn", "Rejected at 447980b"),
+            ("card.close", ["record/switchboard-kit/0032"], "req_c1", "record/switchboard-kit/0032", "withdrawn", "Rejected at 447980b")]
+        acts = Acts(entries=held[1:4], caller="wldn-design")
+        assert plan.record_card_close(None, "wldn", "wldn-design", "record/switchboard-kit/0032", "Accepted at 447980b", acts) == []
+        assert (acts.calls, capsys.readouterr().out.splitlines()[-1]) == (
+            [], "card record/switchboard-kit/0032: wldn-design holds none open on this host, so none is closed")
+
 
 class TestPickedUp:
     """mac-studio's run record of 2026-10-19 (signal 2026-10-19-swancloud-ops-5b7775dd/01): the user approved
@@ -1653,6 +1698,7 @@ class TestActDecisions:
 
     @pytest.mark.parametrize("key, obj", [("proposal/4", "proposal/4"), ("batch/7", "batch/7"), ("land/b1", "bolt/b1"),
                                           ("deploy/srv", "env/srv"), ("op/srv/2", "env/srv"), ("record/crew/0031", "record/crew/0031"),
+                                          ("record/crew/0029/e6fa15f", "record/crew/0029"), ("record/crew/0029/x", None),
                                           ("land/b1/abc1234", None), ("agent-note", None), ("verify/x/20261007-1412", None)])
     def test_each_of_crews_six_keys_is_recorded_on_its_rows_object_and_a_verify_report_has_none(self, key, obj):
         assert built.row_object(key) == obj

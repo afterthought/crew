@@ -13,7 +13,8 @@ whether bolt/<bolt> exists, the changes and chores it holds, those it holds arch
 that main does not hold, its worktree, its head and the head's time; each place under
 <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
 paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
-head, head's time and how many commits of its own it holds beyond the bolt; each fix branched from a bolt; the kit's
+head, head's time and how many commits of its own it holds beyond the bolt; each fix's place with its branch's facts
+(fix_facts), and, as fix_branches, the same facts of each fix branch no worktree holds, its place gone; the kit's
 policy, its main's .config/sluice.toml as text; and each bolt's verdict, the Sluice-Result trailer on its head when
 sluice landed it. With sites, each worktree's devurl names and the host's
 portless routes; with board, each team's slots, one {slot, kind, name, place} per line of its slots file, and each
@@ -129,15 +130,58 @@ def fixes_dropped(main):
     return {k[len("branch."):-len(".crew")] for k, _, v in (l.partition(" ") for l in out.splitlines()) if v == "dropped"}
 
 
+def bolt_ref(up):
+    """The bolt a branch's upstream names, and the ref it names, from its short form as for-each-ref's
+    %(upstream:short) prints it, which still names an upstream that is gone: (bolt, ref) for bolt/<bolt>, the host's
+    refs/heads/bolt/<bolt>, or for origin/bolt/<bolt>, GitHub's refs/remotes/origin/bolt/<bolt> as this host last
+    fetched it (plan.19); (None, None) for any other."""
+    for short, ref in (("bolt/", "refs/heads/bolt/"), ("origin/bolt/", "refs/remotes/origin/bolt/")):
+        if up.startswith(short) and up[len(short):]:
+            return up[len(short):], ref + up[len(short):]
+    return None, None
+
+
+def holds(main, ref, branch):
+    """Whether ref holds a branch's tip."""
+    return subprocess.run(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", ref], cwd=main, capture_output=True).returncode == 0
+
+
+def moved(main, branch):
+    """Whether a branch has moved since it was made: its tip is not its reflog's first entry. False when its reflog is
+    gone."""
+    born = (run(["git", "reflog", "show", "--format=%H", f"refs/heads/{branch}"], main) or "").split()
+    tip = (run(["git", "rev-parse", f"refs/heads/{branch}"], main) or "").strip()
+    return bool(born) and tip != born[-1]
+
+
 def fix_merged(main, branch, bolt):
-    """Whether a fix has merged into its bolt: the bolt holds the fix's tip, and the fix has moved since it was made
-    (its reflog's first entry)."""
+    """Whether a fix has merged into its bolt: the bolt, at the ref the fix tracks when that names it (bolt_ref), else
+    the host's refs/heads/bolt/<bolt>, holds the fix's tip, and the fix has moved since it was made (its reflog's first
+    entry)."""
     if not bolt:
         return False
-    born = (run(["git", "reflog", "show", "--format=%H", branch], main) or "").split()
-    tip = (run(["git", "rev-parse", branch], main) or "").strip()
-    return bool(born) and tip != born[-1] and subprocess.run(
-        ["git", "merge-base", "--is-ancestor", branch, f"bolt/{bolt}"], cwd=main).returncode == 0
+    named, ref = bolt_ref((run(["git", "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{branch}"], main) or "").strip())
+    return holds(main, ref if named == bolt else f"refs/heads/bolt/{bolt}", branch) and moved(main, branch)
+
+
+def fix_facts(main, branches, ups, now):
+    """What a fix's stage is read from, of each fix branch named (branches), by branch, with its upstream from ups
+    (upstreams): its bolt (bolt_ref), whether it has merged into it at the ref it tracks (merged, as fix_merged reads
+    it), whether the kit's main now (now, now_ref) holds its tip (on_main), and whether it has moved since it was made
+    (moved; None when neither main nor its bolt holds its tip, so it decides nothing). Read with as few processes as
+    git allows: one listing of the fix branches main holds and one of the bolt refs; a branch's bolt is asked only when
+    its ref exists, and its reflog only when main or its bolt holds its tip."""
+    if not branches:
+        return {}
+    landed = {r[len("refs/heads/"):] for r in (run(["git", "for-each-ref", f"--merged={now}", "--format=%(refname)", "refs/heads/fix/"], main) or "").split()}
+    refs = set((run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/", "refs/remotes/origin/bolt/"], main) or "").split())
+    out = {}
+    for b in branches:
+        bolt, ref = bolt_ref(ups.get(b, ""))
+        in_bolt = ref in refs and holds(main, ref, b)
+        went = moved(main, b) if in_bolt or b in landed else None
+        out[b] = {"bolt": bolt, "merged": in_bolt and went, "on_main": b in landed, "moved": went}
+    return out
 
 
 def own_head(cwd, branch, bolt):
@@ -445,10 +489,14 @@ def kit(req, sites=False, running=None, board=False):
             out["chore_places"][branch[6:]] = dict(chore_place(path, bolt), branch=branch, bolt=bolt)
         elif branch.startswith("fix/"):
             dropped = fixes_dropped(main) if dropped is None else dropped  # read once, and only for a kit with a fix's place
-            bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
-            # a fix whose bolt has landed tracks a branch that is gone: nothing to read, and git's fatal unsaid
-            out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt) if bolt in have else False,
-                                 "dropped": branch in dropped})
+            out["fixes"].append(dict(fix=branch, path=path, dropped=branch in dropped))
+    # Each fix branch's facts, read together: a fix's place's, and, as fix_branches, those of each fix branch no
+    # worktree holds, whose place is gone, so a slot holding one and the tidy still read it (teams.1, teams.3).
+    worked = {b for b in at.values() if b}
+    facts = fix_facts(main, sorted({b for b in ups if b.startswith("fix/") and b not in worked} | {f["fix"] for f in out["fixes"]}), ups, now)
+    for f in out["fixes"]:
+        f.update(facts[f["fix"]])
+    out["fix_branches"] = {b: f for b, f in facts.items() if b not in worked}
     if sites:
         out["sites"] = {path: devurl(path) for path, branch in at.items()
                         if os.path.dirname(path) in (places, os.path.join(kdir, "bolts")) and branch}

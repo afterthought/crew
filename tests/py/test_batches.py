@@ -1,6 +1,7 @@
 """Constructed changes reach the user in batches that span the partition (briefs.12): which changes are due
-(plan.due_changes), when a batch is due and why (plan.batch_due), a batch's cards (plan.batch_cards), and the facts
-crew raises a batch's one card from once its summary is delivered (plan.batch_facts, summary_paragraph,
+(plan.due_changes), when a batch is due and why (plan.batch_due), a batch's cards (plan.batch_cards), which batches
+wait on nothing (plan.batch_settled), and the facts crew raises a batch's one card from once its summary is delivered
+(plan.batch_facts, summary_paragraph,
 batch_subjects; record 0031). The rail's rows are test_rail's; telling the planner and the reviewer's tab, the review
 journey's (t-journey-review); the raise's wiring, its session and its card, t-cards'."""
 import datetime
@@ -85,6 +86,120 @@ class TestAnswered:
             {"Act": "card.post", "Key": k, "Card": f"req_{k}", "At": "2026-10-12T10:11:00Z", "On": []} for k in ("batch/3-1", "batch/3-2")]
         entries.append(card_closed("batch/3-1", "req_batch/3-1", 20))
         assert plan.awaiting_answer(entries) == {"u5": 3, "u6": 3}
+
+
+def landed(bolt, units, minutes=0, refused=None):
+    """A run-record entry: bolt landed, with each of its units."""
+    return {"Act": "bolt.land", "On": [f"bolt/{bolt}"] + [f"unit/{u}" for u in units], "At": f"2026-10-12T11:{minutes:02d}:00Z",
+            "Refused": refused}
+
+
+def dropped(units, minutes=0, bolt=None, refused=None):
+    """A run-record entry: units dropped from the plan, by crew unit drop (or a proposal's approval, which writes the
+    same entry) for one, or with bolt by crew bolt drop without --requeue."""
+    act, on = ("bolt.drop", [f"bolt/{bolt}"]) if bolt else ("unit.drop", [])
+    return {"Act": act, "On": on + [f"unit/{u}" for u in units] + ([] if bolt else ["bolt/b1"]),
+            "At": f"2026-10-12T11:{minutes:02d}:00Z", "Refused": refused}
+
+
+class TestSettled:
+    """A batch that waits on nothing is closed by crew (review-batches): each of its units has landed, was dropped since
+    the batch was made, or is held by a later batch, read from the run record alone (signal
+    2026-10-20-swancloud-planner-1703a4ae/02: 23 batch cards posted on wldn's box, most of them for bolts landed days
+    before)."""
+
+    def test_a_batch_every_unit_of_which_has_landed_waits_on_nothing(self):
+        entries = [reviewed(3, [("x1", "swb-1", "aaa1"), ("x2", "swb-1", "bbb1")], 10), landed("b1", ["x1", "x2"], 20)]
+        assert plan.batch_settled(entries) == {"batch/3": "its batch waits on nothing: x1 and x2 have landed"}
+
+    def test_a_batch_whose_unit_a_later_batch_holds_waits_on_nothing_and_the_later_batch_does_not(self):
+        entries = [reviewed(5, [("x1", "swb-1", "aaa1")], 10), constructed("x1", "aaa2", 20), reviewed(7, [("x1", "swb-1", "aaa2")], 30)]
+        assert plan.batch_settled(entries) == {"batch/5": "its batch waits on nothing: batch 7 holds a newer change of x1"}
+
+    def test_a_unit_landed_and_another_held_again_are_both_said_landed_first(self):
+        entries = [reviewed(6, [("y1", "swb-2", "ccc1"), ("x1", "swb-1", "aaa1")], 10), reviewed(8, [("y1", "swb-2", "ccc2")], 20),
+                   landed("b1", ["x1"], 30)]
+        assert plan.batch_settled(entries) == {"batch/6": "its batch waits on nothing: x1 has landed; batch 8 holds a newer change of y1"}
+
+    def test_each_later_batch_is_named_oldest_first_with_the_units_it_is_the_newest_to_hold(self):
+        entries = [reviewed(2, [("x1", "swb-1", "aaa1"), ("x2", "swb-1", "bbb1"), ("y1", "swb-2", "ccc1")], 0),
+                   reviewed(4, [("x1", "swb-1", "aaa2"), ("y1", "swb-2", "ccc2")], 10), reviewed(5, [("x2", "swb-1", "bbb2")], 20),
+                   reviewed(6, [("y1", "swb-2", "ccc3")], 30), landed("b1", ["x1"], 40)]
+        assert plan.batch_settled(entries)["batch/2"] == "its batch waits on nothing: x1 has landed; batch 5 holds a newer change of x2; batch 6 holds a newer change of y1"
+        entries = entries[:2] + [reviewed(5, [("x1", "swb-1", "aaa3"), ("x2", "swb-1", "bbb2")], 20)]
+        assert plan.batch_settled(entries)["batch/2"] == "its batch waits on nothing: batch 4 holds a newer change of y1; batch 5 holds newer changes of x1 and x2"
+
+    def test_a_batch_with_one_unit_neither_landed_nor_held_again_still_waits(self):
+        entries = [reviewed(9, [("x1", "swb-1", "aaa1"), ("y1", "swb-2", "ccc1")], 10), landed("b1", ["x1"], 20)]
+        assert plan.batch_settled(entries) == {}
+
+    def test_a_refused_landing_or_batch_counts_for_nothing(self):
+        held = [reviewed(3, [("x1", "swb-1", "aaa1")], 10)]
+        assert plan.batch_settled(held + [landed("b1", ["x1"], 20, refused="x1 has not landed")]) == {}
+        assert plan.batch_settled(held + [dict(reviewed(4, [("x1", "swb-1", "aaa2")], 20), Refused="x")]) == {}
+
+    def test_the_unit_constructed_a_third_time_leaves_the_batch_settled(self):
+        """review-batches, "The unit moves on again": batch 5 stays closed though x1's newest change is in no batch."""
+        entries = [constructed("x1", "aaa1"), reviewed(5, [("x1", "swb-1", "aaa1")], 10), constructed("x1", "aaa2", 20),
+                   reviewed(7, [("x1", "swb-1", "aaa2")], 30), constructed("x1", "aaa3", 40)]
+        assert list(plan.batch_settled(entries)) == ["batch/5"]
+        assert [(u, sha) for u, _, sha, _ in plan.due_changes(PLAN, entries)] == [("x1", "aaa3")]
+
+    def test_an_old_batch_card_of_five_is_settled_on_its_own_units(self):
+        """rail-cards, "An old batch card whose units have landed": batch/2-2's units have landed, one of batch/2-1's not."""
+        units = [(f"u{i}", "swb-1", f"{i:04x}") for i in range(7)]
+        entries = [reviewed(2, units, 0)] + [{"Act": "card.post", "Key": k, "Card": f"req_{k}", "At": "2026-10-12T10:01:00Z", "On": []}
+                                            for k in ("batch/2-1", "batch/2-2")] + [landed("b1", ["u1", "u2", "u3", "u4", "u5", "u6"], 20)]
+        assert plan.batch_settled(entries) == {"batch/2-2": "its batch waits on nothing: u5 and u6 have landed"}
+
+    def test_a_unit_dropped_since_the_batch_was_made_waits_on_nothing(self):
+        """review-batches, "A unit dropped": by crew unit drop or a proposal's approval of one."""
+        entries = [reviewed(4, [("x1", "swb-1", "aaa1"), ("x2", "swb-1", "bbb1")], 10), landed("b1", ["x1"], 20)]
+        assert plan.batch_settled(entries) == {}
+        assert plan.batch_settled(entries + [dropped(["x2"], 30)]) == {"batch/4": "its batch waits on nothing: x1 has landed; x2 was dropped"}
+        approved = dict(dropped(["x2"], 30), From=["proposal/9"])
+        assert plan.batch_settled(entries + [approved]) == {"batch/4": "its batch waits on nothing: x1 has landed; x2 was dropped"}
+
+    def test_units_dropped_with_their_bolt_wait_on_nothing_and_queued_with_it_still_wait(self):
+        """review-batches, "A bolt dropped with its units queued": a requeued bolt's drop names no unit."""
+        held = [reviewed(11, [("x1", "swb-1", "aaa1"), ("x2", "swb-1", "bbb1")], 10)]
+        assert plan.batch_settled(held + [dropped(["x1", "x2"], 20, bolt="b1")]) == {"batch/11": "its batch waits on nothing: x1 and x2 were dropped"}
+        assert plan.batch_settled(held + [dropped([], 20, bolt="b1")]) == {}
+
+    def test_a_refused_drop_counts_for_nothing(self):
+        held = [reviewed(4, [("x1", "swb-1", "aaa1")], 10)]
+        assert plan.batch_settled(held + [dropped(["x1"], 20, refused="unit x1 has merged into its bolt, so it can't be dropped")]) == {}
+
+    def test_a_drop_from_before_the_batch_was_made_counts_for_nothing(self):
+        """review-batches, "A unit dropped and added again before the batch"."""
+        entries = [dropped(["x1"], 0), constructed("x1", "aaa1", 5), reviewed(10, [("x1", "swb-1", "aaa1")], 10)]
+        assert plan.batch_settled(entries) == {}
+        assert plan.batch_settled(entries + [dropped(["x1"], 20)]) == {"batch/10": "its batch waits on nothing: x1 was dropped"}
+
+    def test_landed_dropped_and_held_later_are_said_in_that_order(self):
+        entries = [reviewed(2, [("y1", "swb-2", "ccc1"), ("x2", "swb-1", "bbb1"), ("x1", "swb-1", "aaa1")], 0),
+                   reviewed(5, [("y1", "swb-2", "ccc2")], 10), dropped(["x2"], 20), landed("b1", ["x1"], 30)]
+        assert plan.batch_settled(entries)["batch/2"] == "its batch waits on nothing: x1 has landed; x2 was dropped; batch 5 holds a newer change of y1"
+
+    def test_a_unit_dropped_after_a_later_batch_held_it_or_held_again_once_added_back_is_counted_dropped(self):
+        later = [reviewed(2, [("x1", "swb-1", "aaa1")], 0), reviewed(3, [("x1", "swb-1", "aaa2")], 10), dropped(["x1"], 20)]
+        assert plan.batch_settled(later) == {"batch/2": "its batch waits on nothing: x1 was dropped",
+                                             "batch/3": "its batch waits on nothing: x1 was dropped"}
+        back = [reviewed(2, [("x1", "swb-1", "aaa1")], 0), dropped(["x1"], 10), constructed("x1", "bbb1", 15),
+                reviewed(3, [("x1", "swb-1", "bbb1")], 20)]
+        assert plan.batch_settled(back) == {"batch/2": "its batch waits on nothing: x1 was dropped"}
+
+    def test_a_batch_with_one_unit_dropped_and_another_still_waiting_waits(self):
+        entries = [reviewed(4, [("x1", "swb-1", "aaa1"), ("y1", "swb-2", "ccc1")], 10), dropped(["x1"], 20)]
+        assert plan.batch_settled(entries) == {}
+
+    def test_crews_close_is_not_the_users_answer(self):
+        """review-batches, "crew's close is not the user's answer": batch 5 waits on nothing, and x1's bolt still waits on
+        the user's answer to batch 7."""
+        entries = [constructed("x1", "aaa1"), reviewed(5, [("x1", "swb-1", "aaa1")], 10), constructed("x1", "aaa2", 20),
+                   reviewed(7, [("x1", "swb-1", "aaa2")], 30)]
+        assert "batch/5" in plan.batch_settled(entries) and plan.awaiting_answer(entries) == {"x1": 7}
+        assert plan.batch_closed(entries) == set()
 
 
 def due(n):
@@ -187,6 +302,13 @@ class TestBatchFacts:
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, dict(closed, State="lost")], SUMMARY, {})["n"] == 3
         again = dict(posted, Card="req_9")
         assert plan.batch_facts(3, [reviewed(3, UNITS), posted, closed, again, dict(closed, Card="req_9", State="lost")], SUMMARY, {})["n"] == 3
+
+    def test_no_card_is_raised_for_a_batch_that_waits_on_nothing(self):
+        """review-batches: crew review --wait raises no card for a batch whose every unit has landed."""
+        held = [reviewed(3, UNITS), {"Act": "bolt.land", "On": ["bolt/b1"] + [f"unit/{u}" for u, *_ in UNITS[:2]]}]
+        assert plan.batch_facts(3, held, SUMMARY, {})["n"] == 3
+        held[1]["On"].append("unit/z1")
+        assert plan.batch_facts(3, held, SUMMARY, {}) is None
 
 
 @pytest.mark.parametrize("stage, fix, then", [
