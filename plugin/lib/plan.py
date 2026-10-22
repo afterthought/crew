@@ -1289,8 +1289,8 @@ def bolt_give(fleet, a):
     plan = read(repo, ref, tip)
     held = held_by(plan, t["name"])
     if held:
-        st = stages_for(fleet, plan, held)
-        fail(holding(t["name"], held[0], plan, lambda n: st.of(n)["stage"]))
+        why = give_refusal(t["name"], proven_facts(stages_for(fleet, plan, held), plan, held))
+        not why or fail(why)
     # The bolt's kit, one of the team's (record 0035), decides the policy read and the branch made; the write gives
     # the same bolt, read again at the tip it replays on.
     named = (plan.bolt(a.bolt) or fail(f"{label}/main has no bolt {a.bolt}")) if a.bolt else None
@@ -1338,15 +1338,42 @@ def kit_policy(fleet, t):
     return kit.bolt_checks(text, t["kit"]["name"], f"{t['kit']['main']}/{kit.DECLARATION}", ref=ref), ref, sha
 
 
-def holding(team, b, plan, stage_of):
-    """Why a team that holds a bolt is given no other (teams.16 is proposed, not built): a unit or chore of it that has
-    not landed, the bolt having no units yet, or every unit landed and the bolt not yet."""
-    open_ = [(u, stage_of(u.name())) for u in plan.work_of(b.name()) if stage_of(u.name()) != "landed"]
-    if open_:
-        return f"{team} holds bolt {b.name()}, whose {kind_of(open_[0][0])} {open_[0][0].name()} has not landed ({open_[0][1]})"
-    if not plan.work_of(b.name()):
-        return f"{team} holds bolt {b.name()}, which has no units yet"
-    return f"{team} holds bolt {b.name()}, landed but still in the plan: crew bolt land {b.name()}"
+def proven_facts(st, plan, bolts):
+    """What give_refusal reads of each of the bolts, in the order given, from one read of their kits (st, stages_for):
+    (name, work, head, verdict, unread)."""
+    out = []
+    for b in bolts:
+        k, why = st.kit(b)
+        facts = k["bolts"].get(b.name(), {}) if k else {}
+        work = [(u.name(), kind_of(u), st.of(u.name())["stage"]) for u in plan.work_of(b.name())]
+        out.append((b.name(), work, facts.get("head"), facts.get("verdict"), why))
+    return out
+
+
+def give_refusal(team, held):
+    """Why a team is given no bolt now, or None (teams.16, record 0020): a team builds one bolt and holds at most one
+    more, proven and waiting to land, so a give is refused while it holds two, and while a bolt it holds is not proven:
+    its kit could not be read (read.1), it holds no unit or chore yet, one of them has not merged, or sluice's verdict
+    at its head is not green (kit.verification). held is each bolt the team holds, oldest first, as (name, work, head,
+    verdict, unread): work its units and chores as (name, kind, stage), unread why its kit could not be read or None.
+    A fix in flight refuses nothing, since a carrying fix is what the proven bolt keeps of the team; a bolt every unit
+    of which has landed passes, only crew bolt land being left of it."""
+    if len(held) >= 2:
+        return f"{team} holds {held[0][0]} and {held[1][0]}; {held[0][0]} waits to land, and its landing frees {team}"
+    for name, work, head, verdict, unread in held:
+        if unread:
+            return f"can't tell whether bolt {name} is proven: {unread}"
+        if not work:
+            return f"bolt {name} holds no units or chores yet"
+        for n, kind, stage in work:
+            if stage not in ("merged", "landed"):
+                return f"bolt {name}'s {kind} {n} has not merged ({stage})"
+        if all(stage == "landed" for *_, stage in work):
+            continue
+        state, said = kit.verification(head, verdict)
+        if state != "green":
+            return f"bolt {name}'s verification is not green: {said}"
+    return None
 
 
 def to_give(plan, b, team, kits, label):

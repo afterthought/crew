@@ -1,5 +1,5 @@
 """crew bolt new|order|drop on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
-reads given; which bolt a give hands a team (plan.to_give, plan.holding), and when a bolt lands (plan.land_refusal),
+reads given; which bolt a give hands a team (plan.to_give) and when a team may take one (plan.give_refusal), and when a bolt lands (plan.land_refusal),
 held by a team or by none (plan.unheld_stages, plan.unheld_refusal, plan.builder).
 The branch and worktree give makes and land removes, and the commits every write makes, are the journey's
 (t-journey-units and t-journey-land)."""
@@ -100,14 +100,50 @@ class TestGive:
         with pytest.raises(plan.Refusal, match="wldn/main has no planned bolt in rocs-kit for rcs-1"):
             plan.to_give(fresh().plan, None, "rcs-1", ["rocs-kit"], "wldn")
 
-    def test_a_team_holding_a_bolt_is_given_none_until_it_lands(self):
-        p = fresh().plan
-        held = p.bolt("tenant-environments")
-        assert plan.holding("swb-1", held, p, lambda u: "ready") == (
-            "swb-1 holds bolt tenant-environments, whose unit lint-once has not landed (ready)")
-        assert plan.holding("swb-1", held, p, lambda u: "landed") == (
-            "swb-1 holds bolt tenant-environments, landed but still in the plan: crew bolt land tenant-environments")
-        assert plan.holding("swb-1", p.bolt("board-builds"), p, lambda u: "ready") == "swb-1 holds bolt board-builds, which has no units yet"
+
+class TestGiveRefusal:
+    """A team builds one bolt and holds at most one more, proven and waiting to land (teams.16): a give is refused only
+    while a bolt it holds is not proven, or it holds two (plan.give_refusal)."""
+    GREEN = "passed (3 run, 1 replayed)"
+    HEAD = "abc1234def5678"
+
+    def held(self, *stages, name="tenant-environments", verdict=GREEN, unread=None, kind="unit"):
+        return (name, [(f"u{i}", kind, s) for i, s in enumerate(stages)], self.HEAD, verdict, unread)
+
+    def test_a_team_holding_no_bolt_is_given_one(self):
+        assert plan.give_refusal("swb-1", []) is None
+
+    def test_a_unit_not_merged_refuses_naming_it_and_its_stage(self):
+        assert plan.give_refusal("swb-1", [self.held("merged", "code")]) == "bolt tenant-environments's unit u1 has not merged (code)"
+
+    def test_a_chore_not_merged_and_a_stage_crew_cannot_tell_refuse_too(self):
+        assert plan.give_refusal("swb-1", [self.held("verify", kind="chore")]) == "bolt tenant-environments's chore u0 has not merged (verify)"
+        assert plan.give_refusal("swb-1", [self.held("unknown")]) == "bolt tenant-environments's unit u0 has not merged (unknown)"
+
+    def test_every_unit_merged_and_the_verdict_passed_is_proven(self):
+        assert plan.give_refusal("swb-1", [self.held("merged", "merged")]) is None
+
+    def test_merged_with_a_head_that_is_no_landing_of_sluices_refuses_with_the_verifications_words(self):
+        assert plan.give_refusal("swb-1", [self.held("merged", verdict="")]) == (
+            "bolt tenant-environments's verification is not green: its head abc1234 is no landing of sluice's, so it has no verdict")
+
+    def test_merged_and_green_with_a_fix_in_flight_is_proven_since_fixes_are_no_input(self):
+        """A carrying fix is what the proven bolt keeps of the team, so it refuses nothing (teams.16)."""
+        assert plan.give_refusal("swb-1", [self.held("merged", "landed")]) is None
+
+    def test_every_unit_landed_is_proven_whatever_its_head(self):
+        assert plan.give_refusal("swb-1", [self.held("landed", "landed", verdict="")]) is None
+
+    def test_a_bolt_with_no_units_refuses(self):
+        assert plan.give_refusal("swb-1", [self.held()]) == "bolt tenant-environments holds no units or chores yet"
+
+    def test_a_kit_not_read_refuses_with_why(self):
+        assert plan.give_refusal("swb-1", [self.held("merged", unread="sb-1 did not answer")]) == (
+            "can't tell whether bolt tenant-environments is proven: sb-1 did not answer")
+
+    def test_two_bolts_held_refuses_naming_the_older_whose_landing_frees_the_team(self):
+        held = [self.held("merged", name="doctor-rows"), self.held("merged", name="ssh-fix")]
+        assert plan.give_refusal("swc-1", held) == "swc-1 holds doctor-rows and ssh-fix; doctor-rows waits to land, and its landing frees swc-1"
 
 
 class TestLand:
