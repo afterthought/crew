@@ -1215,16 +1215,38 @@ echo "AT_GITHUB=$(at refs/remotes/origin/main)"
 echo "AT_OWN=$(at refs/heads/main)"
 """
 
-# A bolt's branch, made at the commit the kit's main is at now as the give's read of the policy found it (plan.8,
-# plan.18), tracking nothing, and no worktree (record 0026). A branch already there is kept. crew marks the branch it
-# made in the kit's git config, branch.bolt/<bolt>.crew, which git drops with the branch, so the tidy knows it as crew's
-# (read.4). Prints the commit the branch is at.
-BOLT_BRANCH = r"""main=$1 bolt=$2 at=$3
-cd "$main" || exit 1
-if ! git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null; then
-  git branch -q --no-track "bolt/$bolt" "$at" && git config "branch.bolt/$bolt.crew" given || exit 1
-fi
-git rev-parse --short "refs/heads/bolt/$bolt"
+# What a give reads on the team's host before sluice makes the bolt's branch (plan.19): the kit's policy at its main now
+# (POLICY), and SLUICE, what the host's `sluice --version` said, on one line, for kit.sluice_refusal.
+GIVE_READ = POLICY + r"""echo "SLUICE=$(sluice --version 2>&1 | tr '\n' ' ')"
+"""
+
+# Where a bolt's branch lives, for kit.bolt_lives (plan.19), read in a checkout of its kit with $bolt and $file set:
+# LOCAL and TRACKED, the commit of the host's own bolt/<bolt> and of origin's tracking ref of it, as this host last
+# fetched it, or -; AT_LOCAL and AT_TRACKED, the policy ($file) at each, base64, or - when it holds none, read from the
+# commit as sluice reads a branch's policy.
+BOLT_AT = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
+pol() { if [ "$1" != - ] && text=$(git show "$1:$file" 2>/dev/null); then printf '%s\n' "$text" | base64 | tr -d '\n'; else printf -; fi; }
+l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
+echo "LOCAL=$l"; echo "TRACKED=$o"; echo "AT_LOCAL=$(pol "$l")"; echo "AT_TRACKED=$(pol "$o")"
+"""
+
+# A bolt's branch made by sluice from main, where the policy at main keeps it, on GitHub for a kit whose policy names
+# origin for its bolts (plan.19), run in the kit's main checkout on the team's host, with no worktree (record 0026):
+# sluice's document on standard output and its exit (kit.branch_said). Once sluice made it, which sets the host's own
+# branch too, crew marks that branch in the kit's git config, branch.bolt/<bolt>.crew, so the tidy knows it as crew's
+# (read.4); a mark git refused is said on standard error.
+BOLT_CREATE = r"""cd "$1" || exit 3
+sluice branch create "bolt/$2" --from main --json; rc=$?
+if [ "$rc" = 0 ]; then git config "branch.bolt/$2.crew" given || echo "git could not mark bolt/$2 as crew's" >&2; fi
+exit $rc
+"""
+
+# A bolt's branch deleted by sluice wherever the policy at its tip keeps it (plan.19), once its tip is in main, run in
+# the kit's main checkout: where it lives first (BOLT_AT), then RC, sluice's exit, and SAID, its document, base64.
+BOLT_DELETE = r"""main=$1 bolt=$2 file=$3
+cd "$main" || exit 3
+""" + BOLT_AT + r"""out=$(sluice branch delete "bolt/$bolt" --into main --json 2>/dev/null); rc=$?
+echo "RC=$rc"; echo "SAID=$(printf '%s' "$out" | base64 | tr -d '\n')"
 """
 
 
@@ -1278,13 +1300,13 @@ def held_by(plan, team):
 
 
 def bolt_give(fleet, a):
-    """crew bolt give <team> [<bolt>]: the bolt given to the team in the plan, then bolt/<bolt> made from the kit's main
-    as it stands now on the team's host, at the commit the policy was read at, GitHub's for a kit with an origin
-    (kit.main_now, plan.18), and no
-    worktree (plan.8, record 0026); the conductor and ops start in the kit's main checkout. Refused, with the plan
-    unchanged, while the team holds a bolt, and when the kit's policy names no checks for its bolt branches, since a
-    bolt merges and lands only through sluice (teams.5, read.1), and while the team's host is held (teams.19), since a
-    give starts the team's agents again."""
+    """crew bolt give <team> [<bolt>]: bolt/<bolt> made by sluice on GitHub from the kit's main, run on the team's host,
+    and no worktree (plan.19, record 0026), then the bolt given to the team in the plan; the conductor and ops start in
+    the kit's main checkout. Refused, with the plan unchanged and no branch made, while the team holds a bolt or its
+    host is held (teams.19), since a give starts the team's agents again; when the kit's policy at its main now names
+    no checks or no remote for its bolt branches, since a bolt merges and lands only through sluice and lives on GitHub
+    (teams.5, give_check); when the host's sluice has no `branch create`; and in sluice's words when it makes no
+    branch. A plan write refused after sluice made the branch has sluice delete it again (ungiven_said)."""
     t = crew.team_of(fleet, a.team)
     label, kits = t["label"], [k["name"] for k in crew.kits_of(t)]
     CONTEXT["label"] = label
@@ -1304,24 +1326,33 @@ def bolt_give(fleet, a):
     named = (plan.bolt(a.bolt) or fail(f"{label}/main has no bolt {a.bolt}")) if a.bolt else None
     chosen = to_give(plan, named, t["name"], kits, label).name()
     t = crew.with_kit(t, plan.bolt(chosen).get("Repo"))
-    kit = t["kit"]["name"]
-    _, ref, now = kit_policy(fleet, t, chosen)
+    kit_name, main, host = t["kit"]["name"], t["kit"]["main"], t["machine"]
+    text, ref, _, version = kit_policy(fleet, t)
+    remote = give_check(kit_name, f"{main}/{kit.DECLARATION}", ref, text, chosen, version, host)
+    r = crew.on_machine(fleet, host, ["bash", "-c", BOLT_CREATE, "crew", main, chosen])
+    READ.drop_kit(host, main)
+    if r.stderr.strip():
+        print(r.stderr.strip(), file=sys.stderr)
+    made = made_said(chosen, kit_name, host, r.stdout, r.returncode)
 
     def change(w):
         again = held_by(w.plan, t["name"])
         not again or fail(f"{t['name']} holds bolt {again[0].name()} since {tip[:7]}")
-        b = to_give(w.plan, w.bolt(chosen), t["name"], [kit], label)
+        b = to_give(w.plan, w.bolt(chosen), t["name"], [kit_name], label)
         b.set("Team", t["name"])
         w.subject = f"plan({b.name()}): give to {t['name']}"
         w.quiet = {t["name"]}  # greeted below, once its bolt's branch exists
         seen["bolt"] = b.name()
         return [b.name()]
     seen = {}
-    sha = write(fleet, label, change, "plan: give a bolt")
+    try:
+        sha = write(fleet, label, change, "plan: give a bolt")
+    except Refusal as e:
+        r = crew.on_machine(fleet, host, ["bash", "-c", BOLT_DELETE, "crew", main, chosen, kit.DECLARATION])
+        READ.drop_kit(host, main)
+        fail(ungiven_said(chosen, str(e), r.stdout, r.returncode))
     b = seen["bolt"]
-    at = host_run(fleet, t["machine"], BOLT_BRANCH, t["kit"]["main"], b, now)
-    READ.drop_kit(t["machine"], t["kit"]["main"])
-    print(f"{t['name']} holds {b}: bolt/{b} from {kit}'s {ref} at {at} on {t['machine']}, merged into only through sluice")
+    print(given_said(t["name"], b, kit_name, remote, made, host))
     record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
                 eid=CONTEXT["eid"])
     # A team takes a bolt only once its last one has landed or been dropped, so nothing is in flight: a conductor
@@ -1337,17 +1368,54 @@ def bolt_give(fleet, a):
     greeted(greet_team(fleet, t, crew.greeted_roles("give", up, up), bolt=b))
 
 
-def kit_policy(fleet, t, bolt):
-    """The team's kit's policy as its main holds it now, read on the team's host, origin/main after a fetch for a kit
-    with an origin (POLICY, kit.main_now, plan.18), with the ref and the commit it was read at; refused, naming the file
-    and the ref, when it names no checks for the bolt's branch (kit.bolt_checks, teams.5) or no remote to make it on
-    (kit.give_remote, plan.19)."""
-    text, ref, sha = kit.policy_said(host_run(fleet, t["machine"], POLICY, t["kit"]["main"], kit.DECLARATION),
-                                     t["kit"]["name"], t["machine"])
-    where = f"{t['kit']['main']}/{kit.DECLARATION}"
-    kit.bolt_checks(text, t["kit"]["name"], where, f"bolt/{bolt}", ref=ref)
-    kit.give_remote(text, t["kit"]["name"], where, f"bolt/{bolt}", ref=ref)
-    return text, ref, sha
+def give_check(kit_name, where, ref, text, bolt, version, host):
+    """What a give checks before sluice makes the bolt's branch, so that any refusal leaves the plan as it was and no
+    branch made (plan.19, teams.5, read.1): the kit's policy at its main now (text, read at ref) names checks for the
+    bolt's branch and a remote to make it on, and the team's host runs a sluice with `branch create` (version, what its
+    `sluice --version` said). The remote, else refused naming the file and what it lacks, or the version needed and
+    the host's words."""
+    kit.bolt_checks(text, kit_name, where, f"bolt/{bolt}", ref=ref)
+    remote = kit.give_remote(text, kit_name, where, f"bolt/{bolt}", ref=ref)
+    why = kit.sluice_refusal(version, host)
+    not why or fail(why)
+    return remote
+
+
+def made_said(bolt, kit_name, host, out, code):
+    """The commit sluice made a bolt's branch at, from what BOLT_CREATE printed (kit.branch_said); refused in sluice's
+    words when it made none, as when the branch is already there, the plan unchanged (plan.19)."""
+    made, why = kit.branch_said(out, code)
+    return made or fail(f"sluice did not make bolt/{bolt} for {kit_name} on {host}: {why}")
+
+
+def given_said(team, bolt, kit_name, remote, made, host):
+    """What a give says once the plan gives the bolt (plan.19): where sluice made its branch, on GitHub by the kit's
+    remote, from main at the commit it made it at, and the team's host that builds it."""
+    return (f"{team} holds {bolt}: sluice made bolt/{bolt} on GitHub ({remote}) from {kit_name}'s main at {made[:7]}, "
+            f"built on {host} and merged into only through sluice")
+
+
+def ungiven_said(bolt, why, out, code):
+    """What a give refused at its plan write says, once crew had sluice delete the bolt's branch it made just before
+    (plan.19): the write's refusal, and that the branch is deleted again, or why it stands, in sluice's words, so
+    nobody gives the bolt again onto a branch left behind. out and code are what BOLT_DELETE printed and its exit."""
+    try:
+        code == 0 or fail(f"its delete exited {code}: {(out or '').strip()[-200:] or 'nothing was said'}")
+        gone, words = kit.branch_said(*kit.delete_ran(out))
+    except Refusal as e:
+        gone, words = None, str(e)
+    if gone:
+        return f"{why}; sluice deleted bolt/{bolt} again, so nothing of the give is left"
+    return f"{why}; and bolt/{bolt}, which sluice made for the give, still stands, since sluice did not delete it: {words}"
+
+
+def kit_policy(fleet, t):
+    """The team's kit's policy as its main holds it now and what its host's sluice says of its version, read on the
+    team's host in one go, origin/main after a fetch for a kit with an origin (GIVE_READ, kit.main_now, plan.18): (the
+    policy's text, or None; the ref and the commit it was read at; sluice's words)."""
+    said = host_run(fleet, t["machine"], GIVE_READ, t["kit"]["main"], kit.DECLARATION)
+    text, ref, sha = kit.policy_said(said, t["kit"]["name"], t["machine"])
+    return text, ref, sha, kit.said_of(said).get("SLUICE", "")
 
 
 def holding(team, b, plan, stage_of):
@@ -5236,7 +5304,7 @@ def bolt_detach(path, branch, kdir, over, locked, status):
 def bolt_detached(main, path, branch):
     """A clean bolt's worktree from before record 0026 detached at its bolt's tip (bolt_detach), `git switch --detach`
     in it, its files as they were; the bolt's branch then marked as crew's in the kit's git config, as a branch the give
-    makes is (BOLT_BRANCH), so it goes with the bolt once no worktree holds it (bolt_branch_over). What crew says of it,
+    makes is (BOLT_CREATE), so it goes with the bolt once no worktree holds it (bolt_branch_over). What crew says of it,
     or why git refused."""
     git = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True, env=gitenv())
     r = git("-C", path, "switch", "-q", "--detach")

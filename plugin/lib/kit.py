@@ -234,6 +234,16 @@ def branch_said(out, code):
     crew.fail(f"crew can't read what sluice's branch command said (exit {code}): {(out or '').strip()[:200] or 'nothing'}")
 
 
+def delete_ran(said):
+    """sluice's document and exit as BOLT_DELETE printed them, SAID, base64, and RC (read.2): (document, exit). Refused,
+    naming what was printed, when they are not there."""
+    f = said_of(said)
+    try:
+        return base64.b64decode(f["SAID"]).decode(), int(f["RC"])
+    except (KeyError, ValueError, UnicodeDecodeError):
+        crew.fail(f"crew can't read what sluice's branch delete said from: {(said or '').strip()[-200:] or 'nothing'}")
+
+
 def verification(head, result):
     """A bolt's verification (tests.5, record 0025): sluice's verdict on the bolt's last landing, read from its head's
     VERDICT trailer, as (state, words): "green" when the head is a landing sluice made, which it makes only on a pass;

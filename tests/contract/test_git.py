@@ -252,34 +252,16 @@ def script(name, *args, cwd=None):
     return subprocess.run(["bash", "-c", getattr(plan, name), "crew", *args], capture_output=True, text=True, cwd=cwd)
 
 
-def test_a_bolt_is_a_branch_from_main_as_it_stands_marked_as_crews_and_no_worktree(repo):
-    """plan.bolt_give (plan.8, record 0026): bolt/<bolt> is made from the kit's main with no worktree, marked in the
-    kit's git config as crew's, and the mark goes with the branch when git deletes it, so the tidy reads it as crew's
-    while the branch stands and never after (plan.9, read.4)."""
+def test_the_mark_crew_sets_on_a_bolts_branch_goes_when_git_deletes_the_branch(repo):
+    """plan.tidy (plan.9, read.4): crew marks a bolt's branch as its own in the kit's git config, branch.bolt/<bolt>.crew,
+    once sluice has made it (BOLT_CREATE), and the mark goes with the branch when git deletes it, so the tidy reads it as
+    crew's while the branch stands and never after."""
     head = repo.commit("main", {"README": "r\n"})
-    r = script("BOLT_BRANCH", str(repo.path), "b", head)
-    assert (r.returncode, r.stdout.strip()) == (0, head[:7])
-    assert repo.git("rev-parse", "bolt/b") == head
-    assert "bolt/b" not in repo.git("worktree", "list", "--porcelain")
+    repo.git("branch", "-q", "--no-track", "bolt/b", head)
+    repo.git("config", "branch.bolt/b.crew", "given")
     assert repo.git("config", "--get-regexp", r"^branch\.bolt/.*\.crew$") == "branch.bolt/b.crew given"
-    repo.commit("feat: more", {"more": "m\n"})
-    assert script("BOLT_BRANCH", str(repo.path), "b", repo.git("rev-parse", "HEAD")).stdout.strip() == head[:7]  # kept
     repo.git("branch", "-q", "-D", "bolt/b")
     assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
-
-
-def test_a_bolt_of_a_kit_on_github_is_cut_from_githubs_main_as_the_policys_read_fetched_it(repo, tmp_path):
-    """plan.bolt_give through POLICY and BOLT_BRANCH (plan.8, plan.18): the give's one fetch is the policy's, and the
-    bolt's branch is cut at the commit origin/main was at as it fetched it, ahead of the host's own main, tracking
-    nothing."""
-    import kit
-    pushed = kit_with_github(repo, tmp_path)
-    pushed("from-a-mac")
-    _, ref, at = kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout, "k", "h")
-    github = repo.git("rev-parse", "origin/main")
-    assert (ref, at) == ("origin/main", github) and github != repo.git("rev-parse", "main")
-    assert script("BOLT_BRANCH", str(repo.path), "b", at).stdout.strip() == github[:7]
-    assert repo.git("for-each-ref", "--format=%(upstream)", "refs/heads/bolt/b") == ""
 
 
 def test_a_kits_policy_is_read_from_mains_commit(repo):
