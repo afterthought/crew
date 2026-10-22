@@ -28,7 +28,7 @@ crew SHALL read its teams from `~/.config/crew/teams.json` version 2, which the 
 - **THEN** `swb-1-conductor` and `swb-1-ops` start, and no other agent of the team is running
 
 ### Requirement: Units run in slots
-A team SHALL have at most `units` units in flight, each held by a slot named `<team>-unit-<n>` with its own pane. A slot SHALL be taken when a unit's first stage starts, and freed when the unit merges into the bolt or is dropped. A slot whose unit or fix has merged into its bolt, or whose work the plan no longer has (a dropped unit, or a fix whose bolt was dropped), SHALL be freed the next time crew reads the team (`crew status`, `crew unit run`, `crew fix`), once the slot's agent is not working.
+A team SHALL have at most `units` units in flight, each held by a slot named `<team>-unit-<n>` with its own pane. A slot SHALL be taken when a unit's first stage starts, and freed when the unit merges into the bolt or is dropped. A slot whose unit or fix has merged into its bolt or landed on main, or whose work the plan no longer has (a dropped unit, or a fix whose bolt was dropped), SHALL be freed the next time crew reads the team (`crew status`, `crew unit run`, `crew fix`), once the slot's agent is not working. A fix SHALL read landed once the kit's main holds its branch's tip and the branch has moved since it was made, or, for one that never moved, once its bolt is in no plan and main holds its tip; a fix SHALL be read from its branch whether or not its place still stands.
 
 #### Scenario: Every slot is taken
 - **WHEN** the conductor starts a fifth unit on a team with `units = 4`, all four in flight
@@ -37,6 +37,18 @@ A team SHALL have at most `units` units in flight, each held by a slot named `<t
 #### Scenario: A unit dropped while its stage works
 - **WHEN** the planner drops a unit while its slot's agent is working, and that agent later settles
 - **THEN** the next `crew status` of the team frees the slot, and the unit's worktree and branch go as for any work that is over
+
+#### Scenario: A fix whose bolt has landed
+- **WHEN** a slot holds a fix that merged into its bolt, the bolt has landed, and the kit's main holds the fix's tip
+- **THEN** the next `crew status` of the team reads the fix landed and frees the slot once its agent is not working
+
+#### Scenario: A fix whose place is gone
+- **WHEN** a slot holds a fix whose place was removed while its branch stands, and the fix has merged into its bolt or landed with it
+- **THEN** the next `crew status` of the team reads it merged or landed from its branch and frees the slot, as it would with its place standing
+
+#### Scenario: A fix just made is not landed
+- **WHEN** a fix's branch was cut from its bolt at a commit main already holds, has no commit of its own, and its bolt is still planned
+- **THEN** the fix reads in flight, and its slot is kept
 
 ### Requirement: A unit is built stage by stage, each by a fresh agent
 `crew unit run <unit> <stage>` SHALL start the stage in the unit's slot with a new agent, after ending the one there. The new agent gets that stage's brief and effort, starts in the unit's worktree, and is sent its command. The stages are:
@@ -74,7 +86,7 @@ Code SHALL start as soon as the unit's change is committed, with no review betwe
 - **THEN** its agent's calls of `sluice wait <n> --timeout 9m --json` have each exited 5 within ten minutes, and its next call ends with sluice's verdict, exiting 0 when the unit landed
 
 ### Requirement: Work happens in fixed places
-A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.
+A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. When a branch of the unit's name was kept by an earlier drop, the unit's place SHALL be made on that branch as it stands, the branch SHALL then track the unit's bolt, and the stage that made the place SHALL say it starts from the kept branch, naming the commit it is at; a chore's place SHALL be made on a kept `chore/<chore>` alike. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.
 
 #### Scenario: A bolt is given
 - **WHEN** `crew bolt give swb-1` gives swb-1 the bolt `b`
@@ -87,6 +99,10 @@ A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, 
 #### Scenario: A kit with a crew-prepare script
 - **WHEN** crew makes a unit's place in a kit whose main checkout's devenv profile holds a `crew-prepare` script
 - **THEN** the script does not run
+
+#### Scenario: A unit added again under a kept branch's name
+- **WHEN** `unit/u` was kept when unit `u` was dropped from bolt `a`, and a unit `u` added later to bolt `b` starts construct
+- **THEN** `places/u` is made on `unit/u` as it stood, holding the kept commits, `unit/u` tracks `bolt/b`, and the construct's start says the place starts from the kept `unit/u` at its commit
 
 ### Requirement: Fixes during a bolt are built beside its units
 `crew fix <team> <name> "<what is wrong>"` SHALL make `fix/<bolt>/<name>` from the team's bolt at `<kit>/places/fix-<bolt>--<name>`. While the team holds two bolts, a new fix SHALL name its bolt with `--bolt <bolt>`, one the team holds, and SHALL be refused without it, naming both; a fix in flight SHALL be found by its name among the team's bolts, and a name in flight on both SHALL be refused without `--bolt`. It SHALL start a fresh code agent there in a free slot with the words given, whether or not the place could be made ready: when a step of its readying failed, the agent SHALL be told the step and its last lines with the fix's words, since a fix is how a bolt is repaired, and the command SHALL say so. A new fix whose branch or place already exists SHALL be refused, naming the place, and a fix's agent SHALL start only in a worktree on that fix's own branch, made from the fix's bolt. `crew fix <team> <name> --merge` SHALL start its merge stage, and the fix SHALL merge into the bolt like a unit, by a submission. `crew fix <team> <name> --drop` SHALL end a fix that is not wanted, whether a slot holds it or only its branch or place stands: its slot SHALL be freed and its agent ended when one is up, a working agent only with `--force`, and its place and branch SHALL go as a dropped unit's do, its branch kept and named when it holds commits whose patch the bolt lacks. A fix that has merged into its bolt SHALL NOT be dropped, and a drop refused SHALL be recorded. A fix SHALL have no OpenSpec change and no plan record. A landing that conflicts with main SHALL be taken by a fix whose agent merges main into its place, resolving the conflict, and which merges into the bolt like any fix; nothing of crew's SHALL move the bolt's branch.
@@ -239,11 +255,39 @@ After starting a unit's stage or a fix, the conductor SHALL wait for it through 
 - **THEN** it is refused; a defect is a fix, and a new need is a new unit
 
 ### Requirement: A worktree goes when its work is over
-crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once its bolt holds its change archived or it has landed, or no plan has it, never while the bolt holds its change open; a fix's once it has merged into its bolt, its conductor dropped it, or no plan has its bolt. A dropped fix's branch SHALL be kept and named when `git cherry` finds commits whose patch its bolt lacks, or cannot compare it with its bolt, and SHALL then be the user's; one holding nothing beyond its bolt SHALL go. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, at once after `crew bolt drop`, `crew unit drop` or `crew bolt land`, and at once when a wait sees a unit's, chore's or fix's merge into its bolt delivered.
+crew SHALL remove each worktree it made, with its branch, once its work is over and no slot holds it: a bolt's once no plan has the bolt; a unit's once its bolt holds its change archived or it has landed, or no plan has it, never while the bolt holds its change open; a chore's once its bolt or main holds its trailer, or no plan has it; a fix's once it has merged into its bolt or landed on main, its conductor dropped it, or no plan has its bolt. A fix's bolt SHALL be the one its branch tracks, the host's `bolt/<bolt>` or GitHub's `origin/bolt/<bolt>`, and whether it has merged SHALL be read against that same branch; once that branch is gone, whether the fix has landed SHALL be read from the kit's main. A fix's branch that no worktree and no slot holds SHALL go once the fix has merged or landed, or its bolt is in no plan and the kit's main holds its tip; such a branch holding anything its bolt and main lack SHALL be left as it is. A unit's or chore's branch SHALL go with its place only when `git cherry` finds no commit on it whose patch its bolt lacks, or, once the bolt has landed or the bolt's branch is gone, whose patch the kit's main as crew reads it now lacks; it SHALL never be judged by which commits are ancestors, since a unit's commits are rebased as they merge. A branch with such commits, or one git cannot compare, SHALL be kept, and the command SHALL name it with the commit it is at, how many commits it holds whose patch its bolt or main lacks, and that it is the user's to keep or delete. A dropped fix's branch SHALL be kept and named when `git cherry` finds commits whose patch its bolt lacks, or cannot compare it with its bolt, and SHALL then be the user's; one holding nothing beyond its bolt SHALL go. A fix's branch whose bolt has landed, or whose bolt's branch is gone, SHALL be judged against the kit's main as a unit's is. Each branch kept SHALL be recorded once, in a run-record entry on the team's host naming the branch, the commit it is at and how many commits it holds of its own. A bolt's branch crew made, which crew marks in the kit's git config when it makes it, SHALL go once no plan has the bolt and no worktree is on it, and a landed bolt's only when `git cherry` finds no commit on it whose patch the kit's main lacks, being otherwise kept, named, recorded and the user's; a deletion git or sluice refuses SHALL keep the branch and name why. It SHALL do this each time it reads a team, for the team's kit checkout, at once after `crew bolt drop`, `crew unit drop`, `crew chore drop`, `crew unit free`, `crew chore free` or `crew bolt land`, and at once when a wait sees a unit's, chore's or fix's merge into its bolt delivered.
 
 #### Scenario: A dropped bolt
-- **WHEN** the planner drops a bolt that swb-2 holds
+- **WHEN** the planner drops a bolt that swb-2 holds, none of whose units' or fixes' branches holds a commit of its own
 - **THEN** `bolt/<bolt>` is gone from swb-2's host, and so are the places, branches and slots of the bolt's units and fixes
+
+#### Scenario: A dropped bolt whose unit holds a written change
+- **WHEN** the planner drops a bolt that swb-2 holds, and one of its units' branches holds the unit's change committed, which the bolt does not
+- **THEN** that unit's place and slot are gone and its branch is kept, the drop's output naming it, the commit it is at and that it holds 1 commit whose patch the bolt lacks, and a run-record entry names the branch; the bolt's other places and branches go
+
+#### Scenario: A dropped unit holding nothing of its own
+- **WHEN** the planner drops a unit whose branch holds no commit beyond its bolt
+- **THEN** its place and its branch are removed, and crew says the commit the branch was at
+
+#### Scenario: Work dropped with commits of its own
+- **WHEN** the planner drops a unit whose branch holds its change committed, which neither its bolt nor main has
+- **THEN** its place is removed and its slot freed, its branch is kept, and the drop's output names the branch, the commit it is at and how many commits it holds whose patch the bolt lacks
+
+#### Scenario: A unit whose commits reached the bolt rebased
+- **WHEN** a unit's branch holds commits whose patches the bolt holds under other hashes, rebased as they merged, and its place goes
+- **THEN** its branch is removed, since `git cherry` finds nothing of its own on it
+
+#### Scenario: A unit whose bolt's branch is gone
+- **WHEN** a unit's place goes after its bolt's branch was removed, and its branch holds a commit whose patch the kit's main lacks
+- **THEN** its branch is kept and named, compared with the kit's main
+
+#### Scenario: A unit of a landed bolt
+- **WHEN** a unit's place goes after its bolt has landed, while the bolt's branch still stands, and its branch holds a commit whose patch the bolt holds and main lacks
+- **THEN** its branch is kept and named, compared with the kit's main and not with the bolt
+
+#### Scenario: A slot freed by hand
+- **WHEN** `crew unit free u` frees a slot holding a unit no longer in its team's bolt, whose branch holds a commit of its own
+- **THEN** the slot is freed and the place removed, and `unit/u` is kept and named
 
 #### Scenario: A leftover from before
 - **WHEN** a kit checkout has the worktree of a bolt that no plan has, and a place of a unit that has merged, which no slot holds
@@ -255,11 +299,7 @@ crew SHALL remove each worktree it made, with its branch, once its work is over 
 
 #### Scenario: The host does not answer
 - **WHEN** a bolt is dropped while its team's host cannot be reached
-- **THEN** the plan changes, crew says the host's worktrees were not removed, and the team's next read removes them
-
-#### Scenario: Work dropped with commits of its own
-- **WHEN** a removed branch holds commits that neither main nor its bolt has
-- **THEN** crew says the commit the branch was at
+- **THEN** the plan changes, crew says the host's worktrees were not removed, and the team's next read removes them, keeping each branch that holds work of its own
 
 #### Scenario: A unit carried onto its bolt
 - **WHEN** a unit's change is open on its bolt, carried there inside another unit's merge, and the team is read
@@ -268,6 +308,22 @@ crew SHALL remove each worktree it made, with its branch, once its work is over 
 #### Scenario: A dropped fix's place with uncommitted changes
 - **WHEN** a fix is dropped while its place holds a file nobody committed
 - **THEN** its place and branch are kept, and every read names them until the place is clean, when crew removes them
+
+#### Scenario: A landed fix's place and branch
+- **WHEN** a fix's place stands, no slot holds it, and its bolt has landed with the kit's main holding the fix's tip
+- **THEN** the next read of a team building in that checkout removes the place and the branch, saying the fix has landed on main
+
+#### Scenario: A landed fix's branch with no place
+- **WHEN** a kit checkout holds a `fix/` branch whose place is gone, which no slot holds, whose bolt has landed and been removed, and whose tip the kit's main holds
+- **THEN** the next read of a team building in that checkout removes the branch, saying the commit it was at
+
+#### Scenario: A fix branch with work nobody holds
+- **WHEN** a `fix/` branch with no place and no slot holds a commit neither its bolt nor the kit's main has, and its bolt is in no plan
+- **THEN** crew leaves the branch as it is
+
+#### Scenario: A fix that tracks its bolt on GitHub
+- **WHEN** a fix's branch tracks `origin/bolt/<bolt>` and that branch holds the fix's tip
+- **THEN** crew reads the fix's bolt as `<bolt>` and the fix as merged, and frees its slot and removes its place and branch as for one tracking the host's `bolt/<bolt>`
 
 #### Scenario: A merge lands
 - **WHEN** the conductor's `crew unit wait a` sees unit `a`'s merge into its bolt delivered, its agent idle
@@ -520,7 +576,7 @@ A bolt SHALL be proven by its verification alone: sluice's verdict on its last l
 - **THEN** the bolt is not offered for landing, and `crew bolts` says what its verification is
 
 ### Requirement: Every agent crew starts carries its name for sluice
-Every agent crew starts SHALL have `SLUICE_AGENT` in its environment, the same as its `CREW_AGENT`, from its start and again when herdr resumes it.
+Every agent crew starts SHALL have `SLUICE_AGENT` in its environment, the same as its `CREW_AGENT`, from its start and again when herdr resumes it where crew gives it its identity back; a main level's agent herdr resumes off its main level's host SHALL have neither (`main-level`).
 
 #### Scenario: A stage's agent starts
 - **WHEN** crew starts `swb-1-unit-2` for a code stage
@@ -529,6 +585,10 @@ Every agent crew starts SHALL have `SLUICE_AGENT` in its environment, the same a
 #### Scenario: herdr resumes an agent
 - **WHEN** herdr resumes the conductor's session without crew's environment
 - **THEN** its commands see `SLUICE_AGENT` back, the same as its `CREW_AGENT`
+
+#### Scenario: herdr resumes a main level's agent on another host
+- **WHEN** herdr resumes `swancloud-planner`'s session on a host the teams file does not name for swancloud's main level
+- **THEN** its commands see neither `CREW_AGENT` nor `SLUICE_AGENT`
 
 ### Requirement: Ahead in a bolt is its merge order
 Where crew tells a unit of the units ahead of it in its bolt, in a code stage's note of overlapping Touches and in the forecasts on a conductor's wait, a unit `a` SHALL be ahead of `b` when `b` comes after `a` through `After` at any depth, or, when neither comes after the other, when the plan lists `a` first. A unit's dependent SHALL never be named ahead of it, nor a unit forecast against one that comes after it.
@@ -799,6 +859,29 @@ When crew starts or brings back a team's conductor with `crew up`, `crew rebuild
 #### Scenario: A construct already running
 - **WHEN** a unit's amended construct has started and not yet committed, and its conductor is restarted
 - **THEN** the greeting does not name the unit, whose stage reads `construct`
+
+### Requirement: A landing leaves only what main lacks
+Once sluice has landed a bolt's submission to main, crew SHALL mark the bolt's branch as landed on the team's host, and every read of the team SHALL then judge the bolt's work against the kit's main as crew reads it now, never against the bolt: each unit's, chore's and fix's branch, as its place goes, and the bolt's own branch, once no plan has the bolt and no worktree is on it. Whether main holds a commit SHALL be judged by its patch, as `git cherry` compares, never by which commits are ancestors. A branch holding no commit whose patch main lacks SHALL go; one holding such a commit, or one git cannot compare with main, SHALL be kept, named with the commit it is at and how many commits it holds whose patch main lacks, recorded once in the run record, and SHALL then be the user's to keep or delete. `crew bolt land` SHALL print what the tidy it asks of the team's host removed and kept, and once that tidy has run the kit SHALL hold nothing of the bolt's work but branches holding work main lacks and worktrees kept for uncommitted changes or a remove hook.
+
+#### Scenario: Everything the bolt left is on main
+- **WHEN** a bolt's submission to main has landed, and `crew bolt land` runs while a merged unit's place and a merged fix's place still stand
+- **THEN** both places and their branches are removed, the bolt's branch is removed, and the command says the bolt's branch went because main holds every commit of it
+
+#### Scenario: The bolt's branch holds a commit main lacks
+- **WHEN** a bolt's submission to main has landed, and its branch then holds a commit main does not, and `crew bolt land` runs
+- **THEN** the bolt's branch is kept, the command naming it, the commit it is at and that it holds 1 commit whose patch main lacks, a run-record entry names the branch, and no later read of the team removes it
+
+#### Scenario: A fix of the landed bolt holds work of its own
+- **WHEN** a bolt has landed, and a fix made from it, not merged, holds a commit main does not, and its place goes
+- **THEN** its place is removed and its branch is kept and named, compared with main
+
+#### Scenario: The team's host did not answer the landing
+- **WHEN** `crew bolt land` runs while the team's host cannot be reached, and the team's next read finds the bolt's branch marked landed and holding a commit main lacks
+- **THEN** that read keeps the bolt's branch and names it, as the landing's own tidy would have
+
+#### Scenario: Commits main holds under the same hashes
+- **WHEN** sluice landed the bolt as a merge commit whose second parent is the bolt's head, and the tidy compares the bolt's branch and its units' branches with main
+- **THEN** `git cherry` finds nothing of their own on them, and they go
 
 ### Requirement: A team takes a bolt of any kit it holds
 `crew bolt give <team>` SHALL give a team the first bolt, in the plan's order, of any kit it holds that no team holds, or the bolt named when it is of one of them; a bolt of a kit the team does not hold SHALL be refused. While a team holds a bolt, crew SHALL read its stages, make and ready its places, read its policy, make its branch, land it and read its changes in that bolt's kit's checkout on the team's host, and start its conductor and ops there.
