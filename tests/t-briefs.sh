@@ -134,7 +134,7 @@ for want in "names, in the message that carries it, the documentation page or th
   "not the sequence" "Answer linked questions together" "never the mechanism"; do has "$out" "$want"; done
 has "$out" "\`--source\` also names what the signal points at"
 expect_ok crewpy brief wldn planner
-for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "plan proposed <n>" "--replaces <n>" "--unblocks <bolt>" \
+for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "--replaces <n>" "--unblocks <bolt>" \
   "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none"; do
   has "$out" "$want"
 done
@@ -144,7 +144,9 @@ for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "wh
   "A unit that has merged is not amended"; do has "$out" "$want"; done
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
   "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
-for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
+for want in "Never name a proposal by its number alone" "Recite no command" "which holds the change whole" \
+  "say in a sentence what you propose and point to its card"; do has "$out" "$want"; done
+lacks "$out" "plannotator-tui"
 for want in "crew card session" "crew card wait" \
   "crew raises a proposal's card itself, in your name, when \`$CREW/plugin/bin/crew plan propose\` accepts the proposal" \
   "changes it when you rewrite the proposal with \`--replaces\`, in place while it waits on the user and as a new version following the one they answered" \
