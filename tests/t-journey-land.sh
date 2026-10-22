@@ -270,11 +270,11 @@ on_bolt south "feat: one zone more, after the landing" || fail "the bolt took no
 at=$(short bolt/zone-lists)
 expect_ok crew bolt land zone-lists
 has "$out" "bolt/zone-lists is kept on GitHub: sluice did not delete it: bolt/zone-lists at $(git -C "$k" rev-parse bolt/zone-lists) has not landed into main"
-has "$out" "bolt/zone-lists is kept at $at: bolt zone-lists has landed, and it holds 1 commit whose patch main lacks (git cherry), the user's to keep or delete"
+has "$out" "bolt/zone-lists is kept at $at: bolt zone-lists has landed, and it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete"
 eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" ""
 eq "$(field $box branch.kept Head bolt/zone-lists) $(field $box branch.kept Count bolt/zone-lists)" "$at 1"
 eq "$(field $box branch.kept From bolt/zone-lists) | $(field $box branch.kept Why bolt/zone-lists)" \
-  "bolt/zone-lists | bolt zone-lists has landed, and main lacks its patches"
+  "bolt/zone-lists | bolt zone-lists has landed, and origin/main lacks its patches"
 expect_ok crew status swb-1
 lacks "$out" "bolt/zone-lists"
 eq "$(short bolt/zone-lists)" "$at"

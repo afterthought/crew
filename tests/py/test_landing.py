@@ -99,7 +99,8 @@ def deleted(name, policy=ON_GITHUB):
 
 class TestTheBranchIsDeleted:
     """bolt-plan "A bolt is created, given, dropped and landed through crew" (plan.19): crew bolt land has sluice delete
-    the bolt's branch after its plan write, wherever the policy at its tip keeps it; what it says of it."""
+    the bolt's branch after its plan write, by the tidy on the team's host once the landing's place is gone, wherever
+    the policy at its tip keeps it; what it says of it."""
 
     def test_the_bolts_branch_is_deleted_at_its_land(self):
         """bolt-plan "The bolt's branch is deleted at its land"."""
@@ -127,6 +128,13 @@ class TestTheBranchIsDeleted:
             "chuck-herdr-alpha did not answer, so sluice was not asked to delete bolt/b: sluice branch delete bolt/b --into main there")
         assert plan.deleted_said("b", "chuck-herdr-alpha", 0, deleted("delete.json").replace("RC=0", "RC=x"), "").startswith(
             "bolt/b may still stand on GitHub: crew can't read what sluice's branch delete said from:")
+
+    def test_a_branch_a_worktree_still_holds_is_not_asked_of_sluice(self):
+        """plan.19: sluice 0.36.4's delete removes a branch a worktree holds, leaving the worktree on no branch (read
+        2026-10-22), so a landing's place kept for its changes keeps the branch, named with the command for after it."""
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 0, "", "", "/kit/places/land-b") == (
+            "bolt/b is kept: /kit/places/land-b holds it, so sluice was not asked to delete it: sluice branch delete bolt/b "
+            "--into main on chuck-herdr-alpha, once that worktree is gone")
 
 
 class TestTheCardsClose:

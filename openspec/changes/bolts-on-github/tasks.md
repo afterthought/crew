@@ -27,7 +27,7 @@
 
 ## 6. The place holds what the bolt merged
 
-- [ ] 6.1 The unit's branch is rebased onto `bolt/bolts-live-on-github`, each conflict resolved keeping both changes' intents, and tasks 1 to 5 still hold on it (design, Decision 11, Task notes 6.1). Logic: `tests/suite logic`. Journey: `tests/suite t-journey-teams t-journey-units t-journey-land t-docs` ends with "0 failed".
+- [x] 6.1 The unit's branch is rebased onto `bolt/bolts-live-on-github`, each conflict resolved keeping both changes' intents, and tasks 1 to 5 still hold on it (design, Decision 11, Task notes 6.1). Logic: `tests/suite logic`. Journey: `tests/suite t-journey-teams t-journey-units t-journey-land t-docs` ends with "0 failed".
 
 ## 7. A drop ends the bolt's branch through sluice
 

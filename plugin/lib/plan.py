@@ -1283,14 +1283,17 @@ def tidy_after(fleet, t, what, landed=None):
     """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
     has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did; and,
     after a landing (landed, (bolt, words)), the bolt's landing card closed there with the words, where its conductor
-    holds it (landing_cards_closed). A host that does not answer leaves that to the team's next read, and the write
-    stands."""
+    holds it (landing_cards_closed), and the bolt's branch deleted by sluice once the landing's place is gone
+    (land_delete, plan.19). A host that does not answer leaves that to the team's next read, the land's delete named
+    with its command, and the write stands."""
     more = ["--landed", landed[0], "--outcome", landed[1]] if landed else []
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"], *more))
     READ.drop_kit(t["machine"], t["kit"]["main"])
     said = tidied(t["name"], what, r.returncode, r.stdout, r.stderr)
     if said:
         print(said)
+    if landed and r.returncode == 255:  # nothing ran there, the land's delete among it
+        print(deleted_said(landed[0], t["machine"], r.returncode, r.stdout, r.stderr))
 
 
 def tidied(team, what, code, out, err):
@@ -1419,13 +1422,17 @@ def ungiven_said(bolt, why, out, code):
     return f"{why}; and bolt/{bolt}, which sluice made for the give, still stands, since sluice did not delete it: {words}"
 
 
-def deleted_said(bolt, host, code, out, err):
+def deleted_said(bolt, host, code, out, err, held=None):
     """What a land says of sluice's delete of the bolt's branch (plan.19), from what BOLT_DELETE printed on the team's
     host (out, err, its exit code): deleted, from GitHub for a bolt its tip's policy keeps there, else from the host,
     at the commit it was at; gone already, as sluice says when it finds no branch, which refuses nothing; kept where it
     lives, in sluice's words, when sluice refused, as while a submission is queued on it; and, when the host did not
-    answer or crew can't read what sluice said, that the branch may still stand. The bolt has left the plan either
-    way."""
+    answer or crew can't read what sluice said, that the branch may still stand. A branch a worktree still holds (held,
+    its path) is not asked of sluice, whose delete would leave that worktree on no branch. The bolt has left the plan
+    either way."""
+    if held:
+        return (f"bolt/{bolt} is kept: {held} holds it, so sluice was not asked to delete it: sluice branch delete "
+                f"bolt/{bolt} --into main on {host}, once that worktree is gone")
     if code:
         why = "did not answer" if code == 255 else "failed (" + ((err or out).strip().splitlines() or [f"exit {code}"])[-1] + ")"
         return f"{host} {why}, so sluice was not asked to delete bolt/{bolt}: sluice branch delete bolt/{bolt} --into main there"
@@ -1856,10 +1863,10 @@ def landing_cards_closed(fleet, t, bolt, outcome):
 
 def bolt_land(fleet, a):
     """A bolt whose units and chores have all landed on its kit's main, out of the plan, the landing recording the
-    commit main holds (plan.14, plan.16), then its branch deleted by sluice wherever the policy at its tip keeps it, on
-    GitHub for a bolt given since gives went through sluice, a delete sluice refuses named in its words with the bolt
-    out of the plan all the same (plan.19, deleted_said), and its landing card closed on its team's host with where
-    GitHub's main holds it (landed_words). A bolt no team holds, built outside a team, is read on the host and main
+    commit main holds (plan.14, plan.16), then, by the tidy on its team's host once the landing's place is gone, its
+    branch deleted by sluice wherever the policy at its tip keeps it, on GitHub for a bolt given since gives went through
+    sluice, a delete sluice refuses named in its words with the bolt out of the plan all the same (plan.19,
+    land_delete), and its landing card closed there with where GitHub's main holds it (landed_words). A bolt no team holds, built outside a team, is read on the host and main
     checkout of a team of the partition building its kit, and lands the same way once main holds each of its units'
     changes and chores, on the user's word (roles.2)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
@@ -1900,9 +1907,6 @@ def bolt_land(fleet, a):
           fields=dict(Repo=t["kit"]["name"], Head=head))
     if b.get("Team"):
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]} and {t['name']} holds no bolt")
-        r = crew.on_machine(fleet, t["machine"], ["bash", "-c", BOLT_DELETE, "crew", t["kit"]["main"], a.bolt, kit.DECLARATION])
-        READ.drop_kit(t["machine"], t["kit"]["main"])
-        print(deleted_said(a.bolt, t["machine"], r.returncode, r.stdout, r.stderr))
         tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, landed))
     else:
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]}; no team held it")
@@ -5096,7 +5100,8 @@ def tidy(fleet, a):
     branch crew marked, which no worktree holds, goes once no plan has the bolt, and a landed bolt's only when main holds
     every commit of it, being kept, named and recorded otherwise (bolt_branch_gone, record 0003); crew's marks are read
     once, before the worktrees are judged, so each place of a landed bolt is judged against main, and a mark whose branch
-    sluice's delete removed is unset then, saying nothing (marks_gone, plan.19). A fix's branch no worktree and no slot
+    sluice's delete removed is unset then, saying nothing (marks_gone, plan.19). At a landing (a.landed, the bolt), the
+    landing's place gone, sluice is asked to delete the bolt's branch before it is judged (land_delete). A fix's branch no worktree and no slot
     holds goes once main or its bolt holds its tip (fix_branches_over). The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
     makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
@@ -5122,10 +5127,7 @@ def tidy(fleet, a):
     now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as Stages reads it (plan.18)
     ups, on_main = gather.upstreams(main), set(gather.changes(main, now))
     dropped, marks = fixes_dropped(main), bolt_marks(main)
-    have = set((gather.run(["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/bolt/"], main) or "").split())
-    for branch in marks_gone(marks, have):  # sluice's delete removed it by ref edits, which leave its mark (plan.19)
-        subprocess.run(["git", "-C", main, "config", "--unset", f"branch.{branch}.crew"], capture_output=True, env=gitenv())
-        del marks[branch]
+    unmark_gone(main, marks)
     fixes = gather.fix_facts(main, sorted({b for b in ups if b.startswith("fix/")}), ups, now)  # each fix branch's, read once
 
     def up_landed(branch):  # whether the bolt the branch tracks, the host's or GitHub's, is marked landed (record 0003)
@@ -5197,6 +5199,11 @@ def tidy(fleet, a):
     # and no worktree holds it, a landed bolt's only when main holds every commit of it; a deletion sluice's guard
     # refuses, while a submission to it waits, is kept and named.
     worked = {w.get("branch") for w in trees} - freed
+    if getattr(a, "landed", None):  # the land's delete, asked now that the landing's place is gone (plan.19)
+        b = f"bolt/{a.landed}"
+        holder = next((w["path"] for w in trees if w.get("branch") == b), None) if b in worked else None
+        print(land_delete(t, main, a.landed, holder))
+        unmark_gone(main, marks)
     for branch in sorted(dropped - worked - held):  # a dropped fix's branch no worktree holds, its place gone already
         print(branch_gone(t, main, branch, ups.get(branch, ""), now, landed=up_landed(branch)))
     for branch, why in fix_branches_over(fixes, held | worked, dropped, bolts):
@@ -5216,6 +5223,26 @@ def bolt_marks(main):
     has landed it on main (LANDING), which git drops with the branch (read.4, record 0003)."""
     out = gather.run(["git", "config", "--get-regexp", r"^branch\.bolt/.*\.crew$"], main) or ""
     return {k[len("branch."):-len(".crew")]: v for k, _, v in (l.partition(" ") for l in out.splitlines())}
+
+
+def unmark_gone(main, marks):
+    """Each of crew's marks (marks, bolt_marks) whose bolt branch is gone unset in the kit's git config and taken out of
+    marks, saying nothing (marks_gone, plan.19)."""
+    have = set((gather.run(["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/bolt/"], main) or "").split())
+    for branch in marks_gone(marks, have):
+        subprocess.run(["git", "-C", main, "config", "--unset", f"branch.{branch}.crew"], capture_output=True, env=gitenv())
+        del marks[branch]
+
+
+def land_delete(t, main, bolt, held):
+    """The land's delete of the bolt's branch, run by the tidy on the team's host once the landing's place is gone,
+    `sluice branch delete bolt/<bolt> --into main` (BOLT_DELETE, plan.19), so sluice never deletes a branch from under
+    a worktree, which its delete leaves on no branch (sluice 0.36.4, read 2026-10-22): what is said of it
+    (deleted_said), and nothing asked while a worktree still holds the branch (held, its path)."""
+    if held:
+        return deleted_said(bolt, t["machine"], 0, "", "", held)
+    r = subprocess.run(["bash", "-c", BOLT_DELETE, "crew", main, bolt, kit.DECLARATION], capture_output=True, text=True, env=gitenv())
+    return deleted_said(bolt, t["machine"], r.returncode, r.stdout, r.stderr)
 
 
 def marks_gone(marks, have):
@@ -6034,10 +6061,11 @@ def rebase_waits(unit, bolt, due, status, is_clean, path):
     return None
 
 
-def rebase_and_tidy(fleet, t):
+def rebase_and_tidy(fleet, t, landed=None):
     """The end of a team's read: each dependent whose After unit has merged is rebased (rebase_dependents), a conflict
     waiting for the conductor's next wait, which tells the dependent; then the team's tidy runs, whether or not the
-    rebase was refused; then each bolt the team holds that is local until it lands is said, once (bolts_local_said,
+    rebase was refused, at a landing (landed, the bolt) having sluice delete the bolt's branch once the landing's place
+    is gone (land_delete); then each bolt the team holds that is local until it lands is said, once (bolts_local_said,
     plan.19). What any of them refuses is said on standard error."""
     plan = None
     try:
@@ -6047,7 +6075,7 @@ def rebase_and_tidy(fleet, t):
     except Refusal as e:
         print(e, file=sys.stderr)
     try:
-        tidy(fleet, argparse.Namespace(team=t["name"]))
+        tidy(fleet, argparse.Namespace(team=t["name"], landed=landed))
     except Refusal as e:
         print(e, file=sys.stderr)
     try:
@@ -6972,11 +7000,12 @@ def ending(fleet, t):
     return end
 
 
-def reap(fleet, team):
+def reap(fleet, team, landed=None):
     """A team's read on its host (teams.1, record.5): the end of each stage that delivered with nobody waiting recorded,
     late; each slot freed whose unit or fix has merged into its bolt, been dropped from the plan or left the team's
     bolt, once its agent is not working (crew.reaped); then each dependent whose After unit has merged rebased, and the
-    worktrees whose work is over removed (rebase_and_tidy)."""
+    worktrees whose work is over removed, at a landing (landed, the bolt) the bolt's branch deleted by sluice after them
+    (rebase_and_tidy)."""
     t = team.t
     if team.owes():
         with silenced():
@@ -6994,7 +7023,7 @@ def reap(fleet, team):
                 continue
         if said:
             print(said)
-    rebase_and_tidy(fleet, t)
+    rebase_and_tidy(fleet, t, landed)
 
 
 def free_elsewhere(fleet, t, unit):
@@ -7323,11 +7352,12 @@ def team_tidy(fleet, a):
     """crew _tidy <team> [--landed <bolt> --outcome <words>], on the team's host: the team's read (reap), which a plan
     write that ends work asks for there, and crew rebuild runs once its agents are ended; the conductor's and ops's
     panes told the branch they work for now, none once the bolt has landed or been dropped, and each whose session
-    carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing,
-    its card closed there with the words (landing_cards_closed)."""
+    carries the old one handed its restart at its next stop (teams.19, teams.20); after a landing, the bolt's branch
+    deleted by sluice once the landing's place is gone (land_delete, plan.19), and its card closed there with the words
+    (landing_cards_closed)."""
     t = at_work(fleet, a.team)
     team = on_team_host(fleet, t, a.force)
-    reap(fleet, team)
+    reap(fleet, team, a.landed)
     import hold  # hold imports this module
     for name in team.hint_standing(crew.team_bolt(t)):
         hold.hand(name)
