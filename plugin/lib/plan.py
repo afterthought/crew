@@ -18,7 +18,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew rail [--label L]                      what waits on the user: open proposals, review batches and bolts to
                                              land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
-                                             whose row is gone
+                                             whose row is gone; its sweep tries again the reading of a batch's or a
+                                             long proposal's card that stands without it, ten minutes on
   crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
                                              the design agent's record at each turn of its status, read on the kit's
                                              main, raising its card unless settled in the pane, the user's yes read in
@@ -27,8 +28,10 @@ five times. A write that changes several files is one commit, and it carries the
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
-                                             in it, waited for, a landing's reading started first when none runs while
-                                             its conductor holds the card; and its end, which a card's close brings too
+                                             in it, waited for, a landing's or a batch's reading started first when
+                                             none runs while its owner holds the card, a batch's waiting on the card
+                                             alone when it will not open; a reading started anew changing its open
+                                             card to carry the link; and its end, which a card's close brings too
   crew card answer batch/<n> --excerpt "<words>"
                                              the user's answer to a batch in their own words in the planner's or the
                                              operator's pane, recorded once crew reads the words in that agent's own
