@@ -97,10 +97,13 @@ def moon_said(version):
     return f"moon --version printed no version crew can read: {(version or '').strip()[:80] or 'nothing'}"
 
 
-def place_said(out):
+def place_said(out, bolt=None):
     """What PLACE printed of a worktree it made or found: its absolute git directory and its DECLARATION's text, or None
-    when it has none. Refused when the output is not what PLACE prints."""
+    when it has none. Refused, naming the bolt and git's words, when its fetch of the bolt from GitHub failed, nothing
+    made (plan.19, read.1); and when the output is not what PLACE prints."""
     said = dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
+    if "FETCHED" in said:
+        crew.fail(f"no place is made: crew cannot fetch bolt/{bolt} from GitHub to cut it from: {said['FETCHED'].strip() or 'git said nothing'}")
     gitdir, decl = said.get("GITDIR"), said.get("DECLARATION")
     if not gitdir or decl is None:
         crew.fail(f"crew can't read where the worktree's git directory is and what its kit declares from: {(out or '').strip()[:200] or 'nothing'}")
@@ -232,6 +235,34 @@ def branch_said(out, code):
     if code in (1, 2, 3) and isinstance(err, dict) and isinstance(err.get("message"), str) and err["message"]:
         return None, err["message"]
     crew.fail(f"crew can't read what sluice's branch command said (exit {code}): {(out or '').strip()[:200] or 'nothing'}")
+
+
+def bolt_lives(said, bolt):
+    """Where a bolt's branch lives, as sluice routes it (plan.19): the remote the policy at the host's own bolt/<bolt>
+    names for it, or at origin/bolt/<bolt> when the host has no branch of its own; None for a bolt made before gives
+    went through sluice, kept in its host's refs. said is what BOLT_AT printed in the kit's main checkout: LOCAL and
+    TRACKED, the commit of each ref or -, and AT_LOCAL and AT_TRACKED, the policy at each, base64, or - when that
+    revision holds none. Refused when the host has neither ref, or the output is not BOLT_AT's (read.1, read.2)."""
+    f = said_of(said)
+    if not {"LOCAL", "TRACKED", "AT_LOCAL", "AT_TRACKED"} <= set(f):
+        crew.fail(f"crew can't read where bolt/{bolt} lives from: {(said or '').strip()[:200] or 'nothing'}")
+    where = "LOCAL" if f["LOCAL"] != "-" else "TRACKED" if f["TRACKED"] != "-" else None
+    where or crew.fail(f"crew can't tell where bolt/{bolt} lives: this host has neither bolt/{bolt} nor origin/bolt/{bolt}")
+    at = f[f"AT_{where}"]
+    try:
+        text = None if at == "-" else base64.b64decode(at).decode()
+    except (binascii.Error, UnicodeDecodeError) as e:
+        crew.fail(f"crew can't read bolt/{bolt}'s {DECLARATION} as it was sent: {e}")
+    return bolt_remote(text, f"bolt/{bolt}", f"{DECLARATION} at bolt/{bolt}")
+
+
+
+
+def place_base(said, bolt):
+    """The ref a new place of a bolt is cut from and tracks, from where the bolt lives (bolt_lives, plan.19):
+    origin/bolt/<bolt> for a bolt on GitHub, which PLACE fetches first, so the place holds every merge sluice landed
+    there from any host; the host's own bolt/<bolt> for a bolt made before gives went through sluice."""
+    return f"origin/bolt/{bolt}" if bolt_lives(said, bolt) else f"bolt/{bolt}"
 
 
 def delete_ran(said):

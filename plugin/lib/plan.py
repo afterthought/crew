@@ -1140,19 +1140,35 @@ def host_run(fleet, host, script, *args):
     return r.stdout.strip()
 
 
-# A worktree at a fixed path, made on its branch, or with the branch made from base, tracking it when asked. A branch
-# already there with no worktree, one a drop kept (plan.10, record 0003), is taken as it stands, then tracks base, and
-# the commit it is at is printed as KEPT.
-PLACE = r"""set -e
-main=$1 path=$2 branch=$3 base=$4 track=$5 file=$6
-cd "$main"
+# Where a bolt's branch lives, for kit.bolt_lives (plan.19), read in a checkout of its kit with $bolt and $file set:
+# LOCAL and TRACKED, the commit of the host's own bolt/<bolt> and of origin's tracking ref of it, as this host last
+# fetched it, or -; AT_LOCAL and AT_TRACKED, the policy ($file) at each, base64, or - when it holds none, read from the
+# commit as sluice reads a branch's policy.
+BOLT_AT = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
+pol() { if [ "$1" != - ] && text=$(git show "$1:$file" 2>/dev/null); then printf '%s\n' "$text" | base64 | tr -d '\n'; else printf -; fi; }
+l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
+echo "LOCAL=$l"; echo "TRACKED=$o"; echo "AT_LOCAL=$(pol "$l")"; echo "AT_TRACKED=$(pol "$o")"
+"""
+
+# A place: a worktree at a fixed path, on its branch, made on the team's host, its branch tracking its bolt where the
+# bolt lives (plan.19, kit.place_base): given no base, PLACE says where the bolt lives (BOLT_AT) and makes nothing;
+# given origin/bolt/<bolt>, it fetches the bolt from GitHub first, and says FETCHED with git's words, making nothing,
+# when the fetch fails. A new branch is cut from base; a branch already there with no worktree, one a drop kept
+# (plan.10, record 0003), is taken as it stands, then tracks base, and the commit it is at is printed as KEPT.
+PLACE = r"""main=$1 path=$2 branch=$3 bolt=$4 base=$5 file=$6
+cd "$main" || exit 1
 if [ ! -d "$path" ]; then
+  if [ -z "$base" ]; then
+""" + BOLT_AT + r"""    exit 0
+  fi
+  if [ "$base" = "origin/bolt/$bolt" ] && ! err=$(git fetch -q origin "+refs/heads/bolt/$bolt:refs/remotes/origin/bolt/$bolt" 2>&1); then
+    echo "FETCHED=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+  fi
   if git rev-parse --verify -q "refs/heads/$branch" >/dev/null; then
-    git worktree add -q "$path" "$branch"
-    if [ "$track" = track ]; then git branch -q --set-upstream-to="$base" "$branch"; fi
+    git worktree add -q "$path" "$branch" || exit 1
+    git branch -q --set-upstream-to="$base" "$branch" || exit 1
     echo "KEPT=$(git rev-parse --short "refs/heads/$branch")"
-  elif [ "$track" = track ]; then git worktree add -q --track -b "$branch" "$path" "$base"
-  else git worktree add -q -b "$branch" "$path" "$base"; fi
+  else git worktree add -q --track -b "$branch" "$path" "$base" || exit 1; fi
 fi
 # Where the worktree keeps what crew runs for it, and what its kit declares of its toolchain and tests (kit.py).
 echo "GITDIR=$(git -C "$path" rev-parse --absolute-git-dir)"
@@ -1170,15 +1186,19 @@ exec env -i "${env[@]}" "$@" </dev/null
 """
 
 
-def make_place(fleet, t, path, branch, base, track=False, unready=False):
-    """A worktree at a fixed path, made with git itself on the team's host, then made ready through its kit's
-    declaration (plan.17), whether it is new or was already there: the declared toolchain, its output kept in the
-    worktree's git directory, and the runner's setup inside it. A step that fails refuses the command with the
-    worktree made; with unready, as a fix's place is made (teams.3, record 0028), it stops the readying instead, and
-    what failed is returned, None once the worktree is ready; with the commit a kept branch the new worktree was made on
-    is at (PLACE's KEPT), else None. The command's next step reads the kit again."""
-    said = host_run(fleet, t["machine"], PLACE, t["kit"]["main"], path, branch, base, "track" if track else "", kit.DECLARATION)
-    gitdir, text = kit.place_said(said)
+def make_place(fleet, t, path, branch, bolt, unready=False):
+    """A worktree at a fixed path on its branch, made with git itself on the team's host, its branch tracking the bolt
+    where it lives, origin/bolt/<bolt> after a fetch for a bolt on GitHub (plan.19, PLACE), a new branch cut from it,
+    then made ready through its kit's declaration (plan.17), whether it is new or was already there: the declared
+    toolchain, its output kept in the worktree's git directory, and the runner's setup inside it. A step that fails
+    refuses the command with the worktree made; with unready, as a fix's place is made (teams.3, record 0028), it stops
+    the readying instead, and what failed is returned, None once the worktree is ready; with the commit a kept branch
+    the new worktree was made on is at (PLACE's KEPT), else None. The command's next step reads the kit again."""
+    main, host = t["kit"]["main"], t["machine"]
+    said = host_run(fleet, host, PLACE, main, path, branch, bolt, "", kit.DECLARATION)
+    if "GITDIR=" not in said:
+        said = host_run(fleet, host, PLACE, main, path, branch, bolt, kit.place_base(said, bolt), kit.DECLARATION)
+    gitdir, text = kit.place_said(said, bolt)
     kept = next((l[len("KEPT="):] for l in said.splitlines() if l.startswith("KEPT=")), None)
     why = None
     for what, argv, out in kit.readying(kit.declared(text, f"{path}/{kit.DECLARATION}"), f"{gitdir}/crew/toolchain.sh"):
@@ -1218,16 +1238,6 @@ echo "AT_OWN=$(at refs/heads/main)"
 # What a give reads on the team's host before sluice makes the bolt's branch (plan.19): the kit's policy at its main now
 # (POLICY), and SLUICE, what the host's `sluice --version` said, on one line, for kit.sluice_refusal.
 GIVE_READ = POLICY + r"""echo "SLUICE=$(sluice --version 2>&1 | tr '\n' ' ')"
-"""
-
-# Where a bolt's branch lives, for kit.bolt_lives (plan.19), read in a checkout of its kit with $bolt and $file set:
-# LOCAL and TRACKED, the commit of the host's own bolt/<bolt> and of origin's tracking ref of it, as this host last
-# fetched it, or -; AT_LOCAL and AT_TRACKED, the policy ($file) at each, base64, or - when it holds none, read from the
-# commit as sluice reads a branch's policy.
-BOLT_AT = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
-pol() { if [ "$1" != - ] && text=$(git show "$1:$file" 2>/dev/null); then printf '%s\n' "$text" | base64 | tr -d '\n'; else printf -; fi; }
-l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
-echo "LOCAL=$l"; echo "TRACKED=$o"; echo "AT_LOCAL=$(pol "$l")"; echo "AT_TRACKED=$(pol "$o")"
 """
 
 # A bolt's branch made by sluice from main, where the policy at main keeps it, on GitHub for a kit whose policy names
@@ -1976,17 +1986,29 @@ def unit_stage(fleet, plan, name):
     return (stages_for(fleet, plan, [b]) if b else Stages(fleet, plan, {})).of(name)
 
 
-# A moved unit's place, or a chore's (its kind the fifth word, unit unless given), rebased onto the bolt it moves to.
+# A moved unit's place, or a chore's (its kind the fifth word), rebased onto the bolt it moves to, its branch then
+# tracking that bolt where it lives (the sixth word, bolt_upstream); UNREBASE puts it back, tracking the bolt it left.
 REBASE = r"""cd "$1" || exit 1
-branch="${5:-unit}/$4"
+branch="$5/$4"
 orig=$(git rev-parse HEAD)
 if git rebase -q --onto "bolt/$3" "bolt/$2" "$branch" >/dev/null 2>&1; then
-  git branch -q --set-upstream-to="bolt/$3" "$branch"; echo "$orig"
+  git branch -q --set-upstream-to="$6" "$branch"; echo "$orig"
 else
   git rebase --abort >/dev/null 2>&1; exit 3
 fi
 """
-UNREBASE = r"""cd "$1" && git reset -q --hard "$2" && git branch -q --set-upstream-to="bolt/$3" "${5:-unit}/$4" """
+UNREBASE = r"""cd "$1" && git reset -q --hard "$2" && git branch -q --set-upstream-to="$6" "$5/$4" """
+
+# Where a bolt lives, read in its kit's main checkout (BOLT_AT), for bolt_upstream.
+BOLT_LIVES = r"""cd "$1" || exit 1
+bolt=$2 file=$3
+""" + BOLT_AT
+
+
+def bolt_upstream(fleet, t, bolt):
+    """The ref a place of the bolt tracks, read on the team's host where the bolt lives (kit.place_base, plan.19):
+    origin/bolt/<bolt> for a bolt on GitHub, bolt/<bolt> for one made before gives went through sluice."""
+    return kit.place_base(host_run(fleet, t["machine"], BOLT_LIVES, t["kit"]["main"], bolt, kit.DECLARATION), bolt)
 
 
 # ------------------------------------------------------------------------------------------ who writes what
@@ -2476,14 +2498,15 @@ def op_unit_move(ctx, a):
             f"bolt {to} is built in {tt['kit']['main']} on {tt['machine']}, not in {a.unit}'s checkout; a {k} with a worktree moves only within it")
 
         def prepare():
-            r = crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", REBASE, "crew", s["worktree"], src, to, a.unit, k])
+            ups = {b: bolt_upstream(ctx.fleet, ft, b) for b in (src, to)}
+            r = crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", REBASE, "crew", s["worktree"], src, to, a.unit, k, ups[to]])
             READ.drop_kit(ft["machine"], ft["kit"]["main"])
             r.returncode != 3 or fail(f"rebasing {a.unit} onto bolt/{to} conflicts: the move is abandoned and the plan is unchanged")
             r.returncode == 0 or fail(f"rebasing {a.unit} on {ft['machine']} failed: {r.stderr.strip()}")
             orig = r.stdout.strip()
 
             def undo():
-                crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", UNREBASE, "crew", s["worktree"], orig, src, a.unit, k])
+                crew.on_machine(ctx.fleet, ft["machine"], ["bash", "-c", UNREBASE, "crew", s["worktree"], orig, src, a.unit, k, ups[src]])
                 READ.drop_kit(ft["machine"], ft["kit"]["main"])
             return undo
 
@@ -4367,7 +4390,7 @@ def run_check(fleet, a):
         # The amendment's words, from the mark, so whoever starts the construct sends the same prompt.
         case = proposal(Plan(show(repo, tip, "proposals.rec") or PROPOSALS), mark.split("/", 1)[1], label).get("Case") \
             if amended(mark) and mark != "intent" else None
-        _, kept = make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+        _, kept = make_place(fleet, t, place, f"unit/{a.unit}", bolt)
         if kept:  # a branch an earlier drop kept, which this unit builds on (record 0003)
             print(f"{place} starts from the kept unit/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], u))
@@ -4385,7 +4408,7 @@ def run_check(fleet, a):
         facts = dict(loose=undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After")), touches=got)
     elif a.stage == "merge":
         if not s.get("worktree"):  # carried onto the bolt inside another's merge, its place gone: made again from the bolt
-            make_place(fleet, t, place, f"unit/{a.unit}", f"bolt/{bolt}", track=True)
+            make_place(fleet, t, place, f"unit/{a.unit}", bolt)
         merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "unit", a.unit)
         facts = dict(bolt=bolt, merge=merge_command(bolt))
     else:
@@ -4498,7 +4521,7 @@ def chore_check(fleet, a, label, plan, c):
     not why or fail(why)
     merge = took = ""
     if a.stage == "code":
-        _, kept = make_place(fleet, t, place, f"chore/{a.unit}", f"bolt/{bolt}", track=True)
+        _, kept = make_place(fleet, t, place, f"chore/{a.unit}", bolt)
         if kept:  # a branch an earlier drop kept, which this chore builds on (record 0003)
             print(f"{place} starts from the kept chore/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], c), "chore")
@@ -4750,7 +4773,7 @@ def fix_place(fleet, t, place, fix, bolt):
     """A fix's place made from the team's bolt, tracking it, and refused unless it is on the fix's own branch made
     from that bolt (teams.3, read.4). A place that could not be made ready is no refusal, since a fix is how a bolt is
     repaired (record 0028): what failed is returned, for the fix's agent to be told; None once it is ready."""
-    unready, _ = make_place(fleet, t, place, fix, f"bolt/{bolt}", track=True, unready=True)
+    unready, _ = make_place(fleet, t, place, fix, bolt, unready=True)
     why = own_place(place, *place_branch(fleet, t, place), fix, f"bolt/{bolt}")
     not why or fail(why)
     return unready

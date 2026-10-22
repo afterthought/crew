@@ -78,10 +78,12 @@ def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overl
     assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
 
 
-def rebase(repo, tmp_path, unit, src, to):
-    """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit>."""
+def rebase(repo, tmp_path, unit, src, to, upstream=None):
+    """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit> <kind> <the
+    upstream of the bolt it moves to>, bolt/<to> unless given."""
     import plan
-    return subprocess.run(["bash", "-c", plan.REBASE, "crew", str(tmp_path / "place"), src, to, unit], capture_output=True, text=True)
+    return subprocess.run(["bash", "-c", plan.REBASE, "crew", str(tmp_path / "place"), src, to, unit, "unit", upstream or f"bolt/{to}"],
+                          capture_output=True, text=True)
 
 
 def test_a_move_rebases_the_units_own_commits_onto_the_new_bolt_and_tracks_it(repo, tmp_path):
@@ -112,6 +114,83 @@ def test_a_move_whose_rebase_conflicts_leaves_the_branch_and_place_as_they_were(
     assert r.returncode == 3
     assert repo.git("rev-parse", "unit/d") == tip
     assert subprocess.run(["git", "-C", str(tmp_path / "place"), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
+
+
+def test_a_unit_moved_to_a_bolt_on_github_tracks_it_there(repo, tmp_path):
+    """plan.op_unit_move through REBASE and bolt_upstream (plan.19): a unit moved to a bolt on GitHub tracks
+    origin/bolt/<bolt>, as a place cut from it does."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/te"); repo.git("branch", "bolt/cp")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git")); repo.git("fetch", "-q", "origin")
+    repo.git("worktree", "add", "-q", "--track", "-b", "unit/c", str(tmp_path / "place"), "origin/bolt/te")
+    r = rebase(repo, tmp_path, "c", "te", "cp", "origin/bolt/cp")
+    assert r.returncode == 0, r.stderr
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/c") == "origin/bolt/cp"
+
+
+def bolt_on(repo, tmp_path, remote):
+    """A kit whose bolt/b names the remote for its bolts in its policy at the tip (or none), with GitHub's bolt/b one
+    commit ahead of the host's own, pushed from another clone, as a merge sluice landed from another host leaves it."""
+    policy = '[branches."bolt/*"]\nrequired = ["#check-full"]\n' + (f'remote = "{remote}"\n' if remote else "")
+    repo.commit("main", {".config/sluice.toml": policy})
+    repo.git("branch", "bolt/b")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git")); repo.git("fetch", "-q", "origin")
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "bolt/b", str(tmp_path / "github.git"), str(other)], check=True)
+    (other / "landed").write_text("from another host\n")
+    subprocess.run(["git", "-C", str(other), "add", "landed"], check=True)
+    subprocess.run(["git", "-C", str(other), "commit", "-qm", "chore(land): #1 unit/x"], check=True)
+    subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "bolt/b"], check=True)
+    return subprocess.run(["git", "-C", str(other), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+
+
+def cut(repo, tmp_path, unit, bolt="b"):
+    """plan.make_place's PLACE, as it runs it: first with no base, saying where the bolt lives, then with the base
+    kit.place_base chooses from that."""
+    import kit
+    run = lambda base: script("PLACE", str(repo.path), str(tmp_path / "places" / unit), f"unit/{unit}", bolt, base, kit.DECLARATION).stdout
+    said = run("")
+    assert "GITDIR=" not in said
+    return run(kit.place_base(said, bolt))
+
+
+def test_a_place_of_a_bolt_on_github_is_cut_from_it_there_after_a_fetch_and_tracks_it(repo, tmp_path):
+    """plan.make_place through PLACE (plan.19): a unit's place of a bolt whose policy names origin is cut from
+    origin/bolt/<bolt> after a fetch, tracking it, and holds the merge landed there from another host, which the host's
+    own bolt/<bolt> lags."""
+    import kit
+    landed = bolt_on(repo, tmp_path, "origin")
+    said = cut(repo, tmp_path, "x")
+    assert kit.place_said(said, "b")[0]
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/x") == "origin/bolt/b"
+    assert repo.git("rev-parse", "unit/x") == landed != repo.git("rev-parse", "bolt/b")
+
+
+def test_a_place_of_a_bolt_made_before_is_cut_from_the_hosts_own_branch_with_no_fetch(repo, tmp_path):
+    """plan.make_place through PLACE (plan.19, bolt-teams "A place of a bolt made before"): a bolt whose tip's policy
+    names no remote is cut from the host's own bolt/<bolt>, tracking it, and nothing is fetched for it."""
+    landed = bolt_on(repo, tmp_path, None)
+    repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))  # a fetch would fail
+    cut(repo, tmp_path, "x")
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/x") == "bolt/b"
+    assert repo.git("rev-parse", "unit/x") == repo.git("rev-parse", "bolt/b") == repo.git("rev-parse", "origin/bolt/b") != landed
+
+
+def test_a_place_of_a_bolt_github_does_not_have_is_not_made_and_the_fetch_is_named(repo, tmp_path):
+    """plan.make_place through PLACE (bolt-teams "The bolt on GitHub cannot be fetched", read.1): a fetch that fails, as
+    when GitHub has no bolt/<bolt>, makes no place, and crew names the bolt and git's words."""
+    import kit
+    import pytest
+    from crew import Refusal
+    bolt_on(repo, tmp_path, "origin")
+    subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "branch", "-q", "-D", "bolt/b"], check=True)
+    said = cut(repo, tmp_path, "x")
+    with pytest.raises(Refusal, match=r"^no place is made: crew cannot fetch bolt/b from GitHub to cut it from: .*bolt/b"):
+        kit.place_said(said, "b")
+    assert not (tmp_path / "places" / "x").exists()
+    assert subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", "unit/x"], capture_output=True).returncode == 1
 
 
 def onto(place, bolt, *heads):
@@ -529,8 +608,9 @@ def test_a_bolt_on_github_a_branch_tracks_is_found_at_the_ref_its_upstream_names
 def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt_and_prints_its_commit(repo, tmp_path):
     """plan.make_place through PLACE (record 0003, plan.10): unit/u, kept when u was dropped from bolt a, whose bolt's
     branch is gone, is taken by the place of a unit u added to bolt b as it stands, holding its kept commit; it then
-    tracks bolt/b, so the stages read it as b's, and PLACE prints the commit as KEPT, which kit.place_said passes over.
-    A place already there, or one made with a new branch, prints no KEPT."""
+    tracks bolt/b where it lives, the host's own branch for a bolt whose policy names no remote (plan.19), so the stages
+    read it as b's, and PLACE prints the commit as KEPT, which kit.place_said passes over. A place already there, or one
+    made with a new branch, prints no KEPT."""
     import kit
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/a")
@@ -541,15 +621,13 @@ def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt
     repo.git("branch", "-q", "-D", "bolt/a")
     repo.git("branch", "bolt/b")
     place = tmp_path / "places" / "u"
-    r = script("PLACE", str(repo.path), str(place), "unit/u", "bolt/b", "track", ".config/sluice.toml")
-    assert r.returncode == 0, r.stderr
-    assert f"KEPT={kept[:7]}" in r.stdout.splitlines()
-    assert kit.place_said(r.stdout)[1] is None
+    said = cut(repo, tmp_path, "u")
+    assert f"KEPT={kept[:7]}" in said.splitlines()
+    assert kit.place_said(said, "b")[1] is None
     assert subprocess.run(["git", "-C", str(place), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() == kept
     assert (place / "u").read_text() == "u\n"
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/u") == "bolt/b"
-    again = script("PLACE", str(repo.path), str(place), "unit/u", "bolt/b", "track", ".config/sluice.toml")
-    assert again.returncode == 0 and "KEPT=" not in again.stdout
-    fresh = script("PLACE", str(repo.path), str(tmp_path / "places" / "v"), "unit/v", "bolt/b", "track", ".config/sluice.toml")
-    assert fresh.returncode == 0 and "KEPT=" not in fresh.stdout
+    again = script("PLACE", str(repo.path), str(place), "unit/u", "b", "", kit.DECLARATION)
+    assert again.returncode == 0 and "GITDIR=" in again.stdout and "KEPT=" not in again.stdout
+    assert "KEPT=" not in cut(repo, tmp_path, "v")
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/v") == "bolt/b"
