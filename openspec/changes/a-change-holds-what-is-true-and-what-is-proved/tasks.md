@@ -8,7 +8,7 @@
 ## 2. crew's config says crew's conventions
 
 - [x] 2.1 crew's `openspec/config.yaml` carries crew's rules for specs, design and tasks and the apply guidance to tick a task only when its check passes, and OpenSpec hands them over (design, Decision 3; Task notes 2.1). Verify `openspec instructions tasks --change a-change-holds-what-is-true-and-what-is-proved --json` lists the three tasks rules with no warning.
-- [ ] 2.2 The docs' test reads crew's config and checks each convention (design, Decision 4; Task notes 2.2). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 2.2 The docs' test reads crew's config and checks each convention (design, Decision 4; Task notes 2.2). Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 3. Integration
 
