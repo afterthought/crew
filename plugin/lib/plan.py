@@ -74,7 +74,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              curation's move for a signal, in moves.rec on the flywheel's branch
 
 A signal recorded through crew is on the flywheel's branch, under signals/; one the daily pass read from a meeting or
-a channel is in the partition's first blueprints repo. An id is looked up in that order.
+a channel is in the partition's first blueprints repo. An id is looked up in that order. Every command that takes a
+signal's id takes its full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>, such as
+2026-10-20-swancloud-planner-72efd8ec/01: the one signal of that capture numbered NN, written by its full id.
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
@@ -1913,6 +1915,7 @@ class Reads:
     """How a plan command reads the kits: its units' stages, whether a change's name is free on a kit's main, and the
     first unit of a held bolt not yet merged. A command run directly or inside a proposal reads them; a proposal's
     card reads none (Drawn)."""
+    w = None  # the write a command inside a proposal is applied to; a command run directly reads the branch's tip
 
     def stages(self, plan, bolts):
         return stages_for(self.fleet, plan, bolts)
@@ -2102,6 +2105,7 @@ def op_unit_add(ctx, a):
     ctx.free(label, kit, [a.unit])
     sources = list(a.source)
     if a.signal:
+        a.signal = signal_id(ctx.fleet, label, a.signal, ctx.w)  # a short id is routed, and sourced, by its full one
         sources.insert(0, f"signals/{a.signal}")
 
     def change(w):
@@ -2866,8 +2870,9 @@ def plan_approve(fleet, a):
 
 
 def plan_drop(fleet, a):
-    """crew plan drop <n> "<reason>": an open proposal closed unapplied, with the reason; the planner is told when
-    someone else dropped it, and crew withdraws its card with the reason (raise_proposal_at)."""
+    """crew plan drop <n> "<reason>": an open proposal closed unapplied, with the reason kept whole on its record; the
+    planner is told when someone else dropped it, and crew withdraws its card with the reason, or acks it, once the
+    user answered it, as dropped on their note (raise_proposal_at, DROPPED)."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
 
@@ -2897,7 +2902,7 @@ def signal_text(fleet, label, sig):
         return None, None, None
     if not hit:
         return None, None, None
-    _, repo, tip, text = hit
+    _, repo, tip, text, sig = hit
     return (*asserted(text), field(show(repo, tip, capture_of(sig)) or "", "excerpt"))
 
 
@@ -3342,12 +3347,17 @@ def chain_open(pl, first):
 
 
 SWEPT = "Raised again as the plan stands"  # the change note of a proposal's card the rail's sweep raises
+# The outcome a dropped proposal's card is acked with once the user answered it: their note, the drop's reason, may ask
+# them something, which Pending You refuses as an outcome (proposal 161's drop on 2026-10-19: "Your outcome asks your
+# person something; put it on a new card with follows instead."), so the reason stays on the proposal's record.
+DROPPED = "Dropped on your note, nothing of it applied"
 
 
 def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=(), outcome=None, reason=None, by=None):
     """Which act proposal n's card takes at its event (record 0031 §1), from facts alone: ("post",) when it is
     accepted, ("change", note) when it is rewritten (replace), a conductor agrees, or the rail's sweep finds its card
-    missing or lost (sweep), ("close", outcome, reason) when it is approved or dropped, or None when it has no card of
+    missing or lost (sweep), ("close", outcome, reason) when it is approved, or dropped, its card acked with DROPPED
+    once the user answered it and withdrawn with the reason while it waits, or None when it has no card of
     crew's. mine, whether the planner wrote it, the card's owner, whose proposals alone crew raises a card for;
     was_mine, at a rewrite, whether the planner wrote the one it replaces, whose card a rewrite of anyone else's
     withdraws. A change is made only where its card was posted, held on this host, or on the planner's own (home),
@@ -3366,7 +3376,7 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
             return ("skip",)
         return ("change", f"Rewritten as proposal {n} after your note" if event == "replace" else
                 "No longer waits on " + either([f"{t}-conductor" for t in agreed]))
-    return ("close", outcome, None) if event == "approve" else ("close", None, reason)
+    return ("close", outcome, None) if event == "approve" else ("close", DROPPED, reason)
 
 
 def raise_proposal(fleet, row, acts=None):
@@ -3430,29 +3440,65 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
 
 # -------------------------------------------------------------------------------------------------- signals
 
+SHORT_ID = re.compile(r"^[^/]+/[0-9]{2}$")  # a signal's short id, <capture>/<NN>: its full id without the slug
+
+
 def signal_at(fleet, label, sig, w=None):
     """Where a signal is: signals/<id>.md on the flywheel's branch (as the write w has it, else at the branch's tip),
-    else on main of the partition's first blueprints repo, where the daily pass writes meetings' and channels'.
-    (where, repo, tip, the signal's text), or None when it is in neither."""
-    path = f"signals/{sig}.md"
+    else on main of the partition's first blueprints repo, where the daily pass writes meetings' and channels'. sig is
+    its full id, <capture>/<NN>-<slug>, or its short form, <capture>/<NN>, which names the one signal of that capture
+    numbered NN. (where, repo, tip, the signal's text, its full id), or None when it is in neither."""
     if w is not None:
         repo, ref, tip = w.repo, f"{label}/main", w.tip
-        text = w.text(path)
     else:
         repo, ref = state_of(fleet, label)
         tip = fetch(repo, ref)
-        text = show(repo, tip, path) if tip else None
-    if text is not None:
-        return ref, repo, tip, text
+    hit = signal_in(repo, tip, sig, w) if tip or w is not None else None
+    if hit:
+        return ref, repo, tip, *hit
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
     tip = fetch(srepo, "main")
-    text = show(srepo, tip, path) if tip else None
-    return ("main", srepo, tip, text) if text is not None else None
+    hit = signal_in(srepo, tip, sig) if tip else None
+    return ("main", srepo, tip, *hit) if hit else None
+
+
+def signal_in(repo, tip, sig, w=None):
+    """A signal's (text, full id) in the repo at tip, as the write w has it when given; None when it is not there. A
+    short id is looked for among the files of its capture's folder."""
+    if SHORT_ID.match(sig):
+        cap = sig.split("/")[0]
+        listed = git(repo, "ls-tree", "--name-only", f"{tip}:signals/{cap}", check=False) if tip else None
+        names = (listed.stdout.split() if listed and listed.returncode == 0 else []) + [
+            p.rsplit("/", 1)[1] for p in (w.files if w is not None else ()) if p.startswith(f"signals/{cap}/")]
+        sig = signal_named(sig, names)
+        if sig is None:
+            return None
+    path = f"signals/{sig}.md"
+    text = w.text(path) if w is not None else show(repo, tip, path)
+    return (text, sig) if text is not None else None
+
+
+def signal_named(sig, names):
+    """The full id a short id, <capture>/<NN>, names, from the file names in its capture's folder: the one signal
+    numbered NN, <capture>/<NN>-<slug>. None when the capture has none; refused when it has more than one, since
+    nothing says which (read.1)."""
+    cap, n = sig.split("/")
+    hits = sorted({f"{cap}/{x[:-3]}" for x in names if SIGNAL_FILE.match(x) and x.startswith(f"{n}-")})
+    len(hits) < 2 or fail(f"signal {sig} names {len(hits)} signals: {', '.join(hits)}; give the full id of one")
+    return hits[0] if hits else None
+
+
+def signal_id(fleet, label, sig, w=None):
+    """A signal's full id: a full id as it is, a short one as signal_at finds it (in the write w, when given), refused
+    when it is in neither home."""
+    return sig if not SHORT_ID.match(sig) else (signal_at(fleet, label, sig, w) or no_signal(fleet, label, sig))[4]
 
 
 def no_signal(fleet, label, sig):
+    cap, _, n = sig.rpartition("/")
     fail(f"no signal {sig} on {label}/main of {state_of(fleet, label)[0]} or on main of "
-         f"{crew.partition_of(fleet, label)['blueprints'][0]}: signals/{sig}.md is in neither")
+         f"{crew.partition_of(fleet, label)['blueprints'][0]}: "
+         + (f"signals/{cap}/ holds no {n}-<slug>.md in either" if SHORT_ID.match(sig) else f"signals/{sig}.md is in neither"))
 
 
 def frontmatter(text):
@@ -3498,8 +3544,9 @@ KINDS = ("constraint", "ask", "question", "commitment", "reaction")
 
 def signal_move(fleet, a):
     """Curation's five moves, each written through crew the way the route is: one move per signal, appended to
-    moves.rec on the flywheel's branch of its state repository, never merged."""
+    moves.rec on the flywheel's branch of its state repository, never merged. A short id is moved by its full one."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
+    a.signal = signal_id(fleet, label, a.signal)
     rec, on = curation_move(a.signal, a.move, a.target, a.reason, datetime.date.today().isoformat(), agent())
     write(fleet, label, lambda w: move(fleet, label, w, a.signal, rec), f"signals({a.signal}): {a.move}", act="signal.move", on=on)
 
@@ -3867,8 +3914,9 @@ def signal_land(fleet, a):
 
 
 def signal_show(fleet, a):
-    """crew signal show <id>: the signal, its capture's provenance in plain lines (the excerpt's grade among them), and
-    its move in each flywheel that reads it. Reads only the branches, so any host can answer."""
+    """crew signal show <id>: the signal, by its full id or its short one, its capture's provenance in plain lines (the
+    excerpt's grade among them), and its move in each flywheel that reads it. Reads only the branches, so any host can
+    answer."""
     label = default_label(fleet, a)
     labels, errors, hit = [label] if label else list(fleet["partitions"]), {}, None
     for l in labels:
@@ -3884,7 +3932,7 @@ def signal_show(fleet, a):
             break
     hit or fail(f"no signal {a.signal} on the branches of " + ", ".join(f"{l}/main" for l in labels)
                 + " or on main of their first blueprints repos" + "".join(f"; {l} could not be read: {e}" for l, e in errors.items()))
-    found_in, (where, repo, tip, text) = hit
+    found_in, (where, repo, tip, text, sig) = hit
     # A signal in the state is its flywheel's alone; one in a blueprints repo is read by each flywheel it is first for.
     readers = [found_in] if where != "main" else [l for l in labels if crew.partition_of(fleet, l)["blueprints"][0] == repo]
     moves = []
@@ -3892,8 +3940,8 @@ def signal_show(fleet, a):
         srepo, ref = state_of(fleet, l)
         stip = fetch(srepo, ref)
         recs = show(srepo, stip, "moves.rec") if stip else None
-        moves.append((l, next((m for m in Plan(recs).recs("Move") if m.get("Signal") == a.signal), None) if recs else None))
-    print(shown_signal(a.signal, where, repo, text, show(repo, tip, capture_of(a.signal)), moves))
+        moves.append((l, next((m for m in Plan(recs).recs("Move") if m.get("Signal") == sig), None) if recs else None))
+    print(shown_signal(sig, where, repo, text, show(repo, tip, capture_of(sig)), moves))
 
 
 def shown_signal(sig, where, repo, text, cap, moves):
@@ -9969,8 +10017,7 @@ def card_closed(acts, label, owner, key, outcome, reason):
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return None
-    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
-              Outcome=outcome if outcome is not None else reason)
+    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=cards.close_words(got, outcome, reason))
     print(f"card {key}: {card} {state}")
     return card
 
@@ -10391,6 +10438,9 @@ class _Unbuilt:
         return lambda *args, **kwargs: self
 
 
+SIGNAL_ID = "a signal's full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>"
+
+
 def parser(cls=argparse.ArgumentParser, only=None):
     """crew's command line. With only, the one command a run names is built and the rest are not, since building
     every command's parser is a third of what starting plan.py costs; the names built are in parser.built."""
@@ -10477,7 +10527,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--source", action="append", default=[])
     x.add_argument("--after", action="append", default=[])
     x.add_argument("--before")
-    x.add_argument("--signal")
+    x.add_argument("--signal", metavar="ID", help=SIGNAL_ID)
     x.add_argument("--unblocks", metavar="BOLT")
     x.add_argument("--label")
     x = un.add_parser("split")
@@ -10521,7 +10571,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--source", action="append", default=[])
     x.add_argument("--after", action="append", default=[])
     x.add_argument("--before")
-    x.add_argument("--signal")
+    x.add_argument("--signal", metavar="ID", help=SIGNAL_ID)
     x.add_argument("--unblocks", metavar="BOLT")
     x.add_argument("--label")
     x = ch.add_parser("order")
@@ -10576,13 +10626,13 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--label")
 
     x = sub.add_parser("signal-move", prog="crew signal move")
-    x.add_argument("signal", metavar="id")
+    x.add_argument("signal", metavar="id", help=SIGNAL_ID)
     x.add_argument("move", choices=CURATION)
     x.add_argument("--target")
     x.add_argument("--reason")
     x.add_argument("--label")
     x = sub.add_parser("signal-show", prog="crew signal show")
-    x.add_argument("signal", metavar="id")
+    x.add_argument("signal", metavar="id", help=SIGNAL_ID)
     x.add_argument("--label")
     x = sub.add_parser("signal-land", prog="crew signal land")
     x.add_argument("dir", metavar="capture-dir")

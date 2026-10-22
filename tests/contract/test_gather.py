@@ -138,6 +138,21 @@ def test_a_fix_is_listed_with_its_bolt_and_reads_merged_only_once_it_moved_and_t
     assert k.read()["fixes"][0]["merged"] is True
 
 
+def test_a_fix_whose_bolt_has_landed_and_its_branch_gone_reads_unmerged_and_git_says_nothing(repo, tmp_path, capfd):
+    """crew plan approve and every read of the kits: a fix's place left standing after its bolt landed tracks a branch
+    that is gone, and git's fatal for it is never printed (signal 2026-10-13-swancloud-planner-6eabf8e7/02)."""
+    k = Kit(repo, tmp_path)
+    f = k.place("te/edge", prefix="fix")
+    (f / "edge").write_text("e\n")
+    k.commit(f, "fix(te): the edge")
+    repo.git("worktree", "remove", str(k.dir / "bolts" / "te"))
+    repo.git("branch", "-qD", "bolt/te")
+    capfd.readouterr()
+    got = k.read()
+    assert got["fixes"][0]["merged"] is False and got["bolts"]["te"]["exists"] is False
+    assert capfd.readouterr().err == ""
+
+
 def test_a_fix_its_conductor_dropped_reads_dropped_while_its_place_still_stands(repo, tmp_path):
     """plan.fixes_in_flight (record 0028): crew fix --drop marks the branch dropped in the kit's git config, and a fix
     so marked holds no landing though the tidy has not yet removed its place."""

@@ -27,7 +27,9 @@ branch first, then whatever each host it can reach has not yet carried.
 An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>,
 agent/<name>, stage/<unit or chore>/<stage>, fix/<bolt>/<name>, plan/<label>, proposal/<n>, batch/<n> (a review batch of
 the partition), and
-what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>."""
+what a stage delivered in a file of the team's reports folder: report/<file name> and proof/<file name>. A signal is
+named by its full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>, which is the one signal of that capture
+numbered NN."""
 import argparse, datetime, itertools, json, os, pathlib, re, signal, subprocess, sys
 # getpass, queue, tempfile and threading are imported where they are used, so a command that writes one entry starts
 # without them.
@@ -402,9 +404,23 @@ def labels_for(fleet, label):
     return [own] if own in fleet["partitions"] else list(fleet["partitions"])
 
 
+# A signal's object by its short id, signals/<capture>/<NN>, which names the one signal of that capture numbered NN.
+SHORT_SIGNAL = re.compile(r"^signals/[^/]+/[0-9]{2}$")
+
+
+def objects(e):
+    """The objects an entry names: in On or From, or as what a stage delivered."""
+    return e["On"] + e["From"] + ([e["Delivered"]] if e.get("Delivered") else [])
+
+
+def meant(o, obj):
+    """Whether o is the object obj names: itself, or for a signal's short id, the signal it numbers."""
+    return o == obj or (SHORT_SIGNAL.match(obj) is not None and o.startswith(f"{obj}-"))
+
+
 def names(e, obj):
     """Whether an entry names the object: in On or From, or as what a stage delivered."""
-    return obj in e["On"] or obj in e["From"] or e.get("Delivered") == obj
+    return any(meant(o, obj) for o in objects(e))
 
 
 def events(fleet, a):
@@ -501,7 +517,7 @@ def named_by(entries):
     """The entries naming each object, {object: [entry]}, as names() reads them: one index for many lineages."""
     out = {}
     for e in entries:
-        for o in dict.fromkeys(e["On"] + e["From"] + ([e["Delivered"]] if e.get("Delivered") else [])):
+        for o in dict.fromkeys(objects(e)):
             out.setdefault(o, []).append(e)
     return out
 
@@ -546,12 +562,22 @@ def trace(fleet, a):
 
 def trace_start(found, obj):
     """The object a trace starts from, or None, and the names it was looked for by: a typed one as it is, a bare name
-    as a unit, then a chore, then a bolt, then a signal, the first that an entry names."""
+    as a unit, then a chore, then a bolt, then a signal, the first that an entry names; a signal's short id starts from
+    the signal it numbers, refused when the entries name more than one."""
     candidates = [obj] if obj.startswith(KINDS) else [f"{k}{obj}" for k in ("unit/", "chore/", "bolt/", "signals/")]
-    return next((c for c in candidates if any(names(e, c) for e in found)), None), candidates
+    for c in candidates:
+        hits = sorted({o for e in found for o in objects(e) if meant(o, c)})
+        len(hits) < 2 or fail(f"{c} names {len(hits)} signals: {', '.join(hits)}; give the full id of one")
+        if hits:
+            return hits[0], candidates
+    return None, candidates
 
 
 # ------------------------------------------------------------------------------------------------- command
+
+OBJECT = ("a typed name, unit/<unit>, bolt/<bolt>, signals/<id> and the rest, where a signal's <id> is its full id, "
+          "<capture>/<NN>-<slug>, or its short one, <capture>/<NN>")
+
 
 def parser():
     ap = argparse.ArgumentParser(prog="crew", add_help=False)
@@ -569,13 +595,13 @@ def parser():
     sub.add_parser("session")
     x = sub.add_parser("events")
     x.add_argument("--label")
-    x.add_argument("--about")
+    x.add_argument("--about", metavar="object", help=OBJECT)
     x.add_argument("--since")
     x.add_argument("--follow", action="store_true")
     x.add_argument("--push", action="store_true")
     x.add_argument("--json", action="store_true")
     x = sub.add_parser("trace")
-    x.add_argument("object")
+    x.add_argument("object", help=OBJECT + "; a bare name is tried as a unit, then a chore, a bolt and a signal")
     x.add_argument("--label")
     return ap
 

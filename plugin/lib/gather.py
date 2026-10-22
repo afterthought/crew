@@ -446,7 +446,8 @@ def kit(req, sites=False, running=None, board=False):
         elif branch.startswith("fix/"):
             dropped = fixes_dropped(main) if dropped is None else dropped  # read once, and only for a kit with a fix's place
             bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
-            out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt),
+            # a fix whose bolt has landed tracks a branch that is gone: nothing to read, and git's fatal unsaid
+            out["fixes"].append({"fix": branch, "path": path, "bolt": bolt, "merged": fix_merged(main, branch, bolt) if bolt in have else False,
                                  "dropped": branch in dropped})
     if sites:
         out["sites"] = {path: devurl(path) for path, branch in at.items()

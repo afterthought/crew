@@ -164,6 +164,8 @@
 #   crew signal show <id>              a signal, where its excerpt came from, and its move
 #   crew signal move <id> attach|challenge|new-territory|answered|drop ...
 #                                      curation's move for a signal
+#                                      (a signal's <id>, here, in --signal and in signals/<id>, is its full id,
+#                                      <capture>/<NN>-<slug>, or its short one, <capture>/<NN>)
 #   crew signal land <capture-dir> --label L
 #                                      a program's capture, a deployer's or another adapter's, with its signals,
 #                                      landed on the flywheel's branch from the host that banked its raw record
