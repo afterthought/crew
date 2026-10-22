@@ -10727,14 +10727,16 @@ def reading_of(b):
 
 def unopened(b, why):
     """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
-    its first paragraph, cut again to Pending You's budget, a landing's naming crew card session land/<bolt> as how the
-    bolt's conductor starts it, the card then carrying its link (briefs.13: the conductor's act, nothing for the user to
-    run); its details opening with why, where the link would be; and why kept on the built card (unread), for its post's
-    or change's entry in the run record."""
+    its first paragraph, cut again to Pending You's budget, naming crew card session <key> as how its owner starts it,
+    the card then carrying its link (briefs.13: the owner's act, nothing for the user to run), a landing's the bolt's
+    conductor, a batch's and a long proposal's the planner, whose card says too that crew tries it again when the rail
+    is read (sweep_cards); its details opening with why, where the link would be; and why kept on the built card
+    (unread), for its post's or change's entry in the run record."""
     key = b["key"]
     said = (f"Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session {key}, "
             "and this card then carries its link." if key.startswith("land/")
-            else "Its reading could not be opened on the tailnet.")
+            else "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and the planner "
+                 f"starts it with crew card session {key}; this card then carries its link.")
     first, _, rest = b["card"]["summary"].partition("\n\n")
     summary = cards.prose("\n\n".join(x for x in (first, said, rest) if x))
     context = dict(b["card"]["context"], background=f"The reading could not be opened on the tailnet: {why}\n\n"
@@ -10744,25 +10746,28 @@ def unopened(b, why):
 
 def card_built(acts, label, build, facts):
     """A card of crew's own built from its facts, with its reading session's link among them when it links one: the
-    session started, or given again while it serves, before the card is built (reading_of); facts that carry the
-    link already, or why it could not be opened (unread), as a landing's raise opens it (landing_opened), used as they
-    are, nothing started; a session that could not open said, naming crew card session for a landing, and the card
-    built without it, saying so (unopened)."""
+    session started, or given again while it serves, before the card is built (reading_of); a batch's or a long
+    proposal's tried once more when it refuses, its refusal said, the files it reads written afresh at the second
+    start (card-sessions "A batch's or a long proposal's raise tries its reading twice"); facts that carry the link
+    already, or why it could not be opened (unread), as a landing's raise opens it, twice if it must (landing_opened),
+    used as they are, nothing started; a session that could not open said, naming crew card session <key>, and the card
+    built without it, saying so, with the last try's reason (unopened)."""
     b = build(facts)
     kind = reading_of(b)
     if not kind or facts.get(READING[kind]):
         return b
-    why = facts.get("unread")
-    if not why:
+    key, why = b["key"], facts.get("unread")
+    for again in range(0 if why else 1 if kind == "land" else 2):
+        if again:
+            print(f"card {key}: its reading could not be opened on the tailnet: {why}; crew tries once more", file=sys.stderr)
         try:
-            url = acts.session(label, b["key"], facts)
+            with READ.fresh() if again else contextlib.nullcontext():
+                url = acts.session(label, key, facts)
         except Refusal as e:
             why = str(e)
         else:
             return build(dict(facts, **{READING[kind]: url}))
-    key = b["key"]
-    print(f"card {key}: its reading could not be opened on the tailnet: {why}"
-          + (f"; crew card session {key} starts it" if key.startswith("land/") else ""), file=sys.stderr)
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}; crew card session {key} starts it", file=sys.stderr)
     return unopened(b, why)
 
 

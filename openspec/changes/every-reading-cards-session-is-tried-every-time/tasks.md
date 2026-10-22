@@ -2,9 +2,9 @@
 
 ## 1. The raise tries twice
 
-- [ ] 1.1 A batch card's or a long proposal card's raise tries its reading a second time when the first refuses, and builds the card without it only on the second refusal, with that reason. The cases pass in `tests/py/test_cards.py` (design, Decision 1; Task notes 1.1).
-- [ ] 1.2 Such a card raised without its reading says crew tries again when the rail is read and names `crew card session <key>` as the planner's act, in its words and in the command's output. The cases pass in the logic tier (design, Decision 2; Task notes 1.2).
-- [ ] 1.3 `raise_batch` whose first start fails and second opens posts the card with its link and no `Unread`. The case passes in `tests/py/test_batches.py` (Task notes 1.3).
+- [x] 1.1 A batch card's or a long proposal card's raise tries its reading a second time when the first refuses, and builds the card without it only on the second refusal, with that reason. The cases pass in `tests/py/test_cards.py` (design, Decision 1; Task notes 1.1).
+- [x] 1.2 Such a card raised without its reading says crew tries again when the rail is read and names `crew card session <key>` as the planner's act, in its words and in the command's output. The cases pass in the logic tier (design, Decision 2; Task notes 1.2).
+- [x] 1.3 `raise_batch` whose first start fails and second opens posts the card with its link and no `Unread`. The case passes in `tests/py/test_batches.py` (Task notes 1.3).
 
 ## 2. Starting a reading changes its card
 

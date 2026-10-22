@@ -428,14 +428,57 @@ class TestSessions:
         assert capsys.readouterr().err == ""
 
     def test_a_card_whose_session_could_not_open_is_raised_all_the_same_saying_so(self, capsys):
+        """card-sessions "A batch whose reading could not open": tried twice, and named as the planner's to start."""
         why = "crew can't read z1's change: mac-studio, atl-1's host, did not answer (ssh: timed out)"
         acts = ReadingActs(refused=why)
         c = plan.card_built(acts, "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))["card"]
-        assert c["summary"].startswith("6 changes to read, nothing to approve, since batch 2.\n\nIts reading could not be opened on the tailnet.\n\n")
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "batch/3")]
+        assert c["summary"].startswith("6 changes to read, nothing to approve, since batch 2.\n\nIts reading could not be opened on the "
+                                       "tailnet: crew tries it again when the rail is read, and the planner starts it with crew card "
+                                       "session batch/3; this card then carries its link.\n\n")
         assert len(c["summary"]) <= 400
         assert c["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {why}\n\n")
         assert c["context"]["links"] == [] and not [a for a in c["artifacts"] if a["kind"] == "url"]
-        assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {why}\n"
+        assert capsys.readouterr().err == (f"card batch/3: its reading could not be opened on the tailnet: {why}; crew tries once more\n"
+                                           f"card batch/3: its reading could not be opened on the tailnet: {why}; crew card session "
+                                           "batch/3 starts it\n")
+
+    # A batch's or a long proposal's raise tries its reading twice (card-sessions).
+    SLOW = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+    ENDED = "plannotator ended before batch/3's session was ready: stub: refused to start"
+
+    def test_the_first_start_fails_and_the_second_opens(self, capsys):
+        acts = ReadingActs(refusals=[self.SLOW, None])
+        b = plan.card_built(acts, "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "batch/3")]
+        assert b["card"]["context"]["links"] == [{"label": "Read batch 3", "url": "http://mac-studio.ts.swancloud.net:19432"}]
+        assert "unread" not in b and "could not be opened" not in b["card"]["summary"]
+        assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {self.SLOW}; crew tries once more\n"
+
+    def test_the_second_start_is_made_with_nothing_read_kept(self):
+        """The second start writes the batch's files afresh: nothing the first read kept is served to it."""
+        fresh = []
+
+        class Acts(ReadingActs):
+            def reading(self, label, key, facts):
+                fresh.append(plan.READ.bypass > 0)
+                return super().reading(label, key, facts)
+        plan.card_built(Acts(refusals=[self.SLOW, None]), "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert fresh == [False, True]
+
+    def test_both_starts_fail_and_the_card_holds_the_second_reason(self, capsys):
+        b = plan.card_built(ReadingActs(refusals=[self.SLOW, self.ENDED]), "wldn", built.batch_card,
+                            dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert b["unread"] == self.ENDED and b["card"]["context"]["links"] == []
+        assert b["card"]["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
+        assert capsys.readouterr().err.splitlines()[-1] == (
+            f"card batch/3: its reading could not be opened on the tailnet: {self.ENDED}; crew card session batch/3 starts it")
+
+    def test_a_landings_facts_carry_its_raises_two_tries_so_its_card_tries_once(self):
+        """A landing's raise tries twice itself (landing_opened): card_built makes one start for facts with neither."""
+        acts = ReadingActs(refused="plannotator is not on this host's path, and a card's session is a plannotator session")
+        plan.card_built(acts, "wldn", built.landing_card, LANDING)
+        assert acts.sessions == [("wldn", "land/b1")]
 
     def test_a_landing_whose_reading_could_not_open_is_raised_all_the_same_an_approval_as_before(self, capsys):
         """card-sessions "A landing whose reading could not open"."""
