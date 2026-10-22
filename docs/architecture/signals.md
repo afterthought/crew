@@ -26,7 +26,7 @@ The rules for captures, signals and moves. `core.md` binds here too; the how-to 
 
 **[signals.3]** Rules out: a transcript line in a commit. Source: checked-capture design "The raw record".
 
-**[signals.4]** Rules out: a second move; a hand edit of `moves.rec`; a route without a unit. Source: `main-level` spec; `plan.py` `move`, `curation_move`, `route_move`; fix 2d95e12; `tests/py/test_signals.py`, `tests/contract/test_recfix.py`, `tests/t-journey-signals.sh`.
+**[signals.4]** Rules out: a second move; a hand edit of `moves.rec`; a route without a unit. Source: `main-level` spec; `plan.py` `move`, `curation_move`, `route_move`; fix 2d95e12; `tests/py/test_signals.py`, `tests/contract/test_recfix.py`, `tests/t-journey-signals.sh`. Read 2026-10-22, for 2026-10-11-swancloud-operator-mac-studio-f97c5978/01, routed to `crew-sessions-hear-their-cards-answers` and that unit dropped as already true (proposal 227): a route stands after its unit's drop, as every move is append-only and one; the drop's proposal records why, `crew trace` reads the signal's history to it, and a finding that still stands after a drop is recorded as a new signal, never re-moved; curation gives such a signal nothing.
 
 **[signals.5]** Rules out: a conductor's `Fix:` words graded as the user's. Source: checked-capture design; `transcript.py` `asserter`; `roles.4`; `tests/py/test_transcript.py`.
 
