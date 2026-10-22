@@ -9,5 +9,5 @@
 ## 2. Cases
 
 - [x] 2.1 Logic cases in `tests/py/test_landing.py` cover every scenario of "A landing is read from GitHub's main", with the signal's case among them, and keep today's words for an exit of 0 (Task notes 2.1); `devenv shell -- moon run tests:logic` is green.
-- [ ] 2.2 Contract cases in `tests/contract/test_git.py` land through a stand-in sluice that pushes to a bare origin and exits 3, and through one that pushes nothing and exits 2, alongside the existing cases with no origin (Task notes 2.2); `tests/suite contract` is green.
+- [x] 2.2 Contract cases in `tests/contract/test_git.py` land through a stand-in sluice that pushes to a bare origin and exits 3, and through one that pushes nothing and exits 2, alongside the existing cases with no origin (Task notes 2.2); `tests/suite contract` is green.
 - [ ] 2.3 `tests/suite --affected` is green.
