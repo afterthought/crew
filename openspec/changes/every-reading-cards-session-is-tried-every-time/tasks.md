@@ -18,7 +18,7 @@
 ## 4. The rail's read tries again
 
 - [x] 4.1 Whether a card stands without its reading, and was last tried ten minutes ago or more, is a function of the run record's entries. Its cases pass in `tests/py/test_rail.py` (design, Decision 6; Task notes 4.1).
-- [ ] 4.2 The rail's sweep tries each such batch or long proposal card that waits on the user, changes it to carry the link, and lists what came of it. The cases pass in `tests/py/test_rail.py` (design, Decision 6; Task notes 4.2).
+- [x] 4.2 The rail's sweep tries each such batch or long proposal card that waits on the user, changes it to carry the link, and lists what came of it. The cases pass in `tests/py/test_rail.py` (design, Decision 6; Task notes 4.2).
 
 ## 5. The run record
 

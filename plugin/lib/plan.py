@@ -8854,12 +8854,14 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     not as a row with no card. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is
     left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
     batch), each batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why,
-    once: none is under its key yet, and the user's answer has not closed it (batch_closed). Returns {gone: [(card,
-    outcome, reason)], questions: [card], held: [(card, row)], none: [row], again: [(row, older card)], settled:
-    [(key, why)]}."""
+    once: none is under its key yet, and the user's answer has not closed it (batch_closed). And each row's card of a
+    batch, batch/<n>, or a proposal, proposal/<n>, that the run record shows standing without its reading, last
+    posted, changed or tried CARD_RETRY seconds ago or more (reading_unread), to try its reading again. Returns {gone:
+    [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row], again: [(row, older card)],
+    settled: [(key, why)], unread: [(card, row)]}."""
     import ops  # its decision of a deploy's card alone
     rowed = {r["key"]: r for r in rows}
-    out = {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": []}
+    out = {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": [], "unread": []}
     for c in cards_:
         kind = card_kind(c["key"])
         if c["host"] != here:
@@ -8872,6 +8874,8 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
             out["questions"].append(c)
         elif c["key"] in rowed:
             out["held"].append((c, rowed[c["key"]]))
+            if re.fullmatch(r"(batch|proposal)/\d+", c["key"]) and reading_unread(entries, c["key"], c["card"], now):
+                out["unread"].append((c, rowed[c["key"]]))
         elif (not (c["key"].startswith("land/") and c["key"].split("/")[1] in blind) and not refused_lately(entries, now, card=c["card"])
               and not ops.word_stands(c["key"], entries)):
             out["gone"].append((c, *row_gone(c["key"], entries)))
@@ -11191,8 +11195,8 @@ SWEEP_LATER = "The rail's sweep changes nothing on this read."
 
 
 class SweepActs(CardActs):
-    """What the rail's sweep reaches beyond the act's own: herdr's listing of an asker, a kind's raise and the clock. A
-    logic test hands the sweep a stand-in (code.7)."""
+    """What the rail's sweep reaches beyond the act's own: herdr's listing of an asker, a kind's raise, a reading tried
+    again and the clock. A logic test hands the sweep a stand-in (code.7)."""
 
     def listed(self, name):
         """Whether herdr lists the agent, from one listing of its session (read.2): (True or False, None), or (None,
@@ -11212,6 +11216,10 @@ class SweepActs(CardActs):
 
     def now(self):
         return datetime.datetime.now(datetime.timezone.utc)
+
+    def reading_again(self, label, key):
+        """A card's reading opened again and its card changed to carry the link (reading_again)."""
+        return reading_again(self.fleet, label, key, self)
 
 
 def question_close(acts, label, c, words):
@@ -11357,6 +11365,24 @@ def sweep_cards(fleet, read, acts=None):
                 did(l, row["key"], older, owner, "lost", stranded_said(read["logs"].get(l, []), older, owner, new), new)
             elif kind_raises:
                 did(l, row["key"], older, owner, "left", "its batch no longer waits to be read")
+        for c, row in j["unread"]:
+            if cards.lost(found[c["card"]][1]):
+                continue
+            try:
+                with acts.bridge(c["by"], SWEEP_LATER) as py:
+                    got, words = py.answer("get_request", {"requestId": c["card"], "name": c["by"]})
+                not words or fail(f"Pending You refused get_request: {words}")
+            except Refusal as e:
+                did(l, c["key"], c["card"], c["by"], "left", f"whether it waits on the user can't be read: {e}")
+                continue
+            if not card_waiting(got):
+                continue
+            try:
+                url = acts.reading_again(l, c["key"])[0]
+            except Refusal as e:
+                did(l, c["key"], c["card"], c["by"], "left", f"its reading could not be opened: {e}")
+            else:
+                did(l, c["key"], c["card"], c["by"], "opened", f"its reading opened at {url}")
         for row in j["none"]:
             owner = owners[row["key"]][0]
             new, _ = raised(l, row, owner)

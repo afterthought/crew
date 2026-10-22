@@ -461,7 +461,8 @@ class TestSweepJudged:
     def test_only_the_cards_posted_on_this_host_are_judged_and_a_decision_records_only_once_it_is_settled(self):
         there = card("proposal/4", "req_p4", "wldn-planner", host=BOX)
         rec = card("record/atlas-kit/0021", "req_r1", "wldn-design")
-        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": []}
+        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": [],
+                                                    "unread": []}
         proposed = [did("record.proposed", On=["record/atlas-kit/0021"], Commit=["WilldanGroup/atlas-kit@" + "a" * 40], By="wldn-design")]
         assert self.judged(cards_=[rec], entries=proposed)["gone"] == []
 
@@ -504,7 +505,7 @@ class TestSweepJudged:
         recent = [did("card.close", 5, Card="req_p4", Refused="Pending You refused the close: Too many requests."),
                   did("card.post", 5, Key="deploy/dev", Refused="Pending You refused post_request: x")]
         assert self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=recent) == {"gone": [], "questions": [], "held": [], "none": [],
-                                                                                                "again": [], "settled": []}
+                                                                                                "again": [], "settled": [], "unread": []}
         old = [dict(e, At=iso(plan.CARD_RETRY // 60 + 1)) for e in recent]
         j = self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=old)
         assert ([c for c, *_ in j["gone"]], j["none"]) == ([p4], [row("deploy/dev", "operations")])
@@ -540,6 +541,14 @@ class TestSweepJudged:
         assert plan.reading_unread([posted, refused], "batch/3", "req_b3", NOW)
         assert not plan.reading_unread([did("card.post", 20, Key="batch/3", Card="req_b3"), dict(refused, Unread=self.UNREAD)],
                                        "batch/3", "req_b3")
+
+    def test_a_batchs_or_a_proposals_card_standing_without_its_reading_ten_minutes_is_tried_and_no_other_card(self):
+        b3, p4, y = card("batch/3", "req_b3", "wldn-planner"), card("proposal/4", "req_p4", "wldn-planner"), card("land/y", "req_l1", "swb-1-conductor")
+        unread = [did("card.post", 20, Key=c["key"], Card=c["card"], Unread=self.UNREAD) for c in (b3, p4, y)]
+        rows_ = [row("batch/3", "batches"), row("proposal/4"), row("land/y", "land")]
+        assert self.judged(rows=rows_, cards_=[b3, p4, y], entries=unread)["unread"] == [(b3, rows_[0]), (p4, rows_[1])]
+        assert self.judged(rows=rows_, cards_=[b3, p4, y], entries=[dict(e, At=iso(5)) for e in unread])["unread"] == []
+        assert self.judged(rows=rows_, cards_=[dict(b3, host=BOX)], entries=unread)["unread"] == []
 
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
@@ -619,9 +628,9 @@ class Py:
 class Acts:
     """A stand-in for what the sweep reaches: Pending You, this host's run record, herdr's listing and the raises."""
 
-    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None, here="mac-studio", writes=True):
+    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None, here="mac-studio", writes=True, readings=None):
         self.answers, self.held, self.listing, self.raises, self.opening = dict(answers or {}), list(entries), listed or {}, raises or {}, opening
-        self.here, self.writes = here, writes
+        self.here, self.writes, self.readings = here, writes, readings or {}
         self.calls, self.emitted, self.raised = [], [], []
 
     def bridge(self, name, later, held=None):
@@ -655,6 +664,14 @@ class Acts:
 
     def raise_of(self, kind):
         return self.raises.get(kind)
+
+    def reading_again(self, label, key):
+        """The reading tried again, as readings gives it for the key: its link, or a refusal's words."""
+        self.raised.append(("reading", key))
+        got = self.readings[key]
+        if got.startswith("http"):
+            return got, None, True
+        raise crew.Refusal(got)
 
     def session(self, label, key, facts):
         return None
@@ -799,6 +816,75 @@ class TestSweep:
             crew.fail("proposal 5's plan can't be read")
         out, _ = swept(rows_=[row("proposal/5")], raises={"proposal": raise_proposal})
         assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("proposal/5", "left", "its raise refused: proposal 5's plan can't be read")]
+
+    # The rail's read tries a reading its card stands without (card-sessions).
+    UNREAD = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+    MINE = "This is wldn-planner's card; leave it."
+
+    def unread(self, *cs, minutes=20):
+        return [did("card.post", minutes, Key=c["key"], Card=c["card"], Unread=self.UNREAD) for c in cs]
+
+    def owners(self, status):
+        """Pending You's answer to get_request: crew's own name refused the planner's card, the planner shown it with
+        status."""
+        return lambda args: (None, self.MINE) if args["name"] == "crew" else ({"status": status, "version": 2}, None)
+
+    def test_a_waiting_batch_card_posted_without_its_reading_long_ago_is_tried_and_listed_opened(self):
+        """card-sessions "A batch card raised without its reading": its waiting is read in the planner's name."""
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3),
+                          answers={"get_request": self.owners("pending")}, readings={"batch/3": self.LINK})
+        assert acts.raised == [("reading", "batch/3")]
+        assert [(n, t) for n, t, _ in acts.calls] == [("crew", "get_request"), ("wldn-planner", "get_request")]
+        assert out["done"] == [dict(label="wldn", key="batch/3", card="req_b3", by="wldn-planner", did="opened",
+                                    words=f"its reading opened at {self.LINK}", new=None)]
+        assert f"  batch/3 (wldn), wldn-planner's req_b3: opened: its reading opened at {self.LINK}" in text(
+            [row("batch/3", "batches")], cards=[b3], swept=out)
+
+    def test_a_try_that_refuses_is_listed_left_with_why(self):
+        """card-sessions "A try that fails is left for later": the next read's judgment waits on its refused entry."""
+        p4 = card("proposal/4", "req_p4", "wldn-planner")
+        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
+        out, acts = swept(rows_=[row("proposal/4")], cards_=[p4], entries=self.unread(p4),
+                          answers={"get_request": self.owners("pending")}, readings={"proposal/4": why})
+        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("proposal/4", "left", f"its reading could not be opened: {why}")]
+
+    def test_an_answered_card_is_not_tried(self):
+        """card-sessions "A card the user has answered"."""
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3),
+                          answers={"get_request": self.owners("answered")}, readings={"batch/3": self.LINK})
+        assert acts.raised == [] and out["done"] == []
+
+    def test_a_card_whose_waiting_cant_be_read_is_left_saying_why(self):
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3),
+                          answers={"get_request": lambda args: (None, self.MINE) if args["name"] == "crew" else (None, "Too many requests.")})
+        assert acts.raised == [] and [(d["did"], d["words"]) for d in out["done"]] == [
+            ("left", "whether it waits on the user can't be read: Pending You refused get_request: Too many requests.")]
+
+    def test_a_landing_card_and_a_card_tried_lately_are_not_tried(self):
+        y = card("land/y", "req_l1", "swb-1-conductor")
+        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y), here=BOX,
+                          answers={"get_request": (None, "This is swb-1-conductor's card; leave it.")})
+        assert acts.raised == [] and out["done"] == []
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3, minutes=5),
+                          answers={"get_request": self.owners("pending")}, readings={"batch/3": self.LINK})
+        assert acts.raised == [] and out["done"] == []
+
+    def test_a_lost_card_standing_without_its_reading_is_posted_again_through_its_raise_and_not_tried(self):
+        """Its raise tries the reading twice itself (card_built)."""
+        b3, seen = card("batch/3", "req_b3", "wldn-planner"), []
+
+        def raise_batch(fleet, r, acts=None):
+            seen.append(r["key"])
+            return "req_b4"
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3), raises={"batch": raise_batch},
+                          answers={"get_request": NOT_FOUND}, readings={"batch/3": self.LINK})
+        assert seen == ["batch/3"] and acts.raised == []
+        assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "posted again as req_b4")]
 
     def test_a_host_not_signed_in_changes_nothing_and_says_so(self):
         said = "this host can't ask through Pending You: it is not signed in. The user signs it in with pendingyou-signin. " + plan.SWEEP_LATER
