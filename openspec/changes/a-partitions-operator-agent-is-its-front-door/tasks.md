@@ -13,5 +13,5 @@
 
 ## 3. The documents
 
-- [ ] 3.1 README, the crew skill and the record's field comment name `crew send` (decision 6; Task notes 3.1). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 3.1 README, the crew skill and the record's field comment name `crew send` (decision 6; Task notes 3.1). Verify `tests/suite t-docs` ends with "0 failed".
 - [ ] 3.2 The tests' moon tasks are in step with the tests (Task notes 3.2). Verify `tests/suite --affected` ends with "0 failed".
