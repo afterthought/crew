@@ -31,7 +31,7 @@
 
 ## 7. End to end
 
-- [ ] 7.1 `tests/t-journey-review.sh` proves a batch card's second try carrying its link, a card raised without its reading naming `crew card session` with `Unread` in the run record, and the planner's wait starting the reading and changing the card. `tests/suite t-journey-review` passes, and `tests/moon.yml` is regenerated if the test's reads changed (Task notes 7.1).
+- [x] 7.1 `tests/t-journey-review.sh` proves a batch card's second try carrying its link, a card raised without its reading naming `crew card session` with `Unread` in the run record, and the planner's wait starting the reading and changing the card. `tests/suite t-journey-review` passes, and `tests/moon.yml` is regenerated if the test's reads changed (Task notes 7.1).
 
 ## 8. Checks
 
