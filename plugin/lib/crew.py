@@ -1389,6 +1389,33 @@ def brief_due(source, launched, saved):
     return saved.get("CREW_AGENT") or None
 
 
+def main_named(name, label):
+    """The main-level role a session's recorded agent is, from its record alone: its role when the name is
+    <label>-design, -planner, -ops, -operator or -reviewer, else None, as for a team's agent, a dispatcher or a
+    record with no label. Only such a session's identity is tied to a host, so no other reads the teams file for it."""
+    if not name or not label:
+        return None
+    return next((r for r in MAIN_STANDING + ("reviewer",) if name == f"{label}-{r}"), None)
+
+
+def main_elsewhere_said(name, label, main, here):
+    """Why a main level's agent is not started, nor given its identity back, on this host: crew-role's refusal."""
+    return f"{label}'s main level runs on {main}, not {here}, and crew starts {name} only there"
+
+
+def identity_withheld(name, label, here, main, unread=None):
+    """What a session herdr resumed as a main level's agent is told in place of its identity, or None when it gets
+    its identity back: on its main level's host, the teams file read. Off that host, or with the teams file unread
+    (unread, the refusal's words), it is told it is no agent of crew's here and to do nothing of crew's (read.1)."""
+    if unread is None and main == here:
+        return None
+    why = (f"it can't tell where {label}'s main level runs, {unread.rstrip('.')}" if unread is not None
+           else main_elsewhere_said(name, label, main, here))
+    return (f"[crew] This session was {name}, and crew gives it no identity here: {why}. In this session you are no "
+            "agent of crew's: run no crew command, which crew would record as the user's, write nothing to the plan, "
+            "a kit, a card or another agent, and wait for the user.")
+
+
 def brief_role(fleet, name, recorded):
     """The scope and definition an agent's brief is built from: the definition crew-role recorded starting it from
     (recorded), else, for a session recorded before crew-role named it, the one its name gives; a unit slot's name
@@ -1622,7 +1649,11 @@ def resolve(fleet, scope, role, extra):
 def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
     (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
-    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
+    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
+    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said)."""
+    if scope not in fleet["teams"] and role in MAIN_STANDING + ("reviewer",):
+        p, here = partition_of(fleet, scope), this_host()
+        p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
@@ -1691,6 +1722,7 @@ def reaped(agent, team, name, stage, status):
                         "left": f"{agent} still holds {name}, which has left {team}'s bolt: its agent is working; it is freed once that "
                                 "settles"}.get(stage)
     return "free", {"dropped": f"{agent} is free: {name} was dropped from the plan",
+                    "landed": f"{agent} is free: {name} has landed on main",
                     "left": f"{agent} is free: {name} has left {team}'s bolt"}.get(stage, f"{agent} is free: {name} has merged into its bolt")
 
 

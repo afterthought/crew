@@ -8,6 +8,8 @@
 # The definition's frontmatter gives the model and effort, unless the teams file's `roles` overrides them for
 # that team or partition; its body, filled from the teams file, is appended to Claude Code's own system prompt.
 # With "resume" the role picks its last conversation back up, by the name it was started under.
+# A main level's role starts only on the host the teams file names for its main level; on any other it is refused,
+# naming that host, and no Claude starts (crew.py main_elsewhere_said).
 set -euo pipefail
 scope=${1:?usage: crew-role <team|label> <role> [stage|resume]}; role=${2:?usage: crew-role <team|label> <role> [stage|resume]}
 here=$(cd "$(dirname "$0")" && pwd)

@@ -1,6 +1,6 @@
 """A fix (teams.3, teams.5, plan.8, teams.15): plan.fix_in_slot for what crew fix <name> acts on, plan.leftover and
 plan.own_place for a fix refused its place, plan.fix_prompt for what its agent starts with, told of a place that could
-not be made ready (record 0028), plan.fix_drop_why and plan.fix_branch_kept for a fix dropped, plan.fix_bolt for the bolt a fix is of, of the two a team may hold (teams.16), and crew.never_started for a fix's or unit's
+not be made ready (record 0028), plan.fix_drop_why and plan.branch_kept for a fix dropped, plan.fix_bolt for the bolt a fix is of, of the two a team may hold (teams.16), and crew.never_started for a fix's or unit's
 stage whose prompt was never taken. A fix merges as a unit does, by a submission to sluice (teams.5); the fix's place
 and stage through the command are the journey's (t-journey-fix)."""
 import pytest
@@ -140,16 +140,26 @@ class TestDrop:
         assert plan.fix_drop_why("fix/t/x", "t", "swb-1", slot, place, branch, False) is None
 
     def test_its_branch_goes_when_git_cherry_finds_nothing_of_its_own(self):
-        assert plan.fix_branch_kept("bolt/t", (0, "", "")) is None
-        assert plan.fix_branch_kept("bolt/t", (0, "- 1a2b3c\n", "")) is None
+        assert plan.branch_kept("bolt/t", (0, "", "")) is None
+        assert plan.branch_kept("bolt/t", (0, "- 1a2b3c\n", "")) is None
 
     def test_one_holding_patches_the_bolt_lacks_is_kept_and_counted(self):
-        assert plan.fix_branch_kept("bolt/t", (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
-            "it holds 1 commit whose patch bolt/t lacks (git cherry), the user's to keep or delete")
-        assert plan.fix_branch_kept("bolt/t", (0, "+ 1a2b3c\n+ 4d5e6f\n", "")) == (
-            "it holds 2 commits whose patch bolt/t lacks (git cherry), the user's to keep or delete")
+        assert plan.branch_kept("bolt/t", (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
+            "it holds 1 commit whose patch bolt/t lacks (git cherry), the user's to keep or delete", 1)
+        assert plan.branch_kept("bolt/t", (0, "+ 1a2b3c\n+ 4d5e6f\n", "")) == (
+            "it holds 2 commits whose patch bolt/t lacks (git cherry), the user's to keep or delete", 2)
 
     def test_one_that_cannot_be_compared_is_kept(self):
-        assert plan.fix_branch_kept("bolt/gone", (128, "", "fatal: unknown commit bolt/gone\n")) == (
-            "git cannot compare it with bolt/gone: fatal: unknown commit bolt/gone")
-        assert plan.fix_branch_kept("", None) == "it tracks no bolt to compare it with"
+        assert plan.branch_kept("bolt/gone", (128, "", "fatal: unknown commit bolt/gone\n")) == (
+            "git cannot compare it with bolt/gone: fatal: unknown commit bolt/gone", None)
+
+    def test_one_tracking_no_bolt_is_compared_with_nothing_and_kept(self):
+        assert plan.branch_target("fix", "", False, False, "refs/remotes/origin/main") is None
+        assert plan.branch_kept(None, None) == ("it tracks no bolt to compare it with", None)
+
+    def test_its_bolt_is_its_target_while_it_stands_unlanded_and_main_once_it_has_landed_or_is_gone(self):
+        """bolt-teams "A worktree goes when its work is over" (record 0003): a fix's branch whose bolt has landed, or
+        whose bolt's branch is gone, is judged against the kit's main as a unit's is."""
+        assert plan.branch_target("fix", "bolt/t", True, False, "refs/remotes/origin/main") == "bolt/t"
+        assert plan.branch_target("fix", "bolt/t", True, True, "refs/remotes/origin/main") == "refs/remotes/origin/main"
+        assert plan.branch_target("fix", "bolt/gone", False, False, "refs/remotes/origin/main") == "refs/remotes/origin/main"

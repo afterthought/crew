@@ -894,7 +894,7 @@ def follows_of(kind, thing, entries, by):
 ROWS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"), (re.compile(r"^batch/(\d+)$"), "batch/{}"),
         (re.compile(r"^land/([a-z0-9][a-z0-9-]*)$"), "bolt/{}"), (re.compile(r"^deploy/([a-z0-9][a-z0-9-]*)$"), "env/{}"),
         (re.compile(r"^op/([a-z0-9][a-z0-9-]*)/\d+$"), "env/{}"),
-        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})$"), "record/{}/{}"))
+        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})(?:/[0-9a-f]{7,40})?$"), "record/{}/{}"))
 # What update_request takes of a card crew built. It changes neither a card's kind nor its questions, so a card whose
 # kind changed, or one that carries questions, a proposal's rows in lists, is followed by a new card (revision).
 CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "multi", "recommendedIds", "action",
@@ -907,12 +907,21 @@ KEY_LEAST, FILL = 8, "_"
 
 def row_object(key):
     """The run record's object of one of crew's six cards' keys, the row's: a proposal's, a batch's, a bolt's for its
-    landing, an environment's for its deploy and steps, a record's; None for any other key."""
+    landing, an environment's for its deploy and steps, a record's, under record 0031's key or the key with the commit
+    after it, record/<kit>/<number>/<commit>, as the design agent posted it before; None for any other key."""
     for pattern, obj in ROWS:
         m = pattern.match(key)
         if m:
             return obj.format(*m.groups())
     return None
+
+
+def record_keys(entries, obj, by):
+    """The keys under which the agent `by` holds a decision record's card open, the record's object obj, in either
+    form (row_object), in the order of their first post; entries are in the order they were written."""
+    keys = dict.fromkeys(e["Key"] for e in entries if e.get("Act") == "card.post" and e.get("By") == by and e.get("Key")
+                         and row_object(e["Key"]) == obj)
+    return [k for k in keys if card_under(entries, k, by)]
 
 
 def adopt_line(card, owner):

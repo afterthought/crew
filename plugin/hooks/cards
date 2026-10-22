@@ -10,7 +10,8 @@ session; a call that names no caller passes this check. Then, on a card's post, 
 update_request, cancel_request, ack_answer) and on an area's making (create_area), apart from the name, it asks
 plan.card_refusal: a card is posted, changed or closed only by a conductor, the planner, main-level ops or the design
 agent, and never under crew's own key, the post's idempotencyKey or, for a change or a close, the key this host's run
-record holds the card under; an area is made only under create-area:<owner>/<kit> for a kit of the agent's own.
+record holds the card under, but for the close of an answered card under a key of a row form crew no longer raises,
+which no event of crew's closes; an area is made only under create-area:<owner>/<kit> for a kit of the agent's own.
 Everything else passes: a question's form is its asker's. A call crew could not check is refused, naming what failed,
 since a card let through can't be taken back (read.1). A refused call never reaches Pending You.
 
