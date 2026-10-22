@@ -499,11 +499,13 @@ lacks "$out" "decides with the user"; lacks "$out" "**amend**"
 expect_ok crewpy brief swb-1 coder
 for want in "you are the unit's one round of fixes after its verify" "marks fix, and only those" "No verify runs after you" \
   "\`openspec archive <unit> --yes\`" "crew reads the merge as delivered only once the bolt holds the change archived" \
-  "A chore or a fix has no change to archive"; do
+  "A chore or a fix has no change to archive" "A merge archives what its own archive needs first" \
+  "crew refuses a merge that stops short for an archive it can make" \
+  "Only when the archive needs one you cannot make, another unit's change or one with a task open, or openspec refuses one of them"; do
   has "$out" "$want"
 done
 lacks "$out" "When the prompt carries findings from a verify"; lacks "$out" "leave or amend"
-ok "a verify is one round with no card, grounded in the change as written: the report marks each finding fix or leave, one fresh coder fixes what it marks fix, nothing goes to the planner, and the merge archives the change first"
+ok "a verify is one round with no card, grounded in the change as written: the report marks each finding fix or leave, one fresh coder fixes what it marks fix, nothing goes to the planner, and the merge archives the change first, and what its own archive needs before it"
 expect_ok crewpy brief wldn reviewer
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/reviewer.md left ${BASH_REMATCH[0]} unfilled"
 for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but this file" "at the commit the prompt names" \
