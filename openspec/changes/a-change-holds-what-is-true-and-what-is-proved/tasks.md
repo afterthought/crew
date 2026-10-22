@@ -12,4 +12,4 @@
 
 ## 3. Integration
 
-- [ ] 3.1 Everything this change affects passes (Task notes 3.1). Verify `tests/suite --affected` ends with "0 failed".
+- [x] 3.1 Everything this change affects passes (Task notes 3.1). Verify `tests/suite --affected` ends with "0 failed".
