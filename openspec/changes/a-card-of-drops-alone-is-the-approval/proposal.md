@@ -37,6 +37,7 @@ plugin/skills/crew/SKILL.md
 README.md
 tests/py/test_proposal_card.py
 tests/py/test_proposal_life.py
+tests/py/test_proposals.py
 tests/py/test_cards.py
 tests/t-briefs.sh
 ```
