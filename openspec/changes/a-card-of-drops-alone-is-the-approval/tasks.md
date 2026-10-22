@@ -16,4 +16,4 @@
 
 ## 4. Integration
 
-- [ ] 4.1 The proposal journeys still pass with the card's new shape. Verify `tests/suite logic t-cards t-journey-plan` and then `tests/suite --affected` each end with "0 failed".
+- [x] 4.1 The proposal journeys still pass with the card's new shape. Verify `tests/suite logic t-cards t-journey-plan` and then `tests/suite --affected` each end with "0 failed".
