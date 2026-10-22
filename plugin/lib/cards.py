@@ -986,20 +986,25 @@ def posted_again(card):
     return dict(card, summary=prose(f"{DEAD}\n\n{card['summary']}"))
 
 
+def close_words(got, outcome=None, reason=None):
+    """The words a card's close carries, whole, from get_request's answer: for one the user answered, the outcome, or
+    the reason; for one still waiting, the reason, or the outcome."""
+    first, then = (outcome, reason) if got.get("status") == "answered" else (reason, outcome)
+    return first if first is not None else then
+
+
 def close_call(got, card, name, outcome=None, reason=None):
     """How crew closes a card, from get_request's answer: one the user answered acked at its version with what was
     done on it, the outcome, or the reason it is withdrawn; one still waiting withdrawn with the reason, or the
-    outcome. Either is cut to OUTCOME characters, since Pending You refuses a longer one (proposal 142's close on
-    2026-10-18: "outcome: Too big: expected string to have <=200 characters"); the run record keeps crew's words
-    whole. The tool, its arguments, and the close's state as the run record keeps it."""
-    def said(first, then):
-        words = first if first is not None else then
-        return cut(words, OUTCOME) if isinstance(words, str) else words
+    outcome (close_words). Either is cut to OUTCOME characters, since Pending You refuses a longer one (proposal 142's
+    close on 2026-10-18: "outcome: Too big: expected string to have <=200 characters"); the run record keeps crew's
+    words whole. The tool, its arguments, and the close's state as the run record keeps it."""
+    words = close_words(got, outcome, reason)
+    said = cut(words, OUTCOME) if isinstance(words, str) else words
     if got.get("status") == "answered":
-        return ("ack_answer", {"requestId": card, "name": name, "expectedVersion": version_of(got, card),
-                               "outcome": said(outcome, reason)},
+        return ("ack_answer", {"requestId": card, "name": name, "expectedVersion": version_of(got, card), "outcome": said},
                 "closed" if outcome is not None else "withdrawn")
-    return "cancel_request", {"requestId": card, "name": name, "reason": said(reason, outcome)}, "withdrawn"
+    return "cancel_request", {"requestId": card, "name": name, "reason": said}, "withdrawn"
 
 
 def declined(got):

@@ -26,7 +26,8 @@ five times. A write that changes several files is one commit, and it carries the
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
-                                             in it, waited for; and its end, which a card's close brings too
+                                             in it, waited for, a landing's reading started first when none runs while
+                                             its conductor holds the card; and its end, which a card's close brings too
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
@@ -74,7 +75,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              curation's move for a signal, in moves.rec on the flywheel's branch
 
 A signal recorded through crew is on the flywheel's branch, under signals/; one the daily pass read from a meeting or
-a channel is in the partition's first blueprints repo. An id is looked up in that order.
+a channel is in the partition's first blueprints repo. An id is looked up in that order. Every command that takes a
+signal's id takes its full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>, such as
+2026-10-20-swancloud-planner-72efd8ec/01: the one signal of that capture numbered NN, written by its full id.
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
@@ -1598,17 +1601,67 @@ def land_facts(fleet, label, plan, b, t):
     return dict(card, team=t["name"], host=t["machine"], base=base), None
 
 
+def landing_retry(why, fresh, fresh_why):
+    """What follows a first refusal of a landing's reading at a raise (card-sessions "A landing's raise tries its
+    reading again before raising without it"), from that refusal (why), the landing read afresh once the kit's main was
+    fetched, as land_facts gives it (fresh, (facts, why it does not read proven)), or why that read was refused
+    (fresh_why, fresh None): ("again", facts) to open the reading once more with the fresh facts, the card's from then;
+    ("none", None) when the bolt no longer reads proven, so the raise posts and changes nothing; ("stand", why) when
+    the fresh read was refused, the first facts and the first reason standing (read.1)."""
+    if fresh_why:
+        return "stand", why
+    facts, unproven = fresh
+    return ("none", None) if unproven else ("again", facts)
+
+
+def landing_opened(fleet, label, plan, b, t, card, acts):
+    """A landing card's facts with its reading opened by the raise (raise_land), before the card is built: its link,
+    or on a refusal one more try as crew card session land/<bolt> makes it, the kit's main fetched on the team's host,
+    this one, a fetch that failed said and the try going on (plan.18), the landing read afresh (land_facts) and its
+    reading opened again with those facts (landing_retry). The facts the card is built from, carrying the reading's
+    link or why it could not be opened (unread, the second try's reason, or the first's when the fresh read was
+    refused); None when, read afresh, the bolt no longer reads proven, so the raise posts and changes nothing."""
+    key, main = f"land/{card['bolt']}", t["kit"]["main"]
+    try:
+        return dict(card, link=acts.reading(label, key, card)[0])
+    except Refusal as e:
+        why = str(e)
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}; crew fetches {t['kit']['name']}'s main "
+          "and tries once more", file=sys.stderr)
+    try:
+        if gather.has_origin(main):
+            kit_git(fleet, t, main, "fetch", "-q", "origin")
+    except Refusal as e:
+        print(f"card {key}: {e}; the reading is tried again all the same", file=sys.stderr)
+    fresh, fresh_why = None, None
+    try:
+        with READ.fresh():
+            fresh = land_facts(fleet, label, plan, b, t)
+    except Refusal as e:
+        fresh_why = str(e)
+    step, got = landing_retry(why, fresh, fresh_why)
+    if step == "none":
+        return None
+    if step == "stand":
+        return dict(card, unread=got)
+    try:
+        return dict(got, link=acts.reading(label, key, got)[0])
+    except Refusal as e:
+        return dict(got, unread=str(e))
+
+
 def raise_land(fleet, row, acts=None, note=None):
     """A bolt's landing card raised (record 0031 §1, plan.16), for its rail row land/<bolt>, on the host of the team
     holding the bolt, where its conductor's cards are: once the bolt reads proven (land_facts), in the conductor's name,
     following its own card a fix held (follows_of), posted through row_card_change, so a card the conductor holds is
     changed in place, its head moved, or followed by a new one once the user answered it, and one Pending You no longer
-    finds is posted again; its reading session, on what the bolt brings to main, is started first on this host and its
-    link put on the card (card_built), a session on an older head ended (reading_open); a preview of its head, in a kit
-    whose policy at the head declares one, is asked for before it and its addresses put on the card (landing_preview).
-    Nothing, and nothing said, while the bolt does not read proven. The merge's end calls it, the rail's sweep for a
-    row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or None; what
-    crew can't read is refused (read.1), refusing nothing of the bolt."""
+    finds is posted again; its reading session, on what the bolt brings to main, is opened first on this host, twice if
+    it must be, the second time on the landing read afresh, and its link or why it could not be opened put on the card
+    (landing_opened), a session on an older head ended (reading_open); a preview of its head, in a kit whose policy at
+    the head declares one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and
+    nothing said, while the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's
+    sweep for a row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or
+    None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
     m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", row.get("key") or "")
     if not m:
         return None
@@ -1619,6 +1672,9 @@ def raise_land(fleet, row, acts=None, note=None):
     t["machine"] == acts.host() or fail(f"bolt {bolt}'s landing card is raised on {t['machine']}, where {t['name']}-conductor's cards are")
     card, why = land_facts(fleet, label, plan, b, t)
     if why:
+        return None
+    card = landing_opened(fleet, label, plan, b, t, card, acts)
+    if not card:
         return None
     owner = f"{t['name']}-conductor"
     card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
@@ -1936,6 +1992,7 @@ class Reads:
     """How a plan command reads the kits: its units' stages, whether a change's name is free on a kit's main, and the
     first unit of a held bolt not yet merged. A command run directly or inside a proposal reads them; a proposal's
     card reads none (Drawn)."""
+    w = None  # the write a command inside a proposal is applied to; a command run directly reads the branch's tip
 
     def stages(self, plan, bolts):
         return stages_for(self.fleet, plan, bolts)
@@ -2125,6 +2182,7 @@ def op_unit_add(ctx, a):
     ctx.free(label, kit, [a.unit])
     sources = list(a.source)
     if a.signal:
+        a.signal = signal_id(ctx.fleet, label, a.signal, ctx.w)  # a short id is routed, and sourced, by its full one
         sources.insert(0, f"signals/{a.signal}")
 
     def change(w):
@@ -2889,8 +2947,9 @@ def plan_approve(fleet, a):
 
 
 def plan_drop(fleet, a):
-    """crew plan drop <n> "<reason>": an open proposal closed unapplied, with the reason; the planner is told when
-    someone else dropped it, and crew withdraws its card with the reason (raise_proposal_at)."""
+    """crew plan drop <n> "<reason>": an open proposal closed unapplied, with the reason kept whole on its record; the
+    planner is told when someone else dropped it, and crew withdraws its card with the reason, or acks it, once the
+    user answered it, as dropped on their note (raise_proposal_at, DROPPED)."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
 
@@ -2920,7 +2979,7 @@ def signal_text(fleet, label, sig):
         return None, None, None
     if not hit:
         return None, None, None
-    _, repo, tip, text = hit
+    _, repo, tip, text, sig = hit
     return (*asserted(text), field(show(repo, tip, capture_of(sig)) or "", "excerpt"))
 
 
@@ -3365,12 +3424,17 @@ def chain_open(pl, first):
 
 
 SWEPT = "Raised again as the plan stands"  # the change note of a proposal's card the rail's sweep raises
+# The outcome a dropped proposal's card is acked with once the user answered it: their note, the drop's reason, may ask
+# them something, which Pending You refuses as an outcome (proposal 161's drop on 2026-10-19: "Your outcome asks your
+# person something; put it on a new card with follows instead."), so the reason stays on the proposal's record.
+DROPPED = "Dropped on your note, nothing of it applied"
 
 
 def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=(), outcome=None, reason=None, by=None):
     """Which act proposal n's card takes at its event (record 0031 §1), from facts alone: ("post",) when it is
     accepted, ("change", note) when it is rewritten (replace), a conductor agrees, or the rail's sweep finds its card
-    missing or lost (sweep), ("close", outcome, reason) when it is approved or dropped, or None when it has no card of
+    missing or lost (sweep), ("close", outcome, reason) when it is approved, or dropped, its card acked with DROPPED
+    once the user answered it and withdrawn with the reason while it waits, or None when it has no card of
     crew's. mine, whether the planner wrote it, the card's owner, whose proposals alone crew raises a card for;
     was_mine, at a rewrite, whether the planner wrote the one it replaces, whose card a rewrite of anyone else's
     withdraws. A change is made only where its card was posted, held on this host, or on the planner's own (home),
@@ -3389,7 +3453,7 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
             return ("skip",)
         return ("change", f"Rewritten as proposal {n} after your note" if event == "replace" else
                 "No longer waits on " + either([f"{t}-conductor" for t in agreed]))
-    return ("close", outcome, None) if event == "approve" else ("close", None, reason)
+    return ("close", outcome, None) if event == "approve" else ("close", DROPPED, reason)
 
 
 def raise_proposal(fleet, row, acts=None):
@@ -3453,29 +3517,65 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
 
 # -------------------------------------------------------------------------------------------------- signals
 
+SHORT_ID = re.compile(r"^[^/]+/[0-9]{2}$")  # a signal's short id, <capture>/<NN>: its full id without the slug
+
+
 def signal_at(fleet, label, sig, w=None):
     """Where a signal is: signals/<id>.md on the flywheel's branch (as the write w has it, else at the branch's tip),
-    else on main of the partition's first blueprints repo, where the daily pass writes meetings' and channels'.
-    (where, repo, tip, the signal's text), or None when it is in neither."""
-    path = f"signals/{sig}.md"
+    else on main of the partition's first blueprints repo, where the daily pass writes meetings' and channels'. sig is
+    its full id, <capture>/<NN>-<slug>, or its short form, <capture>/<NN>, which names the one signal of that capture
+    numbered NN. (where, repo, tip, the signal's text, its full id), or None when it is in neither."""
     if w is not None:
         repo, ref, tip = w.repo, f"{label}/main", w.tip
-        text = w.text(path)
     else:
         repo, ref = state_of(fleet, label)
         tip = fetch(repo, ref)
-        text = show(repo, tip, path) if tip else None
-    if text is not None:
-        return ref, repo, tip, text
+    hit = signal_in(repo, tip, sig, w) if tip or w is not None else None
+    if hit:
+        return ref, repo, tip, *hit
     srepo = crew.partition_of(fleet, label)["blueprints"][0]
     tip = fetch(srepo, "main")
-    text = show(srepo, tip, path) if tip else None
-    return ("main", srepo, tip, text) if text is not None else None
+    hit = signal_in(srepo, tip, sig) if tip else None
+    return ("main", srepo, tip, *hit) if hit else None
+
+
+def signal_in(repo, tip, sig, w=None):
+    """A signal's (text, full id) in the repo at tip, as the write w has it when given; None when it is not there. A
+    short id is looked for among the files of its capture's folder."""
+    if SHORT_ID.match(sig):
+        cap = sig.split("/")[0]
+        listed = git(repo, "ls-tree", "--name-only", f"{tip}:signals/{cap}", check=False) if tip else None
+        names = (listed.stdout.split() if listed and listed.returncode == 0 else []) + [
+            p.rsplit("/", 1)[1] for p in (w.files if w is not None else ()) if p.startswith(f"signals/{cap}/")]
+        sig = signal_named(sig, names)
+        if sig is None:
+            return None
+    path = f"signals/{sig}.md"
+    text = w.text(path) if w is not None else show(repo, tip, path)
+    return (text, sig) if text is not None else None
+
+
+def signal_named(sig, names):
+    """The full id a short id, <capture>/<NN>, names, from the file names in its capture's folder: the one signal
+    numbered NN, <capture>/<NN>-<slug>. None when the capture has none; refused when it has more than one, since
+    nothing says which (read.1)."""
+    cap, n = sig.split("/")
+    hits = sorted({f"{cap}/{x[:-3]}" for x in names if SIGNAL_FILE.match(x) and x.startswith(f"{n}-")})
+    len(hits) < 2 or fail(f"signal {sig} names {len(hits)} signals: {', '.join(hits)}; give the full id of one")
+    return hits[0] if hits else None
+
+
+def signal_id(fleet, label, sig, w=None):
+    """A signal's full id: a full id as it is, a short one as signal_at finds it (in the write w, when given), refused
+    when it is in neither home."""
+    return sig if not SHORT_ID.match(sig) else (signal_at(fleet, label, sig, w) or no_signal(fleet, label, sig))[4]
 
 
 def no_signal(fleet, label, sig):
+    cap, _, n = sig.rpartition("/")
     fail(f"no signal {sig} on {label}/main of {state_of(fleet, label)[0]} or on main of "
-         f"{crew.partition_of(fleet, label)['blueprints'][0]}: signals/{sig}.md is in neither")
+         f"{crew.partition_of(fleet, label)['blueprints'][0]}: "
+         + (f"signals/{cap}/ holds no {n}-<slug>.md in either" if SHORT_ID.match(sig) else f"signals/{sig}.md is in neither"))
 
 
 def frontmatter(text):
@@ -3521,8 +3621,9 @@ KINDS = ("constraint", "ask", "question", "commitment", "reaction")
 
 def signal_move(fleet, a):
     """Curation's five moves, each written through crew the way the route is: one move per signal, appended to
-    moves.rec on the flywheel's branch of its state repository, never merged."""
+    moves.rec on the flywheel's branch of its state repository, never merged. A short id is moved by its full one."""
     label = default_label(fleet, a) or fail("which partition's signals? add --label " + "|".join(fleet["partitions"]))
+    a.signal = signal_id(fleet, label, a.signal)
     rec, on = curation_move(a.signal, a.move, a.target, a.reason, datetime.date.today().isoformat(), agent())
     write(fleet, label, lambda w: move(fleet, label, w, a.signal, rec), f"signals({a.signal}): {a.move}", act="signal.move", on=on)
 
@@ -3611,8 +3712,7 @@ def signal(fleet, a):
         excerpt or fail('a signal quotes the words that show it: add --excerpt "<the exact words the user said or the '
                         'tool printed>", or --excerpt-file <path>')
         v, sid = check_excerpt(fleet, name, a, excerpt, host)
-        v.grade != "refused" or fail("the excerpt is not in your session's transcript: quote the words as you received "
-                                     "them, from the user or from a tool's output")
+        excerpt_refusal(v) and fail(excerpt_refusal(v))
     else:
         import getpass
         excerpt, user = (excerpt or a.asserts).strip(), getpass.getuser()
@@ -3665,6 +3765,16 @@ def signal_refusal(slug, asserts):
     if not asserts.strip():
         return "a signal says what it asserts, in a sentence"
     return None
+
+
+def excerpt_refusal(v):
+    """Why crew signal refuses an agent's excerpt on its verdict v, or None: the words are not in the session's
+    transcript, reworded or a background task's output the agent has not read yet (signals.2)."""
+    if v.grade != "refused":
+        return None
+    return ("the excerpt is not in your session's transcript: quote the words as you received them, from the user or "
+            "from a tool's output. A background task's output reaches your transcript only once you read the output file "
+            "its task notification names: read that file, then record the signal again")
 
 
 def capture_named(name, v, sid, excerpt, now, kind=None, user=None, host=None, by=None):
@@ -3890,8 +4000,9 @@ def signal_land(fleet, a):
 
 
 def signal_show(fleet, a):
-    """crew signal show <id>: the signal, its capture's provenance in plain lines (the excerpt's grade among them), and
-    its move in each flywheel that reads it. Reads only the branches, so any host can answer."""
+    """crew signal show <id>: the signal, by its full id or its short one, its capture's provenance in plain lines (the
+    excerpt's grade among them), and its move in each flywheel that reads it. Reads only the branches, so any host can
+    answer."""
     label = default_label(fleet, a)
     labels, errors, hit = [label] if label else list(fleet["partitions"]), {}, None
     for l in labels:
@@ -3907,7 +4018,7 @@ def signal_show(fleet, a):
             break
     hit or fail(f"no signal {a.signal} on the branches of " + ", ".join(f"{l}/main" for l in labels)
                 + " or on main of their first blueprints repos" + "".join(f"; {l} could not be read: {e}" for l, e in errors.items()))
-    found_in, (where, repo, tip, text) = hit
+    found_in, (where, repo, tip, text, sig) = hit
     # A signal in the state is its flywheel's alone; one in a blueprints repo is read by each flywheel it is first for.
     readers = [found_in] if where != "main" else [l for l in labels if crew.partition_of(fleet, l)["blueprints"][0] == repo]
     moves = []
@@ -3915,8 +4026,8 @@ def signal_show(fleet, a):
         srepo, ref = state_of(fleet, l)
         stip = fetch(srepo, ref)
         recs = show(srepo, stip, "moves.rec") if stip else None
-        moves.append((l, next((m for m in Plan(recs).recs("Move") if m.get("Signal") == a.signal), None) if recs else None))
-    print(shown_signal(a.signal, where, repo, text, show(repo, tip, capture_of(a.signal)), moves))
+        moves.append((l, next((m for m in Plan(recs).recs("Move") if m.get("Signal") == sig), None) if recs else None))
+    print(shown_signal(sig, where, repo, text, show(repo, tip, capture_of(sig)), moves))
 
 
 def shown_signal(sig, where, repo, text, cap, moves):
@@ -8921,7 +9032,7 @@ def land_session(fleet, label, key, acts=None):
     except Refusal as e:
         words = str(e)
     if relinks(started, got):
-        facts = dict(facts, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
+        facts = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
         facts["preview"] = landing_preview(fleet, t, label, bolt, facts, acts)
         row_card_change(fleet, label, owner, cards.landing_card, facts, RELINKED, card_where(t["kit"]), acts)
     elif got is not None:
@@ -9269,7 +9380,9 @@ def card_wait(fleet, a):
     card's, batch/<n>-<k>, takes a unit and is waited on at that unit's team's host. A landing's, land/<bolt>, waits on
     its reading alone, on the team's host: its decision is notes on the landing card and never the word to land
     (land_waited), and once it is printed the session is forgotten (reading_decided), so the next crew card session
-    starts it anew; the card is left as it is. Refused for a key with no session started."""
+    starts it anew; the card is left as it is. With no session of its own while the bolt's conductor holds its card,
+    the raise having failed to open it or a wait having forgotten it, it starts the reading as crew card session does
+    and waits on it (land_start). Refused for any other key with no session started."""
     label, d = card_of(fleet, a)
     if a.key.startswith("batch/") and not old_batch(a.key):
         return batch_wait(fleet, label, a.key, d)
@@ -9279,6 +9392,8 @@ def card_wait(fleet, a):
             return forward_card(fleet, t, a, label)
     name = f"{a.key} {a.unit}" if a.unit else a.key
     say = land_waited if a.key.startswith("land/") else waited
+    if say is land_waited and not card_recorded(d):
+        land_start(fleet, label, a.key)
     card_recorded(d) or fail(f"no session was started for card {name}: crew card session {name} starts one")
     while True:
         decided = card_result(d)
@@ -9297,6 +9412,38 @@ def card_wait(fleet, a):
                 reading_decided(d, decided)
             return
         time.sleep(CARD_POLL)
+
+
+def land_unstarted(key, recorded, held, refused=None):
+    """What crew card wait land/<bolt> does before it waits (card-sessions "A wait on a landing card starts its reading
+    when none runs"), from whether a session of the key is recorded on this host, whether the bolt's conductor holds its
+    landing card open here (held), and why the start it made refused (refused): ("wait", None) on a session recorded;
+    ("start", None) with none and the card held, to start it as crew card session does; ("refuse", words) when the
+    start refused, naming crew card session to start it once that is mended, or no card is held."""
+    if recorded:
+        return "wait", None
+    if not held:
+        return "refuse", f"no session was started for card {key}, and no landing card of {key.split('/', 1)[1]} is held on this host"
+    if refused:
+        return "refuse", f"{key}'s reading could not be opened: {refused}; crew card session {key} starts it once that is mended"
+    return "start", None
+
+
+def land_start(fleet, label, key, acts=None):
+    """A landing's reading started for its wait when none is recorded (land_unstarted): while the conductor of the
+    team holding the bolt holds its landing card on this host, opened as crew card session opens it, its link printed
+    and the card changed in place to carry it while it waits on the user (land_session); refused naming why and crew
+    card session when it could not open, and when no card is held."""
+    acts = acts or CardActs(fleet)
+    _, _, t = land_held(fleet, label, key.split("/", 1)[1])
+    held = bool(t) and bool(cards.card_under(acts.entries(label), key, f"{t['name']}-conductor"))
+    step, words = land_unstarted(key, False, held)
+    if step == "start":
+        try:
+            land_session(fleet, label, key, acts)
+        except Refusal as e:
+            step, words = land_unstarted(key, False, held, str(e))
+    not words or fail(words)
 
 
 CARD_READ = 30  # seconds between a batch wait's reads of its card in Pending You, the poll its post's answer asks for
@@ -9970,11 +10117,18 @@ def card_uploaded(acts, key, b, got):
         print(f"card {key}: its picture did not reach the card: {why}", file=sys.stderr)
 
 
+def unread_of(b):
+    """A built card's post or change entry's Unread: why its reading could not open (unopened), crew's own message
+    (record.3), or nothing when it opened or the card links none."""
+    return {"Unread": b["unread"]} if b.get("unread") else {}
+
+
 def card_posted(acts, label, owner, b, where, entries=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
     posted under the row's key, or the key with its revision once a card of the owner's under it closed, either filled
     out to Pending You's eight characters when shorter (post_key, from entries, this host's run record unless given),
-    and recorded under the row's key. A post Pending You answers
+    and recorded under the row's key, with why its reading could not open when it did not (unread_of). A post Pending
+    You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
     this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
     that card, printed with the line that adopts it and recorded once, by the command that recorded it first. A post
@@ -9996,7 +10150,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
             again = cards.card_under(acts.entries(label), key, owner) == card
             read = followed_read(py, follows, owner) if held and not again else None
     except Refusal as e:
-        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key)
+        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key, **unread_of(b))
         print(f"card {key} not posted: {e}", file=sys.stderr)
         return None
     url = got.get("url")
@@ -10005,7 +10159,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
         print(f"card {key}: {card}{url}, its post recorded already")
         print(cards.adopt_line(card, owner))
         return card
-    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key)
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key, **unread_of(b))
     print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
     if held:
@@ -10053,28 +10207,43 @@ def reading_of(b):
 
 def unopened(b, why):
     """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
-    its first paragraph, cut again to Pending You's budget, and its details opening with why, where the link would be."""
+    its first paragraph, cut again to Pending You's budget, a landing's naming crew card session land/<bolt> as how the
+    bolt's conductor starts it, the card then carrying its link (briefs.13: the conductor's act, nothing for the user to
+    run); its details opening with why, where the link would be; and why kept on the built card (unread), for its post's
+    or change's entry in the run record."""
+    key = b["key"]
+    said = (f"Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session {key}, "
+            "and this card then carries its link." if key.startswith("land/")
+            else "Its reading could not be opened on the tailnet.")
     first, _, rest = b["card"]["summary"].partition("\n\n")
-    summary = cards.prose("\n\n".join(x for x in (first, "Its reading could not be opened on the tailnet.", rest) if x))
+    summary = cards.prose("\n\n".join(x for x in (first, said, rest) if x))
     context = dict(b["card"]["context"], background=f"The reading could not be opened on the tailnet: {why}\n\n"
                    + b["card"]["context"]["background"])
-    return dict(b, card=dict(b["card"], summary=summary, context=context))
+    return dict(b, card=dict(b["card"], summary=summary, context=context), unread=why)
 
 
 def card_built(acts, label, build, facts):
     """A card of crew's own built from its facts, with its reading session's link among them when it links one: the
-    session started, or given again while it serves, before the card is built (reading_of); a session that could not
-    open said, and the card built without it, saying so (unopened)."""
+    session started, or given again while it serves, before the card is built (reading_of); facts that carry the
+    link already, or why it could not be opened (unread), as a landing's raise opens it (landing_opened), used as they
+    are, nothing started; a session that could not open said, naming crew card session for a landing, and the card
+    built without it, saying so (unopened)."""
     b = build(facts)
     kind = reading_of(b)
-    if not kind:
+    if not kind or facts.get(READING[kind]):
         return b
-    try:
-        url = acts.session(label, b["key"], facts)
-    except Refusal as e:
-        print(f"card {b['key']}: its reading could not be opened on the tailnet: {e}", file=sys.stderr)
-        return unopened(b, str(e))
-    return build(dict(facts, **{READING[kind]: url}))
+    why = facts.get("unread")
+    if not why:
+        try:
+            url = acts.session(label, b["key"], facts)
+        except Refusal as e:
+            why = str(e)
+        else:
+            return build(dict(facts, **{READING[kind]: url}))
+    key = b["key"]
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}"
+          + (f"; crew card session {key} starts it" if key.startswith("land/") else ""), file=sys.stderr)
+    return unopened(b, why)
 
 
 def row_card_post(fleet, label, owner, build, facts, where, acts=None):
@@ -10108,8 +10277,9 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     update_request ever changes, is followed the same way, withdrawn with note while it waits. Posted instead when the
     owner holds none, and posted again, its summary saying the older copy is dead, when Pending You no longer finds it.
     A landing's card and a long proposal's are built with their reading session's link, as a post's is (card_built),
-    a landing's session on a moved head started anew there, so the card changed carries the new link. A refusal is said
-    and recorded as the change refused, refusing nothing of the event. The card's id, the new card's when one was
+    a landing's session on a moved head started anew there, so the card changed carries the new link, and its entry
+    why it could not open when it did not (unread_of). A refusal is said and recorded as the change refused, refusing
+    nothing of the event. The card's id, the new card's when one was
     posted, or None."""
     acts = acts or CardActs(fleet)
     b = card_built(acts, label, build, facts)
@@ -10139,7 +10309,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
             if lost is None and how == "change":
                 card_uploaded(acts, key, b, got)
     except Refusal as e:
-        acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key)
+        acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key, **unread_of(b))
         print(f"card {key} not changed: {e}", file=sys.stderr)
         return None
     closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner)]
@@ -10157,7 +10327,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
         print(f"card {key}: {card} " + ("closed, the user having answered it" if state == "closed" else f"withdrawn, {why}")
               + ", and its new version follows it")
         return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
-    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key)
+    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key, **unread_of(b))
     v = got.get("version")
     print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
     return card
@@ -10212,8 +10382,7 @@ def card_closed(acts, label, owner, key, outcome, reason):
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return None
-    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state,
-              Outcome=outcome if outcome is not None else reason)
+    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=cards.close_words(got, outcome, reason))
     print(f"card {key}: {card} {state}")
     return card
 
@@ -10644,6 +10813,9 @@ class _Unbuilt:
         return lambda *args, **kwargs: self
 
 
+SIGNAL_ID = "a signal's full id, <capture>/<NN>-<slug>, or its short one, <capture>/<NN>"
+
+
 def parser(cls=argparse.ArgumentParser, only=None):
     """crew's command line. With only, the one command a run names is built and the rest are not, since building
     every command's parser is a third of what starting plan.py costs; the names built are in parser.built."""
@@ -10730,7 +10902,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--source", action="append", default=[])
     x.add_argument("--after", action="append", default=[])
     x.add_argument("--before")
-    x.add_argument("--signal")
+    x.add_argument("--signal", metavar="ID", help=SIGNAL_ID)
     x.add_argument("--unblocks", metavar="BOLT")
     x.add_argument("--label")
     x = un.add_parser("split")
@@ -10774,7 +10946,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--source", action="append", default=[])
     x.add_argument("--after", action="append", default=[])
     x.add_argument("--before")
-    x.add_argument("--signal")
+    x.add_argument("--signal", metavar="ID", help=SIGNAL_ID)
     x.add_argument("--unblocks", metavar="BOLT")
     x.add_argument("--label")
     x = ch.add_parser("order")
@@ -10829,13 +11001,13 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--label")
 
     x = sub.add_parser("signal-move", prog="crew signal move")
-    x.add_argument("signal", metavar="id")
+    x.add_argument("signal", metavar="id", help=SIGNAL_ID)
     x.add_argument("move", choices=CURATION)
     x.add_argument("--target")
     x.add_argument("--reason")
     x.add_argument("--label")
     x = sub.add_parser("signal-show", prog="crew signal show")
-    x.add_argument("signal", metavar="id")
+    x.add_argument("signal", metavar="id", help=SIGNAL_ID)
     x.add_argument("--label")
     x = sub.add_parser("signal-land", prog="crew signal land")
     x.add_argument("dir", metavar="capture-dir")

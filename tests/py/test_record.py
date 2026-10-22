@@ -133,6 +133,21 @@ class TestTrace:
         chore = [entry("20261005T120000Z-mac-5-1", "2026-10-05T12:00:00Z", "chore.add", ["chore/bump", "bolt/b1"])]
         assert record.trace_start(E + chore, "bump")[0] == "chore/bump"
 
+    def test_a_signals_short_id_is_the_signal_it_numbers_for_a_trace_and_for_events(self):
+        assert record.trace_start(E, "signals/s/01") == ("signals/s/01-c", ["signals/s/01"])
+        assert record.trace_start(E, "s/02")[0] == "signals/s/02-other"
+        assert record.trace_start(E, "signals/s/03") == (None, ["signals/s/03"])
+        assert [l.split()[2] for l in record.events_text(E, {}, "0000", "signals/s/01").splitlines()] == ["capture", "unit.add", "signal.move"]
+        two = E + [entry("20261005T120000Z-mac-5-1", "2026-10-05T12:00:00Z", "capture", ["signals/s/01-d"])]
+        with pytest.raises(crew.Refusal, match=r"^signals/s/01 names 2 signals: signals/s/01-c, signals/s/01-d; give the full id of one$"):
+            record.trace_start(two, "signals/s/01")
+
+    def test_trace_and_events_say_in_their_usage_that_a_signal_is_named_by_its_short_id_too(self, capsys):
+        for cmd in ("trace", "events"):
+            with pytest.raises(SystemExit):
+                record.parser().parse_args([cmd, "--help"])
+            assert "<capture>/<NN>-<slug>, or its short one, <capture>/<NN>" in " ".join(capsys.readouterr().out.split())
+
     def test_where_a_chore_moved_from_is_not_what_it_came_from(self):
         moved = [entry("20261005T120000Z-mac-5-1", "2026-10-05T12:00:00Z", "chore.add", ["chore/bump", "queue/switchboard-kit"]),
                  entry("20261005T120100Z-mac-5-2", "2026-10-05T12:01:00Z", "chore.move", ["chore/bump", "bolt/b1"], ["queue/switchboard-kit"])]

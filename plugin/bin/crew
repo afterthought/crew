@@ -150,8 +150,10 @@
 #                                      waits for the user's decision in it and prints it with their words, for a batch
 #                                      card waits on the card too, printing its note and every annotation, and closes
 #                                      the card, and for a landing prints its annotations as notes on the landing card
-#                                      and its approval as landing nothing, leaving the card; end ends it, as the
-#                                      card's close does
+#                                      and its approval as landing nothing, leaving the card, starting the reading
+#                                      first when none runs while its conductor holds the card, refused naming crew
+#                                      card session land/<bolt> when it will not open; end ends it, as the card's
+#                                      close does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use
@@ -164,6 +166,8 @@
 #   crew signal show <id>              a signal, where its excerpt came from, and its move
 #   crew signal move <id> attach|challenge|new-territory|answered|drop ...
 #                                      curation's move for a signal
+#                                      (a signal's <id>, here, in --signal and in signals/<id>, is its full id,
+#                                      <capture>/<NN>-<slug>, or its short one, <capture>/<NN>)
 #   crew signal land <capture-dir> --label L
 #                                      a program's capture, a deployer's or another adapter's, with its signals,
 #                                      landed on the flywheel's branch from the host that banked its raw record
