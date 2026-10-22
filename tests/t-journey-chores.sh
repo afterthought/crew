@@ -32,7 +32,7 @@ eq "$(cat "$slots")" ""
 expect_ok crew chore run bump code
 has "$out" "swb-1-unit-1 has chore bump: code, in $cp"
 eq "$(cat "$slots")" "unit-1 chore bump $cp"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/chore/bump)" "bolt/tenant-environments"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/chore/bump)" "origin/bolt/tenant-environments"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $cp"
 eq "$(prompt_to swb-1-unit-1)" "'Chore bump: Biome follows the shell ZQXT.'"
 eq "$(field $box stage.start On stage/bump/code)" "stage/bump/code chore/bump agent/swb-1-unit-1"

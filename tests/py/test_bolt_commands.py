@@ -1,8 +1,12 @@
 """crew bolt new|order|drop on the plan (bolt-plan spec): each applied to a plan in memory, with the stages a drop
 reads given; which bolt a give hands a team (plan.to_give, plan.holding), and when a bolt lands (plan.land_refusal),
-held by a team or by none (plan.unheld_stages, plan.unheld_refusal, plan.builder).
+held by a team or by none (plan.unheld_stages, plan.unheld_refusal, plan.builder); and what a give checks and says
+around sluice's create of the bolt's branch (plan.give_check, plan.made_said, plan.given_said, plan.ungiven_said).
 The branch and worktree give makes and land removes, and the commits every write makes, are the journey's
 (t-journey-units and t-journey-land)."""
+import base64
+import pathlib
+
 import pytest
 from facts import FactsWrite, apply, known, plan_text, units_of
 
@@ -108,6 +112,134 @@ class TestGive:
         assert plan.holding("swb-1", held, p, lambda u: "landed") == (
             "swb-1 holds bolt tenant-environments, landed but still in the plan: crew bolt land tenant-environments")
         assert plan.holding("swb-1", p.bolt("board-builds"), p, lambda u: "ready") == "swb-1 holds bolt board-builds, which has no units yet"
+
+
+RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
+WHERE = "/kit/main/.config/sluice.toml"
+POLICY = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
+
+
+def recorded(name):
+    """What sluice 0.36.4 printed for a branch command, and its exit, as the folder's README lists them."""
+    codes = dict(l.split("\t")[:2] for l in (RECORDED / "README").read_text().splitlines() if "\texit " in l)
+    return (RECORDED / name).read_text(), int(codes[name].split()[1])
+
+
+def deleted(name, policy=POLICY):
+    """What BOLT_DELETE prints when sluice says what it recorded: a bolt on GitHub, or on the host for a policy naming
+    no remote, its own branch at aaaaaaa."""
+    out, code = recorded(name)
+    return (f"LOCAL={'a' * 40}\nTRACKED={'a' * 40}\nAT_LOCAL={base64.b64encode(policy.encode()).decode()}\nAT_TRACKED=-\n"
+            f"RC={code}\nSAID={base64.b64encode(out.encode()).decode()}\n")
+
+
+class TestDropDeletes:
+    """bolt-plan "A bolt is created, given, dropped and landed through crew" (plan.19, record 0003): a drop of a bolt a
+    team holds has sluice delete its branch, asked on the team's host once its worktrees are gone; what is said of it
+    (plan.dropped_said). That it is marked dropped and recorded once is the journey's (t-journey-land)."""
+    HOST = "chuck-herdr-alpha"
+    KEPT = "it is the drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip"
+
+    def said(self, name, policy=POLICY, again=False):
+        return plan.dropped_said("b", self.HOST, 0, deleted(name, policy), "", again)
+
+    def test_a_dropped_bolt_whose_tip_main_holds_is_deleted_from_github(self):
+        """bolt-plan "Dropping a bolt a team holds"."""
+        assert self.said("delete.json") == "sluice deleted bolt/b from GitHub at 22eef85"
+
+    def test_a_dropped_bolt_made_before_is_deleted_from_its_host(self):
+        assert self.said("delete.json", '[branches."bolt/*"]\nrequired = ["#check-full"]\n') == (
+            "sluice deleted bolt/b from chuck-herdr-alpha at 22eef85")
+
+    def test_a_branch_already_gone_refuses_nothing(self):
+        assert self.said("delete-not-found.json") == "bolt/b is gone already: no branch bolt/b"
+
+    def test_a_dropped_bolt_holding_work_main_lacks_is_kept_and_named_as_the_users(self):
+        """bolt-plan "A dropped bolt holds work main lacks"."""
+        assert self.said("delete-not-landed.json") == (
+            "bolt/b is kept on GitHub at aaaaaaa: bolt b was dropped, and sluice did not delete it: bolt/b at "
+            f"22eef8585855b2ef8feb0e08177e34d15f131182 has not landed into main; submit it there first; {self.KEPT}")
+        assert self.said("delete-not-landed.json", '[branches."bolt/*"]\nrequired = ["#check-full"]\n').startswith(
+            "bolt/b is kept on chuck-herdr-alpha at aaaaaaa: bolt b was dropped")
+
+    def test_one_with_a_submission_queued_is_kept_in_sluices_words(self):
+        assert self.said("delete-queued.json") == (
+            "bolt/b is kept on GitHub at aaaaaaa: bolt b was dropped, and sluice did not delete it: #1 still queued on "
+            f"bolt/b; wait for them to land, or withdraw them; {self.KEPT}")
+
+    def test_a_host_that_does_not_answer_names_the_command_for_the_next_read(self):
+        """bolt-plan "The drop's host does not answer"."""
+        assert plan.dropped_said("b", self.HOST, 255, "", "ssh: connect to host") == (
+            "chuck-herdr-alpha did not answer, so sluice was not asked to delete bolt/b: sluice branch delete bolt/b "
+            "--into main there; the team's next read asks it")
+
+    def test_words_crew_cannot_read_leave_it_to_the_next_read(self):
+        """read.2: what is not sluice's document decides nothing."""
+        assert plan.dropped_said("b", self.HOST, 0, deleted("delete.json").replace("RC=0", "RC=x"), "").startswith(
+            "bolt/b may still stand on GitHub: crew can't read what sluice's branch delete said from:")
+        assert plan.dropped_said("b", self.HOST, 0, deleted("delete.json").replace("RC=0", "RC=x"), "").endswith(
+            "; the team's next read asks sluice again")
+
+    def test_asked_again_once_main_holds_its_tip(self):
+        """bolt-plan "Main comes to hold a dropped bolt's work"."""
+        assert self.said("delete.json", again=True) == (
+            "bolt/b is removed: main now holds bolt b's tip, and sluice deleted it from GitHub at 22eef85")
+        assert self.said("delete-queued.json", again=True) == (
+            "bolt/b is still kept: #1 still queued on bolt/b; wait for them to land, or withdraw them")
+
+
+class TestGiveThroughSluice:
+    """bolt-plan "A bolt is created, given, dropped and landed through crew" (plan.19): what a give checks before sluice
+    makes the branch, every refusal coming before the plan write, so the plan is unchanged and no branch made; what
+    sluice's create says; and a write refused after it, which has sluice delete the branch again."""
+
+    def check(self, text=POLICY, version="sluice 0.36.4 "):
+        return plan.give_check(KIT, WHERE, "origin/main", text, "b", version, "chuck-herdr-alpha")
+
+    def test_a_kit_on_github_with_a_sluice_that_makes_branches_gives_on_its_remote(self):
+        assert self.check() == "origin"
+
+    def test_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
+        with pytest.raises(plan.Refusal) as e:
+            self.check('[branches."bolt/*"]\nrequired = ["#check-full"]\n')
+        assert str(e.value).startswith(f"{KIT} gives bolts only on GitHub, and its {WHERE} on origin/main names no remote")
+
+    def test_a_kit_with_no_bolt_checks_is_refused_first(self):
+        with pytest.raises(plan.Refusal, match="names no checks for its bolt branches"):
+            self.check('[branches."bolt/*"]\nremote = "origin"\n')
+
+    @pytest.mark.parametrize("version, said", [("sluice 0.18.0 ", "sluice 0.18.0"), ("", "nothing")])
+    def test_a_host_whose_sluice_is_older_or_unread_is_refused(self, version, said):
+        with pytest.raises(plan.Refusal) as e:
+            self.check(version=version)
+        assert str(e.value) == ("a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice "
+                                f"--version on chuck-herdr-alpha said: {said}")
+
+    def test_sluices_create_is_the_commit_it_made_the_branch_at(self):
+        assert plan.made_said("b", KIT, "chuck-herdr-alpha", *recorded("create.json")) == "c0da39bae0a5d89da0febc3f46f58607c2ad08a7"
+
+    def test_a_create_sluice_refuses_is_refused_in_its_words(self):
+        with pytest.raises(plan.Refusal) as e:
+            plan.made_said("b", KIT, "chuck-herdr-alpha", *recorded("create-present.json"))
+        assert str(e.value) == (f"sluice did not make bolt/b for {KIT} on chuck-herdr-alpha: bolt/b is already there, at "
+                                "c0da39bae0a5d89da0febc3f46f58607c2ad08a7")
+
+    def test_a_give_names_github_the_commit_and_the_teams_host(self):
+        assert plan.given_said("swb-1", "b", KIT, "origin", "c0da39bae0a5d89da0febc3f46f58607c2ad08a7", "chuck-herdr-alpha") == (
+            f"swb-1 holds b: sluice made bolt/b on GitHub (origin) from {KIT}'s main at c0da39b, built on chuck-herdr-alpha "
+            "and merged into only through sluice")
+
+    def test_a_write_refused_after_the_create_has_sluice_delete_the_branch_again(self):
+        why = "swb-1 holds bolt c since 1234567"
+        assert plan.ungiven_said("b", why, deleted("delete.json"), 0) == (
+            f"{why}; sluice deleted bolt/b again, so nothing of the give is left")
+
+    def test_a_delete_sluice_refuses_then_names_the_branch_left_standing(self):
+        why = "swb-1 holds bolt c since 1234567"
+        assert plan.ungiven_said("b", why, deleted("delete-queued.json"), 0) == (
+            f"{why}; and bolt/b, which sluice made for the give, still stands, since sluice did not delete it: #1 still "
+            "queued on bolt/b; wait for them to land, or withdraw them")
+        assert plan.ungiven_said("b", why, "", 255).endswith("since sluice did not delete it: its delete exited 255: nothing was said")
 
 
 class TestLand:

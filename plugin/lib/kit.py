@@ -97,10 +97,13 @@ def moon_said(version):
     return f"moon --version printed no version crew can read: {(version or '').strip()[:80] or 'nothing'}"
 
 
-def place_said(out):
+def place_said(out, bolt=None):
     """What PLACE printed of a worktree it made or found: its absolute git directory and its DECLARATION's text, or None
-    when it has none. Refused when the output is not what PLACE prints."""
+    when it has none. Refused, naming the bolt and git's words, when its fetch of the bolt from GitHub failed, nothing
+    made (plan.19, read.1); and when the output is not what PLACE prints."""
     said = dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
+    if "FETCHED" in said:
+        crew.fail(f"no place is made: crew cannot fetch bolt/{bolt} from GitHub to cut it from: {said['FETCHED'].strip() or 'git said nothing'}")
     gitdir, decl = said.get("GITDIR"), said.get("DECLARATION")
     if not gitdir or decl is None:
         crew.fail(f"crew can't read where the worktree's git directory is and what its kit declares from: {(out or '').strip()[:200] or 'nothing'}")
@@ -134,13 +137,21 @@ def unready_said(place, why, lines=15):
 VERDICT = "Sluice-Result"
 
 
+def branch_table(branches, branch):
+    """The [branches."<pattern>"] table of a policy's branches whose pattern matches the branch, the most specific
+    first, as sluice matches it; None when none does."""
+    import fnmatch
+    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
+                      key=lambda p: (p.count("*"), -len(p)))
+    return branches[matching[0]] if matching and isinstance(branches[matching[0]], dict) else None
+
+
 def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
     """The checks a kit's policy requires of its bolt branches (teams.5, record 0026): the `required` list of the
     [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it,
     in the policy as the kit's main holds it now (ref, origin/main for a kit on GitHub, plan.18). Refused, naming the
     file and the ref, when the kit has none, it is not TOML, or no table names bolt branches with a check: a kit merges
     and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
-    import fnmatch
     if text is None:
         crew.fail(f"{kit} merges only through sluice, and has no {where} on {ref}: write one whose "
                   f"[branches.\"bolt/*\"] names the checks a bolt's merges must pass, then give the bolt again")
@@ -148,13 +159,134 @@ def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
         branches = tomllib.loads(text).get("branches", {})
     except tomllib.TOMLDecodeError as e:
         crew.fail(f"{kit}'s {where} is not TOML, so crew can't read what gates its bolt branches: {e}")
-    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
-                      key=lambda p: (p.count("*"), -len(p)))
-    required = branches[matching[0]].get("required") if matching and isinstance(branches[matching[0]], dict) else None
+    table = branch_table(branches, branch)
+    required = table.get("required") if table else None
     if not (isinstance(required, list) and required and all(isinstance(r, str) and r for r in required)):
         crew.fail(f"{kit} merges only through sluice, and its {where} names no checks for its bolt branches: give "
                   f"[branches.\"bolt/*\"] a `required` list of the checks a bolt's merges must pass, then give the bolt again")
     return required
+
+
+def bolt_remote(text, branch="bolt/a-bolt", where=DECLARATION):
+    """The remote a kit's policy names for a branch, as sluice routes it (plan.19, its rule core.15): the `remote` of the
+    [branches."<pattern>"] table that matches the branch, the most specific first, as bolt_checks matches it, when it is
+    a non-empty string; None for no policy (text None), no matching table or no remote, which sluice reads as a branch
+    kept in the host's own refs. Refused, naming the file, when it is not TOML (read.1)."""
+    if text is None:
+        return None
+    try:
+        branches = tomllib.loads(text).get("branches", {})
+    except tomllib.TOMLDecodeError as e:
+        crew.fail(f"{where} is not TOML, so crew can't read where sluice keeps {branch}: {e}")
+    table = branch_table(branches, branch)
+    remote = table.get("remote") if table else None
+    return remote if isinstance(remote, str) and remote else None
+
+
+def give_remote(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="origin/main"):
+    """The remote a give has sluice make a bolt's branch on (plan.19): the one the kit's policy at its main now names
+    for its bolt branches (bolt_remote). Refused, naming the file and the key, when it names none, since crew gives
+    bolts only on GitHub and writing the key is the kit's own change (plan.17)."""
+    return bolt_remote(text, branch, where) or crew.fail(
+        f"{kit} gives bolts only on GitHub, and its {where} on {ref} names no remote for its bolt branches: its "
+        f"[branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change (plan.17), then give the bolt again")
+
+
+# The first sluice with `branch create` and `branch delete` (sluice ADR 0026, v0.20.0), which a give and a land need.
+SLUICE_BRANCHES = (0, 20, 0)
+
+
+def sluice_version(out):
+    """The version `sluice --version` printed, as (major, minor, patch), or None when it printed nothing crew can read as
+    `sluice X.Y.Z` (sluice 0.36.4 prints `sluice 0.36.4`, tests/py/sluice-0.36.4/version.txt)."""
+    m = re.fullmatch(r"sluice (\d+)\.(\d+)\.(\d+)", (out or "").strip())
+    return tuple(int(n) for n in m.groups()) if m else None
+
+
+def sluice_refusal(out, host):
+    """Why a give can't go through the host's sluice, or None (plan.19, read.1): its version is below SLUICE_BRANCHES,
+    which has no `branch create`, or `sluice --version` printed nothing crew can read; naming the version needed and
+    the host's own words."""
+    v = sluice_version(out)
+    if v is not None and v >= SLUICE_BRANCHES:
+        return None
+    said = " ".join((out or "").split())[:120] or "nothing"
+    return (f"a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice --version on {host} "
+            f"said: {said}")
+
+
+def branch_said(out, code):
+    """What sluice's `branch create` or `branch delete` said with --json (read.2, as sluice 0.36.4 says it,
+    tests/py/sluice-0.36.4/): (the commit it made the branch at or removed it from, None) for its document of a branch
+    made or removed, exit 0; (None, its message) for its refusal, {"error": {"kind", "message"}}, exit 1 when the
+    branch or the one it is made from is not there, 2 when it refused, 3 on its own failure. Refused, naming what it
+    said, on anything else."""
+    import json
+    try:
+        doc = json.loads(out or "")
+    except ValueError:
+        doc = None
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    if code == 0 and isinstance(doc, dict) and isinstance(doc.get("branch"), str):
+        made = doc.get("created", doc.get("deleted"))
+        if isinstance(made, str) and sha.fullmatch(made):
+            return made, None
+    err = doc.get("error") if isinstance(doc, dict) else None
+    if code in (1, 2, 3) and isinstance(err, dict) and isinstance(err.get("message"), str) and err["message"]:
+        return None, err["message"]
+    crew.fail(f"crew can't read what sluice's branch command said (exit {code}): {(out or '').strip()[:200] or 'nothing'}")
+
+
+def bolt_lives(said, bolt):
+    """Where a bolt's branch lives, as sluice routes it (plan.19): the remote the policy at the host's own bolt/<bolt>
+    names for it, or at origin/bolt/<bolt> when the host has no branch of its own; None for a bolt made before gives
+    went through sluice, kept in its host's refs. said is what BOLT_AT printed in the kit's main checkout: LOCAL and
+    TRACKED, the commit of each ref or -, and AT_LOCAL and AT_TRACKED, the policy at each, base64, or - when that
+    revision holds none. Refused when the host has neither ref, or the output is not BOLT_AT's (read.1, read.2)."""
+    f = said_of(said)
+    if not {"LOCAL", "TRACKED", "AT_LOCAL", "AT_TRACKED"} <= set(f):
+        crew.fail(f"crew can't read where bolt/{bolt} lives from: {(said or '').strip()[:200] or 'nothing'}")
+    where = "LOCAL" if f["LOCAL"] != "-" else "TRACKED" if f["TRACKED"] != "-" else None
+    where or crew.fail(f"crew can't tell where bolt/{bolt} lives: this host has neither bolt/{bolt} nor origin/bolt/{bolt}")
+    at = f[f"AT_{where}"]
+    try:
+        text = None if at == "-" else base64.b64decode(at, validate=True).decode()
+    except (binascii.Error, UnicodeDecodeError) as e:
+        crew.fail(f"crew can't read bolt/{bolt}'s {DECLARATION} as it was sent: {e}")
+    return bolt_remote(text, f"bolt/{bolt}", f"{DECLARATION} at bolt/{bolt}")
+
+
+
+
+def bolt_home(said, bolt):
+    """Where a bolt lives (bolt_lives) and the remote the policy at its kit's main now names for its bolt branches
+    (bolt_remote), from what BOLT_HOME printed: (the bolt's remote or None, main's remote or None). Refused as
+    bolt_lives refuses, and when AT_MAIN is not there or can't be read (read.2)."""
+    lives = bolt_lives(said, bolt)
+    at = said_of(said).get("AT_MAIN")
+    at is not None or crew.fail(f"crew can't read the policy at main from: {(said or '').strip()[:200] or 'nothing'}")
+    try:
+        text = None if at == "-" else base64.b64decode(at, validate=True).decode()
+    except (binascii.Error, UnicodeDecodeError) as e:
+        crew.fail(f"crew can't read main's {DECLARATION} as it was sent: {e}")
+    return lives, bolt_remote(text, f"bolt/{bolt}", f"{DECLARATION} at main")
+
+
+def place_base(said, bolt):
+    """The ref a new place of a bolt is cut from and tracks, from where the bolt lives (bolt_lives, plan.19):
+    origin/bolt/<bolt> for a bolt on GitHub, which PLACE fetches first, so the place holds every merge sluice landed
+    there from any host; the host's own bolt/<bolt> for a bolt made before gives went through sluice."""
+    return f"origin/bolt/{bolt}" if bolt_lives(said, bolt) else f"bolt/{bolt}"
+
+
+def delete_ran(said):
+    """sluice's document and exit as BOLT_DELETE printed them, SAID, base64, and RC (read.2): (document, exit). Refused,
+    naming what was printed, when they are not there."""
+    f = said_of(said)
+    try:
+        return base64.b64decode(f["SAID"]).decode(), int(f["RC"])
+    except (KeyError, ValueError, UnicodeDecodeError):
+        crew.fail(f"crew can't read what sluice's branch delete said from: {(said or '').strip()[-200:] or 'nothing'}")
 
 
 def verification(head, result):

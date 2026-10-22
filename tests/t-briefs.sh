@@ -135,7 +135,8 @@ for want in "names, in the message that carries it, the documentation page or th
 has "$out" "\`--source\` also names what the signal points at"
 expect_ok crewpy brief wldn planner
 for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "--replaces <n>" "--unblocks <bolt>" \
-  "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none"; do
+  "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none" \
+  "A dropped bolt's own branch sluice deletes, on GitHub and the host, or keeps and crew names as the drop's unmerged work, the user's, while main lacks its tip"; do
   has "$out" "$want"
 done
 for gone in "bin/crew bolt new" "bin/crew unit add" "bin/crew unit move" "bin/crew unit drop" "Agree any change to it"; do lacks "$out" "$gone"; done

@@ -1,9 +1,11 @@
 # README, the crew skill and crew's usage name the same commands: every command in the README is in the usage,
 # and none of the removed ones is in any of them. CLAUDE.md names how an agent runs crew's tools through the shell
 # per command, and no role brief or crew skill does (tests.7); a landing pushes nothing and levels no host in each of
-# them (docs.2, plan.18); CLAUDE.md says a host loads crew live from crew/live/plugin or released at a tag swancloud
-# pins, never from a checkout on main, which nobody pulls or levels (plan.18, plan.19); a checkout carries the .envrc
-# a person's direnv enters the shell with, and ignores devenv's and direnv's working files and the tests' .venv.
+# them (docs.2, plan.18), and a give, a land and a drop go through sluice's branch create and delete, a dropped bolt's
+# branch kept while main lacks its tip (plan.19); CLAUDE.md
+# says a host loads crew live from crew/live/plugin or released at a tag swancloud pins, never from a checkout on main,
+# which nobody pulls or levels (plan.18, plan.19); a checkout carries the .envrc a person's direnv enters the shell
+# with, and ignores devenv's and direnv's working files and the tests' .venv.
 # Reads: README.md CLAUDE.md plugin/roles/ plugin/skills/ .envrc .gitignore
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -51,6 +53,16 @@ for doc in usage readme skill; do
   has "${!doc}" "pushes nothing and levels no host"; has "${!doc}" "origin/main"; lacks "${!doc}" "behind GitHub's"
 done
 ok "the README, the skill and the usage say a landing pushes nothing and levels no host, and a bolt is cut from origin/main"
+
+for doc in usage readme skill; do
+  has "${!doc}" "sluice branch create"; has "${!doc}" "sluice branch delete"; has "${!doc}" "0.20.0"
+  has "${!doc}" "stays local until it lands"
+done
+for doc in readme skill; do has "${!doc}" "origin/bolt/<bolt>"; done
+for doc in usage readme skill; do has "${!doc}" "while main lacks its tip"; lacks "${!doc}" "a dropped bolt's whatever it holds"; done
+has "$usage" "land and drop have sluice delete it"; has "$skill" "\`crew bolt land\` and \`crew bolt drop\` have sluice delete"
+has "$readme" "for a bolt a team holds, it then has sluice delete the bolt's branch"
+ok "the README, the skill and the usage say a give has sluice make the bolt's branch on GitHub and a land and a drop have sluice delete it, a dropped bolt's kept while main lacks its tip, a give refused below sluice 0.20.0, every place cut from the bolt on GitHub, and a bolt made before local until it lands"
 
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)

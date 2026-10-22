@@ -1,10 +1,11 @@
-# A unit's stages from the bolt's give, through the crew command on the stubs (tests.11, record 0022): give makes the
-# bolt's branch and no worktree (record 0026); a unit's place is ready through the kit's declaration as every worktree
-# crew makes is (plan.17), a setup that fails refusing the stage until a second run sets the place up; each stage of a
-# unit takes a slot, starts a fresh agent in the unit's place and sends its prompt; the waits end each stage at its
-# deliverable and record it; the team's read records an end nobody waited on, fetching and gathering once; verify's
-# report ends it; code's prompt names an unmerged unit's overlapping Touches; and a wait says a conflict sluice's
-# overview shows for the stage's submission, before its answer (record 0032). The units journey's other parts:
+# A unit's stages from the bolt's give, through the crew command on the stubs (tests.11, record 0022): give has sluice
+# make the bolt's branch on GitHub and no worktree (record 0026, plan.19); a unit's place is cut from the bolt on
+# GitHub after a fetch and made ready through the kit's declaration as every worktree crew makes is (plan.17), a setup
+# that fails refusing the stage until a second run sets the place up; each stage of a unit takes a slot, starts a fresh
+# agent in the unit's place and sends its prompt; the waits end each stage at its deliverable and record it; the
+# team's read records an end nobody waited on, fetching and gathering once; verify's report ends it; code's prompt
+# names an unmerged unit's overlapping Touches; and a wait says a conflict sluice's overview shows for the stage's
+# submission, before its answer (record 0032). The units journey's other parts:
 # t-journey-slots, t-journey-merge, t-journey-prompts, t-journey-fix, t-journey-land.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
@@ -26,20 +27,21 @@ has "$(grep '^%allowed: Unit' "$T/plan.rec")" "Amended"
 by_hand 'unit("b", "tenant-environments", "a"); [unit(u, "tenant-environments") for u in "cde"]
 p.insert(plan.Rec("Bolt", [("Bolt", "console-pages"), ("Repo", "switchboard-kit"), ("Goal", "The console lists them.")]))'
 expect_ok crew bolt give swb-1
-has "$out" "swb-1 holds tenant-environments: bolt/tenant-environments from switchboard-kit's main at $(git -C "$k" rev-parse --short main) on $box, merged into only through sluice"
+has "$out" "swb-1 holds tenant-environments: sluice made bolt/tenant-environments on GitHub (origin) from switchboard-kit's main at $(git -C "$k" rev-parse --short main), built on $box and merged into only through sluice"
 eq "$(plan -t Bolt -e "Bolt = 'tenant-environments'" -P Team)" "swb-1"
 eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
+eq "$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/tenant-environments)" "$(git -C "$k" rev-parse main)"
 [[ ! -e $kd/bolts ]] || fail "give made a worktree for the bolt"
 eq "$(field mac-studio bolt.give On) $(field mac-studio bolt.give Commit)" "bolt/tenant-environments team/swb-1 WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 clean_forecast
-ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give makes the bolt's branch from main on the team's host and no worktree"
+ok "crew up records the team's agents; bolt new and unit add each commit to the plan in the asker's name, a write bringing an older plan's descriptors in step; give has sluice make the bolt's branch on GitHub from main, and no worktree"
 
 # The conductor runs the stages on the team's host.
 export CREW_AGENT=swb-1-conductor
 expect_ok crew unit run a construct
 has "$out" "swb-1-unit-1 has a: construct, in $kd/places/a"
 eq "$(cat "$slots")" "unit-1 unit a $kd/places/a"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "bolt/tenant-environments"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "origin/bolt/tenant-environments"
 eq "$(ready "$kd/places/a")" 1
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort high | swb-1-unit-1 | $kd/places/a"
 eq "$(prompt_to swb-1-unit-1)" "'/opsx:propose a Unit a. Sources: books/x.md; switchboard-kit:docs/y.md.'"
@@ -47,7 +49,7 @@ eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1,swb-1
 eq "$(field $box stage.start On stage/a/construct)" "stage/a/construct unit/a agent/swb-1-unit-1"
 eq "$(field $box stage.start By stage/a/construct)" "swb-1-conductor"
 has "$(cat "$stages")" "unit-1 a construct "
-ok "construct takes a free slot, makes the unit's place from the bolt ready through the kit's declaration, starts a fresh agent sent its prompt in the units workspace, and records the start it owes an end"
+ok "construct takes a free slot, makes the unit's place from the bolt on GitHub ready through the kit's declaration, starts a fresh agent sent its prompt in the units workspace, and records the start it owes an end"
 
 expect_fail "unit b is waiting: it comes after a, whose change is not committed yet" crew unit run b construct
 eq "$(wc -l < "$slots" | tr -d ' ')" "1"
@@ -144,3 +146,14 @@ eq "$(head -1 <<<"$out")" "merge on a: sluice says of swb-1-unit-1's submission 
 has "$(tail -1 <<<"$out")" "merge on a is still running after the wait's 0 ms"
 eq "$(grep -c "^$box sluice status 7 --json in " "$CREW_TEST_LOG")" 1
 ok "a wait says the conflict sluice recorded for the stage's submission, placed by sluice status, before its answer"
+
+# A merge sluice landed on the bolt from another host is on GitHub's bolt/tenant-environments, which this host's own
+# lags: a unit's place is cut from GitHub's after a fetch, tracking it, and holds that merge.
+w=$T/another-host; git clone -q -b bolt/tenant-environments "$(remote WilldanGroup/switchboard-kit)" "$w"
+echo elsewhere > "$w/landed-elsewhere"; commit_all "$w" "chore(land): #9 unit/elsewhere"; git -C "$w" push -q origin bolt/tenant-environments
+landed=$(git -C "$w" rev-parse HEAD)
+git -C "$k" cat-file -e "$landed^{commit}" 2>/dev/null && fail "the host already held the merge"
+expect_ok crew unit run c construct
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/c)" "origin/bolt/tenant-environments"
+git -C "$k" merge-base --is-ancestor "$landed" unit/c || fail "c's place does not hold the merge landed on GitHub"
+ok "a unit's place is cut from the bolt on GitHub after a fetch, holding a merge landed there from another host"
