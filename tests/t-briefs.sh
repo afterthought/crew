@@ -281,6 +281,15 @@ done
 expect_ok crewpy brief swb-1 conductor; lacks "$out" "prove swb-1"
 ok "no brief prompts another agent through herdr"
 
+# Every kit's main is an anchor the timer moves, and a host loads crew live or released, never from a checkout on main
+# (plan.18, plan.19): no brief pulls, fast-forwards or levels crew's checkout (tests.6).
+for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" \
+  "wldn design" "wldn planner" "wldn main-ops" "wldn dispatcher" "wldn operator" "wldn reviewer"; do
+  expect_ok crewpy brief $brief
+  for gone in "/workspace/crew/main" "crew/main/plugin" "merge --ff-only" "read-tree"; do lacks "$out" "$gone"; done
+done
+ok "no brief pulls, fast-forwards or levels crew's checkout"
+
 # The plan and the moves live on the flywheel's branch of its state repository: no brief names a plan/<label>
 # branch or a moves.rec in the blueprints, and the design agent and the planner name the state repository.
 for role in conductor ops construct coder verify; do

@@ -8,4 +8,4 @@
 
 ## 2. No brief pulls or levels crew's checkout
 
-- [ ] 2.1 `tests/t-briefs.sh` holds every rendered brief to naming no pull, fast-forward or levelling of crew's checkout (Task notes 2.1), and `tests/suite t-briefs` is green.
+- [x] 2.1 `tests/t-briefs.sh` holds every rendered brief to naming no pull, fast-forward or levelling of crew's checkout (Task notes 2.1), and `tests/suite t-briefs` is green.
