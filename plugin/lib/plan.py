@@ -7723,6 +7723,44 @@ def batch_closed(entries):
     return closed
 
 
+def batch_settled(entries):
+    """The batch card keys whose batch waits on nothing (briefs.12), from the run record's entries, oldest first, as
+    {key: why}: each batch/<n>, or for a batch posted as cards of five before, each batch/<n>-<k> (batch_cards), every
+    unit of which has landed, a bolt.land not refused naming it, or was dropped since the batch was made, a unit.drop or
+    bolt.drop not refused naming it later in the entries' order than the batch's review.batch, since a drop from before
+    says nothing of a unit added again under its name, or is held by a later batch not refused, at any commit, since a
+    later batch held the unit's latest change when it was made. Landings, drops and batches are only ever added, so a
+    key once settled stays so. Whether a card of it closed is not read: batch_closed is what the user's answer closed.
+    Each unit is counted once, the first of landed, dropped, held later true of it. The words name the units in the
+    batch's order: those landed, those dropped, then, oldest first, each later batch with the units it is the newest to
+    hold."""
+    landed = {o[5:] for e in entries if e.get("Act") == "bolt.land" and not e.get("Refused") for o in e.get("On") or [] if o.startswith("unit/")}
+    made_at, dropped_at = {}, {}
+    for i, e in enumerate(entries):
+        if e.get("Refused"):
+            continue
+        if e.get("Act") == "review.batch" and (e.get("Batch") or "").isdigit():
+            made_at[int(e["Batch"])] = i
+        elif e.get("Act") in ("unit.drop", "bolt.drop"):
+            dropped_at.update({o[5:]: i for o in e.get("On") or [] if o.startswith("unit/")})
+    made, posts, out = batches(entries), batch_posts(entries), {}
+    for n, _, units in made:
+        for key, part in batch_cards(n, units, posts):
+            names = list(dict.fromkeys(u for u, *_ in part))
+            here = [u for u in names if u in landed]
+            gone = [u for u in names if u not in landed and dropped_at.get(u, -1) > made_at[n]]
+            later = {u: max((m for m, _, us in made if m > n and any(v == u for v, *_ in us)), default=None)
+                     for u in names if u not in here + gone}
+            if not names or not all(later.values()):
+                continue
+            why = ([f"{joined(here)} {'has' if len(here) == 1 else 'have'} landed"] if here else []) + (
+                [f"{joined(gone)} {'was' if len(gone) == 1 else 'were'} dropped"] if gone else []) + [
+                f"batch {m} holds " + ("a newer change of " if len(us) == 1 else "newer changes of ") + joined(us)
+                for m in sorted(set(later.values())) for us in [[u for u in later if later[u] == m]]]
+            out[key] = "its batch waits on nothing: " + "; ".join(why)
+    return out
+
+
 def awaiting_answer(entries):
     """Each unit whose latest change has been in a batch whose card the user has not answered (briefs.12), as {unit: the
     batch}: no card of a batch holding the change at its commit (batch_cards) is closed (batch_closed), so its row
@@ -7969,14 +8007,15 @@ def batch_facts(n, entries, summary, subjects):
     level's host, oldest first, and the reviewer's summary: n, the batch before it, and each unit in the batch's order
     with its team, the commit the batch read it at, what it is about (subjects, else its name in words) and the
     paragraph the reviewer opened its section with, or a line saying the summary has none. None while the batch's point
-    has not come or has passed: the run record holds no batch n, its summary is not there (None), or its key is closed
-    (batch_closed), the last card act under it a close, but as lost to its owner. A card of it the owner holds open is
-    no reason: the act changes it, or posts it again once lost."""
+    has not come or has passed: the run record holds no batch n, its summary is not there (None), its key is closed
+    (batch_closed), the last card act under it a close, but as lost to its owner, or the batch waits on nothing
+    (batch_settled), so crew review --wait raises no card for it. A card of it the owner holds open is no reason: the
+    act changes it, or posts it again once lost."""
     key = f"batch/{n}"
     held = [e for e in entries if e.get("Act") == "review.batch" and not e.get("Refused") and e.get("Batch") == str(n)]
     if not held or summary is None:
         return None
-    if key in batch_closed(entries):
+    if key in batch_closed(entries) or key in batch_settled(entries):
         return None
     previous = max((m for m, _, _ in batches(entries) if m < n), default=None)
     units = [dict(unit=u, team=team, commit=sha, subject=subjects.get(u) or u.replace("-", " "),
@@ -8101,8 +8140,9 @@ def record_reading(l, entries, plan, fresh, missing=None):
     older, lost to it), the landings, the team each bolt was last given to, and what the batches hold, the due units
     None while a host of the record did not answer (missing), as are the units whose latest change waits on the user's
     answer to its batch's card (awaiting_answer). A close refused leaves its card open; a card's close as lost to its
-    owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed only
-    while its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row."""
+    owner ends that card but not its row, whose card is posted again under its key; and a batch's key is closed while
+    its last card act is a close (batch_closed), so a batch card posted again after a close keeps its row, or once its
+    batch waits on nothing (batch_settled), whose words are held as settled."""
     times, posted, closed, landings, gives = {}, {}, set(), [], {}
     for e in entries:
         act = e.get("Act")
@@ -8130,8 +8170,9 @@ def record_reading(l, entries, plan, fresh, missing=None):
             team = next((o[5:] for o in e["On"] if o.startswith("team/")), None)
             if bolt and team:
                 gives[(l, bolt)] = team
-    closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries)  # a batch card posted again reopens its row
-    held = dict(batches=batches(entries), closed=closed, posts=batch_posts(entries),
+    settled = batch_settled(entries)
+    closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries) | set(settled)  # a batch card posted again reopens its row
+    held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
                 due=None if missing else {u for u, *_ in due_changes(plan, entries)},
                 unanswered=None if missing else awaiting_answer(entries))
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
@@ -8145,8 +8186,9 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     card, whose units, their teams and the commits the batch read them at the row holds too, None for a landing. A
     proposal's row is keyed by its chain's card, proposal/<first>, the first proposal it was rewritten from. A
     verify report is no row: its findings are fixed in one round with no card (teams.17). A batch is one row, keyed
-    batch/<n>, holding every unit, until its card closes; a batch posted as cards of five before a batch was one card is
-    a row for each card posted, keyed batch/<n>-<k>, until it closes. A bolt with every unit merged is a landing row,
+    batch/<n>, holding every unit, until its card closes or it waits on nothing (batch_settled); a batch posted as cards
+    of five before a batch was one card is a row for each card posted, keyed batch/<n>-<k>, until it closes or the units
+    it holds wait on nothing. A bolt with every unit merged is a landing row,
     offered for landing only once its verification is green, sluice's verdict on its last landing (kit.verification,
     record 0025), and every unit's latest change has been in a batch whose card the user has answered: until then the
     row says which units no batch has held and which batches wait on the user's answer, and offers nothing
@@ -8280,7 +8322,8 @@ CARD_RETRY = 600
 def row_gone(key, entries):
     """Why a row's card has no row now, from the run record's entries, oldest first: (outcome, None) when the event
     that ends its row was recorded, so its card is closed with what was done, a proposal applied or a bolt landed;
-    else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them."""
+    else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them, and a batch that waits on
+    nothing with the words of crew's close (batch_settled)."""
     kind, _, rest = (key or "").partition("/")
     thing, _, head = rest.partition("/")
 
@@ -8295,6 +8338,9 @@ def row_gone(key, entries):
         return (("its bolt landed", None) if act == "bolt.land" else
                 (None, "its bolt was dropped" if act == "bolt.drop" else
                  "its bolt no longer waits to land" + (f" at {head}" if head else "")))
+    settled = batch_settled(entries) if kind == "batch" else {}
+    if key in settled:
+        return None, settled[key]
     return None, {"batch": "its batch no longer waits to be read", "deploy": "its deploy no longer waits on your word",
                   "op": "its step no longer waits on you",
                   "verify": "a verify report has no card, its findings fixed in one round"}.get(kind, "its row is gone")
@@ -8332,7 +8378,7 @@ def row_owner(fleet, plan, row):
     return f"{l}-{'ops' if row['group'] == 'operations' else 'planner'}", fleet["partitions"][l]["machine"]
 
 
-def sweep_judged(here, rows, cards_, entries, owners, blind, now):
+def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None)):
     """What the rail's read does with one partition's cards, of those posted on this host (here), the only ones its
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
     be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
@@ -8340,10 +8386,13 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now):
     left for the deploy's end to close (ops.word_stands). Then each row in record 0031's
     form with no card open on any host, whose owner runs here (owners, {row key: (owner, host)}), to post through its
     kind's raise. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is left for a
-    later read. Returns {gone: [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row]}."""
+    later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a batch), each
+    batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why, once: none is
+    under its key yet, and the user's answer has not closed it (batch_closed). Returns {gone: [(card, outcome,
+    reason)], questions: [card], held: [(card, row)], none: [row], settled: [(key, why)]}."""
     import ops  # its decision of a deploy's card alone
     rowed = {r["key"]: r for r in rows}
-    out = {"gone": [], "questions": [], "held": [], "none": []}
+    out = {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
     for c in cards_:
         kind = card_kind(c["key"])
         if c["host"] != here or kind == "record":
@@ -8358,6 +8407,9 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now):
     carded = {c["key"] for c in cards_}
     out["none"] = [r for r in rows if r["key"] not in carded and cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
                    and not refused_lately(entries, now, key=r["key"])]
+    if planner[1] == here:
+        done = {e.get("Key") for e in entries if e.get("Act") == "batch.close" and not e.get("Refused")} | batch_closed(entries)
+        out["settled"] = [(k, why) for k, why in batch_settled(entries).items() if k not in done]
     return out
 
 
@@ -8457,9 +8509,9 @@ def rail_text(fleet, labels, read, now):
     crew could not read (unread_card_acts); then the decision records waiting on the user, each the design
     agent's open card for one, with when it was asked and by whom, and no command, since the card is where it is
     answered; then any open card whose row is gone that the sweep did not close, with the host whose rail read closes
-    it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, each partition it
-    changed nothing for and why, each card session ended, with its host and why, and each host whose sessions were not
-    checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
+    it; then, from a read that swept, each card the sweep closed, withdrew, recorded lost or posted, and each batch it
+    closed or left with no card, named so, each partition it changed nothing for and why, each card session ended,
+    with its host and why, and each host whose sessions were not checked. A host is named as not answering only when it holds a bolt of the plans read, so a read that surveyed more
     (the board's) gives the same text."""
     found, rows, cards_, here = read["found"], read["rows"], read["cards"], crew.this_host()
     holding = {fleet["teams"][b.get("Team")]["machine"] for _, _, _, p in found if p for b in p.bolts() if b.get("Team") in fleet["teams"]}
@@ -8509,7 +8561,8 @@ def rail_text(fleet, labels, read, now):
         lines.append(when(c) + f"{c['key']} ({c['label']}), asked by {c['by']} on {c['host']}")
         lines.append(f"    {'left:':<8}" + (f"a rail read on {c['host']} closes it, under that host's sign-in" if c["host"] != here
                                             else "a later rail read here closes it"))
-    done = [f"  {d['key'] or 'a question'} ({d['label']}), {d['by']}'s {d['card'] or d['new']}: {d['did']}: {d['words']}" for d in swept["done"]]
+    done = [f"  {d['key'] or 'a question'} ({d['label']}), {d['by']}" + (f"'s {d['card'] or d['new']}" if d["card"] or d["new"] else ", no card")
+            + f": {d['did']}: {d['words']}" for d in swept["done"]]
     lines += (["", "cards swept:"] + done if done else []) + (
         ["", "cards not swept:"] + [f"  {u['label']}: {u['why']}" for u in swept["unswept"]] if swept["unswept"] else [])
     ended = [f"  {e['key']}{' ' + e['unit'] if e['unit'] else ''} ({e['label']}) on {e['host']}: {e['why']}; {e['said']}"
@@ -10363,12 +10416,16 @@ def sweep_cards(fleet, read, acts=None):
     (sweep_judged, row_gone), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
     card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
-    command that raised it, and a row of one is left as it is. It first asks Pending You in crew's own name
+    command that raised it, and a row of one is left as it is. Before any of it, where the partition's planner runs,
+    it records crew's close of each batch that waits on nothing, once, as batch.close on batch/<n> in the planner's
+    name with its card key and why (briefs.12), so a host not signed in still records it; a card open under its key is
+    withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
     (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
     that assistant's, and for a card this host's sign-in no longer reaches with "not found"; a host not signed in,
-    or a bridge that fails, changes nothing, and is said, as is a partition whose record did not answer there
-    (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
-    card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left."""
+    or a bridge that fails, changes nothing more, and is said, as is a partition whose record did not answer there,
+    which records no close either (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
+    card, by, did, words, new}], unswept: [{label, why}]}, did closed, withdrawn, lost, posted or left, a batch's close
+    by crew with card and new None."""
     acts = acts or SweepActs(fleet)
     here, now = acts.host(), acts.now()
     out, judged = {"done": [], "unswept": []}, []
@@ -10384,7 +10441,13 @@ def sweep_cards(fleet, read, acts=None):
         rows = [r for r in read["rows"] if r["label"] == l]
         owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
         blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now)
+        planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner)
+        for key, why in j.pop("settled"):
+            got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
+                            Key=key, Outcome=why)
+            out["done"].append(dict(label=l, key=key, card=None, by=planner[0], did="closed" if got else "left",
+                                    words=why if got else "crew's close was not recorded, as said above", new=None))
         j["none"] = [r for r in j["none"] if acts.raise_of(r["key"].split("/")[0])]
         if any(j.values()):
             judged.append((l, owners, j))
