@@ -2,7 +2,7 @@
 
 ## 1. crew can tell which copy of a key's card the main level's host can't reach
 
-- [ ] 1.1 `cards.stranded` names the owner's newest card under a key when it was posted from another host and is still open, or was closed as lost, and nothing otherwise, and its logic-tier cases pass in `tests/suite logic` (design: *One decision says which copy*; Task notes 1.1; `code.7`).
+- [x] 1.1 `cards.stranded` names the owner's newest card under a key when it was posted from another host and is still open, or was closed as lost, and nothing otherwise, and its logic-tier cases pass in `tests/suite logic` (design: *One decision says which copy*; Task notes 1.1; `code.7`).
 
 ## 2. The rail's next read on the main level's host raises such a batch's card again
 

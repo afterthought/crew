@@ -129,6 +129,23 @@ def card_under(entries, key, by):
     return held
 
 
+def stranded(entries, key, owner, here):
+    """The owner's newest card under a key when this host (here) can't reach it: one posted from another host, done and
+    naming a card, that no later card.close of it closes, or one whose last close was as lost to its owner, on any
+    host; None for a card posted here and still open, which its owner asks Pending You after, one closed any other
+    way, a post that names no host, and none. A refused post or close changes nothing, as in card_under. entries are in
+    the order they were written."""
+    card, host, state = None, None, None
+    for e in entries:
+        if e.get("Refused") or not e.get("Card"):
+            continue
+        if e.get("Act") == "card.post" and e.get("Key") == key and e.get("By") == owner:
+            card, host, state = e["Card"], e.get("Host"), None
+        elif e.get("Act") == "card.close" and e["Card"] == card:
+            state = e.get("State") or "closed"
+    return card if state == "lost" or (card and state is None and host not in (None, here)) else None
+
+
 def followed_open(entries, card, by):
     """The key under which the run record still holds open the agent `by`'s card a new post follows: the key of its
     newest card.post of that card, done, that no later card.close of the card closes, a close naming no key among

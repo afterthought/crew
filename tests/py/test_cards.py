@@ -1288,6 +1288,32 @@ class TestFollows:
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
 
 
+class TestStranded:
+    """rail-cards, "A batch's card the main level's host can't reach is raised again there": which of the planner's
+    cards under a batch's key the main level's host, deneb, can't reach (cards.stranded), from the run record alone."""
+    POST = dict(Act="card.post", Key="batch/13", By="swancloud-planner", Card="req_b13", Host="mac-studio")
+
+    def lost(self, host="mac-studio"):
+        return dict(Act="card.close", Key="batch/13", By="swancloud-planner", Card="req_b13", State="lost", Host=host)
+
+    @pytest.mark.parametrize("entries, card", [
+        ([POST], "req_b13"),
+        ([dict(POST, Host="deneb")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="closed")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="withdrawn", Host="mac-studio")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="lost", Host="mac-studio")], "req_b13"),
+        ([dict(POST, Host="deneb"), dict(Act="card.close", Card="req_b13", State="lost", Host="deneb")], "req_b13"),
+        ([POST, dict(Act="card.close", Card="req_b13", State="lost"), dict(POST, Card="req_b14", Host="deneb")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="closed", Refused="Pending You refused the close: x")], "req_b13"),
+        ([dict(POST, Host="deneb"), dict(POST, Card=None, Refused="Pending You refused post_request: x")], None),
+        ([dict(POST, By="swancloud-design")], None),
+        ([dict(POST, Key="batch/12")], None),
+        ([dict(POST, Host=None)], None),
+        ([], None)])
+    def test_the_owners_newest_card_held_on_another_host_or_lost_is_the_one_this_host_cant_reach(self, entries, card):
+        assert built.stranded(entries, "batch/13", "swancloud-planner", "deneb") == card
+
+
 
 class TestTheRefusedDeployCards:
     """The run record of 2026-10-19 23:54Z to 2026-10-20 00:16Z on swancloud/main (runs/mac-studio/2026-10-19.rec and
