@@ -2757,9 +2757,8 @@ def closed_refusal(p, n):
 
 
 def close(p, state, today, reason=None, cleared=()):
-    """A proposal closed: approved, with each unit whose row the user left out of the change as Cleared, a new one not
-    added, a dropped one kept, an amended one keeping its old intent, or dropped with its reason; one that is not open
-    is refused, saying what it is (plan.4)."""
+    """A proposal closed: approved, with each new unit the user left out of the change as Cleared, or dropped with its
+    reason; one that is not open is refused, saying what it is (plan.4)."""
     p.get("State") == "open" or fail(f"proposal {p.get('Proposal')} is {p.get('State')}, so it can't be " + (
         "dropped" if state == "dropped" else "approved"))
     p.set("State", state)
