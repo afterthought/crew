@@ -9822,12 +9822,15 @@ def batch_wait(fleet, label, key, d, acts=None):
     together, on the main level's host, until the user sends either back: the card read in Pending You every CARD_READ
     seconds, the session's result every CARD_POLL. It prints what batch_waited gives, the card's note and every
     annotation as the user wrote them, and closes the card with the outcome, which ends the session (row_card_close); a
-    word given while nobody waited is returned at once. A card closed outside crew is recorded closed as Pending You
-    shows it, and the session ended. A batch answered in a main-level pane (pane_answered), read in this host's run
-    record each round before the card, ends the wait, saying in whose pane and when and never the words, which the
-    planner has from crew card answer: its card is closed answered and the session ended. A session closed or ended
-    with no decision leaves the wait on the card, said once; a card lost to its owner is recorded lost, leaving the wait on the session; a session crew ended, as its card
-    closed, ends the wait. Refused with neither a card nor a session of the batch on this host."""
+    word given while nobody waited is returned at once. A session sent with no card held on this host, or one lost or
+    whose close Pending You refused, so that no card is closed, records the batch read: crew's own close of it,
+    batch.close on batch/<n> in the planner's name with what was read (batch_read_close, briefs.12), the session
+    ended when no card was held. A card closed outside crew is recorded closed as Pending You shows it, and the session
+    ended. A batch answered in a main-level pane (pane_answered), read in this host's run record each round before the
+    card, ends the wait, saying in whose pane and when and never the words, which the planner has from crew card
+    answer: its card is closed answered and the session ended. A session closed or ended with no decision leaves the
+    wait on the card, said once; a card lost to its owner is recorded lost, leaving the wait on the session; a session
+    crew ended, as its card closed, ends the wait. Refused with neither a card nor a session of the batch on this host."""
     acts = acts or CardActs(fleet)
     here = acts.host()
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], here)
@@ -9869,10 +9872,15 @@ def batch_wait(fleet, label, key, d, acts=None):
         done = batch_waited(key, decided, got)
         if done:
             print(done[1])
-            if done[0] == "read" and card:
-                row_card_close(fleet, label, owner, key, outcome=done[2], acts=acts)
-                return
-            if done[0] == "closed":
+            if done[0] == "read":
+                closed = row_card_close(fleet, label, owner, key, outcome=done[2], acts=acts) if card else None
+                if batch_read_close(closed):
+                    acts.emit(label, "batch.close", [cards.row_object(key) or key], by=owner,
+                              why=f"batch({key.split('/', 1)[1]}): read in its session", Key=key, State="read", Outcome=done[2])
+                    print(f"{key}: recorded read, {done[2]}")
+                if card:
+                    return
+            elif done[0] == "closed":
                 acts.emit(label, "card.close", [cards.row_object(key)], by=owner, Card=card, Key=key, State=done[2],
                           Outcome="closed outside crew")
             print(acts.end(label, key) or f"no session was running for {key}")
@@ -9898,6 +9906,13 @@ def batch_wait(fleet, label, key, d, acts=None):
             print(f"{key}: its card is lost to {owner}, and it has no session to wait on")
             return
         time.sleep(CARD_POLL)
+
+
+def batch_read_close(closed):
+    """Whether a batch whose reading the user sent is recorded read by crew's own close of it (review-batches, briefs.12):
+    when no card of it was closed, closed being what row_card_close gave, the card's id or None, or None when no card
+    was held, so the user's word holds the batch's landings no longer whatever became of the card."""
+    return closed is None
 
 
 def batch_waited(key, decided, got):

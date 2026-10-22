@@ -12,7 +12,7 @@
 
 ## 3. A batch whose session the user sends is read, with or without its card
 
-- [ ] 3.1 `crew card wait batch/<n>` records crew's close of the batch, in the planner's name with what was read, whenever the session's send closes no card on the main level's host (design: *A session sent records the batch read*; Task notes 3.1; `briefs.12`, `roles.2`).
+- [x] 3.1 `crew card wait batch/<n>` records crew's close of the batch, in the planner's name with what was read, whenever the session's send closes no card on the main level's host (design: *A session sent records the batch read*; Task notes 3.1; `briefs.12`, `roles.2`).
 - [ ] 3.2 A batch closed so is closed for the rail, the landing rows and the batch's raise until a newer card is posted under its key, proved in `tests/py/test_batches.py`, `tests/py/test_cards.py` and `tests/py/test_rail.py` with `tests/suite logic` ending "0 failed" (design: *`batch_closed` reads crew's close of a batch*; Task notes 3.2).
 - [ ] 3.3 `tests/t-cards.sh` proves the planner's wait on a session sent with no card, and with a card whose close is refused, records the batch read, and `tests/suite t-cards` ends with "0 failed" (Task notes 3.3).
 
