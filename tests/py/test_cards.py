@@ -506,6 +506,12 @@ class TestSessions:
         assert plan.batch_waited("batch/3", ("annotated", notes, 2), tapped)[2] == "Read; 3 notes sent to their teams"
         assert plan.batch_waited("batch/3", ("annotated", notes, None), None)[2] == "Read; its notes sent to their teams"
 
+    def test_a_batch_whose_session_was_sent_is_recorded_read_by_crew_whenever_no_card_of_it_closed(self):
+        """review-batches, "A batch whose reading session is sent is read, with or without its card": a card closed is
+        the record; none held, or one lost or whose close was refused, which row_card_close gives as None, is not."""
+        assert plan.batch_read_close("req_b13") is False
+        assert plan.batch_read_close(None) is True
+
     def test_a_batch_wait_goes_on_while_neither_has_the_users_word_and_ends_on_a_card_closed_outside_crew(self):
         for decided in (None, ("dismissed", None, None)):
             assert plan.batch_waited("batch/3", decided, {"status": "pending", "turn": "you"}) is None

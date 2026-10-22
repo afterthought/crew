@@ -8069,20 +8069,22 @@ def latest_changes(entries):
 
 
 def batch_closed(entries):
-    """The batch card keys the run record holds closed, entries oldest first: those whose last card act under the key
-    is a card.close, not refused and not lost to its owner, once the user sent the card back with a tap or sent its
-    reading session, or closed it in Pending You. A card posted under the key after it, one followed or raised again,
-    opens the key again, and a close as lost leaves it open for its card posted again; a refused post or close changes
-    nothing, since Pending You did neither. A batch the user answered in a main-level pane (pane_answered) has every key
-    of it closed for good, whatever card is posted under one after, in whichever order the hosts' entries came."""
+    """The batch card keys the run record holds closed, entries oldest first: those whose last act under the key is a
+    card.close, not refused and not lost to its owner, once the user sent the card back with a tap or sent its reading
+    session, or closed it in Pending You, or crew's own close of the batch, a batch.close not refused, card or none,
+    once the user sent its reading session and no card of it was closed (batch_read_close), or the sweep found it
+    waits on nothing. A card posted under the key after it, one followed or raised again, opens the key again, and a
+    close as lost leaves it open for its card posted again; a refused post or close changes nothing, since neither
+    Pending You nor crew did it. A batch the user answered in a main-level pane (pane_answered) has every key of it
+    closed for good, whatever card is posted under one after, in whichever order the hosts' entries came."""
     closed = set()
     for e in entries:
-        key = e.get("Key") or ""
-        if not key.startswith("batch/") or not e.get("Card") or e.get("Refused"):
+        key, act = e.get("Key") or "", e.get("Act")
+        if not key.startswith("batch/") or e.get("Refused") or (act != "batch.close" and not e.get("Card")):
             continue
-        if e.get("Act") == "card.post" or (e.get("Act") == "card.close" and e.get("State") == "lost"):
+        if act == "card.post" or (act == "card.close" and e.get("State") == "lost"):
             closed.discard(key)
-        elif e.get("Act") == "card.close":
+        elif act in ("card.close", "batch.close"):
             closed.add(key)
     return closed | set(pane_answered(entries))
 

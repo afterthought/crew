@@ -336,6 +336,18 @@ class TestRecord:
         assert {"batch/1", "batch/2-2"} <= r["held"]["closed"]
         assert [x["key"] for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"] == ["batch/2-1", "batch/9"]
 
+    def test_a_batch_crew_recorded_read_in_its_session_has_no_row_and_its_card_held_elsewhere_is_left_as_a_stray(self):
+        """review-batches, "Sent with no card on the main level's host": batch 1's card is held on mac-studio, and crew
+        recorded it read on the box, so the rail no longer shows batch 1 nor raises its card; the older copy is open
+        with no row, for mac-studio's rail read."""
+        batch = {"Act": "review.batch", "Batch": "1", "Units": "zone-one:swb-2@abc1", "At": "2026-10-12T09:59:00Z", "On": []}
+        read = {"Act": "batch.close", "Key": "batch/1", "On": ["batch/1"], "By": "wldn-planner", "Host": BOX, "State": "read",
+                "Outcome": "Read; no notes", "At": "2026-10-12T10:05:00Z"}
+        r = self.read([batch, post("req_1", "batch/1"), read])
+        assert "batch/1" in r["held"]["closed"] and [c["card"] for c in r["cards"]] == ["req_1"]
+        assert not [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
+        assert plan.batch_facts(1, [batch, post("req_1", "batch/1"), read], "## zone-one (swb-2)\n\nIt zones.\n", {}) is None
+
     def test_a_card_its_owner_posts_again_under_a_key_replaces_the_older_but_another_agents_does_not(self):
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]

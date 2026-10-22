@@ -57,6 +57,17 @@ class TestAnswered:
         assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, state="lost")]) == {"x1": 7}
         assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, refused="Pending You did not answer")]) == {"x1": 7}
 
+    def test_a_batch_crew_recorded_read_in_its_session_with_no_card_closed_waits_on_nothing_until_a_newer_card_is_posted(self):
+        """review-batches, "The batch's session sent with no card held": crew's close of batch 7, in the planner's name,
+        answers it; a card posted under its key after opens it again, and a close refused closes nothing."""
+        held = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10)]
+        read = {"Act": "batch.close", "Key": "batch/7", "On": ["batch/7"], "By": "wldn-planner", "State": "read",
+                "Outcome": "Read; no notes", "At": "2026-10-12T10:20:00Z"}
+        assert plan.awaiting_answer(held + [read]) == {} and plan.batch_closed(held + [read]) == {"batch/7"}
+        posted = {"Act": "card.post", "Key": "batch/7", "Card": "req_8", "At": "2026-10-12T10:21:00Z", "On": []}
+        assert plan.awaiting_answer(held + [read, posted]) == {"x1": 7}
+        assert plan.awaiting_answer(held + [dict(read, Refused="the run record could not be written")]) == {"x1": 7}
+
     def test_a_card_posted_again_under_the_key_after_its_close_waits_until_that_card_closes(self):
         held = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10)]
         posted = lambda card, minutes: {"Act": "card.post", "Key": "batch/7", "Card": card, "At": f"2026-10-12T10:{minutes:02d}:00Z", "On": []}
