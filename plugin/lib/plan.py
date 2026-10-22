@@ -2834,9 +2834,8 @@ def closed_refusal(p, n):
 
 
 def close(p, state, today, reason=None, cleared=()):
-    """A proposal closed: approved, with each unit whose row the user left out of the change as Cleared, a new one not
-    added, a dropped one kept, an amended one keeping its old intent, or dropped with its reason; one that is not open
-    is refused, saying what it is (plan.4)."""
+    """A proposal closed: approved, with each new unit the user left out of the change as Cleared, or dropped with its
+    reason; one that is not open is refused, saying what it is (plan.4)."""
     p.get("State") == "open" or fail(f"proposal {p.get('Proposal')} is {p.get('State')}, so it can't be " + (
         "dropped" if state == "dropped" else "approved"))
     p.set("State", state)
@@ -2884,16 +2883,13 @@ def plan_approve(fleet, a):
     the proposal closed as approved, in one commit; refused, with nothing changed, when a command no longer applies or
     a conductor whose bolt it touches has not agreed. A rebase it prepares is undone if the approval is refused. With
     --clear, the commands that concern only the units the user left out are not applied, a command left in that names
-    one refuses the whole, and the proposal records each as Cleared (plan.3). With keep, the card's dropped units the
-    user ticked to keep and amended ones ticked to keep their old intent, as crew plan answer hands them, each one's drop
-    or amendment is not applied, and the proposal records it as Cleared too. Then crew closes the proposal's card with
+    one refuses the whole, and the proposal records each as Cleared (plan.3). Then crew closes the proposal's card with
     what was applied, and the planner is told it when someone else approved (raise_proposal_at)."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
     w0, _, p0, argvs = at_tip(fleet, label, a.n)
     repo = w0.repo
     cleared = list(dict.fromkeys(getattr(a, "clear", None) or []))
-    keep = list(dict.fromkeys(getattr(a, "keep", None) or []))
 
     def agreed(w, p):
         why = agreement_missing(w.plan, argvs, p, a.n)
@@ -2904,8 +2900,7 @@ def plan_approve(fleet, a):
         not why or refuse(*why)
     opened(p0)
     agreed(w0, p0)
-    applied = as_they_stand(argvs, cleared, keep, a.n)
-    left = cleared + keep
+    applied = kept(argvs, cleared, a.n)
     ops0 = apply_all(fleet, label, w0, applied, a.n)[0]  # checked at the tip, to know what to prepare
     undos, seen = [], {}
     try:
@@ -2919,15 +2914,15 @@ def plan_approve(fleet, a):
             opened(p)
             agreed(w, p)
             ops, told = apply_all(fleet, label, w, applied, a.n)
-            if left:  # a branch's proposals.rec keeps the descriptor it was made with, from before Cleared
+            if cleared:  # a branch's proposals.rec keeps the descriptor it was made with, from before Cleared
                 in_step(pl, PROPOSALS)
-            close(p, "approved", datetime.date.today().isoformat(), cleared=left)
+            close(p, "approved", datetime.date.today().isoformat(), cleared=cleared)
             w.replace("proposals.rec", pl.text())
             w.subject = f"plan(proposal {a.n}): approve: {summary(applied) or 'nothing applied'}"
             w.on += [f"proposal/{a.n}"] + objects(argvs)
             seen.update(ops=ops, w=w)
             return told
-        body = "\n".join(([f"Left out: {', '.join(cleared)}"] if cleared else []) + ([f"Kept as it was: {', '.join(keep)}"] if keep else []))
+        body = f"Left out: {', '.join(cleared)}" if cleared else ""
         sha = write(fleet, label, change, "plan: approve", body, act="plan.approve")
     except Refusal:
         for undo in reversed([u for u in undos if u]):
@@ -2938,9 +2933,8 @@ def plan_approve(fleet, a):
                     record.subject(op.subject))
         if op.after:
             op.after(repo, sha)
-    print(f"proposal {a.n} is approved and applied" + (f", without {joined(cleared)}" if cleared else "")
-          + (f", keeping {joined(keep)} as {'it was' if len(keep) == 1 else 'they were'}" if keep else ""))
-    words = approved_words(argvs, applied, cleared, keep)
+    print(f"proposal {a.n} is approved and applied" + (f", without {joined(cleared)}" if cleared else ""))
+    words = approved_words(applied, cleared)
     if p0.get("By") == f"{label}-planner":
         tell_planner(fleet, label, f"Proposal {a.n} was approved by {agent()}. {words}")
     raise_proposal_at(fleet, label, seen["w"], a.n, "approve", outcome=words)
@@ -3229,24 +3223,9 @@ def kept(argvs, cleared, n):
     return out
 
 
-def as_they_stand(argvs, cleared, keep, n):
-    """Proposal n's commands applied with its card's boxes as they stand (plan.3, record 0031 §5): every command but
-    those `kept` leaves out for the new units the user cleared, and but the drop of each dropped unit the user ticked
-    to keep and the amendment of each amended unit ticked to keep its old intent. A unit kept that the proposal neither
-    drops nor amends is refused."""
-    out = kept(argvs, cleared, n) if cleared else list(argvs)
-    changed = list(dict.fromkeys(a.unit for a in argvs if a.cmd in ("unit", "chore") and a.sub in ("drop", "amend")))
-    wrong = [u for u in keep if u not in changed]
-    not wrong or fail(f"proposal {n} neither drops nor amends {either(wrong)}, so the user can't keep "
-                      + ("it" if len(wrong) == 1 else "them") + " as it was: "
-                      + (f"the units it drops or amends are {either(changed)}" if changed else "it drops and amends no unit"))
-    return [a for a in out if not (a.cmd in ("unit", "chore") and a.sub in ("drop", "amend") and a.unit in keep)]
-
-
-def approved_words(argvs, applied, cleared, keep):
+def approved_words(applied, cleared):
     """What an approval did, as the proposal's card is closed with it and the planner told (record 0031 §1): what was
-    added, dropped and amended, with a count of the rest, then each row the user left out: a new unit not added, a
-    dropped one kept, an amended one keeping its old intent."""
+    added, dropped and amended, with a count of the rest, then the new units the user left out."""
     def units(subs, xs):
         return [a.unit for a in xs if a.cmd in ("unit", "chore") and a.sub in subs]
     added, dropped, amended = new_units(applied), units(("drop",), applied), units(("amend",), applied)
@@ -3255,11 +3234,7 @@ def approved_words(argvs, applied, cleared, keep):
     did = ([f"added {joined(added)}"] if added else []) + ([f"dropped {joined(dropped)}"] if dropped else []) \
         + ([f"amended {joined(amended)}"] if amended else []) + ([cards.plural(rest, "other change")] if rest else [])
     said = [("Applied: " + "; ".join(did) + ".") if did else "Nothing applied."]
-    old = [u for u in keep if u in units(("amend",), argvs)]
-    stays = [u for u in keep if u not in old]
-    said += ([f"Left out on your word: {joined(cleared)}."] if cleared else []) \
-        + ([f"Kept on your word: {joined(stays)}."] if stays else []) \
-        + ([f"Kept the old intent of {joined(old)}."] if old else [])
+    said += [f"Left out on your word: {joined(cleared)}."] if cleared else []
     return " ".join(said)
 
 
@@ -3281,15 +3256,14 @@ def held_answers(f):
 def plan_answer(fleet, a):
     """crew plan answer <n> <question> <answer>... [--note "<text>"] [--label L]: one question of open proposal n's card
     answered, as the planner reads it from the card: rows-<k> and the ids of the boxes the user left ticked (none when
-    every one is cleared; rows-1 for a card of one list, and for a lone row the side the user picked), or, for a
+    every one is cleared; rows-1 for a card of one list, and for a lone new unit the side the user picked), or, for a
     hold-to-approve, plan approve or decline. It is checked against the card crew builds for the proposal now
     (proposal_facts, cards.proposal_card), and kept on this host, the planner's, beside the card's session files: a
     card's working state, never the plan's (state.2). Once it holds every question's answer, the change is applied with
-    the boxes as they stand, as crew plan approve applies it, and the answers go: a new unit unticked left out, a
-    dropped unit ticked kept, an amendment ticked not applied; a note beside it is then printed as the user's word for
-    the planner's next proposal. A decline applies nothing, and its answers go. Refused for a question the card does
-    not ask, a box its question does not hold, an answer that differs from the one held, and a closed proposal,
-    recording nothing."""
+    the boxes as they stand, as crew plan approve applies it, and the answers go: a new unit unticked left out; a note
+    beside it is then printed as the user's word for the planner's next proposal. A decline applies nothing, and its
+    answers go. Refused for a question the card does not ask, a box its question does not hold, an answer that differs
+    from the one held, and a closed proposal, recording nothing."""
     label = proposal_label(fleet, a, a.n)
     CONTEXT["label"] = label
     w, _, p, _ = at_tip(fleet, label, a.n)
@@ -3312,11 +3286,11 @@ def plan_answer(fleet, a):
                   f"write the proposal again with crew plan propose <file> --replaces {a.n}, or drop it with "
                   f"crew plan drop {a.n} \"<the user's reason>\".")
             return
-        waits, cleared, keep = answered(asks, held, b["boxes"])
+        waits, cleared = answered(asks, held, b["boxes"])
         if waits:
             print(f"proposal {a.n} waits on {either(waits)}: nothing is applied")
             return
-        approval = argparse.Namespace(cmd="plan", sub="approve", n=a.n, label=label, clear=cleared, keep=keep)
+        approval = argparse.Namespace(cmd="plan", sub="approve", n=a.n, label=label, clear=cleared)
         try:
             plan_approve(fleet, approval)
         except Refusal as e:
@@ -3330,7 +3304,7 @@ def plan_answer(fleet, a):
 def card_asks(card):
     """The questions a proposal's card crew built asks, as crew plan answer takes their answers, each with the ids of
     its boxes: plan, approve or decline, for a hold-to-approve; else rows-<k> for each list of boxes, rows-1 for a card
-    of one list or a lone row's choice of its two sides."""
+    of one list or a lone new unit's choice of its two sides."""
     if card.get("kind") == "approve":
         return {"plan": None}
     if card.get("questions"):
@@ -3340,8 +3314,8 @@ def card_asks(card):
 
 def card_answer(asks, lone, n, question, given):
     """One question of proposal n's card answered, checked against the questions the card asks now (asks, each
-    question's box ids): plan, approve or decline; a lone row's, the one side the user picked; rows-<k>, the boxes the
-    user left ticked of those it holds. Returns the answer as kept."""
+    question's box ids): plan, approve or decline; a lone new unit's, the one side the user picked; rows-<k>, the boxes
+    the user left ticked of those it holds. Returns the answer as kept."""
     question in asks or fail(f"proposal {n}'s card asks {either(list(asks))}, not {question}")
     given, boxes = list(dict.fromkeys(given)), asks[question]
     if question == "plan":
@@ -3372,16 +3346,13 @@ def with_answer(held, n, question, answer, note=None):
 
 def answered(asks, held, boxes):
     """What the answers held say once a card's questions are read (record 0031 §5): the questions still unanswered,
-    and, once none is, the card's boxes as they stand, as the units the user cleared, each new unit's box left
-    unticked, and the units the user kept as they were, each dropped or amended unit's box ticked. A hold-to-approve's
-    boxes stand as proposed."""
+    and, once none is, the new units the user cleared, each one's box left unticked. A hold-to-approve leaves none out,
+    the boxes of one that links its reading session standing as proposed."""
     waits = [q for q in asks if q not in held]
-    if waits:
-        return waits, [], []
-    picked = {x for q in asks if q != "plan" for x in held[q]}
-    ticked = {b["id"]: b["ticked"] if "plan" in asks else b["id"] in picked for b in boxes}
-    return ([], [b["unit"] for b in boxes if b["is"] == "new" and not ticked[b["id"]]],
-            [b["unit"] for b in boxes if b["is"] != "new" and ticked[b["id"]]])
+    if waits or "plan" in asks:
+        return waits, []
+    picked = {x for q in asks for x in held[q]}
+    return [], [b["unit"] for b in boxes if b["id"] not in picked]
 
 
 def proposal_facts(fleet, label, w, n):
@@ -9044,10 +9015,9 @@ def land_session(fleet, label, key, acts=None):
 
 def proposal_reads(argvs):
     """Whether a proposal's card links a reading session, as cards.proposal_card decides it from the proposal's
-    commands (briefs.9): more units new to a bolt than its boxes take, or more rows than its lists hold."""
-    new = new_units(argvs)
-    rows = len(new) + sum(1 for a in argvs if a.cmd in ("unit", "chore") and a.sub in ("drop", "amend"))
-    return len(new) > cards.CARD_NEW or rows > cards.BOXES * cards.GROUPS
+    commands (briefs.9): more units and chores new to a bolt or the queue than its boxes take, whatever else it
+    changes, since only those are boxes."""
+    return len(new_units(argvs)) > cards.CARD_NEW
 
 
 def session_open(d, name, write):

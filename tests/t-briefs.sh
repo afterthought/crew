@@ -151,16 +151,19 @@ for want in "crew card session" "crew card wait" \
   "a card whose rows fill more than one list withdrawn and followed by its new version instead" "closes it with what was applied when the proposal is approved" \
   "You post, change and close no proposal card." \
   "call get_request (requestId req_…, name wldn-planner)" "crew raises its card in your name" \
-  "a dropped one unticked as \"Keep <unit>\"" "a lone row is the choice of its two sides" \
+  "The card asks only the units and chores the proposal makes new to a bolt or the queue" \
+  "is drawn on its face and applies with it" "A lone new unit is the choice of its two sides" \
+  "is a hold-to-approve, which the user declines with a note to keep something it drops or amends" \
   "so each new unit's \`Do\` carries its direction" "crew plan answer <n> <question> <box>... --label wldn" \
   "\`rows-<k>\` and the ids of the boxes the user left ticked" "--note \"<the user's note>\"" \
-  "applies the change with the boxes as they stand, a new unit unticked left out, a dropped one ticked kept, an amendment ticked not applied" \
+  "applies the change with the boxes as they stand, a new unit unticked left out, closes the card with what was applied" \
   "you close no proposal card" \
   "add \`--clear <unit>\` for each of them" "An approval applies the commands the user read and kept" \
   "when a command they kept names a unit they left out"; do has "$out" "$want"; done
 for gone in "Post its \`card\` as it is" "crew refuses a proposal's card in any other form" "close the old proposal's card" \
   "\`units-<k>\` and the units left ticked" "update its card to say"; do lacks "$out" "$gone"; done
 lacks "$out" "offers approval"; lacks "$out" "exactly as the user read them"; lacks "$out" "not the page as a file"
+lacks "$out" "Keep <unit>"
 asks_say
 lacks "$out" "Its words are the proposal's case and each of its changes in a line"
 for want in "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\` of the first proposal it was rewritten from" \
@@ -572,7 +575,8 @@ done
 expect_ok crewpy brief wldn planner
 for want in "**Unit, fix or chore.**" "chore add <chore> \"<what is done>\" --bolt <bolt>" "A chore is never split or amended" \
   "its words change by a proposal that drops it and adds it again" "A batch of chores" "chore by chore on the card" \
-  "a new unit or chore ticked" "\`unit add\` or \`chore add\`"; do has "$out" "$want"; done
+  "units and chores the proposal makes new to a bolt or the queue, each a box ticked as proposed" \
+  "\`unit add\` or \`chore add\`"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn design
 has "$out" "is queued the same way as a chore: \`$CREW/plugin/bin/crew chore add <chore> \"<what is done>\" --repo <kit>\`"
 ok "the coder, verifier, conductor, planner and design agent each carry what a chore is to them"

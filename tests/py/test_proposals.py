@@ -1,6 +1,6 @@
 """A proposal's commands (plan.3, plan.4): how its Do lines parse (plan.do_args), which conductors must agree
 (plan.touched_by, plan.held_teams), the units the user may leave out and what is applied without them (plan.new_units,
-plan.kept, plan.as_they_stand), and the plan its commands leave, applied in order to the plan in memory. Writing, recording and telling
+plan.kept), and the plan its commands leave, applied in order to the plan in memory. Writing, recording and telling
 the planner are the proposals journey's (t-journey-plan)."""
 import pytest
 from facts import FactsWrite, apply, plan_text, units_of
@@ -92,17 +92,6 @@ class TestApplied:
         apply(w, *[a.do for a in plan.kept(TestLeftOut.DOS, ["q-queued", "c-clear"], 7)])
         assert units_of(w, "clears") == ["b-keep"]
         assert units_of(w, repo=KIT) == ["q-queued"]
-
-    def test_a_dropped_unit_the_user_kept_stays_in_its_bolt_as_it_was(self):
-        w = self.write()
-        apply(w, *[a.do for a in plan.as_they_stand(TestLeftOut.DOS, ["c-clear"], ["a-drop"], 7)])
-        assert units_of(w, "clears") == ["a-drop", "b-keep", "q-queued"]
-
-    def test_an_amended_unit_the_user_kept_keeps_its_old_intent(self):
-        w = self.write()
-        dos = args('unit amend a-drop "Amended."', 'unit add b-keep "Kept." --bolt clears')
-        apply(w, *[a.do for a in plan.as_they_stand(dos, [], ["a-drop"], 7)])
-        assert (w.plan.unit("a-drop").get("Intent"), units_of(w, "clears")) == ("Unit a-drop.", ["a-drop", "b-keep"])
 
     def test_a_bolt_made_and_added_to_is_one_plan(self):
         w = apply(self.write(), 'bolt new fresh "Fresh." --repo switchboard-kit', 'unit add f1 "F1." --bolt fresh',

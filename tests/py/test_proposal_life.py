@@ -3,7 +3,7 @@
 agreement it waits on (plan.agreements_wanted, plan.agreement_missing), a refused command as said and as recorded
 (plan.command_refused), its page (plan.describe drawn alone, plan.amendment_lines, plan.page, plan.code_span), its
 card's answers and the change Send applies with its boxes as they stand (plan.card_asks, card_answer, with_answer,
-answered, as_they_stand, approved_words), and its card at each step (record 0031 §1): the chain's key
+answered, kept, approved_words), and its card at each step (record 0031 §1): the chain's key
 (plan.proposal_chain, chain_open), which act each step makes (plan.proposal_act), and what crew raises with it at each
 step and at the rail's sweep (plan.raise_proposal_at, raise_proposal, proposal_facts, named_kit) on a stand-in for the
 act. The commits, the tells and the approval's constructs are the
@@ -209,7 +209,7 @@ class TestAmendment:
 class TestAnswers:
     """The card's questions are the approval and the new units (plan-proposals): what `crew plan answer` gathers of the
     card crew builds, and the change Send applies with its boxes as they stand (plan.card_asks, card_answer,
-    with_answer, answered, as_they_stand, approved_words)."""
+    with_answer, answered, kept, approved_words)."""
     BOLT = "y"
 
     def card(self, *dos):
@@ -226,57 +226,66 @@ class TestAnswers:
         held = {}
         for q, boxes in answers:
             held = plan.with_answer(held, 4, q, plan.card_answer(asks, b["card"].get("kind") == "choice", 4, q, boxes))
-        waits, cleared, keep = plan.answered(asks, held, b["boxes"])
+        waits, cleared = plan.answered(asks, held, b["boxes"])
         assert waits == []
-        applied = plan.as_they_stand(argvs, cleared, keep, 4)
-        return [a.do for a in applied], cleared, keep, plan.approved_words(argvs, applied, cleared, keep)
+        applied = plan.kept(argvs, cleared, 4)
+        return [a.do for a in applied], cleared, plan.approved_words(applied, cleared)
 
     DROP_ADD = ('unit drop a "Replaced by three."', 'unit add b "B." --bolt y', 'unit add c "C." --bolt y', 'unit add d "D." --bolt y')
 
     def test_one_dropped_three_new_sent_as_it_stands_applies_the_proposal_whole(self):
         b, asks, _ = self.card(*self.DROP_ADD)
-        assert asks == {"rows-1": ["keep:a", "add:b", "add:c", "add:d"]}
-        dos, cleared, keep, words = self.sent(self.DROP_ADD, ("rows-1", ["add:b", "add:c", "add:d"]))
-        assert (dos, cleared, keep) == (list(self.DROP_ADD), [], [])
+        assert asks == {"rows-1": ["add:b", "add:c", "add:d"]}
+        dos, cleared, words = self.sent(self.DROP_ADD, ("rows-1", ["add:b", "add:c", "add:d"]))
+        assert (dos, cleared) == (list(self.DROP_ADD), [])
         assert words == "Applied: added b, c and d; dropped a."
 
-    def test_how_to_object_to_a_drop_tick_keep_and_the_rest_is_applied(self):
-        dos, cleared, keep, words = self.sent(self.DROP_ADD, ("rows-1", ["keep:a", "add:b", "add:c", "add:d"]))
-        assert (dos, keep) == (list(self.DROP_ADD[1:]), ["a"])
-        assert words == "Applied: added b, c and d. Kept on your word: a."
+    def test_drops_alone_are_a_hold_to_approve_applied_whole_or_declined_with_a_note(self):
+        drops = ('unit drop a "Superseded."', 'unit drop x "Done elsewhere."')
+        b, asks, _ = self.card(*drops)
+        assert (asks, b["boxes"]) == ({"plan": None}, [])
+        assert b["card"]["summary"].endswith("to keep a unit it drops or amends, decline with a note.")
+        assert self.sent(drops, ("plan", ["approve"])) == (list(drops), [], "Applied: dropped a and x.")
+        declined = plan.with_answer({}, 4, "plan", plan.card_answer(asks, False, 4, "plan", ["decline"]), "keep x")
+        assert declined == {"plan": "decline", "note": "keep x"}
 
-    def test_a_new_unit_unticked_is_left_out_and_an_amendment_ticked_is_not_applied(self):
+    def test_a_new_unit_unticked_is_left_out_and_an_amendment_beside_it_applied(self):
         dos = ('unit amend x "X, done better."', 'unit add b "B." --bolt y', 'unit add c "C." --bolt y --after b')
-        applied, cleared, keep, words = self.sent(dos, ("rows-1", ["old:x", "add:b"]))
-        assert (applied, cleared, keep) == ([dos[1]], ["c"], ["x"])
-        assert words == "Applied: added b. Left out on your word: c. Kept the old intent of x."
+        applied, cleared, words = self.sent(dos, ("rows-1", ["add:b"]))
+        assert (applied, cleared) == (list(dos[:2]), ["c"])
+        assert words == "Applied: added b; amended x. Left out on your word: c."
 
     def test_one_new_unit_is_the_choice_of_its_two_sides(self):
         one = ('unit add c "C." --bolt y',)
         assert self.card(*one)[1] == {"rows-1": ["add:c", "unticked"]}
         assert self.sent(one, ("rows-1", ["add:c"]))[:2] == (list(one), [])
-        assert self.sent(one, ("rows-1", ["unticked"]))[:3] == ([], ["c"], [])
-        assert self.sent(one, ("rows-1", ["unticked"]))[3] == "Nothing applied. Left out on your word: c."
+        assert self.sent(one, ("rows-1", ["unticked"])) == ([], ["c"], "Nothing applied. Left out on your word: c.")
 
     def test_seven_new_units_wait_for_both_lists(self):
         seven = tuple(f'unit add s-{k} "S{k}." --bolt y' for k in range(1, 8))
         b, asks, _ = self.card(*seven)
         assert list(asks) == ["rows-1", "rows-2"]
         held = plan.with_answer({}, 4, "rows-1", asks["rows-1"])
-        assert plan.answered(asks, held, b["boxes"]) == (["rows-2"], [], [])
+        assert plan.answered(asks, held, b["boxes"]) == (["rows-2"], [])
         held = plan.with_answer(held, 4, "rows-2", asks["rows-2"][1:], "split s-5 later")
-        assert plan.answered(asks, held, b["boxes"]) == ([], ["s-5"], [])
+        assert plan.answered(asks, held, b["boxes"]) == ([], ["s-5"])
         assert held["note"] == "split s-5 later"
 
     def test_a_move_alone_is_a_hold_to_approve_applied_whole(self):
         move = ("unit order x --first",)
         assert self.card(*move)[1] == {"plan": None}
-        assert self.sent(move, ("plan", ["approve"]))[:3] == (list(move), [], [])
+        assert self.sent(move, ("plan", ["approve"]))[:2] == (list(move), [])
+
+    def test_sixteen_new_units_approved_on_their_hold_are_applied_every_one(self):
+        sixteen = tuple(f'unit add h-{k} "H{k}." --bolt y' for k in range(1, 17))
+        assert self.card(*sixteen)[1] == {"plan": None}
+        assert self.sent(sixteen, ("plan", ["approve"]))[:2] == (list(sixteen), [])
 
     def test_an_answer_the_card_does_not_ask_for_is_refused(self):
         b, asks, _ = self.card(*self.DROP_ADD)
         assert refusal(plan.card_answer, asks, False, 7, "rows-2", ["add:b"]) == "proposal 7's card asks rows-1, not rows-2"
-        assert refusal(plan.card_answer, asks, False, 7, "rows-1", ["add:zz"]) == "rows-1 holds keep:a, add:b, add:c or add:d, not add:zz"
+        assert refusal(plan.card_answer, asks, False, 7, "rows-1", ["add:zz"]) == "rows-1 holds add:b, add:c or add:d, not add:zz"
+        assert refusal(plan.card_answer, asks, False, 7, "rows-1", ["keep:a", "add:b"]) == "rows-1 holds add:b, add:c or add:d, not keep:a"
         assert refusal(plan.card_answer, {"plan": None}, False, 7, "plan", ["maybe"]) == "plan is answered approve or decline"
         one = self.card('unit add c "C." --bolt y')[1]
         assert refusal(plan.card_answer, one, True, 3, "rows-1", ["add:c", "unticked"]) == "rows-1 is answered add:c or unticked"
@@ -286,10 +295,6 @@ class TestAnswers:
         assert plan.with_answer(held, 8, "rows-1", ["add:g-2", "add:g-1"]) == held
         assert refusal(plan.with_answer, held, 8, "rows-1", ["add:g-1"]) == (
             "crew already holds rows-1 add:g-1 add:g-2 for proposal 8: the user answered it once")
-
-    def test_a_kept_unit_the_proposal_neither_drops_nor_amends_is_refused(self):
-        assert refusal(plan.as_they_stand, args(*self.DROP_ADD), [], ["b"], 4) == (
-            "proposal 4 neither drops nor amends b, so the user can't keep it as it was: the units it drops or amends are a")
 
 
 def test_a_closed_proposal_is_not_approved_and_its_reason_is_not_recorded():
