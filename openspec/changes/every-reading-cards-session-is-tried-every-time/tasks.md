@@ -26,7 +26,7 @@
 
 ## 6. Briefs and docs
 
-- [ ] 6.1 `planner.md` says a card raised without its reading names `crew card session`, that the batch's wait starts it, and that the rail's read tries again. `tests/suite t-briefs` passes (design, Decision 7; Task notes 6.1).
+- [x] 6.1 `planner.md` says a card raised without its reading names `crew card session`, that the batch's wait starts it, and that the rail's read tries again. `tests/suite t-briefs` passes (design, Decision 7; Task notes 6.1).
 - [ ] 6.2 The crew skill's rows, the usage in `plugin/bin/crew` and `plan.py`, and README's card-session paragraph and list of acts say the same together. `tests/suite t-docs` passes (Task notes 6.2).
 
 ## 7. End to end

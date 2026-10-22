@@ -477,6 +477,10 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "prints the card's note and every annotation the user sent, word for word; crew then closes the card and ends the session" \
   "card session batch/<n> --label wldn\` prints the session's link again" \
   "You start no session for a batch, and post, change and close no batch card: crew does." \
+  "a card raised without its reading says so and why, and names \`$CREW/plugin/bin/crew card session batch/<n> --label wldn\` as your act, never the user's, which starts the reading and changes the card to carry its link" \
+  "When no reading runs, the wait starts it first and changes the card to carry its link" \
+  "the wait says why once, naming \`card session\`, and waits on the card alone" "crew's rail read tries it again too" \
+  "names \`$CREW/plugin/bin/crew card session proposal/<n> --label wldn\` as your act, never the user's" \
   "at once, word for word, to the conductor of each unit it speaks of" \
   "go to every unit's conductor, saying they named no unit you could tell" \
   "Never split, reword or summarize the user's words" "you never run a stage" \
