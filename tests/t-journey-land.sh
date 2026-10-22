@@ -19,7 +19,9 @@
 # refusing its delete, and on the host, named, its mark unset and the keeping recorded, and the team's next read leaves
 # it; a bolt no team holds lands once its unit's change is on main; a delete sluice refuses is named in its words, the
 # branch kept on GitHub; a bolt made before gives went through sluice is deleted there once its landing's pull request
-# put it there, no create run for it; and dropping a held bolt removes its branch and places.
+# put it there, no create run for it; and dropping a held bolt removes its places and has sluice delete its branch,
+# which holding a merge main lacks is kept on GitHub and the host, marked, named and recorded, the team's next read
+# leaving it, until a landing brings its tip into main and the next read has sluice delete it.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -326,8 +328,38 @@ git -C "$k" rev-parse --verify -q bolt/made-before >/dev/null && fail "bolt/made
 calls | grep -q " sluice branch create bolt/made-before " && fail "crew ran a create for a bolt made before"
 ok "a bolt made before lands through its pull request, and sluice deletes its branch from GitHub with no create run for it"
 
+github() { git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q "$1" >/dev/null; }
+console=$(short bolt/console-pages)
 expect_ok crew bolt drop console-pages "the portal lists them"
-has "$out" "bolt/console-pages is removed: bolt console-pages is in no plan; it was at"
+has "$out" "sluice deleted bolt/console-pages from GitHub at $console"
 has "$out" "$kd/places/c and unit/c are removed; the branch was at"
+github bolt/console-pages && fail "bolt/console-pages is still on GitHub"
+git -C "$k" rev-parse --verify -q bolt/console-pages >/dev/null && fail "bolt/console-pages is still on the host"
 eq "$(git --git-dir "$ws" log -1 --format=%b wldn/main | head -1)" "the portal lists them"
-ok "dropping a held bolt removes its branch and its units' places, with the reason in the commit"
+ok "dropping a held bolt removes its units' places and has sluice delete its branch from GitHub and the host, with the reason in the commit"
+
+# A dropped bolt holding a merge main lacks: sluice refuses its delete, and the branch is kept on GitHub and the host,
+# marked dropped, named as the drop's unmerged work in sluice's words and recorded once; the team's next read leaves it,
+# saying nothing, until a landing brings its tip into main, when the next read has sluice delete it.
+crew bolt new kept-work "Work dropped before it landed." --repo switchboard-kit >/dev/null
+crew bolt give swb-2 kept-work >/dev/null
+git -C "$k" worktree add -q "$T/kept-work" bolt/kept-work && echo kept > "$T/kept-work/kept.txt" &&
+  commit_all "$T/kept-work" "feat: work merged into the bolt" && git -C "$k" worktree remove "$T/kept-work" &&
+  git -C "$k" push -q origin bolt/kept-work || fail "the bolt took no merge"  # as sluice pushes a landing on a bolt on GitHub
+tip=$(git -C "$k" rev-parse bolt/kept-work)
+expect_ok crew bolt drop kept-work "not this quarter"
+has "$out" "bolt/kept-work is kept on GitHub at ${tip:0:7}: bolt kept-work was dropped, and sluice did not delete it: bolt/kept-work at $tip has not landed into main; submit it there first; it is the drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip"
+github bolt/kept-work || fail "the refused delete removed bolt/kept-work from GitHub"
+eq "$(git -C "$k" rev-parse bolt/kept-work) $(git -C "$k" config branch.bolt/kept-work.crew)" "$tip dropped"
+eq "$(field $box branch.kept Head bolt/kept-work team/swb-2) | $(field $box branch.kept Why bolt/kept-work)" \
+  "${tip:0:7} | bolt kept-work was dropped, and main does not hold its tip (sluice)"
+expect_ok crew status swb-2
+lacks "$out" "bolt/kept-work"
+eq "$(record_of $box | grep -c "^On: bolt/kept-work")" "1"
+ok "a dropped bolt holding a merge main lacks is kept on GitHub and the host, marked, named in sluice's words and recorded once, and the next read leaves it"
+git -C "$k" merge -q --no-edit bolt/kept-work && push "$k"  # a landing that carried its work
+expect_ok crew status swb-2
+has "$out" "bolt/kept-work is removed: main now holds bolt kept-work's tip, and sluice deleted it from GitHub at ${tip:0:7}"
+github bolt/kept-work && fail "bolt/kept-work is still on GitHub"
+git -C "$k" rev-parse --verify -q bolt/kept-work >/dev/null && fail "bolt/kept-work is still on the host"
+ok "once main holds a dropped bolt's tip, the team's next read has sluice delete its kept branch from GitHub and the host"
