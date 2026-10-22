@@ -1915,11 +1915,11 @@ def landing_cards_closed(fleet, t, bolt, outcome):
 def bolt_land(fleet, a):
     """A bolt whose units and chores have all landed on its kit's main, out of the plan, the landing recording the
     commit main holds (plan.14, plan.16), then, by the tidy on its team's host once the landing's place is gone, its
-    branch deleted by sluice wherever the policy at its tip keeps it, on GitHub for a bolt given since gives went through
-    sluice, a delete sluice refuses named in its words with the bolt out of the plan all the same (plan.19,
-    land_delete), and its landing card closed there with where GitHub's main holds it (landed_words). A bolt no team holds, built outside a team, is read on the host and main
-    checkout of a team of the partition building its kit, and lands the same way once main holds each of its units'
-    changes and chores, on the user's word (roles.2)."""
+    branch deleted by sluice wherever the policy at its tip keeps it, on GitHub for a bolt given since gives went
+    through sluice, a delete sluice refuses named in its words with the bolt out of the plan all the same (plan.19,
+    land_delete), and its landing card closed there with where GitHub's main holds it (landed_words). A bolt no team
+    holds, built outside a team, is read on the host and main checkout of a team of the partition building its kit, and
+    lands the same way once main holds each of its units' changes and chores, on the user's word (roles.2)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
     t = bolt_team(fleet, b)
@@ -5154,11 +5154,11 @@ def tidy(fleet, a):
     lacks its tip, and is asked again once main holds it (bolt_branch_asked, plan.19); crew's marks are read
     once, before the worktrees are judged, so each place of a landed bolt is judged against main, and a mark whose branch
     sluice's delete removed is unset then, saying nothing (marks_gone, plan.19). At a landing (a.landed, the bolt), the
-    landing's place gone, sluice is asked to delete the bolt's branch before it is judged (land_delete). A fix's branch no worktree and no slot
-    holds goes once main or its bolt holds its tip (fix_branches_over). The worktrees are listed
+    landing's place gone, sluice is asked to delete the bolt's branch before it is judged (land_delete). A fix's branch
+    no worktree and no slot holds goes once main or its bolt holds its tip (fix_branches_over). The worktrees are listed
     before the slots and plans are read: a plan has a bolt, a unit or a fix's bolt, and a slot is taken, before crew
-    makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's
-    work goes in can't be read. Once a worktree is removed, the command's next step reads the kit again."""
+    makes the worktree, so whatever is listed was planned or held by then. Nothing is removed when a plan the kit's work
+    goes in can't be read. Once a worktree is removed, the command's next step reads the kit again."""
     t = at_work(fleet, a.team)
     main, kdir, kit = os.path.realpath(t["kit"]["main"]), os.path.realpath(t["kit"]["dir"]), t["kit"]["name"]
     trees = gather.worktrees(main)
@@ -5253,8 +5253,9 @@ def tidy(fleet, a):
             print(branch_gone(t, main, branch, ups.get(branch, ""), now, path, "it was dropped" if branch in dropped else over,
                               up_landed(branch)))
             continue
-        # a legacy bolt's worktree, its branch judged by its mark
-        print(bolt_branch_gone(t, main, branch, marks.get(branch), now, bolts, False, branch in in_main(), path) or f"{path} is removed: {over}")
+        mark = marks.get(branch)  # a legacy bolt's worktree, its branch judged by its mark
+        print(bolt_branch_gone(t, main, branch, mark, now, bolts, False, mark == "dropped" and branch in in_main(), path)
+              or f"{path} is removed: {over}")
     # A bolt is a branch with no worktree (record 0026): each one crew made, by its mark, goes once no plan has the bolt
     # and no worktree holds it, a landed bolt's only when main holds every commit of it, and any other by sluice's delete,
     # a dropped bolt's kept while main lacks its tip (plan.19); a deletion sluice's guard refuses, while a submission to
@@ -5359,8 +5360,8 @@ def branch_gone(t, main, branch, up, now, path=None, over="it was dropped", land
     that branch stands and is not marked landed (landed), else with the kit's main now (now), a fix tracking no bolt
     with nothing (branch_target); deleted when it holds nothing its target lacks, else kept and named, a dropped fix's
     mark unset, so the user's from then on (branch_kept, plan.10, record 0003), and recorded once on the team's host as
-    branch.kept, from its bolt when it was compared with it or the bolt has landed, since no later read reaches a branch
-    no worktree is on. What crew says of it (branch_said)."""
+    branch.kept, from its bolt, bolt/<bolt> whichever of its refs it tracks, when it was compared with it or the bolt has
+    landed, since no later read reaches a branch no worktree is on. What crew says of it (branch_said)."""
     git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
     kind = branch.split("/", 1)[0]
     sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
@@ -5372,7 +5373,8 @@ def branch_gone(t, main, branch, up, now, path=None, over="it was dropped", land
         why, n = kept
         git("config", "--unset", f"branch.{branch}.crew")
         why = kept_record(f"bolt {gather.bolt_ref(up)[0]} has landed", target, kept) if landed else over if n else f"{over}, and {why}"
-        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [up] if target == up or landed else [],
+        bolt = gather.bolt_ref(up)[0]  # recorded as the bolt, whichever of its refs the branch tracks (plan.19)
+        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [f"bolt/{bolt}"] if bolt and (target == up or landed) else [],
                     why=why, Head=sha, Count=n)
         return branch_said(branch, path, sha, over, kept)
     r = git("branch", "-q", "-D", branch)
