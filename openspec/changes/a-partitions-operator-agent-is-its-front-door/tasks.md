@@ -9,7 +9,7 @@
 ## 2. The briefs
 
 - [x] 2.1 Every brief's roster says in one line that anything for another team or partition goes with `crew send`, and to nobody else (decision 4; Task notes 2.1). Verify `tests/suite t-briefs` ends with "0 failed".
-- [ ] 2.2 The operator's brief carries what is sent to it, and sends a teams change from a box with `crew send <label>` (decision 5; Task notes 2.2). Verify `tests/suite t-briefs t-roles` ends with "0 failed".
+- [x] 2.2 The operator's brief carries what is sent to it, and sends a teams change from a box with `crew send <label>` (decision 5; Task notes 2.2). Verify `tests/suite t-briefs t-roles` ends with "0 failed".
 
 ## 3. The documents
 

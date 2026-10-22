@@ -1315,9 +1315,9 @@ def main_tokens(fleet, p, role, self_name):
     account = lambda s: fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account", "")
     places = "; ".join(f"`{label}-{r}` in session {s}" + (f" (account {account(s)})" if account(s) else "")
                        for r, s in ((r, role_session(p, r)) for r in MAIN_STANDING + ("reviewer",)))
-    # The partitions whose operator can change the teams: one whose main level runs on a Mac keeping swancloud's
-    # checkout, where lib/crew-teams.nix is edited.
-    doors = sorted(f"`{o['label']}-operator`" for o in fleet["partitions"].values()
+    # The partitions whose operator can change the teams, by label for crew send: one whose main level runs on a Mac
+    # keeping swancloud's checkout, where lib/crew-teams.nix is edited.
+    doors = sorted(f"`{o['label']}`" for o in fleet["partitions"].values()
                    if fleet["hosts"].get(o["machine"], {}).get("kind") == "darwin" and kept_on(fleet, o["machine"], "afterthought/swancloud"))
     tok = {
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
@@ -1333,7 +1333,7 @@ def main_tokens(fleet, p, role, self_name):
         "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
         "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
         "OPERATORS": f"`{label}-operator` on {p['machine']}",
-        "TEAMS_OPERATORS": ", ".join(doors) or "none",
+        "TEAMS_DOORS": ", ".join(doors) or "none",
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
                     "`terminal-browser open <url> --split right`." if fleet["hosts"].get(host, {}).get("kind") == "darwin" else
                     f"{host} is a box, which can't open the dev.swancloud.net names: say so, and give the user the URL "
