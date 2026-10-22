@@ -284,8 +284,9 @@ class TestTidied:
 
 class TestBoltBranch:
     """A bolt is a branch and no worktree (record 0026): the branch crew marked when it gave the bolt goes once no plan
-    has the bolt and no worktree holds it (plan.9), and a landed bolt's only when git cherry finds nothing on it whose
-    patch main lacks, kept and named otherwise (plan.10, record 0003)."""
+    has the bolt and no worktree holds it (plan.9), a landed bolt's only when git cherry finds nothing on it whose patch
+    main lacks, kept and named otherwise (plan.10, record 0003), and any other by sluice's delete alone, a dropped
+    bolt's kept branch asked again only once main holds its tip (plan.19)."""
     NOW = "refs/remotes/origin/main"
 
     def test_a_bolt_no_plan_has_goes(self):
@@ -303,27 +304,35 @@ class TestBoltBranch:
         assert plan.marks_gone(marks, {"bolt/a", "bolt/b", "bolt/c", "bolt/d"}) == []
         assert plan.marks_gone({}, set()) == []
 
-    @pytest.mark.parametrize("mark", ["given", "landed", None])
+    @pytest.mark.parametrize("mark", ["given", "landed", "dropped", None])
     def test_a_bolt_still_planned_or_held_by_a_worktree_is_left_whatever_its_mark(self, mark):
-        assert plan.bolt_branch_judged("b", {"b"}, False, mark, self.NOW, (0, "+ 1a2b3c\n", "")) is None
-        assert plan.bolt_branch_judged("b", set(), True, mark, self.NOW, (0, "+ 1a2b3c\n", "")) is None
+        assert plan.bolt_branch_judged("b", {"b"}, False, mark, True, self.NOW, (0, "+ 1a2b3c\n", "")) is None
+        assert plan.bolt_branch_judged("b", set(), True, mark, True, self.NOW, (0, "+ 1a2b3c\n", "")) is None
 
     def test_a_landed_bolt_whose_every_commit_main_holds_goes_saying_so(self):
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "", "")) == (
-            "bolt b has landed, and origin/main holds every commit of it (git cherry)", None)
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "- 1a2b3c\n", ""))[1] is None
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (0, "", "")) == (
+            "delete", "bolt b has landed, and origin/main holds every commit of it (git cherry)", None)
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (0, "- 1a2b3c\n", ""))[0] == "delete"
 
     def test_a_landed_bolt_holding_a_commit_main_lacks_is_kept_and_counted(self):
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
-            "bolt b has landed", ("it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete", 1))
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
+            "keep", "bolt b has landed", ("it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete", 1))
 
     def test_a_landed_bolt_git_cannot_compare_with_main_is_kept(self):
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (128, "", "fatal: bad revision\n")) == (
-            "bolt b has landed", ("git cannot compare it with origin/main: fatal: bad revision", None))
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (128, "", "fatal: bad revision\n")) == (
+            "keep", "bolt b has landed", ("git cannot compare it with origin/main: fatal: bad revision", None))
 
     @pytest.mark.parametrize("mark", ["given", None])
-    def test_a_dropped_bolts_or_one_landed_before_the_mark_goes_as_before_unread(self, mark):
-        assert plan.bolt_branch_judged("b", set(), False, mark, self.NOW, None) == ("bolt b is in no plan", None)
+    def test_a_dropped_bolts_or_one_landed_before_the_mark_is_sluices_to_delete_unread(self, mark):
+        """plan.19: a bolt branch marked given that no plan has, a drop's whatever its host answered, or a legacy bolt
+        worktree's with no mark, is asked of sluice's delete, never git's, whose answer keeps a tip main lacks."""
+        assert plan.bolt_branch_judged("b", set(), False, mark, False, self.NOW, None) == ("ask", "bolt b is in no plan", None)
+
+    def test_a_dropped_bolts_kept_branch_is_asked_again_only_once_main_holds_its_tip(self):
+        """bolt-plan "Main comes to hold a dropped bolt's work" and "A dropped bolt's kept branch while main lacks it"."""
+        assert plan.bolt_branch_judged("b", set(), False, "dropped", True, self.NOW, None) == (
+            "ask", "main now holds bolt b's tip", None)
+        assert plan.bolt_branch_judged("b", set(), False, "dropped", False, self.NOW, None) is None
 
     def test_what_is_said_of_a_landed_bolts_branch(self):
         assert plan.branch_said("bolt/b", None, "1a2b3c4", "bolt b has landed, and origin/main holds every commit of it "

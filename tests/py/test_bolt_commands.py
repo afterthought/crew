@@ -125,11 +125,67 @@ def recorded(name):
     return (RECORDED / name).read_text(), int(codes[name].split()[1])
 
 
-def deleted(name):
-    """What BOLT_DELETE prints of a bolt on GitHub when sluice says what it recorded."""
+def deleted(name, policy=POLICY):
+    """What BOLT_DELETE prints when sluice says what it recorded: a bolt on GitHub, or on the host for a policy naming
+    no remote, its own branch at aaaaaaa."""
     out, code = recorded(name)
-    return (f"LOCAL={'a' * 40}\nTRACKED={'a' * 40}\nAT_LOCAL={base64.b64encode(POLICY.encode()).decode()}\nAT_TRACKED=-\n"
+    return (f"LOCAL={'a' * 40}\nTRACKED={'a' * 40}\nAT_LOCAL={base64.b64encode(policy.encode()).decode()}\nAT_TRACKED=-\n"
             f"RC={code}\nSAID={base64.b64encode(out.encode()).decode()}\n")
+
+
+class TestDropDeletes:
+    """bolt-plan "A bolt is created, given, dropped and landed through crew" (plan.19, record 0003): a drop of a bolt a
+    team holds has sluice delete its branch, asked on the team's host once its worktrees are gone; what is said of it
+    (plan.dropped_said). That it is marked dropped and recorded once is the journey's (t-journey-land)."""
+    HOST = "chuck-herdr-alpha"
+    KEPT = "it is the drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip"
+
+    def said(self, name, policy=POLICY, again=False):
+        return plan.dropped_said("b", self.HOST, 0, deleted(name, policy), "", again)
+
+    def test_a_dropped_bolt_whose_tip_main_holds_is_deleted_from_github(self):
+        """bolt-plan "Dropping a bolt a team holds"."""
+        assert self.said("delete.json") == "sluice deleted bolt/b from GitHub at 22eef85"
+
+    def test_a_dropped_bolt_made_before_is_deleted_from_its_host(self):
+        assert self.said("delete.json", '[branches."bolt/*"]\nrequired = ["#check-full"]\n') == (
+            "sluice deleted bolt/b from chuck-herdr-alpha at 22eef85")
+
+    def test_a_branch_already_gone_refuses_nothing(self):
+        assert self.said("delete-not-found.json") == "bolt/b is gone already: no branch bolt/b"
+
+    def test_a_dropped_bolt_holding_work_main_lacks_is_kept_and_named_as_the_users(self):
+        """bolt-plan "A dropped bolt holds work main lacks"."""
+        assert self.said("delete-not-landed.json") == (
+            "bolt/b is kept on GitHub at aaaaaaa: bolt b was dropped, and sluice did not delete it: bolt/b at "
+            f"22eef8585855b2ef8feb0e08177e34d15f131182 has not landed into main; submit it there first; {self.KEPT}")
+        assert self.said("delete-not-landed.json", '[branches."bolt/*"]\nrequired = ["#check-full"]\n').startswith(
+            "bolt/b is kept on chuck-herdr-alpha at aaaaaaa: bolt b was dropped")
+
+    def test_one_with_a_submission_queued_is_kept_in_sluices_words(self):
+        assert self.said("delete-queued.json") == (
+            "bolt/b is kept on GitHub at aaaaaaa: bolt b was dropped, and sluice did not delete it: #1 still queued on "
+            f"bolt/b; wait for them to land, or withdraw them; {self.KEPT}")
+
+    def test_a_host_that_does_not_answer_names_the_command_for_the_next_read(self):
+        """bolt-plan "The drop's host does not answer"."""
+        assert plan.dropped_said("b", self.HOST, 255, "", "ssh: connect to host") == (
+            "chuck-herdr-alpha did not answer, so sluice was not asked to delete bolt/b: sluice branch delete bolt/b "
+            "--into main there; the team's next read asks it")
+
+    def test_words_crew_cannot_read_leave_it_to_the_next_read(self):
+        """read.2: what is not sluice's document decides nothing."""
+        assert plan.dropped_said("b", self.HOST, 0, deleted("delete.json").replace("RC=0", "RC=x"), "").startswith(
+            "bolt/b may still stand on GitHub: crew can't read what sluice's branch delete said from:")
+        assert plan.dropped_said("b", self.HOST, 0, deleted("delete.json").replace("RC=0", "RC=x"), "").endswith(
+            "; the team's next read asks sluice again")
+
+    def test_asked_again_once_main_holds_its_tip(self):
+        """bolt-plan "Main comes to hold a dropped bolt's work"."""
+        assert self.said("delete.json", again=True) == (
+            "bolt/b is removed: main now holds bolt b's tip, and sluice deleted it from GitHub at 22eef85")
+        assert self.said("delete-queued.json", again=True) == (
+            "bolt/b is still kept: #1 still queued on bolt/b; wait for them to land, or withdraw them")
 
 
 class TestGiveThroughSluice:

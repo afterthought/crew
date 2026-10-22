@@ -1279,13 +1279,14 @@ def main_held(name, machine, said):
     return sha, why
 
 
-def tidy_after(fleet, t, what, landed=None):
+def tidy_after(fleet, t, what, landed=None, dropped=None):
     """crew _tidy on the team's host, after a plan write that ends work there: the slots of work the plan no longer
     has are freed and the worktrees whose work is over removed, as the team's next read would, saying what it did; and,
     after a landing (landed, (bolt, words)), the bolt's landing card closed there with the words, where its conductor
     holds it (landing_cards_closed), and the bolt's branch deleted by sluice once the landing's place is gone
-    (land_delete, plan.19). A host that does not answer leaves that to the team's next read, the land's delete named
-    with its command, and the write stands."""
+    (land_delete, plan.19); after a drop (dropped, the bolt), its branch asked of sluice by the tidy's judgment of it
+    (bolt_branch_asked). A host that does not answer leaves that to the team's next read, the delete named with its
+    command, and the write stands."""
     more = ["--landed", landed[0], "--outcome", landed[1]] if landed else []
     r = crew.on_machine(fleet, t["machine"], crew.crew_argv(fleet, t["machine"], "_tidy", t["name"], *more))
     READ.drop_kit(t["machine"], t["kit"]["main"])
@@ -1294,6 +1295,8 @@ def tidy_after(fleet, t, what, landed=None):
         print(said)
     if landed and r.returncode == 255:  # nothing ran there, the land's delete among it
         print(deleted_said(landed[0], t["machine"], r.returncode, r.stdout, r.stderr))
+    if dropped and r.returncode == 255:  # the team's next read asks it, the bolt's branch marked given and in no plan
+        print(dropped_said(dropped, t["machine"], r.returncode, r.stdout, r.stderr))
 
 
 def tidied(team, what, code, out, err):
@@ -1434,8 +1437,60 @@ def deleted_said(bolt, host, code, out, err, held=None):
         return (f"bolt/{bolt} is kept: {held} holds it, so sluice was not asked to delete it: sluice branch delete "
                 f"bolt/{bolt} --into main on {host}, once that worktree is gone")
     if code:
-        why = "did not answer" if code == 255 else "failed (" + ((err or out).strip().splitlines() or [f"exit {code}"])[-1] + ")"
-        return f"{host} {why}, so sluice was not asked to delete bolt/{bolt}: sluice branch delete bolt/{bolt} --into main there"
+        return unasked(bolt, host, code, out, err)
+    h = delete_heard(bolt, host, out)
+    on, frm = (f" on {h['where']}", f" from {h['where']}") if h["where"] else ("", "")
+    if h["rc"] is None:
+        return f"bolt/{bolt} may still stand{on}: {h['words']}"
+    if h["gone"]:
+        return f"sluice deleted bolt/{bolt}{frm} at {h['gone'][:7]}"
+    if h["rc"] == 1:
+        return f"bolt/{bolt} is gone already: {h['words']}"
+    return f"bolt/{bolt} is kept{on}: sluice did not delete it: {h['words']}"
+
+
+def dropped_said(bolt, host, code, out, err, again=False):
+    """What a drop says of sluice's delete of the bolt's branch (plan.19, record 0003), asked by the tidy on the team's
+    host once no plan has the bolt and its worktrees are gone, from what BOLT_DELETE printed there (out, err, its exit
+    code), read as deleted_said reads it (delete_heard): deleted, from GitHub or, for a bolt made before, from the host;
+    gone already, which refuses nothing; kept where it lives, at its tip, in sluice's words when sluice refused, as it
+    does while main lacks the tip or a submission is queued on it, named as the drop's unmerged work, the user's; and,
+    when the host did not answer, crew can't read what sluice said or sluice failed, the command, which the team's next
+    read asks again. Asked again (again), once main holds a kept branch's tip: removed, or still kept in sluice's
+    words."""
+    if code:
+        return unasked(bolt, host, code, out, err) + "; the team's next read asks it"
+    h = delete_heard(bolt, host, out)
+    on, frm = (f" on {h['where']}", f" from {h['where']}") if h["where"] else ("", "")
+    if h["rc"] not in (0, 1, 2):
+        return f"bolt/{bolt} may still stand{on}: {h['words']}; the team's next read asks sluice again"
+    if h["gone"]:
+        return (f"bolt/{bolt} is removed: main now holds bolt {bolt}'s tip, and sluice deleted it{frm} at {h['gone'][:7]}" if again
+                else f"sluice deleted bolt/{bolt}{frm} at {h['gone'][:7]}")
+    if h["rc"] == 1:
+        return f"bolt/{bolt} is gone already: {h['words']}"
+    if again:
+        return f"bolt/{bolt} is still kept: {h['words']}"
+    at = f" at {h['tip']}" if h["tip"] else ""
+    return (f"bolt/{bolt} is kept{on}{at}: bolt {bolt} was dropped, and sluice did not delete it: {h['words']}; it is the "
+            "drop's unmerged work, the user's to keep or delete, and crew asks sluice again once main holds its tip")
+
+
+def unasked(bolt, host, code, out, err):
+    """That sluice was not asked to delete the bolt's branch, the host not answering (ssh's 255) or the script failing,
+    with the command to ask it."""
+    why = "did not answer" if code == 255 else "failed (" + ((err or out).strip().splitlines() or [f"exit {code}"])[-1] + ")"
+    return f"{host} {why}, so sluice was not asked to delete bolt/{bolt}: sluice branch delete bolt/{bolt} --into main there"
+
+
+def delete_heard(bolt, host, out):
+    """What BOLT_DELETE printed on host of sluice's delete of bolt/<bolt>, read by facts checked against sluice 0.36.4
+    (read.2): where the branch lives, GitHub, or the host for one its tip's policy keeps there, None when crew can't
+    tell (where); the commit it was at, short, the host's own branch first, or None (tip); the commit sluice deleted it
+    at, or None (gone); sluice's exit, None when crew can't read what it said (rc); and sluice's message, or crew's
+    refusal to read it (words)."""
+    f = kit.said_of(out)
+    tip = next((f[k][:7] for k in ("LOCAL", "TRACKED") if f.get(k, "-") != "-"), None)
     try:
         where = "GitHub" if kit.bolt_lives(out, bolt) else host
     except Refusal:
@@ -1444,12 +1499,8 @@ def deleted_said(bolt, host, code, out, err, held=None):
         doc, rc = kit.delete_ran(out)
         gone, words = kit.branch_said(doc, rc)
     except Refusal as e:
-        return f"bolt/{bolt} may still stand{f' on {where}' if where else ''}: {e}"
-    if gone:
-        return f"sluice deleted bolt/{bolt}{f' from {where}' if where else ''} at {gone[:7]}"
-    if rc == 1:
-        return f"bolt/{bolt} is gone already: {words}"
-    return f"bolt/{bolt} is kept{f' on {where}' if where else ''}: sluice did not delete it: {words}"
+        return dict(where=where, tip=tip, gone=None, rc=None, words=str(e))
+    return dict(where=where, tip=tip, gone=gone, rc=rc, words=words)
 
 
 def kit_policy(fleet, t):
@@ -2324,9 +2375,9 @@ def op_bolt_drop(ctx, a):
         w.plan.remove(b)
         return [a.bolt]
 
-    def after(repo, sha):
+    def after(repo, sha):  # the bolt's branch asked of sluice there, after its worktrees (plan.19, bolt_branch_asked)
         if team:
-            tidy_after(ctx.fleet, team, f"bolt {a.bolt}")
+            tidy_after(ctx.fleet, team, f"bolt {a.bolt}", dropped=a.bolt)
     return Op(label, change, f"plan({a.bolt}): drop the bolt" + (", its units queued" if a.requeue else ""), "bolt.drop",
               on=[f"bolt/{a.bolt}"], body=a.reason, after=after)
 
@@ -5097,8 +5148,10 @@ def tidy(fleet, a):
     marked as crew's, and named as kept on the branch while it is not (bolt_detach, plan.18). The landing's place, which
     git could not remove after its submission or a stopped landing left, goes with its bolt, kept and named while its
     submission is still with sluice (landing_now), and leaves the bolt's branch to be judged in the same read. A bolt's
-    branch crew marked, which no worktree holds, goes once no plan has the bolt, and a landed bolt's only when main holds
-    every commit of it, being kept, named and recorded otherwise (bolt_branch_gone, record 0003); crew's marks are read
+    branch crew marked, which no worktree holds, goes once no plan has the bolt, a landed bolt's only when main holds
+    every commit of it, being kept, named and recorded otherwise (bolt_branch_gone, record 0003), and any other, a
+    dropped bolt's among them, only by sluice's delete, which keeps it, marked dropped, named and recorded, while main
+    lacks its tip, and is asked again once main holds it (bolt_branch_asked, plan.19); crew's marks are read
     once, before the worktrees are judged, so each place of a landed bolt is judged against main, and a mark whose branch
     sluice's delete removed is unset then, saying nothing (marks_gone, plan.19). At a landing (a.landed, the bolt), the
     landing's place gone, sluice is asked to delete the bolt's branch before it is judged (land_delete). A fix's branch no worktree and no slot
@@ -5128,6 +5181,12 @@ def tidy(fleet, a):
     ups, on_main = gather.upstreams(main), set(gather.changes(main, now))
     dropped, marks = fixes_dropped(main), bolt_marks(main)
     unmark_gone(main, marks)
+    merged_now = []  # the bolt branches main now holds the tip of, read once and only for a dropped bolt's or a legacy one's
+
+    def in_main():
+        if not merged_now:
+            merged_now.append(bolt_merged(main, now))
+        return merged_now[0]
     fixes = gather.fix_facts(main, sorted({b for b in ups if b.startswith("fix/")}), ups, now)  # each fix branch's, read once
 
     def up_landed(branch):  # whether the bolt the branch tracks, the host's or GitHub's, is marked landed (record 0003)
@@ -5194,16 +5253,20 @@ def tidy(fleet, a):
             print(branch_gone(t, main, branch, ups.get(branch, ""), now, path, "it was dropped" if branch in dropped else over,
                               up_landed(branch)))
             continue
-        print(bolt_branch_gone(t, main, branch, marks.get(branch), now, bolts, False, path))  # a legacy bolt's worktree
+        # a legacy bolt's worktree, its branch judged by its mark
+        print(bolt_branch_gone(t, main, branch, marks.get(branch), now, bolts, False, branch in in_main(), path) or f"{path} is removed: {over}")
     # A bolt is a branch with no worktree (record 0026): each one crew made, by its mark, goes once no plan has the bolt
-    # and no worktree holds it, a landed bolt's only when main holds every commit of it; a deletion sluice's guard
-    # refuses, while a submission to it waits, is kept and named.
+    # and no worktree holds it, a landed bolt's only when main holds every commit of it, and any other by sluice's delete,
+    # a dropped bolt's kept while main lacks its tip (plan.19); a deletion sluice's guard refuses, while a submission to
+    # it waits, is kept and named.
     worked = {w.get("branch") for w in trees} - freed
     if getattr(a, "landed", None):  # the land's delete, asked now that the landing's place is gone (plan.19)
         b = f"bolt/{a.landed}"
         holder = next((w["path"] for w in trees if w.get("branch") == b), None) if b in worked else None
         print(land_delete(t, main, a.landed, holder))
         unmark_gone(main, marks)
+        if marks.get(b) != "landed":  # asked of sluice once, here: only a landed mark is judged again below
+            marks.pop(b, None)
     for branch in sorted(dropped - worked - held):  # a dropped fix's branch no worktree holds, its place gone already
         print(branch_gone(t, main, branch, ups.get(branch, ""), now, landed=up_landed(branch)))
     for branch, why in fix_branches_over(fixes, held | worked, dropped, bolts):
@@ -5212,15 +5275,16 @@ def tidy(fleet, a):
         r = subprocess.run(["git", "-C", main, "branch", "-q", "-D", branch], capture_output=True, text=True, env=gitenv())
         print(f"{branch} is removed: {why}; it was at {sha}" if r.returncode == 0 else f"{branch} is kept: {r.stderr.strip()}")
     for branch, mark in sorted(marks.items()):
-        said = bolt_branch_gone(t, main, branch, mark, now, bolts, branch in worked)
+        said = bolt_branch_gone(t, main, branch, mark, now, bolts, branch in worked, mark == "dropped" and branch in in_main())
         if said:
             print(said)
 
 
 def bolt_marks(main):
-    """crew's mark on each bolt branch of a kit checkout, {bolt/<bolt>: given or landed}, from the kit's git config,
-    branch.bolt/<bolt>.crew, set given when crew makes the branch (BOLT_CREATE, bolt_detached) and landed once sluice
-    has landed it on main (LANDING), which git drops with the branch (read.4, record 0003)."""
+    """crew's mark on each bolt branch of a kit checkout, {bolt/<bolt>: given, landed or dropped}, from the kit's git
+    config, branch.bolt/<bolt>.crew, set given when crew makes the branch (BOLT_CREATE, bolt_detached), landed once
+    sluice has landed it on main (LANDING) and dropped when sluice kept a dropped bolt's (bolt_branch_asked), which git
+    drops with the branch and sluice's delete leaves (marks_gone; read.4, record 0003)."""
     out = gather.run(["git", "config", "--get-regexp", r"^branch\.bolt/.*\.crew$"], main) or ""
     return {k[len("branch."):-len(".crew")]: v for k, _, v in (l.partition(" ") for l in out.splitlines())}
 
@@ -5369,37 +5433,45 @@ def bolt_branch_over(bolt, bolts, worktree):
     return None if bolt in bolts or worktree else f"bolt {bolt} is in no plan"
 
 
-def bolt_branch_judged(bolt, bolts, worktree, mark, target, cherry):
-    """What becomes of a bolt's branch crew made (plan.9, plan.10, record 0003), from plain facts: None while the bolt
-    is planned (bolts) or a worktree holds the branch (worktree), left as it is; else why it is over and branch_kept's
-    (why, count) when it is kept, or None when it goes. One marked given (mark), a dropped bolt's or one landed by a
-    crew older than the landed mark, or a legacy bolt worktree's with no mark, goes once no plan has the bolt
-    (bolt_branch_over); one marked landed goes only when git cherry (cherry: exit, output, error) of it against the
-    kit's main now (target) finds no commit whose patch main lacks, and is kept otherwise, or when git cannot compare
-    them (read.1)."""
+def bolt_branch_judged(bolt, bolts, worktree, mark, in_main, target, cherry):
+    """What becomes of a bolt's branch crew made (plan.9, plan.10, plan.19, record 0003), from plain facts: None while
+    the bolt is planned (bolts) or a worktree holds the branch (worktree), left as it is; else (what crew does, why it
+    is over, branch_kept's (why, count) or None). One marked landed (mark) is deleted with git ("delete") only when git
+    cherry (cherry: exit, output, error) of it against the kit's main now (target) finds no commit whose patch main
+    lacks, and is kept ("keep") otherwise, or when git cannot compare them (read.1). Any other is sluice's to delete
+    ("ask", bolt_branch_asked), as a drop has it, never git's: one marked given, a dropped bolt's or one landed by a
+    crew older than the landed mark, or a legacy bolt worktree's with no mark, once no plan has the bolt; and one
+    marked dropped, which sluice kept at its drop, only once the kit's main holds its tip (in_main), sluice's own
+    condition for the delete, left with nothing said while it does not."""
     over = bolt_branch_over(bolt, bolts, worktree)
     if not over:
         return None
-    if mark != "landed":
-        return over, None
-    kept = branch_kept(target, cherry)
-    return (f"bolt {bolt} has landed" if kept else
-            f"bolt {bolt} has landed, and {ref_named(target)} holds every commit of it (git cherry)"), kept
+    if mark == "landed":
+        kept = branch_kept(target, cherry)
+        return ("keep", f"bolt {bolt} has landed", kept) if kept else (
+            "delete", f"bolt {bolt} has landed, and {ref_named(target)} holds every commit of it (git cherry)", None)
+    if mark == "dropped":
+        return ("ask", f"main now holds bolt {bolt}'s tip", None) if in_main else None
+    return "ask", over, None
 
 
-def bolt_branch_gone(t, main, branch, mark, now, bolts, worktree, path=None):
+def bolt_branch_gone(t, main, branch, mark, now, bolts, worktree, in_main, path=None):
     """A bolt's branch crew made, by its mark (mark, bolt_marks), or a legacy bolt worktree's once its place (path) is
     removed: judged by bolt_branch_judged, a landed bolt's against the kit's main now (now) by git cherry, run only
     then; deleted, saying the commit it was at, or kept, its mark unset so no later read deletes it, named as the
     user's and recorded once on the team's host as branch.kept (record 0003); a deletion git or sluice's guard refuses
-    is kept and named. None while the bolt lasts."""
+    is kept and named; any other asked of sluice (bolt_branch_asked, plan.19). None while the bolt lasts, or while a
+    dropped bolt's kept branch waits for main to hold its tip (in_main)."""
     git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
     bolt = branch.split("/", 1)[-1]
     r = git("cherry", now, branch) if mark == "landed" else None
-    judged = bolt_branch_judged(bolt, bolts, worktree, mark, now, r and (r.returncode, r.stdout, r.stderr))
+    judged = bolt_branch_judged(bolt, bolts, worktree, mark, in_main, now, r and (r.returncode, r.stdout, r.stderr))
     if not judged:
         return None
-    over, kept = judged
+    act, over, kept = judged
+    if act == "ask":
+        said = bolt_branch_asked(t, main, bolt, mark)
+        return f"{path} is removed: {over}; {said}" if path else said
     sha = git("rev-parse", "--short", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
     if kept:
         git("config", "--unset", f"branch.{branch}.crew")
@@ -5409,6 +5481,31 @@ def bolt_branch_gone(t, main, branch, mark, now, bolts, worktree, path=None):
     r = git("branch", "-q", "-D", branch)
     return branch_said(branch, path, sha, over, None,
                        f"{over}, and git refused to remove it: {' '.join(r.stderr.split()) or f'exit {r.returncode}'}" if r.returncode else None)
+
+
+def bolt_branch_asked(t, main, bolt, mark):
+    """A bolt's branch crew made, which sluice is to delete (bolt_branch_judged's "ask"): sluice's delete, `sluice branch
+    delete bolt/<bolt> --into main`, run here, on the team's host, once no worktree holds the branch (BOLT_DELETE,
+    plan.19), crew deleting nothing with git; when sluice refuses it a first time (exit 2), as it does while main lacks
+    the tip, the host's branch marked dropped in the kit's git config, so the tidy knows it as a drop's kept work and
+    not as one to delete (read.4), and recorded once on the team's host as branch.kept, from names (record.3); what is
+    said of it (dropped_said), asked again for a branch marked dropped."""
+    r = subprocess.run(["bash", "-c", BOLT_DELETE, "crew", main, bolt, kit.DECLARATION], capture_output=True, text=True, env=gitenv())
+    again = mark == "dropped"
+    h = None if r.returncode or again else delete_heard(bolt, t["machine"], r.stdout)
+    if h and h["rc"] == 2:
+        branch = f"bolt/{bolt}"
+        git = lambda *a: subprocess.run(["git", "-C", main, *a], capture_output=True, text=True, env=gitenv())
+        if git("rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0:
+            git("config", f"branch.{branch}.crew", "dropped")
+        record.emit(t["label"], "branch.kept", [branch, f"team/{t['name']}"], [branch],
+                    why=f"bolt {bolt} was dropped, and main does not hold its tip (sluice)", Head=h["tip"])
+    return dropped_said(bolt, t["machine"], r.returncode, r.stdout, r.stderr, again)
+
+
+def bolt_merged(main, now):
+    """The bolt branches of a kit checkout whose tip the kit's main now (now) holds, by one listing (plan.19)."""
+    return set((gather.run(["git", "for-each-ref", f"--merged={now}", "--format=%(refname:short)", "refs/heads/bolt/"], main) or "").split())
 
 
 def bolt_detach(path, branch, kdir, over, locked, status):
