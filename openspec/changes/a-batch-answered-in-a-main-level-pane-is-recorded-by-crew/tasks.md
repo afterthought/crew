@@ -10,9 +10,9 @@
 
 ## 3. `crew card answer` records it
 
-- [ ] 3.1 `pane_answer_refusal` refuses a caller who is not the planner or operator, an unknown batch, a batch answered already or waiting on nothing, and any words not read as the user's, naming who said them (design, Decision 1 to 3; Task notes 3.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batch_answer.py`.
-- [ ] 3.2 `crew card answer batch/<n> --excerpt "<words>"` records one `batch.answer` with no words in it, closes the planner's card held on this host with the words, and tells the planner the words when the operator ran it (design, Decision 1, 4 and 5; Task notes 3.2). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batch_answer.py`.
-- [ ] 3.3 `crew card wait batch/<n>` ends once the batch is answered in a pane, saying in whose pane, and closes the card it holds (design, Decision 4; Task notes 3.3). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batch_answer.py`.
+- [x] 3.1 `pane_answer_refusal` refuses a caller who is not the planner or operator, an unknown batch, a batch answered already or waiting on nothing, and any words not read as the user's, naming who said them (design, Decision 1 to 3; Task notes 3.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batch_answer.py`.
+- [x] 3.2 `crew card answer batch/<n> --excerpt "<words>"` records one `batch.answer` with no words in it, closes the planner's card held on this host with the words, and tells the planner the words when the operator ran it (design, Decision 1, 4 and 5; Task notes 3.2). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batch_answer.py`.
+- [x] 3.3 `crew card wait batch/<n>` ends once the batch is answered in a pane, saying in whose pane, and closes the card it holds (design, Decision 4; Task notes 3.3). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batch_answer.py`.
 
 ## 4. The briefs and the docs say it
 
