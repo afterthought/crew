@@ -40,4 +40,4 @@
 
 ## 10. Integration
 
-- [ ] 10.1 Everything this change affects passes. Verify `tests/suite --affected` ends with "0 failed".
+- [x] 10.1 Everything this change affects passes. Verify `tests/suite --affected` ends with "0 failed".
