@@ -1,8 +1,9 @@
 # README, the crew skill and crew's usage name the same commands: every command in the README is in the usage,
 # and none of the removed ones is in any of them. CLAUDE.md names how an agent runs crew's tools through the shell
 # per command, and no role brief or crew skill does (tests.7); a landing pushes nothing and levels no host in each of
-# them (docs.2, plan.18); a checkout carries the .envrc a person's direnv enters the shell with, and ignores devenv's
-# and direnv's working files and the tests' .venv.
+# them (docs.2, plan.18); CLAUDE.md says a host loads crew live from crew/live/plugin or released at a tag swancloud
+# pins, never from a checkout on main, which nobody pulls or levels (plan.18, plan.19); a checkout carries the .envrc
+# a person's direnv enters the shell with, and ignores devenv's and direnv's working files and the tests' .venv.
 # Reads: README.md CLAUDE.md plugin/roles/ plugin/skills/ .envrc .gitignore
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -55,6 +56,13 @@ has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)
 [[ -z $wrapped ]] || fail "these briefs or skills name the shell's wrap, which is CLAUDE.md's to say:"$'\n'"$wrapped"
 ok "CLAUDE.md names the per-command form of crew's shell, and no brief or skill does"
+
+claude=$(cat "$CREW/CLAUDE.md")
+for want in "## How crew reaches a host" "crew/live/plugin" "release tags" "cut from \`origin/main\`"; do has "$claude" "$want"; done
+for gone in "This checkout is live" "read-tree" "merge --ff-only" "git pull" "brings every host's checkout up"; do
+  lacks "$claude" "$gone"
+done
+ok "CLAUDE.md says crew/main is an anchor, a host loads crew live from crew/live/plugin or released at a pinned tag, and work is cut from origin/main, with no pull or levelling of crew's checkout"
 
 grep -qxF 'use devenv' "$CREW/.envrc" || fail ".envrc does not enter devenv"
 for line in .devenv/ .direnv/ '!.envrc' tests/.venv/; do grep -qxF -- "$line" "$CREW/.gitignore" || fail ".gitignore lacks $line"; done
