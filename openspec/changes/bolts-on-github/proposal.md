@@ -47,6 +47,7 @@ README.md
 tests/lib.sh
 tests/stubs/sluice
 tests/stubs/wt-submit
+tests/stubs/route.py
 tests/py/**
 tests/contract/**
 tests/t-*.sh
