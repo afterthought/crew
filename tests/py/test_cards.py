@@ -92,13 +92,26 @@ class TestKeys:
         ("wldn-ops", "deploy/dev", "a deploy's card is crew's, raised by crew ops offer"),
         ("wldn-ops", "op/dev/1", "a step's card is crew's, raised by crew ops step"),
         ("wldn-design", "record/atlas-kit/0021", "a record's card is crew's, raised by crew record"),
-        ("wldn-design", "proposal/1", "a proposal's card is crew's"),
-        ("swb-1-conductor", "verify/x/20261007-1412", "a verify report has no card")])
+        ("wldn-design", "proposal/1", "a proposal's card is crew's")])
     def test_none_of_the_four_posts_changes_or_closes_crews_own_card(self, name, k, said):
         for tool, verb in (("post_request", "post"), ("update_request", "change"), ("ack_answer", "close"), ("cancel_request", "close")):
             why = key(name, k, tool)
             assert why.startswith(f"crew refuses {name}'s {verb} of the card under {k}: {said}"), why
             assert why.endswith(f"Ask a question of your own under a key of your own, ask/{name}/<what it is about>.")
+
+    @pytest.mark.parametrize("name", ["swb-1-conductor", "wldn-planner", "wldn-ops", "wldn-design"])
+    def test_an_asker_closes_an_answered_verify_card_and_posts_changes_or_withdraws_none(self, name):
+        """A card under verify/<unit>/<stamp>, a row form crew no longer raises (teams.17), was a conductor's own, and
+        no event of crew's closes it: its ack passes, so its asker closes it with the user's outcome, and its post,
+        change and withdrawal are refused, as is any other role's close (crw-2-conductor's three cards of 2026-10-11,
+        signal 2026-10-19-crw-2-conductor-2bec975e/01)."""
+        k = "verify/a-card-lost-to-its-owner-is-posted-again/20261011-2238"
+        assert key(name, k, "ack_answer", label="wldn") is None
+        for tool, verb in (("post_request", "post"), ("update_request", "change"), ("cancel_request", "close")):
+            assert key(name, k, tool).startswith(f"crew refuses {name}'s {verb} of the card under {k}: a verify report has no card")
+        for other in ("verify/x", "verify/x/abc1234", "verify/x/20261007-1412/y"):
+            assert key(name, other, "ack_answer").startswith(f"crew refuses {name}'s close of the card under {other}: a verify report")
+        assert key("swb-1-unit-2", k, "ack_answer").startswith("crew refuses a card from swb-1-unit-2")
 
     def test_the_planner_closes_an_old_batch_card_it_posted_and_posts_or_changes_none(self):
         """rail-cards: the planner closes an old batch card. A card under batch/<n>-<k> was the planner's own, posted
@@ -258,6 +271,18 @@ class TestNames:
         assert "close of the card under land/tenant-environments" in cards.refusal(hooked("cancel_request", {"requestId": "req_l1", "reason": "x"}))
         assert cards.refusal(hooked("cancel_request", {"requestId": "req_q1", "reason": "x"})) is None
         assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-conductor/hold", "kind": "text"})) is None
+
+    def test_the_hook_lets_a_conductor_ack_its_answered_verify_card_by_the_key_its_record_holds(self, monkeypatch):
+        """crw-2-conductor's ack of req_6d9cca5680a84e08abb2, refused on 2026-10-19 under the key its run record holds
+        (signal 2026-10-19-crw-2-conductor-2bec975e/01), goes through; its withdrawal is still refused."""
+        monkeypatch.setenv("CREW_LABEL", "wldn")
+        monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
+        monkeypatch.setattr(plan.crew, "load", lambda: FLEET)
+        k = "verify/a-card-lost-to-its-owner-is-posted-again/20261011-2238"
+        monkeypatch.setattr(cards, "posted", lambda record, label, card: k if card == "req_v1" else None)
+        assert cards.refusal(hooked("ack_answer", {"requestId": "req_v1", "expectedVersion": 2, "outcome": "Fixed"})) is None
+        assert f"close of the card under {k}: a verify report has no card" in cards.refusal(
+            hooked("cancel_request", {"requestId": "req_v1", "reason": "x"}))
 
     @pytest.mark.parametrize("agent, row, said", [
         ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a landing card is crew's"),

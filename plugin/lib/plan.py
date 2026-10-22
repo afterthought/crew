@@ -8711,7 +8711,8 @@ CARDS = pathlib.Path.home() / ".local/state/crew/cards"
 # crew's (crews_key), closed by the rail's read as one whose row is gone, and none is posted.
 CARD_KEYS = (r"proposal/\d+", r"batch/\d+", r"batch/\d+-\d+", r"land/[a-z0-9][a-z0-9-]*", r"deploy/[a-z0-9][a-z0-9-]*",
              r"op/[a-z0-9][a-z0-9-]*/\d+")
-# A verify report's key, verify/<unit>/<stamp>, whose card and session from before teams.17 a sweep still ends.
+# A verify report's key, verify/<unit>/<stamp>, whose card and session from before teams.17 a sweep still ends, and
+# whose answered card its asker closes (card_refusal).
 VERIFY_KEY = r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}"
 # A decision record's card key, the design agent's: the kit and the record's four digits, one card per record however
 # often it is revised (briefs.15, record 0031 §1), raised by crew record. It is no rail row's: the rail lists its open
@@ -8754,7 +8755,10 @@ def card_refusal(fleet, name, label, tool, key):
     the one this host's run record holds the card under, crew's raises and the agents' own posts alike, read locally
     with no state-branch fetch, None when it holds none; the hook refuses the call when that record can't be read. The planner's close of a card under
     batch/<n>-<k>, which it posted itself before a batch was one card and crew never raises, passes, a departure from
-    briefs.11 that goes once no such card is open; its post or change there is refused. An area is made only under
+    briefs.11 that goes once no such card is open; its post or change there is refused. So does an asker's ack of an
+    answered card under a verify report's key, verify/<unit>/<stamp>, a row form crew no longer raises (teams.17),
+    which a conductor posted before it and no event of crew's closes, the same departure: its post, change or
+    withdrawal there is refused (signal 2026-10-19-crw-2-conductor-2bec975e/01). An area is made only under
     create-area:<owner>/<kit> for a kit the agent's team builds or, for the main level, a kit of any team of its
     partition, read from the teams file. Everything else passes: a question's form, and its key but crew's, are its
     asker's. A decision of the role, the call and the key alone (code.7)."""
@@ -8783,7 +8787,9 @@ def card_refusal(fleet, name, label, tool, key):
         return (f"crew refuses an area under {key}: " + (f"{name} makes a kit's area only under {either(mine)}." if mine
                 else f"no kit's area is {name}'s to make."))
     crews = crews_key(key)
-    if crews and not (kind == "planner" and tool in ("cancel_request", "ack_answer") and old_batch(key)):
+    old = (kind == "planner" and tool in ("cancel_request", "ack_answer") and old_batch(key)
+           or tool == "ack_answer" and old_verify(key))
+    if crews and not old:
         verb = {"post_request": "post", "update_request": "change"}.get(tool, "close")
         return (f"crew refuses {name}'s {verb} of the card under {key}: {CREWS[crews]}. Ask a question of your own under "
                 f"a key of your own, ask/{name}/<what it is about>.")
@@ -8794,6 +8800,11 @@ def old_batch(key):
     """Whether a card key is a batch's posted as cards of five before a batch was one card, batch/<n>-<k>, whose
     sessions are its units'."""
     return bool(re.fullmatch(r"batch/\d+-\d+", key or ""))
+
+
+def old_verify(key):
+    """Whether a card key is a verify report's, verify/<unit>/<stamp>, posted by a conductor before teams.17."""
+    return bool(re.fullmatch(VERIFY_KEY, key or ""))
 
 
 def card_of(fleet, a, unit_needed=True):
