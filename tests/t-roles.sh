@@ -1,7 +1,9 @@
 # Each role starts from its agent definition: the model and effort in its frontmatter, unless the teams file
 # overrides them for the team or partition, and its brief appended to Claude Code's system prompt; its name is in
 # CREW_AGENT, and in SLUICE_AGENT for sluice, and its definition in CREW_ROLE. A session herdr resumes without crew's
-# environment is given that same brief back by crew's SessionStart hook at each compaction.
+# environment is given that same brief back by crew's SessionStart hook at each compaction. A main level's role is
+# started only on its main level's host, and a main level's session herdr resumes on any other host is given no
+# identity, pane name or brief, its record left as it was, and told where the main level runs, or why crew can't tell.
 # Reads: plugin/hooks/ plugin/roles/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
@@ -79,3 +81,44 @@ expect_fail "swb-1-unit-1 holds no unit or fix" as chuck-herdr-alpha "$CREW/plug
 expect_fail "which stage?" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" swb-1 unit-2 apply
 expect_fail "no role 'conductor' at wldn's main level" as chuck-herdr-alpha "$CREW/plugin/bin/crew-role" wldn conductor
 ok "an unknown role, slot or stage is refused"
+
+: > "$CREW_TEST_CLAUDE_LOG"
+expect_fail "wldn's main level runs on chuck-herdr-alpha, not mac-studio, and crew starts wldn-planner only there" as mac-studio "$CREW/plugin/bin/crew-role" wldn planner
+expect_fail "wldn's main level runs on chuck-herdr-alpha, not mac-studio, and crew starts wldn-design only there" as mac-studio "$CREW/plugin/bin/crew-role" wldn design resume
+eq "$(launches)" ""
+ok "a main level's role, fresh or resumed, is refused off its main level's host, naming that host, and no Claude starts"
+
+# replayed <source>: what crew's SessionStart hook gives, on mac-studio, the wldn planner's session copied there from the
+# box, as herdr's session restore replays a saved pane on a host that once ran the main level: without crew's environment
+replayed() {
+  : > "$T/env"; : > "$CREW_TEST_LOG"
+  as mac-studio env -u CREW_AGENT -u CREW_LABEL -u CREW_ROLE CLAUDE_ENV_FILE="$T/env" HERDR_ENV=1 HERDR_PANE_ID="$p" \
+    HERDR_BIN_PATH="$TESTS/stubs/herdr" python3 "$CREW/plugin/hooks/session-start" <<<"{\"session_id\":\"$sid\",\"source\":\"$1\"}" |
+    jq -r '.hookSpecificOutput | select(.hookEventName == "SessionStart") | .additionalContext'
+}
+role chuck-herdr-alpha wldn planner;        has "$launch" "role planner"
+sid=$(jq -r .session "$CREW_TEST_CLAUDE_LOG"); rec="$(home_of mac-studio)/.local/state/crew/sessions/$sid"
+mkdir -p "$(dirname "$rec")"; cp "$(home_of chuck-herdr-alpha)/.local/state/crew/sessions/$sid" "$rec"; cp "$rec" "$T/kept"
+p=$(as mac-studio herdr workspace create --cwd / --label swancloud | jq -r .result.root_pane.pane_id)
+as mac-studio herdr stub agent "$p"
+elsewhere="[crew] This session was wldn-planner, and crew gives it no identity here: wldn's main level runs on chuck-herdr-alpha, not mac-studio, and crew starts wldn-planner only there. In this session you are no agent of crew's"
+ctx=$(replayed resume)
+has "$ctx" "$elsewhere"
+eq "$(cat "$T/env")" ""; lacks "$(calls)" "rename"; cmp -s "$rec" "$T/kept" || fail "the replayed session's record changed"
+eq "$(as mac-studio herdr agent get "$p" | jq -r .result.agent.name)" "null"
+eq "$(replayed compact)" "$ctx"
+eq "$(cat "$T/env")" ""; lacks "$(calls)" "rename"; cmp -s "$rec" "$T/kept" || fail "the compacted session's record changed"
+ok "a main level's agent herdr resumed off its host gets no identity, pane name or brief, its record left, and is told where the main level runs"
+
+mv "$(home_of mac-studio)/.config/crew/teams.json" "$T/teams.json"
+ctx=$(replayed resume)
+has "$ctx" "[crew] This session was wldn-planner, and crew gives it no identity here: it can't tell where wldn's main level runs, $(home_of mac-studio)/.config/crew/teams.json is missing"
+has "$ctx" "In this session you are no agent of crew's"
+eq "$(cat "$T/env")" ""; cmp -s "$rec" "$T/kept" || fail "the record changed with no teams file"
+mv "$T/teams.json" "$(home_of mac-studio)/.config/crew/teams.json"
+ok "with no teams file to tell where its main level runs, it gets no identity either, and is told why"
+
+ctx=$(compacted chuck-herdr-alpha)
+has "${ctx%%$'\n\n'*}" "[crew] This is your brief as wldn-planner"
+eq "${ctx#*$'\n\n'}" "$(brief)"
+ok "on its main level's host the same session is given its brief back at a compaction"
