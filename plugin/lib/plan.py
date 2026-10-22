@@ -8778,6 +8778,24 @@ def refused_lately(entries, now, key=None, card=None):
     return bool(last and last.get("Refused") and (now - utc(last["At"])).total_seconds() < CARD_RETRY)
 
 
+def reading_unread(entries, key, card, now=None):
+    """Whether a batch's or a long proposal's card stands without its reading, from this host's run record, oldest
+    first (card-sessions "The rail's read tries a reading its card stands without"): a done post or change of the card
+    with Unread, or a refused try of the key's reading (card.reading), marks it so from that entry's time; a done post
+    or change of the card without Unread clears it; a refused post or change, and a done try, change nothing. With now,
+    whether it stands so and its last such entry is CARD_RETRY seconds old or more, so the rail's sweep tries it again
+    no sooner than it posts a refused card again."""
+    last = None
+    for e in entries:
+        if e.get("Act") in ("card.post", "card.update") and card and e.get("Card") == card and not e.get("Refused"):
+            last = e if e.get("Unread") else None
+        elif e.get("Act") == "card.reading" and e.get("Key") == key and e.get("Refused"):
+            last = e
+    if not last or now is None:
+        return bool(last)
+    return (now - utc(last["At"])).total_seconds() >= CARD_RETRY
+
+
 def last_refusal(entries, key):
     """The words of the last post under a row's key when it was refused, as the row's card line gives them; None when
     it was not, or there was none."""

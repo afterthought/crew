@@ -509,6 +509,38 @@ class TestSweepJudged:
         j = self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=old)
         assert ([c for c, *_ in j["gone"]], j["none"]) == ([p4], [row("deploy/dev", "operations")])
 
+    # Whether a card stands without its reading, and was last tried ten minutes ago or more (card-sessions "The rail's
+    # read tries a reading its card stands without").
+    UNREAD = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+
+    def test_a_card_posted_without_its_reading_stands_so_and_is_due_a_try_ten_minutes_on(self):
+        posted = [did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD)]
+        assert plan.reading_unread(posted, "batch/3", "req_b3", NOW)
+        assert not plan.reading_unread([dict(posted[0], At=iso(5))], "batch/3", "req_b3", NOW)
+        assert plan.reading_unread([dict(posted[0], At=iso(5))], "batch/3", "req_b3")
+        assert not plan.reading_unread(posted, "batch/3", "req_b9", NOW)
+
+    def test_a_later_change_carrying_the_link_clears_it(self):
+        entries = [did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD), did("card.update", 15, Key="batch/3", Card="req_b3")]
+        assert not plan.reading_unread(entries, "batch/3", "req_b3", NOW) and not plan.reading_unread(entries, "batch/3", "req_b3")
+        assert plan.reading_unread(entries + [did("card.update", 12, Key="batch/3", Card="req_b3", Unread=self.UNREAD)], "batch/3", "req_b3", NOW)
+
+    def test_a_refused_try_restarts_the_ten_minutes_and_a_done_one_changes_nothing(self):
+        posted = did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD)
+        tried = did("card.reading", 5, Key="batch/3", Card="req_b3", Refused=self.UNREAD)
+        assert not plan.reading_unread([posted, tried], "batch/3", "req_b3", NOW)
+        assert plan.reading_unread([posted, dict(tried, At=iso(11))], "batch/3", "req_b3", NOW)
+        assert plan.reading_unread([posted, did("card.reading", 5, Key="batch/3", Card="req_b3")], "batch/3", "req_b3", NOW)
+        opened = did("card.post", 20, Key="batch/3", Card="req_b3")
+        assert plan.reading_unread([opened, dict(tried, At=iso(11))], "batch/3", "req_b3", NOW)
+
+    def test_a_refused_post_or_change_changes_nothing(self):
+        posted = did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD)
+        refused = did("card.update", 5, Key="batch/3", Card="req_b3", Refused="Pending You refused update_request: x")
+        assert plan.reading_unread([posted, refused], "batch/3", "req_b3", NOW)
+        assert not plan.reading_unread([did("card.post", 20, Key="batch/3", Card="req_b3"), dict(refused, Unread=self.UNREAD)],
+                                       "batch/3", "req_b3")
+
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
 
