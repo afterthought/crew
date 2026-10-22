@@ -37,7 +37,7 @@ def png(data):
 
 
 # cards.proposal_card on the facts crew raises a proposal's card from: the plan at the tip, the plan the commands
-# leave, and the proposal's case and commands, parsed. One checkbox list, every row of the change a box set as proposed.
+# leave, and the proposal's case and commands, parsed. One checkbox list, a box for each new unit only, ticked.
 def adds(prefix, k):
     return [f'unit add {prefix}-{i} "Unit {i}." --repo switchboard-kit' for i in range(1, k + 1)]
 
@@ -64,22 +64,18 @@ class TestBuiltDropAmendAdd:
         c = self.B["card"]
         assert self.B["key"] == "proposal/1"
         assert c["title"] == "Plan change to deploys: 1 dropped, 1 amended, 2 new"
-        assert c["summary"] == ("The third unit is not needed. Each row below is set as proposed; flip any and send. "
-                                "It waits on swb-2-conductor to agree.")
+        assert c["summary"] == ("The third unit is not needed. Each new unit below is ticked; clear any to leave it out, and send. "
+                                "What it drops or amends applies with it. It waits on swb-2-conductor to agree.")
         assert c["context"]["background"] == ("The third unit is not needed. The second needs more. Two units finish the bolt."
                                               "\n\nWaiting on swb-2-conductor to agree.")
 
-    def test_it_is_one_checkbox_list_every_row_a_box_set_as_proposed_and_nothing_else_to_tap(self):
+    def test_it_is_one_checkbox_list_of_its_new_units_ticked_with_no_box_for_the_drop_or_the_amendment(self):
         c = self.B["card"]
         assert (c["kind"], c["intent"]) == ("multi", "decide") and "approve" not in c and "questions" not in c
-        assert [(o["id"], o["label"]) for o in c["options"]] == [
-            ("keep:c-third", "Keep c-third"), ("old:b-second", "Keep b-second's old intent"), ("add:e-fifth", "Add e-fifth"),
-            (f"add:{LONG}", f"Add {LONG}")]
-        assert c["recommendedIds"] == ["add:e-fifth", f"add:{LONG}"] and c["multi"] == {"min": 0, "max": 4}
-        assert c["options"][0]["detail"] == "Proposed: drop. Why: Not needed now."
-        assert c["options"][1]["detail"] == "Unit b-second."
-        assert [b["ticked"] for b in self.B["boxes"]] == [False, False, True, True]
-        assert [(b["unit"], b["is"]) for b in self.B["boxes"]][:2] == [("c-third", "dropped"), ("b-second", "amended")]
+        assert [(o["id"], o["label"]) for o in c["options"]] == [("add:e-fifth", "Add e-fifth"), (f"add:{LONG}", f"Add {LONG}")]
+        assert c["recommendedIds"] == ["add:e-fifth", f"add:{LONG}"] and c["multi"] == {"min": 0, "max": 2}
+        assert c["options"][0]["detail"] == "The fifth thing is built."
+        assert [(b["unit"], b["is"], b["ticked"]) for b in self.B["boxes"]] == [("e-fifth", "new", True), (LONG, "new", True)]
 
     def test_its_face_holds_a_paragraph_for_each_new_unit_and_the_dropped_one_with_its_direction(self):
         md = self.B["card"]["artifacts"][0]
@@ -109,12 +105,29 @@ def test_the_text_of_a_proposal_that_drops_and_adds():
     assert "ONCE APPROVED\n" in text and " + c-new" in text.split("ONCE APPROVED")[1]
 
 
-def test_a_proposal_with_no_unit_rows_is_a_hold_to_approve_of_low_risk():
+def test_a_proposal_with_no_new_unit_is_a_hold_to_approve_of_low_risk():
     c = built(3, "The last goes first.", "unit order d-fourth --first")["card"]
     assert c["title"] == "Plan change to deploys: 1 moved"
     assert (c["kind"], c["approve"], c["recommendedIds"]) == ("approve", {"action": "Apply the plan change to deploys", "risk": "low",
                                                                          "reversible": True}, ["approve"])
     assert [a["kind"] for a in c["artifacts"]] == ["image", "code"]
+    assert c["summary"] == "The last goes first. Hold to apply it whole."
+
+
+def test_a_proposal_of_drops_alone_is_a_hold_to_approve_declined_with_a_note_to_keep_one():
+    b = built(10, "Three units are not needed. They were superseded.", 'unit drop a-first "Superseded."',
+              'unit drop b-second "Done elsewhere."', 'unit drop c-third "Not needed now."')
+    c = b["card"]
+    assert c["title"] == "Plan change to deploys: 3 dropped"
+    assert (c["kind"], c["intent"], c["approve"]["risk"], c["approve"]["reversible"]) == ("approve", "approve", "low", True)
+    assert "options" not in c and "questions" not in c and b["boxes"] == []
+    assert c["summary"] == ("Three units are not needed. Hold to apply it whole; to keep a unit it drops or amends, "
+                            "decline with a note.")
+    md = c["artifacts"][0]
+    assert md["title"] == "The dropped units"
+    text = "\n".join(md["lines"])
+    for u, why in (("a-first", "Superseded."), ("b-second", "Done elsewhere."), ("c-third", "Not needed now.")):
+        assert f"**Drop {u}**\n\nUnit {u}.\n\nWhy: {why}" in text
 
 
 def test_a_lone_row_is_the_choice_of_its_two_sides_since_a_list_holds_two_at_least():
@@ -123,8 +136,13 @@ def test_a_lone_row_is_the_choice_of_its_two_sides_since_a_list_holds_two_at_lea
     assert c["title"] == "Plan change to the switchboard-kit queue: 1 new"
     assert (c["kind"], [o["id"] for o in c["options"]], c["recommendedIds"]) == ("choice", ["add:g-one", "unticked"], ["add:g-one"])
     assert c["options"][1]["label"] == "Leave g-one out"
+    assert c["summary"] == "One more unit, queued. Its one new unit is set as proposed; pick the other side and send to leave it out."
     dropped = built(5, "x.", 'unit drop c-third "Not needed now."')["card"]
-    assert ([o["label"] for o in dropped["options"]], dropped["recommendedIds"]) == (["Keep c-third", "Drop c-third"], ["unticked"])
+    assert (dropped["kind"], "options" not in dropped) == ("approve", True)
+    assert dropped["summary"].endswith("decline with a note.")
+    beside = built(5, "x.", 'unit drop c-third "Not needed now."', 'unit add g-one "One unit." --bolt deploys')["card"]
+    assert ([o["id"] for o in beside["options"]], beside["recommendedIds"]) == (["add:g-one", "unticked"], ["add:g-one"])
+    assert beside["summary"].endswith("send to leave it out. What it drops or amends applies with it.")
 
 
 def test_seven_new_units_are_two_lists_of_four_and_three_on_one_card():
@@ -145,7 +163,8 @@ def test_sixteen_new_units_are_a_hold_to_approve_that_links_its_reading_session_
 
 @pytest.mark.parametrize("dos, form", [
     (("unit order a-first --first",), "approve"), (adds("p", 1), "choice"), (adds("p", 5), "multi"), (adds("p", 6), "lists"),
-    (adds("p", 16), "approve"), (('unit drop c-third "Not needed."', 'unit amend b-second "Better."'), "multi")])
+    (adds("p", 16), "approve"), (('unit drop c-third "Not needed."', 'unit amend b-second "Better."'), "approve"),
+    (('unit drop c-third "Not needed."', *adds("p", 1)), "choice")])
 def test_a_proposals_card_form_is_read_from_its_commands_alone_as_its_card_is_built(dos, form):
     """cards.proposal_form, which a rewrite compares with the replaced proposal's, agrees with the card proposal_card
     builds: a hold-to-approve, a choice, one list or lists of questions."""
