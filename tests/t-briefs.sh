@@ -307,7 +307,7 @@ expect_ok crewpy brief wldn planner; has "$out" "\`wldn/main\` of WilldanGroup/c
 ok "every brief names the flywheel's branch for the plan and the moves, and none names plan/<label>"
 
 # Test, check and proof results reach the user as a glyph list (briefs.7): the six roles that report results carry
-# one section, built once in crew, word for word the same in each.
+# one section, built once in crew, word for word the same in each, which names no proof list (briefs.3).
 first=""
 for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" "wldn main-ops"; do
   expect_ok crewpy brief $brief
@@ -317,10 +317,13 @@ for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-
   for want in "## Test, check and proof results" "- ✅" "- ❌" "- ⏳" "before any prose" "Never say a result only in a sentence"; do
     has "$cut" "$want"
   done
+  lacks "$cut" "Proof in dev"
   [[ -z $first ]] && first=$cut
   [[ $cut == "$first" ]] || fail "the $brief brief's results section differs from the swb-1 conductor's:"$'\n'"$cut"
 done
-ok "the six roles that report results carry one glyph-list section, the same in each"
+ok "the six roles that report results carry one glyph-list section, the same in each, naming no proof list"
+expect_ok crewpy brief swb-1 coder; has "$out" "Every task is yours."; lacks "$out" "what needs dev"
+ok "the coder's brief names no work that needs dev"
 
 # A stage ends at its deliverable (teams.4): the conductor waits for every stage and fix through crew and reads no pane
 # for an outcome, takes a stuck stage to the user and runs a stopped-short one again with the answer; the stage agents

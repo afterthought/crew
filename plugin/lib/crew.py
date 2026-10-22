@@ -1220,7 +1220,7 @@ SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sen
 # How an agent reports results, the same in every brief that reports them.
 RESULTS = ("## Test, check and proof results\n\n"
            "Whenever you report how tests, checks or proofs went (a suite you ran, a merge's checks, the bolt's verification, "
-           "an `openspec validate`, a verify's checks, each item of a Proof in dev list), list them first, before any prose, "
+           "an `openspec validate`, a verify's checks), list them first, before any prose, "
            "one bullet per suite, check or proof:\n\n"
            "- ✅ <what ran>: passed, with its counts where the tool gave them (`46 passed`)\n"
            "- ❌ <what ran>: failed, with how many failed and one line on why (`2 of 46 failed: t-briefs lacks \"open nothing\"`)\n"

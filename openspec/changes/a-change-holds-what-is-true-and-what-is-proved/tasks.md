@@ -3,7 +3,7 @@
 ## 1. The briefs leave a change's content to the kit
 
 - [ ] 1.1 The construct brief names no proof list, task shape or *Task notes*, and says a change's content is the kit's, from its `openspec/config.yaml` through `/opsx:propose` (design, Decision 1; Task notes 1.1). Verify `tests/suite t-briefs` ends with "0 failed".
-- [ ] 1.2 The coder's brief names no work that needs dev, and the results section every brief carries names no *Proof in dev* list (design, Decision 2; Task notes 1.2). Verify `tests/suite t-briefs` ends with "0 failed".
+- [x] 1.2 The coder's brief names no work that needs dev, and the results section every brief carries names no *Proof in dev* list (design, Decision 2; Task notes 1.2). Verify `tests/suite t-briefs` ends with "0 failed".
 
 ## 2. crew's config says crew's conventions
 
