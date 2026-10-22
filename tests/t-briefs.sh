@@ -49,9 +49,16 @@ expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by han
 has "$out" "run the tests of what you changed, as the kit's CLAUDE.md says"; lacks "$out" "moon run"
 expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it runs only those the change affects"
 has "$out" "never the whole suite, which the merge gate runs"
-expect_ok crewpy brief swb-1 construct; has "$out" "ending with the tests its change affects green, not the whole suite, which the merge gate runs"
-lacks "$out" "ending with the suite green"
-ok "the coder, verify and construct run only the tests a change affects, and leave the whole suite to the merge gate"
+ok "the coder and verify run only the tests a change affects, and leave the whole suite to the merge gate"
+
+# A change's content is the kit's (briefs.3, record 0025): the construct brief names no proof list, task shape or
+# design section, points at the kit's openspec/config.yaml, and keeps the Touches block crew reads.
+expect_ok crewpy brief swb-1 construct
+has "$out" "openspec/config.yaml"; has "$out" "## Touches"
+for gone in "Proof in dev" "proof in dev" "Task notes" "one sentence saying what must be true" "ending with the tests its change affects"; do
+  lacks "$out" "$gone"
+done
+ok "the construct brief leaves a change's content to the kit's openspec/config.yaml and keeps only what crew reads"
 
 expect_ok crewpy brief swb-1 conductor
 for want in "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
