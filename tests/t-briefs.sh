@@ -251,6 +251,16 @@ HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
 ok "the operator brief prints for wldn, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
 
+# The operator carries what crew send brings it, and sends a teams change from a box to a Mac's partition with crew
+# send, never with a tell to another operator (briefs.10).
+HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
+for want in "A message that reaches you marked \`(sent to <team or partition>)\`" "in the sender's words and naming the sender" \
+  "you record as a signal, its excerpt the words as sent" "a message for a team to that team's conductor, \`<team>-conductor\`" \
+  "Don't answer it in the sender's place" "crew refuses a send of yours to your own partition or one of its teams" \
+  "one of \`madswan\`, \`swancloud\`, with \`" "/crew send <label> \"<the request>\"\`, which reaches that partition's operator"; do has "$out" "$want"; done
+lacks "$out" "TEAMS_OPERATORS"; lacks "$out" "TEAMS_DOORS"; lacks "$out" "to an operator whose main level runs on a Mac"
+ok "the operator carries what is sent to it in the sender's words, and sends a teams change from a box with crew send to a Mac's partition"
+
 # Every brief says who is speaking in the agent's pane; the six that record findings say how, with the excerpt, and
 # where crew writes the signal.
 for role in conductor ops construct coder verify; do
@@ -275,6 +285,21 @@ expect_ok crewpy brief wldn design; lacks "$out" "crew writes signals straight t
 expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
 has "$out" "Never pass on a word to land, and never tell \`wldn-ops\` to land or deploy"
 ok "every brief says who speaks in its pane, and the six that record findings quote the words and say what a refusal means"
+
+# Anything for another team or partition goes with crew send, to that partition's operator, and to nobody else
+# (briefs.10): every brief says so in one line beside its roster.
+for role in conductor ops construct coder verify; do
+  expect_ok crewpy brief swb-1 $role
+  has "$out" 'anything for another team, of this partition or another, or for another partition, is sent with `'
+  has "$out" '/crew send <team or partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+  lacks "$out" "Agents outside the team are reached with"
+done
+for role in design planner main-ops dispatcher operator reviewer; do
+  expect_ok crewpy brief wldn $role
+  has "$out" 'anything for another partition or one of its teams is sent with `'
+  has "$out" '/crew send <team or partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+done
+ok "every brief sends anything for another team or partition with crew send, to that partition's operator and to nobody else"
 ok "a signal names where what it points at lives, a unit carries it as a source, and the construct reads it, stops when it can't, and builds from its sources over its intent"
 
 # Every message an agent sends another goes through crew tell, marked: no brief prompts an agent through herdr.

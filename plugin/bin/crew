@@ -198,6 +198,10 @@
 #                                      again where a restart left its pane a shell; down closes them
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
+#   crew send     <team or partition> "<text>"
+#                                      send anything for another team or partition to that partition's operator, its
+#                                      one door, wherever it runs: a team by its partition, a partition by its label;
+#                                      marked with who sent it and whom it was for, and recorded with its length
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
 #                                      agent in it, or dead, closed and opened again in its layout first, picked up
 #                                      from its last conversation and greeted when it is a conductor or an agent
@@ -314,6 +318,7 @@ case $cmd in
   board | _views | _board) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
   hold | go | update | _hold | _go | _update | _renew) exec python3 "$here/../lib/hold.py" "${args[@]}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
+  send) py send "${2:?usage: crew send <team or partition> \"<text>\"}" "${3:?usage: crew send <team or partition> \"<text>\"}" ;;
   status)
     if [[ -n ${2:-} ]]; then one _status "$2" ${forced[@]+"${forced[@]}"}
     else first=1; for t in $(teams); do [[ $first == 1 ]] || echo; first=0; bash "$0" status "$t" || true; done; fi ;;

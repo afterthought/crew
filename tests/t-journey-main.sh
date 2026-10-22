@@ -1,9 +1,10 @@
 # A partition's main level and its console through the crew command on the stubs (tests.11, record 0022), a part of
 # the teams journey (t-journey-teams): crew main up starts the main level, its operator among it, and a dispatcher on
 # each host of the partition, each greeted once, one waiting on a question holding back no other; main status reaches
-# every host; a tell records its length and never its text; the console gets its tabs and starts no agent; crew revive
-# brings back what a restart left empty, leaving down what was taken down; crew revive and crew main up open again a
-# pane herdr brought back dead; and a role its partition names a session for comes up there (record 0035).
+# every host; a tell records its length and never its text; crew send reaches the partition's operator, marked with
+# whom it was for, and records its length; the console gets its tabs and starts no agent; crew revive brings back what
+# a restart left empty, leaving down what was taken down; crew revive and crew main up open again a pane herdr brought
+# back dead; and a role its partition names a session for comes up there (record 0035).
 # What each agent is greeted with, where it runs and whether a pane is dead are logic cases (tests/py/test_teams.py).
 # Reads: plugin/hooks/ tests/teams.sh
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
@@ -47,6 +48,18 @@ for a in wldn-design wldn-planner wldn-ops wldn-operator wldn-dispatch-chuck-her
 crew tell wldn-planner "Secret words ZQXR" >/dev/null
 eq "$(field mac-studio tell Chars)" "17"
 [[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *ZQXR* ]] || fail "a tell's text is in the run record"
+# crew send: a team's agent and the user reach the partition's operator, the door, wherever it runs.
+CREW_AGENT=swb-1-conductor expect_ok crew send swb-2 "Words QVXJ for the team"
+grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from swb-1-conductor\] (sent to swb-2) Words QVXJ for the team'" "$CREW_TEST_LOG" ||
+  fail "crew send did not reach wldn-operator marked with its sender and whom it was for"
+eq "$(field mac-studio send On team/swb-2) $(field mac-studio send Chars team/swb-2) $(field mac-studio send Why team/swb-2)" "agent/wldn-operator team/swb-2 23 send swb-2"
+[[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *QVXJ* ]] || fail "a send's text is in the run record"
+expect_ok crew send wldn "For the partition"
+grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from [^]]*@mac-studio\] (sent to wldn) For the partition'" "$CREW_TEST_LOG" ||
+  fail "crew send from the user's shell did not reach wldn-operator"
+eq "$(count mac-studio send) $(field mac-studio tell Chars)" "2 17"
+expect_fail "crew send takes a team or a partition, not 'nosuch': teams apk-1 atl-1 brd-1 swb-1 swb-2; partitions madswan swancloud wldn" crew send nosuch "x"
+eq "$(count mac-studio send)" "2"
 # The operator agent mac-studio ran before record 0035, in an operator workspace beside a tab of the user's own: the
 # console's up ends it and closes the panes crew recorded, leaving the user's tab.
 as mac-studio herdr --session wldn workspace create --cwd /tmp --label operator --no-focus >/dev/null
@@ -67,7 +80,7 @@ expect_ok crew console up wldn
 grep -q "workspace create\|tab create\|pane run\|agent prompt" "$CREW_TEST_LOG" && fail "a second console up made, ran or greeted something"
 expect_ok crew operator up wldn
 has "$out" "crew operator up is crew console up now; the operator is <label>-operator, at the main level"
-ok "main status reaches every host, a tell records its length and never its text, and the console comes up with its flow, rail and board tabs and no agent, crew operator up opening it too"
+ok "main status reaches every host, a tell and a send record their length and never their text, a send reaching the partition's operator, and the console comes up with its flow, rail and board tabs and no agent, crew operator up opening it too"
 
 # A restart: herdr brings each tab back as its shell alone. console up, which the fleet runs every five minutes, runs
 # each tab's command there again, and leaves a pane running something else.
