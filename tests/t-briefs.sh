@@ -60,6 +60,11 @@ done
 lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
 for want in "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
 has "$out" "You post, change and close no landing card"
+# A team builds one bolt and may hold one more that waits to land (teams.16).
+for want in "Your team builds one bolt at a time" "it waits to land on the user's yes, and your team may be given its next bolt beside it" \
+  "name the fix's bolt with \`--bolt <bolt>\`" "\`--bolt <the bolt that waits to land>\`, and goes in the first slot that frees"; do
+  has "$out" "$want"
+done
 for want in "The card links a reading of the bolt, first in its details" "crew starts that reading with the card and ends it when the card closes" \
   "crew card wait land/<bolt>\` as a background command" "crew card session land/<bolt>\` prints its link, or starts the reading again" \
   "Notes the user sends from the reading are notes on the landing card" "An approval in the reading lands nothing" \
@@ -207,6 +212,7 @@ done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
 expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "makes its branch from the kit's main with no worktree" "It is the one tell not about a bolt that is yours" "ops step\` command that records it done or failed"; do has "$out" "$want"; done
+for want in "may hold one more that waits to land" "once crew tells you its bolt reads proven" "so a refusal is no fault"; do has "$out" "$want"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
@@ -339,6 +345,7 @@ for role in construct coder verify; do
 done
 expect_ok crewpy brief swb-1 ops
 has "$out" 'tell swb-1-conductor "<what you wait on, and why>"`'; lacks "$out" "needs \"<what you tried"; lacks "$out" "proof-<bolt>"
+has "$out" "may hold one more, proven, that waits to land beside it"
 expect_ok crewpy brief swb-1 verify
 has "$out" "unchanged and whole"; has "$out" "crew ends the stage once it is there"
 ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor"

@@ -308,6 +308,26 @@ class TestViews:
         assert view("swb-1-conductor") == ["  switchboard-kit  ◑◔  tenant-environments  0 of 2 merged", "    ◑  a  code 1/2  unit-1", "    ◔  b  planned",
                                            "    fix/tenant-environments/edge  fix  unit-4", "  switchboard-kit  next  apex-zones", "  queued  1 in switchboard-kit"]
 
+    def test_a_team_holding_a_bolt_that_waits_to_land_and_one_it_builds_draws_both(self, monkeypatch):
+        """A team builds one bolt and may hold one more, proven, that waits to land (teams.16): its conductor's band and
+        the Construction lane draw both, the proven one saying it waits to land."""
+        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", "swb-2"), ("ssh-fix", "switchboard-kit", "swb-2")],
+                                  units=[("rows-one", "switchboard-kit", "doctor-rows", []), ("ssh-one", "switchboard-kit", "ssh-fix", [])]))
+        monkeypatch.setitem(globals(), "the_plan", lambda: two)
+        sv = kits()
+        swb = sv[BOX]["kits"]["/kit/main"]
+        swb["bolts"].update({"doctor-rows": {"head": "f" * 40, "head_at": ago(30), "changes": ["rows-one"], "archived": ["rows-one"],
+                                             "verdict": "passed (2 run)"},
+                             "ssh-fix": {"head": "c" * 40, "head_at": ago(20), "changes": []}})
+        swb["places"]["ssh-one"] = dict(swb["places"]["a"], path="/kit/places/ssh-one", bolt="ssh-fix")
+        swb["slots"]["swb-2"] = [{"slot": "unit-1", "kind": "unit", "name": "ssh-one"}]
+        mine = view("swb-2-conductor", sv=sv)
+        assert mine[:4] == ["✓ switchboard-kit  ●  doctor-rows  waits to land  1 of 1 merged  no card open", "    ●  rows-one  merged",
+                            "  switchboard-kit  ◑  ssh-fix  0 of 1 merged", "    ◑  ssh-one  code 1/2  unit-1"]
+        assert lane(board.board_text(data(sv=sv)), "Construction") == [
+            "✓ switchboard-kit doctor-rows  swb-2 on chuck-herdr-alpha  waits to land  no card open", "    rows-one  merged",
+            "  switchboard-kit ssh-fix  swb-2 on chuck-herdr-alpha", "    ssh-one  code 1/2  unit-1"]
+
     def test_a_unit_waits_on_no_answer_so_it_has_no_marker_even_with_an_old_verify_card_open(self):
         card = dict(label="wldn", card="req_2", key="verify/a/20261012-1200", by="swb-1-conductor", host="mac-studio", at=NOW)
         assert view("swb-1-conductor", cards=[card])[1] == "    ◑  a  code 1/2  unit-1"

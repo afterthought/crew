@@ -33,7 +33,7 @@ COLUMNS = ("signals/", "agenda/", "proposal/", ("unit/", "chore/"), "bolt/")
 # Present status, as the page colours it: open, in flight, done or dropped; None when it can't be told.
 UNIT = {"queued": "open", "waiting": "open", "ready": "open", "construct": "flight", "amended": "flight", "planned": "flight",
         "code": "flight", "verify": "flight", "merged": "done", "landed": "done"}
-BOLT = {"planned": "open", "active": "flight", "landed": "done"}
+BOLT = {"planned": "open", "active": "flight", "waits": "flight", "landed": "done"}
 PROPOSAL = {"open": "open", "approved": "done", "dropped": "dropped"}
 ITEM = {"open": "open", "planned": "done", "decided": "done", "dropped": "dropped"}
 # What a unit or bolt the plan no longer holds became, from the act that took it out.

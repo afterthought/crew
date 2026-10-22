@@ -395,6 +395,12 @@ class TestBoltAgainstMain:
             f'says a landing conflicts: crew fix swb-1 take-main-{self.M[:7]} "Take main into the bolt: it is forecast to '
             'conflict on docs/builds.md"')
 
+    def test_while_the_team_holds_two_bolts_the_fix_names_the_bolt_forecast(self):
+        """A team may hold a bolt that waits to land beside the one it builds (teams.16)."""
+        doc, _ = self.read(2, self.LANDED)
+        _, _, words = plan.bolt_forecast("swb-1", "wldn", "tenant-environments", doc, set(), two=True)
+        assert words.endswith('conflict on docs/builds.md" --bolt tenant-environments')
+
     def test_a_conflict_with_a_submission_queued_on_main_is_waited_out(self):
         heads, paths, words = self.told(self.QUEUED)
         assert heads == f"bolt/tenant-environments@{self.H[:7]} main@{self.M[:7]} #217"

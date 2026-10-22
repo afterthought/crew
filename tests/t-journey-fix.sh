@@ -4,8 +4,9 @@
 # moved unit, a merged fix and a dropped unit leave, keeping a place that holds a stray file; a dropped unit's branch
 # that holds a commit of its own is kept, named and recorded, and a unit added again under its name starts from it; a
 # fix whose place could not be made ready starts all the same, told what failed; a fix not wanted is dropped, its
-# branch kept when it holds a commit of its own, while a merged one is not; and a merged fix whose place was removed by
-# hand is read from its branch, its slot freed and its branch removed.
+# branch kept when it holds a commit of its own, while a merged one is not; a merged fix whose place was removed by
+# hand is read from its branch, its slot freed and its branch removed; and a team holding two bolts names a fix's bolt
+# with --bolt.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -158,3 +159,15 @@ eq "$(git -C "$kd/places/a" rev-parse --short HEAD)" "$aat"
 eq "$(cat "$kd/places/a/own")" "a's own"
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "bolt/console-pages"
 ok "a dropped unit's branch holding a commit of its own is kept, named and recorded, and a unit added again under its name starts from it, tracking its new bolt"
+
+# A team holding a bolt that waits to land beside the one it builds (teams.16): a new fix naming no bolt is refused,
+# naming both, and one naming its bolt with --bolt is made from that bolt.
+export CREW_AGENT=swb-1-conductor
+by_hand 'p.insert(plan.Rec("Bolt", [("Bolt", "ssh-fix"), ("Repo", "switchboard-kit"), ("Goal", "Hosts reach each other."), ("Team", "swb-1")]))'
+git -C "$k" branch -q --no-track bolt/ssh-fix main
+expect_fail "swb-1 holds tenant-environments and ssh-fix: name the fix's bolt with --bolt" crew fix swb-1 edge "The edge drops a host."
+sf=fix/ssh-fix/edge sp=$kd/places/fix-ssh-fix--edge
+expect_ok crew fix swb-1 edge "The edge drops a host." --bolt ssh-fix
+has "$out" "has $sf: code, in $sp"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$sf")" "bolt/ssh-fix"
+ok "a fix on a team holding two bolts names its bolt with --bolt, and one naming none is refused"

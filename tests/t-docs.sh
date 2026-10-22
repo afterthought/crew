@@ -51,6 +51,9 @@ for doc in usage readme skill; do
 done
 ok "the README, the skill and the usage say a landing pushes nothing and levels no host, and a bolt is cut from origin/main"
 
+for doc in usage readme skill; do has "${!doc}" "--bolt <bolt>"; has "${!doc}" "one more"; has "${!doc}" "waits to land"; done
+ok "the README, the skill and the usage say a team may hold one more bolt that waits to land, and crew fix names its bolt with --bolt"
+
 has "$(cat "$CREW/CLAUDE.md")" "devenv shell -- "
 wrapped=$(grep -rlF -- 'devenv shell --' "$CREW/plugin/roles" "$CREW/plugin/skills" || true)
 [[ -z $wrapped ]] || fail "these briefs or skills name the shell's wrap, which is CLAUDE.md's to say:"$'\n'"$wrapped"

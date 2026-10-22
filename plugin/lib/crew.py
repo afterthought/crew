@@ -894,19 +894,21 @@ def greet(fleet, team, first="", wait=90):
                        f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
 
 
-def greet_ops(fleet, team, bolt, unread=None, wait=90):
+def greet_ops(fleet, team, bolt, unread=None, wait=90, waiting=None):
     """Give a team's ops its first message (teams.7): who it is, what its team holds, and to wait to be told."""
     t = team_of(fleet, team)
     name = f"{t['name']}-ops"
-    return greet_agent(fleet, name, ops_greeting(t["name"], bolt, unread), [f"agent/{name}", f"team/{t['name']}"],
+    return greet_agent(fleet, name, ops_greeting(t["name"], bolt, unread, waiting), [f"agent/{name}", f"team/{t['name']}"],
                        t["label"], f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
 
 
-def ops_greeting(team, bolt, unread=None):
-    """What a team's ops is greeted with (teams.7): who it is, the bolt its team holds or that it holds none, and that it
-    waits to be told, so it starts nothing of its own; when crew could not read the plan (unread), it says so rather
-    than name no bolt (read.1)."""
+def ops_greeting(team, bolt, unread=None, waiting=None):
+    """What a team's ops is greeted with (teams.7): who it is, the bolt its team holds or that it holds none, and, when
+    it holds two, the one it builds and the one that waits to land (waiting, teams.16), and that it waits to be told,
+    so it starts nothing of its own; when crew could not read the plan (unread), it says so rather than name no bolt
+    (read.1)."""
     holds = (f"crew could not read which bolt your team holds ({' '.join(unread.split())})" if unread
+             else f"your team builds the bolt {bolt}. Bolt {waiting} waits to land" if bolt and waiting
              else f"your team holds the bolt {bolt}" if bolt else "your team holds no bolt")
     return OPS_GREETING.format(team=team, holds=holds)
 
@@ -1026,8 +1028,9 @@ def slot_of(t, slot):
 
 
 def team_bolt(t, then=""):
-    """The bolt a team holds, from the plan; None when it holds none. A plan that can't be read is reported, with what
-    crew does then, and taken as no bolt."""
+    """The bolt a team builds, the one given last when it holds two (plan.team_building, teams.16), from the plan; None
+    when it holds none. A plan that can't be read, or a pair of bolts crew can't tell the newer of, is reported, with
+    what crew does then, and taken as no bolt."""
     import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
     try:
         return plan.bolt_of_team(this.load(), t)
