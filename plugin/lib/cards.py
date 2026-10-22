@@ -550,7 +550,8 @@ def landing_card(f):
     the batches; the reading linked first, then sluice's pull request when the submission has one. f: bolt, kit,
     units, chores, batches ({unit: the batch it was read in}), head, at (sluice's time), moved (landings on main since
     the bolt was cut), pr ({number, url}) or None, offers (the environments whose deploy will be offered on a card),
-    link (the reading session's) or None, preview (a preview of the head as preview_said takes it) or None, follows.
+    link (the reading session's) or None, preview (a preview of the head as preview_said takes it) or None, frees
+    ({team, next}, when its team holds another bolt proven too) or None, follows.
     A preview's addresses follow the reading in its details and links, each on its face as a link after the reading's
     and before the pull request, as many as the card's artifacts leave room for (record 0031 §3)."""
     units, chores, batches = list(f["units"]), list(f.get("chores") or []), f.get("batches") or {}
@@ -565,6 +566,10 @@ def landing_card(f):
     moved = f.get("moved") or 0
     said.append(f"main has moved {plural(moved, 'landing')} since the bolt was cut." if moved else
                 "main has not moved since the bolt was cut.")
+    frees = f.get("frees")
+    if frees:  # its team holds another bolt, proven too, so a yes frees it (teams.16)
+        said.append(f"A yes frees {frees['team']} for {frees['next']}, which waits behind this landing." if frees.get("next")
+                    else f"A yes frees {frees['team']}, and nothing is planned for it.")
     offers = list(f.get("offers") or [])
     then = ("After it lands: main-level ops lands it through sluice and every host takes it"
             + (f"; {joined(offers)}'s deploy will be offered on a card." if offers else "."))

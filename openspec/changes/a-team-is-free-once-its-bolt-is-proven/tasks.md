@@ -23,7 +23,7 @@
 
 ## 6. The rail and the card say what a yes frees
 
-- [ ] 6.1 The landing row says the bolt waits to land and what its team builds meanwhile or what a yes frees, and the landing card's summary says what a yes frees (design, Decision 7; Task notes 6.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_rail.py`, `tests/py/test_cards.py` and `tests/py/test_landing.py`.
+- [x] 6.1 The landing row says the bolt waits to land and what its team builds meanwhile or what a yes frees, and the landing card's summary says what a yes frees (design, Decision 7; Task notes 6.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_rail.py`, `tests/py/test_cards.py` and `tests/py/test_landing.py`.
 
 ## 7. The board and the bands draw a waiting bolt
 

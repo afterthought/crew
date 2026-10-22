@@ -1632,18 +1632,19 @@ def landing_unready(work, head, verdict, fixes):
     return f"{either(sorted(fixes))} is in flight on it" if fixes else None
 
 
-def landing_facts(bolt, kit_name, work, head, at, due, unanswered, read_in, moved, pr):
+def landing_facts(bolt, kit_name, work, head, at, due, unanswered, read_in, moved, pr, frees=None):
     """The landing card's facts as cards.landing_card takes them, once the bolt reads proven by its kit (landing_unready):
     the bolt, its kit, its units and chores, the batch each unit was last read in (read_in), its head and when sluice
-    landed it there (at), how many landings main has had since the bolt last met it (moved), and sluice's pull request
-    at the head (pr) or None. None while a unit's latest change waits for a batch (due), or has been in one whose card
-    the user has not answered (unanswered, awaiting_answer), since a bolt lands only once each has been in a batch the
-    user has answered (briefs.12); a chore is in no batch."""
+    landed it there (at), how many landings main has had since the bolt last met it (moved), sluice's pull request
+    at the head (pr) or None, and, when its team holds another bolt that is proven too, what a yes frees it for (frees,
+    {team, next}, yes_frees) or None. None while a unit's latest change waits for a batch (due), or has been in one whose
+    card the user has not answered (unanswered, awaiting_answer), since a bolt lands only once each has been in a batch
+    the user has answered (briefs.12); a chore is in no batch."""
     units = [n for n, kind, _ in work if kind == "unit"]
     if any(u in due or u in unanswered for u in units):
         return None
     return dict(bolt=bolt, kit=kit_name, units=units, chores=[n for n, kind, _ in work if kind == "chore"],
-                batches={u: read_in[u] for u in units if u in read_in}, head=head, at=at, moved=moved, pr=pr)
+                batches={u: read_in[u] for u in units if u in read_in}, head=head, at=at, moved=moved, pr=pr, frees=frees)
 
 
 def pull_of(sluice_from, repo):
@@ -1679,7 +1680,7 @@ def land_facts(fleet, label, plan, b, t):
     bolt last met main (base), which the card leaves out; (None, why) while it does not. Refused when its kit can't be
     read (read.1)."""
     bolt = b.name()
-    st = stages_for(fleet, plan, [b])
+    st = stages_for(fleet, plan, held_by(plan, t["name"]) or [b])
     k, why = st.kit(b)
     not why or fail(f"bolt {bolt}'s kit could not be read: {why}")
     of = {u.name(): st.of(u.name()) for u in plan.work_of(bolt)}
@@ -1699,8 +1700,10 @@ def land_facts(fleet, label, plan, b, t):
     _, moved = kit_git(fleet, t, main, "rev-list", "--count", "--first-parent", f"{base}..{now}")
     _, came = kit_git(fleet, t, main, "log", "-1", "--format=%(trailers:key=Sluice-From,valueonly)", head)
     due, unanswered = {u for u, *_ in due_changes(plan, entries)}, awaiting_answer(entries)
+    frees = frees_of(st, plan, t, bolt)
     card = landing_facts(bolt, t["kit"]["name"], work, head, facts.get("head_at"), due, unanswered, read_in, int(moved),
-                         pull_of(came.strip(), t["kit"]["repo"]))
+                         pull_of(came.strip(), t["kit"]["repo"]),
+                         dict(team=t["name"], next=frees[1]) if frees and frees[0] == "frees" else None)
     if not card:
         return None, batch_waits([n for n, kind, _ in work if kind == "unit"], due, unanswered)
     return dict(card, team=t["name"], host=t["machine"], base=base), None
@@ -1868,6 +1871,36 @@ def free_now(refusal, planned):
     """Whether a merge's end tells the dispatchers a team can take its next bolt (teams.16): the give would not be
     refused (give_refusal) and a bolt is planned for the team (planned, its name or None)."""
     return refusal is None and planned is not None
+
+
+def yes_frees(this, others, planned):
+    """What a yes to a bolt's landing frees of its team (teams.16), the one fact its rail row and its card share:
+    others, each bolt the team holds as (name, proven), this one left out; planned, the bolt a give would hand the team
+    (next_planned) or None. None when the team holds no other bolt, being free already; ("builds", it) while the other
+    is not proven, the team building it meanwhile; ("frees", planned) once it is, planned None saying nothing is
+    planned for the team."""
+    others = [(n, proven) for n, proven in others if n != this]
+    if not others:
+        return None
+    name, proven = others[0]
+    return ("frees", planned) if proven else ("builds", name)
+
+
+def frees_of(st, plan, t, bolt):
+    """yes_frees for a bolt of the team t, its other bolt read proven from the kits as read (st), as a give reads it."""
+    others = [x for x in held_by(plan, t["name"]) if x.name() != bolt]
+    return yes_frees(bolt, [(x.name(), give_refusal(t["name"], proven_facts(st, plan, [x])) is None) for x in others],
+                     next_planned(plan, t) if others else None)
+
+
+def frees_said(team, frees):
+    """The landing row's line for what a yes frees (yes_frees), or None."""
+    if not frees:
+        return None
+    kind, other = frees
+    if kind == "builds":
+        return f"{team} builds {other} meanwhile"
+    return f"a yes frees {team} for {other}" if other else f"a yes frees {team}, and nothing is planned for it"
 
 
 def frees_note(team, planned):
@@ -8306,7 +8339,8 @@ def rail_rows(fleet, found, sv, props, times, held=None):
                 due, waits = held.get(l, {}).get("due"), held.get(l, {}).get("unanswered") or {}
                 outside = [u.name() for u in units if due is not None and u.name() in due]
                 unread = sorted({waits[u.name()] for u in units if u.name() in waits})
-                what = [f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; {l}-ops lands it"]
+                what = [f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; waits to land; {l}-ops lands it"]
+                what += [x for x in [frees_said(team, frees_of(st, plan, k["team"], b.name()))] if x]
                 cmds = [("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]
                 state, said = kit.verification(head, k["bolts"].get(b.name(), {}).get("verdict"))
                 if state != "green":  # a bolt's proof is its verification (record 0025, tests.5)

@@ -121,7 +121,10 @@ class TestTheLandingsPoint:
         pr = plan.pull_of("swb-1-unit-2 (pull/23)", "WilldanGroup/switchboard-kit")
         facts = plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", "2026-10-17T10:00:00Z", set(), {}, {"a": 4, "b": 5}, 2, pr)
         assert facts == dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], batches={"a": 4, "b": 5}, head="abc1234",
-                             at="2026-10-17T10:00:00Z", moved=2, pr={"number": 23, "url": "https://github.com/WilldanGroup/switchboard-kit/pull/23"})
+                             at="2026-10-17T10:00:00Z", moved=2, pr={"number": 23, "url": "https://github.com/WilldanGroup/switchboard-kit/pull/23"},
+                             frees=None)
+        frees = {"team": "swc-1", "next": "d"}
+        assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, set(), {}, {}, 0, None, frees)["frees"] == frees
         assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, {"b"}, {}, {"a": 4}, 0, None) is None
 
     def test_its_facts_wait_for_the_users_answer_on_each_batch_card_that_holds_a_units_latest_change(self):
@@ -314,3 +317,18 @@ class TestAMergeFreesTheTeam:
     def test_the_other_bolts_card_says_what_a_yes_now_frees(self):
         assert plan.frees_note("swc-1", "d") == "A yes now frees swc-1 for d"
         assert plan.frees_note("swc-1", None) == "A yes now frees swc-1, and nothing is planned for it"
+
+
+class TestWhatAYesFrees:
+    """What a yes to a landing frees of its team (teams.16, plan.yes_frees), shared by its rail row and its card."""
+
+    def test_a_team_holding_no_other_bolt_is_free_already(self):
+        assert plan.yes_frees("doctor-rows", [], "d") is None
+        assert plan.yes_frees("doctor-rows", [("doctor-rows", True)], "d") is None
+
+    def test_while_the_other_is_not_proven_the_team_builds_it(self):
+        assert plan.yes_frees("doctor-rows", [("ssh-fix", False)], "d") == ("builds", "ssh-fix")
+
+    def test_once_the_other_is_proven_a_yes_frees_the_team_for_its_next_planned_bolt_or_for_none(self):
+        assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], "d") == ("frees", "d")
+        assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], None) == ("frees", None)
