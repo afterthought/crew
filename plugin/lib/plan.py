@@ -9330,54 +9330,50 @@ def card_stop(proc):
         proc.wait()
 
 
-def card_session(fleet, a):
+def card_session(fleet, a, acts=None):
     """crew card session <key> [<unit>] [--label L]: the plannotator session of a card that has one, on what the rail
     row with that card key asks the user to read, started on this host with an Approve button and no browser if none
     runs, and its link printed (session_open). A batch card's, batch/<n>, is one session on the whole batch, started on
     the partition's main level's host and refused elsewhere, naming it: crew writes the batch's folder (batch_folder)
     and gives plannotator its files as one review. A proposal's is on its page, for a proposal whose card links one
-    (proposal_reads), and refused for any other, whose card holds it whole. An old batch card's, batch/<n>-<k>, is one
+    (proposal_reads), and refused for any other, whose card holds it whole. Either is opened by reading_again, so a
+    start anew is recorded and the planner's card, while it waits on the user, changed to carry the link, and a card
+    the user has answered left as it is. An old batch card's, batch/<n>-<k>, is one
     session for each unit it holds, on that unit's whole change as its Markdown files, started on the host the teams
     file names for the unit's team (code.3) and refused for a unit the card does not hold. A landing's, land/<bolt>, is
     one session on what the bolt brings to main, on the host of the team holding it (land_session). Refused for a key
     with no row, a document crew can't read whole, and a link that would open only on this host."""
     label, d = card_of(fleet, a)
     if a.key.startswith("land/"):
-        return land_session(fleet, label, a.key)
+        return land_session(fleet, label, a.key, acts)
     here = crew.this_host()
     why = session_refusal(a.key, label, fleet["partitions"][label]["machine"], here)
     not why or fail(why)
     row, props = card_row(fleet, label, a.key)
     row["doc"] or fail(f"{a.key}'s card has no document to read, so it has no session")
     name = f"{a.key}'s session"
-    if old_batch(a.key):
-        a.unit in row["units"] or fail(f"{a.key} holds {either(row['units'])}, not {a.unit}: its sessions are its units'")
-        t = fleet["teams"].get(row["teams"][a.unit]) or fail(f"{a.unit}'s team {row['teams'][a.unit]} is not in the teams file")
-        t = unit_kit_team(fleet, label, t, a.unit)
-        if t["machine"] != here:
-            return forward_card(fleet, t, a, label)
-        folder, name = change_folder(fleet, t, a.unit, d / "change"), f"{a.key}'s session of {a.unit}"
 
-        def write():
-            return change_files(folder) or fail(f"{a.unit}'s change {folder} on {here} holds no Markdown file to read")
-    elif row["doc"][0] == "page":
-        p = next(x for x in props if x["proposal"] == row["doc"][2])
-        proposal_reads([do_args(label, c["do"]) for c in p["changes"]]) or fail(
-            f"{a.key}'s card has nothing to read: it holds the proposal whole, and only a proposal of more than "
-            f"{cards.CARD_NEW} new units has a reading session")
-
-        def write():
-            f = d / f"proposal-{p['proposal']}.md"
-            f.write_text(page(p, label))
-            return [str(f)]
-    else:
-        def write():
-            return batch_folder_write(fleet, label, row["doc"][2], [(u, row["teams"][u], row["commits"][u]) for u in row["units"]])
-    url, decided, _ = session_open(d, name, write)
-    print(url)
-    if decided:
-        print(f"the user decided in {name} before it ended: crew card wait {a.key}{' ' + a.unit if a.unit else ''} gives "
-              "the decision", file=sys.stderr)
+    def said(url, decided):
+        print(url)
+        if decided:
+            print(f"the user decided in {name} before it ended: crew card wait {a.key}{' ' + a.unit if a.unit else ''} gives "
+                  "the decision", file=sys.stderr)
+    if not old_batch(a.key):
+        if row["doc"][0] == "page":
+            p = next(x for x in props if x["proposal"] == row["doc"][2])
+            proposal_reads([do_args(label, c["do"]) for c in p["changes"]]) or fail(
+                f"{a.key}'s card has nothing to read: it holds the proposal whole, and only a proposal of more than "
+                f"{cards.CARD_NEW} new units has a reading session")
+        reading_again(fleet, label, a.key, acts, said)
+        return
+    a.unit in row["units"] or fail(f"{a.key} holds {either(row['units'])}, not {a.unit}: its sessions are its units'")
+    t = fleet["teams"].get(row["teams"][a.unit]) or fail(f"{a.unit}'s team {row['teams'][a.unit]} is not in the teams file")
+    t = unit_kit_team(fleet, label, t, a.unit)
+    if t["machine"] != here:
+        return forward_card(fleet, t, a, label)
+    folder, name = change_folder(fleet, t, a.unit, d / "change"), f"{a.key}'s session of {a.unit}"
+    said(*session_open(d, name, lambda: change_files(folder) or fail(
+        f"{a.unit}'s change {folder} on {here} holds no Markdown file to read"))[:2])
 
 
 # The change note of a card changed to carry its reading's new link (card-sessions).
@@ -9452,16 +9448,16 @@ def relink(acts, label, key, owner, due, change):
 
 
 def reading_facts(fleet, label, key, acts):
-    """The facts a batch's or a long proposal's card is built from, read as its raise reads them, its reading opened
-    on: a batch's from this host's run record and the reviewer's summary (batch_read), a proposal's from the open
-    proposal of its chain at the branch's tip (chain_read, proposal_facts). Refused when its point has passed."""
+    """The facts a batch's or a long proposal's reading is opened on (reading_open), read as its raise reads them: a
+    batch's card's from this host's run record and the reviewer's summary (batch_read); a proposal's number, the open
+    one of its chain at the branch's tip (chain_read), whose page is its reading. Refused when its point has passed."""
     kind, n = key.split("/")[0], int(key.split("/")[1])
     if kind == "batch":
         return batch_read(fleet, label, n, acts) or fail(
             f"{key}'s card has nothing to read: this host's run record holds no batch {n} waiting on the user, or its "
             "summary is not there")
     got = chain_read(fleet, label, n) or fail(f"{key}'s card has nothing to read: no proposal of its chain is open")
-    return proposal_facts(fleet, label, *got)
+    return dict(n=got[1], first=n)
 
 
 def reading_again(fleet, label, key, acts=None, say=None):
