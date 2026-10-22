@@ -8997,6 +8997,9 @@ VERIFY_KEY = r"verify/[a-z0-9][a-z0-9-]*/\d{8}-\d{4}"
 # this key is.
 RECORD_KEY = r"record/([a-z0-9][a-z0-9-]*)/(\d{4})"
 CARD_START = 10  # seconds a start waits for plannotator to list its session
+# The ports a card's session takes the first free one of when its environment names no range: swancloud's agents'
+# range, set in its lib/agent-config.nix (session_env).
+CARD_PORTS = "19432-19451"
 CARD_POLL = 5  # seconds between a wait's reads
 CARD_GRACE = 120  # seconds a session is left alone after it starts, since the rail's read may not have seen its row
 
@@ -9329,6 +9332,19 @@ def proposal_reads(argvs):
     return len(new_units(argvs)) > cards.CARD_NEW
 
 
+def session_env(environ):
+    """The environment a card's session starts plannotator in, from the caller's environ, which is not changed: every
+    variable as given, with no browser and in remote mode, and PLANNOTATOR_PORT kept when it names a range
+    plannotator 0.28.26 reads (<a>-<b>, 1 <= a <= b <= 65535), else crew's own, CARD_PORTS, so the session takes the
+    first free port of a range wherever crew runs: unset, one port, which plannotator holds alone, and a value it
+    can't read, which in remote mode it takes as the one port 19432."""
+    env = dict(environ, PLANNOTATOR_SKIP_BROWSER_OPEN="1", PLANNOTATOR_REMOTE="1")
+    m = re.fullmatch(r"([0-9]+)-([0-9]+)", env.get("PLANNOTATOR_PORT", ""))
+    if not (m and 1 <= int(m[1]) <= int(m[2]) <= 65535):
+        env["PLANNOTATOR_PORT"] = CARD_PORTS
+    return env
+
+
 def session_open(d, name, write):
     """The plannotator session of a card key on this host, kept in its folder d, called name in what is said: the one
     crew recorded given again while it serves its document, or kept for crew card wait when the user decided in it
@@ -9359,7 +9375,7 @@ def session_open(d, name, write):
         not gone or fail(f"{name}'s document {gone[0]} is not on {here}")
         doc = ", ".join(files)  # as plannotator lists a session of several files
         started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        env = dict(os.environ, PLANNOTATOR_SKIP_BROWSER_OPEN="1", PLANNOTATOR_REMOTE="1")
+        env = session_env(os.environ)
         with open(d / "out", "w") as out, open(d / "err", "w") as err:
             # Several files, each its own path, open as one review in that order with one decision (plannotator 0.28.6).
             # Its own session, so it outlives the command that started it, and the shell that ran that.

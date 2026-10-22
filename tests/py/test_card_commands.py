@@ -5,7 +5,8 @@ area to make; a tool's reply read as Pending You's CLI reads it, its refusal in 
 own error; and what `crew card read` prints. Then the act that sends crew's own cards, plan.row_card_post,
 row_card_change and row_card_close, on a stand-in for the bridge, the run record, a tell and an upload (record 0031):
 what each sends and records, the line that adopts a card and whom it is told to, a card the user answered followed by
-its new version under the key's revision rather than changed, and each failure said and recorded.
+its new version under the key's revision rather than changed, and each failure said and recorded. Then the port
+range a card's session starts plannotator on, plan.session_env.
 The bridge itself, and every command's wiring, are t-cards'."""
 import pytest
 
@@ -604,3 +605,34 @@ def test_a_close_with_no_card_held_closes_nothing_and_says_so(capsys):
 
 PLAN = "%rec: Bolt\n%key: Bolt\n\n%rec: Unit\n%key: Unit\n"
 PLAN_AFTER = PLAN + "\nUnit: g-one\nRepo: switchboard-kit\nIntent: One unit.\n"
+
+
+# ------------------------------------------------------------------------------------ the port a session takes
+# plan.session_env: the environment a card's session starts plannotator in, so it takes the first free port of a
+# range wherever crew runs (card-sessions), read against plannotator 0.28.26's reading of PLANNOTATOR_PORT.
+
+def test_a_session_with_no_port_named_takes_crews_range():
+    assert plan.session_env({})["PLANNOTATOR_PORT"] == "19432-19451" == plan.CARD_PORTS
+
+
+def test_a_range_the_environment_names_is_kept():
+    assert plan.session_env({"PLANNOTATOR_PORT": "19440-19460"})["PLANNOTATOR_PORT"] == "19440-19460"
+
+
+@pytest.mark.parametrize("named", ["19432", "abc", "19451-19432", "0-10", "19432-70000", ""])
+def test_one_port_or_one_plannotator_cant_read_gives_crews_range(named):
+    assert plan.session_env({"PLANNOTATOR_PORT": named})["PLANNOTATOR_PORT"] == "19432-19451"
+
+
+@pytest.mark.parametrize("environ", [{}, {"PLANNOTATOR_PORT": "19440-19460"},
+                                     {"PLANNOTATOR_REMOTE": "0", "PLANNOTATOR_SKIP_BROWSER_OPEN": "0"}])
+def test_every_session_is_remote_and_opens_no_browser(environ):
+    env = plan.session_env(environ)
+    assert env["PLANNOTATOR_REMOTE"] == "1" and env["PLANNOTATOR_SKIP_BROWSER_OPEN"] == "1"
+
+
+def test_the_rest_of_the_environment_passes_through_and_the_one_given_is_not_changed():
+    environ = {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}
+    env = plan.session_env(environ)
+    assert env["PLANNOTATOR_URL_HOST"] == "auto" and env["PATH"] == "/bin"
+    assert environ == {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}

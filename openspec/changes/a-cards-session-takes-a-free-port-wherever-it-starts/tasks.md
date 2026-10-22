@@ -2,7 +2,7 @@
 
 ## 1. A card's session takes a free port of the range
 
-- [ ] 1.1 crew starts every card's reading session with a port range, the environment's own when it names one and else 19432–19451, proved by cases in `tests/py/test_card_commands.py` and a green `devenv shell -- moon run tests:logic` (design, Task notes 1.1).
+- [x] 1.1 crew starts every card's reading session with a port range, the environment's own when it names one and else 19432–19451, proved by cases in `tests/py/test_card_commands.py` and a green `devenv shell -- moon run tests:logic` (design, Task notes 1.1).
 - [ ] 1.2 The stub plannotator chooses its port as plannotator 0.28.26 does, and a card's session started with no port named, while another holds 19432, prints a link on another port, proved by `tests/suite cards` passing and failing without 1.1 (design, Task notes 1.2).
 
 ## 2. The documents say it
