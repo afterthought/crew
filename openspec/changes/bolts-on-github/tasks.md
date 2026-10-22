@@ -23,7 +23,7 @@
 
 ## 5. The parent change says the same
 
-- [ ] 5.1 `no-worktree-holds-main-or-a-bolt-branch` has its part 1 tasks ticked as built by this change, and its words for a bolt made before and its two matching requirement blocks read as this change's (Decision 8, Task notes 5.1). Check: `openspec validate no-worktree-holds-main-or-a-bolt-branch` passes.
+- [x] 5.1 `no-worktree-holds-main-or-a-bolt-branch` has its part 1 tasks ticked as built by this change, and its words for a bolt made before and its two matching requirement blocks read as this change's (Decision 8, Task notes 5.1). Check: `openspec validate no-worktree-holds-main-or-a-bolt-branch` passes.
 
 ## 6. The suite
 
