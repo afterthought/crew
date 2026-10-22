@@ -229,6 +229,32 @@ class TestTeamGreetings:
             "one line, then wait until your conductor or I tell you what is needed.")
         assert "your team holds no bolt. Nothing is asked of you now" in crew.ops_greeting("crw-2", None)
 
+    def test_a_conductor_of_a_team_holding_two_bolts_is_told_both_its_landing_card_and_each_fix_in_flight(self):
+        """A give beside a waiting bolt restarts the conductor fresh at its next stop (teams.16)."""
+        assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", ("land/doctor-rows", "req_7"), ["take-main"]) == (
+            "Your team now builds the bolt ssh-fix. Bolt doctor-rows waits to land; its landing card land/doctor-rows is "
+            "yours: call get_request (requestId req_7, name swc-1-conductor), then run crew card wait land/doctor-rows in "
+            "the background. Fix take-main is in flight on it: wait on it with crew fix swc-1 take-main --wait --bolt doctor-rows.")
+
+    def test_with_no_card_or_fix_it_names_both_bolts_and_a_kit_not_read_is_said(self):
+        assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", None, []) == "Your team now builds the bolt ssh-fix. Bolt doctor-rows waits to land."
+        assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", None, None, "box did not answer").endswith(
+            "waits to land. crew could not read its fixes (box did not answer): read crew status swc-1.")
+
+    def test_status_names_the_bolt_a_team_builds_and_the_one_waiting_to_land(self):
+        assert plan.two_held_said("swc-1", "ssh-fix", "doctor-rows") == "swc-1 builds ssh-fix; doctor-rows waits to land"
+
+    def test_a_give_beside_a_waiting_bolt_says_its_roles_start_again_at_their_next_stop(self):
+        assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 0, "") == (
+            "swc-1-conductor and swc-1-ops start again on bolt/ssh-fix at their next stop")
+        assert plan.given_beside("swc-1", "ssh-fix", ["ops"], 0, "") == "swc-1-ops starts again on bolt/ssh-fix at its next stop"
+        assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 255, "") == (
+            "swc-1's host did not answer: swc-1-conductor and swc-1-ops carry bolt/ssh-fix once next started")
+
+    def test_ops_of_a_team_holding_two_bolts_is_told_the_one_it_builds_and_the_one_waiting(self):
+        assert crew.ops_greeting("swc-1", "ssh-fix", waiting="doctor-rows").startswith(
+            "You are swc-1's ops; your team builds the bolt ssh-fix. Bolt doctor-rows waits to land. Nothing is asked of you now")
+
     def test_a_plan_crew_could_not_read_is_said_rather_than_no_bolt(self):
         said = crew.ops_greeting("crw-2", None, "wldn/main of afterthought/crew-state could not be read:\nfatal: unable to access")
         assert "crew could not read which bolt your team holds (wldn/main of afterthought/crew-state could not be read: fatal: " \

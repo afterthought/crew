@@ -121,7 +121,10 @@ class TestTheLandingsPoint:
         pr = plan.pull_of("swb-1-unit-2 (pull/23)", "WilldanGroup/switchboard-kit")
         facts = plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", "2026-10-17T10:00:00Z", set(), {}, {"a": 4, "b": 5}, 2, pr)
         assert facts == dict(bolt="y", kit="switchboard-kit", units=["a", "b"], chores=["c"], batches={"a": 4, "b": 5}, head="abc1234",
-                             at="2026-10-17T10:00:00Z", moved=2, pr={"number": 23, "url": "https://github.com/WilldanGroup/switchboard-kit/pull/23"})
+                             at="2026-10-17T10:00:00Z", moved=2, pr={"number": 23, "url": "https://github.com/WilldanGroup/switchboard-kit/pull/23"},
+                             frees=None)
+        frees = {"team": "swc-1", "next": "d"}
+        assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, set(), {}, {}, 0, None, frees)["frees"] == frees
         assert plan.landing_facts("y", "switchboard-kit", self.WORK, "abc1234", None, {"b"}, {}, {"a": 4}, 0, None) is None
 
     def test_its_facts_wait_for_the_users_answer_on_each_batch_card_that_holds_a_units_latest_change(self):
@@ -298,3 +301,34 @@ class TestThePreview:
     def test_how_sluices_preview_ended_is_read_from_its_exit_and_its_words(self, code, out, err, ended):
         """"The stack fails to come up" and "The host's sluice has no preview command"."""
         assert plan.preview_ended(code, out, err) == ended
+
+
+class TestAMergeFreesTheTeam:
+    """A team is free for its next bolt once every bolt it holds reads proven and it holds fewer than two (teams.16):
+    the merge's end tells the dispatchers then, when a bolt is planned for it (plan.free_now)."""
+
+    def test_the_dispatchers_are_told_once_the_give_would_pass_and_a_bolt_is_planned(self):
+        assert plan.free_now(None, "ssh-fix")
+
+    def test_nothing_planned_or_a_give_still_refused_tells_no_one(self):
+        assert not plan.free_now(None, None)
+        assert not plan.free_now("bolt doctor-rows's unit a has not merged (code)", "ssh-fix")
+
+    def test_the_other_bolts_card_says_what_a_yes_now_frees(self):
+        assert plan.frees_note("swc-1", "d") == "A yes now frees swc-1 for d"
+        assert plan.frees_note("swc-1", None) == "A yes now frees swc-1, and nothing is planned for it"
+
+
+class TestWhatAYesFrees:
+    """What a yes to a landing frees of its team (teams.16, plan.yes_frees), shared by its rail row and its card."""
+
+    def test_a_team_holding_no_other_bolt_is_free_already(self):
+        assert plan.yes_frees("doctor-rows", [], "d") is None
+        assert plan.yes_frees("doctor-rows", [("doctor-rows", True)], "d") is None
+
+    def test_while_the_other_is_not_proven_the_team_builds_it(self):
+        assert plan.yes_frees("doctor-rows", [("ssh-fix", False)], "d") == ("builds", "ssh-fix")
+
+    def test_once_the_other_is_proven_a_yes_frees_the_team_for_its_next_planned_bolt_or_for_none(self):
+        assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], "d") == ("frees", "d")
+        assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], None) == ("frees", None)

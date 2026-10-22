@@ -8,14 +8,17 @@
 # the address of a preview of its head, which the
 # kit's policy there declares, asked of sluice first; the preview's stack failing is said on the card, changed in
 # place by the process that waited on it; a fix started on the bolt withdraws the card, held for it, ending its
-# reading and releasing its preview, and once the fix merges and the bolt reads proven again a new card follows it
+# reading and releasing its preview, and once the fix merges and the bolt reads proven again, the dispatcher told its
+# team is free for its next bolt, a new card follows it
 # with a preview of the new head, raised without its reading when both its starts fail, naming crew card session and
 # keeping why in the run record, whose reading the conductor's wait then starts, changing the card to carry its link,
-# and waits on until the landing ends it; the landing then lands, leaving the kit's detached main checkout
+# and waits on until the landing ends it; the bolt read proven, its team is given its next bolt beside it and refused
+# a third (teams.16); the landing then lands, leaving the kit's detached main checkout
 # as it was; the bolt lands in the plan once every unit has, recording the commit main holds and removing its branch,
 # its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
-# preview, and its conductor told; a bolt no team holds lands once its unit's change is on main; and dropping a held
-# bolt removes its branch and places.
+# preview, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
+# that bolt is dropped too the team holds none and its conductor and ops start again at their next stop without it;
+# a bolt no team holds lands once its unit's change is on main; and dropping a held bolt removes its branch and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -158,6 +161,9 @@ echo four >> "$gp/shared.txt"; commit_all "$gp" "fix(a): the zone list holds eve
 expect_ok crew fix swb-1 gap --wait
 expect_ok crew fix swb-1 gap --merge
 merge_as swb-1-unit-1 "$gp" bolt/tenant-environments || fail "the gap fix's submission failed"
+(unset CREW_AGENT; crew bolt new ssh-fix "Hosts reach each other over ssh." --repo switchboard-kit >/dev/null)  # swb-1's next
+p=$(as $box herdr --session wldn-3 workspace create --cwd / --label "wldn dispatch" | jq -r .result.root_pane.pane_id)
+as $box herdr --session wldn-3 stub agent "$p" wldn-dispatch-chuck-herdr-alpha
 : > "$CREW_TEST_LOG"
 echo 2 > "$refusals"  # both of the reading's starts fail
 expect_ok crew fix swb-1 gap --wait
@@ -175,7 +181,10 @@ eq "$(listed)" ""; eq "$(cat "$refusals")" "0"
 eq "$(field $box card.post Card bolt/tenant-environments) $(field $box card.post Unread bolt/tenant-environments)" "$again $refused"
 has "$posted" "web: http://web-${h2:0:7}--bolt-tenant-environments--kit"
 eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h2 --wait --json in $(cd "$k" && pwd -P)"
-ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record"
+# The merge that makes the bolt proven frees its team for its next bolt, planned for it: the dispatcher is told (teams.16).
+has "$(grep "^$box wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha " "$CREW_TEST_LOG")" \
+  "swb-1 can take its next bolt: bolt tenant-environments reads proven. Give a free team its next bolt."
+ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
 
 # The conductor's wait finds no reading and starts it, changing the card to carry its link, then waits on it until the
 # landing's close ends it.
@@ -192,6 +201,35 @@ eq "$(listed)" "$pid2"
 kill -0 "$waiting" 2>/dev/null || fail "the wait returned rather than waiting on the reading:"$'\n'"$(cat "$T/land-wait.out")"
 ok "the conductor's wait on a landing card with no reading starts it, prints its link, changes the card to carry it and waits on it"
 unset CREW_AGENT
+
+# The bolt reads proven, so its team is free for its next bolt while it waits to land (teams.16): the give hands swb-1
+# ssh-fix beside it, and a third is refused, naming the bolt whose landing frees the team.
+: > "$CREW_TEST_LOG"
+expect_ok crew bolt give swb-1
+has "$out" "swb-1 holds ssh-fix: bolt/ssh-fix from switchboard-kit's"
+given=$out
+expect_ok crew bolts --label wldn
+eq "$(grep -c "  swb-1 @ $box  " <<<"$out")" "2"
+has "$out" "tenant-environments  switchboard-kit  swb-1 @ $box  waits"
+expect_ok crew status swb-1
+has "$out" "swb-1 builds ssh-fix; tenant-environments waits to land"
+crew bolt new third-one "The bolt after." --repo switchboard-kit >/dev/null
+expect_fail "swb-1 holds tenant-environments and ssh-fix; tenant-environments waits to land, and its landing frees swb-1" crew bolt give swb-1
+ok "a team whose bolt reads proven is given its next bolt beside it, and a third is refused, naming the bolt whose landing frees the team"
+
+# The give restarts neither the conductor, which waits on its landing card, nor ops at once: each starts again at its
+# next stop, once idle, the conductor fresh and greeted with both bolts and the line that adopts its landing card.
+has "$given" "swb-1-conductor and swb-1-ops start again on bolt/ssh-fix at their next stop"
+lacks "$given" "swb-1-conductor started"
+for a in swb-1-conductor swb-1-ops; do
+  log=$(home_of $box)/.local/state/crew/renew/$a.log
+  until_ok grep -q "$a is restarted on crew" "$log" || fail "$a was not restarted at its next stop: $(cat "$log" 2>/dev/null)"
+done
+greeted=$(calls | grep "^$box wldn-1 agent prompt swb-1-conductor '\[crew\] crew restarted you")
+has "$greeted" "bolt is now bolt/ssh-fix, which sluice"
+has "$greeted" "Your team now builds the bolt ssh-fix. Bolt tenant-environments waits to land; its landing card land/tenant-environments is yours: call get_request (requestId $again, name swb-1-conductor), then run crew card wait land/tenant-environments in the background."
+eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
+ok "a give beside a waiting bolt restarts its conductor and ops at their next stop, the conductor greeted with both bolts and its landing card"
 git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)
 expect_ok crew bolt submit tenant-environments
 has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
@@ -210,18 +248,12 @@ echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answer
 : > "$CREW_TEST_LOG"
 # The branch the conductor's pane tells sluice's plugins it works for (teams.20), "none" when it carries none.
 branch() { herdr_state $box wldn-1 ".panes[\"$(awk '$1=="conductor"{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].tokens.sluice_branch // \"none\""; }
-eq "$(branch)" "bolt/tenant-environments"
+eq "$(branch)" "bolt/ssh-fix"
 expect_ok crew bolt land tenant-environments
-has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
-eq "$(branch)" "none"
-# Each carried the bolt's branch in its session, which only a start changes, so each is restarted at its next stop.
-for a in swb-1-conductor swb-1-ops; do
-  log=$(home_of $box)/.local/state/crew/renew/$a.log
-  until_ok grep -q "$a is restarted on crew" "$log" || fail "$a was not restarted for its landed bolt: $(cat "$log" 2>/dev/null)"
-done
-eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "null"
-grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on crew .*its team no longer holds bolt/tenant-environments" "$CREW_TEST_LOG" ||
-  fail "ops was not told why it was restarted:"$'\n'"$(calls)"
+has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main); swb-1 builds ssh-fix"
+# The branch the conductor carries is the bolt it builds, so the landing makes no restart due.
+eq "$(branch)" "bolt/ssh-fix"
+eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
 n=$(git -C "$k" log -1 --format='%(trailers:key=Sluice-Submission,valueonly)' main)
 has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"landed on GitHub's main at $(short main) (#$n); every host's folder follows by swancloud's timer within minutes\""
 has "$out" "card land/tenant-environments: $again closed"
@@ -240,7 +272,22 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice and its conductor and ops restarted at their next stop without it"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
+
+# swb-1's other bolt dropped: the team holds none, its pane carries no branch, and each of its conductor and ops, whose
+# session carried the bolt's branch, which only a start changes, is restarted at its next stop.
+restarted() { cat "$(home_of $box)/.local/state/crew/renew/$1.log" 2>/dev/null | grep -c "$1 is restarted on crew" || true; }
+restarted_since() { test "$(restarted "$1")" -gt "$2"; }
+before_conductor=$(restarted swb-1-conductor) before_ops=$(restarted swb-1-ops)
+: > "$CREW_TEST_LOG"
+expect_ok crew bolt drop ssh-fix "folded into the next"
+eq "$(branch)" "none"
+until_ok restarted_since swb-1-conductor "$before_conductor" || fail "swb-1-conductor was not restarted for its dropped bolt"
+until_ok restarted_since swb-1-ops "$before_ops" || fail "swb-1-ops was not restarted for its dropped bolt"
+eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "null"
+grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on crew .*its team no longer holds bolt/ssh-fix" "$CREW_TEST_LOG" ||
+  fail "ops was not told why it was restarted:"$'\n'"$(calls)"
+ok "a team whose last bolt goes holds none: its pane carries no branch for sluice, and its conductor and ops are restarted at their next stop without it"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null
