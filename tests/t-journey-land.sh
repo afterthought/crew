@@ -13,12 +13,13 @@
 # keeping why in the run record, whose reading the conductor's wait then starts, changing the card to carry its link,
 # and waits on until the landing ends it; the landing then lands, leaving the kit's detached main checkout
 # as it was and marking the bolt's branch landed; the bolt lands in the plan once every unit has, recording the commit
-# main holds and removing its branch, since main holds every commit of it, and the place a stopped landing left on it,
+# main holds, sluice deleting its branch from GitHub (plan.19), and removing the place a stopped landing left on it,
 # its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
-# preview, and its conductor told; a landed bolt's branch holding a commit main lacks is kept and named instead, its
-# mark unset and the keeping recorded, and the team's next read leaves it; a bolt no team holds lands once its unit's
-# change is on main; and dropping a held
-# bolt removes its branch and places.
+# preview, and its conductor told; a landed bolt's branch holding a commit main lacks is kept on GitHub, sluice
+# refusing its delete, and on the host, named, its mark unset and the keeping recorded, and the team's next read leaves
+# it; a bolt no team holds lands once its unit's change is on main; a delete sluice refuses is named in its words, the
+# branch kept on GitHub; a bolt made before gives went through sluice is deleted there once its landing's pull request
+# put it there, no create run for it; and dropping a held bolt removes its branch and places.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -218,6 +219,7 @@ sh -c 'echo $$' > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
 # The branch the conductor's pane tells sluice's plugins it works for (teams.20), "none" when it carries none.
 branch() { herdr_state $box wldn-1 ".panes[\"$(awk '$1=="conductor"{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].tokens.sluice_branch // \"none\""; }
 eq "$(branch)" "bolt/tenant-environments"
+tip=$(short bolt/tenant-environments)
 expect_ok crew bolt land tenant-environments
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main) and swb-1 holds no bolt"
 eq "$(branch)" "none"
@@ -242,27 +244,32 @@ eq "$(tail -1 "$T/land-wait.out")" "land/tenant-environments: crew ended its ses
 [[ ! -e $reading ]] || fail "the landing's reading outlived its card"
 has "$out" "$land is removed: bolt tenant-environments is in no plan"
 [[ ! -e $land ]] || fail "the landing's worktree outlived the landing"
-has "$out" "bolt/tenant-environments is removed: bolt tenant-environments has landed, and main holds every commit of it (git cherry); it was at"
+has "$out" "sluice deleted bolt/tenant-environments from GitHub at $tip"
+git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still on GitHub"
+eq "$(git -C "$k" config branch.bolt/tenant-environments.crew || true)" ""
 grep -qF "agent prompt swb-1-conductor '[crew] plan(tenant-environments): land the bolt ($me@mac-studio)'" \
   "$CREW_TEST_LOG" || fail "the conductor was not told of the landing:"$'\n'"$(calls)"
 eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, removing its branch, the place a stopped landing left and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice and its conductor and ops restarted at their next stop without it"
+ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, sluice deleting its branch from GitHub and the host and crew removing the place a stopped landing left and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying no branch for sluice and its conductor and ops restarted at their next stop without it"
 
-# A bolt whose branch takes a commit after its landing: crew bolt land keeps the branch at its commit, the user's, its
-# mark unset and the keeping recorded on the team's host, and the team's next read leaves it.
+# A bolt whose branch takes a commit after its landing: crew bolt land has sluice's delete refused, the branch kept on
+# GitHub, and keeps the host's at its commit, the user's, its mark unset and the keeping recorded on the team's host,
+# and the team's next read leaves it.
 crew bolt new zone-lists "The zone list grows." --repo switchboard-kit >/dev/null
 crew bolt give swb-1 zone-lists >/dev/null
 on_bolt() { git -C "$k" worktree add -q "$T/zone-lists" bolt/zone-lists && echo "$1" >> "$T/zone-lists/zones.txt" &&
-  commit_all "$T/zone-lists" "$2" && git -C "$k" worktree remove "$T/zone-lists"; }
+  commit_all "$T/zone-lists" "$2" && git -C "$k" worktree remove "$T/zone-lists" &&
+  git -C "$k" push -q origin bolt/zone-lists; }  # as sluice pushes a landing on a bolt on GitHub
 on_bolt north "feat: the zone list" || fail "the bolt took no commit"
 expect_ok crew bolt submit zone-lists
 eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" "landed"
 on_bolt south "feat: one zone more, after the landing" || fail "the bolt took no commit after its landing"
 at=$(short bolt/zone-lists)
 expect_ok crew bolt land zone-lists
+has "$out" "bolt/zone-lists is kept on GitHub: sluice did not delete it: bolt/zone-lists at $(git -C "$k" rev-parse bolt/zone-lists) has not landed into main"
 has "$out" "bolt/zone-lists is kept at $at: bolt zone-lists has landed, and it holds 1 commit whose patch main lacks (git cherry), the user's to keep or delete"
 eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" ""
 eq "$(field $box branch.kept Head bolt/zone-lists) $(field $box branch.kept Count bolt/zone-lists)" "$at 1"
@@ -271,7 +278,8 @@ eq "$(field $box branch.kept From bolt/zone-lists) | $(field $box branch.kept Wh
 expect_ok crew status swb-1
 lacks "$out" "bolt/zone-lists"
 eq "$(short bolt/zone-lists)" "$at"
-ok "a landed bolt's branch holding a commit main lacks is kept at its commit and named, its mark unset and the keeping recorded, and the team's next read leaves it"
+git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/zone-lists >/dev/null || fail "the refused delete removed bolt/zone-lists from GitHub"
+ok "a landed bolt's branch holding a commit main lacks is kept on GitHub, sluice refusing its delete, and at its commit on the host, named, its mark unset and the keeping recorded, and the team's next read leaves it"
 
 # A bolt built outside a team: no team holds it, and it lands once its unit's change is on the kit's main.
 crew bolt new done-outside "Built outside a team." --repo switchboard-kit >/dev/null
@@ -283,6 +291,40 @@ expect_ok crew bolt land done-outside
 eq "$(tail -1 <<<"$out")" "done-outside has landed at switchboard-kit's $(git -C "$k" rev-parse main | cut -c1-7); no team held it"
 eq "$(field mac-studio bolt.land Head bolt/done-outside) $(plan -t Bolt -e "Bolt = 'done-outside'" -c)" "$(git -C "$k" rev-parse main) 0"
 ok "a bolt no team holds lands once its unit's change is on its kit's main, recording the commit main holds"
+
+# A delete sluice refuses, a submission still queued on the bolt: the bolt leaves the plan, its branch kept on GitHub and
+# named in sluice's words.
+crew bolt new queued-one "Landed with a submission queued." --repo switchboard-kit >/dev/null
+crew unit add q1 "Unit q1." --bolt queued-one >/dev/null
+crew bolt give swb-1 queued-one >/dev/null 2>&1
+mkdir -p "$k/openspec/changes/archive/2026-10-22-q1"; echo "# q1" > "$k/openspec/changes/archive/2026-10-22-q1/proposal.md"
+commit_all "$k" "chore(openspec): archive q1"; push "$k"
+echo 3 > "$T/sluice-queued-bolt-queued-one"
+expect_ok crew bolt land queued-one
+has "$out" "bolt/queued-one is kept on GitHub: sluice did not delete it: #3 still queued on bolt/queued-one; wait for them to land, or withdraw them"
+eq "$(plan -t Bolt -e "Bolt = 'queued-one'" -c)" "0"
+git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/queued-one >/dev/null || fail "the refused delete removed bolt/queued-one from GitHub"
+rm "$T/sluice-queued-bolt-queued-one"
+ok "a delete sluice refuses leaves the bolt out of the plan and its branch on GitHub, named in sluice's words"
+
+# A bolt made before gives went through sluice: its branch made with git on the kit's host, its policy naming no remote
+# for bolts, until its last merge brings main's, which names origin; its landing's pull request puts it on GitHub, and
+# crew bolt land has sluice delete it there, no create run for it.
+by_hand 'p.insert(plan.Rec("Bolt", [("Bolt", "made-before"), ("Repo", "switchboard-kit"), ("Goal", "Made before."), ("Team", "swb-1")]))
+unit("mb", "made-before")'
+git -C "$k" branch -q --no-track bolt/made-before main; git -C "$k" config branch.bolt/made-before.crew given
+on_branch "$k" bolt/made-before "chore: bolts kept on the host" .config/sluice.toml $'[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+mkdir -p "$k/openspec/changes/archive/2026-10-22-mb"; echo "# mb" > "$k/openspec/changes/archive/2026-10-22-mb/proposal.md"
+commit_all "$k" "chore(openspec): archive mb"; push "$k"
+git -C "$k" update-ref refs/heads/bolt/made-before "$(git -C "$k" commit-tree "main^{tree}" -p bolt/made-before -p main -m "chore(land): #20 chore/bolts-on-github")"
+git -C "$k" push -q origin bolt/made-before  # as sluice pushes the branch its landing's pull request opens from
+expect_ok crew bolt submit made-before
+expect_ok crew bolt land made-before
+has "$out" "sluice deleted bolt/made-before from GitHub at"
+git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/made-before >/dev/null && fail "bolt/made-before is still on GitHub"
+git -C "$k" rev-parse --verify -q bolt/made-before >/dev/null && fail "bolt/made-before is still on the host"
+calls | grep -q " sluice branch create bolt/made-before " && fail "crew ran a create for a bolt made before"
+ok "a bolt made before lands through its pull request, and sluice deletes its branch from GitHub with no create run for it"
 
 expect_ok crew bolt drop console-pages "the portal lists them"
 has "$out" "bolt/console-pages is removed: bolt console-pages is in no plan; it was at"

@@ -1,6 +1,8 @@
 """A bolt lands by main-level ops's submission of its branch to main through sluice (plan.16, record 0026): what
-plan.landing_said makes of what the landing's submission did on the team's host; and its landing card, raised by crew
-once the bolt reads proven, held by a fix and closed at the landing (record 0031 §1)."""
+plan.landing_said makes of what the landing's submission did on the team's host; what plan.deleted_said makes of
+sluice's delete of the bolt's branch at crew bolt land (plan.19); and its landing card, raised by crew once the bolt
+reads proven, held by a fix and closed at the landing (record 0031 §1)."""
+import base64
 import pathlib
 
 import pytest
@@ -79,6 +81,52 @@ def test_the_hosts_main_lags_githubs_and_nothing_is_refused_for_it():
     after a fetch, which it records, and a host's own main lagging it refuses nothing."""
     github, own = "d" * 40, "e" * 40
     assert plan.main_held("k", "chuck-herdr-alpha", f"ORIGIN=yes\nFETCHED=ok\nGITHUB={github}\nOWN={own}\n") == (github, None)
+
+
+RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
+ON_GITHUB = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
+ON_HOST = '[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+
+
+def deleted(name, policy=ON_GITHUB):
+    """What BOLT_DELETE prints when sluice says what sluice 0.36.4 recorded under name: where the bolt lives, by the
+    policy at the host's own branch, then sluice's exit and document."""
+    out = (RECORDED / name).read_text()
+    code = int(next(l for l in (RECORDED / "README").read_text().splitlines() if l.startswith(f"{name}\t")).split("\t")[1].split()[1])
+    return (f"LOCAL={'a' * 40}\nTRACKED={'a' * 40}\nAT_LOCAL={base64.b64encode(policy.encode()).decode()}\nAT_TRACKED=-\n"
+            f"RC={code}\nSAID={base64.b64encode(out.encode()).decode()}\n")
+
+
+class TestTheBranchIsDeleted:
+    """bolt-plan "A bolt is created, given, dropped and landed through crew" (plan.19): crew bolt land has sluice delete
+    the bolt's branch after its plan write, wherever the policy at its tip keeps it; what it says of it."""
+
+    def test_the_bolts_branch_is_deleted_at_its_land(self):
+        """bolt-plan "The bolt's branch is deleted at its land"."""
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 0, deleted("delete.json"), "") == (
+            "sluice deleted bolt/b from GitHub at 22eef85")
+
+    def test_a_bolt_made_before_is_deleted_where_its_tip_keeps_it(self):
+        """bolt-plan "A bolt made before lands": a tip whose policy names no remote is the host's own branch."""
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 0, deleted("delete.json", ON_HOST), "") == (
+            "sluice deleted bolt/b from chuck-herdr-alpha at 22eef85")
+
+    def test_a_delete_sluice_refuses_names_the_branch_kept_in_its_words(self):
+        """bolt-plan "A delete sluice refuses": the bolt has left the plan, and the branch stays on GitHub."""
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 0, deleted("delete-queued.json"), "") == (
+            "bolt/b is kept on GitHub: sluice did not delete it: #1 still queued on bolt/b; wait for them to land, or withdraw them")
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 0, deleted("delete-not-landed.json"), "").startswith(
+            "bolt/b is kept on GitHub: sluice did not delete it: bolt/b at 22eef85")
+
+    def test_a_branch_already_gone_refuses_nothing(self):
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 0, deleted("delete-not-found.json"), "") == (
+            "bolt/b is gone already: no branch bolt/b")
+
+    def test_a_host_that_does_not_answer_or_words_crew_cannot_read_leave_the_branch_named(self):
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 255, "", "ssh: connect to host") == (
+            "chuck-herdr-alpha did not answer, so sluice was not asked to delete bolt/b: sluice branch delete bolt/b --into main there")
+        assert plan.deleted_said("b", "chuck-herdr-alpha", 0, deleted("delete.json").replace("RC=0", "RC=x"), "").startswith(
+            "bolt/b may still stand on GitHub: crew can't read what sluice's branch delete said from:")
 
 
 class TestTheCardsClose:

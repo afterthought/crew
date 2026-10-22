@@ -343,6 +343,19 @@ def test_the_mark_crew_sets_on_a_bolts_branch_goes_when_git_deletes_the_branch(r
     assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
 
 
+def test_a_branch_removed_by_ref_edits_leaves_crews_mark_behind(repo):
+    """plan.tidy through bolt_branch_end (plan.19): sluice's branch delete removes the local branch by ref edits, as
+    git update-ref -d does, which leave the branch's git config section, crew's mark among it, so the tidy unsets a mark
+    whose branch is gone (read on sluice 0.36.4, tests/py/sluice-0.36.4/README)."""
+    head = repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "-q", "--no-track", "bolt/b", head)
+    repo.git("config", "branch.bolt/b.crew", "given")
+    repo.git("update-ref", "-d", "refs/heads/bolt/b")
+    assert repo.git("config", "--get-regexp", r"^branch\.bolt/.*\.crew$") == "branch.bolt/b.crew given"
+    repo.git("config", "--unset", "branch.bolt/b.crew")
+    assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
+
+
 def test_a_kits_policy_is_read_from_mains_commit(repo):
     """plan.kit_policy (teams.5): the policy is what main's commit holds, as sluice reads a branch's policy, not the
     main checkout's files; a main without one says so."""

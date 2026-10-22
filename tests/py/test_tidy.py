@@ -279,6 +279,14 @@ class TestBoltBranch:
         assert plan.bolt_branch_over("b", {"b"}, False) is None
         assert plan.bolt_branch_over("b", set(), True) is None
 
+    def test_a_mark_whose_branch_sluice_deleted_is_read_as_gone(self):
+        """plan.19: sluice's delete leaves the branch's git config section, so the tidy unsets each mark whose branch is
+        gone, saying nothing, rather than judge a branch that is not there on every read."""
+        marks = {"bolt/a": "given", "bolt/b": "landed", "bolt/c": "given"}
+        assert plan.marks_gone(marks, {"bolt/a"}) == ["bolt/b", "bolt/c"]
+        assert plan.marks_gone(marks, {"bolt/a", "bolt/b", "bolt/c", "bolt/d"}) == []
+        assert plan.marks_gone({}, set()) == []
+
     @pytest.mark.parametrize("mark", ["given", "landed", None])
     def test_a_bolt_still_planned_or_held_by_a_worktree_is_left_whatever_its_mark(self, mark):
         assert plan.bolt_branch_judged("b", {"b"}, False, mark, self.NOW, (0, "+ 1a2b3c\n", "")) is None
