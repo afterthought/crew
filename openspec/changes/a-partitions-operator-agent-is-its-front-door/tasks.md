@@ -4,7 +4,7 @@
 
 - [x] 1.1 A team or a partition's label resolves to its partition's operator, and an unknown name or the door sending to its own partition is refused (design.md, decision 1; Task notes 1.1). Verify `tests/suite logic` ends with "0 failed".
 - [x] 1.2 A send is a tell to the door, marked with its sender and `(sent to <name>)`, recorded as one `send` entry in the receiving partition with no tell entry, and nothing recorded when nothing was typed (decisions 2 and 3; Task notes 1.2). Verify `tests/suite logic` ends with "0 failed".
-- [ ] 1.3 `crew send <team or partition> "<text>"` is a command in `plugin/bin/crew` and its usage, and reaches the operator end to end (decision 6; Task notes 1.3). Verify `tests/suite t-journey-main` ends with "0 failed".
+- [x] 1.3 `crew send <team or partition> "<text>"` is a command in `plugin/bin/crew` and its usage, and reaches the operator end to end (decision 6; Task notes 1.3). Verify `tests/suite t-journey-main` ends with "0 failed".
 
 ## 2. The briefs
 
