@@ -342,7 +342,8 @@ def test_a_landings_verdict_is_its_trailer(repo):
 def landing(repo, tmp_path):
     """plan.LANDING as bolt_submit runs it on the team's host, for bolt b of the kit at repo, with a path holding wt
     and the tools LANDING runs but no wt-submit; and stand_in(), which puts a stand-in wt-submit there that lands as
-    sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout on main behind its HEAD."""
+    sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout on main behind its HEAD, and,
+    with stray, leaves a file git does not ignore in the landing's worktree."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
@@ -357,11 +358,12 @@ def landing(repo, tmp_path):
         return subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
                               capture_output=True, text=True, env=dict(os.environ, PATH=path))
 
-    def stand_in():
+    def stand_in(stray=False):
         (bin_ / "wt-submit").write_text(f'''#!/bin/sh
 [ "$1 $2" = "main --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
+{"echo s > stray.txt" if stray else ""}
 tree=$(printf 'x\\n' | git hash-object -w --stdin)
 idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree main
 GIT_INDEX_FILE=$idx git update-index --add --cacheinfo 100644,$tree,landed.txt
@@ -379,22 +381,57 @@ def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(rep
     landing makes one on bolt/<bolt>, runs `wt submit main` there, which the real worktrunk runs as wt-submit from the
     path, removes it, and brings the kit's main checkout level with what sluice moved while it is on branch main,
     keeping an untracked file there. With no wt-submit on the path the landing is refused, naming it, with nothing
-    made."""
+    made. Once sluice has landed it and main moved, the bolt's branch crew marked given is marked landed in the kit's
+    git config, which a refused landing leaves as it was and git drops with the branch (record 0003)."""
     import plan
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/b")
+    repo.git("config", "branch.bolt/b.crew", "given")
     (repo.path / "notes.txt").write_text("the user's own\n")
     land, unready, stand_in = landing(repo, tmp_path)
     r = unready()
     assert r.returncode == 2 and "wt submit needs sluice's wt-submit, which is not on" in r.stderr, r.stderr
     assert not land.exists()
+    assert repo.git("config", "branch.bolt/b.crew") == "given"
     r = stand_in()()
     landed, words = plan.landing_said("b", "kit", r.stdout)
-    assert landed, r.stdout + r.stderr
+    assert landed and "MARKED=yes" in r.stdout and "mark" not in words, r.stdout + r.stderr
+    assert repo.git("config", "branch.bolt/b.crew") == "landed"
     assert (tmp_path / "agent").read_text().strip() == "wldn-ops"
     assert not land.exists() and "land-b" not in repo.git("worktree", "list")
     assert (repo.path / "landed.txt").read_text() == "x\n"
     assert repo.git("status", "--porcelain") == "?? notes.txt"
+    repo.git("branch", "-q", "-D", "bolt/b")
+    assert subprocess.run(["git", "-C", str(repo.path), "config", "--get", "branch.bolt/b.crew"]).returncode == 1
+
+
+def test_a_landing_of_a_bolt_branch_crew_did_not_mark_leaves_it_unmarked(repo, tmp_path):
+    """plan.LANDING and plan.landing_said (read.4): a bolt's branch with no mark of crew's is not crew's, so its landing
+    sets none and says so."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    _, _, stand_in = landing(repo, tmp_path)
+    r = stand_in()()
+    assert "MARKED=no" in r.stdout, r.stdout + r.stderr
+    assert plan.landing_said("b", "kit", r.stdout)[1].endswith("crew could not mark bolt/b landed: its branch carries no mark of crew's.")
+    assert subprocess.run(["git", "-C", str(repo.path), "config", "--get", "branch.bolt/b.crew"]).returncode == 1
+
+
+def test_a_landings_worktree_git_cannot_remove_is_kept_and_named_in_gits_words(repo, tmp_path):
+    """plan.LANDING and plan.landing_said (read.1, plan.19): a landing's worktree holding a file git does not ignore is
+    one git worktree remove refuses; the landing still lands, and names the worktree with git's words, which LANDING
+    keeps rather than discarding, for crew bolt land to sweep it with the bolt or name it there."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    land, _, stand_in = landing(repo, tmp_path)
+    r = stand_in(stray=True)()
+    landed, words = plan.landing_said("b", "kit", r.stdout)
+    assert landed, r.stdout + r.stderr
+    assert (land / "stray.txt").exists() and "land-b" in repo.git("worktree", "list")
+    assert f"Its worktree {land} is kept, git refusing to remove it: fatal: '{land}' contains modified or untracked files" in words, words
+    assert words.endswith("crew bolt land removes it with the bolt, or names it with why it stays."), words
 
 
 def test_a_landing_against_a_detached_main_checkout_leaves_it_untouched_and_says_nothing_of_levelling(repo, tmp_path):
@@ -431,3 +468,106 @@ def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_mer
     repo.commit("feat: the bolt's own", {"other": "o\n"})
     repo.git("merge", "-q", "--no-ff", "-m", "chore(land): #1 unit/a", "unit/a")
     assert plan.landed_at(str(repo.path), "b", "a") == made
+
+
+def test_git_cherry_finds_nothing_of_a_units_own_once_its_commits_reached_the_bolt_rebased(repo):
+    """plan.branch_gone and plan.branch_kept (plan.10, record 0003): a unit's commits that reached its bolt under other
+    hashes, rebased or cherry-picked as they merged, are - lines to git cherry, which compares each commit's patch, so
+    the branch goes; a commit whose patch the bolt lacks is a + line, so it is kept."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("checkout", "-q", "-b", "unit/u", "bolt/b")
+    one = repo.commit("feat(u): one", {"u1": "1\n"})
+    two = repo.commit("feat(u): two", {"u2": "2\n"})
+    repo.git("checkout", "-q", "bolt/b")
+    repo.commit("feat: the bolt's own", {"other": "o\n"})
+    repo.git("cherry-pick", one, two)
+    assert repo.git("rev-parse", "bolt/b") != two
+    assert repo.git("cherry", "bolt/b", "unit/u") == f"- {one}\n- {two}"
+    repo.git("checkout", "-q", "unit/u")
+    three = repo.commit("feat(u): three", {"u3": "3\n"})
+    assert repo.git("cherry", "bolt/b", "unit/u").splitlines()[-1] == f"+ {three}"
+
+
+def test_git_cherry_does_not_list_a_merge_commit_on_the_branch(repo):
+    """plan.branch_kept (plan.10): a dependent's branch that took another unit's head by a merge counts only its own
+    commits whose patch the bolt lacks, since git cherry leaves merge commits out."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("checkout", "-q", "-b", "unit/a", "bolt/b")
+    a = repo.commit("feat(a): its own", {"a": "a\n"})
+    repo.git("checkout", "-q", "-b", "unit/d", "bolt/b")
+    repo.git("merge", "-q", "--no-ff", "-m", "chore(d): build on a", "unit/a")
+    merge = repo.git("rev-parse", "HEAD")
+    repo.git("checkout", "-q", "bolt/b")
+    repo.git("merge", "-q", "--no-ff", "-m", "Merge a", "unit/a")
+    assert merge not in repo.git("cherry", "bolt/b", "unit/d")
+    assert repo.git("cherry", "bolt/b", "unit/d") == ""
+    repo.git("checkout", "-q", "unit/d")
+    d = repo.commit("feat(d): its own", {"d": "d\n"})
+    assert repo.git("cherry", "bolt/b", "unit/d") == f"+ {d}" and a not in repo.git("cherry", "bolt/b", "unit/d")
+
+
+def test_a_deleted_bolt_is_still_named_as_the_upstream_but_neither_compared_nor_found(repo, tmp_path):
+    """plan.branch_target, through branch_gone (plan.10): once the bolt's branch is gone, %(upstream:short), which
+    gather.upstreams reads, still names it, so whether the bolt exists is read with rev-parse --verify; git cherry
+    against it exits non-zero, which keeps the branch when nothing else is compared (read.1)."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    repo.git("worktree", "add", "-q", "--track", "-b", "unit/u", str(tmp_path / "place"), "bolt/b")
+    repo.git("branch", "-q", "-D", "bolt/b")
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/u") == "bolt/b"
+    verify = subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", "refs/heads/bolt/b"], capture_output=True, text=True)
+    assert verify.returncode != 0 and verify.stdout == ""
+    cherry = subprocess.run(["git", "-C", str(repo.path), "cherry", "bolt/b", "unit/u"], capture_output=True, text=True)
+    assert cherry.returncode != 0 and "bolt/b" in cherry.stderr
+
+
+def test_a_bolt_on_github_a_branch_tracks_is_found_at_the_ref_its_upstream_names(repo, tmp_path):
+    """plan.branch_gone (plan.10, plan.19): a fix cut from origin/bolt/<bolt> names it as its upstream, which is no
+    branch of the host's, so whether its bolt stands is read at gather.bolt_ref's refs/remotes/origin/bolt/<bolt>; read
+    under refs/heads/ it would seem gone, and the fix be compared with main rather than the bolt holding it."""
+    import gather
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    repo.git("branch", "-q", "-D", "bolt/b")
+    repo.git("fetch", "-q", "origin")
+    repo.git("branch", "-q", "--track", "fix/b/edge", "origin/bolt/b")
+    up = repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/fix/b/edge")
+    assert up == "origin/bolt/b"
+    verify = lambda ref: subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", ref], capture_output=True).returncode
+    assert verify(f"refs/heads/{up}") != 0
+    assert verify(gather.bolt_ref(up)[1]) == 0
+    assert repo.git("cherry", up, "fix/b/edge") == ""
+
+
+def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt_and_prints_its_commit(repo, tmp_path):
+    """plan.make_place through PLACE (record 0003, plan.10): unit/u, kept when u was dropped from bolt a, whose bolt's
+    branch is gone, is taken by the place of a unit u added to bolt b as it stands, holding its kept commit; it then
+    tracks bolt/b, so the stages read it as b's, and PLACE prints the commit as KEPT, which kit.place_said passes over.
+    A place already there, or one made with a new branch, prints no KEPT."""
+    import kit
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/a")
+    repo.git("branch", "--track", "unit/u", "bolt/a")
+    repo.git("checkout", "-q", "unit/u")
+    kept = repo.commit("feat(u): written before the drop", {"u": "u\n"})
+    repo.git("checkout", "-q", "main")
+    repo.git("branch", "-q", "-D", "bolt/a")
+    repo.git("branch", "bolt/b")
+    place = tmp_path / "places" / "u"
+    r = script("PLACE", str(repo.path), str(place), "unit/u", "bolt/b", "track", ".config/sluice.toml")
+    assert r.returncode == 0, r.stderr
+    assert f"KEPT={kept[:7]}" in r.stdout.splitlines()
+    assert kit.place_said(r.stdout)[1] is None
+    assert subprocess.run(["git", "-C", str(place), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() == kept
+    assert (place / "u").read_text() == "u\n"
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/u") == "bolt/b"
+    again = script("PLACE", str(repo.path), str(place), "unit/u", "bolt/b", "track", ".config/sluice.toml")
+    assert again.returncode == 0 and "KEPT=" not in again.stdout
+    fresh = script("PLACE", str(repo.path), str(tmp_path / "places" / "v"), "unit/v", "bolt/b", "track", ".config/sluice.toml")
+    assert fresh.returncode == 0 and "KEPT=" not in fresh.stdout
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/v") == "bolt/b"

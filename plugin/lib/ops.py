@@ -35,7 +35,7 @@ when it names one.
       time on an environment, each following the one before, and closes when the step is marked done or declined.
       Recorded again while its own card is open, the card is changed in place when its words, doer or hold differ,
       and the line that adopts it is printed either way. The text's field lines, `- why:`, `- where:`, `- command:`
-      (one a command) and `- done:`, are the card's
+      (one a command) and `- done:`, are the card's. Run away from the main level's host, it carries the text there
   crew ops steps <env> --label L --json
       the latest state of every step on the environment: [{to, key, state, by, at, note}], to empty for a step that
       names no deploy
@@ -698,13 +698,16 @@ def handed_changed(kept_notes, kept_steps, notes, steps):
             if (was or None) != (now or None)]
 
 
-def forwarded(a, argv, notes, steps, rows=None):
+def forwarded(a, argv, notes, steps, rows=None, text=None):
     """The ops command as it is run on the partition's main level's host, and what it reads there on its stdin
     (code.3): an offer handed --notes or --steps, files of this host, carries their text as JSON, {"notes", "steps"},
-    in --handed -, and a record handed --rows carries the rows (recorded_rows') in --rows -, since the files do not
-    reach that host; any other command runs as it was given, with nothing."""
+    in --handed -, a record handed --rows carries the rows (recorded_rows') in --rows -, and a step handed --text
+    carries its text (stepped_text's) in --text -, since the files do not reach that host; any other command runs as
+    it was given, with nothing."""
     if a.cmd == "record" and a.rows:
         return without(argv, "--rows") + ["--rows", "-"], rows
+    if a.cmd == "step" and a.text:
+        return without(argv, "--text") + ["--text", "-"], text
     if a.cmd != "offer" or not (a.notes or a.steps):
         return list(argv), None
     return (["offer", a.env, "--label", a.label, "--to", a.to, "--from", getattr(a, "from"), "--handed", "-"],
@@ -823,15 +826,22 @@ def record_cmd(fleet, a):
 CLOSED = {"done": "Done.", "declined": "Skipped."}  # what a step's card closes with when the step is marked so
 
 
+def stepped_text(a):
+    """The text a step was handed, or None when it was handed none: the file --text names, read on this host, or the
+    text a step forwarded here carries on its stdin (--text -); refused, naming what can't be read, with nothing
+    recorded (read.1), before the step runs here or is forwarded."""
+    if not a.text:
+        return None
+    try:
+        return sys.stdin.read() if a.text == "-" else pathlib.Path(a.text).read_text()
+    except (OSError, UnicodeDecodeError) as e:
+        where = "carried on the stdin" if a.text == "-" else a.text
+        fail(f"the step's text {where} can't be read: {getattr(e, 'strerror', None) or e}")
+
+
 def step(fleet, a):
-    text = None
-    if a.text:
-        try:
-            text = pathlib.Path(a.text).read_text()
-        except OSError as e:
-            fail(f"the step's text {a.text} can't be read: {e.strerror or e}")
     emit(a.label, "ops.step", a.env, f"{a.key} {a.state}", Head=a.to, Key=a.key, State=a.state, Doer=a.doer, Agent=a.agent,
-         When=" ".join(w for w in (a.when, "held" if a.held else None) if w), Text=text, Changes=a.changes, Note=a.note)
+         When=" ".join(w for w in (a.when, "held" if a.held else None) if w), Text=a.step_text, Changes=a.changes, Note=a.note)
     if a.state in CLOSED:
         import cards, plan
         owner, n = f"{a.label}-ops", next(n for n, k, _ in numbered(state(entries(a.label))[2]) if k == (a.env, a.to or "", a.key))
@@ -955,8 +965,9 @@ def main(argv):
     machine = crew.partition_of(fleet, a.label)["machine"]
     a.texts = offered_texts(a) if a.cmd == "offer" else None
     a.rows_json = recorded_rows(a) if a.cmd == "record" else None
+    a.step_text = stepped_text(a) if a.cmd == "step" else None
     if a.cmd != "quiet" and machine != crew.this_host():
-        args, carried = forwarded(a, argv, *(a.texts or (None, None)), rows=a.rows_json)
+        args, carried = forwarded(a, argv, *(a.texts or (None, None)), rows=a.rows_json, text=a.step_text)
         r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "ops", *args), input=carried)
         sys.stdout.write(r.stdout), sys.stderr.write(r.stderr)
         if r.returncode == 255 and crew.unanswered(machine, r):

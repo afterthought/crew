@@ -134,7 +134,7 @@ for want in "names, in the message that carries it, the documentation page or th
   "not the sequence" "Answer linked questions together" "never the mechanism"; do has "$out" "$want"; done
 has "$out" "\`--source\` also names what the signal points at"
 expect_ok crewpy brief wldn planner
-for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "plan proposed <n>" "--replaces <n>" "--unblocks <bolt>" \
+for want in "only agent that proposes bolts" "--signal" "plan propose <file>" "--replaces <n>" "--unblocks <bolt>" \
   "plan agree <n>" "only when the user says so" "wldn/main" "is refused while a unit of the bolt has a worktree, since a queued unit has none"; do
   has "$out" "$want"
 done
@@ -144,23 +144,28 @@ for want in 'unit amend <unit> "<new intent>"' "never a drop and a new unit" "wh
   "A unit that has merged is not amended"; do has "$out" "$want"; done
 for want in "An intent names the outcome and the records that govern it" "never the mechanism" \
   "Corrections to a unit under construction are batched" "blocks the team"; do has "$out" "$want"; done
-for want in "Never name a proposal by its number alone" "recite no command"; do has "$out" "$want"; done
+for want in "Never name a proposal by its number alone" "Recite no command" "which holds the change whole" \
+  "say in a sentence what you propose and point to its card"; do has "$out" "$want"; done
+lacks "$out" "plannotator-tui"
 for want in "crew card session" "crew card wait" \
   "crew raises a proposal's card itself, in your name, when \`$CREW/plugin/bin/crew plan propose\` accepts the proposal" \
   "changes it when you rewrite the proposal with \`--replaces\`, in place while it waits on the user and as a new version following the one they answered" \
   "a card whose rows fill more than one list withdrawn and followed by its new version instead" "closes it with what was applied when the proposal is approved" \
   "You post, change and close no proposal card." \
   "call get_request (requestId req_…, name wldn-planner)" "crew raises its card in your name" \
-  "a dropped one unticked as \"Keep <unit>\"" "a lone row is the choice of its two sides" \
+  "The card asks only the units and chores the proposal makes new to a bolt or the queue" \
+  "is drawn on its face and applies with it" "A lone new unit is the choice of its two sides" \
+  "is a hold-to-approve, which the user declines with a note to keep something it drops or amends" \
   "so each new unit's \`Do\` carries its direction" "crew plan answer <n> <question> <box>... --label wldn" \
   "\`rows-<k>\` and the ids of the boxes the user left ticked" "--note \"<the user's note>\"" \
-  "applies the change with the boxes as they stand, a new unit unticked left out, a dropped one ticked kept, an amendment ticked not applied" \
+  "applies the change with the boxes as they stand, a new unit unticked left out, closes the card with what was applied" \
   "you close no proposal card" \
   "add \`--clear <unit>\` for each of them" "An approval applies the commands the user read and kept" \
   "when a command they kept names a unit they left out"; do has "$out" "$want"; done
 for gone in "Post its \`card\` as it is" "crew refuses a proposal's card in any other form" "close the old proposal's card" \
   "\`units-<k>\` and the units left ticked" "update its card to say"; do lacks "$out" "$gone"; done
 lacks "$out" "offers approval"; lacks "$out" "exactly as the user read them"; lacks "$out" "not the page as a file"
+lacks "$out" "Keep <unit>"
 asks_say
 lacks "$out" "Its words are the proposal's case and each of its changes in a line"
 for want in "idempotencyKey" "create-area:" "pendingyou hold" "keyed \`proposal/<n>\` of the first proposal it was rewritten from" \
@@ -213,6 +218,7 @@ lacks "$out" "wt submit"
 lacks "$out" "read-tree"; lacks "$out" "push swancloud's main"
 expect_ok crewpy brief wldn main-ops
 for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bolt lands either way" \
+  "The bolt's branch goes too, once main holds every commit of it" "a branch holding a commit main lacks is kept and named" \
   "Every agent of clients/willdan lands a bolt this one way" "Nothing else is a word to land" \
   "The word to land is also the word for sluice to push main to GitHub: you push nothing, and pull and level no host's checkout" \
   "records the commit GitHub's main holds" "closes the bolt's landing card on its team's host" "Nothing waits on a host, and no agent is told main moved" \
@@ -580,7 +586,8 @@ done
 expect_ok crewpy brief wldn planner
 for want in "**Unit, fix or chore.**" "chore add <chore> \"<what is done>\" --bolt <bolt>" "A chore is never split or amended" \
   "its words change by a proposal that drops it and adds it again" "A batch of chores" "chore by chore on the card" \
-  "a new unit or chore ticked" "\`unit add\` or \`chore add\`"; do has "$out" "$want"; done
+  "units and chores the proposal makes new to a bolt or the queue, each a box ticked as proposed" \
+  "\`unit add\` or \`chore add\`"; do has "$out" "$want"; done
 expect_ok crewpy brief wldn design
 has "$out" "is queued the same way as a chore: \`$CREW/plugin/bin/crew chore add <chore> \"<what is done>\" --repo <kit>\`"
 ok "the coder, verifier, conductor, planner and design agent each carry what a chore is to them"

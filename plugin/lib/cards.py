@@ -429,7 +429,7 @@ OUTCOME = 200  # Pending You's budget for a close's words: ack_answer's outcome 
 ARTIFACTS = 8  # Pending You's most artifacts on a card: post_request's artifacts maxItems (read 2026-10-19)
 LINE = 40  # the most characters a line of a list on a card's face holds: the phone shows it in monospace
 CARD_NEW = 15  # the most units new to a bolt a proposal's card takes as boxes; more link its reading session (briefs.9)
-BOXES, GROUPS = 5, 4  # Pending You's limits: a question's options, and a card's questions
+BOXES = 5  # Pending You's most options in a question; a card holds four questions, so CARD_NEW's fit in three
 SENTENCE = re.compile(r"(?<=[.!?…])\s+(?=\S)")
 MARKS = re.compile(r"\*\*|__|`")
 
@@ -723,46 +723,41 @@ def batch_card(f):
 
 
 def proposal_rows(argvs):
-    """The rows of a proposal's card from its commands alone, in order, each (is, command): a unit or chore new to a
-    bolt, added or moved in, once ("new"); one dropped ("dropped"); one amended ("amended")."""
+    """The rows of a proposal's card from its commands alone, in order, each ("new", command): a unit or chore new to a
+    bolt or the queue, once, at the command that adds it or moves it in. A drop, an amendment, a move out, an order or a
+    new bolt is no row: it is drawn on the card's face and applies with it (briefs.13)."""
     new, seen, rows = new_units(argvs), set(), []
     for a in argvs:
-        if a.cmd not in ("unit", "chore"):
-            continue
-        if a.unit in new and a.unit not in seen:
+        if (a.cmd in ("unit", "chore") and (a.sub == "add" or (a.sub == "move" and a.bolt != "queue"))
+                and a.unit in new and a.unit not in seen):
             seen.add(a.unit)
             rows.append(("new", a))
-        elif a.sub == "drop":
-            seen.add(a.unit)
-            rows.append(("dropped", a))
-        elif a.sub == "amend":
-            rows.append(("amended", a))
     return rows
 
 
 def proposal_form(argvs):
-    """The form of a proposal's card from its commands alone (proposal_card): "approve", a hold-to-approve, when it
-    has no unit rows or links its reading session, for more than CARD_NEW new units or more rows than its lists hold;
-    "choice" for a lone row; "multi" for one list, BOXES rows at most; "lists" for more, each list a question. Pending
-    You's update_request changes neither a card's kind nor its questions, so a rewrite that moves its chain's card from
-    one form to another is followed rather than changed (plan.raise_proposal_at)."""
-    rows = proposal_rows(argvs)
-    if not rows or len(new_units(argvs)) > CARD_NEW or len(rows) > BOXES * GROUPS:
+    """The form of a proposal's card from its commands alone (proposal_card), by the count of units and chores it makes
+    new: "approve", a hold-to-approve, when it makes none, or more than CARD_NEW, which link its reading session;
+    "choice" for one; "multi" for one list, BOXES at most; "lists" for more, each list a question. Pending You's
+    update_request changes neither a card's kind nor its questions, so a rewrite that moves its chain's card from one
+    form to another is followed rather than changed (plan.raise_proposal_at)."""
+    k = len(new_units(argvs))
+    if not k or k > CARD_NEW:
         return "approve"
-    return "choice" if len(rows) == 1 else "multi" if len(rows) <= BOXES else "lists"
+    return "choice" if k == 1 else "multi" if k <= BOXES else "lists"
 
 
 def proposal_card(f):
     """A proposal's card (record 0031 §5, plan-proposals): titled "Plan change to <bolt>: <counts>", with no number and
-    no question; a sentence of what the planner proposes and why, from its case; one checkbox list, every row of the
-    change a box set as proposed, a new unit or chore ticked, a dropped one unticked as "Keep <unit>", an amended one
-    unticked as "Keep <unit>'s old intent", in groups of five, and nothing else to tap; a lone row the choice of its
-    two sides, Pending You's lists holding two at least; a hold-to-approve of low risk when it has no unit rows, or
-    more than CARD_NEW new units, which link its reading session; a paragraph per new and dropped unit on its face as
-    inline Markdown; the change drawn at twice the density and as text. f: n, first (the first proposal of its
-    chain, its key's), state, case, before and after (the plan at the tip and as its commands leave it), argvs (its
-    commands, parsed), waiting ([teams whose conductor has yet to agree]), session (the reading session's link) or
-    None. Also handed back: the boxes, each {id, unit, is: new, dropped or amended, ticked: as proposed}, and whether
+    no question; a sentence of what the planner proposes and why, from its case, and what the user does with it; one
+    checkbox list, a box only for each unit or chore new to a bolt or the queue, ticked, in groups of five, and nothing
+    else to tap, what else it changes drawn and applied with it; a lone new unit the choice of its two sides, Pending
+    You's lists holding two at least; a hold-to-approve of low risk when it makes no unit or chore new, declined with a
+    note to keep what it drops or amends, or more than CARD_NEW, which link its reading session; a paragraph per new
+    and dropped unit on its face as inline Markdown; the change drawn at twice the density and as text. f: n, first
+    (the first proposal of its chain, its key's), state, case, before and after (the plan at the tip and as its
+    commands leave it), argvs (its commands, parsed), waiting ([teams whose conductor has yet to agree]), session (the
+    reading session's link) or None. Also handed back: the boxes, each {id, unit, is: new, ticked: true}, and whether
     the card needs its reading session."""
     n, argvs = f["n"], list(f["argvs"])
     f.get("state", "open") == "open" or fail(f"proposal {n} is {f['state']}: it is closed, so it has no card")
@@ -774,10 +769,11 @@ def proposal_card(f):
               for said in [joined(headings[:k] + ([f"{len(headings) - k} more"] if k < len(headings) else []))]
               if len(said) <= room or k == 1)
     title = f"Plan change to {to}" + (f": {counts}" if counts else "")
-    new, units = new_units(argvs), {}
-    rows = []
-    for is_, a in proposal_rows(argvs):
-        if is_ == "new":
+    new, made, units, rows = new_units(argvs), {a.unit: a for _, a in proposal_rows(argvs)}, {}, []
+    for a in argvs:  # the new units and the dropped ones, in the order the commands name them, for the face
+        if a.cmd not in ("unit", "chore") or a.unit in units:
+            continue
+        if made.get(a.unit) is a:
             units[a.unit] = a
             moved = a.sub == "move"
             src = d["came_from"].get(a.unit)
@@ -785,42 +781,38 @@ def proposal_card(f):
                          "label": f"Move {a.unit} in" if moved else f"Add {a.unit}", "detail": d["intent"].get(a.unit) or "",
                          "consequence": f"Cleared: stays in {'the queue' if src is None else 'bolt ' + src}; the rest still applies"
                          if moved else "Cleared: not added; the rest still applies"})
-        elif is_ == "dropped":
+        elif a.sub == "drop" and a.unit not in made:
             units[a.unit] = a
-            rows.append({"id": f"keep:{a.unit}", "unit": a.unit, "is": "dropped", "ticked": False,
-                         "label": f"Keep {a.unit}", "detail": f"Proposed: drop. Why: {a.reason}",
-                         "consequence": "Ticked: it stays; the rest still applies"})
-        else:
-            rows.append({"id": f"old:{a.unit}", "unit": a.unit, "is": "amended", "ticked": False,
-                         "label": f"Keep {a.unit}'s old intent", "detail": d["amended"].get(a.unit) or "",
-                         "consequence": "Ticked: its intent stays as it was; the rest still applies"})
-    session = len(new) > CARD_NEW or len(rows) > BOXES * GROUPS
+    session = len(new) > CARD_NEW
     shape = proposal_form(argvs)
+    also = bool(d["dropped"] or d["amended"])  # it drops or amends a unit, which no box asks
 
     def option(r):
         return {"id": r["id"], "label": cut(r["label"], LABEL), "detail": by_words(r["detail"], DETAIL),
                 "consequence": by_words(r["consequence"], DETAIL)}
     if shape == "approve":
-        how = "Hold to apply it whole."
+        how = ("Hold to apply it whole; to keep a unit it drops or amends, decline with a note." if also and not session
+               else "Hold to apply it whole.")
         form = dict(kind="approve", intent="approve", recommendedIds=["approve"],
                     approve={"action": f"Apply the plan change to {to}", "risk": "low", "reversible": True})
     elif shape == "choice":
         r = rows[0]
-        how = "Its one row is set as proposed; pick the other side and send to change it."
-        other = {"new": f"Leave {r['unit']} out", "dropped": f"Drop {r['unit']}", "amended": f"Amend {r['unit']}"}[r["is"]]
-        options = [option(r), {"id": "unticked", "label": cut(other, LABEL)}]
-        form = dict(kind="choice", intent="decide", options=options, recommendedIds=[r["id"] if r["ticked"] else "unticked"])
+        how = "Its one new unit is set as proposed; pick the other side and send to leave it out."
+        options = [option(r), {"id": "unticked", "label": cut(f"Leave {r['unit']} out", LABEL)}]
+        form = dict(kind="choice", intent="decide", options=options, recommendedIds=[r["id"]])
     else:
-        how = "Each row below is set as proposed; flip any and send."
+        how = "Each new unit below is ticked; clear any to leave it out, and send."
         g = -(-len(rows) // BOXES)
         sizes = [len(rows) // g + (1 if k < len(rows) % g else 0) for k in range(g)]
         groups = [rows[sum(sizes[:k]):sum(sizes[:k + 1])] for k in range(g)]
         lists = [{"options": [option(r) for r in grp], "multi": {"min": 0, "max": len(grp)},
-                  "recommendedIds": [r["id"] for r in grp if r["ticked"]]} for grp in groups]
+                  "recommendedIds": [r["id"] for r in grp]} for grp in groups]
         form = (dict(kind="multi", intent="decide", **lists[0]) if g == 1 else
                 dict(intent="decide", about={"kind": "other", "title": cut(f"Plan change to {to}", 120)},
                      questions=[dict(id=f"rows-{k}", kind="multi", title=f"The change, part {k} of {g}: each row as proposed", **q)
                                 for k, q in enumerate(lists, 1)]))
+    if shape != "approve" and also:
+        how += " What it drops or amends applies with it."
     waiting = [f"{t}-conductor" for t in f.get("waiting") or []]
     case = prose(f["case"], 10 ** 6)
     said = ((f"Read it all in one session: {f['session']}\n\n" if f.get("session") else "")
@@ -835,7 +827,7 @@ def proposal_card(f):
                      (f"into {a.bolt}" if a.bolt else f"to the {a.repo} queue") + (f", before {a.before}" if a.before else "")
                      + (f", after {joined(list(a.after))}" if a.after else ""))
             paragraphs.append(f"**{'Move' if a.sub == 'move' else 'Add'} {u}**\n\n{d['intent'].get(u) or ''}\n\nDirection: {where}.")
-    named = [r["is"] for r in rows if r["is"] in ("new", "dropped")]
+    named = ["dropped" if a.sub == "drop" else "new" for a in units.values()]
     shown = ([markdown(f"The {joined([w for w in ('new', 'dropped') if w in named])} units", f"proposal-{n}-units.md",
                        "\n\n".join(paragraphs))] if paragraphs else [])
     shown += [{"kind": "image", "title": "The change, once approved", "ref": f"proposal-{n}.png", "upload": True, "caption": CAPTION},
@@ -897,7 +889,7 @@ def follows_of(kind, thing, entries, by):
 ROWS = ((re.compile(r"^proposal/(\d+)$"), "proposal/{}"), (re.compile(r"^batch/(\d+)$"), "batch/{}"),
         (re.compile(r"^land/([a-z0-9][a-z0-9-]*)$"), "bolt/{}"), (re.compile(r"^deploy/([a-z0-9][a-z0-9-]*)$"), "env/{}"),
         (re.compile(r"^op/([a-z0-9][a-z0-9-]*)/\d+$"), "env/{}"),
-        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})$"), "record/{}/{}"))
+        (re.compile(r"^record/([a-z0-9][a-z0-9-]*)/(\d{4})(?:/[0-9a-f]{7,40})?$"), "record/{}/{}"))
 # What update_request takes of a card crew built. It changes neither a card's kind nor its questions, so a card whose
 # kind changed, or one that carries questions, a proposal's rows in lists, is followed by a new card (revision).
 CHANGED = ("title", "summary", "context", "artifacts", "approve", "options", "multi", "recommendedIds", "action",
@@ -910,12 +902,21 @@ KEY_LEAST, FILL = 8, "_"
 
 def row_object(key):
     """The run record's object of one of crew's six cards' keys, the row's: a proposal's, a batch's, a bolt's for its
-    landing, an environment's for its deploy and steps, a record's; None for any other key."""
+    landing, an environment's for its deploy and steps, a record's, under record 0031's key or the key with the commit
+    after it, record/<kit>/<number>/<commit>, as the design agent posted it before; None for any other key."""
     for pattern, obj in ROWS:
         m = pattern.match(key)
         if m:
             return obj.format(*m.groups())
     return None
+
+
+def record_keys(entries, obj, by):
+    """The keys under which the agent `by` holds a decision record's card open, the record's object obj, in either
+    form (row_object), in the order of their first post; entries are in the order they were written."""
+    keys = dict.fromkeys(e["Key"] for e in entries if e.get("Act") == "card.post" and e.get("By") == by and e.get("Key")
+                         and row_object(e["Key"]) == obj)
+    return [k for k in keys if card_under(entries, k, by)]
 
 
 def adopt_line(card, owner):
