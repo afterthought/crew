@@ -225,7 +225,7 @@ echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answer
 branch() { herdr_state $box wldn-1 ".panes[\"$(awk '$1=="conductor"{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].tokens.sluice_branch // \"none\""; }
 eq "$(branch)" "bolt/ssh-fix"
 expect_ok crew bolt land tenant-environments
-has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main)"
+has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main); swb-1 builds ssh-fix"
 # The branch the conductor carries is the bolt it builds, so the landing makes no restart due.
 eq "$(branch)" "bolt/ssh-fix"
 eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"

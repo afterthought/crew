@@ -1473,6 +1473,16 @@ def unheld_refusal(bolt, units, kit, t, label):
     return None
 
 
+def landed_line(bolt, kit_name, head, team, still):
+    """What crew bolt land says of a bolt its team held (teams.16): where it landed, and the bolt the team still builds
+    (still, the bolts it holds once the landing is written), or that it holds none; when the plan could not be read
+    after the write (still None), only where it landed."""
+    said = f"{bolt} has landed at {kit_name}'s {head[:7]}"
+    if still is None:
+        return f"{said}; {team}'s plan could not be read again to say what it holds"
+    return f"{said}; {team} builds {still[0]}" if still else f"{said} and {team} holds no bolt"
+
+
 def landed_words(head, submission):
     """What a bolt's landing card closes with at crew bolt land (plan.16, record 0032 §3): where GitHub's main holds the
     landing, with sluice's submission number when its head carries one, and that every host's folder follows by the
@@ -1848,7 +1858,8 @@ def bolt_land(fleet, a):
     write(fleet, label, change, f"plan({a.bolt}): land the bolt", act="bolt.land", on=[f"bolt/{a.bolt}"],
           fields=dict(Repo=t["kit"]["name"], Head=head))
     if b.get("Team"):
-        print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]} and {t['name']} holds no bolt")
+        after = plan_of(fleet, label)
+        print(landed_line(a.bolt, t["kit"]["name"], head, t["name"], [x.name() for x in held_by(after, t["name"])] if after else None))
         tidy_after(fleet, t, f"bolt {a.bolt}", (a.bolt, landed))
     else:
         print(f"{a.bolt} has landed at {t['kit']['name']}'s {head[:7]}; no team held it")

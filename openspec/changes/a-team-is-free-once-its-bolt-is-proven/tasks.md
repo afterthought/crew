@@ -31,7 +31,7 @@
 
 ## 8. A landing leaves the team its other bolt
 
-- [ ] 8.1 `crew bolt land` says which bolt the team still builds, or that it holds none (design, Decision 9; Task notes 8.1). Verify `tests/suite t-journey-land` ends with "0 failed".
+- [x] 8.1 `crew bolt land` says which bolt the team still builds, or that it holds none (design, Decision 9; Task notes 8.1). Verify `tests/suite t-journey-land` ends with "0 failed".
 
 ## 9. The briefs and the docs
 

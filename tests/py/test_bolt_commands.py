@@ -147,6 +147,12 @@ class TestGiveRefusal:
 
 
 class TestLand:
+    def test_a_landing_says_which_bolt_the_team_still_builds_or_that_it_holds_none(self):
+        """A team may hold a bolt beside the one that lands (teams.16)."""
+        head = "0123456789abcdef"
+        assert plan.landed_line("doctor-rows", "swancloud", head, "swc-1", ["ssh-fix"]) == "doctor-rows has landed at swancloud's 0123456; swc-1 builds ssh-fix"
+        assert plan.landed_line("doctor-rows", "swancloud", head, "swc-1", []) == "doctor-rows has landed at swancloud's 0123456 and swc-1 holds no bolt"
+
     def land(self, stages, outside=(), of=None):
         return plan.land_refusal("console-pages", ["a-console-page", "a-console-filter"],
                                  of or (lambda u: {"stage": stages[u], "why": "its host did not answer"}), list(outside), "wldn")
