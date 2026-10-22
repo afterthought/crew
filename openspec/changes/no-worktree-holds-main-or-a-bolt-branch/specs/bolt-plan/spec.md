@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: A bolt is created, given, dropped and landed through crew
-`crew bolt new` SHALL add a bolt with its repo, goal and sources. `crew bolt give <team> [<bolt>]` SHALL set the bolt's team; with no bolt named it takes the first planned bolt in the team's kit. It SHALL have sluice make `bolt/<bolt>` on GitHub from main, `sluice branch create bolt/<bolt> --from main` on the team's host, and no worktree, before the plan is written. It SHALL be refused, with the plan unchanged and no branch made, naming the file, when the kit's `.config/sluice.toml` at `origin/main` names no checks or no `remote` for its bolt branches; naming the version it needs and the one the host has when the host's sluice lacks `branch create` or its version cannot be read; and in sluice's words when sluice refuses the create. `crew bolt order` SHALL move a bolt. `crew bolt drop` SHALL remove a bolt and its units, or with `--requeue` queue them, and SHALL refuse `--requeue` while a unit of the bolt has a worktree, since a queued unit has none. `crew bolt submit` SHALL submit a held bolt's branch to its kit's main through sluice, and `crew bolt land` SHALL remove a landed bolt and its units and have sluice delete its branch, `sluice branch delete bolt/<bolt> --into main`, naming a refusal in sluice's words. A dropped or landed bolt's local branch and worktrees SHALL then go from its team's host. A bolt whose branch crew made on its host before gives went through sluice SHALL stay local until it lands: crew SHALL run no create for it, its places SHALL be cut from the local branch, each read of its team SHALL say once that it is local until it lands, and its land SHALL have sluice delete it wherever its tip's policy routes it, on GitHub once its landing's pull request put it there.
+`crew bolt new` SHALL add a bolt with its repo, goal and sources. `crew bolt give <team> [<bolt>]` SHALL set the bolt's team; with no bolt named it takes the first planned bolt in the team's kit. It SHALL have sluice make `bolt/<bolt>` on GitHub from main, `sluice branch create bolt/<bolt> --from main` on the team's host, and no worktree, before the plan is written. It SHALL be refused, with the plan unchanged and no branch made, naming the file, when the kit's `.config/sluice.toml` at `origin/main` names no checks or no `remote` for its bolt branches; naming the version it needs and the one the host has when the host's sluice lacks `branch create` or its version cannot be read; and in sluice's words when sluice refuses the create. `crew bolt order` SHALL move a bolt. `crew bolt drop` SHALL remove a bolt and its units, or with `--requeue` queue them, and SHALL refuse `--requeue` while a unit of the bolt has a worktree, since a queued unit has none. `crew bolt submit` SHALL submit a held bolt's branch to its kit's main through sluice, and `crew bolt land` SHALL remove a landed bolt and its units and have sluice delete its branch, `sluice branch delete bolt/<bolt> --into main`, naming a refusal in sluice's words. `crew bolt drop` of a bolt a team holds SHALL have sluice delete its branch the same way after the plan write; when sluice refuses, as while the branch's tip is not in main, the branch SHALL be kept where it lives, on GitHub and on the team's host, named in the drop's output as the drop's unmerged work with sluice's words, and recorded once in the run record, and the team's reads SHALL ask sluice's delete again once main holds its tip; crew SHALL NOT delete a dropped bolt's branch with git. A dropped or landed bolt's worktrees SHALL then go from its team's host. A bolt whose branch crew made on its host before gives went through sluice SHALL stay local until it lands: crew SHALL run no create for it, its places SHALL be cut from the local branch, each read of its team SHALL say once that it is local until it lands, and its land SHALL have sluice delete it wherever its tip's policy routes it, on GitHub once its landing's pull request put it there.
 
 #### Scenario: A team still holds a bolt
 - **WHEN** `crew bolt give swb-1` runs while swb-1 holds a bolt with a unit that has not landed
@@ -48,8 +48,24 @@
 - **THEN** the bolt leaves the plan, sluice deletes `bolt/<bolt>` from GitHub, and the branch is gone from the team's host
 
 #### Scenario: Dropping a bolt a team holds
-- **WHEN** the planner drops a bolt that swb-2 holds
-- **THEN** the bolt and its units are gone from the plan, and the bolt's local branch is gone from swb-2's host
+- **WHEN** the planner drops a bolt that swb-2 holds, whose branch's tip main holds
+- **THEN** the bolt and its units are gone from the plan, sluice deletes `bolt/<bolt>` from GitHub, and the branch is gone from swb-2's host
+
+#### Scenario: A dropped bolt holds work main lacks
+- **WHEN** the planner drops a bolt that swb-2 holds, into which a unit has merged that main does not hold
+- **THEN** the bolt and its units are gone from the plan, sluice refuses the delete, the branch stays on GitHub and on swb-2's host, and the drop names it as its unmerged work with sluice's words, the user's to keep or delete, and records it once
+
+#### Scenario: Main comes to hold a dropped bolt's work
+- **WHEN** a read of swb-2 finds a dropped bolt's kept branch whose tip the kit's main now holds, as after a landing that carried it
+- **THEN** crew asks sluice to delete it, and it is gone from GitHub and from swb-2's host
+
+#### Scenario: A dropped bolt's kept branch while main lacks it
+- **WHEN** a read of swb-2 finds a dropped bolt's kept branch whose tip main does not hold
+- **THEN** nothing is asked of sluice and nothing is said, and the branch stays
+
+#### Scenario: The drop's host does not answer
+- **WHEN** the planner drops a bolt that swb-2 holds while swb-2's host does not answer
+- **THEN** the drop names the host and the command, and swb-2's next read asks sluice's delete as the drop would have
 
 #### Scenario: Requeuing a unit that has a worktree
 - **WHEN** `crew bolt drop <bolt> --requeue` runs while one of the bolt's units has a worktree
