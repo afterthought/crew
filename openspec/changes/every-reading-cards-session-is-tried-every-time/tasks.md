@@ -13,7 +13,7 @@
 
 ## 3. The batch's wait starts a missing reading
 
-- [ ] 3.1 `crew card wait batch/<n>` with the card open and no session starts the reading and waits on both, and when it can't, says why once, naming `crew card session batch/<n>`, and waits on the card alone. The decision's cases pass in `tests/py/test_cards.py` (design, Decision 4; Task notes 3.1).
+- [x] 3.1 `crew card wait batch/<n>` with the card open and no session starts the reading and waits on both, and when it can't, says why once, naming `crew card session batch/<n>`, and waits on the card alone. The decision's cases pass in `tests/py/test_cards.py` (design, Decision 4; Task notes 3.1).
 
 ## 4. The rail's read tries again
 
