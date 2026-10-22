@@ -16,7 +16,8 @@
 # settled it in the pane. Then a batch's card, raised by crew in the planner's name once the reviewer's summary is
 # there, with its one reading session on the main level's host linked from it, and, lost to its owner, raised again by
 # the sweep's entry under its key, saying its older copy is dead, on the same session; crew card session giving that
-# link again and refusing a unit, a landing's key while its bolt does not read proven and a short proposal's; crew card wait closing the card on the tap,
+# link again and refusing a unit, a landing's key while its bolt does not read proven and a short proposal's, and,
+# started from a shell naming no port while another session holds 19432, a link on the next port of crew's range; crew card wait closing the card on the tap,
 # with its note, and on the session's send, with every annotation, each ending the session; a session whose link only
 # the host could open ended, and the card raised all the same, saying so; and a wait with neither card nor session
 # refused. Then the rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when
@@ -368,6 +369,16 @@ crew plan propose "$T/p.rec" >/dev/null
 expect_fail "proposal/1's card has nothing to read: it holds the proposal whole" crew card session proposal/1
 ok "crew card session gives a running session's link again, and refuses a unit with a batch's key, a landing's key while its bolt does not read proven, saying why, and a short proposal's"
 
+# A batch's session started from a shell naming no PLANNOTATOR_PORT, as on a Mac outside any agent, while batch 1's
+# holds 19432, plannotator's one fixed port in remote mode: crew gives it its own range, so it takes the next port.
+[[ $u1 == *:19432 ]] || fail "batch 1's session is not the one holding 19432: $u1"
+batch 2
+out=$(unset PLANNOTATOR_PORT; planner session batch/2 2>&1) || fail "batch 2's session with no port named failed: $out"
+[[ $out =~ ^http://chuck-herdr-alpha\.ts\.swancloud\.net:([0-9]+)$ ]] && (( BASH_REMATCH[1] > 19432 && BASH_REMATCH[1] <= 19451 )) \
+  || fail "not a link on the next free port of 19432-19451: $out"
+eq "$(jq -r .url "$cards_dir/batch/2/session.json")" "$out"
+ok "a card's session started from a shell naming no port, while another holds 19432, takes the next free port of crew's range"
+
 echo '{"answer": {"note": {"text": "v1: say what the zone is."}}}' > "$stub/answered/req_stub-11.json"
 : > "$CREW_TEST_LOG"
 expect_ok planner wait batch/1
@@ -382,7 +393,6 @@ gone "$p1"
 eq "$(entries card.close | jq -r 'select(.Key == "batch/1" and .State == "closed") | [.Card, .Outcome] | join(" ")')" "req_stub-11 Read; 1 note sent to its team"
 ok "the card sent back while nobody waited ends the planner's wait at once with its note, and crew closes it and ends its session"
 
-batch 2
 raise 2 >/dev/null; p2=$(jq -r .pid "$cards_dir/batch/2/session.json")
 notes=$'# Annotations\n\n1. 01-v1-design.md: say why one zone.\n2. 01-v1-tasks.md: a task for the console.'
 decide "$p2" "$(jq -nc --arg f "$notes" '{decision: "annotated", feedback: $f, annotationCount: 2}')"
