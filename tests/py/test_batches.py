@@ -316,13 +316,14 @@ class TestBatchFacts:
     ("construct", True, []),
     ("code", False, []),
     ("verify", False, []),
-    ("merge", False, ["landing", "batch"]),
-    ("merge", True, ["landing", "batch"]),
+    ("merge", False, ["landing", "batch", "tidy"]),
+    ("merge", True, ["landing", "batch", "tidy"]),
 ])
 def test_a_merge_reckons_a_batch_as_a_construct_does(stage, fix, then):
     """A wait's end reckons a batch after a construct's change and after a merge (briefs.12): a bolt whose last unit
     merged leaves its conductor waiting on nothing, so no later wait would tell the planner its batch is due at once, as
-    on 2026-10-19, when every-deploy-has-its-live-card and swc-1's bolt sat merged two hours with no batch begun."""
+    on 2026-10-19, when every-deploy-has-its-live-card and swc-1's bolt sat merged two hours with no batch begun; and
+    a merge's end removes its place and branch as it lands, for the same reason (teams.1, plan.9)."""
     assert plan.after_delivery(stage, fix) == then
 
 

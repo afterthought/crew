@@ -16,10 +16,16 @@ So at every start this records a crew agent's session in ~/.local/state/crew/ses
 resume keeps, with the definition its brief comes from and the folder it began in: Claude Code finds a conversation again only from that folder, so crew
 resumes a role there (crew.py last_conversation). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
 variables back, and SLUICE_AGENT, the same name for sluice, as crew-role sets them, through CLAUDE_ENV_FILE, which Claude Code applies to
-each of its Bash commands, and its pane gets its name back. Such a session keeps its brief from the transcript only
+each of its Bash commands, and its pane gets its name back, and a team's conductor's or ops's pane the token naming its bolt's
+branch for sluice's plugins (teams.20); its SLUICE_BRANCH, which sluice's board reads from the Claude process, no hook can give
+back, and it comes with `crew resume` or `crew revive`. Such a session keeps its brief from the transcript only
 until its first compaction, so at each compaction it is given its brief back as context, built by crew.py as
 crew-role builds it, from the definition the record names (crew.brief_due, crew.brief_role). Any other session costs
-one file lookup. At every start it also removes the session's question mark
+one file lookup. A start that loads crew's plugin, a new session's or a resume's, records the commit and version of
+crew the session loaded, and a session crew-role started the digest of its launch (CREW_LAUNCH) and the branch it carries
+for sluice (CREW_BRANCH, empty once herdr has resumed it bare), which tell crew's mod
+the version an agent runs and crew whether an update has made it due a restart (crew.update_due, teams.19); a
+compaction or a /clear loads nothing anew and keeps what the record says. At every start it also removes the session's question mark
 (hooks/questions), so a session resumed after its pane died with a question open carries no mark whose answer will
 never be written. The hook never fails a start."""
 import json
@@ -33,7 +39,25 @@ import sys
 LIB = pathlib.Path(__file__).resolve().parent.parent / "lib"
 
 # herdr knows the agent only once it has started, after this hook: crew's own start retries its rename the same way.
-RENAME = 'for _ in $(seq 60); do "$0" agent rename "$1" "$2" >/dev/null 2>&1 && exit 0; sleep 1; done'
+# The pane then gets back the branch sluice's plugins read, which herdr keeps no more than its name (crew.hint_agent).
+RENAME = ('for _ in $(seq 60); do "$0" agent rename "$1" "$2" >/dev/null 2>&1 && break; sleep 1; done; '
+          'HERDR_BIN_PATH="$0" "$3" "$4" hint "$2" "$1" >/dev/null 2>&1')
+
+
+# The starts that load crew's plugin anew: a compaction or a /clear goes on with what the session loaded.
+LOADS = ("startup", "resume")
+
+
+def loaded(source, saved, launch):
+    """The lines of a session's record saying what it loaded: at a start that loads crew's plugin, the commit and version
+    of this checkout's crew; at any other, what the record already said; and the launch's digest."""
+    if source in LOADS:
+        sys.path.insert(0, str(LIB))
+        import crew
+        commit, version = crew.crew_version()
+    else:
+        commit, version = saved.get("CREW_COMMIT", ""), saved.get("CREW_VERSION", "")
+    return f"CREW_COMMIT={commit or ''}\nCREW_VERSION={version or ''}\nCREW_LAUNCH={launch}\n"
 
 
 def main():
@@ -47,19 +71,22 @@ def main():
     # A question left open when the session last ended is never answered in it: its mark goes (hooks/questions).
     (pathlib.Path.home() / ".local/state/crew/questions" / sid).unlink(missing_ok=True)
     record = pathlib.Path.home() / ".local/state/crew/sessions" / sid
+    saved = dict(line.split("=", 1) for line in record.read_text().splitlines() if "=" in line) if record.is_file() else {}
     agent = os.environ.get("CREW_AGENT")
     if agent:
         record.parent.mkdir(parents=True, exist_ok=True)
         cwd = hook.get("cwd") if isinstance(hook.get("cwd"), str) else os.getcwd()
         record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\nCREW_CWD={cwd}\n"
-                          f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\n")
+                          f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\nCREW_BRANCH={os.environ.get('SLUICE_BRANCH', '')}\n"
+                          + loaded(hook.get("source"), saved, os.environ.get("CREW_LAUNCH", "")))
         return
-    if not record.is_file():
-        return
-    saved = dict(line.split("=", 1) for line in record.read_text().splitlines() if "=" in line)
     agent = saved.get("CREW_AGENT")
     if not agent:
         return
+    if hook.get("source") in LOADS:  # herdr's resume loads crew's plugin anew, its launch the one it began with,
+        # and the process has no SLUICE_BRANCH, crew's environment being gone (teams.20)
+        record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH", "CREW_BRANCH"))
+                          + "CREW_BRANCH=\n" + loaded(hook.get("source"), saved, saved.get("CREW_LAUNCH", "")))
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:
         with open(env_file, "a") as f:
@@ -68,7 +95,7 @@ def main():
     pane = os.environ.get("HERDR_PANE_ID")
     if os.environ.get("HERDR_ENV") == "1" and pane:
         herdr = os.environ.get("HERDR_BIN_PATH") or "herdr"
-        subprocess.Popen(["bash", "-c", RENAME, herdr, pane, agent], stdin=subprocess.DEVNULL,
+        subprocess.Popen(["bash", "-c", RENAME, herdr, pane, agent, sys.executable, str(LIB / "crew.py")], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     # A resume needs no brief: the transcript holds it. A compaction drops it, so it is given back.
     sys.path.insert(0, str(LIB))

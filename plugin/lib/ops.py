@@ -698,14 +698,30 @@ def handed_changed(kept_notes, kept_steps, notes, steps):
             if (was or None) != (now or None)]
 
 
-def forwarded(a, argv, notes, steps):
+def forwarded(a, argv, notes, steps, rows=None):
     """The ops command as it is run on the partition's main level's host, and what it reads there on its stdin
     (code.3): an offer handed --notes or --steps, files of this host, carries their text as JSON, {"notes", "steps"},
-    in --handed -, since the files do not reach that host; any other command runs as it was given, with nothing."""
+    in --handed -, and a record handed --rows carries the rows (recorded_rows') in --rows -, since the files do not
+    reach that host; any other command runs as it was given, with nothing."""
+    if a.cmd == "record" and a.rows:
+        return without(argv, "--rows") + ["--rows", "-"], rows
     if a.cmd != "offer" or not (a.notes or a.steps):
         return list(argv), None
     return (["offer", a.env, "--label", a.label, "--to", a.to, "--from", getattr(a, "from"), "--handed", "-"],
             json.dumps({"notes": notes, "steps": steps}))
+
+
+def without(argv, flag):
+    """argv with flag and its value left out, given as `flag value` or `flag=value`."""
+    out, value = [], False
+    for x in argv:
+        if value:
+            value = False
+        elif x == flag:
+            value = True
+        elif not x.startswith(flag + "="):
+            out.append(x)
+    return out
 
 
 def offer_move(offers, env, to, changed, held):
@@ -776,13 +792,21 @@ def word(fleet, a):
     print(e["Head"])
 
 
+def recorded_rows(a):
+    """The rows a record was handed, as compact JSON, or None when it was handed none: the file --rows names, read on
+    this host, or the rows a record forwarded here carries on its stdin (--rows -); refused, naming what can't be
+    read, with nothing recorded (read.1), before the record runs here or is forwarded."""
+    if not a.rows:
+        return None
+    where = "carried on the stdin" if a.rows == "-" else f"file {a.rows}"
+    try:
+        return json.dumps(json.loads(sys.stdin.read() if a.rows == "-" else pathlib.Path(a.rows).read_text()), separators=(",", ":"))
+    except (OSError, ValueError) as e:
+        fail(f"the rows {where} can't be read as JSON: {e}")
+
+
 def record_cmd(fleet, a):
-    rows_ = None
-    if a.rows:
-        try:
-            rows_ = json.dumps(json.loads(pathlib.Path(a.rows).read_text()), separators=(",", ":"))
-        except (OSError, ValueError) as e:
-            fail(f"the rows file {a.rows} can't be read as JSON: {e}")
+    rows_ = a.rows_json
     _, words, _ = state(entries(a.label))
     emit(a.label, "ops.deploy", a.env, f"deploy {a.to[:7]}: {a.act}" + (f" {a.step}" if a.step else ""), Head=a.to,
          Base=getattr(a, "from"), Phase=a.act, Step=a.step, Outcome=a.outcome, Log=a.log, Rows=rows_)
@@ -930,8 +954,9 @@ def main(argv):
     why is None or fail(why)
     machine = crew.partition_of(fleet, a.label)["machine"]
     a.texts = offered_texts(a) if a.cmd == "offer" else None
+    a.rows_json = recorded_rows(a) if a.cmd == "record" else None
     if a.cmd != "quiet" and machine != crew.this_host():
-        args, carried = forwarded(a, argv, *(a.texts or (None, None)))
+        args, carried = forwarded(a, argv, *(a.texts or (None, None)), rows=a.rows_json)
         r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "ops", *args), input=carried)
         sys.stdout.write(r.stdout), sys.stderr.write(r.stderr)
         if r.returncode == 255 and crew.unanswered(machine, r):

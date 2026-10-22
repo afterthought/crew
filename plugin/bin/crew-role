@@ -16,6 +16,10 @@ eval "$spec"
 cd "$CWD"
 # What the agent's own crew commands read: who is writing to the plan, and in which partition. sluice names the agent
 # behind a submission from SLUICE_AGENT, so it carries the same name. crew's SessionStart hook records CREW_ROLE, the
-# definition the brief comes from, to give the brief back to a session herdr resumes (hooks/session-start).
-export CREW_AGENT=$NAME CREW_LABEL=$LABEL SLUICE_AGENT=$NAME CREW_ROLE=$ROLE
+# definition the brief comes from, to give the brief back to a session herdr resumes, and CREW_LAUNCH, what the start
+# is made of besides crew's plugin, which tells an update that changes it (hooks/session-start, teams.19).
+export CREW_AGENT=$NAME CREW_LABEL=$LABEL SLUICE_AGENT=$NAME CREW_ROLE=$ROLE CREW_LAUNCH=$LAUNCH
+# sluice's board reads the branch an agent works for from SLUICE_BRANCH when its folder names none: a conductor's and
+# ops's bolt, and nothing for any other role (teams.20).
+if [ -n "$BRANCH" ]; then export SLUICE_BRANCH=$BRANCH; else unset SLUICE_BRANCH; fi
 exec claude "${args[@]}"

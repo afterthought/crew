@@ -78,7 +78,7 @@ CREW_AGENT=wldn-planner expect_ok crew review wldn
 summary=$(home_of $box)/.local/state/crew/wldn-main/reports/batch-wldn-1.md
 has "$out" "wldn-reviewer is reviewing batch 1 of wldn, into $summary"
 eq "$(jq -r '"\(.agent) \(.argv[3])"' "$CREW_TEST_CLAUDE_LOG")" "wldn-reviewer high"
-eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,review"
+eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator,review"
 rpane=$(herdr_state $box wldn-3 '.agents | to_entries[] | select(.value.name == "wldn-reviewer") | .key')
 grep -q "agent prompt \($rpane\|wldn-reviewer\) '\[crew\]" "$CREW_TEST_LOG" && fail "the reviewer was greeted"
 CREW_AGENT=wldn-planner expect_fail "wldn-reviewer is still reviewing a batch" crew review wldn
@@ -94,7 +94,7 @@ eq "$(entries $box card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By] | jo
 CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
 eq "$out" "batch summary: $summary"
 eq "$(entries $box card.post | jq -r .Card)" "req_stub-1"
-eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops"
+eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator"
 ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name once, and closes its tab"
 
 # v1 is in verify, its report newer than its last commit, and waits on nobody (teams.17).

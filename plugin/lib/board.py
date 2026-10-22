@@ -208,10 +208,11 @@ def board_data(fleet, labels, read, now):
         found = next(((repo, tip, pl) for x, repo, tip, pl in read["found"] if x == l), None)
         repo, tip, pl = found or (plan.state_of(fleet, l)[0], None, None)
         unread, logs = read["unread"].get(l, {}), read.get("logs", {}).get(l, [])
-        teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
+        teams = [{"team": t, "kit": fleet["teams"][t]["kit"]["name"], "kits": [k["name"] for k in crew.kits_of(fleet["teams"][t])],
+                  "host": fleet["teams"][t]["machine"]} for t in p["teams"]]
 
         def building(repo):
-            return [t["team"] for t in teams if repo and t["kit"] == repo]
+            return [t["team"] for t in teams if repo and repo in t["kits"]]
 
         def ordered(ts):
             return [t for t in p["teams"] if t in ts]
@@ -230,8 +231,8 @@ def board_data(fleet, labels, read, now):
         attention += [{"what": "signals", "name": n, "why": why} for n, why in sunread.items()]
 
         explorations = []
-        for kit in dict.fromkeys(fleet["teams"][t]["kit"]["name"] for t in sorted(p["teams"])):
-            for t in (fleet["teams"][x] for x in sorted(p["teams"]) if fleet["teams"][x]["kit"]["name"] == kit):
+        for kit in dict.fromkeys(k["name"] for t in sorted(p["teams"]) for k in crew.kits_of(fleet["teams"][t])):
+            for t in (crew.with_kit(fleet["teams"][x], kit) for x in sorted(p["teams"]) if crew.builds(fleet["teams"][x], kit)):
                 k = (sv.get(t["machine"]) or {}).get("kits", {}).get(t["kit"]["main"]) or {}
                 if k.get("ok") and "explorations" in k:
                     explorations += [{"kit": kit, "name": e["name"], "first": e["first"], "teams": building(kit)} for e in k["explorations"]]
@@ -685,7 +686,11 @@ def card_line(c, now):
 def agent_views(data):
     """Each crew agent's view of its partition's board, by the agent's name, for the band crew's mod draws above its
     prompt (plugin/hooks/status.js): each team's conductor's, the planner's, the design agent's, main-level ops's and
-    each host's operator's, every line a list of (text, style) segments. Any other agent has no view, and its mod draws nothing.
+    the partition's operator's, every line a list of (text, style) segments. With what this host's agents run of crew
+    (data's `here`, here_read), each standing agent here with a recorded start has the crew it started on at the end of
+    its view's first line, or as its one line when it has no view, a team's ops and a dispatcher, with the version it is
+    restarted on at its next stop once an update made it due; and while this host is held every view opens with the
+    hold (teams.19). Any other agent has no view, and its mod draws nothing.
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
     the lines the mod draws above its view. With them, the line the mod adds once the frame is stale_after_ms old: the
     day and time it was read, since a frame a restart left can be days old, and that the rail tab has not refreshed it
@@ -697,13 +702,46 @@ def agent_views(data):
     for p in data["partitions"]:
         views.update({f"{t['team']}-conductor": conductor_view(p, t["team"]) for t in p["teams"]})
         views.update({f"{p['label']}-planner": planner_view(p), f"{p['label']}-design": design_view(p), f"{p['label']}-ops": ops_view(p)})
-        views.update({f"{p['label']}-operator-{h}": operator_view(p) for h in p["hosts"]})
+        views[f"{p['label']}-operator"] = operator_view(p)
         for c in p.get("cards", []):
             cards.setdefault(c["by"], []).append(card_line(c, now))
+    here = data.get("here")
+    if here:
+        for name, f in here["agents"].items():
+            said = [(crew_said(f, here["version"]), "dim")]
+            views[name] = [views[name][0] + [("  ", None)] + said] + views[name][1:] if views.get(name) else [row(said)]
+        if here["held"]:
+            views = {name: [held_row(here["host"], here["held"])] + v for name, v in views.items()}
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
             "stale": row([(f"read at {local(data['read_at'])}; the rail tab on {data['from']} has not refreshed it since", "dim")]),
             "views": views, "cards": {a: lines for a, lines in cards.items() if a in views}}
 
+
+def crew_said(f, now):
+    """The crew an agent runs, as its band says it (teams.19): the version it started on, or that it started on a crew
+    older than crew's versions in its bands; and once an update made it due a restart, the version it is restarted on
+    at its next stop."""
+    was = f"crew {f['version']}" if f["version"] else "an older crew"
+    return f"{was} \u2192 {now or 'crew as it now is'} at its next stop" if f["due"] else was
+
+
+def held_row(host, h):
+    """The line every band on a held host opens with (teams.19): who held it, since when, and why."""
+    since = f" since {h['at']}" if h.get("at") else ""
+    return row([(f"{host} is held", "bold"), (f" by {h['by']}{since}: {h['why']}. Start nothing new; crew go {host} lifts it", None)])
+
+
+def here_read(fleet, label):
+    """What this host's agents of a partition run of crew, for their bands (agent_views): this host, its crew's
+    version, its hold, and each standing agent of the partition here with a recorded start, by name: the version it
+    started on, and whether an update has made it due a restart (crew.due_of)."""
+    commit, version = crew.crew_version()
+    started, agents = crew.starts(), {}
+    for name in crew.agents_here(fleet, label):
+        if name in started:
+            due, _, _ = crew.due_of(fleet, name, started[name], commit)
+            agents[name] = {"version": started[name]["version"], "due": due}
+    return {"host": crew.this_host(), "version": version, "held": crew.held(), "agents": agents}
 
 # ------------------------------------------------------------------------------------------------- the board tab
 
@@ -732,8 +770,8 @@ def write_frame(label, data, path=None):
 
 def no_frame(label):
     return (f"No board for {label} yet: the rail tab's loop writes it each time it refreshes, and has not written one. A rail tab "
-            f"opened before crew board existed draws no board: close the operator workspace's rail tab and run "
-            f"crew operator up {label}, which opens the rail tab and this board tab afresh.")
+            f"opened before crew board existed draws no board: close the console's rail tab and run "
+            f"crew console up {label}, which opens the rail tab and this board tab afresh.")
 
 
 def frame_text(label, data, width, color, now):
@@ -808,7 +846,7 @@ def main(argv):
         print(plan.rail_text(fleet, labels, read, now))
         try:
             write_frame(labels[0], data)
-            write_frame(labels[0], agent_views(data), agents_path(labels[0]))
+            write_frame(labels[0], agent_views(dict(data, here=here_read(fleet, labels[0]))), agents_path(labels[0]))
         except OSError as e:
             print(f"crew could not write the board's frame in {FRAMES}: {e.strerror or e}", file=sys.stderr)
     elif a.json:

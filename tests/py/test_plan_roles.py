@@ -41,7 +41,7 @@ def test_the_planner_writes_through_a_proposal(monkeypatch, key):
     ("wldn-design", ("unit", "add"), "console-pages", "wldn-design does not write the plan with crew unit add --bolt: tell wldn-planner, who proposes it"),
     ("wldn-design", ("bolt", "new"), None, "wldn-design does not write the plan with crew bolt new: tell wldn-planner, who proposes it"),
     ("swb-1-unit-1", ("unit", "order"), None, "swb-1-unit-1 does not write the plan with crew unit order: tell wldn-planner, who proposes it"),
-    ("wldn-operator-mac-studio", ("unit", "drop"), None, "wldn-operator-mac-studio does not write the plan with crew unit drop: tell wldn-planner, who proposes it"),
+    ("wldn-operator", ("unit", "drop"), None, "wldn-operator does not write the plan with crew unit drop: tell wldn-planner, who proposes it"),
     ("wldn-ops", ("bolt", "new"), None, "wldn-ops does not write the plan with crew bolt new: tell wldn-planner, who proposes it")])
 def test_any_other_write_is_refused_naming_the_planner(monkeypatch, agent, key, bolt, said):
     assert may(monkeypatch, agent, key, bolt) == said
