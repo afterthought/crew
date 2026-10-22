@@ -12,7 +12,7 @@
 ## 3. The planner, the skill and README say the card's shape
 
 - [x] 3.1 The planner's brief says a proposal's card asks only its new units and that a proposal with none is a hold-to-approve the user declines with a note to keep something (Task notes 3.1). Verify `tests/suite t-briefs` ends with "0 failed".
-- [ ] 3.2 README and the crew skill say the same (Task notes 3.2). Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 3.2 README and the crew skill say the same (Task notes 3.2). Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 4. Integration
 
