@@ -6,7 +6,7 @@
 
 ## 2. A pane answer closes its batch for good
 
-- [ ] 2.1 `batch_closed` reads a `batch.answer` as closing every key of its batch for good, `awaiting_answer` frees the batch's units, `row_gone` gives its card "Answered in <agent>'s pane at <time>", and the rail drops its row and offers the bolt it held for landing (design, Decision 3 and 4; Task notes 2.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batches.py` and `tests/py/test_rail.py`.
+- [x] 2.1 `batch_closed` reads a `batch.answer` as closing every key of its batch for good, `awaiting_answer` frees the batch's units, `row_gone` gives its card "Answered in <agent>'s pane at <time>", and the rail drops its row and offers the bolt it held for landing (design, Decision 3 and 4; Task notes 2.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batches.py` and `tests/py/test_rail.py`.
 
 ## 3. `crew card answer` records it
 

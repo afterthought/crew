@@ -8067,7 +8067,8 @@ def batch_closed(entries):
     is a card.close, not refused and not lost to its owner, once the user sent the card back with a tap or sent its
     reading session, or closed it in Pending You. A card posted under the key after it, one followed or raised again,
     opens the key again, and a close as lost leaves it open for its card posted again; a refused post or close changes
-    nothing, since Pending You did neither."""
+    nothing, since Pending You did neither. A batch the user answered in a main-level pane (pane_answered) has every key
+    of it closed for good, whatever card is posted under one after, in whichever order the hosts' entries came."""
     closed = set()
     for e in entries:
         key = e.get("Key") or ""
@@ -8077,7 +8078,24 @@ def batch_closed(entries):
             closed.discard(key)
         elif e.get("Act") == "card.close":
             closed.add(key)
-    return closed
+    return closed | set(pane_answered(entries))
+
+
+def pane_answered(entries):
+    """Each batch card key of a batch the user answered in their own words in a main-level pane, a batch.answer not
+    refused (crew card answer), as {key: (who recorded it, when)}: batch/<n>, and every batch/<n>-<k> any entry is
+    under, a card of a batch posted as cards of five before. The first answer of a batch is its answer."""
+    answered = {}
+    for e in entries:
+        if e.get("Act") == "batch.answer" and not e.get("Refused") and (e.get("Batch") or "").isdigit():
+            answered.setdefault(int(e["Batch"]), (e.get("By"), e.get("At")))
+    keys = {e.get("Key") for e in entries if (e.get("Key") or "").startswith("batch/")}
+    out = {f"batch/{n}": by for n, by in answered.items()}
+    for k in keys:
+        m = re.fullmatch(r"batch/(\d+)-\d+", k)
+        if m and int(m.group(1)) in answered:
+            out[k] = answered[int(m.group(1))]
+    return out
 
 
 def batch_settled(entries):
@@ -8679,9 +8697,10 @@ CARD_RETRY = 600
 
 def row_gone(key, entries):
     """Why a row's card has no row now, from the run record's entries, oldest first: (outcome, None) when the event
-    that ends its row was recorded, so its card is closed with what was done, a proposal applied or a bolt landed;
-    else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them, and a batch that waits on
-    nothing with the words of crew's close (batch_settled)."""
+    that ends its row was recorded, so its card is closed with what was done, a proposal applied, a bolt landed or a
+    batch answered in a main-level pane, in whose and when (pane_answered); else (None, reason), its card withdrawn
+    with why, a proposal or a bolt dropped among them, and a batch that waits on nothing with the words of crew's close
+    (batch_settled)."""
     kind, _, rest = (key or "").partition("/")
     thing, _, head = rest.partition("/")
 
@@ -8696,6 +8715,10 @@ def row_gone(key, entries):
         return (("its bolt landed", None) if act == "bolt.land" else
                 (None, "its bolt was dropped" if act == "bolt.drop" else
                  "its bolt no longer waits to land" + (f" at {head}" if head else "")))
+    answered = pane_answered(entries) if kind == "batch" else {}
+    if key in answered:
+        by, at = answered[key]
+        return f"Answered in {by}'s pane at {(at or '')[11:16]}Z", None
     settled = batch_settled(entries) if kind == "batch" else {}
     if key in settled:
         return None, settled[key]

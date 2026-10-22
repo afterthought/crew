@@ -369,6 +369,24 @@ class TestRecord:
         r = self.read([made, batch, post("req_8", "batch/8", minutes=11), post("req_8", "batch/8", act="card.close", minutes=12)])
         assert r["held"]["unanswered"] == {}
 
+    def test_a_batch_answered_in_a_pane_has_no_row_and_the_bolt_it_held_is_offered_for_landing_as_after_a_tap(self):
+        """review-batches, "The batch answered in a pane": batch 8 is apex-zones' only unanswered batch, and the user
+        answered it in the planner's pane, its card still open on another host."""
+        made = {"Act": "stage.end", "Ended": "delivered", "On": ["stage/zone-one/construct", "unit/zone-one"], "Delivered": "unit/zone-one@abc1",
+                "At": "2026-10-12T10:00:00Z"}
+        batch = {"Act": "review.batch", "Batch": "8", "Units": "zone-one:swb-2@abc1", "At": "2026-10-12T10:10:00Z", "On": []}
+        answer = {"Act": "batch.answer", "On": ["batch/8"], "Key": "batch/8", "Batch": "8", "Chars": "17", "By": "wldn-planner",
+                  "From": ["session/s-1/u-1"], "At": "2026-10-12T10:20:00Z"}
+        held = self.read([made, batch, post("req_8", "batch/8", minutes=11)])["held"]
+        land, = [x for x in rows(held={"wldn": held}) if x["group"] == "land"]
+        assert land["what"][1:] == ["lands once you have answered batch 8"] and land["cmds"] == []
+        r = self.read([made, batch, post("req_8", "batch/8", minutes=11), answer])
+        assert ([c["card"] for c in r["cards"]], r["held"]["unanswered"]) == (["req_8"], {})
+        rs = rows(held={"wldn": r["held"]})
+        assert not [x for x in rs if x["group"] == "batches"]
+        land, = [x for x in rs if x["group"] == "land"]
+        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+
 
 def card(key, cid, by, host="mac-studio", minutes=0):
     return dict(label="wldn", card=cid, key=key, on=cards.row_object(key or "") or f"agent/{by}", by=by, host=host,
@@ -410,6 +428,14 @@ class TestSweepJudged:
          (None, "its batch waits on nothing: x1 has landed"))])
     def test_why_a_rows_card_has_no_row_is_read_from_the_run_record(self, key, entries, why):
         assert plan.row_gone(key, entries) == why
+
+    def test_a_batch_card_held_here_whose_batch_was_answered_in_a_pane_elsewhere_is_closed_answered(self):
+        """review-batches, "The card on a host the main level has left": batch 13's card was posted from mac-studio, and
+        the planner answered it in its pane on another host."""
+        c = card("batch/13", "req_13", "wldn-planner")
+        answer = did("batch.answer", On=["batch/13"], Key="batch/13", Batch="13", Chars="28", From=["session/s-1/u-1"])
+        j = self.judged(cards_=[c], entries=[did("review.batch", 60, Batch="13", Units="x1:swb-1@aaa1", On=[]), answer])
+        assert j["gone"] == [(c, f"Answered in wldn-planner's pane at {iso(30)[11:16]}Z", None)]
 
     def test_a_deploys_card_whose_word_stands_is_left_for_its_deploys_end_to_close_and_listed_as_no_stray(self):
         d = card("deploy/dev", "req_d1", "wldn-ops")
