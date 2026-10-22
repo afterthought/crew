@@ -7,7 +7,7 @@
 ## 2. The rail's next read on the main level's host raises such a batch's card again
 
 - [x] 2.1 The rail's sweep on the main level's host posts again, through the batch's raise, each batch whose card it can't reach, reports the older card as lost and the new one posted, and leaves the batch's row out of the rows with no card (design: *The rail's sweep on the main level's host*; Task notes 2.1; `briefs.12`, `read.1`).
-- [ ] 2.2 A batch raised again because of an older copy says on its card's summary that the older copy was lost and to dismiss it in the app (design: *The raise posts with the dead-copy summary*; Task notes 2.2; `briefs.13`).
+- [x] 2.2 A batch raised again because of an older copy says on its card's summary that the older copy was lost and to dismiss it in the app (design: *The raise posts with the dead-copy summary*; Task notes 2.2; `briefs.13`).
 - [ ] 2.3 `tests/py/test_rail.py` and `tests/py/test_cards.py` prove a card held on another host and one lost there raised again on the main level's host alone, a proposal's left alone, the dead-copy summary and the sweep's report, and `tests/suite logic` ends with "0 failed" (Task notes 2.3).
 
 ## 3. A batch whose session the user sends is read, with or without its card

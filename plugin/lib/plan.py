@@ -8418,8 +8418,10 @@ def raise_batch(fleet, row, acts=None):
     Pending You no longer finds is recorded lost and posted again saying its older copy is dead; nothing while
     batch_facts finds its point not come or passed, and nothing for a key not batch/<n>, an old batch card's among
     them. crew review --wait calls it once the batch is recorded, and the rail's sweep for a row whose card is missing
-    or lost. Run on the main level's host, where the batch and its card are recorded and its summary written. What
-    crew can't read is said and refuses nothing, since the batch stands. The card's id, or None."""
+    or lost, and for one whose card this host can't reach, handed that older copy as the row's dead, when the card is
+    posted saying first that an older copy was lost and to dismiss it in the app (cards.posted_again). Run on the main
+    level's host, where the batch and its card are recorded and its summary written. What crew can't read is said and
+    refuses nothing, since the batch stands. The card's id, or None."""
     m = re.fullmatch(r"batch/(\d+)", row["key"] or "")
     if not m:
         return None
@@ -8440,8 +8442,18 @@ def raise_batch(fleet, row, acts=None):
         print(f"batch {n}'s card is not raised: none of its units' teams is in the teams file, so it has no kit to be filed in",
               file=sys.stderr)
         return None
-    return row_card_change(fleet, label, owner, cards.batch_card, facts, "Raised again: crew could not find its earlier copy",
+    build = built_again(cards.batch_card) if row.get("dead") else cards.batch_card
+    return row_card_change(fleet, label, owner, build, facts, "Raised again: crew could not find its earlier copy",
                            card_where(t["kit"]), acts)
+
+
+def built_again(build):
+    """A builder whose card, posted again under its key once an older copy was lost to its owner, says so first
+    (cards.posted_again)."""
+    def again(facts):
+        b = build(facts)
+        return dict(b, card=cards.posted_again(b["card"]))
+    return again
 
 
 # ------------------------------------------------------------------------------------------------ crew rail
