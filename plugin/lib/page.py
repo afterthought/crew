@@ -558,14 +558,14 @@ def subscriptions(fleet, readings, teams, now):
     out = []
     for a in sorted(named | {r["account"] for r in readings}):
         mine = sorted((r for r in readings if r["account"] == a), key=lambda r: (-board.when(r["at"]).timestamp(), r["host"]))
-        shown = next((r for r in mine if not r["unread"]), None)
-        if shown:
-            state, said = "read", f"read by {shown['host']} {age_said(shown['at'], now)}"
+        newest = next((r for r in mine if not r["unread"]), None)
+        if newest:
+            state, said = "read", f"read by {newest['host']} {age_said(newest['at'], now)}"
         else:
             state, said = ("unread", "its use could not be read") if mine else ("none", "no host has published its use")
-        out.append(dict({"account": a, "state": state, "said": said, "host": shown and shown["host"], "at": shown and shown["at"]},
-                        **(figures(shown, now) if shown else {"windows": [], "models": []}),
-                        others=[{"host": r["host"], "at": r["at"], "unread": r["unread"], "said": reading_said(r, now)} for r in mine if r is not shown],
+        out.append(dict({"account": a, "state": state, "said": said, "host": newest and newest["host"], "at": newest and newest["at"]},
+                        **(figures(newest, now) if newest else {"windows": [], "models": []}),
+                        others=[{"host": r["host"], "at": r["at"], "unread": r["unread"], "said": reading_said(r, now)} for r in mine if r is not newest],
                         **on_subscription(fleet, a, teams)))
     return out
 
