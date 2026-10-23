@@ -9477,6 +9477,22 @@ def proposal_reads(argvs):
     return len(new_units(argvs)) > cards.CARD_NEW
 
 
+# What a card's session does not carry of the agent that starts it: herdr's reading of the agent's pane, which the
+# Claude plannotator starts to answer the user would report its own session to, so herdr took it for a new session in
+# the agent's pane and dropped the agent's name (swc-3-conductor on deneb, 2026-10-23: its landing card's session,
+# started by `crew card wait`, gave herdr the session of the Claude that answered the user's question on the page, and
+# crew read the conductor ended; signal 2026-10-23-swc-3-conductor-8556b697/01); and the identity crew-role gives
+# the agent (teams.6), which would record that Claude's start as the agent's own (hooks/session-start).
+NOT_CARRIED = ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_AGENT", "HERDR_SESSION",
+               "HERDR_SOCKET_PATH", "CREW_AGENT", "CREW_LABEL", "CREW_ROLE", "CREW_LAUNCH", "SLUICE_AGENT", "SLUICE_BRANCH")
+
+
+def session_env(environ):
+    """The environment a card's plannotator session runs in, from the one that starts it: everything but what it does
+    not carry of the agent (NOT_CARRIED), with no browser opened and its links for another host (session_open)."""
+    return {**{k: v for k, v in environ.items() if k not in NOT_CARRIED}, "PLANNOTATOR_SKIP_BROWSER_OPEN": "1", "PLANNOTATOR_REMOTE": "1"}
+
+
 def session_open(d, name, write):
     """The plannotator session of a card key on this host, kept in its folder d, called name in what is said: the one
     crew recorded given again while it serves its document, or kept for crew card wait when the user decided in it
@@ -9507,7 +9523,7 @@ def session_open(d, name, write):
         not gone or fail(f"{name}'s document {gone[0]} is not on {here}")
         doc = ", ".join(files)  # as plannotator lists a session of several files
         started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        env = dict(os.environ, PLANNOTATOR_SKIP_BROWSER_OPEN="1", PLANNOTATOR_REMOTE="1")
+        env = session_env(os.environ)
         with open(d / "out", "w") as out, open(d / "err", "w") as err:
             # Several files, each its own path, open as one review in that order with one decision (plannotator 0.28.6).
             # Its own session, so it outlives the command that started it, and the shell that ran that.
