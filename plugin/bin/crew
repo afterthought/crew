@@ -392,6 +392,11 @@ case $cmd in
   _preview)  # crew _preview <label> <bolt> <head>: a landing card's preview of the bolt's head, asked of sluice and
     # waited on to its end in a process of its own on the team's host, which the card's raise hands it to (code.9)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _land-row | _land-card)  # crew _land-row <label> <bolt> --json, on the bolt's team's host: its row on its kit's
+    # landings card, its reading and preview opened or ended there; crew _land-card <label> <kit> [--note <words>], on
+    # the partition's main machine: the kit's landings card raised from each row, which every event that changes a row
+    # hands there (Decision 2 of one-landings-card-lands-the-proven-bolts-in-order, code.3)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   main)
     need_label "${3:-}"
     case ${2:-} in up | down | status) one _main "$2" "$3" ${forced[@]+"${forced[@]}"} ;; *) echo "usage: crew main up|down|status <label>" >&2; exit 2 ;; esac ;;

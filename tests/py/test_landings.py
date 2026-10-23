@@ -256,3 +256,194 @@ def test_the_ticked_bolts_are_read_in_the_cards_order_from_each_form_of_answer()
     assert plan.ticked_of(got({"approved": True}), heads[:1]) == ["y"]
     assert plan.ticked_of(got({"approved": False}), heads[:1]) == []
     assert plan.ticked_of({"status": "pending", "turn": "you"}, heads) is None
+
+
+# ------------------------------------------------------------- the raise on the main machine, from each row's host
+
+import json  # noqa: E402
+import types  # noqa: E402
+
+PLAN = ("%rec: Bolt\n\n" + "".join(f"Bolt: {b}\nRepo: {k}\nTeam: {t}\n\n" for b, k, t in
+                                    [("y", "crew", "crw-1"), ("w", "swancloud", "swc-1"), ("z", "crew", "crw-1")]) + "%rec: Unit\n\n")
+
+
+def row(bolt, head=H1, **more):
+    return dict(bolt=bolt, box=True, facts=dict(bolt=bolt, kit="crew", units=["a"], chores=[], batches={}, head=head, at=None,
+                                                moved=0, pr=None, team="crw-1", conductor="crw-1-conductor", preview=None,
+                                                link=f"http://mac-studio:19432/{bolt}", **more))
+
+
+class LandActs:
+    """A stand-in for what the raise reaches (plan.CardActs) on the main machine: each bolt's row as its team's host
+    gives it (rows, a missing one's host not answering), the forecasts, this host's run record (entries) and the
+    partition's (partition), and Pending You's tools answered from answers."""
+
+    def __init__(self, rows, entries=(), partition=(), answers=None, here="mac-studio"):
+        self.rows, self.held, self.whole, self.answers, self.here = rows, list(entries), list(partition), dict(answers or {}), here
+        self.calls, self.emitted, self.told, self.asked = [], [], [], []
+
+    def land_row(self, label, bolt, host):
+        self.asked.append((bolt, host))
+        got = self.rows.get(bolt)
+        return (got, None) if got else (None, "ssh: connect to host deneb: timed out")
+
+    def forecast(self, label, kit, bolts):
+        return {b: [] for b in bolts}, {}
+
+    def entries(self, label):
+        return self.held
+
+    def partition(self, label):
+        return self.whole
+
+    def bridge(self, name, later, held=None):
+        acts = self
+
+        class Py:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+            def answer(self, tool, args):
+                acts.calls.append((tool, args))
+                return acts.answers.get(tool, ({"ok": True}, None))
+
+            def call(self, tool, args):
+                got, words = self.answer(tool, args)
+                if words is not None:
+                    raise crew.Refusal(f"Pending You refused {tool}: {words}")
+                return got
+        return Py()
+
+    def emit(self, label, act, on, **fields):
+        self.emitted.append(dict(fields, Act=act, On=on))
+        self.held.append(dict(fields, Act=act, On=on, By=fields.get("by")))
+
+    def tell(self, name, text):
+        self.told.append((name, text))
+        return True
+
+    def put(self, url, data, kind):
+        return None
+
+    def host(self):
+        return self.here
+
+    def caller(self):
+        return "crw-1-conductor"
+
+    def kits(self, label):
+        return KITS
+
+
+POSTED = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_crew"}]}, None),
+          "post_request": ({"requestId": "req_k1", "version": 1}, None)}
+
+
+def raised(monkeypatch, acts, note=None):
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(PLAN))
+    return plan.raise_landings(FLEET, "swancloud", "crew", acts, note=note)
+
+
+def test_two_proven_bolts_post_one_card_in_ops_name_with_two_boxes(monkeypatch, capsys):
+    acts = LandActs({"y": row("y"), "z": row("z")}, answers=POSTED)
+    assert raised(monkeypatch, acts) == "req_k1"
+    assert acts.asked == [("y", "mac-studio"), ("z", "mac-studio")]  # w is swancloud's, no row of crew's card
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert (post["idempotencyKey"], post["session"]["label"], post["kind"], post["highStakes"]) == (
+        "land/crew", "swancloud-ops", "multi", True)
+    assert [o["label"] for o in post["options"]] == ["1. y", "2. z"]
+    assert acts.emitted == [dict(Act="card.post", On=["kit/crew"], by="swancloud-ops", Card="req_k1", Key="land/crew",
+                                 Heads="y@abc1234 z@abc1234")]
+    assert acts.told == [("swancloud-ops", "Your card land/crew is up for the user: call get_request (requestId req_k1, "
+                                           "name swancloud-ops), to hear their answer.")]
+
+
+def test_a_rows_head_moved_changes_the_waiting_card_in_place_naming_it(monkeypatch):
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    acts = LandActs({"y": row("y"), "z": row("z", H2)}, held,
+                    answers={"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)})
+    assert raised(monkeypatch, acts) == "req_k1"
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert (change["requestId"], change["changeNote"], change["expectedVersion"]) == ("req_k1", "z's head is now def5678", 2)
+    assert acts.emitted[-1]["Heads"] == "y@abc1234 z@def5678"
+
+
+def test_a_host_that_does_not_answer_is_named_and_the_rest_raised(monkeypatch, capsys):
+    acts = LandActs({"y": row("y")}, answers=POSTED)
+    raised(monkeypatch, acts)
+    assert "card land/crew: mac-studio did not answer for bolt z (ssh: connect to host deneb: timed out), so its row is left off" in capsys.readouterr().err
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert (post["kind"], post["title"]) == ("approve", "Land the bolt y on crew's main")
+
+
+def test_off_the_partitions_main_machine_the_raise_is_refused_naming_it(monkeypatch):
+    with pytest.raises(crew.Refusal, match="crew's landings card is raised on mac-studio, where swancloud-ops's cards are"):
+        raised(monkeypatch, LandActs({}, here="deneb"))
+
+
+def test_an_answered_card_whose_ticked_bolts_all_landed_is_closed_naming_where_with_no_row_left(monkeypatch):
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    landed = [dict(Act="bolt.land", On=["bolt/y"], Head="1" * 40), dict(Act="bolt.land", On=["bolt/z"], Head="2" * 40)]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y", "land:z"]}}
+    acts = LandActs({}, held, landed, answers={"get_request": (answer, None)})
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan("%rec: Bolt\n\n%rec: Unit\n\n"))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
+    ack = next(a for t, a in acts.calls if t == "ack_answer")
+    assert ack["outcome"] == "Landed on GitHub's main: y at 1111111 and z at 2222222."
+    assert acts.emitted[-1] == dict(Act="card.close", On=["kit/crew"], by="swancloud-ops", Card="req_k1", Key="land/crew",
+                                    State="closed", Outcome="Landed on GitHub's main: y at 1111111 and z at 2222222.", Rows="0")
+    assert not [t for t, _ in acts.calls if t == "post_request"]
+
+
+def test_one_left_out_closes_the_card_and_a_new_one_follows_it_with_that_bolt_unticked(monkeypatch):
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234")]
+    answer = {"status": "answered", "turn": "agent", "version": 3, "answer": {"choiceIds": ["land:y"]}}
+    answers = dict(POSTED, get_request=(answer, None), post_request=({"requestId": "req_k2", "version": 1}, None))
+    acts = LandActs({"z": row("z")}, held, [dict(Act="bolt.land", On=["bolt/y"], Head="1" * 40)], answers)
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan("%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k2"
+    close = next(e for e in acts.emitted if e["Act"] == "card.close")
+    assert (close["Outcome"], close["Rows"]) == ("Landed on GitHub's main: y at 1111111. Left: z.", "1")
+    post = next(a for t, a in acts.calls if t == "post_request")
+    assert post["follows"] == "req_k1" and post["summary"].startswith("Left on your last send.")
+    assert acts.emitted[-1]["Heads"] == "z@abc1234:left"
+
+
+def test_the_raise_is_handed_to_the_main_machine_as_the_one_asking(monkeypatch, capsys):
+    ran = []
+    monkeypatch.setattr(crew, "this_host", lambda: "deneb")
+    monkeypatch.setattr(crew, "crew_argv", lambda fleet, host, *args: ["crew-on", host, *args])
+    monkeypatch.setattr(crew, "on_machine", lambda fleet, host, argv: ran.append((host, argv)) or types.SimpleNamespace(
+        returncode=1, stdout="card land/crew: req_k1 changed\n", stderr="ssh: refused\n"))
+    plan.land_hand(FLEET, "swancloud", "crew", "y is held for a fix: x")
+    assert ran == [("mac-studio", ["crew-on", "mac-studio", "_land-card", "swancloud", "crew", "--note", "y is held for a fix: x"])]
+    out, err = capsys.readouterr()
+    assert out == "card land/crew: req_k1 changed\n" and err.endswith("crew's landings card is not raised on mac-studio: ssh: refused\n")
+
+
+def test_on_the_main_machine_the_raise_runs_in_this_process_and_a_refusal_refuses_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+    monkeypatch.setattr(plan, "raise_landings", lambda fleet, label, kit, note=None: plan.fail(f"no plan, {note}"))
+    plan.land_hand(FLEET, "swancloud", "crew", "x")
+    assert capsys.readouterr().err == "crew's landings card is not raised: no plan, x\n"
+
+
+def test_a_row_read_on_another_host_is_its_crew_land_row_and_one_crew_cannot_read_is_said(monkeypatch):
+    acts = plan.CardActs(FLEET)
+    monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+    monkeypatch.setattr(crew, "crew_argv", lambda fleet, host, *args: list(args))
+    out = {"y": json.dumps(row("y")), "z": "not a row"}
+    monkeypatch.setattr(crew, "on_machine", lambda fleet, host, argv: types.SimpleNamespace(
+        returncode=0, stdout=f"{out[argv[2]]}\n", stderr=""))
+    assert acts.land_row("swancloud", "y", "deneb") == (row("y"), None)
+    assert acts.land_row("swancloud", "z", "deneb") == (None, "crew _land-row printed no row crew reads: not a row")
+
+
+def test_crew_land_row_prints_the_row_as_one_line_of_json(monkeypatch, capsys):
+    monkeypatch.setattr(plan, "land_row", lambda fleet, label, bolt: print("ended land/y's session") or dict(bolt=bolt, why="no"))
+    plan.land_row_cmd(FLEET, argparse.Namespace(label="swancloud", bolt="y", json=True))
+    out, err = capsys.readouterr()
+    assert (out, err) == ('{"bolt": "y", "why": "no"}\n', "ended land/y's session\n")

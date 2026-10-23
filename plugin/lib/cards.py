@@ -590,11 +590,16 @@ def landing_card(f):
         said.append(f"Held, with no box: {joined([h['bolt'] for h in held])}.")
     if f.get("left"):
         said.insert(0, "Left on your last send.")
+    if "key" in f and f.get("unread") and not f.get("link"):
+        said.insert(1, f"Its reading could not be opened on the tailnet: {f.get('conductor') or 'its conductor'} starts it "
+                       f"with crew card session land/{f['bolt']}, and this card then carries its link.")
     defect = ("A note naming a defect holds the landing: crew withdraws this card, and raises it again, following this "
               "one, once the bolt is green again." if "key" not in f else
               f"A note naming a defect in {f['bolt']} goes to {f.get('conductor') or 'its conductor'}, and holds it on "
               "this card with no box until its fix merges.")
-    background = (reading + tried + ("Read in its batches:\n" + "\n".join(counted) + "\n\n" if counted else "")
+    unread = (f"The reading could not be opened on the tailnet: {f['unread']}\n\n"
+              if "key" in f and f.get("unread") and not f.get("link") else "")
+    background = (unread + reading + tried + ("Read in its batches:\n" + "\n".join(counted) + "\n\n" if counted else "")
                   + defect)
     pr_title = f"Pull request #{pr['number']} on GitHub, opened by sluice" if pr else None
     read = [(f"Read bolt {f['bolt']}", f["link"])] if f.get("link") else []
@@ -698,9 +703,11 @@ def landings_card(f):
     for r in rows:
         r["left"] = r["bolt"] in left
     heads = [f"{r['bolt']}@{r['head'][:7]}" + (":left" if r["left"] else "") for r in rows]
+    unread = [(r["bolt"], r["unread"]) for r in rows if r.get("unread")]
+    why = unread[0][1] if len(rows) == 1 and unread else "; ".join(f"{b}: {w}" for b, w in unread)
     if form == "approve":
         out = landing_card(dict(rows[0], key=key, held=held, follows=f.get("follows")))
-        out.update(heads=heads, linked=True)
+        out.update(heads=heads, linked=True, **({"unread": why} if why else {}))
         return out
     n = len(rows)
     about = f"{kit}'s main"
@@ -749,7 +756,7 @@ def landings_card(f):
                 shown + [link(t, u) for t, u in links[:ARTIFACTS - len(shown)]], f.get("follows"), highStakes=True,
                 rationale=by_words("After they land: main-level ops lands them through sluice in this order, closing each "
                                    "as it lands, and every host takes them.", DETAIL), **shape)
-    out.update(heads=heads, linked=True)
+    out.update(heads=heads, linked=True, **({"unread": why} if why else {}))
     return out
 
 

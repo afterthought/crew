@@ -2073,12 +2073,14 @@ def land_held(fleet, label, bolt):
     return plan, b, bolt_team(fleet, b) if b else None
 
 
-def land_facts(fleet, label, plan, b, t):
-    """A held bolt's landing facts, read on the host of its team (t), so its card (raise_land) and its reading (crew card
-    session) read the same bolt: (facts, None) once it reads proven (landing_unready, landing_facts), the card's facts as
-    cards.landing_card takes them with what the reading's writer needs beside them, the team, its host and where the
-    bolt last met main (base), which the card leaves out; (None, why) while it does not. Refused when its kit can't be
-    read (read.1)."""
+def land_facts(fleet, label, plan, b, t, fixes_hold=True):
+    """A held bolt's landing facts, read on the host of its team (t), so its row on its kit's landings card (land_row)
+    and its reading (crew card session) read the same bolt: (facts, None) once it reads proven (landing_unready,
+    landing_facts), the row's facts as cards.landings_card takes them with what the reading's writer needs beside them,
+    the team, its conductor, its host and where the bolt last met main (base); (None, why) while it does not. With
+    fixes_hold False, a fix in flight on it does not keep it from reading proven, and the facts hold each such fix with
+    the words it started with ({fix: words or None}, fix_notes) and the bolt's last landing sluice did not land
+    ((head, words), refusals) or None, for landing_rows to hold its row by. Refused when its kit can't be read (read.1)."""
     bolt = b.name()
     st = stages_for(fleet, plan, held_by(plan, t["name"]) or [b])
     k, why = st.kit(b)
@@ -2086,7 +2088,8 @@ def land_facts(fleet, label, plan, b, t):
     of = {u.name(): st.of(u.name()) for u in plan.work_of(bolt)}
     work = [(n, s.get("kind", "unit"), s["stage"]) for n, s in of.items()]
     facts = k["bolts"].get(bolt, {})
-    why = landing_unready(work, facts.get("head"), facts.get("verdict"), fixes_in_flight(k.get("fixes", []), bolt))
+    fixes = fixes_in_flight(k.get("fixes", []), bolt)
+    why = landing_unready(work, facts.get("head"), facts.get("verdict"), fixes if fixes_hold else [])
     if why:
         return None, why
     entries = partition_entries(fleet, label)
@@ -2106,7 +2109,20 @@ def land_facts(fleet, label, plan, b, t):
                          dict(team=t["name"], next=frees[1]) if frees and frees[0] == "frees" else None)
     if not card:
         return None, batch_waits([n for n, kind, _ in work if kind == "unit"], due, unanswered)
-    return dict(card, team=t["name"], host=t["machine"], base=base), None
+    held = {} if fixes_hold else dict(fixes=fix_notes(entries, fixes), refusal=refusals(entries).get(bolt))
+    return dict(card, team=t["name"], conductor=f"{t['name']}-conductor", host=t["machine"], base=base, **held), None
+
+
+def fix_notes(entries, fixes):
+    """The words each fix in flight (fixes, its branch, fix/<bolt>/<name>) started with, from its fix.start's Note in
+    the run record's entries, the words crew fix took: {fix: words, or None when none is recorded}."""
+    notes = dict.fromkeys(fixes)
+    for e in entries:
+        if e.get("Act") == "fix.start" and not e.get("Refused") and e.get("Note"):
+            for o in e.get("On") or []:
+                if o in notes:
+                    notes[o] = e["Note"]
+    return notes
 
 
 def landing_retry(why, fresh, fresh_why):
@@ -2123,7 +2139,7 @@ def landing_retry(why, fresh, fresh_why):
 
 
 def landing_opened(fleet, label, plan, b, t, card, acts):
-    """A landing card's facts with its reading opened by the raise (raise_land), before the card is built: its link,
+    """A landings row's facts with its reading opened by its read (land_row), before the card is built: its link,
     or on a refusal one more try as crew card session land/<bolt> makes it, the kit's main fetched on the team's host,
     this one, a fetch that failed said and the try going on (plan.18), the landing read afresh (land_facts) and its
     reading opened again with those facts (landing_retry). The facts the card is built from, carrying the reading's
@@ -2158,37 +2174,176 @@ def landing_opened(fleet, label, plan, b, t, card, acts):
         return dict(got, unread=str(e))
 
 
-def raise_land(fleet, row, acts=None, note=None):
-    """A bolt's landing card raised (record 0031 §1, plan.16), for its rail row land/<bolt>, on the host of the team
-    holding the bolt, where its conductor's cards are: once the bolt reads proven (land_facts), in the conductor's name,
-    following its own card a fix held (follows_of), posted through row_card_change, so a card the conductor holds is
-    changed in place, its head moved, or followed by a new one once the user answered it, and one Pending You no longer
-    finds is posted again; its reading session, on what the bolt brings to main, is opened first on this host, twice if
-    it must be, the second time on the landing read afresh, and its link or why it could not be opened put on the card
-    (landing_opened), a session on an older head ended (reading_open); a preview of its head, in a kit whose policy at
-    the head declares one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and
-    nothing said, while the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's
-    sweep for a row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or
-    None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
-    m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", row.get("key") or "")
-    if not m:
-        return None
-    acts, label, bolt = acts or CardActs(fleet), row["label"], m.group(1)
-    plan, b, t = land_held(fleet, label, bolt)
-    if not t:
-        return None
-    t["machine"] == acts.host() or fail(f"bolt {bolt}'s landing card is raised on {t['machine']}, where {t['name']}-conductor's cards are")
-    card, why = land_facts(fleet, label, plan, b, t)
+def land_read(fleet, label, plan, b, t):
+    """A held bolt's row on its kit's landings card, read on its team's host (t) as land_facts reads it, a fix in flight
+    on it holding its row rather than keeping it off the card: (row, None), the row as landing_rows gives it, a box,
+    or held for a fix or for sluice's refusal of its landing at its present head (rail-cards, Decision 7); (None, why)
+    while it is no row. Refused when its kit can't be read (read.1)."""
+    facts, why = land_facts(fleet, label, plan, b, t, fixes_hold=False)
     if why:
+        return None, why
+    return landing_rows([b.name()], {b.name(): facts}, {b.name(): facts["refusal"]} if facts.get("refusal") else {})[0], None
+
+
+def land_row(fleet, label, bolt, acts=None):
+    """crew _land-row <label> <bolt>: a bolt's row on its kit's landings card, on the host of the team holding it, where
+    its reading and its preview run (Decision 2): read as land_read reads it; a row that can land with its reading
+    opened, or given again while it serves, twice if it must be, the second time on the landing read afresh
+    (landing_opened), and the preview of its head asked, kept or replaced (landing_preview); a held row, and a bolt that
+    is no row, with its reading ended and its preview released, as a card's close ends them (row_card_close). Returns
+    the row, {bolt, box, why, facts}, its facts carrying its reading's link or why it could not be opened and its
+    preview; or {bolt, why} while it is no row. Refused on any host but the team's, naming it, and when what it reads
+    can't be read (read.1)."""
+    acts = acts or CardActs(fleet)
+    plan, b, t = land_held(fleet, label, bolt)
+    if not b:
+        return dict(bolt=bolt, why=f"{label}'s plan holds no bolt {bolt}")
+    if not t:
+        return dict(bolt=bolt, why=f"no team holds bolt {bolt}")
+    t["machine"] == acts.host() or fail(f"bolt {bolt}'s row is read on {t['machine']}, where {t['name']}, which holds it, runs")
+    row, why = land_read(fleet, label, plan, b, t)
+    if row and row["box"]:
+        facts = landing_opened(fleet, label, plan, b, t, row["facts"], acts)
+        if facts:
+            facts["preview"] = landing_preview(fleet, t, label, bolt, facts, acts)
+            return dict(row, facts=facts)
+        row, why = None, "read afresh, it no longer reads proven"
+    for said in (acts.end(label, f"land/{bolt}"), acts.release_preview(label, f"land/{bolt}")):
+        if said:
+            print(said)
+    return row or dict(bolt=bolt, why=why)
+
+
+def land_row_cmd(fleet, a):
+    """crew _land-row <label> <bolt> [--json]: land_row, what it does said on standard error, and the row printed, as
+    JSON with --json, the one line on standard output, which the raise of the kit's card reads (CardActs.land_row)."""
+    with contextlib.redirect_stdout(sys.stderr):
+        row = land_row(fleet, a.label, a.bolt)
+    print(json.dumps(row) if a.json else f"{a.bolt}: " + ("can land" if row.get("box") else row["why"]))
+
+
+def kit_card_state(acts, label, key, owner, card, entries):
+    """The kit's landings card ops holds (card), as landings_step reads it, with the bolts the user ticked on it: ({status,
+    heads}, ticked), status "answered" once the user answered it, else "waiting", heads its rows as its last post or
+    change recorded them (card_heads); (None, why) when Pending You could not be read or no longer finds it, so the
+    raise changes nothing (read.1), but a lost card, recorded lost, reads as none held, for a new one to be posted."""
+    try:
+        with acts.bridge(owner, "Its landings card is not changed.") as py:
+            got, words = py.answer("get_request", {"requestId": card, "name": owner})
+    except Refusal as e:
+        return None, str(e)
+    if words is not None:
+        if cards.lost(words):
+            card_lost(acts, label, owner, key, card, words)
+            return {"status": None}, None
+        return None, f"Pending You refused get_request: {words}"
+    recorded = next((e.get("Heads") for e in reversed(entries) if e.get("Card") == card and not e.get("Refused")
+                     and e.get("Act") in ("card.post", "card.update") and e.get("Heads")), None)
+    heads = card_heads(recorded)
+    return {"status": "answered" if got.get("status") == "answered" else "waiting", "heads": heads, "ticked": ticked_of(got, heads)}, None
+
+
+def raise_landings(fleet, label, kit, acts=None, note=None):
+    """crew _land-card <label> <kit>: a kit's landings card raised, changed, followed or closed (rail-cards, record 0031
+    as amended 2026-10-23, Decisions 2 and 8), on the partition's main machine in main-level ops's name, refused
+    elsewhere naming it: each of the plan's bolts of the kit a team holds asked for its row on its team's host
+    (acts.land_row, land_row), a host that does not answer named and its rows left off, the rest raised (read.3); the
+    rows in the plan's order, each that can land forecast against main and the rows above it (acts.forecast,
+    forecast_rows); then what the card ops holds, its state in Pending You and the bolts the user ticked on it, makes
+    of them (landings_step): posted, changed in place with what changed, or the event's note first, followed when its
+    form changed, left, withdrawn saying why, or closed with what landed, was held and was left, with how many rows can
+    still land, a new card following it while any can. The card's id, or None."""
+    acts = acts or CardActs(fleet)
+    machine = crew.partition_of(fleet, label)["machine"]
+    machine == acts.host() or fail(f"{kit}'s landings card is raised on {machine}, where {label}-ops's cards are")
+    plan = plan_of(fleet, label) or fail(f"{label}/main could not be read, so {kit}'s landings card is not raised")
+    owner, key = f"{label}-ops", f"land/{kit}"
+    got = {}
+    for b in plan.bolts():
+        t = bolt_team(fleet, b) if b.get("Repo") == kit else None
+        if not t:
+            continue
+        row, why = acts.land_row(label, b.name(), t["machine"])
+        if row is None:
+            print(f"card {key}: {t['machine']} did not answer for bolt {b.name()} ({why}), so its row is left off", file=sys.stderr)
+        elif "box" in row:
+            got[b.name()] = row
+    rows = [got[b.name()] for b in plan.bolts() if b.name() in got]
+    boxed = [r["bolt"] for r in rows if r["box"]]
+    forecast, unmade = acts.forecast(label, kit, boxed) if boxed else ({}, {})
+    for r in rows:
+        if r["box"]:
+            r["facts"] = dict(r["facts"], forecast=forecast.get(r["bolt"], []), forecast_why=unmade.get(r["bolt"]))
+    entries = acts.entries(label)
+    card = cards.card_under(entries, key, owner)
+    state, ticked = None, None
+    if card:
+        state, why = kit_card_state(acts, label, key, owner, card, entries)
+        if state is None:
+            print(f"card {key}: {card} is not changed, since where it stands can't be read: {why}", file=sys.stderr)
+            return None
+        if state["status"] is None:  # lost to its owner and recorded so: posted again
+            card, state = None, None
+        else:
+            ticked = state.pop("ticked")
+    landed = {next((o[5:] for o in e.get("On") or [] if o.startswith("bolt/")), None): e.get("Head") or ""
+              for e in acts.partition(label) if e.get("Act") == "bolt.land" and not e.get("Refused")}
+    in_plan = {b.name() for b in plan.bolts() if b.get("Repo") == kit}
+    step = landings_step(rows, state, ticked, in_plan, landed, note)
+    t = builder(fleet, label, kit)
+    where = card_where(t["kit"] if t else {"main": str(pathlib.Path.home()), "repo": kit})
+    facts = dict(kit=kit, rows=[r["facts"] for r in rows if r["box"]], held=[dict(bolt=r["bolt"], why=r["why"]) for r in rows if not r["box"]])
+    if step[0] == "none":
         return None
-    card = landing_opened(fleet, label, plan, b, t, card, acts)
-    if not card:
-        return None
-    owner = f"{t['name']}-conductor"
-    card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
-    card["preview"] = landing_preview(fleet, t, label, bolt, card, acts)
-    note = note or landing_act("proven", head=card["head"])[1]
-    return row_card_change(fleet, label, owner, cards.landing_card, card, note, card_where(t["kit"]), acts)
+    if step[0] == "leave":
+        print(f"card {key}: {card} is left as it is" + (", the user having answered it" if state and state["status"] == "answered" else ""))
+        return card
+    if step[0] == "withdraw":
+        return row_card_close(fleet, label, owner, key, reason=step[1], acts=acts, Rows="0")
+    if step[0] == "post":
+        facts.update(left=step[1], follows=cards.follows_of("land", {"kit": kit}, entries, owner))
+        return row_card_change(fleet, label, owner, cards.landings_card, facts, note or "Raised as the bolts stand", where, acts)
+    if step[0] == "change":
+        _, said, kind_changed, left = step
+        return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=left), said, where, acts, kind_changed)
+    _, outcome, then = step
+    closed = row_card_close(fleet, label, owner, key, outcome=outcome, acts=acts, Rows=str(len(boxed)))
+    if then is None or not boxed or not closed:  # a close refused leaves the card open, and nothing follows it yet
+        return closed
+    return row_card_change(fleet, label, owner, cards.landings_card, dict(facts, left=then, follows=closed), outcome, where, acts)
+
+
+def raise_landings_row(fleet, row, acts=None):
+    """The rail's raise of a kit's landing row, land/<kit>, whose card is missing or lost (sweep_cards): raise_landings
+    of its kit; a row of a bolt's key, the form before a kit's card, is raised by none."""
+    kind = land_key(row.get("key"), partition_kits(fleet, row["label"]))
+    return raise_landings(fleet, row["label"], kind[1], acts) if kind and kind[0] == "kit" else None
+
+
+def land_hand(fleet, label, kit, note=None):
+    """The raise of a kit's landings card handed to the partition's main machine, where main-level ops's cards are
+    (Decision 2, code.3): raise_landings there, as crew _land-card <label> <kit>, through crew.on_machine as the one
+    asking, or in this process when this is that machine; what it said passed on, and its failure said, refusing
+    nothing of the event that handed it."""
+    machine = crew.partition_of(fleet, label)["machine"]
+    if machine == crew.this_host():
+        try:
+            raise_landings(fleet, label, kit, note=note)
+        except Refusal as e:
+            print(f"{kit}'s landings card is not raised: {e}", file=sys.stderr)
+        return
+    r = crew.on_machine(fleet, machine, crew.crew_argv(fleet, machine, "_land-card", label, kit, *(["--note", note] if note else [])))
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    if r.returncode:
+        said = ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
+        print(f"{kit}'s landings card is not raised on {machine}: {said}", file=sys.stderr)
+
+
+def land_card_cmd(fleet, a):
+    """crew _land-card <label> <kit> [--note <words>]: raise_landings on the partition's main machine, handed there by the
+    event that changed a bolt's row (land_hand)."""
+    raise_landings(fleet, a.label, a.kit, note=a.note)
 
 
 def head_previewed(fleet, t, head):
@@ -2217,13 +2372,23 @@ def landing_preview(fleet, t, label, bolt, card, acts):
     return acts.preview(label, f"land/{bolt}", dict(card, previewed=declared))
 
 
+def land_end(fleet, label, bolt):
+    """A bolt's reading and its preview ended on this, its team's, host, as a card's close ends them (row_card_close):
+    what each said, printed."""
+    acts = CardActs(fleet)
+    for said in (acts.end(label, f"land/{bolt}"), acts.release_preview(label, f"land/{bolt}")):
+        if said:
+            print(said)
+
+
 def landing_held(fleet, t, bolt, words):
-    """A fix started on the bolt holds its landing (record 0031 §1): its landing pull request drafted first, so no merge
-    into the bolt lands it meanwhile (pull_hold, bolt-teams), what crew could not read or mark said on standard error
-    and the fix going on, since the fix is how the bolt is repaired and its merge drafts it before it starts
-    (merge_holds); then each landing card its conductor holds, on this, the team's host, withdrawn with "held for a fix:
-    <the fix's words>", acked so when the user answered it; the card is raised again, following it, once the bolt reads
-    proven again (raise_land)."""
+    """A fix started on the bolt holds its row on its kit's landings card (rail-cards "A fix in flight holds the card"):
+    its landing pull request drafted first, so no merge into the bolt lands it meanwhile (pull_hold, bolt-teams), what
+    crew could not read or mark said on standard error and the fix going on, since the fix is how the bolt is repaired
+    and its merge drafts it before it starts (merge_holds); then, on this, the team's host, any landing card of the
+    bolt's own its conductor still holds withdrawn with "held for a fix: <the fix's words>", the row's reading ended and
+    its preview released (land_end); then the kit's card changed on the partition's main machine, the row held with no
+    box, its note naming the fix's words (land_hand). The row has its box again once the bolt reads proven again."""
     try:
         said = pull_said(bolt, *pull_hold(fleet, t, bolt, "held"), True, t["kit"]["repo"])
         if said:
@@ -2233,6 +2398,8 @@ def landing_held(fleet, t, bolt, words):
     owner, (_, outcome, reason) = f"{t['name']}-conductor", landing_act("fix", words=words)
     for key in landing_card_keys(cards.host_entries(record, t["label"], crew.this_host()), bolt, owner):
         row_card_close(fleet, t["label"], owner, key, outcome=outcome, reason=reason)
+    land_end(fleet, t["label"], bolt)
+    land_hand(fleet, t["label"], t["kit"]["name"], f"{bolt} is held for a fix: {words}")
 
 
 def merge_holds(fleet, t, bolt, what):
@@ -2250,39 +2417,35 @@ def merge_holds(fleet, t, bolt, what):
 
 
 def landing_after_merge(fleet, t, bolt):
-    """The merge's end, on the team's host: the bolt the merge went into raises its landing card once it reads proven,
-    or changes it, its head moved (raise_land); then what that frees of the team (team_freed). What crew can't read is
-    said, and the merge stands."""
+    """The merge's end, on the team's host: what it frees of the team (team_freed); then the raise of the kit's landings
+    card handed to the partition's main machine (land_hand), which puts the bolt on it once it reads proven, or changes
+    its row, its head moved, with what a yes now frees as its note. What crew can't read is said, and the merge
+    stands."""
     plan = plan_of(fleet, t["label"])
     if not plan or not plan.bolt(bolt) or plan.bolt(bolt).get("Team") != t["name"]:
         return
+    note = None
     try:
-        raise_land(fleet, {"label": t["label"], "key": f"land/{bolt}"})
-    except Refusal as e:
-        print(f"bolt {bolt}'s landing card is not raised: {e}", file=sys.stderr)
-    try:
-        team_freed(fleet, t, plan, bolt)
+        note = team_freed(fleet, t, plan, bolt)
     except Refusal as e:
         print(f"whether {t['name']} is free for its next bolt can't be told: {e}", file=sys.stderr)
+    land_hand(fleet, t["label"], plan.bolt(bolt).get("Repo") or t["kit"]["name"], note)
 
 
 def team_freed(fleet, t, plan, bolt):
     """What a merge into a bolt frees of its team (teams.16), from one read of its kits: once the bolt reads proven for
-    a give and the team holds another that is proven too, that other's landing card changed to say what a yes now
-    frees (raise_land, yes_frees); and once the team may take its next bolt and one is planned for it (free_now), the
-    partition's dispatchers that are up told so, as a landing tells them."""
+    a give and the team holds another that is proven too, the note the kit's landings card changes with, what a yes
+    now frees (frees_note), returned, else None; and once the team may take its next bolt and one is planned for it
+    (free_now), the partition's dispatchers that are up told so, as a landing tells them."""
     held = held_by(plan, t["name"])
     facts = proven_facts(stages_for(fleet, plan, held), plan, held)
     proven = {f[0]: give_refusal(t["name"], [f]) is None for f in facts}
     planned = next_planned(plan, t)
-    if proven.get(bolt):
-        for other in (b for b in proven if b != bolt and proven[b]):
-            try:
-                raise_land(fleet, {"label": t["label"], "key": f"land/{other}"}, note=frees_note(t["name"], planned))
-            except Refusal as e:
-                print(f"bolt {other}'s landing card is not changed: {e}", file=sys.stderr)
     if free_now(give_refusal(t["name"], facts), planned):
         tell_dispatchers(fleet, t["label"], f"{t['name']} can take its next bolt: bolt {bolt} reads proven. Give a free team its next bolt.")
+    if proven.get(bolt) and any(proven[b] for b in proven if b != bolt):
+        return frees_note(t["name"], planned)
+    return None
 
 
 def next_planned(plan, t):
@@ -2335,10 +2498,11 @@ def frees_note(team, planned):
 
 
 def landing_cards_closed(fleet, t, bolt, outcome):
-    """At crew bolt land, on the team's host, where its conductor's cards are posted and recorded (plan.16): each card
-    the conductor holds under the bolt's landing keys (landing_card_keys) closed in its name with outcome, acked when
-    the user answered it (row_card_close), only once the partition's plan no longer holds the bolt; a plan that can't be
-    read closes none, saying so (read.1)."""
+    """At crew bolt land, on the team's host, once the partition's plan no longer holds the bolt (plan.16): any landing
+    card of the bolt's own its conductor still holds closed with outcome, its reading ended and its preview released
+    (land_end); then the kit's landings card raised on the partition's main machine (land_hand), which closes it once
+    every bolt the user ticked has landed or been held, naming where GitHub's main holds each. A plan that can't be read
+    closes none, saying so (read.1)."""
     pl = plan_of(fleet, t["label"])
     if pl is None or pl.bolt(bolt):
         print(f"no landing card of bolt {bolt} is closed: " + (f"{t['label']}/main could not be read" if pl is None else
@@ -2347,6 +2511,8 @@ def landing_cards_closed(fleet, t, bolt, outcome):
     owner, (_, outcome, reason) = f"{t['name']}-conductor", landing_act("landed", words=outcome)
     for key in landing_card_keys(cards.host_entries(record, t["label"], crew.this_host()), bolt, owner):
         row_card_close(fleet, t["label"], owner, key, outcome=outcome, reason=reason)
+    land_end(fleet, t["label"], bolt)
+    land_hand(fleet, t["label"], t["kit"]["name"])
 
 
 def bolt_land(fleet, a):
@@ -7792,7 +7958,7 @@ def stage_wait(fleet, a):
                 said = settle_said(fleet, t, o.name, said)
             if how:
                 print(said, flush=True)
-                if "landing" in then:  # the head of the bolt it merged into moved: its landing card (raise_land)
+                if "landing" in then:  # the head of the bolt it merged into moved: its row on its kit's landings card (land_hand)
                     landing_after_merge(fleet, t, got.split("@")[0][len("bolt/"):])
                 if "batch" in then and "landing" in then:  # its last unit merged may make a batch due at once
                     batch_reckoned(fleet, t)
@@ -8271,7 +8437,8 @@ def fix_run(fleet, a):
     else:
         if unready:
             print(f"{unready.splitlines()[0].rstrip(':')}; {agent} starts on the fix all the same, told what failed")
-        run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"])
+        run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"],
+                  Note=a.words)
         print(f"{agent} has {fix}: code, in {place}")
         landing_held(fleet, t, bolt, a.words)
 
@@ -8468,25 +8635,18 @@ def conductor_bolts(fleet, t):
         return ""
     new = team_building(fleet, plan, t)
     old = waiting_bolt(plan, t["name"], new)
-    owner = f"{t['name']}-conductor"
-    entries = cards.host_entries(record, t["label"], crew.this_host())
-    keys = landing_card_keys(entries, old, owner)
-    card = (keys[-1], cards.card_under(entries, keys[-1], owner)) if keys else None
     k, why = stages_for(fleet, plan, [plan.bolt(old)]).kit(plan.bolt(old))
     fixes = [f.rsplit("/", 1)[-1] for f in fixes_in_flight(k.get("fixes", []), old)] if k else None  # fix/<bolt>/<name>
-    return two_bolts_said(t["name"], new, old, card, fixes, why)
+    return two_bolts_said(t["name"], new, old, plan.bolt(old).get("Repo") or t["kit"]["name"], t["label"], fixes, why)
 
 
-def two_bolts_said(team, new, old, card, fixes, unread=None):
+def two_bolts_said(team, new, old, kit, label, fixes, unread=None):
     """What a conductor started afresh while its team holds two bolts is told first (teams.16): the bolt it builds
-    (new), the one that waits to land (old), its landing card it holds, (key, id), with the line that adopts it, and
-    each fix in flight on it (fixes, by the name crew fix takes), with how to wait on it; when its kit could not be read
-    (unread), that, rather than name no fix (read.1)."""
-    said = f"Your team now builds the bolt {new}. Bolt {old} waits to land"
-    if card:
-        said += (f"; its landing card {card[0]} is yours: {cards.adopt_line(card[1], f'{team}-conductor')}, then run "
-                 f"crew card wait {card[0]} in the background")
-    said += "."
+    (new), the one that waits to land (old), a row of its kit's landings card, main-level ops's, with the wait on its
+    reading that brings the user's notes, and each fix in flight on it (fixes, by the name crew fix takes), with how to
+    wait on it; when its kit could not be read (unread), that, rather than name no fix (read.1)."""
+    said = (f"Your team now builds the bolt {new}. Bolt {old} waits to land, a row of {kit}'s landings card, {label}-ops's: "
+            f"run crew card wait land/{old} in the background for its reading's notes.")
     if unread:
         said += f" crew could not read its fixes ({unread}): read crew status {team}."
     for f in fixes or []:
@@ -10095,14 +10255,19 @@ def card_of(fleet, a, unit_needed=True):
     return label, CARDS / label / a.key / a.unit if old and a.unit else CARDS / label / a.key
 
 
-def session_refusal(key, label, main, here, team=None):
+def session_refusal(key, label, main, here, team=None, kits=()):
     """Why a card key's session is not started or waited on here, before its row is read: a batch card's one session
-    runs on the partition's main level's host (main), where its summary is written and its card raised; a landing
-    card's on the host of the team holding its bolt (team), where its card is raised and closed and its kit's main
-    checkout is."""
+    runs on the partition's main level's host (main), where its summary is written and its card raised; a bolt's
+    reading, land/<bolt>, on the host of the team holding the bolt (team), where its kit's main checkout is; a kit's
+    landings card, land/<kit> (kits, the partition's kits' names, land_key), has no reading of its own, each of its
+    rows having its bolt's."""
+    kind = land_key(key, kits)
+    if kind and kind[0] == "kit":
+        return (f"{key} is {kind[1]}'s landings card, {label}-ops's, which has no reading of its own: each of its rows "
+                f"has its bolt's, land/<bolt>, on the host of the team holding the bolt")
     if key.startswith("land/") and team != here:
-        return (f"{key}'s reading session runs on {team}, the host of the team holding its bolt, where its landing card "
-                f"is raised: run crew card session {key} there")
+        return (f"{key}'s reading session runs on {team}, the host of the team holding its bolt, where its kit's main "
+                f"checkout is: run crew card session {key} there")
     if key.startswith("batch/") and not old_batch(key) and main != here:
         return (f"{key}'s reading session runs on {main}, where {label}'s main level writes the batch's summary: run crew card "
                 f"session {key} there")
@@ -10255,63 +10420,40 @@ def card_session(fleet, a):
               "the decision", file=sys.stderr)
 
 
-# The change note of a landing card changed to carry its reading's new link (card-sessions).
+# The change note of a kit's landings card raised to carry a row's reading's new link (card-sessions).
 RELINKED = "Its reading is open again at a new link"
 
 
-def relinks(started, got):
-    """Whether crew card session land/<bolt> changes the landing card to carry its reading's new link (card-sessions
-    "A landing's session follows the bolt's head"): only when it started the session anew, and the card, as
-    get_request gives it (got, None when none is held or it could not be read), still waits on the user; a card the user
-    has answered is left as it is, since a new card following it would ask for the landing again."""
-    return bool(started) and card_waiting(got)
-
-
-def card_waiting(got):
-    """Whether a card, as get_request gives it (got, None when none is held or it could not be read), still waits on
-    the user, so crew changes it in place; one the user answered is left as it is."""
-    return isinstance(got, dict) and got.get("status") in OPEN
-
-
 def land_session(fleet, label, key, acts=None):
-    """crew card session land/<bolt>: the landing's one reading session, on what the bolt brings to main at its head,
-    on the host of the team holding the bolt and refused elsewhere, naming it, read from the same facts as its card
-    (land_facts) and opened as the card opens it (reading_open), its link printed. When it started the session anew,
-    none running, the landing card its conductor holds is changed in place to carry the new link while it waits on the
-    user (relinks, row_card_change), and left as it is once they answered it. Refused for a bolt the plan does not
-    hold, one no team holds, and one that does not read proven, saying why (card-sessions)."""
+    """crew card session land/<bolt>: the bolt's one reading session, on what it brings to main at its head, on the host
+    of the team holding it and refused elsewhere, naming it, while it is a row of its kit's landings card that can land,
+    read from the same facts as its row (land_read) and opened as its row's raise opens it (reading_open), its link
+    printed. When it started the session anew, none running, the kit's card is raised on the partition's main machine
+    with the new link's note (land_hand), changed in place while it waits on the user and left as it is once they
+    answered it (card-sessions "A landing's session follows the bolt's head"). Refused for land/<kit>, which has no
+    reading of its own, a bolt the plan does not hold, one no team holds, and one that is no row that can land, saying
+    what it waits on or why it is held (card-sessions "A bolt that is no row")."""
     acts = acts or CardActs(fleet)
+    kits = partition_kits(fleet, label)
+    why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), None, kits)
+    if why and land_key(key, kits)[0] == "kit":
+        fail(why)
     bolt = key.split("/", 1)[1]
     plan, b, t = land_held(fleet, label, bolt)
-    b or fail(f"{label}'s plan holds no bolt {bolt}, so {key} has no landing card to read")
-    t or fail(f"bolt {bolt} is held by no team, so crew raises no landing card for it, and it has no reading")
-    why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), t["machine"])
+    b or fail(f"{label}'s plan holds no bolt {bolt}, so {key} has no reading")
+    t or fail(f"bolt {bolt} is held by no team, so it is no row of its kit's landings card, and it has no reading")
+    why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), t["machine"], kits)
     not why or fail(why)
-    facts, why = land_facts(fleet, label, plan, b, t)
-    not why or fail(f"bolt {bolt} does not read proven, so its landing card is not raised and has no reading: {why}")
-    url, decided, started = acts.reading(label, key, facts)
+    row, why = land_read(fleet, label, plan, b, t)
+    kit = b.get("Repo") or t["kit"]["name"]
+    row or fail(f"{bolt} is no row of {kit}'s landings card, so it has no reading: {why}")
+    row["box"] or fail(f"{bolt} is {row['why']} on {kit}'s landings card, so it has no reading until it can land again")
+    url, decided, started = acts.reading(label, key, row["facts"])
     print(url)
     if decided:
         print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
-    owner = f"{t['name']}-conductor"
-    card = cards.card_under(acts.entries(label), key, owner) if started else None
-    if not card:
-        return
-    got = None
-    try:
-        with acts.bridge(owner, "The reading stands at its new link, and its card is not changed.") as py:
-            got, words = py.answer("get_request", {"requestId": card, "name": owner})
-    except Refusal as e:
-        words = str(e)
-    if relinks(started, got):
-        facts = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
-        facts["preview"] = landing_preview(fleet, t, label, bolt, facts, acts)
-        row_card_change(fleet, label, owner, cards.landing_card, facts, RELINKED, card_where(t["kit"]), acts)
-    elif got is not None:
-        print(f"card {key}: {card} is left as it is: " + ("the user has answered it" if got.get("status") == "answered"
-                                                          else f"Pending You shows it {got.get('status')}"))
-    else:
-        print(f"card {key}: {card} is not changed, since whether it waits on the user can't be read: {words}", file=sys.stderr)
+    if started:
+        land_hand(fleet, label, kit, f"{bolt}: {RELINKED}")
 
 
 def proposal_reads(argvs):
@@ -10663,6 +10805,9 @@ def card_wait(fleet, a):
             return forward_card(fleet, t, a, label)
     name = f"{a.key} {a.unit}" if a.unit else a.key
     say = land_waited if a.key.startswith("land/") else waited
+    kind = land_key(a.key, partition_kits(fleet, label))
+    if kind and kind[0] == "kit":
+        fail(session_refusal(a.key, label, fleet["partitions"][label]["machine"], crew.this_host(), None, partition_kits(fleet, label)))
     if say is land_waited and not card_recorded(d):
         land_start(fleet, label, a.key)
     card_recorded(d) or fail(f"no session was started for card {name}: crew card session {name} starts one")
@@ -10687,27 +10832,33 @@ def card_wait(fleet, a):
 
 def land_unstarted(key, recorded, held, refused=None):
     """What crew card wait land/<bolt> does before it waits (card-sessions "A wait on a landing card starts its reading
-    when none runs"), from whether a session of the key is recorded on this host, whether the bolt's conductor holds its
-    landing card open here (held), and why the start it made refused (refused): ("wait", None) on a session recorded;
-    ("start", None) with none and the card held, to start it as crew card session does; ("refuse", words) when the
-    start refused, naming crew card session to start it once that is mended, or no card is held."""
+    when none runs"), from whether a session of the key is recorded on this host, whether the bolt is a row of its kit's
+    landings card that can land (held, land_read), and why the start it made refused (refused): ("wait", None) on a
+    session recorded; ("start", None) with none and the bolt a row, to start it as crew card session does; ("refuse",
+    words) when the start refused, naming crew card session to start it once that is mended, or the bolt is no row."""
     if recorded:
         return "wait", None
     if not held:
-        return "refuse", f"no session was started for card {key}, and no landing card of {key.split('/', 1)[1]} is held on this host"
+        return "refuse", f"no session was started for card {key}, and {key.split('/', 1)[1]} is no row of its kit's landings card"
     if refused:
         return "refuse", f"{key}'s reading could not be opened: {refused}; crew card session {key} starts it once that is mended"
     return "start", None
 
 
 def land_start(fleet, label, key, acts=None):
-    """A landing's reading started for its wait when none is recorded (land_unstarted): while the conductor of the
-    team holding the bolt holds its landing card on this host, opened as crew card session opens it, its link printed
-    and the card changed in place to carry it while it waits on the user (land_session); refused naming why and crew
-    card session when it could not open, and when no card is held."""
+    """A landing's reading started for its wait when none is recorded (land_unstarted): while the bolt is a row of its
+    kit's landings card that can land, read on this, its team's, host (land_read), opened as crew card session opens it,
+    its link printed and the kit's card changed in place to carry it while it waits on the user (land_session); refused
+    naming why and crew card session when it could not open, and when the bolt is no such row."""
     acts = acts or CardActs(fleet)
-    _, _, t = land_held(fleet, label, key.split("/", 1)[1])
-    held = bool(t) and bool(cards.card_under(acts.entries(label), key, f"{t['name']}-conductor"))
+    plan, b, t = land_held(fleet, label, key.split("/", 1)[1])
+    held = False
+    if t and t["machine"] == acts.host():
+        try:
+            row, _ = land_read(fleet, label, plan, b, t)
+            held = bool(row and row["box"])
+        except Refusal:
+            held = False
     step, words = land_unstarted(key, False, held)
     if step == "start":
         try:
@@ -11211,30 +11362,15 @@ def preview_handed(fleet, a):
 
 
 def preview_changed(fleet, label, bolt, note):
-    """The landing card changed in place with a preview's note (raise_land, which takes the preview again by keep), only
-    while its conductor's card waits on the user (card_waiting): a card the user answered is left as it is, since a new
-    one following it would ask for the landing again; one crew can't read is left, said."""
-    key, acts = f"land/{bolt}", CardActs(fleet)
-    _, _, t = land_held(fleet, label, bolt)
+    """A preview's end said on its kit's landings card (rail-cards "A preview that fails is said on the card"): the
+    card's raise handed to the partition's main machine with the preview's note (land_hand), where the row is read
+    again, its preview taken by keep, and the card changed in place while it waits on the user, and left as it is once
+    they answered it (landings_step)."""
+    plan, b, t = land_held(fleet, label, bolt)
     if not t:
-        print(f"{key} is not changed: no team holds bolt {bolt}")
+        print(f"land/{bolt}'s preview ended, and no card is changed: no team holds bolt {bolt}")
         return
-    owner = f"{t['name']}-conductor"
-    card = cards.card_under(acts.entries(label), key, owner)
-    if not card:
-        print(f"{key} is not changed: {owner} holds no card under it on this host")
-        return
-    got, words = None, None
-    try:
-        with acts.bridge(owner, "The preview stands, and its card is not changed.") as py:
-            got, words = py.answer("get_request", {"requestId": card, "name": owner})
-    except Refusal as e:
-        words = str(e)
-    if not card_waiting(got):
-        print(f"card {key}: {card} is left as it is: " + (f"Pending You shows it {got.get('status')}" if isinstance(got, dict)
-                                                           else f"whether it waits on the user can't be read: {words}"))
-        return
-    raise_land(fleet, {"label": label, "key": key}, acts, note=landing_act("preview", words=note)[1])
+    land_hand(fleet, label, b.get("Repo") or t["kit"]["name"], f"{bolt}: {landing_act('preview', words=note)[1]}")
 
 
 def preview_released(label, bolt, r):
@@ -11331,6 +11467,36 @@ class CardActs:
         """The names of the kits the partition's teams build, which tell a kit's landings card's key from a bolt's
         (cards.row_object)."""
         return partition_kits(self.fleet, label)
+
+    def partition(self, label):
+        """The partition's run record, its branch's and every host's (partition_entries)."""
+        return partition_entries(self.fleet, label)
+
+    def forecast(self, label, kit, bolts):
+        """The forecasts of a kit's landings card's rows (forecast_rows)."""
+        return forecast_rows(self.fleet, label, kit, bolts)
+
+    def land_row(self, label, bolt, host):
+        """A bolt's row on its kit's landings card, read on its team's host (land_row): (row, None), in this process
+        when that is this host, else by crew _land-row there as the one asking (code.3), what it said passed on; (None,
+        why) when that host did not answer, the read refused, or it printed no row crew reads (read.2, read.3)."""
+        if host == self.host():
+            try:
+                with contextlib.redirect_stdout(sys.stderr):
+                    return land_row(self.fleet, label, bolt, self), None
+            except Refusal as e:
+                return None, str(e)
+        r = crew.on_machine(self.fleet, host, crew.crew_argv(self.fleet, host, "_land-row", label, bolt, "--json"))
+        if r.stderr.strip():
+            print(r.stderr.rstrip(), file=sys.stderr)
+        if r.returncode:
+            return None, ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
+        try:
+            row = json.loads(r.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            row = None
+        ok = isinstance(row, dict) and row.get("bolt") == bolt and (isinstance(row.get("why"), str) or row.get("box") is True)
+        return (row, None) if ok else (None, f"crew _land-row printed no row crew reads: {cut(r.stdout.strip(), 200)}")
 
 
 CARD_LATER = "The event stands, and its card is not posted."
@@ -11613,17 +11779,19 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     return card
 
 
-def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None):
+def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None, **more):
     """The act that closes a card of crew's own at the event that ends it (record 0031 §1): the card the owner holds
     under the row's key on this host, acked with the outcome once the user answered it, else withdrawn with the
     reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
     refusal said and recorded as the close refused, neither refusing the event. The key's reading session on this
     host ends with the card, closed, lost or held by nobody, and stays while a refused close leaves the card open
     (card-sessions); a landing's preview crew asked for is released whatever became of the card, since the event that
-    closes it, the bolt landed or held for a fix, is over that head (rail-cards). The card's id, or None when none was
-    closed."""
+    closes it, the bolt landed or held for a fix, is over that head (rail-cards). more, fields the close's entry carries
+    beside crew's own, a kit's landings card's Rows (landings_step). The card's id, or None when none was closed."""
     acts = acts or CardActs(fleet)
-    card = card_closed(acts, label, owner, key, outcome, reason)
+    card = card_closed(acts, label, owner, key, outcome, reason, more)
+    if (land_key(key, acts.kits(label)) or ("",))[0] == "kit":  # a kit's landings card has no reading or preview of its own
+        return card or None
     if card is not False and key.split("/")[0] in READING:
         said = acts.end(label, key)
         if said:
@@ -11635,7 +11803,7 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     return card or None
 
 
-def card_closed(acts, label, owner, key, outcome, reason):
+def card_closed(acts, label, owner, key, outcome, reason, more=None):
     """row_card_close's close in Pending You: the card's id once closed, None when none was held or it was lost, and
     False when the close was refused, so the card stays open."""
     obj = cards.row_object(key, acts.kits(label)) or f"agent/{owner}"
@@ -11662,7 +11830,8 @@ def card_closed(acts, label, owner, key, outcome, reason):
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return None
-    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=cards.close_words(got, outcome, reason))
+    acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=cards.close_words(got, outcome, reason),
+              **(more or {}))
     print(f"card {key}: {card} {state}")
     return card
 
@@ -11824,7 +11993,7 @@ def record_status(fleet, a):
 SWEEPER = "crew"
 # Each kind's raise, the function its change of the series gives it, handed a rail row (record 0031 §1): by the row
 # key's first part, a name in this module or, as ops.<name>, in ops.py. A kind whose function is not there has none yet.
-RAISES = {"proposal": "raise_proposal", "batch": "raise_batch", "land": "raise_land", "deploy": "ops.raise_deploy",
+RAISES = {"proposal": "raise_proposal", "batch": "raise_batch", "land": "raise_landings_row", "deploy": "ops.raise_deploy",
           "op": "ops.raise_step"}
 SWEEP_LATER = "The rail's sweep changes nothing on this read."
 
@@ -12350,6 +12519,14 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("label")
     x.add_argument("bolt")
     x.add_argument("head")
+    x = sub.add_parser("_land-row")
+    x.add_argument("label")
+    x.add_argument("bolt")
+    x.add_argument("--json", action="store_true")
+    x = sub.add_parser("_land-card")
+    x.add_argument("label")
+    x.add_argument("kit")
+    x.add_argument("--note")
     x = sub.add_parser("_unit-wait")
     x.add_argument("unit")
     x.add_argument("--timeout", type=int, default=3600000)
@@ -12413,6 +12590,7 @@ COMMANDS = {
     ("chore", "move"): direct(("chore", "move")), ("chore", "drop"): direct(("chore", "drop")),
     ("_status", None): team_status, ("_unit-run", None): unit_run, ("_unit-wait", None): unit_wait, ("_fix-run", None): fix_run,
     ("_construct-again", None): construct_hand, ("_preview", None): preview_handed,
+    ("_land-row", None): land_row_cmd, ("_land-card", None): land_card_cmd,
     ("_tidy", None): team_tidy, ("_unit-free", None): unit_free,
     ("_team", None): team_cmd, ("_main", None): main_cmd, ("_dispatch", None): dispatch_cmd,
     ("_review", None): review_cmd, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
