@@ -35,4 +35,4 @@
 
 ## 8. Checks
 
-- [ ] 8.1 `tests/suite logic`, `tests/suite t-journey-review t-briefs t-docs t-cards`, then `tests/suite --affected` once, all report 0 failed (Task notes 8.1).
+- [x] 8.1 `tests/suite logic`, `tests/suite t-journey-review t-briefs t-docs t-cards`, then `tests/suite --affected` once, all report 0 failed (Task notes 8.1).
