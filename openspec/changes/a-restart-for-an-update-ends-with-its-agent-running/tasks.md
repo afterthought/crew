@@ -9,4 +9,4 @@
 
 ## 2. The change's tests
 
-- [ ] 2.1 The tests the change affects pass (Task notes 2.1); Verify `tests/suite --affected` ends with "0 failed".
+- [x] 2.1 The tests the change affects pass (Task notes 2.1); Verify `tests/suite --affected` ends with "0 failed".
