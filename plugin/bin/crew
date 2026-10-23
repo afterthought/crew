@@ -261,7 +261,9 @@
 #                                      the partition's page, one HTML file that loads nothing: it opens on the board,
 #                                      its four lanes drawn as the flywheel mockup draws them, narrowed to one team
 #                                      when chosen, kept across reloads, and its header linking each other partition's
-#                                      page beside it (../<label>/page.html); one switch away, the lineage: signals,
+#                                      page in the layout of its own file (../<label>/page.html in crew's,
+#                                      <label>.html beside one written as <label>.html, none, said so, when its
+#                                      file and folder are not the partition's); one switch away, the lineage: signals,
 #                                      agenda items, proposals, units and bolts as columns, a line from each to what
 #                                      it led to, and each one's history as crew trace prints it; and the deploys,
 #                                      each environment's as a timeline, with the word, steps, checks and outcome of
