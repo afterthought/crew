@@ -6229,6 +6229,41 @@ def split_refusal(kind, name, bolt, host, remote, f):
             f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one")
 
 
+def landing_head(bolt, host, f):
+    """The head a bolt's landing submits, from what it read of the bolt's two copies after one fetch (f,
+    kit.land_copies; plan.19): {"head", "level", "said"}, or why it submits nothing. A bolt lands from where it lives.
+    One whose copy on GitHub crew could not read submits nothing, in git's words (read.1). One that lives on its host,
+    GitHub having no copy or GitHub's copy naming no remote for it, is submitted from the host's copy as it stands
+    (head None), nothing levelled and nothing said. A bolt on GitHub is submitted at GitHub's head: the host's copy
+    made there when the host has none, and levelled to it when it is behind, each said with both commits, or left
+    alone when it is level. A host's copy ahead of GitHub's is the split a merge into the bolt is refused for, whose
+    way on is this landing: its tip is submitted, nothing levelled, and its push moves GitHub's branch forward,
+    dropping nothing. Two copies that have diverged submit nothing, naming both commits and what each lacks, since
+    either submission would drop the other's merges. level is whether SUBMIT writes the host's copy first."""
+    def merges(n):
+        return f"{n} merge{'' if n == 1 else 's'}"
+    if f["read"]:
+        return f"bolt/{bolt} was not submitted: crew can't read bolt/{bolt} on GitHub: {f['read']}"
+    if f["there"] == "-" or f["remote"] is None:
+        return dict(head=None, level=False, said=None)
+    own, there = f["own"], f["there"]
+    if own == "-":
+        return dict(head=there, level=True, said=f"made {host}'s copy of bolt/{bolt} at GitHub's {there[:7]}")
+    if own == there:
+        return dict(head=there, level=False, said=None)
+    if f["held"] == "yes":
+        lacked = f", {merges(f['beyond'])} it lacked" if f["beyond"] else ""
+        return dict(head=there, level=True,
+                    said=f"levelled {host}'s copy of bolt/{bolt} from {own[:7]} to GitHub's {there[:7]}{lacked}")
+    if f["ahead"] == "yes":
+        return dict(head=own, level=False,
+                    said=(f"bolt/{bolt} is split: {host}'s tip {own[:7]} holds {merges(f['lacks'])} GitHub's {there[:7]} "
+                          "lacks; the landing submits that tip, its push moving GitHub's branch forward"))
+    return (f"bolt/{bolt} was not submitted: its two copies have diverged: {host}'s {own[:7]} holds {merges(f['lacks'])} "
+            f"GitHub's {there[:7]} lacks, and GitHub's holds {merges(f['beyond'])} {host}'s lacks, so either submission "
+            "would drop merges")
+
+
 def chore_check(fleet, a, label, plan, c):
     """Whether a chore's stage may start (chore_refusal), its place (made at its first code, on chore/<name> from the
     bolt, tracking it, and taking the head of each unmerged unit or chore it comes after, as a unit's construct's place

@@ -740,6 +740,60 @@ class TestSubmitDecisions:
         assert plan.named(argparse.Namespace(cmd="bolt", sub="submit", bolt=["y", "z"])) == ["bolt/y", "bolt/z"]
 
 
+HOSTS, GITHUBS = "1" * 40, "2" * 40
+
+
+def copies(own=HOSTS, there=GITHUBS, remote="origin", held="yes", ahead="no", lacks=0, beyond=2, read=None):
+    """What kit.land_copies reads of a bolt's two copies, a host's copy two merges behind GitHub's unless given."""
+    return dict(own=own, there=there, remote=remote, held=held, ahead=ahead, lacks=lacks, beyond=beyond, read=read)
+
+
+class TestTheHeadALandingSubmits:
+    """The head a landing submits, read after one fetch of the bolt (plan.landing_head, plan.19, design Decision 2):
+    the bolt where it lives, the host's copy levelled to GitHub's first."""
+
+    def test_a_copy_that_lags_githubs_is_levelled_and_githubs_head_submitted(self):
+        """bolt-teams "The host's copy lags GitHub's"."""
+        assert plan.landing_head("b", "box", copies()) == dict(
+            head=GITHUBS, level=True, said="levelled box's copy of bolt/b from 1111111 to GitHub's 2222222, 2 merges it lacked")
+        assert plan.landing_head("b", "box", copies(beyond=1))["said"].endswith(", 1 merge it lacked")
+
+    def test_a_copy_level_with_githubs_writes_nothing_and_says_nothing(self):
+        """bolt-teams "The host's copy is level with GitHub's"."""
+        assert plan.landing_head("b", "box", copies(own=GITHUBS, ahead="yes", beyond=0)) == dict(head=GITHUBS, level=False, said=None)
+
+    def test_a_host_with_no_copy_has_one_made_at_githubs_head(self):
+        """bolt-teams "The host has no copy"."""
+        assert plan.landing_head("b", "box", copies(own="-", ahead=None, lacks=None, beyond=None)) == dict(
+            head=GITHUBS, level=True, said="made box's copy of bolt/b at GitHub's 2222222")
+
+    def test_a_legacy_tip_ahead_of_githubs_is_submitted_as_it_stands(self):
+        """bolt-teams "A legacy bolt's host tip is ahead of GitHub's copy"."""
+        assert plan.landing_head("b", "box", copies(held="no", ahead="yes", lacks=1, beyond=0)) == dict(
+            head=HOSTS, level=False, said=("bolt/b is split: box's tip 1111111 holds 1 merge GitHub's 2222222 lacks; the "
+                                           "landing submits that tip, its push moving GitHub's branch forward"))
+
+    def test_two_copies_that_have_diverged_submit_nothing(self):
+        """bolt-teams "The two copies have diverged"."""
+        assert plan.landing_head("b", "box", copies(held="no", ahead="no", lacks=1, beyond=2)) == (
+            "bolt/b was not submitted: its two copies have diverged: box's 1111111 holds 1 merge GitHub's 2222222 lacks, "
+            "and GitHub's holds 2 merges box's lacks, so either submission would drop merges")
+
+    def test_a_bolt_that_lives_on_its_host_is_submitted_from_its_copy(self):
+        """bolt-teams "A bolt that lives on its host": no origin, GitHub without the branch, or GitHub's copy naming no
+        remote for it."""
+        absent = dict(copies(), own=None, there="-", remote=None, held=None, ahead=None, lacks=None, beyond=None)
+        assert plan.landing_head("b", "box", absent) == dict(head=None, level=False, said=None)
+        assert plan.landing_head("b", "box", copies(remote=None)) == dict(head=None, level=False, said=None)
+
+    def test_a_copy_on_github_crew_cannot_read_submits_nothing(self):
+        """bolt-teams "GitHub's copy cannot be read"."""
+        unread = dict(copies(), own=None, there=None, remote=None, held=None, ahead=None, lacks=None, beyond=None,
+                      read="fatal: Could not read from remote repository.")
+        assert plan.landing_head("b", "box", unread) == (
+            "bolt/b was not submitted: crew can't read bolt/b on GitHub: fatal: Could not read from remote repository.")
+
+
 def test_what_the_mark_said_is_its_value_or_the_hosts_words():
     assert [plan.mark_said(0, f"MARKED={v}\n", "") for v in ("yes", "no", "'git config could not set it'")] == [
         "yes", "no", "git config could not set it"]
