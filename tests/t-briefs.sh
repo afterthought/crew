@@ -575,7 +575,10 @@ for want in "Every decision record you write, and every amendment you make to on
   "the kit one of atlas-kit, breadboard-kit, switchboard-kit" "refuses a status the file there does not hold" \
   "\`record/<kit>/<number>\`, one card however often the record is revised" \
   "adopt it with the line the command prints, \`call get_request (requestId <id>, name wldn-design)\`" \
-  "run it with \`--settled-in-pane\`: crew records their yes as given here, and no card is raised" \
+  "run it with \`--settled-in-pane --excerpt \"<their yes, as they wrote it in this pane>\"\`, quoting their yes whole" \
+  "crew reads those words in your session's transcript, records their yes as given here, and raises no card" \
+  "It refuses your own words, or another agent's tell of what the user said" \
+  "When it refuses, run it again without the flag, and the user answers on the record's card" \
   "You post and close no record card yourself: crew does both" \
   "a rule-decided choice is never settled silently" "the rules that decided and each rule as it would read loosened" \
   "\`crew record … --proposed --alternatives <file>\`" "loosen the rules as drafted and take the other path, accept the record as ruled, or send it back" \

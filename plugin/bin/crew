@@ -199,14 +199,16 @@
 #                                      review tab beside the planner; --wait waits for its summary, records the batch,
 #                                      raises its card with its reading session in the planner's name, and closes the
 #                                      tab
-#   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
+#   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
 #                                      kit's main: the status recorded with its commit; --proposed raises the record's
 #                                      card in the design agent's name, or at a new commit changes it, a new card
 #                                      following it once the user has answered it, unless --settled-in-pane says the
-#                                      user said yes in the pane; --alternatives <file> makes it a choice, loosen the
-#                                      rules as drafted, accept as ruled or send back; --accepted or --rejected closes
-#                                      it with the commit. A status the file does not hold is refused
+#                                      user said yes in the pane, in the words --excerpt gives, which crew reads in the
+#                                      design agent's transcript as the user's; --alternatives <file> makes it a
+#                                      choice, loosen the rules as drafted, accept as ruled or send back; --accepted
+#                                      or --rejected closes it with the commit. A status the file does not hold is
+#                                      refused
 #   crew console  up|down <label>      the partition's console in this host's operator session <label>, starting no
 #                                      agent: a flow tab following the run record, a rail tab (crew rail above, a shell
 #                                      below) and a board tab drawn from the rail tab's read, each tab's command run

@@ -19,10 +19,11 @@ five times. A write that changes several files is one commit, and it carries the
                                              land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone
-  crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
+  crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
                                              the design agent's record at each turn of its status, read on the kit's
-                                             main, raising its card unless settled in the pane, a choice when a rule
-                                             decided, changing it on a revision and closing it on accepted or rejected
+                                             main, raising its card unless settled in the pane, the user's yes read in
+                                             the design agent's transcript as theirs, a choice when a rule decided,
+                                             changing it on a revision and closing it on accepted or rejected
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
@@ -10140,20 +10141,40 @@ def pane_answer_refusal(n, entries, v, kind):
     settled = batch_settled(entries)
     if all(k in settled for k in keys):
         return f"{head}: {settled[keys[0]]}"
+    return words_refusal(head, v, "answer a batch", "the user answers a batch on its card or in your pane")
+
+
+def words_refusal(head, v, what, advice):
+    """Why crew takes no words the user said in the caller's pane to what, after head, or None: the verdict v on the
+    words in the caller's own transcript (transcript.check, want="user") reads them as the user's (signals.5); else
+    why not, naming who said them, and for another agent's tell, telling the caller to tell that agent advice. A
+    decision of facts alone (code.7)."""
     if v.grade == "verified" and v.asserted_by == "user":
         return None
     if v.grade == "unverified":
         return f"{head}: crew can't read your session's transcript, so it can't tell the words are the user's: {v.reason}"
     if v.grade == "refused":
-        return (f"{head}: the words are not in a record your session received; only the user's own words answer a batch, "
+        return (f"{head}: the words are not in a record your session received; only the user's own words {what}, "
                 "quoted as they wrote them in your pane, never your own")
     if v.grade == "found":
         return f"{head}: the words are in a record of your transcript crew can't read as anyone's, so it can't tell they are the user's"
     if v.asserted_by.startswith("agent:"):
         other = v.asserted_by[6:]
-        return (f"{head}: the words are {other}'s, passed on with crew tell, and not the user's; tell {other} that the user "
-                "answers a batch on its card or in your pane")
+        return f"{head}: the words are {other}'s, passed on with crew tell, and not the user's; tell {other} that {advice}"
     return f"{head}: the words are " + ("crew's own message" if v.asserted_by == "crew" else "a tool's output") + ", not the user's"
+
+
+def settled_refusal(n, kit, kind, v):
+    """Why crew record <kit> <n> --proposed --settled-in-pane records no record settled in the pane (briefs.15,
+    signals.5), or None: the caller is not the record's partition's design agent, whose kind it is (role, "design"), or
+    the verdict v on the user's yes in its own transcript (words_refusal) does not read the words as the user's. Each
+    refusal of the words sends the record to its card. A decision of facts alone (code.7)."""
+    head = f"crew records record {n:04d} in {kit} as settled in no pane"
+    if kind != "design":
+        return (f"{head}: only the design agent records a record the user settled in its pane, in the user's own words; "
+                "run crew record without --settled-in-pane, and the user answers on its card")
+    why = words_refusal(head, v, "settle a record", "the user settles a record in your pane or on its card")
+    return why and f"{why}; run crew record {kit} {n} --proposed without --settled-in-pane, and the user answers on its card"
 
 
 def answer_said(n, by, words):
@@ -10964,16 +10985,18 @@ def record_card_close(fleet, label, owner, obj, outcome, acts=None):
 
 
 def record_status(fleet, a):
-    """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
-    [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031 §1). The kit is one of
-    the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
+    """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"]
+    [--alternatives <file>] [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031
+    §1). The kit is one of the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
     its main now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18), read in this host's checkout
     of the kit, at the last commit that changed it, read where the
     partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
     alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
     record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
-    changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane,
-    which is recorded and raises nothing; --alternatives makes the card the choice a rule decided; and --accepted or
+    changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane, in the
+    words --excerpt gives, which crew reads in the design agent's own transcript on this host as the user's before it
+    reads the kit (settled_refusal), and records naming the transcript record and the words' length, never the words
+    (record.3), raising nothing; --alternatives makes the card the choice a rule decided; and --accepted or
     --rejected closes the card with the commit, under either key form (record_card_close)."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
     p = crew.partition_of(fleet, label)
@@ -10985,8 +11008,19 @@ def record_status(fleet, a):
         f"--settled-in-pane and --alternatives go with --proposed: a record {a.status} closes its card")
     not (a.settled_in_pane and a.alternatives) or fail(
         "a record settled in the pane raises no card, so it takes no alternatives: give --settled-in-pane or --alternatives")
+    not a.settled_in_pane or (a.excerpt or "").strip() or fail(
+        "--settled-in-pane needs --excerpt \"<the user's yes, as they wrote it in your pane>\": crew reads it in your transcript")
+    a.excerpt is None or a.settled_in_pane or fail(
+        "--excerpt goes with --settled-in-pane: the words are the user's yes, given in your pane")
     here, k, n = crew.this_host(), kits[a.kit], f"{a.number:04d}"
     p["machine"] == here or fail(f"crew record runs on {p['machine']}, where {label}'s design agent holds its records' cards")
+    v = sid = None
+    if a.settled_in_pane:
+        kind, of = role(fleet, agent())
+        if kind == "design" and of == label:
+            v, sid = CardActs(fleet).heard(a.excerpt)
+        why = settled_refusal(a.number, a.kit, kind if of == label else "other", v)
+        not why or fail(why)
     checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
     alternatives = None
     if a.alternatives:
@@ -11012,7 +11046,9 @@ def record_status(fleet, a):
     facts = record_facts(a.kit, a.number, git("show", f"{sha}:{files[0]}"), a.status,
                          git("show", f"{commits[1][0]}:{files[0]}") if len(commits) > 1 else None, alternatives)
     key, settled = f"record/{a.kit}/{n}", a.status == "proposed" and a.settled_in_pane
-    record.emit(label, f"record.{a.status}", [key], commit=[f"{k['repo']}@{sha}"], State="settled in the pane" if settled else None)
+    frm = [f"session/{sid}/{v.uuid or f'line-{v.line_hash()[:16]}'}"] if settled else []
+    record.emit(label, f"record.{a.status}", [key], frm=frm, commit=[f"{k['repo']}@{sha}"],
+                State="settled in the pane" if settled else None, Chars=len(a.excerpt) if settled else None)
     print(f"record {n} in {a.kit}: {a.status} at {sha[:7]}" + (", the user's yes given in the pane; no card is raised" if settled else ""))
     if a.status != "proposed":
         record_card_close(fleet, label, f"{label}-design", key, f"{a.status.capitalize()} at {sha[:7]}")
@@ -11388,6 +11424,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     for status in ("proposed", "accepted", "rejected"):
         g.add_argument(f"--{status}", dest="status", action="store_const", const=status)
     x.add_argument("--settled-in-pane", action="store_true")
+    x.add_argument("--excerpt")
     x.add_argument("--alternatives", metavar="FILE")
     x.add_argument("--label")
 
