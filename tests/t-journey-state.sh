@@ -6,7 +6,7 @@
 # goes with the host's next entry, crew events --push pushes what is left, and an entry cut short stops the record's
 # push, not the write; an agent's entry names its session as herdr has it; a refused write is an entry and a read none;
 # crew events and crew trace read the branch, then each host, naming a host that does not answer, and --follow prints
-# what another host writes. What an entry holds, which entries a push takes and how their commits are worded, how a
+# what another host pushes, asking no host. What an entry holds, which entries a push takes and how their commits are worded, how a
 # trace walks and what events shows, the act and objects of each plan write, and how plans are joined are logic cases
 # (tests/py/test_record.py); two processes appending at once, and a chain of entries landing on a moved branch, contract
 # cases (tests/contract/test_record.py); each step here checks a command's wiring once.
@@ -175,18 +175,19 @@ HOST=$box expect_ok crew events --push
 eq "$(onbranch $box | wc -l | tr -d ' ')" "$(( $(wc -w <<<"$carried") + 1 ))"
 ok "a host that lost its run record after carrying keeps its entries on the branch, and adds new ones beside them"
 
+cache=$(home_of mac-studio)/.cache/crew/git/WilldanGroup/crew-state.git
+rm -f "$cache/FETCH_HEAD"; : > "$CREW_TEST_LOG"
 ( export CREW_TEST_HOST=mac-studio HOME=$(home_of mac-studio); cd "$HOME" && exec "$CREW/plugin/bin/crew" events --follow ) > "$T/follow" 2>&1 &
 fpid=$!
-# Its tails are up once one follows the box's files: an entry written before then is never followed.
-tailing() { pgrep -f "tail -q -n 0 -F .*$T/hosts/$box/" >/dev/null; }
-until_ok tailing || fail "crew events --follow never started its tails"
+# Its first read is made once it has fetched the branch: what the branch held then is not printed.
+fetched() { [[ -f $cache/FETCH_HEAD ]]; }
+until_ok fetched || fail "crew events --follow never read the branch"
 emit $box --act stage.start --on stage/a/construct --on unit/a --why "unit(a): start construct" >/dev/null
 follows() { grep -q "stage.start" "$T/follow"; }; until_ok follows || true
 kill "$fpid"; wait "$fpid" 2>/dev/null || true
 has "$(cat "$T/follow")" "stage/a/construct unit/a"; lacks "$(cat "$T/follow")" "unit.add"
-untailed() { ! pgrep -f "tail -q -n 0 -F .*$T/hosts" >/dev/null; }
-until_ok untailed || fail "a tail outlived crew events --follow"
-ok "crew events --follow prints an entry another host writes while it runs, and leaves no tail behind"
+lacks "$(calls)" " ssh "
+ok "crew events --follow prints an entry another host pushes while it runs, and asks no host for it"
 
 # An entry cut short in the host's run record fails recfix --check: the record's push is refused, naming the file, with
 # nothing of it pushed, while the write whose entry it held back lands; once the entry is gone the record is pushed.

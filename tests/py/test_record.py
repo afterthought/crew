@@ -213,6 +213,10 @@ class TestEvents:
         assert [l.split()[2] for l in out[:-1]] == ["unit.move", "stage.start", "stage.end"]
         assert out[-1] == f"{BOX} did not answer: ssh: timed out"
 
+    def test_a_follow_prints_what_it_has_not_printed_in_time_order(self):
+        assert [e["Id"] for e in record.fresh({E[0]["Id"], E[2]["Id"]}, [E[3], E[2], E[1], E[0]])] == [E[1]["Id"], E[3]["Id"]]
+        assert record.fresh({e["Id"] for e in E}, E) == []
+
     def test_as_json_the_entries_and_what_did_not_answer(self):
         got = json.loads(record.events_text(E, {}, "0000", None, as_json=True))
         assert [e["Act"] for e in got["entries"]][:2] == ["capture", "capture"] and got["unreachable"] == {}
