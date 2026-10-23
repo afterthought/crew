@@ -3184,6 +3184,19 @@ def tell_planner(fleet, label, text):
         crew.tell(fleet, planner, text)
 
 
+# A decision record a source names by its path (plan-proposals): docs/adr/ and its four digits, the repository's when
+# <owner>/<name> and a colon or a space come right before it. The lookbehinds keep a path's tail from reading as a
+# repository, and other/docs/adr/ from reading as a record.
+RECORD_REF = re.compile(r"(?:(?<![\w./-])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)[:\s])?(?<![\w./-])docs/adr/(\d{4})(?!\d)")
+
+
+def record_refs(source, kit_repo):
+    """The decision records a source names, [(repo, number)] in the order they appear and each once: each by its path
+    (RECORD_REF), of the repository written before it, else of kit_repo, the repository of the kit whose work names it.
+    A record named only in words ("record 0026") is no record here, since nothing in the words says whose it is."""
+    return list(dict.fromkeys((m.group(1) or kit_repo, int(m.group(2))) for m in RECORD_REF.finditer(source)))
+
+
 def plan_propose(fleet, a):
     """crew plan propose <file> [--replaces <n>]: the planner's proposal, checked against the plan at the tip, written
     open with the next number; the conductor of each bolt in flight it touches is told. Once it is written, crew raises

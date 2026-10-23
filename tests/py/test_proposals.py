@@ -102,3 +102,38 @@ class TestApplied:
     def test_a_unit_added_twice_is_refused(self):
         w = self.write()
         assert refused(apply, w, 'unit add q-queued "Again." --repo switchboard-kit')[0] == "wldn/main already has unit q-queued"
+
+
+class TestRecordSources:
+    """The decision records a source names (plan.record_refs): by their docs/adr/<number> path, of the kit's repository
+    or of the <owner>/<name> right before it, and none named only in words."""
+    KIT_REPO = "WilldanGroup/switchboard-kit"
+
+    def refs(self, source):
+        return plan.record_refs(source, self.KIT_REPO)
+
+    def test_a_path_with_its_file_name_names_a_record_of_the_kit(self):
+        assert self.refs("docs/adr/0033-a-unit-waiting-to-merge-yields-its-slot.md") == [(self.KIT_REPO, 33)]
+
+    def test_a_bare_path_names_it_too(self):
+        assert self.refs("docs/adr/0032") == [(self.KIT_REPO, 32)]
+
+    def test_only_the_record_of_a_source_holding_other_pages_is_named(self):
+        assert self.refs("docs/adr/0029 (accepted 2026-10-14); docs/architecture/core.md read.5") == [(self.KIT_REPO, 29)]
+
+    def test_a_page_before_a_record_is_no_repository(self):
+        assert self.refs("docs/architecture/core.md docs/adr/0001") == [(self.KIT_REPO, 1)]
+
+    def test_owner_and_name_before_it_name_the_repository(self):
+        assert self.refs("afterthought/crew:docs/adr/0010-the-plan.md") == [("afterthought/crew", 10)]
+        assert self.refs("agentplot/sluice docs/adr/0026 (branch create and delete)") == [("agentplot/sluice", 26)]
+
+    def test_words_other_pages_signals_and_another_folder_name_none(self):
+        for source in ("record 0026 point 4", "docs/architecture/plan.md plan.16", "signals/2026-10-19-swancloud-planner-e269e093/01",
+                       "other/docs/adr/0001", "docs/adr/00123"):
+            assert self.refs(source) == [], source
+
+    def test_a_source_may_name_several_each_once(self):
+        assert self.refs("docs/adr/0031 §1; agentplot/sluice:docs/adr/0017; docs/adr/0031 §2") == [
+            (self.KIT_REPO, 31), ("agentplot/sluice", 17)]
+
