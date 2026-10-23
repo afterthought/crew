@@ -981,7 +981,8 @@ class Stages:
     by whether its After is met (after_met); a chore's is chore_stage's, then ready or waiting the same way. A unit
     whose change its bolt holds open, carried there inside another unit's merge, is marked carried and reads its stage
     from its place, or with none from the change on the bolt, its merge owed (carried_place). Work with no bolt is
-    queued, and work whose host does not answer is unknown."""
+    queued, and work whose host does not answer, or whose bolt crew can't tell where to read, is unknown, unless main
+    holds it landed."""
 
     def __init__(self, fleet, plan, survey):
         self.fleet, self.plan, self.survey, self.memo = fleet, plan, survey, {}
@@ -1019,6 +1020,10 @@ class Stages:
                 return res
             pl = k.get("chore_places", {}).get(name) if is_chore(u) else k["places"].get(name)
             res["worktree"], res["head"], res["place"] = (pl["path"], pl.get("head"), pl) if pl else (None, None, None)
+            unread = k["bolts"].get(b, {}).get("error")  # a bolt crew can't tell where to read (gather.bolt_read)
+            if unread and name not in (k.get("chores", []) if is_chore(u) else k["main"]):
+                res["why"] = unread
+                return res
             if is_chore(u):
                 stage, why = chore_stage(name, b, k, pl)
                 if stage:
@@ -1044,7 +1049,7 @@ class Stages:
 
     def bolt_state(self, b):
         """A bolt's state: planned while no team holds it; unknown when its kit can't be read; landed once every unit
-        and chore has landed; waits, to land, once every one has merged and sluice is green at its head (teams.16);
+        and chore has landed; else unknown when crew can't tell where the bolt is read (gather.bolt_read); waits, to land, once every one has merged and sluice is green at its head (teams.16);
         else active."""
         if not b.get("Team"):
             return "planned"
@@ -1056,6 +1061,8 @@ class Stages:
         if units and all(x == "landed" for x in stages):
             return "landed"
         facts = k["bolts"].get(b.name(), {})
+        if facts.get("error"):
+            return "unknown"
         if units and all(x in ("merged", "landed") for x in stages) and kit.verification(facts.get("head"), facts.get("verdict"))[0] == "green":
             return "waits"
         return "active"

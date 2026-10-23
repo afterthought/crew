@@ -516,3 +516,18 @@ class TestWhereABoltIsRead:
 
     def test_kit_matches_branches_as_gather_does(self):
         assert plan.kit.branch_table is plan.gather.branch_table
+
+    def test_a_bolt_whose_policy_crew_cant_read_is_unknown_for_all_that_has_not_landed(self):
+        """bolt-plan "A policy crew can't read": nothing is read from the host's bolt/b in its place."""
+        why = ".config/sluice.toml at origin/bolt/b is not TOML, so crew can't read bolt b: Expected ']'"
+        fleet = {"partitions": {"wldn": {"teams": ["swb-1"]}},
+                 "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
+        p = plan.Plan(plan_text(bolts=[("b", KIT, "swb-1")], units=[("a", KIT, "b", []), ("done", KIT, "b", []), ("bump", KIT, "b", [], "chore")]))
+        k = {"ok": True, "main": ["done"], "chores": [], "places": {"a": {"path": "/kit/places/a", "tasks": [2, 2], "planning": True, "open": [], "head": "h"}},
+             "chore_places": {}, "fixes": [], "bolts": {"b": {"exists": False, "at": None, "changes": [], "archived": [], "open": {}, "chores": [],
+                                                              "head": None, "head_at": None, "verdict": None, "error": why}}}
+        st = plan.Stages(fleet, p, {"box": {"ok": True, "kits": {"/kit/main": k}}})
+        assert (st.of("a")["stage"], st.of("a")["why"]) == ("unknown", why)
+        assert (st.of("bump")["stage"], st.of("bump")["why"]) == ("unknown", why)
+        assert st.of("done")["stage"] == "landed"
+        assert st.bolt_state(p.bolt("b")) == "unknown"
