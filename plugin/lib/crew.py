@@ -2239,6 +2239,19 @@ class Agents:
         self.ended.append(role)
         return None
 
+    def exited(self, role, looks):
+        """Whether a role's agent exits within looks five seconds apart, read from herdr afresh at each, as stop reads
+        it: the exit a stop's keys set going after the stop gave up, which a restart for an update watches for
+        (teams.19). Once herdr reads it gone it is one this command ended. Nothing is typed into its pane, so an agent
+        that never goes runs on as it was (teams.2)."""
+        pane = self.pane(role)
+        for _ in range(looks):
+            nap(5)
+            if not self.herdr.status(pane, fresh=True):
+                self.ended.append(role)
+                return True
+        return False
+
     def start(self, role, stage=None):
         """Start a role in its pane, fresh, at a stage for a slot, or picking up its last conversation with "resume"
         (teams.2, teams.6): never over an agent still running. Its shell is cleared and moved to the folder the role
