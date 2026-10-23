@@ -185,6 +185,7 @@ def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None,
     except OSError as e:
         print(f"crew: the run record at {path} could not be written: {e.strerror or e}", file=sys.stderr)
         return None
+    reach(label, eid)
     return eid
 
 
@@ -279,6 +280,36 @@ def entry_message(text, agent):
             f.setdefault(m.group(1), m.group(2).strip())
     words = " ".join(w for w in (f.get("Act"), f.get("On"), "refused" if f.get("Refused") else None, f"({agent})") if w)
     return ("runs" + (f"({f['Host']})" if f.get("Host") else "") + f": {words}\n\nCrew-Entry: {f.get('Id')}\n")
+
+
+def reach(label, eid=None):
+    """Push each entry of this host's record of the label that its branch lacks, oldest first, normally the one just
+    written, each a commit of its own and all in one push, by the write every state write takes (read.5, state.1), on
+    this host before the command goes on; then note the newest the branch holds from here. Returns how many were
+    pushed. With eid, the entry just written, a push that is refused is said once on standard error, naming it, and
+    changes nothing else the command does (record.2): the entry stays in the host's file, and its next push takes it
+    first. With none, as crew events --push runs it, the refusal is the command's."""
+    import plan  # plan.py imports this module; its git layer is only needed here
+    where, seen = f"{label}/main", {"n": 0}
+    try:
+        repo, ref = plan.state_of(crew.load(), label)
+        where = f"{ref} of {repo}"
+        tip = plan.fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
+
+        def make(tip):
+            chain, seen["newest"] = unpushed(label, lambda path: plan.show(repo, tip, path))
+            seen["n"] = len(chain)
+            return [({path: text}, entry_message(lines, who())) for _, lines, path, text in chain]
+        if make(tip):
+            plan.land(repo, ref, None, make)
+    except (Refusal, OSError) as e:
+        why = " ".join(str(e).split())  # one line, though git's and recfix's own words may span several
+        if eid is None:
+            fail(f"nothing reached {where}: {why}")
+        print(f"crew: entry {eid} did not reach {where}: {why}; {crew.this_host()} keeps it and pushes it with its next entry", file=sys.stderr)
+        return None
+    mark_carried(label, seen.get("newest"))
+    return seen["n"]
 
 
 def mark_carried(label, newest):

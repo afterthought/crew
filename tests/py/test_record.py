@@ -17,6 +17,7 @@ import record
 KIT = "switchboard-kit"
 TE = "tenant-environments"
 BOX = "chuck-herdr-alpha"
+REACH = record.reach  # the push itself, which conftest stands in for in every case
 
 
 @pytest.fixture
@@ -62,6 +63,33 @@ class TestEmit:
             (tmp_path / "crew").chmod(0o755)
         err = capsys.readouterr().err.strip().splitlines()
         assert len(err) == 1 and err[0].startswith(f"crew: the run record at {tmp_path}/crew/wldn/runs/mac-studio/") and "could not be written" in err[0]
+
+    def test_an_entry_is_pushed_to_its_branch_before_emit_returns(self, here, pushed):
+        assert record.emit("wldn", "tell", ["agent/wldn-planner"], Chars="5") and pushed == ["wldn"]
+        assert record.emit(None, "tell") is None and pushed == ["wldn"]
+
+    def test_a_push_that_is_refused_is_said_once_and_emit_still_returns_its_id(self, here, monkeypatch, capsys):
+        monkeypatch.setattr(record, "reach", REACH)
+        monkeypatch.setattr(crew, "load", lambda: FLEET)
+        monkeypatch.setattr(plan, "state_of", lambda fleet, label: ("WilldanGroup/crew-state", f"{label}/main"))
+
+        def unreachable(repo, ref, fresh=False):
+            raise crew.Refusal(f"could not fetch {ref} of {repo} over https: fatal: unable to access\n'https://github.com/': timed out")
+        monkeypatch.setattr(plan, "fetch", unreachable)
+        eid = record.emit("wldn", "stage.start", ["stage/a/construct"])
+        assert eid and [e["Id"] for e in record.parse(next(here.glob("*.rec")).read_text())] == [eid]
+        assert capsys.readouterr().err.splitlines() == [
+            f"crew: entry {eid} did not reach wldn/main of WilldanGroup/crew-state: could not fetch wldn/main of WilldanGroup/crew-state "
+            "over https: fatal: unable to access 'https://github.com/': timed out; mac-studio keeps it and pushes it with its next entry"]
+
+    def test_a_push_by_hand_that_is_refused_is_the_commands_refusal(self, here, monkeypatch):
+        monkeypatch.setattr(record, "reach", REACH)
+
+        def missing():
+            raise crew.Refusal("/x/teams.json is missing; the machine's configuration writes it")
+        monkeypatch.setattr(crew, "load", missing)
+        with pytest.raises(crew.Refusal, match="^nothing reached wldn/main: /x/teams.json is missing"):
+            record.reach("wldn")
 
     def test_the_entries_of_one_second_sort_as_they_were_made_whichever_process_made_each(self):
         import datetime

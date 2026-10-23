@@ -81,7 +81,7 @@ exit 0
 HOOK
 chmod +x "$as/hooks/pre-receive"; touch "$T/refuse-once"
 expect_fail "the push of swancloud/main to afterthought/crew-state failed" crew state init swancloud
-eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" "plan.rec"
+eq "$(git --git-dir "$as" ls-tree --name-only swancloud/main)" $'plan.rec\nruns'
 expect_ok crew state init swancloud
 has "$out" "added moves.rec"; lacks "$out" "started an empty plan"
 git --git-dir "$as" merge-base madswan/main swancloud/main >/dev/null 2>&1 && fail "madswan's and swancloud's branches share history"
@@ -90,18 +90,15 @@ ok "state init adopts a partition's first old plan with its history, joins anoth
 export CREW_LABEL=wldn
 crew bolt new tenants "Tenants." --repo switchboard-kit >/dev/null
 rec=$(home_of mac-studio)/.local/state/crew/wldn/runs/mac-studio/$day.rec
-eid=$(git --git-dir "$ws" log -1 --format='%(trailers:key=Crew-Entry,valueonly)' wldn/main | head -1)
-eq "$(recsel -t Entry -e "Id = '$eid'" -P Act,Commit "$rec")" $'bolt.new\n'"WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
-tell=$(emit mac-studio --act tell --on agent/wldn-planner --field Chars=5)
-crew bolt new consoles "Consoles." --repo switchboard-kit >/dev/null
-has "$(onbranch mac-studio)" "$tell"; has "$(onbranch mac-studio)" "$eid"
-eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" $'plan.rec\n'"runs/mac-studio/$day.rec"
+eid=$(git --git-dir "$ws" log -1 --format='%(trailers:key=Crew-Entry,valueonly)' wldn/main~1 | head -1)
+eq "$(recsel -t Entry -e "Id = '$eid'" -P Act,Commit "$rec")" $'bolt.new\n'"WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main~1)"
+has "$(onbranch mac-studio)" "$eid"
 n=$(commits)
-emit mac-studio --act tell --on agent/wldn-planner --field Chars=7 >/dev/null
-expect_ok crew events --push; has "$out" "carried mac-studio's run record"
-expect_ok crew events --push; has "$out" "nothing of mac-studio's run record left to carry"
-eq "$(commits)" "$((n + 1))"
-ok "a write's commit names its entry and carries the host's uncarried record; crew events --push carries the rest in a commit of its own, and nothing when nothing is left"
+tell=$(emit mac-studio --act tell --on agent/wldn-planner --field Chars=5)
+has "$(onbranch mac-studio)" "$tell"; eq "$(commits)" "$((n + 1))"
+eq "$(git --git-dir "$ws" diff-tree --no-commit-id --name-only -r wldn/main)" "runs/mac-studio/$day.rec"
+eq "$(git --git-dir "$ws" log -1 --format='%s%n%(trailers:key=Crew-Entry,valueonly)' wldn/main | sed '/^$/d')" "runs(mac-studio): tell agent/wldn-planner ($me@mac-studio)"$'\n'"$tell"
+ok "an entry is on the branch when the command that wrote it returns, in a commit of its own changing its day's file alone and naming it"
 
 crew unit add a "Unit a." --bolt tenants >/dev/null
 before=$(grep -c '^Act: unit.drop$' "$rec" || true)
@@ -117,19 +114,18 @@ has "$(cat "$(home_of $box)"/.local/state/crew/wldn/runs/$box/$day.rec)" "Sessio
 ok "a refused write is one entry and a read none, and an agent's entry names its session as herdr has it"
 
 emit $box --act unit.add --on unit/x --on queue/switchboard-kit --why "plan(queue): add x" >/dev/null
-HOST=$box expect_ok crew events --push; has "$out" "carried $box's run record"
 emit $box --act unit.drop --on unit/x --on queue/switchboard-kit --why "plan(queue): drop x" >/dev/null
 echo "$box" > "$T/down"
 expect_ok crew events --about unit/x
-eq "$(acts "$(grep -v 'did not answer' <<<"$out")")" "unit.add "; has "$out" "$box did not answer"
+eq "$(acts "$(grep -v 'did not answer' <<<"$out")")" "unit.add unit.drop "; has "$out" "$box did not answer"
 expect_ok crew trace unit/x
-has "$out" "unit.add"; lacks "$out" "unit.drop"; has "$out" "$box did not answer"
+has "$out" "unit.add"; has "$out" "unit.drop"; has "$out" "$box did not answer"
 rm "$T/down"
 expect_ok crew events --about unit/x
 eq "$(acts "$out")" "unit.add unit.drop "
 expect_ok crew events --json
 eq "$(jq -r '[.entries[].Host] | unique | join(" ")' <<<"$out")" "$box mac-studio"
-ok "crew events and crew trace read the branch, then each host: one that does not answer is shown as far as it had carried, and named"
+ok "crew events and crew trace read the branch, then each host: one that does not answer is shown as far as it had pushed, and named"
 
 carried=$(onbranch $box)
 mv "$(home_of $box)/.local/state/crew/wldn" "$T/box-record-lost"
