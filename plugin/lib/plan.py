@@ -6979,7 +6979,8 @@ def deliverable(fleet, t, o, place=None):
 def deliverable_facts(fleet, t, o, place=None):
     """What delivered judges an owed stage by, read on the team's host, only what its stage asks: the newest verify
     report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it, a unit's change
-    archived too, and its head; for a chore's code, its own newest commit and when it was committed; else the branch's
+    archived too, and its head, read where the bolt is read (gather.bolt_read) once its GitHub is fetched, or why it
+    could not be fetched (fetch) or read (unread); for a chore's code, its own newest commit and when it was committed; else the branch's
     head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since it
     began, whether its planning is complete. The head is read once and the rest read at that commit, never at the branch
     again: an agent that commits between the reads would pair one commit's time or ticks with another's sha."""
@@ -6992,12 +6993,21 @@ def deliverable_facts(fleet, t, o, place=None):
     if o.stage == "merge":
         f["bolt"] = o.obj.split("/")[1] if o.fix and o.obj.count("/") == 2 else None if o.fix else bolt_of_unit(fleet, t, main, o.name, o.kind)
         if f["bolt"]:
-            f["holds"] = (gather.fix_merged(main, o.name, f["bolt"]) if o.fix else
-                          o.name in gather.chores(main, f"refs/heads/bolt/{f['bolt']}") if o.chore else
-                          o.name in gather.changes(main, f"bolt/{f['bolt']}"))
+            # Each look fetches GitHub first: sluice lands the merge there, and moves neither the host's copy nor its
+            # tracking ref when it pushes as its app (plan.19).
+            why = gather.fetched(main)
+            if why:
+                f["fetch"] = why
+                return f
+            ref, why = gather.bolt_read(main, f["bolt"])
+            if not ref:
+                f["unread"] = why or f"this host has neither bolt/{f['bolt']} nor origin/bolt/{f['bolt']}"
+                return f
+            f["holds"] = (gather.fix_merged(main, o.name, f["bolt"], ref) if o.fix else
+                          o.name in gather.chores(main, ref) if o.chore else o.name in gather.changes(main, ref))
             if not (o.fix or o.chore):
-                f["archived"] = o.name in gather.archived(main, f"bolt/{f['bolt']}")
-            f["bolt_head"] = short_head(main, f"refs/heads/bolt/{f['bolt']}")
+                f["archived"] = o.name in gather.archived(main, ref)
+            f["bolt_head"] = short_head(main, ref)
         return f
     if o.chore:  # its own newest commit: what its place took of what it comes after is not its code (plan.13)
         bolt = bolt_of_unit(fleet, t, main, o.name, "chore")
@@ -7044,6 +7054,10 @@ def delivered(o, f):
         bolt, head = f.get("bolt"), f.get("bolt_head")
         if not bolt:
             return None, "no bolt crew can read for it"
+        if f.get("fetch"):
+            return None, f"can't fetch bolt/{bolt} from GitHub: {f['fetch']}"
+        if f.get("unread"):
+            return None, f"can't read bolt/{bolt}: {f['unread']}"
         if f.get("holds") and f.get("archived") is False:
             return None, f"bolt/{bolt} holds its change open: its merge did not archive it first"
         return (f"bolt/{bolt}@{head}", f"bolt/{bolt} holds it at {head}") if f.get("holds") and head else (None, f"bolt/{bolt} not yet holding it")

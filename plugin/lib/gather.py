@@ -222,10 +222,10 @@ def moved(main, branch):
     return bool(born) and tip != born[-1]
 
 
-def fix_merged(main, branch, bolt):
-    """Whether a fix has merged into its bolt: the bolt, at the ref it is read at (bolt_read), holds the fix's tip, and
-    the fix has moved since it was made (its reflog's first entry)."""
-    ref = bolt_read(main, bolt)[0] if bolt else None
+def fix_merged(main, branch, bolt, ref=None):
+    """Whether a fix has merged into its bolt: the bolt, at the ref it is read at (ref, else bolt_read), holds the fix's
+    tip, and the fix has moved since it was made (its reflog's first entry)."""
+    ref = ref or (bolt_read(main, bolt)[0] if bolt else None)
     return bool(ref) and holds(main, ref, branch) and moved(main, branch)
 
 
