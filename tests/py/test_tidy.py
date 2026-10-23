@@ -29,8 +29,9 @@ CUT = dict(GOING, on_main=True, moved=False)
 
 
 def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix=GOING, dropped=()):
-    return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), set(units), set(on_main),
-                          lambda bolt: set(merged), lambda b: fix, dropped=set(dropped))
+    """units: each unit the plan holds, in bolt t, or as (unit, its bolt or None for the queue)."""
+    return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), dict((u, "t") if isinstance(u, str) else u for u in units),
+                          set(on_main), lambda bolt: set(merged), lambda b: fix, dropped=set(dropped))
 
 
 class TestOver:
@@ -48,6 +49,14 @@ class TestOver:
         assert over("places/a", "unit/a", "bolt/t", on_main={"a"}) == ("a", "unit a has landed on main")
         assert over("places/ignored-only", "unit/ignored-only", "bolt/t") == ("ignored-only", "unit ignored-only is in no plan")
         assert over("places/planned", "unit/planned", "bolt/t") == ("planned", None)
+
+    def test_a_units_place_is_over_once_it_has_left_the_bolt_its_place_tracks(self):
+        """teams.1: a unit added again to another bolt, or moved to the queue, leaves the place its old bolt's stage cut,
+        which goes as a dropped unit's does, its branch judged by git cherry (plan.10); one whose place tracks no bolt crew
+        can name stays (read.1)."""
+        assert over("places/a", "unit/a", "origin/bolt/gone", units=[("a", "t")]) == ("a", "unit a has left bolt/gone for bolt/t")
+        assert over("places/a", "unit/a", "bolt/t", units=[("a", None)]) == ("a", "unit a has left bolt/t for the queue")
+        assert over("places/a", "unit/a", "", units=[("a", "t")]) == ("a", None)
 
     def test_a_fixs_place_is_over_once_it_merged_was_dropped_or_its_bolt_left_every_plan(self):
         assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")

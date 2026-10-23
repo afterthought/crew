@@ -1001,7 +1001,9 @@ class Stages:
     marks amended whose construct has not committed again, then verify, code, planned, construct, then ready or waiting
     by whether its After is met (after_met); a chore's is chore_stage's, then ready or waiting the same way. A unit
     whose change its bolt holds open, carried there inside another unit's merge, is marked carried and reads its stage
-    from its place, or with none from the change on the bolt, its merge owed (carried_place). Work with no bolt is
+    from its place, or with none from the change on the bolt, its merge owed (carried_place). A place at its path that
+    tracks another bolt, one it has left, kept from a drop or a move, is not its place: its stage is read as having none,
+    and that place is marked left, which the tidy removes and no stage starts over (left_refusal). Work with no bolt is
     queued, and work whose host does not answer is unknown."""
 
     def __init__(self, fleet, plan, survey):
@@ -1039,11 +1041,13 @@ class Stages:
                 res["why"] = why
                 return res
             pl = k.get("chore_places", {}).get(name) if is_chore(u) else k["places"].get(name)
+            if pl and pl.get("bolt") and pl["bolt"] != b:  # a place of a bolt it has left is not its place (left_refusal)
+                res["left"], pl = pl, None
             res["worktree"], res["head"], res["place"] = (pl["path"], pl.get("head"), pl) if pl else (None, None, None)
             if is_chore(u):
                 stage, why = chore_stage(name, b, k, pl)
-                if stage:
-                    res.update(stage=stage, **({"why": why} if why else {}))
+                if stage:  # unknown only for its place, so a drop or a move is not refused for it (place_unread)
+                    res.update(stage=stage, **({"why": why, "place_unread": True} if why else {}))
                     return res
             elif name in k["main"]:
                 res["stage"] = "landed"
@@ -3674,9 +3678,11 @@ def op_unit_move(ctx, a):
     ahead = unblocking(ctx, plan, label, a, to) if getattr(a, "unblocks", None) else None
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"{k} {a.unit} has merged into {src}, so it can't move")
-    s["stage"] != "unknown" or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
+    s["stage"] != "unknown" or s.get("place_unread") or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
     prepare = None
-    if s["worktree"]:
+    # A place that tracks a bolt crew cannot read is not rebased: it is left on the bolt it tracks, which the work has
+    # then left, so the tidy removes it and its next stage cuts its place from bolt/<to> (left_refusal).
+    if s["worktree"] and not s.get("place_unread"):
         to or fail(f"{k} {a.unit} has a worktree at {s['worktree']}, and a queued {k} has none")
         ft, tt = bolt_team(ctx.fleet, plan.bolt(src)), bolt_team(ctx.fleet, plan.bolt(to))
         tt or fail(f"bolt {to} is held by no team, so it has no branch to rebase {a.unit} onto")
@@ -3721,7 +3727,8 @@ def op_unit_drop(ctx, a):
     k = a.cmd
     s = ctx.stage(plan, a.unit)
     s["stage"] not in ("merged", "landed") or fail(f"{k} {a.unit} has merged into its bolt, so it can't be dropped")
-    s["stage"] != "unknown" or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
+    # A stage unknown only for its place is not merged: the drop goes, and the tidy after it removes that place.
+    s["stage"] != "unknown" or s.get("place_unread") or fail(f"cannot tell {k} {a.unit}'s stage: {s.get('why')}")
     u0 = plan.item(a.unit)
     bolt = u0.get("Bolt")
     team = bolt_team(ctx.fleet, plan.bolt(bolt)) if bolt else None
@@ -5677,6 +5684,8 @@ def run_check(fleet, a):
     s = st_all.of(a.unit)
     st, place, mark = s["stage"], f"{t['kit']['dir']}/places/{a.unit}", u.get("Amended")
     st != "unknown" or fail(f"cannot tell unit {a.unit}'s stage: {s.get('why')}")
+    why = left_refusal("unit", a.unit, bolt, s.get("left"))
+    not why or fail(why)
     amended_at = entry = ""
     after = {d: st_all.of(d)["stage"] for d in u.all("After")}
     why = stage_refusal(a.unit, bolt, a.stage, st, mark, after, role(fleet, os.environ.get("CREW_AGENT")), t["name"],
@@ -5893,6 +5902,8 @@ def chore_check(fleet, a, label, plan, c):
     s = st_all.of(a.unit)
     st, place = s["stage"], f"{t['kit']['dir']}/places/chore-{a.unit}"
     st != "unknown" or fail(f"cannot tell chore {a.unit}'s stage: {s.get('why')}")
+    why = left_refusal("chore", a.unit, bolt, s.get("left"))
+    not why or fail(why)
     after = {d: (st_all.of(d)["kind"], st_all.of(d)["stage"]) for d in c.all("After")}
     why = chore_refusal(a.unit, bolt, a.stage, st, after, a.stage == "merge" and st == "verify" and verified(label, a.unit))
     not why or fail(why)
@@ -5918,6 +5929,19 @@ def chore_check(fleet, a, label, plan, c):
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENTRY="",
                 FORECAST="", TOOK=took)
+
+
+def left_refusal(kind, name, bolt, left):
+    """Why no stage of a unit or chore starts while a place it has left stands at its path (left, as Stages.of marks a
+    place tracking another bolt, kept from a drop or a move), or None: its stage cuts its place from bolt/<bolt>
+    (make_place), never builds on that one, which the team's read before the stage removes when it is clean, its branch
+    kept and built on when it holds work of its own (tidy_over, plan.10, record 0003); one the read kept, saying why, or
+    left for a slot that holds it, waits for a hand."""
+    if not left:
+        return None
+    return (f"{kind} {name}'s place {left['path']} tracks bolt/{left['bolt']}, which it has left for bolt/{bolt}, and still "
+            f"stands: crew's tidy removes it only when it is clean, unlocked and no slot or run holds it, and once it is gone "
+            f"{name}'s stage cuts its place from bolt/{bolt}")
 
 
 def chore_refusal(name, bolt, stage, st, after, delivered_verify):
@@ -6468,8 +6492,8 @@ def tidy(fleet, a):
         print(unread_plans(errors))
         return
     bolts = {b.name() for *_, p in found for b in p.bolts() if b.get("Repo") == kit}
-    units = {u.name() for *_, p in found for u in p.units() if u.get("Repo") == kit}
-    chores = {u.name() for *_, p in found for u in p.chores() if u.get("Repo") == kit}
+    units = {u.name(): u.get("Bolt") for *_, p in found for u in p.units() if u.get("Repo") == kit}
+    chores = {u.name(): u.get("Bolt") for *_, p in found for u in p.chores() if u.get("Repo") == kit}
     now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as Stages reads it (plan.18)
     ups, on_main = gather.upstreams(main), set(gather.changes(main, now))
     dropped, marks = fixes_dropped(main), bolt_marks(main)
@@ -6858,11 +6882,13 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
     in <kit>/places/ on unit/<its folder>, on chore/<name> in chore-<name>, on bolt/<bolt> in land-<bolt>, the landing's
     place (bolt_submit), or on a fix/ branch made from a bolt (up, its upstream, bolt/<bolt> or origin/bolt/<bolt>:
     gather.bolt_ref). A bolt's is over once no plan has the bolt (bolts), and so is its landing's, which the landing
-    ends (plan.19); a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)) or no plan
-    has it (units), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while the
-    bolt holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)) or no plan has
-    it (chores); a fix's once it has landed on main or merged into its bolt (fix_stage, on its branch's facts,
-    fix_of(branch)), its conductor dropped it (its branch in dropped, record 0028) or no plan has its bolt."""
+    ends (plan.19); a unit's once it has landed on main (on_main), merged into its bolt (archived_of(bolt)), no plan
+    has it (units, each unit's bolt by its name, None for one queued) or it has left the bolt its place tracks
+    (left_over), merged meaning its bolt holds its change archived (archived_of(bolt), teams.17), never while the bolt
+    holds it open; a chore's once main's or its bolt's history holds its trailer (chores_of(ref)), no plan has it
+    (chores, each chore's bolt by its name) or it has left that bolt; a fix's once it has landed on main or merged into
+    its bolt (fix_stage, on its branch's facts, fix_of(branch)), its conductor dropped it (its branch in dropped, record
+    0028) or no plan has its bolt."""
     folder, bolt = os.path.basename(path), gather.bolt_of(up)
     if os.path.dirname(path) == os.path.join(kdir, "bolts") and branch in (f"bolt/{folder}", ""):
         return None, None if folder in bolts else f"bolt {folder} is in no plan"
@@ -6872,11 +6898,11 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
         name = branch[6:]
         return name, (f"chore {name} has landed on main" if name in chores_of("main") else
                       f"chore {name} has merged into bolt/{bolt}" if bolt and name in chores_of(f"bolt/{bolt}") else
-                      None if name in chores else f"chore {name} is in no plan")
+                      left_over("chore", name, bolt, chores[name]) if name in chores else f"chore {name} is in no plan")
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch == f"unit/{folder}":
         return folder, (f"unit {folder} has landed on main" if folder in on_main else
                         f"unit {folder} has merged into bolt/{bolt}" if bolt and folder in archived_of(bolt) else
-                        None if folder in units else f"unit {folder} is in no plan")
+                        left_over("unit", folder, bolt, units[folder]) if folder in units else f"unit {folder} is in no plan")
     bolt = gather.bolt_ref(up)[0]  # a fix's, from either form of the bolt it tracks
     if os.path.dirname(path) == os.path.join(kdir, "places") and branch.startswith("fix/") and bolt:
         stage = fix_stage(fix_of(branch), bolt in bolts)
@@ -6885,6 +6911,16 @@ def tidy_over(path, branch, kdir, up, bolts, units, on_main, archived_of, fix_of
                         f"{branch} was dropped" if branch in dropped else
                         None if bolt in bolts else f"bolt {bolt}, which {branch} was made from, is in no plan")
     return None
+
+
+def left_over(kind, name, bolt, now):
+    """Why a unit's or chore's place is over once the plan holds it in another bolt than the one its place tracks
+    (bolt), or in the queue (now, None there), as a slot's work is once it has left its team's bolt (teams.1): its work
+    for that bolt is over, and a stage of its name cuts its place from the bolt it is in now (left_refusal). None while
+    it is in that bolt, or when its place tracks no bolt crew can name, which it never removes on a guess (read.1)."""
+    if not bolt or bolt == now:
+        return None
+    return f"{kind} {name} has left bolt/{bolt} for " + (f"bolt/{now}" if now else "the queue")
 
 
 def unread_plans(errors):
