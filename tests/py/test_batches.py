@@ -341,6 +341,9 @@ class RaiseActs:
     def caller(self):
         return "wldn-planner"
 
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
 
 def test_a_batch_whose_first_start_fails_and_second_opens_is_posted_with_its_link(monkeypatch, tmp_path, capsys):
     """card-sessions "The first start fails and the second opens": crew review --wait's raise posts the card with the

@@ -3,8 +3,8 @@ submit --excerpt submits nothing unless crew reads the words in ops's own transc
 (plan.submit_word_refusal), naming who said any others and holding none of the words; the act, plan.bolt_submit, on
 stand-ins for what it reaches, recording the landing's bolt.submit with the transcript record and the words' length
 and keeping the words on its host; and crew bolt land's reads of it, plan.pane_word_of from the run record and
-plan.landing_word_read from the kept file. Reading the words in a transcript is test_transcript's; the card's close,
-test_landing's and test_card_commands'."""
+plan.landing_word_read from the kept file. Reading the words in a transcript is test_transcript's; the cards' close,
+test_landing's, test_landings' and test_card_commands'."""
 import argparse
 
 import pytest
@@ -12,6 +12,7 @@ import pytest
 import transcript
 
 import plan
+from test_landing import QUEUED, TAKES_NONE, policy, ran_as, said
 
 WORDS = "Land crw-5's bolt"
 HEAD = "crew submits nothing of bolt y"
@@ -52,47 +53,43 @@ class TestTheWordToLand:
         assert WORDS not in plan.submit_word_refusal("y", v)
 
 
-class Ran:
-    def __init__(self, stdout, returncode=0, stderr=""):
-        self.stdout, self.returncode, self.stderr = stdout, returncode, stderr
-
-
 class Plan:
     def bolt(self, name):
-        return {"Bolt": name, "Team": "crw-5"}
+        return {"Bolt": name, "Team": "crw-5", "Repo": "crew"}
 
 
 OLD, NEW = "a" * 40, "b" * 40
-TEAM = {"name": "crw-5", "label": "swancloud", "machine": "deneb", "kit": {"name": "crew", "dir": "/k", "main": "/k/main"}}
+TEAM = {"name": "crw-5", "label": "swancloud", "machine": "deneb", "kit": {"name": "crew", "dir": "/k", "main": "/k/main", "repo": "o/crew"}}
 BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\nSUBMISSION_OWN=\n"
-
-
-def landed(rc=0, github=NEW, held="yes"):
-    """What plan.LANDING prints on the team's host: GitHub's main after the submission and whether it holds the bolt's
-    tip, then sluice's exit."""
-    return (f"ORIGIN=yes\nFETCHED=ok\nGITHUB={github}\nOWN={OLD}\nHELD_GITHUB={held}\nHELD_OWN=no\n"
-            f"RC={rc} TIP={'c' * 40} OLD={OLD} KEPT='' WHY='' LEVEL=detached SAID=\n")
 
 
 @pytest.fixture
 def submit(monkeypatch, tmp_path):
     """crew bolt submit on stand-ins for what it reaches: the plan, ops's transcript, the team's host, whose main is at
-    OLD before and which lands the bolt unless told otherwise (answers, by script), and this host's run record and kept
-    words, under tmp_path."""
-    got = {"ran": [], "emitted": [], "verdict": heard(), "answers": {plan.LANDING: landed(), plan.LANDED_MARK: "MARKED=yes\n"}}
+    OLD before, whose policy takes no pull requests, and which queues, waits on and lands the bolt unless told
+    otherwise (outs, in turn), and this host's run record and kept words, under tmp_path; crew bolt land's close
+    stood in for."""
+    got = {"ran": [], "emitted": [], "closed": [], "verdict": heard(),
+           "outs": [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]}
+    monkeypatch.setattr(plan, "CONTEXT", {})
     monkeypatch.setattr(plan, "locate", lambda fleet, kind, name, label: ("swancloud", "crew", "tip", Plan()))
     monkeypatch.setattr(plan, "default_label", lambda fleet, a: "swancloud")
     monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: TEAM)
     monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
-    monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(script) or BEFORE)
-    monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: got["ran"].append(argv[2]) or Ran(got["answers"][argv[2]]))
+    monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(
+        "MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE)))
+    names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK"}
+    monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: got["ran"].append(names[argv[2]]) or got["outs"].pop(0))
     monkeypatch.setattr(plan.READ, "drop_kit", lambda *a: None)
     monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: got["emitted"].append(dict(f, Act=act, On=on)) or "eid")
     monkeypatch.setattr(plan.record, "who", lambda: "swancloud-ops")
+    monkeypatch.setattr(plan, "may_write", lambda fleet, key, a: None)
+    monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: got["closed"].append(a.bolt))
+    monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None, pane=None: None)
     monkeypatch.setattr(plan, "LANDINGS", tmp_path / "landings")
 
-    def run(excerpt=None):
-        a = argparse.Namespace(bolt="y", label=None, excerpt=excerpt)
+    def run(excerpt=None, bolts=("y",)):
+        a = argparse.Namespace(bolt=list(bolts), label=None, excerpt=excerpt)
         plan.bolt_submit({"teams": {}, "partitions": {}}, a)
         return got
     got["run"] = run
@@ -100,9 +97,12 @@ def submit(monkeypatch, tmp_path):
 
 
 class TestTheSubmission:
-    def test_the_users_words_land_the_bolt_recorded_by_their_record_and_length_and_kept_here(self, submit):
+    def test_the_users_words_land_the_bolt_recorded_by_their_record_and_length_and_kept_here_before_it_closes(self, submit, monkeypatch):
+        kept = []  # what crew bolt land's close reads back
+        monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: kept.append(plan.landing_word_read("swancloud", a.bolt, "session/s-1/u-7")))
         got = submit["run"](WORDS)
-        assert got["ran"] == [plan.MAIN, plan.LANDING, plan.LANDED_MARK]
+        assert kept == [WORDS]
+        assert got["ran"] == ["MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
         [e] = got["emitted"]
         assert e["Act"] == "bolt.submit" and e["frm"] == ["session/s-1/u-7"] and e["Chars"] == len(WORDS)
         assert WORDS not in repr(e)
@@ -112,6 +112,13 @@ class TestTheSubmission:
         submit["verdict"] = heard(uuid=None)
         e = submit["run"](WORDS)["emitted"][0]
         assert e["frm"] == [f"session/s-1/line-{heard(uuid=None).line_hash()[:16]}"]
+
+    def test_several_bolts_on_one_sentence_are_read_once_and_each_landing_names_the_record(self, submit):
+        landed = [ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]
+        submit["outs"] = [QUEUED, QUEUED] + landed + landed  # one host: both queued, then each waited on in order
+        got = submit["run"](WORDS, bolts=("y", "z"))
+        assert [e["frm"] for e in got["emitted"]] == [["session/s-1/u-7"]] * 2 and got["closed"] == ["y", "z"]
+        assert plan.landing_word_read("swancloud", "z", "session/s-1/u-7") == WORDS
 
     @pytest.mark.parametrize("v", [heard("agent:swancloud-operator"), heard(grade="refused"), heard("tool"),
                                    heard(grade="unverified", reason="session s-1 is on mac-studio, not deneb")])
@@ -128,15 +135,16 @@ class TestTheSubmission:
             submit["run"]("  ")
         assert submit["ran"] == []
 
-    def test_the_cards_approval_lands_as_before_naming_no_record(self, submit):
+    def test_the_cards_send_lands_as_before_naming_no_record(self, submit):
         e = submit["run"]()["emitted"][0]
-        assert e["frm"] == [] and e.get("Chars") is None
+        assert "frm" not in e and "Chars" not in e
         assert not (plan.LANDINGS / "swancloud" / "y.json").exists()
 
     def test_a_submission_that_did_not_land_keeps_no_words(self, submit):
-        submit["answers"][plan.LANDING] = landed(rc=1, github=OLD, held="no")
-        with pytest.raises(plan.Refusal, match="did not land"):
+        submit["outs"][1:] = [ran_as(1, "{}"), ran_as(0, said(1, new=OLD, github=OLD, held="no"))]
+        with pytest.raises(plan.Stopped):
             submit["run"](WORDS)
+        assert submit["emitted"][0].get("refused") and "frm" not in submit["emitted"][0]
         assert plan.landing_word_read("swancloud", "y", "session/s-1/u-7") is None
 
 

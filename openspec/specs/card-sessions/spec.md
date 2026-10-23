@@ -242,60 +242,63 @@ A `land/<bolt>` card's session SHALL be one plannotator review of several files,
 - **THEN** the diff in `y`'s session holds only what `y` brings, from where `y` last met main to its head, and none of those landings' changes
 
 ### Requirement: A landing's session follows the bolt's head
-When a merge moves a bolt's head while its landing card is open, crew SHALL end the session on the old head and start one on the new head before it changes the card, and the card changed in place SHALL carry the new link. When `crew card session land/<bolt>` starts the session anew because none runs, or gives a running session's link again while the run record shows the card standing without its reading, crew SHALL change the open landing card in place to carry the link while the card waits on the user, and SHALL leave a card the user has answered as it is, printing the link alone.
+A bolt's reading, keyed `land/<bolt>`, SHALL run on the host of the team holding it while the bolt is a row of its kit's landings card, and its link SHALL be carried on that row. When a merge moves the bolt's head, crew SHALL end the session on the old head and start one on the new head before the row changes, and the card, changed in place, SHALL carry the new link. When `crew card session land/<bolt>` starts the session anew because none runs, or gives a running session's link again while the run record shows the kit's card standing without a row's reading, crew SHALL change the kit's open card in place to carry the link while it waits on the user, and SHALL leave a card the user has answered as it is, printing the link alone.
 
 #### Scenario: A merge moves the head
-- **WHEN** bolt `y`'s landing card is open with a session on head `abc1234`, and a fix merges into `y` at `def5678`
-- **THEN** the session on `abc1234` is no longer running, one on `def5678` is, and the card, changed in place saying its head is now `def5678`, carries the new session's link
+- **WHEN** bolt `y` is a row of `land/crew` with a session on head `abc1234`, and a fix merges into `y` at `def5678`
+- **THEN** the session on `abc1234` is no longer running, one on `def5678` is, and `land/crew`, changed in place saying `y`'s head is now `def5678`, carries the new session's link on `y`'s row
 
 #### Scenario: Started again after a restart
-- **WHEN** the team's host restarted, `land/y`'s session no longer runs, and swb-1-conductor runs `crew card session land/y` while the card waits on the user
-- **THEN** a new session starts on `y` at its head, its link is printed, and the card, changed in place, carries that link
+- **WHEN** the team's host restarted, `land/y`'s session no longer runs, and swb-1-conductor runs `crew card session land/y` while `land/crew` waits on the user
+- **THEN** a new session starts on `y` at its head, its link is printed, and `land/crew`, changed in place, carries that link on `y`'s row
 
 #### Scenario: A card raised before landings had a reading
-- **WHEN** bolt `y`'s landing card was raised with no link before this change, and swb-1-conductor runs `crew card session land/y`
-- **THEN** a session starts on `y` at its head, and the open card is changed in place to carry its link
+- **WHEN** bolt `y`'s row on `land/crew` carries no link, and swb-1-conductor runs `crew card session land/y`
+- **THEN** a session starts on `y` at its head, and the open card is changed in place to carry its link on `y`'s row
 
 #### Scenario: A card already approved
-- **WHEN** the user has approved `land/y`'s card, its session no longer runs, and swb-1-conductor runs `crew card session land/y`
+- **WHEN** the user has sent `land/crew`, `y`'s session no longer runs, and swb-1-conductor runs `crew card session land/y`
 - **THEN** a new session starts and its link is printed, and the card is not changed and no new card follows it
 
-#### Scenario: A running session whose card never got its link
-- **WHEN** `land/y`'s card was posted without its reading, a later try started its session but the card's change was refused, and swb-1-conductor runs `crew card session land/y` while that session runs and the card waits on the user
-- **THEN** the same link is printed, no new session starts, and the card, changed in place, carries that link
+#### Scenario: A running session whose row never got its link
+- **WHEN** `land/crew` was posted with `y`'s row standing without its reading, a later try started `y`'s session but the card's change was refused, and swb-1-conductor runs `crew card session land/y` while that session runs and the card waits on the user
+- **THEN** the same link is printed, no new session starts, and `land/crew`, changed in place, carries that link on `y`'s row
 
 #### Scenario: A running session on a card that carries it
-- **WHEN** swb-1-conductor runs `crew card session land/y` while its session runs and the card already carries its link
+- **WHEN** swb-1-conductor runs `crew card session land/y` while its session runs and `land/crew` already carries every row's link
 - **THEN** the same link is printed and the card is not changed
 
+#### Scenario: A bolt that is no row
+- **WHEN** swb-1-conductor runs `crew card session land/y` while `y` does not read proven
+- **THEN** it is refused, saying `y` is no row of crew's landings card and what it waits on, and nothing is started
 ### Requirement: A landing's raise tries its reading again before raising without it
-When a landing card's reading refuses to open as crew raises or changes the card, crew SHALL try once more as `crew card session land/<bolt>` would, on the team's host: the kit's main fetched there, the bolt's landing read afresh, and its reading opened again. The card SHALL carry the second try's link, and be raised without a reading only when both tries refuse, with the second's reason. A failed fetch SHALL be said and SHALL NOT stop the second try.
+When a bolt's reading refuses to open as crew puts its row on the kit's landings card or changes it, crew SHALL try once more as `crew card session land/<bolt>` would, on the team's host: the kit's main fetched there, the bolt's landing read afresh, and its reading opened again. The row SHALL carry the second try's link, and be on the card without a reading only when both tries refuse, with the second's reason. A failed fetch SHALL be said and SHALL NOT stop the second try.
 
 #### Scenario: The first start fails and the second opens
-- **WHEN** the merge's end raises bolt `y`'s landing card and plannotator's first start of its reading ends before it is ready, and its second start comes up
-- **THEN** one session runs for `land/y` on the team's host, the posted card carries its link, and its `card.post` entry holds no reason
+- **WHEN** the merge's end makes bolt `y` a row of `land/crew` and plannotator's first start of its reading ends before it is ready, and its second start comes up
+- **THEN** one session runs for `land/y` on the team's host, and `y`'s row on the posted card carries its link
 
 #### Scenario: Both starts fail
-- **WHEN** both starts of bolt `y`'s reading end before they are ready as crew raises its landing card
-- **THEN** the card is raised without a reading, saying so with the second start's reason and naming `crew card session land/y`, no session of `land/y` is recorded, and the card's `card.post` entry holds that reason
+- **WHEN** both starts of bolt `y`'s reading end before they are ready
+- **THEN** `y`'s row is on the card without a reading, saying so with the second start's reason and naming `crew card session land/y` as its conductor's act, and no session of `land/y` is recorded
 
 #### Scenario: The bolt no longer reads proven at the second try
 - **WHEN** the first start of bolt `y`'s reading fails and, read afresh, `y` no longer reads proven
-- **THEN** crew does not try again, and posts or changes no card on this raise, as for a bolt that does not read proven
+- **THEN** crew does not try again, and `y` is no row of the card
 
 #### Scenario: Every raise and change tries again
-- **WHEN** bolt `y`'s landing card is raised again after a fix, posted again by the rail's sweep, or changed at a preview's end, and its first start fails
-- **THEN** crew tries the reading a second time before it posts or changes the card, as at a merge's end
+- **WHEN** `y`'s row is put on the card again after a fix, by the rail's sweep, or at a preview's end, and its first start fails
+- **THEN** crew tries the reading a second time before the card is posted or changed, as at a merge's end
 
 ### Requirement: A wait on a landing card starts its reading when none runs
-When `crew card wait land/<bolt>` finds no session of the key on the team's host and the bolt's conductor holds its landing card open there, the wait SHALL start the reading as `crew card session land/<bolt>` does, printing its link and changing the card to carry it while the card waits on the user, and SHALL then wait on it. When the reading will not open, the wait SHALL be refused, saying why and naming `crew card session land/<bolt>`. With no landing card held, it SHALL be refused as before.
+`crew card wait land/<bolt>`, run by the bolt's conductor on the team's host while the bolt is a row of its kit's landings card, SHALL wait on the bolt's reading and return what the user sends from it, each annotation a note on that row, an approval in it landing nothing. When it finds no session of the key, it SHALL start the reading as `crew card session land/<bolt>` does, printing its link and changing the kit's card to carry it while the card waits on the user, and SHALL then wait on it. When the reading will not open, it SHALL be refused, saying why and naming `crew card session land/<bolt>`. While the bolt is no row of an open landings card, it SHALL be refused, saying so.
 
 #### Scenario: A card raised without its reading
-- **WHEN** bolt `y`'s landing card was raised saying its reading could not be opened, and swb-1-conductor runs `crew card wait land/y` once the cause has passed
-- **THEN** a session starts on `y` at its head, its link is printed, the card is changed in place to carry it, and the wait waits on that session
+- **WHEN** bolt `y`'s row says its reading could not be opened, and swb-1-conductor runs `crew card wait land/y` once the cause has passed
+- **THEN** a session starts on `y` at its head, its link is printed, `land/crew` is changed in place to carry it, and the wait waits on that session
 
 #### Scenario: Waiting again after a decision
-- **WHEN** the wait on `land/y` printed the user's annotations and forgot the decided session, and swb-1-conductor runs `crew card wait land/y` again while the card is open
+- **WHEN** the wait on `land/y` printed the user's annotations and forgot the decided session, and swb-1-conductor runs `crew card wait land/y` again while `y` is a row
 - **THEN** a new session starts on `y` at its head, the card carries its new link, and the wait waits on it, saying nothing about no session having been started
 
 #### Scenario: The reading still will not open
@@ -303,8 +306,8 @@ When `crew card wait land/<bolt>` finds no session of the key on the team's host
 - **THEN** the wait is refused, saying the reading could not be opened and why, and naming `crew card session land/y`, and the card is not changed
 
 #### Scenario: No landing card held
-- **WHEN** swb-1-conductor runs `crew card wait land/y` and holds no landing card under `land/y` on this host, and no session of it runs
-- **THEN** the wait is refused, saying no session was started and no landing card of `y` is held there, and nothing is started
+- **WHEN** swb-1-conductor runs `crew card wait land/y` and `y` is no row of an open landings card, and no session of it runs
+- **THEN** the wait is refused, saying `y` is no row of its kit's landings card, and nothing is started
 
 ### Requirement: A session takes a free port of plannotator's range wherever it is started
 crew SHALL start every card's reading session on a port range, so plannotator takes the first port in it no other session holds, whether crew runs in an agent's pane, in a shell outside any agent, or in a raise within another command. The range SHALL be the one the environment's `PLANNOTATOR_PORT` names when it names a range, and otherwise crew's own, 19432–19451.
@@ -314,8 +317,8 @@ crew SHALL start every card's reading session on a port range, so plannotator ta
 - **THEN** batch 13's session starts on the next free port of 19432–19451, and the command prints its link on that port
 
 #### Scenario: Started from an agent's pane
-- **WHEN** a conductor's merge raises bolt `y`'s landing card in an agent whose environment names `PLANNOTATOR_PORT=19432-19451`, while two other sessions hold 19432 and 19433
-- **THEN** `y`'s reading starts on 19434, and its card carries that link
+- **WHEN** a conductor's merge puts bolt `y` on its kit's landings card in an agent whose environment names `PLANNOTATOR_PORT=19432-19451`, while two other sessions hold 19432 and 19433
+- **THEN** `y`'s reading starts on 19434, and its row on the card carries that link
 
 #### Scenario: An environment naming one port
 - **WHEN** crew starts a batch's session where `PLANNOTATOR_PORT` names the single port 19432
@@ -363,23 +366,23 @@ When `crew card wait batch/<n>` finds the planner's card of the batch open on th
 - **THEN** the wait says once that the reading could not be opened and why, naming `crew card session batch/3`, leaves the card as it is, and returns when the user sends the card back
 
 ### Requirement: The rail's read tries a reading its card stands without
-On each rail read, crew's sweep SHALL try the reading of each batch card, long proposal card and landing card posted on this host that waits on the user and that the run record shows standing without its reading, its last post, change or try of the reading having refused to open it: a batch's and a proposal's as `crew card session <key>` does, a landing's as `crew card session land/<bolt>` does, on the host of the team holding the bolt with the bolt read afresh; each changing the card to carry the link. A card whose last try refused under ten minutes before SHALL be left for a later read. The rail SHALL list each such try with what came of it.
+On each rail read, crew's sweep SHALL try the reading of each batch card, long proposal card and kit's landings card posted on this host that waits on the user and that the run record shows standing without its reading, or a row's, its last post, change or try of the reading having refused to open it: a batch's and a proposal's as `crew card session <key>` does, a landings card's by raising it again, which tries each row's reading as `crew card session land/<bolt>` does, on the host of the team holding the bolt with the bolt read afresh; each changing the card to carry the link. A card whose last try refused under ten minutes before SHALL be left for a later read. The rail SHALL list each such try with what came of it.
 
 #### Scenario: A batch card raised without its reading
 - **WHEN** batch 3's card was posted with its reading refused twenty minutes ago, the card waits on the user, and the planner's host now starts plannotator
 - **THEN** the next rail read on that host starts batch 3's reading, changes the card in place to carry its link, and lists `batch/3` as its reading opened
 
-#### Scenario: A landing card raised without its reading
-- **WHEN** bolt `y`'s landing card was posted on swb-1's host with its reading refused twenty minutes ago, the card waits on the user, and that host now starts plannotator
-- **THEN** the next rail read on that host starts `y`'s reading at its head, changes the card in place to carry its link, and lists `land/y` as its reading opened
+#### Scenario: A landings card raised without a row's reading
+- **WHEN** `land/crew` was posted on the main level's host with `y`'s reading refused twenty minutes ago, the card waits on the user, and swb-1's host, which holds `y`, now starts plannotator
+- **THEN** the next rail read on the main level's host raises `land/crew` again, which starts `y`'s reading at its head on swb-1's host, changes the card in place to carry its link, and lists `land/crew` as its rows' readings opened
 
 #### Scenario: A try that fails is left for later
 - **WHEN** a rail read tries proposal 4's reading and it refuses, and another rail read comes five minutes later
 - **THEN** the first read lists `proposal/4` as left with why, and the second does not try it
 
-#### Scenario: A landing's try that fails is left for later
-- **WHEN** a rail read tries `land/y`'s reading and it refuses, and another rail read comes five minutes later
-- **THEN** the first read lists `land/y` as left with why, a `card.reading` entry for `land/y` holds why, and the second read does not try it
+#### Scenario: A landings card's try that fails is left for later
+- **WHEN** a rail read raises `land/crew` again and `y`'s reading still refuses, and another rail read comes five minutes later
+- **THEN** the first read lists `land/crew` as left with why, the card's change records why, and the second read does not try it
 
 #### Scenario: A card whose reading opened since
 - **WHEN** batch 3's card was posted without its reading, and the planner's `crew card session batch/3` has since changed it to carry its link
@@ -389,12 +392,12 @@ On each rail read, crew's sweep SHALL try the reading of each batch card, long p
 - **WHEN** batch 3's card was posted without its reading and the user has sent it back
 - **THEN** no rail read tries its reading
 
-#### Scenario: A landing card on another host
-- **WHEN** `land/y`'s card stands without its reading on the box, and the rail is read on mac-studio
-- **THEN** that read does not try `land/y`'s reading
+#### Scenario: A landings card on another host
+- **WHEN** `land/crew` stands without a row's reading, posted on the box, and the rail is read on mac-studio
+- **THEN** that read does not try it
 
 ### Requirement: A later try of a reading is recorded
-Each try of a batch's, a long proposal's or a landing's reading that is not part of its card's post or change, by `crew card session` starting it anew, by the batch's or the landing's wait or by the rail's sweep, SHALL append one `card.reading` entry to the run record on the card's key, in the name of the card's owner, the planner's for a batch's and a proposal's and the bolt's conductor's for a landing's, done, or refused with crew's own message saying why.
+Each try of a batch's, a long proposal's or a bolt's reading that is not part of its card's post or change, by `crew card session` starting it anew, by the batch's or the bolt's wait or by the rail's sweep, SHALL append one `card.reading` entry to the run record on the reading's key, in the name of its owner, the planner's for a batch's and a proposal's and the bolt's conductor's for a bolt's, `land/<bolt>`, done, or refused with crew's own message saying why. The sweep's try of a kit's landings card is its raise, recorded as the card's change.
 
 #### Scenario: A try that refuses
 - **WHEN** the rail's sweep tries batch 3's reading and plannotator does not list it within its start time
@@ -406,7 +409,7 @@ Each try of a batch's, a long proposal's or a landing's reading that is not part
 
 #### Scenario: A landing's reading started by hand
 - **WHEN** swb-1-conductor runs `crew card session land/y`, no session of `land/y` runs, and the reading opens
-- **THEN** a done `card.reading` entry for `land/y` is appended in swb-1-conductor's name, beside the card it holds
+- **THEN** a done `card.reading` entry for `land/y` is appended in swb-1-conductor's name
 
 #### Scenario: A landing's try off its team's host
 - **WHEN** the planner on mac-studio runs `crew card session land/y --label wldn`, and `y` is held by swb-1 on the box

@@ -176,23 +176,43 @@ A bolt SHALL be the branch `bolt/<bolt>`, made on GitHub from main by sluice at 
 - **THEN** crew refuses, saying it has merged and that a new fix undoes it, and records the refusal
 
 ### Requirement: A bolt lands on main on the user's word
-A bolt whose verification is green SHALL be landed by the partition's main-level ops, on the user's approval of its landing card, by one procedure: `crew bolt submit <bolt>` submits `bolt/<bolt>` to main through sluice and waits for its outcome, main-level ops pushes main without force, and then runs `crew bolt land`; it deploys nothing. `crew bolt submit` SHALL be refused while the kit's main on its host is behind GitHub's, SHALL submit from a short-lived worktree on the bolt's branch at `<kit>/places/land-<bolt>` on the team's host, in the name of whoever asked, SHALL remove that worktree after, and SHALL bring the kit's main checkout level with what landed. The bolt's branch SHALL then be removed, and the team SHALL no longer hold that bolt, keeping any other it holds; `crew bolt land` SHALL say which bolt the team still builds, or that it holds none. A worktree that is kept SHALL NOT stop the landing. When the submission conflicts with main or fails main's checks, nothing SHALL land and nothing SHALL move, and main-level ops SHALL tell the bolt's conductor sluice's words, for the team to take main into the bolt by a fix.
+Bolts whose verification is green SHALL be landed by the partition's main-level ops on the user's word, by one procedure: `crew bolt submit <bolt>...` submits each bolt's branch to its kit's main through sluice, in the order given, and closes each with `crew bolt land` as it lands; it deploys nothing, pushes nothing and levels no host. Each SHALL be submitted from a short-lived worktree on its branch at `<kit>/places/land-<bolt>` on its team's host, in the name of whoever asked, removed once its outcome is in. A bolt that does not land SHALL move nothing, and the bolts after it SHALL go on. The command SHALL exit non-zero when any bolt did not land, naming each.
 
 #### Scenario: The bolt lands
-- **WHEN** the user approves swb-1's landing card and main-level ops runs `crew bolt submit <bolt>`
-- **THEN** sluice lands the bolt on main as a merge commit, the landing's worktree is gone, the kit's main checkout holds what landed with nothing modified, and after the push and `crew bolt land` GitHub's main holds it too, the bolt's records are gone from the plan, and swb-1 can be given its next bolt
+- **WHEN** the user sends swb-1's bolt ticked on its kit's landings card and main-level ops runs `crew bolt submit <bolt>`
+- **THEN** sluice lands the bolt on GitHub's main as a merge commit, the landing's worktree is gone, `crew bolt land` has closed it, the bolt's records are gone from the plan, and swb-1 can be given its next bolt
+
+#### Scenario: Three bolts queued as one chain
+- **WHEN** main-level ops runs `crew bolt submit y z w`, the three held by teams on one host
+- **THEN** `y` is submitted first, `z` once sluice has queued `y`, and `w` once it has queued `z`, none waiting for the one before to land, so sluice tests them as one chain and lands them in that order
+
+#### Scenario: Bolts on two hosts
+- **WHEN** main-level ops runs `crew bolt submit y z`, `y` held by a team on deneb and `z` by one on mac-studio
+- **THEN** `z` is submitted only once `y`'s submission has ended, so `z` never lands before `y`
+
+#### Scenario: One refused, the rest go on
+- **WHEN** `crew bolt submit y z w` runs and sluice refuses `z` for a conflict with main
+- **THEN** `y` and `w` land and are closed, `z` and main are where they were for `z`, the command says `z` did not land in sluice's words and that its team takes main into it by a fix, and it exits non-zero
+
+#### Scenario: Bolts of two kits
+- **WHEN** `crew bolt submit y w` names a bolt of crew and a bolt of swancloud
+- **THEN** it is refused before anything is submitted, saying it lands one kit's bolts at a time
 
 #### Scenario: The waiting bolt lands while the team builds another
-- **WHEN** swc-1 holds `doctor-rows`, proven, and builds `ssh-fix`, and `crew bolt land doctor-rows` runs
+- **WHEN** swc-1 holds `doctor-rows`, proven, and builds `ssh-fix`, and `crew bolt submit doctor-rows` lands it
 - **THEN** swc-1 holds `ssh-fix` alone, the command says swc-1 builds `ssh-fix`, and the conductor's and ops's restart is not made due by the landing, since the branch they carry is `bolt/ssh-fix`
-
-#### Scenario: Main is behind GitHub's
-- **WHEN** `crew bolt submit` runs while the kit's main on the team's host lacks a commit GitHub's main has
-- **THEN** it is refused, saying how far behind main is, and nothing is submitted
 
 #### Scenario: The landing's rebase conflicts
 - **WHEN** the bolt and main changed the same lines and `crew bolt submit` runs
-- **THEN** the command fails with sluice's words, main and the bolt's branch are where they were, the landing's worktree is gone, and the conductor is told to take main into the bolt by a fix
+- **THEN** the command says the bolt did not land with sluice's words, main and the bolt's branch are where they were, the landing's worktree is gone, and the conductor is to take main into the bolt by a fix
+
+#### Scenario: Main is behind GitHub's
+- **WHEN** `crew bolt submit` runs while the kit's main on the team's host lacks a commit GitHub's main has
+- **THEN** nothing is refused for it, since sluice forms each landing on GitHub's main and pushes it with a lease
+
+#### Scenario: A landed bolt crew could not close
+- **WHEN** sluice lands bolt `y` and `crew bolt land y` then refuses, its plan unreadable
+- **THEN** the command says `y` landed and was not closed, naming why and `crew bolt land y` as the act that closes it, and goes on to the next bolt
 
 #### Scenario: The bolt's worktree has uncommitted changes
 - **WHEN** `crew bolt land` runs on a bolt given before bolts were branches, whose worktree has a modified file
@@ -1045,6 +1065,51 @@ Whenever the conductor, ops, construct, coder or verify reports the results of t
 #### Scenario: Nothing passed in a sentence
 - **WHEN** every suite a coder ran passed
 - **THEN** its summary still lists each suite with ✅ and its counts, and never says only "the tests all pass"
+
+### Requirement: A landing's pull request is a draft whenever the user's word does not stand
+In a kit whose sluice policy at main takes pull requests into main, crew SHALL leave the pull request a bolt's landing opened from `bolt/<bolt>` into main a draft, which sluice never takes into main's queue, whenever the user's word to land does not stand for the bolt's head, so that no merge into the bolt lands it by itself. crew SHALL mark it a draft when `crew bolt submit` ends with the bolt not on main, before it answers, naming its link and saying the next `crew bolt submit` on the user's word makes it live again; when a fix starts on the bolt, as the landing card is held for the fix; and before any unit's, chore's or fix's merge into the bolt starts, which SHALL NOT start when crew cannot read or mark it.
+
+#### Scenario: A refused landing leaves its pull request a draft
+- **WHEN** `crew bolt submit` runs on a bolt whose kit takes pull requests into main and sluice refuses it as conflicting with main
+- **THEN** nothing lands, the bolt's pull request into main is a draft, and the command's words name its link, say it is a draft, and say the next `crew bolt submit` on the user's word makes it live again
+
+#### Scenario: A failed landing leaves its pull request a draft
+- **WHEN** `crew bolt submit` runs and main's checks fail on the bolt
+- **THEN** nothing lands and the bolt's pull request into main is a draft
+
+#### Scenario: A landing that lands marks nothing
+- **WHEN** `crew bolt submit` runs and the bolt lands on main
+- **THEN** no pull request is marked a draft, and the command's words are those of a landing
+
+#### Scenario: A fix's start holds the pull request with the card
+- **WHEN** a fix starts on a bolt whose landing was refused and whose pull request into main is ready for review
+- **THEN** the pull request is a draft and the bolt's landing card is withdrawn as held for the fix
+
+#### Scenario: A merge into the bolt does not land it
+- **WHEN** a unit's, chore's or fix's merge into a bolt starts while the bolt's pull request into main is ready for review
+- **THEN** the pull request is a draft before the merge starts, so the merge's move of `bolt/<bolt>` submits nothing to main
+
+#### Scenario: A merge that can't hold the pull request does not start
+- **WHEN** a merge into a bolt starts in a kit that takes pull requests and `gh` cannot list the kit's pull requests or cannot mark the bolt's one a draft
+- **THEN** the merge does not start, and crew names the pull request, or the repository it could not list, with `gh`'s words
+
+### Requirement: The next landing on the user's word readies the pull request
+`crew bolt submit` SHALL mark the bolt's draft pull request into main ready for review before it submits, so sluice takes it at the head the bolt then has, and SHALL refuse, submitting nothing, when it cannot.
+
+#### Scenario: The next landing readies the pull request
+- **WHEN** the user's word to land a bolt whose pull request into main is a draft reaches main-level ops and it runs `crew bolt submit`
+- **THEN** the pull request is marked ready for review before the submission, and the landing goes on as any landing does
+
+#### Scenario: A pull request crew can't ready submits nothing
+- **WHEN** `crew bolt submit` runs and `gh` cannot mark the bolt's draft pull request ready for review
+- **THEN** nothing is submitted, and crew names the pull request with `gh`'s words
+
+### Requirement: A kit that takes no pull requests is asked nothing of GitHub
+crew SHALL read or mark no pull request on GitHub for a kit whose sluice policy at main has no pull requests table for main.
+
+#### Scenario: A kit that takes no pull requests is asked nothing
+- **WHEN** a landing, a fix's start or a merge runs in a kit whose sluice policy at main has no pull requests table for main
+- **THEN** crew runs no `gh` command, and the landing, fix or merge goes on as before
 
 ### Requirement: A split bolt takes no merge
 A bolt is split when its host's own `bolt/<bolt>` has a tip whose policy names a remote for the bolt and the bolt's branch on that remote, read after a fetch, does not hold that tip. A unit's, chore's or fix's merge into a split bolt SHALL be refused before anything is submitted, naming both commits, the merges the remote's copy lacks, and the bolt's landing as the way on. A landing SHALL NOT be refused for it.

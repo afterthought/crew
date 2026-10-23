@@ -363,6 +363,83 @@ class TestQueuedLanding:
         assert self.refusal(standing=False, alive=False) is None
 
 
+class TestMergesHoldThePullRequest:
+    """A merge into the bolt and a fix's start hold the bolt's landing pull request (bolt-teams "A fix's start holds the
+    pull request with the card", "A merge into the bolt does not land it", "A merge that can't hold the pull request
+    does not start"), with pull_hold's reads and marks given as facts."""
+    T = {"name": "swb-1", "label": "wldn", "machine": "box", "kit": {"name": "k", "main": "/k/main", "repo": "o/k"}}
+    READY = dict(number=99, draft=False, head="c" * 40, url="https://github.com/o/k/pull/99")
+
+    def held(self, monkeypatch, got):
+        """pull_hold answering got, (pull, act) or a refusal's words, each call kept as self.asked."""
+        self.asked = []
+
+        def hold(fleet, t, bolt, want):
+            self.asked.append((t["machine"], bolt, want))
+            if isinstance(got, str):
+                plan.fail(got)
+            return got
+        monkeypatch.setattr(plan, "pull_hold", hold)
+
+    def test_a_merge_drafts_a_ready_pull_request_before_it_starts_and_says_so(self, monkeypatch, capsys):
+        self.held(monkeypatch, (self.READY, "draft"))
+        plan.merge_holds({}, self.T, "b", "unit a's merge into bolt/b")
+        assert self.asked == [("box", "b", "held")]
+        assert capsys.readouterr().out == (
+            "Its pull request https://github.com/o/k/pull/99 is a draft, so no merge into bolt/b lands it; the next crew "
+            "bolt submit b, on the user's word, makes it live again.\n")
+
+    def test_a_merge_with_nothing_to_mark_says_nothing(self, monkeypatch, capsys):
+        self.held(monkeypatch, (dict(self.READY, draft=True), None))
+        plan.merge_holds({}, self.T, "b", "unit a's merge into bolt/b")
+        self.held(monkeypatch, (None, None))
+        plan.merge_holds({}, self.T, "b", "chore c's merge into bolt/b")
+        assert capsys.readouterr().out == ""
+
+    def test_a_merge_that_cant_hold_it_does_not_start_naming_it_in_ghs_words(self, monkeypatch):
+        why = plan.pull_said("b", self.READY, "draft", "HTTP 403: Resource not accessible", "o/k")
+        self.held(monkeypatch, why)
+        with pytest.raises(plan.Refusal) as e:
+            plan.merge_holds({}, self.T, "b", "fix/b/gap's merge into bolt/b")
+        assert str(e.value) == f"fix/b/gap's merge into bolt/b does not start: {why}"
+
+    def row(self, monkeypatch):
+        """The bolt's row on its kit's landings card, held by the fix's start: its reading and preview ended on the
+        team's host (land_end) and the kit's card raised with the fix's words (land_hand), each kept as done."""
+        done = []
+        monkeypatch.setattr(plan, "land_end", lambda fleet, label, bolt: done.append(("end", bolt)))
+        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: done.append(("hand", note)))
+        return done
+
+    def test_a_fixs_start_drafts_it_then_holds_the_card(self, monkeypatch, capsys):
+        self.held(monkeypatch, (self.READY, "draft"))
+        closed = []
+        monkeypatch.setattr(plan, "landing_card_keys", lambda entries, bolt, owner: ["land/b"])
+        monkeypatch.setattr(plan.cards, "host_entries", lambda *a: [])
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "box")
+        monkeypatch.setattr(plan, "row_card_close", lambda fleet, label, owner, key, **kw: closed.append((owner, key, kw["reason"])))
+        handed = self.row(monkeypatch)
+        plan.landing_held({}, self.T, "b", "The zone list misses one zone.")
+        assert capsys.readouterr().out.startswith("Its pull request https://github.com/o/k/pull/99 is a draft")
+        assert closed == [("swb-1-conductor", "land/b", "held for a fix: The zone list misses one zone.")]
+        assert handed == [("end", "b"), ("hand", "b is held for a fix: The zone list misses one zone.")]
+
+    def test_a_fixs_start_that_cant_hold_it_says_so_and_the_fix_goes_on(self, monkeypatch, capsys):
+        self.held(monkeypatch, "crew can't read o/k's open pull request from bolt/b into main: gh exited 1: HTTP 401: Bad credentials")
+        closed = []
+        monkeypatch.setattr(plan, "landing_card_keys", lambda entries, bolt, owner: ["land/b"])
+        monkeypatch.setattr(plan.cards, "host_entries", lambda *a: [])
+        monkeypatch.setattr(plan.crew, "this_host", lambda: "box")
+        monkeypatch.setattr(plan, "row_card_close", lambda fleet, label, owner, key, **kw: closed.append(key))
+        handed = self.row(monkeypatch)
+        plan.landing_held({}, self.T, "b", "The zone list misses one zone.")
+        said = capsys.readouterr()
+        assert said.out == "" and said.err == (
+            "crew can't read o/k's open pull request from bolt/b into main: gh exited 1: HTTP 401: Bad credentials; the fix "
+            "goes on, and its merge drafts it before it starts\n")
+        assert closed == ["land/b"]
+
+
 class TestSplitBolt:
     """bolt-teams "A split bolt takes no merge" (plan.19): a merge into a bolt whose host's tip names a remote for it,
     while that remote's bolt/<bolt> lacks the tip, is refused naming both commits, what is lacked and the landing."""

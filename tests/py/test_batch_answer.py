@@ -152,6 +152,9 @@ class Acts:
     def caller(self):
         return self.who
 
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
 
 def answer(acts, key="batch/13", words=WORDS, label=None):
     return plan.batch_answer(FLEET, argparse.Namespace(key=key, excerpt=words, label=label), acts)
