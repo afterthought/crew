@@ -9,4 +9,4 @@
 ## 2. A merge into a split bolt is refused
 
 - [x] 2.1 A unit's and a chore's merge stage and `crew fix merge` run `bolt_split_check` and refuse through `split_refusal` before the place is made again, the carried changes are read or the merge command is handed out, a fix's refusal recorded as `fix.merge` (design, Decision 3; Task notes 2.1). Verify `tests/suite logic` ends with "0 failed".
-- [ ] 2.2 Every test the change affects passes: verify `tests/suite --affected` ends with "0 failed".
+- [x] 2.2 Every test the change affects passes: verify `tests/suite --affected` ends with "0 failed".
