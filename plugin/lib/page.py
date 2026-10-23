@@ -375,6 +375,287 @@ def linked(d, links):
             t["link"] = f"{p['link']}#dock=team:{t['team']}" if p["link"] else None
 
 
+# ------------------------------------------------------------------------------------------------- the docks
+
+# A lineage node's kind as a dock's key names it, a chore's a unit's (plan.11); an agenda item has no dock.
+DOCK = {"signals": "signal", "proposal": "proposal", "unit": "unit", "chore": "unit", "bolt": "bolt"}
+# A lineage node's kind as a dock names it in a row.
+KIND = {"signals": "signal", "agenda": "agenda item", "proposal": "proposal", "unit": "unit", "chore": "chore", "bolt": "bolt"}
+
+
+def key_of(node):
+    """A lineage node's id as the key of its dock (signals/x to signal:x, chore/x to unit:x), or None for a kind that
+    has none, an agenda item's. The key names the item, not where the page draws it."""
+    kind, _, name = node.partition("/")
+    return f"{DOCK[kind]}:{name}" if kind in DOCK and name else None
+
+
+def deploy_key(env, x):
+    """A deploy's key: its environment, its commit and when it was offered or started, which ops.environments gives
+    every deploy one of and never changes once set, since one commit can be offered to an environment more than once."""
+    return f"deploy:{env}/{x['to']}/{x['offered'] or x['started']}"
+
+
+def fix_name(bolt, fix):
+    """A fix's own name, its branch fix/<bolt>/<name> without the part its key already says."""
+    return fix[len(f"fix/{bolt}/"):] if fix.startswith(f"fix/{bolt}/") else fix
+
+
+def dock(kind, title, tail=(), form=None, facts=(), markers=(), parts=(), history=(), attention=None):
+    """A dock's page, plain data the page's script draws whatever its kind: its head's form and line of what it is, its
+    facts [label, text] and [label, text, key] for one that opens another dock, its markers as the board's, its parts
+    {title, rows [{text, key?}]} and its history, entry ids oldest first. A fact or part the data does not hold is left
+    out, and nothing is said blank (read.2)."""
+    return {"kind": kind, "form": form, "title": title, "tail": " · ".join(t for t in tail if t),
+            "facts": [[f[0], f[1]] + ([f[2]] if len(f) > 2 and f[2] else []) for f in facts if f[1] not in (None, "")],
+            "markers": list(markers or []), "attention": attention,
+            "parts": [{"title": t, "rows": [r if r.get("key") else {"text": r["text"]} for r in rows]} for t, rows in parts if rows],
+            "history": list(history)}
+
+
+def word_said(x):
+    """The user's word on a deploy, as the deploys view says it."""
+    if x["answer"] == "waiting":
+        return "waits on your word: hold its card to deploy"
+    by = (x["word"] or {}).get("by") or "no one named"
+    if x["answer"] == "replaced":
+        return (f"approved by {by}, {x['word']['at']}, then the word went to a newer offer before it was deployed" if x["word"]
+                else "not answered, and replaced by a newer offer")
+    if x["answer"] == "unasked":
+        return "deployed with no word asked in the record (an auto environment's, or offered before its window)"
+    return f"approved by {by}, {x['word']['at']}" if x["word"] else None
+
+
+def deploy_said(x):
+    """Where a deploy stands, in the words of its stamp on the board."""
+    if x["answer"] == "waiting":
+        return "waits on your word"
+    if x["answer"] == "replaced":
+        return "replaced, never deployed" if x["word"] else "replaced, unanswered"
+    if x["ended"]:
+        return x["outcome"] or "ended"
+    return "deploying" if x["started"] else "approved"
+
+
+def wait_said(w):
+    """Where an operation waiting on an environment stands, as the board's Operation lane says it."""
+    return (f"handed to {w['agent'] or w['doer']}" if w["state"] == "handed" else "failed" if w["state"] == "failed"
+            else "waits on you" if w["doer"] == "user" else f"waits for {w['agent'] or w['doer'] or 'its doer'}")
+
+
+def docks(d, fleet, label):
+    """Every item of the page's board and deploys, and every team, given the key of its dock, {key: page}: a signal, a
+    proposal, a planned or held bolt and each of its units, a held bolt's fixes, a queued unit, a landing, a deploy and
+    an operation waiting on an environment; a team, from the strip; and the Claude account of each team's session, a
+    subscription, from the team's dock. Each page is made from the page's data, its lineage and the fleet crew already
+    loaded, and nothing else; an item it names is a link only where it has a dock (record 0038, S27, S28)."""
+    B, p = d["board"], crew.partition_of(fleet, label)
+    nodes = {n["id"]: n for n in d["nodes"]}
+    read_at = plan.utc(B["read_at"])
+
+    # Every item's key first, so a page links only what has a dock.
+    for s in B["inception"]["signals"]:
+        s["dock"] = f"signal:{s['signal']}"
+    for x in B["bolt_plan"]["proposals"]:
+        x["dock"] = f"proposal:{x['proposal']}"
+    for b in B["bolt_plan"]["planned"] + B["construction"]:
+        b["dock"] = f"bolt:{b['bolt']}"
+        for u in b["units"]:
+            u["dock"] = f"unit:{u['unit']}"
+        for f in b.get("fixes", []):
+            f["dock"] = f"fix:{b['bolt']}/{fix_name(b['bolt'], f['fix'])}"
+    for u in B["bolt_plan"]["queue"]:
+        u["dock"] = f"unit:{u['unit']}"
+    for o in B["operation"]:
+        o["dock"] = f"landing:{o['bolt']}"
+    # A deploy is one dock from the Operation lane and from the deploys view: its release notes are the view's, its
+    # markers the lane's.
+    deps, waits = {}, {}
+    for e in B.get("environments", []) + d["deploys"]:
+        for x in e["deploys"]:
+            x["dock"] = deploy_key(e["env"], x)
+            deps.setdefault(x["dock"], {"env": e["env"], "markers": []}).update({k: v for k, v in x.items() if k != "markers"})
+            deps[x["dock"]]["markers"] = x.get("markers") or deps[x["dock"]]["markers"]
+        for w in e["waiting"]:
+            w["dock"] = f"operation:{e['env']}/{w['key']}"
+            waits.setdefault(w["dock"], {"env": e["env"], "markers": []}).update({k: v for k, v in w.items() if k != "markers"})
+            waits[w["dock"]]["markers"] = w.get("markers") or waits[w["dock"]]["markers"]
+    sessions = {}
+    for t in B["teams"]:
+        t["dock"] = f"team:{t['team']}"
+        ft = fleet["teams"][t["team"]]
+        account = fleet["hosts"].get(ft["machine"], {}).get("sessions", {}).get(ft["session"], {}).get("account")
+        sessions[t["team"]] = (ft["machine"], ft["session"], account)
+    keys = {x["dock"] for x in walk(B, d["deploys"])} | {f"subscription:{a}" for _, _, a in sessions.values() if a}
+
+    def link(key):
+        return key if key in keys else None
+
+    def named(node):
+        """A lineage node as a row: its kind, its name and its label, a link where it has a dock."""
+        n = nodes[node]
+        return {"text": f"{KIND[n['kind']]} {n['name']}" + (f" · {n['label']}" if n.get("label") else ""), "key": link(key_of(node))}
+
+    def joined(node, way):
+        """The rows of what the lineage joins to a node: those it leads to, those it came from, or both."""
+        return [named(e["to"] if e["from"] == node else e["from"]) for e in d["edges"]
+                if (e["from"] == node and way in ("out", "both")) or (e["to"] == node and way in ("in", "both"))]
+
+    def unit_row(u):
+        """A unit in a bolt's dock, as its link in the ledger's chain: its stage, and its tasks while coded or verified."""
+        tasks = f" {u['tasks'][0]}/{u['tasks'][1]}" if u.get("tasks") and u.get("stage") in ("code", "verify") else ""
+        return {"text": ("chore " if u.get("kind") == "chore" else "") + f"{u['unit']} · {stage_said(u.get('stage'))}{tasks}", "key": link(u["dock"])}
+
+    def deploy_row(x):
+        return {"text": f"deploy {x['to'][:7]} to {x['env']}", "key": link(x["dock"])}
+
+    def carrying(bolt):
+        return [deploy_row(x) for x in deps.values() if bolt in (x.get("bolts") or [])]
+
+    landings = {o["bolt"]: o for o in B["operation"]}
+    out = {}
+    for s in B["inception"]["signals"]:
+        node = f"signals/{s['signal']}"
+        age = plan.age(board.when(s["at"]), read_at) if board.when(s["at"]) else None
+        who = s["captured_by"] or "no one named"
+        out[s["dock"]] = dock("signal", words(s["first"] or s["signal"]), (s["kind"], f"captured by {who}", age and f"{age} ago"),
+                              facts=[("signal", s["signal"]), ("kind", s["kind"]), ("captured by", who), ("captured", s["at"]),
+                                     ("home", s["home"])],
+                              parts=[("assertion", [{"text": nodes[node]["label"]}] if nodes.get(node, {}).get("label") else
+                                      [{"text": s["first"]}] if s["first"] else []),
+                                     ("linked", joined(node, "both") if node in nodes else []),
+                                     ("teams", [{"text": t, "key": link(f"team:{t}")} for t in s.get("teams", [])])],
+                              history=d["histories"].get(node, []))
+    for x in B["bolt_plan"]["proposals"]:
+        node = f"proposal/{x['proposal']}"
+        out[x["dock"]] = dock("proposal", x["case"] or f"proposal {x['proposal']}",
+                              (f"proposal {x['proposal']}", x["by"] and f"by {x['by']}", x["opened"] and f"opened {x['opened']}"), form="sheet",
+                              facts=[("waiting on", ", ".join(f"{t}-conductor" for t in x["waiting"]))], markers=x["markers"],
+                              parts=[("teams", [{"text": t, "key": link(f"team:{t}")} for t in x["teams"]]),
+                                     ("units and bolts", joined(node, "out") if node in nodes else [])],
+                              history=d["histories"].get(node, []))
+    for b in B["bolt_plan"]["planned"] + B["construction"]:
+        held = "team" in b
+        run = (f"{b['team']} on {b['host']}" if b["host"] else b["team"]) if held else "planned, no team"
+        landed = landings.get(b["bolt"])
+        out[b["dock"]] = dock("bolt", b["bolt"], (b["repo"], run, held and stage_said(b["state"])), form="ledger",
+                              facts=[("goal", b["goal"]), ("repository", b["repo"]), ("team", b.get("team"), link(f"team:{b.get('team')}")),
+                                     ("host", b.get("host")), ("state", stage_said(b["state"]) if held else "planned"), ("server", b.get("url"))],
+                              markers=b.get("markers"),
+                              attention="every unit has landed, and the bolt is still in the plan" if held and b["state"] == "landed" else None,
+                              parts=[("units", [unit_row(u) for u in b["units"]]),
+                                     ("fixes", [{"text": f"{f['fix']} · {'merged' if f['merged'] else 'not merged'}", "key": link(f["dock"])}
+                                                for f in b.get("fixes", [])]),
+                                     ("landed", [{"text": f"landed {landed['at']}" + (f" by {landed['by']}" if landed["by"] else ""),
+                                                  "key": link(landed["dock"])}] if landed else []),
+                                     ("carried by", carrying(b["bolt"]))],
+                              history=d["histories"].get(f"bolt/{b['bolt']}", []))
+        for u in b["units"]:
+            out[u["dock"]] = unit_dock(u, b, nodes, d["histories"], link, f"in {b['bolt']}" if held else f"planned in {b['bolt']}")
+        for f in b.get("fixes", []):
+            out[f["dock"]] = dock("fix", f["fix"], (f"fix of {b['bolt']}",),
+                                  facts=[("state", "merged" if f["merged"] else "not merged"), ("slot", f["slot"]), ("worktree", f["worktree"]), ("server", f["url"])],
+                                  parts=[("bolt", [{"text": b["bolt"], "key": link(b["dock"])}])])
+    for u in B["bolt_plan"]["queue"]:
+        out[u["dock"]] = unit_dock(u, None, nodes, d["histories"], link, "queued")
+    for o in B["operation"]:
+        out[o["dock"]] = dock("landing", o["bolt"], ("landed " + o["at"] + (f" by {o['by']}" if o["by"] else ""),), form="record",
+                              facts=[("bolt", o["bolt"], link(f"bolt:{o['bolt']}")), ("landed", o["at"]), ("by", o["by"]),
+                                     ("team", o["team"], link(f"team:{o['team']}"))],
+                              parts=[("units", [{"text": n, "key": link(f"unit:{n}")} for n in o["units"]]), ("carried by", carrying(o["bolt"]))],
+                              history=[e["Id"] for e in sorted(d["entries"].values(), key=lambda e: (e["At"], e["Id"]))
+                                       if e.get("Act") == "bolt.land" and f"bolt/{o['bolt']}" in e["On"] and not e.get("Refused")])
+    for key, x in deps.items():
+        out[key] = deploy_dock(x, link)
+    for key, w in waits.items():
+        out[key] = dock("operation", w["key"], (f"on {w['env']}", wait_said(w)), form="record",
+                        facts=[("state", wait_said(w)), ("environment", w["env"]), ("commit", w["to"]), ("held", "for the user's word" if w.get("held") else None),
+                               ("gate", w.get("gate")), ("at", w["at"])],
+                        markers=w["markers"], parts=[("text", [{"text": w["text"]}] if w["text"] else []), ("note", [{"text": w["note"]}] if w["note"] else [])])
+    for t in B["teams"]:
+        host, session, account = sessions[t["team"]]
+        mine = [b for b in B["construction"] if b.get("team") == t["team"]]
+        out[t["dock"]] = dock("team", t["team"], (f"{t['kit']} on {t['host']}",),
+                              facts=[("kits", ", ".join(t["kits"])), ("host", host), ("session", session),
+                                     ("account", account or NO_ACCOUNT, link(f"subscription:{account}") if account else None)],
+                              parts=[("bolts held", [{"text": b["bolt"], "key": link(b["dock"])} for b in mine] or [{"text": "holds no bolt"}]),
+                                     ("landings", [{"text": f"{o['bolt']} · landed {o['at']}", "key": link(o["dock"])} for o in B["operation"] if o["team"] == t["team"]]),
+                                     ("signals captured", [{"text": words(s["first"] or s["signal"]), "key": link(s["dock"])}
+                                                           for s in B["inception"]["signals"] if t["team"] in s.get("teams", [])]),
+                                     (f"environment {host}", [deploy_row(x) for x in deps.values() if x["env"] == host]
+                                      + [{"text": f"{w['key']} · {wait_said(w)}", "key": link(k)} for k, w in waits.items() if w["env"] == host])])
+    for account in sorted({a for _, _, a in sessions.values() if a}):
+        rows = [{"text": f"{t} · {h} session {s}", "key": link(f"team:{t}")} for t, (h, s, a) in sessions.items() if a == account]
+        rows += [{"text": f"{label}-{role} · {p['machine']} session {s}"} for role, s in p["sessions"].items()
+                 if fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account") == account]
+        out[f"subscription:{account}"] = dock("subscription", account, ("Claude account",), parts=[("sessions on it", rows)])
+    return out
+
+
+def walk(B, deploys):
+    """Every item of the board and the deploys view that has a dock, each once for each place it is drawn."""
+    yield from B["inception"]["signals"]
+    yield from B["bolt_plan"]["proposals"]
+    for b in B["bolt_plan"]["planned"] + B["construction"]:
+        yield b
+        yield from b["units"]
+        yield from b.get("fixes", [])
+    yield from B["bolt_plan"]["queue"]
+    yield from B["operation"]
+    for e in B.get("environments", []) + deploys:
+        yield from e["deploys"]
+        yield from e["waiting"]
+    yield from B["teams"]
+
+
+def words(text, most=64):
+    """A text's first words, cut at a word under most characters, as a dock's title."""
+    text = " ".join((text or "").split())
+    return text if len(text) <= most else text[:most].rsplit(" ", 1)[0] + "…"
+
+
+def stage_said(stage):
+    """A stage as a dock says it: one crew could not read, or none, is unknown (read.1)."""
+    return stage if stage and stage != "unknown" else "unknown"
+
+
+def unit_dock(u, b, nodes, histories, link, where):
+    """A unit's or chore's dock: in a held bolt's ledger, planned in one no team holds, or queued, its head a slip's."""
+    kind = "chore" if u.get("kind") == "chore" else "unit"
+    node = f"{kind}/{u['unit']}"
+    return dock(kind, u["unit"], (kind, where), form="slip" if b is None else None,
+                facts=[("bolt", b and b["bolt"], b and link(b["dock"])), ("repository", (b or u).get("repo")),
+                       ("stage", stage_said(u.get("stage")) if b else "queued"),
+                       ("tasks", f"{u['tasks'][0]} of {u['tasks'][1]} tasks" if u.get("tasks") else None), ("slot", u.get("slot")),
+                       ("worktree", u.get("worktree")), ("server", u.get("url")), ("sources", ", ".join(u.get("sources") or []))],
+                parts=[("intent", [{"text": nodes[node]["label"]}] if nodes.get(node, {}).get("label") else [])],
+                history=histories.get(node, []))
+
+
+def deploy_dock(x, link):
+    """A deploy's dock, as the deploys view says it: its commits, the user's word, its steps and checks, its outcome, the
+    bolts it carried with their changes' proposals as its release notes, and the steps after it."""
+    if x.get("bolts") is None:
+        carried = [{"text": f"can't be read: {x['bolts_why']}"}]
+    else:
+        carried = []
+        for n in x.get("notes") or [{"bolt": b, "proposals": []} for b in x["bolts"]]:
+            carried.append({"text": f"bolt {n['bolt']}", "key": link(f"landing:{n['bolt']}") or link(f"bolt:{n['bolt']}")})
+            carried += [{"text": f"proposal {q['proposal']}" + (f" · {q['label']}" if q["label"] else ""), "key": link(f"proposal:{q['proposal']}")}
+                        for q in n["proposals"]]
+        carried = carried or [{"text": "no landing"}]
+    return dock("deploy", f"deploy {x['to'][:7]}", (f"on {x['env']}", deploy_said(x)),
+                form="record",
+                facts=[("environment", x["env"]), ("to", x["to"]), ("from", x["from"] if x["from"] not in (None, "", "none") else "nothing deployed"),
+                       ("word", word_said(x)), ("offered", x["offered"]), ("started", x["started"]), ("ended", x["ended"]), ("outcome", x["outcome"])],
+                markers=x["markers"],
+                parts=[("steps", [{"text": " ".join(s for s in (s["step"], s["outcome"]) if s)} for s in x["steps"]]),
+                       ("checks", [{"text": " ".join(t for t in (c.get("name"), c.get("state"), c.get("verdict") and f"({c['verdict']} than before)",
+                                                                  c.get("detail")) if t)} for c in x.get("checks") or []]),
+                       ("carried", carried),
+                       ("after the deploy", [{"text": " · ".join(t for t in (a["key"], a["doer"], a["state"], a["note"]) if t)} for a in x.get("after") or []])])
+
+
 # ------------------------------------------------------------------------------------------------- the file
 
 def header(made):
@@ -489,6 +770,7 @@ def page(fleet, a):
                  "unreachable": missing}
     d["board"] = dict(part, read_at=bd["read_at"], unread=bd["unread"])
     d["deploys"] = deploys(d, entries, fleet["partitions"][label]["machine"], stamp)
+    d["docks"] = docks(d, fleet, label)
     d["partitions"], d["label"] = list(fleet["partitions"]), label
     if a.json:
         print(json.dumps(d, indent=1))
