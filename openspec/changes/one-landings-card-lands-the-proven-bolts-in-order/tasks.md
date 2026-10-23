@@ -32,4 +32,4 @@
 
 ## 7. Integration
 
-- [ ] 7.1 Run `tests/moon-tasks` and commit `tests/moon.yml` for the tests added or changed, then `tests/suite --affected` ends with "0 failed".
+- [x] 7.1 Run `tests/moon-tasks` and commit `tests/moon.yml` for the tests added or changed, then `tests/suite --affected` ends with "0 failed".
