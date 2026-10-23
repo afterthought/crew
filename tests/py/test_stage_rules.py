@@ -89,11 +89,20 @@ class TestSettle:
 
 class TestMerge:
     def test_merges_a_verified_unit_whose_after_units_have_merged(self):
-        assert refusal("merge", "verify", after={"b": "merged", "c": "landed"}) is None
+        assert refusal("merge", "verify", after={"b": "merged", "c": "landed"}, delivered_verify=True) is None
 
     def test_waits_on_after_units_not_yet_merged(self):
-        assert refusal("merge", "verify", after={"b": "verify", "c": "merged"}) == (
+        assert refusal("merge", "verify", after={"b": "verify", "c": "merged"}, delivered_verify=True) == (
             "unit a merges after b, not yet merged into bolt/tenant-environments")
+
+    def test_a_unit_whose_verify_delivered_no_report_does_not_merge_naming_the_report(self):
+        # crw-4, 2026-10-23: crew started a unit's merge with no verify report (signal
+        # 2026-10-23-crw-4-conductor-8de4d1fb/01). Its verify may have run, been stuck, stopped short or not ended.
+        assert plan.stage_refusal("a", "tenant-environments", "merge", "verify", None, {"b": "merged"}, USER, "swb-1", [], False,
+                                  False, reports="/home/.local/state/swb-1-team/reports") == (
+            "unit a merges only once its verify has delivered its report, and no verify since its change was last "
+            "written has: no report verify-a-<YYYYMMDD-HHMM>.md was delivered from /home/.local/state/swb-1-team/reports "
+            "(crew unit run a verify)")
 
     def test_waits_for_verify(self):
         assert refusal("merge", "code") == "unit a is in code: it merges once every task is ticked and verify has run"

@@ -376,11 +376,12 @@ ok "the coder's brief names no work that needs dev"
 # A stage ends at its deliverable (teams.4): the conductor waits for every stage and fix through crew and reads no pane
 # for an outcome, takes a stuck stage to the user and runs a stopped-short one again with the answer; the stage agents
 # say what they need with crew needs, and ops, which runs no stage, tells the conductor; verify's report is written once,
-# whole.
+# whole, every run, one with nothing to do as well, and a verify with no report has not ended (record 0007).
 expect_ok crewpy brief swb-1 conductor
 for want in "unit wait <unit>\` as a background command" "you never read a pane for one" "**Stuck**" \
   "run the stage again or wait again only on the user's word" "fix swb-1 <name> --wait\`" \
-  "run the stage again with the answer as its words"; do
+  "run the stage again with the answer as its words" "**Not ended**: a verify's agent ended its turn with no report saved" \
+  "run the verify again only on the user's word"; do
   has "$out" "$want"
 done
 for gone in "If it is waiting on a question for the user, leave it for the user" "When its agent settles, merge it" "tell swb-1-ops \"Deploy"; do
@@ -399,7 +400,8 @@ has "$out" 'tell swb-1-conductor "<what you wait on, and why>"`'; lacks "$out" "
 has "$out" "may hold one more, proven, that waits to land beside it"
 expect_ok crewpy brief swb-1 verify
 has "$out" "unchanged and whole"; has "$out" "crew ends the stage once it is there"
-ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor"
+has "$out" "Save the report every run, one that found nothing to do as well"; has "$out" "A verify that ends with no report there has not ended"
+ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor; verify saves its report every run, and a verify with none has not ended"
 
 # A landing that conflicts lands nothing and goes back to the team as a fix that takes main into the bolt (plan.8,
 # teams.5, record 0026): main-ops submits the bolt with crew bolt submit and passes on sluice's words, the conductor
