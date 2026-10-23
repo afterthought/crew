@@ -11207,8 +11207,10 @@ def record_status(fleet, a):
     the pane, in the words --excerpt gives, which crew reads in the caller's own transcript on this host as the user's
     before it reads the kit (settled_refusal), whoever the caller is (roles.2), and records naming the transcript
     record and the words' length, never the words (record.3), raising nothing; --alternatives makes the card the
-    choice a rule decided; and --accepted or --rejected closes the card with the commit, under either key form
-    (record_card_close)."""
+    choice a rule decided, recorded as the proposed status's Form, none of the file's words (record.3); and --accepted
+    or --rejected closes the card with the commit, under either key form (record_card_close). A card the design agent
+    holds where this host's sign-in can't reach it, posted from another host or lost to it (record_stranded), is
+    posted again saying first that the older copy was lost."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
     p = crew.partition_of(fleet, label)
     k = record_kit(fleet, label, a.kit)
@@ -11238,12 +11240,26 @@ def record_status(fleet, a):
     key, settled = f"record/{a.kit}/{n}", a.status == "proposed" and a.settled_in_pane
     frm = [f"session/{sid}/{v.uuid or f'line-{v.line_hash()[:16]}'}"] if settled else []
     record.emit(label, f"record.{a.status}", [key], frm=frm, commit=[f"{k['repo']}@{sha}"],
-                State="settled in the pane" if settled else None, Chars=len(a.excerpt) if settled else None)
+                State="settled in the pane" if settled else None, Chars=len(a.excerpt) if settled else None,
+                Form="alternatives" if alternatives is not None else None)
     print(f"record {n} in {a.kit}: {a.status} at {sha[:7]}" + (", the user's yes given in the pane; no card is raised" if settled else ""))
     if a.status != "proposed":
         record_card_close(fleet, label, f"{label}-design", key, f"{a.status.capitalize()} at {sha[:7]}")
     elif not settled:
-        raise_record(fleet, label, facts, where, f"Revised at {sha[:7]}: {subject}")
+        raise_record(fleet, label, facts, where, f"Revised at {sha[:7]}: {subject}", dead=record_stranded(fleet, label, key))
+
+
+def record_stranded(fleet, label, key):
+    """Whether the design agent's newest card under a record's key is one this host's sign-in can't reach, posted from
+    another host and not closed, or lost to it (cards.stranded), from the partition's run record of the last cards.DAYS
+    days (record.gather); False, said, when that record did not answer whole, so the card is posted as it would be."""
+    since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=cards.DAYS)).isoformat()
+    entries, missing = record.gather(fleet, [label], since)
+    if missing:
+        print(f"card {key}: whether an older copy of it is held where this host's sign-in can't reach could not be looked for: "
+              + "; ".join(f"{h}: {v}" for h, v in sorted(missing.items())), file=sys.stderr)
+        return False
+    return cards.stranded(entries, key, f"{label}-design", crew.this_host()) is not None
 
 
 # ------------------------------------------------------------------------------- the rail's sweep of the cards
