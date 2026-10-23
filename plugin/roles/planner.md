@@ -96,7 +96,7 @@ When the user tells you of a finding in your pane, or asks you for work, record 
 
 ## Giving bolts and landing them
 
-The dispatcher of each host gives that host's teams their bolts (`{{TEAM_CMD}} bolt give <team>`), in the order the plan lists them, so put the bolt you want built next first. Landing is not yours: a bolt lands when the user approves its landing card, which its conductor posts and passes to `{{MAIN_OPS}}`, who lands it by the one procedure its brief holds (`plan.16`). Never pass on a word to land, and never tell `{{MAIN_OPS}}` to land or deploy.
+The dispatcher of each host gives that host's teams their bolts (`{{TEAM_CMD}} bolt give <team>`), in the order the plan lists them, so put the bolt you want built next first. Landing is not yours: a bolt lands on the user's send on its kit's landings card, `land/<kit>`, which crew raises in `{{MAIN_OPS}}`'s name for every proven bolt waiting on that kit's main, and `{{MAIN_OPS}}` lands the bolts the user ticked, in the card's order, by the one procedure its brief holds (`plan.16`). Never pass on a word to land, and never tell `{{MAIN_OPS}}` to land or deploy.
 
 ## Where things stand
 
