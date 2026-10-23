@@ -5,9 +5,12 @@ record that holds it.
 Claude Code keeps each session's transcript at ~/.claude*/projects/<folder>/<session id>.jsonl (each account keeps
 its own directory, ~/.claude-sub-<name>/), one JSON value per line, in a format it does not document and may change.
 crew leans on it as little as it can: it parses each line as JSON and walks every string in it, knowing no field
-name. It knows two facts of the format: a top-level type of user marks a record the session received, and one of
-assistant a record the agent wrote itself. When either stops holding, a grade falls; nothing that is not a paraphrase
-is refused, and no capture is stopped.
+name. It knows three facts of the format: a top-level type of user marks a record the session received, one of
+assistant a record the agent wrote itself, and one of api-request-blob Claude Code's copy of a message it sent the
+model, the agent's own among them, read from Claude Code 2.1.303's transcript of session
+f965a6bb-1725-4522-8d49-576f4bb1fc50, a chore's verify of 2026-10-20, on deneb on 2026-10-22. When any stops holding, a
+grade falls; nothing that is not a paraphrase is refused, and no capture is stopped: when the copy's type changes, a
+quote of the agent's own earlier words grades found again.
 
 Who asserted the words is read from the mark crew puts on what it sends, and a stage's own prompt, which crew cannot
 mark, from its form: `Fix: …`, a chore's `Chore <name>: …` and `Verify chore <name>: …`, the merge line, and the /opsx:
@@ -23,8 +26,8 @@ session's, such as the one before a /clear, and is not searched.
   verified    the excerpt is in a record the session received; who asserted it is read as far as crew can
   found       it is in the transcript, in a record crew cannot classify
   unverified  crew could not read the transcript, or it is not the live session's, with the reason
-  refused     the transcript is the live session's, and the excerpt is nowhere in it but in crew signal commands and
-              in what the agent wrote itself: a paraphrase
+  refused     the transcript is the live session's, and the excerpt is nowhere in it but in crew signal commands, in
+              what the agent wrote itself, or Claude Code's copies of what it sent the model: a paraphrase
 
 A wait on a stage reads the same transcript for the work the agent started in the background and is still waiting on
 (pending), and for when the session last wrote (last_at). It knows two more facts of the format, read from Claude Code
@@ -63,6 +66,9 @@ STAGE = re.compile(r"^(Fix: |Chore \S+: |Verify chore \S+: |Merge \S+ into bolt/
 SLASH = re.compile(r"<command-name>/opsx:(propose|apply|verify)</command-name>")
 ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.S)
 FRESH = datetime.timedelta(minutes=15)
+# The types of the lines that hold the agent's own writing: its records, and api-request-blob, Claude Code's copy of
+# each message it sends the model (2.1.303, session f965a6bb).
+WROTE = {"assistant", "api-request-blob"}
 NOTICE = "<task-notification>"
 TASK_ID = re.compile(r"<task-id>(.*?)</task-id>", re.S)
 SESSION = re.compile(r"[A-Za-z0-9._:-]+")
@@ -201,8 +207,9 @@ def holds_tool_result(v):
 def check(session, excerpt, skip=(), stage_by=None):
     """Look for the excerpt in the session's transcript, whitespace aside, once it shows it is the live session's: its
     last record written within FRESH. The crew signal command lines that carry an excerpt are crew's commands and their
-    echoes, lines of type assistant what the agent wrote, and lines that name a path in skip the writing of the
-    excerpt's file: none of them is searched, and the rest of a string that holds such a command line is. stage_by is
+    echoes, lines of type assistant what the agent wrote and lines of type api-request-blob Claude Code's copies of
+    what it sent the model, the agent's own among them, and lines that name a path in skip the writing of the excerpt's
+    file: none of them is searched, and the rest of a string that holds such a command line is. stage_by is
     the conductor whose stage the session runs, None for a session that runs none, where a prompt of a stage's form is
     the user's. Returns a Verdict; refused is one too."""
     if not session:
@@ -223,7 +230,7 @@ def check(session, excerpt, skip=(), stage_by=None):
     needle = collapse(excerpt)
     received = other = args = None  # args: the words of the stage command just received, which its expansion ends with
     for n, raw, v in found:
-        if kind(v) == "assistant":
+        if kind(v) in WROTE:
             continue
         every = list(strings(v))
         expansion = False
