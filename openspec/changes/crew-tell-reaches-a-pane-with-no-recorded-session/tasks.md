@@ -8,7 +8,7 @@
 ## 2. A tell reaches a pane herdr names no session for
 
 - [x] 2.1 A tell to an agent herdr names no session for reads the session from crew's record of its pane, and with neither is guarded by herdr's reading alone, never refused for the missing session (design, Decisions 2 and 3; Task notes 2.1); passes `tests/py/test_review.py`, verify `tests/suite logic` ends with "0 failed".
-- [ ] 2.2 On the stubs, a main-level agent whose pane herdr names no session for is told, is refused while the session crew recorded in its pane has a question open, and is told again with no record of its pane (design, Decision 3; Task notes 2.2); verify `tests/suite t-journey-main` ends with "0 failed".
+- [x] 2.2 On the stubs, a main-level agent whose pane herdr names no session for is told, is refused while the session crew recorded in its pane has a question open, and is told again with no record of its pane (design, Decision 3; Task notes 2.2); verify `tests/suite t-journey-main` ends with "0 failed".
 
 ## 3. Docs and the affected tests
 

@@ -25,7 +25,9 @@ HERDR_SESSION names, as herdr reads its own server from a pane's environment, el
 a pane back as herdr does after a restart, its shell alone with nothing running in it, and `herdr --session S stub dead
 <pane> [cwd]` brings it back as herdr 0.9.3 does when the pane's saved folder (cwd, else its own) is gone at the restart:
 listed with a restore_error and no terminal, so its read, run, send-keys and process-info answer pane_not_found, while
-its split and close work. With CREW_TEST_BLOCKED naming agents, each one
+its split and close work. `herdr --session S stub nosession <pane|name> on|off` leaves `agent_session` out of that
+agent's pane's item in `agent get` and `agent list` while on, as herdr's item has none when its integration reported no
+Claude session for the pane, as after herdr's own restore resumed it. With CREW_TEST_BLOCKED naming agents, each one
 named so is stopped on a question in its pane (blocked) once it has its name, as a first run's consent stops Claude.
 `herdr --session S stub leave <pane|name> <n> [status]` makes the next n prompts to that agent, up now or started
 later under that name, untaken, as a prompt that lands before Claude is ready, or whose Enter is lost: each is added to
@@ -124,6 +126,11 @@ def agent_pane(target):
         if a.get("name") == target:
             return p
     return None
+
+
+def sessioned(p):
+    """The agent_session of a pane's agent item: its stub session, or none while `stub nosession` is on for the pane."""
+    return {} if p in st.get("nosession", []) else {"agent_session": {"value": "sid-" + p.replace(":", "-")}}
 
 
 def transcript_of(p):
@@ -293,10 +300,10 @@ elif group == "pane" and cmd == "read":
 elif group == "agent" and cmd == "get":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     a = st["agents"][p]
-    out({"agent": {"pane_id": p, "name": a["name"], "agent_status": a["status"], "agent_session": {"value": "sid-" + p.replace(":", "-")}}})
+    out({"agent": dict({"pane_id": p, "name": a["name"], "agent_status": a["status"]}, **sessioned(p))})
 elif group == "agent" and cmd == "list":  # as herdr 0.9.3 lists them: an agent with no name has none in its item
-    out({"agents": [dict({"pane_id": p, "agent_status": a["status"], "agent_session": {"value": "sid-" + p.replace(":", "-")}},
-                         **({"name": a["name"]} if a["name"] else {})) for p, a in st["agents"].items()]})
+    out({"agents": [dict({"pane_id": p, "agent_status": a["status"]}, **sessioned(p), **({"name": a["name"]} if a["name"] else {}))
+                    for p, a in st["agents"].items()]})
 elif group == "agent" and cmd == "rename":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     st["agents"][p]["name"] = rest[1]
@@ -333,6 +340,9 @@ elif group == "agent" and cmd == "wait":
 elif group == "stub" and cmd == "status":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     st["agents"][p]["status"] = rest[1]
+elif group == "stub" and cmd == "nosession":
+    p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
+    st["nosession"] = [x for x in st.get("nosession", []) if x != p] + ([p] if rest[1] == "on" else [])
 elif group == "stub" and cmd == "leave":
     st.setdefault("leave", {})[rest[0]] = {"n": int(rest[1]), "status": rest[2] if len(rest) > 2 else None}
 elif group == "stub" and cmd == "restore":
