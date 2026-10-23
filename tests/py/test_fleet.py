@@ -124,6 +124,8 @@ class TestWhereItRuns:
         assert [(p["plan"], p["commit"]) for p in d["partitions"]] == [(None, "madswan/main not read"), ("c" * 40, "swancloud/main ccccccc"),
                                                                        ("c" * 40, "wldn/main ccccccc")]
         assert of(d, "madswan")["unread"] == {"the plan of madswan": "fetch failed: timed out"} and of(d, "wldn")["unread"] == {}
+        b = dict(BOARD, partitions=[part("wldn", {"chuck-herdr-alpha": True}, plan=None)], unread={})
+        assert of(fleet(b), "wldn")["commit"] == "wldn/main not started"
         assert of(d, "madswan")["partition"] == "business"
 
     def test_a_host_that_did_not_answer_is_named_with_its_why_and_the_rest_shown(self):

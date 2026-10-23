@@ -5,11 +5,13 @@
 # card session; the rail tab's refresh, in one fetch and one read of each host's kits, prints the rail, sweeps a dead
 # card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards; crew page writes the page whole, with the
 # deploys and its partition links in the layout of its file, saying so when that names no partition, and nothing when
-# the branch can't be read; every view names a host that does not answer and shows the
-# rest; and a plan a hand edit broke is refused, named by its commit. What each lane,
-# line, URL and node says are logic cases (tests/py/test_board.py, test_page.py, test_rail.py), and what the kit
-# reader takes from git, contract cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
-# Reads: tests/stubs-sites/ plugin/lib/board.py plugin/lib/sites.py plugin/lib/page.py plugin/lib/page.html
+# the branch can't be read; crew page --fleet writes every partition on one page beside the partitions' folders, its
+# links in the layout of its file, and a partition's page served as <label>.html links back to it; every view names a
+# host that does not answer and shows the rest; and a plan a hand edit broke is refused, named by its commit. What each
+# lane, line, URL and node says are logic cases (tests/py/test_board.py, test_page.py, test_fleet.py, test_rail.py), and
+# what the kit reader takes from git, contract cases (tests/contract/test_gather.py); each step here checks a command's
+# wiring once.
+# Reads: tests/stubs-sites/ plugin/lib/board.py plugin/lib/sites.py plugin/lib/page.py plugin/lib/page.html plugin/lib/fleet.html
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 export PATH="$TESTS/stubs-sites:$PATH"
 team_world
@@ -183,6 +185,29 @@ lacks "$(parts "$T/served/board.html")" "<a "
 eq "$(sed -n 3p <<<"$out")" "the other partitions are not linked: $T/served/board.html is neither named wldn.html nor in a folder wldn"
 ok "a page written as <label>.html links the other partitions' pages beside it, and one whose file and folder name no partition links none and says so"
 
+# crew page --fleet: every partition of the teams file on one page, written beside the partitions' folders, its path
+# and each partition's header printed; its links follow its file as the partition page's do, and a partition's page
+# served as <label>.html links back to the fleet page as index.html.
+fleet=$(home_of mac-studio)/.local/state/crew/page.html
+expect_ok crew page --fleet
+eq "$(sed -n 1p <<<"$out")" "$fleet"
+eq "$(sed -n 2,4p <<<"$out" | sed -E 's/^as of [0-9-]{10} [0-9:]{5}Z · //' | tr '\n' '|')" \
+  "wldn/main $(git --git-dir "$ws" rev-parse --short=7 wldn/main)|madswan/main not started|swancloud/main not started|"
+json=$(block "$fleet")
+eq "$(j '[.partitions[].label] | join(" ")')" "wldn madswan swancloud"
+eq "$(j '.partitions[0].link') $(j '.partitions[0].teams[] | select(.team == "swb-1") | .link')" "wldn/page.html wldn/page.html#dock=team:swb-1"
+eq "$(j '.partitions[0].kits[] | select(.kit == "switchboard-kit") | .said[1]')" "tenant-environments in construction; 1 bolt planned; 1 unit queued"
+expect_ok crew page --fleet --out "$T/served/index.html"
+eq "$(block "$T/served/index.html" | jq -r '.partitions[0].link')" "wldn.html"
+lacks "$out" "not linked"
+expect_ok crew page --fleet --out "$T/served/fleet.html"
+eq "$(tail -n 1 <<<"$out")" "the partitions are not linked: $T/served/fleet.html is named neither index.html nor page.html"
+expect_ok crew page wldn --out "$T/served/wldn.html"
+has "$(parts "$T/served/wldn.html")" 'href="index.html"'
+expect_fail "crew page takes a partition's label or --fleet, not both" crew page wldn --fleet
+eq "$(records)" "$n"
+ok "crew page --fleet writes every partition on one page beside their folders, links each in the layout of its file and says when it can't, and a partition's page served beside it links back"
+
 # The box asleep: every view names it and shows the rest.
 echo $box > "$T/down"
 expect_ok crew bolts; has "$out" "$box did not answer"; has "$out" "  map-one"
@@ -191,8 +216,10 @@ has "$(lane "$out" attention)" "! $box did not answer (its kits: "
 eq "$(line_of "$(lane "$out" Construction)" "  a  ")" "    a  unknown"
 expect_ok crew sites wldn; has "$out" "$box  did not answer"; has "$out" "unit-map-one--atlas-kit.local"
 expect_ok crew page wldn; has "$(sed -n 3p <<<"$out")" "$box did not answer"
+expect_ok crew page --fleet; has "$out" "wldn: $box did not answer (its kits: "
+eq "$(block "$fleet" | jq -r --arg h $box '.partitions[0].hosts[] | select(.host == $h) | .answered')" "false"
 rm "$T/down"
-ok "a host that does not answer is named by crew bolts, board, sites and page, and the rest is shown"
+ok "a host that does not answer is named by crew bolts, board, sites, page and the fleet page, and the rest is shown"
 
 cp "$mine/page.html" "$T/earlier.html"
 mv "$ws" "$ws.away"

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""page.py: a flywheel's page, one HTML file: its board, its lineage and its deploys, drawn from its run record.
+"""page.py: a flywheel's page, one HTML file: its board, its lineage and its deploys, drawn from its run record; and
+the fleet page, every partition at once.
 
   crew page <label> [--out <file>] [--since <time>]
                                      the partition's board, as crew board reads it, which the page opens on; the
@@ -10,14 +11,26 @@
                                      outcome, and the bolts it carried with their changes' proposals as its release
                                      notes; written whole to ~/.local/state/crew/<label>/page.html on this host, or to
                                      --out, and its path printed with what it was made from
+  crew page --fleet [--out <file>]   the fleet page: every partition of the teams file at once, a block to each, from
+                                     one read of all of them, the one crew board makes: where it runs, each host and
+                                     the herdr sessions its agents run in with each one's Claude account; its kits,
+                                     each main's last landing and what is queued for it; its teams, each one's bolt,
+                                     slots and what its conductor waits on; and what needs attention; each partition
+                                     a link to its page and each team to its dock there, in the layout of the file:
+                                     <label>.html beside index.html, <label>/page.html beside page.html, none, said
+                                     so, for any other name; written whole to ~/.local/state/crew/page.html, beside
+                                     the partitions' folders, or to --out
 
 The board is the one read crew board makes (board.flow_read), of the one partition. Which objects the lineage holds,
 how they are linked and each one's history are read from the run record's entries alone, by the walk crew trace makes
 (record.lineage), so the page and the trace cannot disagree. Labels and present status are read from the plan and kits
 the board read, at the commit the entries were read at, which a command fetches once (plan.12); no entry holds them
 (record.3). The deploys are the ops entries of the main level's host and the landings, as ops.environments reads them
-(plan.14), a deploy's release notes the proposals the lineage joins to each bolt it carried. The file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and
-making it appends no entry (state.4, record.1)."""
+(plan.14), a deploy's release notes the proposals the lineage joins to each bolt it carried. The fleet page is the
+board of every partition from the one read crew board makes of them all, each slot's stage read from the starts and
+ends the run record holds in the board's window (read.5), and each session's account from the hosts file (code.5).
+Each file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and making it
+appends no entry (state.4, record.1)."""
 import argparse, datetime, html, json, os, pathlib, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
@@ -190,9 +203,9 @@ def fleet_partition(fleet, part, unread, entries, since):
     runs, its kits, its teams and its attention in the board's words, with how many of its cards are open."""
     l, p = part["label"], fleet["partitions"][part["label"]]
     attention = [board.attention_text(a) for a in part["attention"]]
-    return {"label": l, "partition": p["partition"], "plan": part["plan"],
-            "unread": {n: why for n, why in unread.items() if n.startswith(f"{l}/main of ") or n == f"the plan of {l}"},
-            "commit": f"{l}/main " + (part["plan"][:7] if part["plan"] else "not read"),
+    mine = {n: why for n, why in unread.items() if n.startswith(f"{l}/main of ") or n == f"the plan of {l}"}
+    return {"label": l, "partition": p["partition"], "plan": part["plan"], "unread": mine,
+            "commit": f"{l}/main " + (part["plan"][:7] if part["plan"] else "not read" if mine else "not started"),
             "hosts": where(fleet, l, part["hosts"]), "kits": fleet_kits(part, entries, since),
             "teams": [fleet_team(fleet, part, t, entries) for t in p["teams"]],
             "attention": attention, "attention_said": attention or ["nothing needs attention"], "cards": len(part["cards"]),
@@ -492,16 +505,51 @@ def page(fleet, a):
         print(f"{h} did not answer: {why}")
 
 
+def fleet_page(fleet, a):
+    """crew page --fleet: one read of every partition in the teams file, the read crew board makes of all of them, made
+    into the fleet page and written whole to --out or beside the partitions' pages; its path printed, then as of when
+    and which commit of each plan, each host or plan of a partition that did not answer, and that the partitions are
+    not linked when the file's name gives no layout. Nothing is refused for a silent host (read.3)."""
+    labels = list(fleet["partitions"])
+    read = board.flow_read(fleet, labels)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    bd = board.board_data(fleet, labels, read, now)
+    d = fleet_data(fleet, bd, read.get("logs", {}), now)
+    out = pathlib.Path(a.out).expanduser().absolute() if a.out else record.ROOT / "page.html"
+    links = fleet_links(out, labels)
+    linked(d, links)
+    if a.json:
+        print(json.dumps(d, indent=1))
+        return
+    write(out, render_fleet(d))
+    print(out)
+    for p in d["partitions"]:
+        print(f"as of {d['made']['at'][:10]} {d['made']['at'][11:16]}Z · {p['commit']}")
+    for p in bd["partitions"]:
+        for x in p["attention"]:
+            if x["what"] in ("host", "plan", "signals"):
+                print(f"{p['label']}: {board.attention_text(x)}")
+    if links is None:
+        print(f"the partitions are not linked: {out} is named neither index.html nor page.html")
+
+
 def main(argv):
     plan.need_recutils()
     sub, argv = (argv[0], argv[1:]) if argv else (None, [])
     sub == "page" or fail(f"page.py runs crew page, not {sub}")
     ap = argparse.ArgumentParser(prog="crew page")
-    ap.add_argument("label")
+    ap.add_argument("label", nargs="?")
+    ap.add_argument("--fleet", action="store_true")
     ap.add_argument("--out")
     ap.add_argument("--since")
     ap.add_argument("--json", action="store_true", help=argparse.SUPPRESS)  # the page's data, for tests: nothing is written
-    page(crew.load(), ap.parse_args(argv))
+    a = ap.parse_args(argv)
+    if a.fleet:
+        a.label is None or fail(f"crew page takes a partition's label or --fleet, not both: {a.label} and --fleet")
+        a.since is None or fail("crew page --fleet takes no --since: the fleet page reads the run record in the board's window")
+        return fleet_page(crew.load(), a)
+    a.label or fail("crew page takes a partition's label, or --fleet for every partition")
+    page(crew.load(), a)
 
 
 if __name__ == "__main__":
