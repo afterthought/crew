@@ -2116,6 +2116,15 @@ class TestActDecisions:
         assert built.close_call({"status": "pending", "version": 1}, "req_a", "wldn-ops", reason="A newer head") == (
             "cancel_request", {"requestId": "req_a", "name": "wldn-ops", "reason": "A newer head"}, "withdrawn")
 
+    def test_a_waiting_card_answered_in_a_conversation_is_cancelled_as_answered_there_and_closed(self):
+        """plan.16: a landing said in ops's pane closes its card as answered in the conversation (Pending You's
+        cancel_request answeredHere, read from its MCP schema on 2026-10-22); a card the user tapped is acked as before."""
+        assert built.close_call({"status": "pending", "version": 1}, "req_a", "crw-5-conductor", outcome="Landed", here=True) == (
+            "cancel_request", {"requestId": "req_a", "name": "crw-5-conductor", "reason": "Landed", "answeredHere": True}, "closed")
+        assert built.close_call({"status": "answered", "version": 3}, "req_a", "crw-5-conductor", outcome="Landed", here=True) == (
+            built.close_call({"status": "answered", "version": 3}, "req_a", "crw-5-conductor", outcome="Landed"))
+        assert "answeredHere" not in built.close_call({"status": "pending", "version": 1}, "req_a", "crw-5-conductor", outcome="Landed")[1]
+
     def test_a_close_given_an_outcome_and_a_reason_acks_an_answered_card_with_the_outcome_and_withdraws_a_waiting_one_with_the_reason(self):
         both = dict(outcome="Dropped on your note", reason="Why now?")
         assert built.close_call({"status": "answered", "version": 3}, "req_a", "wldn-planner", **both)[1]["outcome"] == "Dropped on your note"

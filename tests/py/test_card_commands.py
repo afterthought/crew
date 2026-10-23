@@ -561,6 +561,26 @@ def test_a_close_acks_an_answered_card_with_its_outcome_and_withdraws_a_waiting_
     assert capsys.readouterr().out.splitlines()[-1] == "card land/b1: req_c1 withdrawn"
 
 
+def test_a_landing_on_the_users_words_sends_them_answered_here_and_records_the_outcome_without_them(capsys):
+    """plan.16, main-level spec "The card closes with the user's words": a landing card still waiting closes as answered
+    in the conversation, Pending You sent the user's words, the run record the outcome alone (record.3); one the user
+    also tapped is acked with the words."""
+    landed = plan.landed_words("c" * 40, "24")
+    outcome, said = plan.pane_landed(landed, "wldn-ops", "2026-10-22T21:04:00Z", "Land swb-1's bolt")
+    acts = Acts({"get_request": ({"status": "pending", "version": 1}, None)}, entries=HELD)
+    assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True) == "req_c1"
+    assert acts.calls[1] == ("cancel_request", {"requestId": "req_c1", "name": "swb-1-conductor", "reason": cards.cut(said, cards.OUTCOME),
+                                                "answeredHere": True})
+    assert acts.calls[1][1]["reason"].startswith('Landed on the user\'s word in wldn-ops\'s pane, "Land swb-1\'s bolt"; landed on')
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", outcome)
+    assert "Land swb-1's bolt" not in repr(acts.emitted)
+    assert capsys.readouterr().out.splitlines()[0] == "card land/b1: req_c1 closed"
+    acts = Acts({"get_request": ({"status": "answered", "version": 3}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True)
+    assert acts.calls[1][0] == "ack_answer" and "answeredHere" not in acts.calls[1][1]
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", outcome)
+
+
 LONG = ("Applied: added " + ", ".join(f"the-unit-that-does-thing-{i}" for i in range(1, 9))
         + "; 3 other changes. Left out on your word: the-briefs-say-never-wt-submit-help.")
 

@@ -1016,17 +1016,21 @@ def close_words(got, outcome=None, reason=None):
     return first if first is not None else then
 
 
-def close_call(got, card, name, outcome=None, reason=None):
+def close_call(got, card, name, outcome=None, reason=None, here=False):
     """How crew closes a card, from get_request's answer: one the user answered acked at its version with what was
     done on it, the outcome, or the reason it is withdrawn; one still waiting withdrawn with the reason, or the
-    outcome (close_words). Either is cut to OUTCOME characters, since Pending You refuses a longer one (proposal 142's
-    close on 2026-10-18: "outcome: Too big: expected string to have <=200 characters"); the run record keeps crew's
-    words whole. The tool, its arguments, and the close's state as the run record keeps it."""
+    outcome (close_words), or, with here, the user having answered it in a conversation, as a landing said in ops's
+    pane is (plan.16), cancelled as answered there (Pending You's answeredHere) and closed. Either is cut to OUTCOME
+    characters, since Pending You refuses a longer one (proposal 142's close on 2026-10-18: "outcome: Too big: expected
+    string to have <=200 characters"); the run record keeps crew's words whole. The tool, its arguments, and the
+    close's state as the run record keeps it."""
     words = close_words(got, outcome, reason)
     said = cut(words, OUTCOME) if isinstance(words, str) else words
     if got.get("status") == "answered":
         return ("ack_answer", {"requestId": card, "name": name, "expectedVersion": version_of(got, card), "outcome": said},
                 "closed" if outcome is not None else "withdrawn")
+    if here:
+        return "cancel_request", {"requestId": card, "name": name, "reason": said, "answeredHere": True}, "closed"
     return "cancel_request", {"requestId": card, "name": name, "reason": said}, "withdrawn"
 
 
