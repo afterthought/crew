@@ -569,10 +569,11 @@ def raise_deploy(fleet, row, acts=None, note=None):
     main-level ops's name, following the card follows_of names, or changed in place when the card ops holds asks for
     an older offer still unanswered, or for this one when it is offered again with other files, note naming what
     changed; once the user answered it, left as it is unless a newer head is offered since the head it asked about,
-    when it is followed by a new card (cards.head_anew); posted again when Pending You no longer finds it; built from
-    the open offer, the files it was handed and the partition's run record. None, saying why, when no offer waits on a
-    card; the offer's own call and the rail's sweep alike. A card not posted or changed is said and recorded, and the
-    offer stands. The card's id, or None."""
+    when it is followed by a new card (cards.head_anew); posted again when Pending You no longer finds it, and saying
+    first that an older copy was lost when the rail's sweep hands it the older copy this host can't reach as the row's
+    dead (plan.built_again); built from the open offer, the files it was handed and the partition's run record. None,
+    saying why, when no offer waits on a card; the offer's own call and the rail's sweep alike. A card not posted or
+    changed is said and recorded, and the offer stands. The card's id, or None."""
     import cards, plan
     acts = acts or plan.CardActs(fleet)
     label, key = row["label"], row["key"]
@@ -595,8 +596,8 @@ def raise_deploy(fleet, row, acts=None, note=None):
     facts = deploy_facts(env, offer, lands, ranged, kept_text(d / "notes.md"), steps)
     facts["follows"] = cards.follows_of("deploy", {"env": env, "head": offer["Head"]}, gathered, owner)
     anew = cards.head_anew(mine, held, offer["Head"])
-    return plan.row_card_change(fleet, label, owner, cards.deploy_card, facts, said or "Raised again", ops_where(fleet, label), acts,
-                                anew=anew)
+    build = plan.built_again(cards.deploy_card) if row.get("dead") else cards.deploy_card
+    return plan.row_card_change(fleet, label, owner, build, facts, said or "Raised again", ops_where(fleet, label), acts, anew=anew)
 
 
 def stages_working(fleet, env):
@@ -616,9 +617,10 @@ def stages_working(fleet, env):
 def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
     """Raise the card of the rail row op/<env>/<n> of row["label"], a step that waits on the user, one at a time
     (record 0031 §5): posted in main-level ops's name, following the deploy's card or the step card before it, once its
-    point has come (step_point), and posted again when Pending You no longer finds it; while its card is open, changed
-    with note, or followed by a new card when its kind changed (step_again). None, saying why, before then; the step's
-    own call and the rail's sweep alike. The card's id, or None."""
+    point has come (step_point), and posted again when Pending You no longer finds it, saying first that an older copy
+    was lost when the rail's sweep hands it the older copy this host can't reach as the row's dead (plan.built_again);
+    while its card is open, changed with note, or followed by a new card when its kind changed (step_again). None,
+    saying why, before then; the step's own call and the rail's sweep alike. The card's id, or None."""
     import cards, plan
     acts = acts or plan.CardActs(fleet)
     label, key = row["label"], row["key"]
@@ -630,7 +632,8 @@ def raise_step(fleet, row, acts=None, note="Raised again", kind_changed=False):
     n, _, e = step
     facts = step_facts(env, n, e, label, stages_working(fleet, env) if held(e) else None)
     facts["follows"] = cards.follows_of("step", {"env": env, "key": key}, mine, f"{label}-ops")
-    return plan.row_card_change(fleet, label, f"{label}-ops", cards.step_card, facts, note, ops_where(fleet, label), acts, kind_changed)
+    build = plan.built_again(cards.step_card) if row.get("dead") else cards.step_card
+    return plan.row_card_change(fleet, label, f"{label}-ops", build, facts, note, ops_where(fleet, label), acts, kind_changed)
 
 
 def raise_next_step(fleet, label, env, k=None):

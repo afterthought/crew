@@ -246,6 +246,14 @@ def test_a_ticked_bolt_sluice_refused_is_held_and_the_rest_close_the_card():
                              "refused its landing at abc1234, and it waits for its team's fix: x.", None)
 
 
+def test_a_landing_on_the_users_word_in_ops_pane_closes_a_waiting_card_no_row_of_which_can_land_as_answered_there():
+    """main-level "A landing said in ops's pane closes its card naming the user's words": the word answers the card."""
+    assert plan.landings_step([], waiting("y@abc1234"), None, set(), here=True) == ("answered", "no bolt waits to land on its main")
+    assert plan.landings_step([hold("z")], waiting("y@abc1234", "z@abc1234"), None, {"z"}, here=True)[0] == "answered"
+    step = plan.landings_step([box("z")], waiting("y@abc1234", "z@abc1234"), None, {"z"}, note="Landed on the user's word", here=True)
+    assert step[:2] == ("change", "Landed on the user's word; y no longer waits to land")
+
+
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():
     step = plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), [], {"y", "z"})
     assert step == ("close", "Sent with no bolt ticked, so nothing lands. Left: y and z.", ["y", "z"])
@@ -431,7 +439,7 @@ def test_the_raise_is_handed_to_the_main_machine_as_the_one_asking(monkeypatch, 
 
 def test_on_the_main_machine_the_raise_runs_in_this_process_and_a_refusal_refuses_nothing(monkeypatch, capsys):
     monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
-    monkeypatch.setattr(plan, "raise_landings", lambda fleet, label, kit, note=None: plan.fail(f"no plan, {note}"))
+    monkeypatch.setattr(plan, "raise_landings", lambda fleet, label, kit, note=None, pane=None: plan.fail(f"no plan, {note}"))
     plan.land_hand(FLEET, "swancloud", "crew", "x")
     assert capsys.readouterr().err == "crew's landings card is not raised: no plan, x\n"
 
@@ -452,3 +460,45 @@ def test_crew_land_row_prints_the_row_as_one_line_of_json(monkeypatch, capsys):
     plan.land_row_cmd(FLEET, argparse.Namespace(label="swancloud", bolt="y", json=True))
     out, err = capsys.readouterr()
     assert (out, err) == ('{"bolt": "y", "why": "no"}\n', "ended land/y's session\n")
+
+
+# ------------------------------------------------------------------- a landing in ops's pane, a card left elsewhere
+
+PANE = "Landed on the user's word in swancloud-ops's pane; landed on GitHub's main at 1111111"
+SAID = 'Landed on the user\'s word in swancloud-ops\'s pane, "Land crw-1\'s bolt"; landed on GitHub\'s main at 1111111'
+WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 2}, None)}
+
+
+def test_a_pane_landing_closes_the_waiting_kits_card_no_row_of_which_can_land_as_answered_with_the_users_words(monkeypatch):
+    """main-level "The card closes with the user's words": Pending You is sent the words, the run record keeps none."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234")]
+    acts = LandActs({}, held, answers=WAITING)
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(PLAN))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts, note=SAID, pane=PANE) == "req_k1"
+    tool, args = acts.calls[-1]
+    assert (tool, args["answeredHere"], args["reason"]) == ("cancel_request", True, f"{SAID}; no bolt waits to land on its main")
+    close = acts.emitted[-1]
+    assert (close["Act"], close["State"], close["Outcome"]) == ("card.close", "closed", f"{PANE}; no bolt waits to land on its main")
+    assert "Land crw-1's bolt" not in repr(acts.emitted)
+
+
+def test_a_pane_landing_changes_the_kits_card_naming_the_users_words_while_another_row_can_land(monkeypatch):
+    """main-level "Another row still waits"."""
+    held = [dict(Act="card.post", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234 z@abc1234 v@abc1234")]
+    acts = LandActs({"z": row("z"), "v": row("v")}, held, answers=WAITING)
+    three = PLAN.replace("%rec: Unit", "Bolt: v\nRepo: crew\nTeam: crw-1\n\n%rec: Unit")
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(three))
+    assert plan.raise_landings(FLEET, "swancloud", "crew", acts, note=SAID, pane=PANE) == "req_k1"
+    change = next(a for t, a in acts.calls if t == "update_request")
+    assert change["changeNote"].startswith(SAID) and not [t for t, _ in acts.calls if t == "cancel_request"]
+
+
+def test_the_sweeps_raise_of_a_kits_card_handed_an_older_copy_posts_it_saying_that_copy_is_dead(monkeypatch):
+    """rail-cards "A landings card left on the host the main level left"."""
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan(PLAN))
+    r = {"label": "swancloud", "key": "land/crew", "group": "land"}
+    acts, plain = LandActs({"y": row("y")}, answers=POSTED), LandActs({"y": row("y")}, answers=POSTED)
+    assert plan.raise_landings_row(FLEET, dict(r, dead="req_k0"), acts) == "req_k1"
+    assert plan.raise_landings_row(FLEET, r, plain) == "req_k1"
+    dead, bare = [next(a for t, a in x.calls if t == "post_request")["summary"] for x in (acts, plain)]
+    assert dead == f"{cards.DEAD}\n\n{bare}"
