@@ -1225,6 +1225,14 @@ class TestLandings:
         assert c["questions"][1]["options"][0]["label"] == "5. b5"
         assert c["questions"][1]["recommendedIds"] == ["land:b5", "land:b6", "land:b7"]
 
+    def test_several_lists_each_carry_what_follows_a_yes_and_the_card_carries_no_rationale(self):
+        then = ("After they land: main-level ops lands them through sluice in this order, closing each as it lands, "
+                "and every host takes them.")
+        c = landings(7)["card"]
+        assert "rationale" not in c
+        assert [q["rationale"] for q in c["questions"]] == [then, then]
+        assert landings(3)["card"]["rationale"] == then
+
     def test_a_held_row_is_on_the_face_with_why_and_no_box(self):
         c = landings(2, held=[{"bolt": "w", "why": "held for a fix: The zone list misses one zone. (fix/w/gap)"}])["card"]
         assert [o["id"] for o in c["options"]] == ["land:b1", "land:b2"]
