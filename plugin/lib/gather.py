@@ -232,8 +232,9 @@ def fix_merged(main, branch, bolt, ref=None):
 def fix_facts(main, branches, ups, now, at=None):
     """What a fix's stage is read from, of each fix branch named (branches), by branch, with its upstream from ups
     (upstreams): its bolt (bolt_ref), whether it has merged into it (merged, as fix_merged reads it), at the ref its
-    bolt is read at when at names it ({bolt: ref}, bolt_at; None for a bolt crew can't read), else at the ref it tracks, whether the kit's main now (now, now_ref) holds its tip (on_main), and whether it has moved since it was made
-    (moved; None when neither main nor its bolt holds its tip, so it decides nothing). Read with as few processes as
+    bolt is read at when at names it ({bolt: ref}, bolt_at; None for a bolt crew can't read), else at the ref it
+    tracks, whether the kit's main now (now, now_ref) holds its tip (on_main), and whether it has moved since it was
+    made (moved; None when neither main nor its bolt holds its tip, so it decides nothing). Read with as few processes as
     git allows: one listing of the fix branches main holds and one of the bolt refs; a branch's bolt is asked only when
     its ref exists, and its reflog only when main or its bolt holds its tip."""
     if not branches:

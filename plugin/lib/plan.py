@@ -1052,8 +1052,8 @@ class Stages:
 
     def bolt_state(self, b):
         """A bolt's state: planned while no team holds it; unknown when its kit can't be read; landed once every unit
-        and chore has landed; else unknown when crew can't tell where the bolt is read (gather.bolt_read); waits, to land, once every one has merged and sluice is green at its head (teams.16);
-        else active."""
+        and chore has landed; else unknown when crew can't tell where the bolt is read (gather.bolt_read); waits, to
+        land, once every one has merged and sluice is green at its head (teams.16); else active."""
         if not b.get("Team"):
             return "planned"
         k, _ = self.kit(b)
@@ -5358,10 +5358,10 @@ HEAD = r"""cd "$1" && git rev-parse HEAD"""
 # <name> <paths...>", exit 3. Each taking is a merge commit of its own, never a fast-forward, so the place's own work is
 # its first-parent line with no merges (a chore's, plan.11). Never a push, never a write to their branches.
 TAKE = r"""cd "$1" || exit 1
-unit=$2 bolt=$3; shift 3
+unit=$2 at=$3; shift 3
 start=$(git rev-parse HEAD)
 refs=(); for b; do refs+=("refs/heads/$b"); done
-[ -z "$(git rev-list -n1 --no-merges HEAD --not "$bolt" "${refs[@]}")" ] || exit 0
+[ -z "$(git rev-list -n1 --no-merges HEAD --not "$at" "${refs[@]}")" ] || exit 0
 for b; do
   a=${b#*/}
   if ! git merge-base --is-ancestor "refs/heads/$b" HEAD; then
@@ -6986,8 +6986,8 @@ def deliverable_facts(fleet, t, o, place=None):
     """What delivered judges an owed stage by, read on the team's host, only what its stage asks: the newest verify
     report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it, a unit's change
     archived too, and its head, read where the bolt is read (gather.bolt_read) once its GitHub is fetched, or why it
-    could not be fetched (fetch) or read (unread); for a chore's code, its own newest commit and when it was committed; else the branch's
-    head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since it
+    could not be fetched (fetch) or read (unread); for a chore's code, its own newest commit and when it was
+    committed; else the branch's head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since it
     began, whether its planning is complete. The head is read once and the rest read at that commit, never at the branch
     again: an agent that commits between the reads would pair one commit's time or ticks with another's sha."""
     main, f = t["kit"]["main"], {}
@@ -7327,14 +7327,14 @@ def reach_way(owed, status, stage, verified):
 # after the bolt, of merged After units as the place took them, are left out with the bolt's commits: the rebase
 # replays what is beyond both, from a commit with no ref whose parents are the bolt and those heads.
 ONTO = r"""cd "$1" || exit 1
-bolt=$2; shift 2
-git merge-base --is-ancestor "$bolt" HEAD && exit 0
-upstream=$bolt
+at=$2; shift 2
+git merge-base --is-ancestor "$at" HEAD && exit 0
+upstream=$at
 if [ $# -gt 0 ]; then
   parents=(-p "$upstream"); for h; do parents+=(-p "$h"); done
   upstream=$(git commit-tree "${parents[@]}" -m "crew: the bolt and the heads taken" "$upstream^{tree}") || exit 1
 fi
-if git rebase -q --onto "$bolt" "$upstream" >/dev/null 2>&1; then echo rebased; exit 0; fi
+if git rebase -q --onto "$at" "$upstream" >/dev/null 2>&1; then echo rebased; exit 0; fi
 paths=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
 git rebase --abort >/dev/null 2>&1
 echo "conflict $paths"; exit 3
