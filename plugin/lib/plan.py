@@ -11315,17 +11315,19 @@ def card_uploaded(acts, key, b, got):
         print(f"card {key}: its picture did not reach the card: {why}", file=sys.stderr)
 
 
-def unread_of(b):
-    """A built card's post or change entry's Unread: why its reading could not open (unopened), crew's own message
-    (record.3), or nothing when it opened or the card links none."""
-    return {"Unread": b["unread"]} if b.get("unread") else {}
+def built_fields(b):
+    """A built card's post or change entry's own fields: Unread, why its reading could not open (unopened), crew's own
+    message (record.3), left out when it opened or the card links none; and Heads, a kit's landings card's rows as
+    <bolt>@<head>, :left after one the user cleared on their last send (cards.landings_card), which its next raise reads
+    (landings_step)."""
+    return ({"Unread": b["unread"]} if b.get("unread") else {}) | ({"Heads": " ".join(b["heads"])} if b.get("heads") else {})
 
 
 def card_posted(acts, label, owner, b, where, entries=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
     posted under the row's key, or the key with its revision once a card of the owner's under it closed, either filled
     out to Pending You's eight characters when shorter (post_key, from entries, this host's run record unless given),
-    and recorded under the row's key, with why its reading could not open when it did not (unread_of). A post Pending
+    and recorded under the row's key, with why its reading could not open when it did not (built_fields). A post Pending
     You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
     this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
@@ -11348,7 +11350,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
             again = cards.card_under(acts.entries(label), key, owner) == card
             read = followed_read(py, follows, owner) if held and not again else None
     except Refusal as e:
-        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key, **unread_of(b))
+        acts.emit(label, "card.post", [obj], by=owner, refused=str(e), Key=key, **built_fields(b))
         print(f"card {key} not posted: {e}", file=sys.stderr)
         return None
     url = got.get("url")
@@ -11357,7 +11359,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
         print(f"card {key}: {card}{url}, its post recorded already")
         print(cards.adopt_line(card, owner))
         return card
-    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key, **unread_of(b))
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key, **built_fields(b))
     print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
     if held:
@@ -11400,6 +11402,8 @@ def reading_of(b):
     """Whether a built card links a reading session, and of which kind: a batch's and a landing's always, a
     proposal's when its builder says it needs one, for more than fifteen new units; None for any other."""
     kind = b["key"].split("/")[0]
+    if b.get("linked"):  # a kit's landings card, each of whose rows' readings its raise opened (landings_card)
+        return None
     return kind if kind in ("batch", "land") or (kind == "proposal" and b.get("session")) else None
 
 
@@ -11476,7 +11480,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     owner holds none, and posted again, its summary saying the older copy is dead, when Pending You no longer finds it.
     A landing's card and a long proposal's are built with their reading session's link, as a post's is (card_built),
     a landing's session on a moved head started anew there, so the card changed carries the new link, and its entry
-    why it could not open when it did not (unread_of). A refusal is said and recorded as the change refused, refusing
+    why it could not open when it did not (built_fields). A refusal is said and recorded as the change refused, refusing
     nothing of the event. The card's id, the new card's when one was
     posted, or None."""
     acts = acts or CardActs(fleet)
@@ -11507,7 +11511,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
             if lost is None and how == "change":
                 card_uploaded(acts, key, b, got)
     except Refusal as e:
-        acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key, **unread_of(b))
+        acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key, **built_fields(b))
         print(f"card {key} not changed: {e}", file=sys.stderr)
         return None
     closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner)]
@@ -11525,7 +11529,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
         print(f"card {key}: {card} " + ("closed, the user having answered it" if state == "closed" else f"withdrawn, {why}")
               + ", and its new version follows it")
         return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
-    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key, **unread_of(b))
+    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key, **built_fields(b))
     v = got.get("version")
     print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
     return card

@@ -1186,6 +1186,101 @@ class TestLanding:
         assert c == landing(link=self.READ)["card"] and "preview" not in json.dumps(c).lower()
 
 
+def landings_row(bolt, team="swc-1", head="abc1234def", **more):
+    return dict(dict(bolt=bolt, kit="crew", units=["a", "b"], chores=["c"], batches={"a": 7, "b": 7}, head=head, at="10:02",
+                     moved=2, pr={"number": 23, "url": "https://github.com/afterthought/crew/pull/23"}, team=team,
+                     conductor=f"{team}-conductor", forecast=[], link=f"http://deneb.ts.swancloud.net:19432/{bolt}",
+                     preview=None), **more)
+
+
+def landings(n, **more):
+    return built.landings_card(dict(dict(kit="crew", rows=[landings_row(f"b{i}") for i in range(1, n + 1)]), **more))
+
+
+class TestLandings:
+    """A kit's landings card (rail-cards "The landing card is posted once the bolt's verification is green", "A row that
+    can land is a box, ticked as crew proposes", "Landing is approved only by holding the button"): land/<kit>, its
+    rows in the plan's order, its form by how many can land."""
+
+    def test_one_row_is_todays_approve_of_risk_high_titled_as_today_with_no_high_stakes(self):
+        b = landings(1)
+        c = b["card"]
+        assert b["key"] == "land/crew" and b["heads"] == ["b1@abc1234"] and b["linked"]
+        assert c["title"] == "Land the bolt b1 on crew's main"
+        assert (c["kind"], c["approve"]["risk"], c["approve"]["reversible"]) == ("approve", "high", False)
+        assert "highStakes" not in c
+        assert "No conflict is forecast." in c["summary"]
+
+    def test_three_rows_are_one_ticked_list_carrying_high_stakes_in_order(self):
+        c = landings(3)["card"]
+        assert (c["kind"], c["highStakes"], c["multi"], "approve" in c) == ("multi", True, {"min": 0, "max": 3}, False)
+        assert [o["label"] for o in c["options"]] == ["1. b1", "2. b2", "3. b3"]
+        assert c["recommendedIds"] == ["land:b1", "land:b2", "land:b3"]
+        assert c["title"] == "Land on crew's main: 3 bolts in order"
+        assert "One send lands the ticked ones in that order" in c["summary"]
+        o = c["options"][0]
+        assert o["detail"] == "2 units and 1 chore; read in batch 7; green at abc1234 since 10:02; swc-1-conductor"
+        assert o["consequence"] == "No conflict is forecast."
+        assert all(len(x["label"]) <= built.LABEL and len(x["detail"]) <= built.DETAIL and len(x["consequence"]) <= built.DETAIL
+                   for x in c["options"])
+
+    def test_a_rows_forecast_is_its_consequence_and_on_its_paragraph(self):
+        rows = [landings_row("y"), landings_row("z", forecast=[("main", ["README.md"]), ("y", ["plugin/lib/plan.py"])])]
+        c = built.landings_card(dict(kit="crew", rows=rows))["card"]
+        said = "It is forecast to conflict with main on README.md; and with y on plugin/lib/plan.py."
+        assert c["options"][1]["consequence"] == said
+        assert said in "\n".join(c["artifacts"][0]["lines"])
+
+    def test_a_forecast_not_made_is_said_with_why(self):
+        assert built.forecast_said([("main", None)], "bolt/y is on no branch crew can read") == (
+            "Its forecast against main could not be made: bolt/y is on no branch crew can read.")
+
+    def test_seven_rows_are_two_lists_of_four_and_three_with_about(self):
+        c = landings(7)["card"]
+        assert "options" not in c and c["about"] == {"kind": "other", "title": "Land on crew's main"} and c["highStakes"]
+        assert [len(q["options"]) for q in c["questions"]] == [4, 3]
+        assert [q["id"] for q in c["questions"]] == ["rows-1", "rows-2"]
+        assert c["questions"][1]["options"][0]["label"] == "5. b5"
+        assert c["questions"][1]["recommendedIds"] == ["land:b5", "land:b6", "land:b7"]
+
+    def test_a_held_row_is_on_the_face_with_why_and_no_box(self):
+        c = landings(2, held=[{"bolt": "w", "why": "held for a fix: The zone list misses one zone. (fix/w/gap)"}])["card"]
+        assert [o["id"] for o in c["options"]] == ["land:b1", "land:b2"]
+        face = "\n".join(c["artifacts"][0]["lines"])
+        assert "**Held, with no box**" in face and "- **w**: held for a fix: The zone list misses one zone. (fix/w/gap)" in face
+        one = landings(1, held=[{"bolt": "w", "why": "held"}])["card"]
+        assert [a["title"] for a in one["artifacts"]][1] == "Held on crew's main, with no box"
+
+    def test_a_bolt_cleared_on_the_last_send_is_unticked_and_said_so(self):
+        c = landings(3, left=["b2"])["card"]
+        assert c["recommendedIds"] == ["land:b1", "land:b3"]
+        assert c["options"][1]["detail"].startswith("Left on your last send. ")
+        assert landings(3, left=["b2"])["heads"] == ["b1@abc1234", "b2@abc1234:left", "b3@abc1234"]
+
+    def test_the_face_names_each_rows_reading_preview_and_pull_request(self):
+        preview = {"head": "abc1234def", "name": "preview/1", "addresses": {"web": "http://web-abc1234"}, "state": "up"}
+        rows = [landings_row("y", preview=preview), landings_row("z", link=None, unread="plannotator is not on the path")]
+        b = built.landings_card(dict(kit="crew", rows=rows))
+        face = "\n".join(b["card"]["artifacts"][0]["lines"])
+        assert "[Read y](http://deneb.ts.swancloud.net:19432/y)" in face and "[Preview web](http://web-abc1234)" in face
+        assert "[Pull request #23](https://github.com/afterthought/crew/pull/23)" in face
+        assert "Its reading could not be opened: plannotator is not on the path; swc-1-conductor starts it with crew card session land/z" in face
+        assert "- a\n- b\n- c (chore)" in face
+        assert [l["label"] for l in b["card"]["context"]["links"]][:2] == ["Read y", "Preview y: web"]
+
+    def test_a_card_holds_at_most_pending_yous_artifacts(self):
+        c = landings(5)["card"]
+        assert len(c["artifacts"]) == built.ARTIFACTS
+        assert [a["title"] for a in c["artifacts"]][1:6] == ["Read b1", "Read b2", "Read b3", "Read b4", "Read b5"]
+
+    def test_the_form_by_how_many_rows_can_land(self):
+        assert [built.landings_form(n) for n in (1, 2, 5, 6, 20)] == ["approve", "multi", "multi", "lists", "lists"]
+
+    def test_a_card_with_no_row_that_can_land_is_refused(self):
+        with pytest.raises(crew.Refusal):
+            built.landings_card(dict(kit="crew", rows=[]))
+
+
 class TestDeploy:
     def test_three_landings_since_srvs_last_deploy(self):
         b = deploy()
