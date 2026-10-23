@@ -19,7 +19,7 @@ export CREW_AGENT=swb-1-conductor
 for u in a b c d; do crew unit run $u construct >/dev/null; done
 echo "a's own" > "$kd/places/a/own"; commit_all "$kd/places/a" "feat(a): written before the drop"; aat=$(short unit/a)
 CREW_AGENT= expect_ok crew unit drop a "not this one"; mkdir -p "$reports"
-has "$out" "$kd/places/a is removed, and unit/a is kept at $aat: unit a is in no plan, and it holds 1 commit whose patch bolt/tenant-environments lacks (git cherry), the user's to keep or delete; a unit added as a starts from it"
+has "$out" "$kd/places/a is removed, and unit/a is kept at $aat: unit a is in no plan, and it holds 1 commit whose patch origin/bolt/tenant-environments lacks (git cherry), the user's to keep or delete; a unit added as a starts from it"
 eq "$(short unit/a)" "$aat"
 eq "$(field $box branch.kept Head unit/a team/swb-1)" "$aat"
 eq "$(field $box branch.kept Count unit/a)" "1"
@@ -29,7 +29,7 @@ expect_ok crew fix swb-1 tidy "The banner flickers ZQXS."
 has "$out" "swb-1-unit-1 has $fb: code, in $fp"
 eq "$(prompt_to swb-1-unit-1)" "'Fix: The banner flickers ZQXS.'"
 eq "$(field $box fix.start On)" "$fb bolt/tenant-environments agent/swb-1-unit-1"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$fb")" "bolt/tenant-environments"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$fb")" "origin/bolt/tenant-environments"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $fp"
 plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
 expect_ok crew fix swb-1 tidy "It flickers still."
@@ -61,7 +61,7 @@ said=$out
 expect_ok crew unit move c console-pages
 has "$out" "plan(console-pages): move c from tenant-environments"
 said+=$'\n'$out
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/c)" "bolt/console-pages"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/c)" "origin/bolt/console-pages"
 git -C "$k" merge-base --is-ancestor bolt/console-pages unit/c || fail "c was not rebased onto console-pages"
 status swb-1-unit-4 working
 expect_ok crew unit drop d "not wanted"
@@ -73,7 +73,7 @@ status swb-1-unit-4 idle
 echo "d's own" > "$kd/places/d/own"; commit_all "$kd/places/d" "feat(d): its own"; dat=$(short unit/d)
 HOST=$box expect_ok crew unit free d
 has "$out" "swb-1-unit-4 is free"
-has "$out" "$kd/places/d is removed, and unit/d is kept at $dat: unit d is in no plan, and it holds 1 commit whose patch bolt/tenant-environments lacks (git cherry)"
+has "$out" "$kd/places/d is removed, and unit/d is kept at $dat: unit d is in no plan, and it holds 1 commit whose patch origin/bolt/tenant-environments lacks (git cherry)"
 eq "$(field $box branch.kept Head unit/d)" "$dat"
 export CREW_AGENT=swb-1-conductor
 expect_ok crew status swb-1
@@ -157,17 +157,17 @@ CREW_AGENT=swb-2-conductor expect_ok crew unit run a construct
 has "$out" "$kd/places/a starts from the kept unit/a, at $aat"
 eq "$(git -C "$kd/places/a" rev-parse --short HEAD)" "$aat"
 eq "$(cat "$kd/places/a/own")" "a's own"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "bolt/console-pages"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/a)" "origin/bolt/console-pages"
 ok "a dropped unit's branch holding a commit of its own is kept, named and recorded, and a unit added again under its name starts from it, tracking its new bolt"
 
 # A team holding a bolt that waits to land beside the one it builds (teams.16): a new fix naming no bolt is refused,
 # naming both, and one naming its bolt with --bolt is made from that bolt.
 export CREW_AGENT=swb-1-conductor
 by_hand 'p.insert(plan.Rec("Bolt", [("Bolt", "ssh-fix"), ("Repo", "switchboard-kit"), ("Goal", "Hosts reach each other."), ("Team", "swb-1")]))'
-git -C "$k" branch -q --no-track bolt/ssh-fix main
+git -C "$k" push -q origin main:refs/heads/bolt/ssh-fix && git -C "$k" branch -q --no-track bolt/ssh-fix main  # as sluice's branch create makes it on GitHub (plan.19)
 expect_fail "swb-1 holds tenant-environments and ssh-fix: name the fix's bolt with --bolt" crew fix swb-1 edge "The edge drops a host."
 sf=fix/ssh-fix/edge sp=$kd/places/fix-ssh-fix--edge
 expect_ok crew fix swb-1 edge "The edge drops a host." --bolt ssh-fix
 has "$out" "has $sf: code, in $sp"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$sf")" "bolt/ssh-fix"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$sf")" "origin/bolt/ssh-fix"
 ok "a fix on a team holding two bolts names its bolt with --bolt, and one naming none is refused"

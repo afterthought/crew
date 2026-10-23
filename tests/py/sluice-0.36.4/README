@@ -1,0 +1,17 @@
+sluice 0.36.4's branch documents, as crew reads them (kit.sluice_version, kit.branch_said; tests/py/test_kit.py).
+Recorded on mac-studio on 2026-10-22, running sluice 0.36.4 for real in a scratch repository: a kit whose
+.config/sluice.toml names `remote = "origin"` under [branches."bolt/*"] and [branches.main], its origin a bare
+repository, main pushed there. Each file is the command's standard output, verbatim; the list below gives each one's
+exit and command, run from the kit's checkout, in this order. Between them: create-from-absent, then a submission of a
+commit to bolt/b from a worktree on unit/u, `sluice submit bolt/b --no-wait --json`, left queued for delete-queued and
+withdrawn after it; a commit pushed to bolt/b from another clone for delete-not-landed; bolt/b merged into main from
+that clone and pushed for delete; delete-not-found deletes bolt/b again.
+
+version.txt	exit 0	sluice --version
+create.json	exit 0	sluice branch create bolt/b --from main --json
+create-present.json	exit 2	sluice branch create bolt/b --from main --json
+create-from-absent.json	exit 1	sluice branch create bolt/c --from nope --json
+delete-queued.json	exit 2	sluice branch delete bolt/b --into main --json
+delete-not-landed.json	exit 2	sluice branch delete bolt/b --into main --json
+delete.json	exit 0	sluice branch delete bolt/b --into main --json
+delete-not-found.json	exit 1	sluice branch delete bolt/b --into main --json

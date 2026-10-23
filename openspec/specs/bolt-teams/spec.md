@@ -86,15 +86,27 @@ Code SHALL start as soon as the unit's change is committed, with no review betwe
 - **THEN** its agent's calls of `sluice wait <n> --timeout 9m --json` have each exited 5 within ten minutes, and its next call ends with sluice's verdict, exiting 0 when the unit landed
 
 ### Requirement: Work happens in fixed places
-A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from its bolt and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`. When a branch of the unit's name was kept by an earlier drop, the unit's place SHALL be made on that branch as it stands, the branch SHALL then track the unit's bolt, and the stage that made the place SHALL say it starts from the kept branch, naming the commit it is at; a chore's place SHALL be made on a kept `chore/<chore>` alike. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, or in the worktree a bolt given before bolts were branches still has.
+A bolt SHALL be the branch `bolt/<bolt>`, made on GitHub from main by sluice at crew's give, with no worktree, and SHALL move only through sluice. A unit SHALL be built on `unit/<unit>`, branched from `origin/bolt/<bolt>` after a fetch, tracking it, and holding its `After` units' work as it stood when its place was made, in `<kit>/places/<unit>`; a bolt made on its host before gives went through sluice SHALL have its places branched from the local `bolt/<bolt>`, tracking it, until it lands. A chore's and a fix's place SHALL be cut the same way. When a branch of the unit's name was kept by an earlier drop, the unit's place SHALL be made on that branch as it stands, the branch SHALL then track the unit's bolt where it lives, `origin/bolt/<bolt>` for a bolt on GitHub and the local `bolt/<bolt>` for one made before, and the stage that made the place SHALL say it starts from the kept branch, naming the commit it is at; a chore's place SHALL be made on a kept `chore/<chore>` alike. A unit SHALL merge into its bolt only by a submission through sluice. Its place SHALL be removed once it has merged, as every worktree crew made is once its work is over. Each worktree crew makes SHALL be made ready through its kit's declaration before any agent starts in it, and by no script a kit names for crew. A team's conductor and ops SHALL start in the kit's main checkout, a detached anchor at `origin/main` that the fleet's timer moves and nobody edits in, and SHALL read the bolt by ref. No worktree crew makes or starts an agent in SHALL be on `main` or on a bolt branch, except the landing's short-lived worktree.
 
 #### Scenario: A bolt is given
 - **WHEN** `crew bolt give swb-1` gives swb-1 the bolt `b`
-- **THEN** `bolt/b` is made from the kit's main on swb-1's host, no worktree is made for it, and swb-1's conductor and ops start in the kit's main checkout
+- **THEN** `bolt/b` is made on GitHub from main by sluice, no worktree is made for it, and swb-1's conductor and ops start in the kit's main checkout, which is detached
 
 #### Scenario: A unit merges
 - **WHEN** the merge stage of a verified unit submits it and sluice lands it
 - **THEN** `bolt/<bolt>` holds the unit's change in a merge commit sluice made, `places/<unit>` is gone, and the unit's slot is free
+
+#### Scenario: A place is cut from the bolt on GitHub
+- **WHEN** crew makes a unit's, chore's or fix's place on a host whose local `bolt/<bolt>` lags the branch on GitHub
+- **THEN** the place is cut from `origin/bolt/<bolt>` after a fetch, tracks it, and holds every merge sluice landed there
+
+#### Scenario: A place of a bolt made before
+- **WHEN** crew makes a unit's place for a bolt whose branch is on its host only, its tip's policy naming no remote for it
+- **THEN** the place is cut from the local `bolt/<bolt>`, tracks it, and nothing is fetched or made on GitHub for it
+
+#### Scenario: The bolt on GitHub cannot be fetched
+- **WHEN** crew makes a place for a bolt on GitHub and the fetch fails or GitHub has no `bolt/<bolt>`
+- **THEN** no place is made, and crew names the bolt and the fetch's words
 
 #### Scenario: A kit with a crew-prepare script
 - **WHEN** crew makes a unit's place in a kit whose main checkout's devenv profile holds a `crew-prepare` script
@@ -102,7 +114,7 @@ A bolt SHALL be the branch `bolt/<bolt>`, branched from main, with no worktree, 
 
 #### Scenario: A unit added again under a kept branch's name
 - **WHEN** `unit/u` was kept when unit `u` was dropped from bolt `a`, and a unit `u` added later to bolt `b` starts construct
-- **THEN** `places/u` is made on `unit/u` as it stood, holding the kept commits, `unit/u` tracks `bolt/b`, and the construct's start says the place starts from the kept `unit/u` at its commit
+- **THEN** `places/u` is made on `unit/u` as it stood, holding the kept commits, `unit/u` tracks bolt `b` where it lives, `origin/bolt/b` for a bolt on GitHub, and the construct's start says the place starts from the kept `unit/u` at its commit
 
 ### Requirement: Fixes during a bolt are built beside its units
 `crew fix <team> <name> "<what is wrong>"` SHALL make `fix/<bolt>/<name>` from the team's bolt at `<kit>/places/fix-<bolt>--<name>`. While the team holds two bolts, a new fix SHALL name its bolt with `--bolt <bolt>`, one the team holds, and SHALL be refused without it, naming both; a fix in flight SHALL be found by its name among the team's bolts, and a name in flight on both SHALL be refused without `--bolt`. It SHALL start a fresh code agent there in a free slot with the words given, whether or not the place could be made ready: when a step of its readying failed, the agent SHALL be told the step and its last lines with the fix's words, since a fix is how a bolt is repaired, and the command SHALL say so. A new fix whose branch or place already exists SHALL be refused, naming the place, and a fix's agent SHALL start only in a worktree on that fix's own branch, made from the fix's bolt. `crew fix <team> <name> --merge` SHALL start its merge stage, and the fix SHALL merge into the bolt like a unit, by a submission. `crew fix <team> <name> --drop` SHALL end a fix that is not wanted, whether a slot holds it or only its branch or place stands: its slot SHALL be freed and its agent ended when one is up, a working agent only with `--force`, and its place and branch SHALL go as a dropped unit's do, its branch kept and named when it holds commits whose patch the bolt lacks. A fix that has merged into its bolt SHALL NOT be dropped, and a drop refused SHALL be recorded. A fix SHALL have no OpenSpec change and no plan record. A landing that conflicts with main SHALL be taken by a fix whose agent merges main into its place, resolving the conflict, and which merges into the bolt like any fix; nothing of crew's SHALL move the bolt's branch.
@@ -373,29 +385,6 @@ When a stage stops short on design questions, its conductor SHALL send the quest
 #### Scenario: The planner is holding corrections
 - **WHEN** the planner has said it holds corrections to a unit, and that unit's construct settles
 - **THEN** the conductor tells the planner, which then proposes the one amendment
-
-### Requirement: A team reports results as one glyph per line
-Whenever the conductor, ops, construct, coder or verify reports the results of tests, checks or proofs, it SHALL list them first, before any prose, one bullet per suite, check or proof: ✅ passed, with its counts where the tool gave them; ❌ failed, with how many failed and one line on why; ⏳ not yet run, or still running. It SHALL NOT state a result only in a sentence, nor fold several into one bullet. It SHALL use the same list in a file or a message that carries results.
-
-#### Scenario: A bolt's verification after a merge
-- **WHEN** ops reports the bolt's verification and two of its tests failed
-- **THEN** its message opens with one ❌ bullet naming the suite, the two failures and one line on why, and only then says what it would do
-
-#### Scenario: Proof in dev
-- **WHEN** ops has worked three items of a unit's *Proof in dev* list and the fourth waits on the user
-- **THEN** its report opens with one bullet per item, three with ✅ or ❌ and the fourth with ⏳ and what it waits on
-
-#### Scenario: The conductor passes results on
-- **WHEN** the conductor tells the user what ops or a verify reported
-- **THEN** it shows that agent's list as it is, first, and then says in plain English what it would do about each ❌
-
-#### Scenario: A construct's validation
-- **WHEN** a construct agent ends after `openspec validate <unit>` passed
-- **THEN** its final message opens with a ✅ bullet for that validation
-
-#### Scenario: Nothing passed in a sentence
-- **WHEN** every suite a coder ran passed
-- **THEN** its summary still lists each suite with ✅ and its counts, and never says only "the tests all pass"
 
 ### Requirement: A stage ends at its deliverable
 Each stage SHALL have one deliverable, read in the kit or on the team's host and never kept by hand. A stage SHALL end when its deliverable exists and its agent has stopped working, or when its agent stops short through crew, and SHALL NOT end because its agent has gone quiet.
@@ -936,6 +925,37 @@ Each time the conductor waits on a stage through crew, crew SHALL forecast each 
 - **WHEN** the host's sluice refuses `--head`
 - **THEN** the wait says once for the bolt's head that it can't forecast the bolt against main, and why, and goes on
 
+### Requirement: A landing is read from GitHub's main
+`crew bolt submit` SHALL judge whether a bolt landed by main now, never by sluice's exit alone. For a kit with an origin remote, main now is GitHub's `origin/main` after a fetch. For a kit with no origin, it is the kit's own `main`. Before it submits, crew SHALL read main now on the team's host, and SHALL refuse, submitting nothing, when it cannot. After sluice's outcome it SHALL read main now again, after a fresh fetch, together with whether it holds the bolt's tip that was submitted. The bolt has landed when main now moved and holds that tip, whatever sluice exited. crew SHALL then say where main holds it, mark the bolt's branch landed, and send ops on to `crew bolt land`. When sluice's exit was not 0, crew SHALL also name the exit and sluice's last words as what came after its push, sluice's to report apart from the landing. crew SHALL say that main is where it was only when main now did not move. When main now moved but does not hold the bolt, crew SHALL say the bolt did not land and name where main now is. When main now cannot be read after the submission, crew SHALL say it cannot tell whether the bolt landed, naming why and sluice's exit, and SHALL mark nothing and say nothing of where main is.
+
+#### Scenario: sluice fails after its push
+- **WHEN** main-level ops runs `crew bolt submit <bolt>`, and sluice pushes the bolt's merge to GitHub's main, then fails releasing a place and exits 3, leaving the host's own `main` where it was
+- **THEN** the command succeeds, saying the bolt landed on the kit's main at the commit GitHub's main holds, naming sluice's exit 3 and its last words as what came after the push, sluice's to report apart, and saying "now crew bolt land <bolt>"; and the bolt's branch is marked landed
+
+#### Scenario: sluice lands it and exits 0
+- **WHEN** sluice lands the bolt and exits 0, and GitHub's main holds the bolt's merge after a fetch
+- **THEN** crew says the bolt landed at that commit and "now crew bolt land <bolt>", naming no exit, and marks the branch landed
+
+#### Scenario: GitHub's main did not move
+- **WHEN** sluice exits 1 or 2, or any other exit, and GitHub's main after a fetch is at the commit it held before the submission
+- **THEN** the command fails, saying the bolt did not land and main is where it was, and the branch is not marked
+
+#### Scenario: Main moved, but not with the bolt
+- **WHEN** sluice exits non-zero and GitHub's main after a fetch has moved but does not hold the bolt's submitted tip
+- **THEN** the command fails, saying the bolt did not land and naming the commit main is now at; it does not say main is where it was, and the branch is not marked
+
+#### Scenario: GitHub can't be read after the submission
+- **WHEN** the fetch after sluice's outcome fails
+- **THEN** the command fails, saying crew cannot tell whether the bolt landed, with the fetch's words and sluice's exit; it says neither that the bolt landed nor that main is where it was, and the branch is not marked
+
+#### Scenario: GitHub can't be read before the submission
+- **WHEN** `crew bolt submit` runs and the fetch of the kit's origin on the team's host fails
+- **THEN** it is refused with the fetch's words, nothing is submitted, and no landing worktree is made
+
+#### Scenario: A kit with no origin
+- **WHEN** a kit with no origin remote is landed and sluice moves its own `main` to a merge holding the bolt
+- **THEN** crew reads the kit's own `main` before and after, and says the bolt landed
+
 ### Requirement: A team builds one bolt and may hold one more that waits to land
 A team SHALL build one bolt at a time, and MAY hold one more that is proven and waits to land. A bolt SHALL be proven for this when it holds at least one unit or chore, every one of them has merged, and sluice's verdict at its head is green; a fix in flight on it SHALL NOT make it unproven. The bolt a team builds SHALL be the one it was given last, read from the run record's gives; while it holds one bolt, that one. The proven bolt SHALL keep of the team only what its landing needs: a fix's slot when its landing or a forecast conflicts with main, and the team's ops. The conductor SHALL serve both bolts, and the team SHALL never have more than `units` units, chores and fixes in flight across them. The landing SHALL still run on the user's yes, by main-level ops. When a merge leaves the team free to take a bolt and a bolt of its kits is planned that no team holds, crew SHALL tell the partition's dispatchers that are up, as it does when a bolt lands.
 
@@ -961,3 +981,67 @@ A give to a team that holds a proven bolt SHALL restart neither its conductor no
 #### Scenario: A give while the conductor waits on its landing card
 - **WHEN** `crew bolt give swc-1` gives `ssh-fix` while swc-1-conductor runs `crew card wait land/doctor-rows` in the background and is otherwise idle
 - **THEN** the conductor is restarted fresh once idle, and its first message says it builds `ssh-fix`, that `doctor-rows` waits to land, and how to adopt its landing card `land/doctor-rows`
+
+### Requirement: A brief names nothing of a change's content but what crew reads
+No brief crew gives an agent SHALL name a proof list, a task's shape or a design's sections. The construct's brief SHALL say that what a change holds is the kit's, from OpenSpec's schema and the kit's `openspec/config.yaml`, which `/opsx:propose` hands it, and SHALL name of a change only what crew reads: its name, which is the unit's; its tasks' tick boxes; its proposal's `## Touches` block; and its archive at merge. The results section every brief carries SHALL name no proof list.
+
+#### Scenario: Another kit's construct
+- **WHEN** crew gives the construct brief to a team whose bolt is of another kit, such as swancloud or switchboard
+- **THEN** the brief names no *Proof in dev* list, no *Task notes* section and no shape for a task, and says the change's content is the kit's, from its `openspec/config.yaml` through `/opsx:propose`
+
+#### Scenario: What crew reads stays
+- **WHEN** the construct brief is printed for any team
+- **THEN** it still says to end the proposal with the `## Touches` block crew reads before code, and to name the change for the unit
+
+#### Scenario: The coder and the results section
+- **WHEN** the coder's brief, or any brief's results section, is printed
+- **THEN** neither names work that needs dev or a *Proof in dev* list
+
+### Requirement: A crew change's tasks each name their check
+crew's `openspec/config.yaml` SHALL hand crew's construct, as rules for `tasks`, that each task is one sentence naming the check in crew's tiers that proves it, with a pointer to its reasoning; that no task is a deploy, a step on a live host or the user's, or work done after the landing; and that the tasks end with the tests the change affects, not the whole suite, which the merge gate runs. Its apply guidance SHALL tell crew's coder to tick a task only once the check it names passes.
+
+#### Scenario: A crew construct asks for the tasks' instructions
+- **WHEN** a construct in crew runs `/opsx:propose` and OpenSpec gives it the instructions for `tasks`
+- **THEN** their rules say each task names the check that proves it, the tasks end with the tests the change affects, and no task is a deploy or work after the landing
+
+#### Scenario: A crew coder ticks a task
+- **WHEN** a crew coder runs `/opsx:apply` on a change
+- **THEN** the guidance OpenSpec hands it says to tick a task only once the check the task names passes
+
+#### Scenario: Another kit's agents
+- **WHEN** a construct or coder works a change of another kit
+- **THEN** OpenSpec hands it that kit's config, and nothing of crew's conventions reaches it
+
+### Requirement: A crew change holds no proof list
+crew's `openspec/config.yaml` SHALL hand crew's construct, as rules for `design`, that a task's full brief goes under *Task notes*, headed by the task's number; that a design holds no proof list of any name; and that *After deploy* lists only the steps no check can be code, each saying why, with its environments and its doer. As a rule for `specs`, it SHALL say that a scenario no check proves is a check the change adds (`docs.6`).
+
+#### Scenario: A scenario no check proves
+- **WHEN** a crew construct writes a scenario that no existing check proves
+- **THEN** its tasks add the check that proves it, and its design lists no hand step for it
+
+#### Scenario: Nothing to do after a deploy
+- **WHEN** a crew change has no step that only a person or a live host can do
+- **THEN** its design's *After deploy* says none and why, and it has no *Proof in dev* or *Proof on real work* section
+
+### Requirement: A team reports each result on a line of its own, with one glyph
+Whenever the conductor, ops, construct, coder or verify reports the results of tests, checks or proofs, it SHALL list them first, before any prose, one bullet per suite, check or proof: ✅ passed, with its counts where the tool gave them; ❌ failed, with how many failed and one line on why; ⏳ not yet run, or still running. It SHALL NOT state a result only in a sentence, nor fold several into one bullet. It SHALL use the same list in a file or a message that carries results.
+
+#### Scenario: A bolt's verification after a merge
+- **WHEN** ops reports the bolt's verification and two of its tests failed
+- **THEN** its message opens with one ❌ bullet naming the suite, the two failures and one line on why, and only then says what it would do
+
+#### Scenario: A submission still running
+- **WHEN** ops reports on a submission to the bolt whose checks sluice is still running
+- **THEN** its report opens with one ⏳ bullet naming the submission and what it waits on
+
+#### Scenario: The conductor passes results on
+- **WHEN** the conductor tells the user what ops or a verify reported
+- **THEN** it shows that agent's list as it is, first, and then says in plain English what it would do about each ❌
+
+#### Scenario: A construct's validation
+- **WHEN** a construct agent ends after `openspec validate <unit>` passed
+- **THEN** its final message opens with a ✅ bullet for that validation
+
+#### Scenario: Nothing passed in a sentence
+- **WHEN** every suite a coder ran passed
+- **THEN** its summary still lists each suite with ✅ and its counts, and never says only "the tests all pass"

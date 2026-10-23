@@ -698,9 +698,10 @@ def agent_views(data):
     restarted on at its next stop once an update made it due; and while this host is held every view opens with the
     hold (teams.19). Any other agent has no view, and its mod draws nothing.
     Beside them, cards: each of those agents' open cards, oldest first, its questions among them, by the agent's name,
-    the lines the mod draws above its view. With them, the line the mod adds once the frame is stale_after_ms old: the
-    day and time it was read, since a frame a restart left can be days old, and that the rail tab has not refreshed it
-    since.
+    the lines the mod draws above its view. With them, the line the mod draws in place of the view and the cards once
+    the frame is stale_after_ms old, so a band names no bolt that has landed since, nor a card closed since (read.1):
+    the day and time it was read, since a frame a restart or a rail tab that stopped left can be days old, and that the
+    rail tab has not refreshed it since.
 
     A change to what crew models (bolts, units, stages, proposals, explorations and elaborations, cards, rail rows)
     changes these views and plugin/hooks/status.js with it, each with its cases (code.8)."""
@@ -719,7 +720,8 @@ def agent_views(data):
         if here["held"]:
             views = {name: [held_row(here["host"], here["held"])] + v for name, v in views.items()}
     return {"read_at": data["read_at"], "stale_after_ms": STALE * 1000,
-            "stale": row([(f"read at {local(data['read_at'])}; the rail tab on {data['from']} has not refreshed it since", "dim")]),
+            "stale": row([(f"crew: the board was last read at {local(data['read_at'])}, too long ago to show; the rail tab on "
+                           f"{data['from']} has not refreshed it since", "dim")]),
             "views": views, "cards": {a: lines for a, lines in cards.items() if a in views}}
 
 

@@ -1,13 +1,12 @@
-# The teams journey's world, which each of its parts sources after lib.sh: a team world whose kit has a GitHub another
+# The teams journey's world, which each of its parts sources after lib.sh: a team world whose kit's GitHub another
 # clone pushes to, wldn's blueprints on mac-studio and atl-1's kit there; and the helpers the parts read it with.
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
 clone WilldanGroup/willdan-blueprints "$(space mac-studio willdan)/willdan-blueprints/main"
 kit mac-studio willdan atlas-kit >/dev/null
-# The kit's GitHub, and another clone that pushes to it.
-r=$(remote WilldanGroup/switchboard-kit); git clone -q --bare "$k" "$r"
-git -C "$k" remote add origin https://github.com/WilldanGroup/switchboard-kit; git -C "$k" fetch -q origin
+# The kit's GitHub, which kit made, and another clone that pushes to it.
+r=$(remote WilldanGroup/switchboard-kit)
 other=$T/elsewhere; git clone -q "$r" "$other"
 pushed() { git -C "$other" pull -q --rebase origin main; echo "$1" > "$other/$1"; commit_all "$other" "feat: $1"; git -C "$other" push -q origin main; }
 # field <host> <act> <field> [object]: a field of that host's last entry of the act naming the object

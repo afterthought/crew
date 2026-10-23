@@ -2,8 +2,14 @@
 plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
 plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
 goes with its place (plan.10) and plan.branch_said for what is said of it, plan.bolt_branch_judged for a bolt's own
-branch and plan.kept_record for what a kept one's record says, and plan.unread_plans for a tidy that removes nothing. How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
+branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing, and
+plan.overview_runs and plan.run_kept for a worktree sluice has a run in. The documents under sluice-0.36.4/ were
+recorded from sluice 0.36.4 on deneb, 2026-10-22, their scratch folder written /scratch: a kit whose place a ran
+`sluice exec main -- sleep 25` (overview-run.json) until it ended (overview-ended.json). How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
 settles, the journey's (t-journey-merge, t-journey-fix)."""
+import json
+import pathlib
+
 import pytest
 
 from facts import plan_of
@@ -11,6 +17,7 @@ from facts import plan_of
 import plan
 
 KD = "/kit"
+RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
 
 
 # A fix branch's facts as gather.fix_facts reads them: in flight, merged into its bolt, landed with it, or cut at a
@@ -69,6 +76,12 @@ class TestOver:
         assert over("places/land-gone", "bolt/gone") == ("land-gone", "bolt gone is in no plan")
         assert over("places/land-t", "bolt/t") == ("land-t", None)
 
+    def test_a_units_place_tracking_its_bolt_on_github_is_a_place_of_that_bolt(self):
+        """plan.19: a unit's place cut from origin/bolt/<bolt> is read as a place of that bolt, merged and over as any."""
+        assert over("places/merged-one", "unit/merged-one", "origin/bolt/t", merged={"merged-one"}) == (
+            "merged-one", "unit merged-one has merged into bolt/t")
+        assert over("places/planned", "unit/planned", "origin/bolt/t") == ("planned", None)
+
     @pytest.mark.parametrize("path, branch, up", [
         ("mine", "mine", ""), ("places/fix-t--y", "fix/t/y", "origin/main"), ("x", "unit/x", "bolt/t"), ("bolts/not-elsewhere", "bolt/elsewhere", ""),
         ("places/detached", "", ""), ("places/fix-t--y", "fix/t/y", ""), ("main", "main", ""),
@@ -104,13 +117,39 @@ class TestFixBranchesOver:
         assert self.gone({"fix/t/y": GOING, "fix/t/cut": CUT}) == []
 
 
+@pytest.mark.parametrize("up, bolt", [
+    ("bolt/b", "b"), ("origin/bolt/b", "b"), ("origin/bolt/tenant-environments", "tenant-environments"),
+    ("", None), (None, None), ("main", None), ("origin/main", None), ("unit/x", None), ("bolt/", None), ("upstream/bolt/b", None)])
+def test_a_places_bolt_is_read_from_either_upstream(up, bolt):
+    """gather.bolt_of (plan.19): every read of a place's bolt from its upstream takes bolt/<bolt>, a bolt made before,
+    and origin/bolt/<bolt>, a bolt on GitHub, alike."""
+    import gather
+    assert gather.bolt_of(up) == bolt
+
+
+class TestBoltMadeBefore:
+    """bolt-plan "A bolt made before stays local" (plan.19, record 0032's amendment): each read of a team holding a bolt
+    on its host only, while the kit's main names a remote for its bolts, says once that it is local until it lands."""
+    LINE = ("bolt/b is local until it lands: it was made before bolts were on GitHub, so its places are cut from the "
+            "local branch, and its landing puts it on GitHub")
+
+    def test_a_local_bolt_while_main_names_a_remote_is_said(self):
+        assert plan.bolt_local_said("b", None, "origin") == self.LINE
+
+    def test_a_bolt_on_github_is_not(self):
+        assert plan.bolt_local_said("b", "origin", "origin") is None
+
+    def test_a_local_bolt_while_main_names_none_is_not_since_every_bolt_is(self):
+        assert plan.bolt_local_said("b", None, None) is None
+
+
 class TestLegacyBolt:
     """crew removes only its own worktrees (bolt-teams): a bolt's worktree from before record 0026, still on its
     branch, is detached at the bolt's tip by the team's read while the bolt lasts when it is clean, and named as kept on
     the branch while it is not (plan.9, plan.18)."""
 
-    def detach(self, path="bolts/t", branch="bolt/t", over=None, locked=False, status=(0, "", "")):
-        return plan.bolt_detach(f"{KD}/{path}", branch, KD, over, locked, lambda: status)
+    def detach(self, path="bolts/t", branch="bolt/t", over=None, locked=False, status=(0, "", ""), run=None):
+        return plan.bolt_detach(f"{KD}/{path}", branch, KD, over, locked, lambda: status, lambda: run)
 
     def test_a_legacy_bolt_worktree_on_its_branch_with_nothing_modified_is_detached(self):
         assert self.detach() == (True, None)
@@ -119,6 +158,11 @@ class TestLegacyBolt:
         assert self.detach(status=(0, " M README.md\n", "")) == (False, (
             "it has uncommitted changes, which are the user's to keep or discard, and crew detaches it at the bolt's tip "
             "once it is clean"))
+
+    def test_a_clean_one_sluice_has_a_run_in_stays_on_its_branch_named_for_the_run(self):
+        # wldn's signal 2026-10-20-swb-2-ops-20f43d6b/01: the tidy detached one 45 s into a run in it (plan.9).
+        assert self.detach(run="sluice's overview lists a run in it, `sleep 25`") == (False, (
+            "sluice's overview lists a run in it, `sleep 25`, and crew detaches it at the bolt's tip once no run is in it"))
 
     def test_a_locked_one_or_one_git_cannot_read_stays_on_its_branch(self):
         assert self.detach(locked=True, status=None) == (False, "it is locked, and crew detaches it at the bolt's tip once it is not")
@@ -133,21 +177,65 @@ class TestLegacyBolt:
 
 class TestKept:
     def test_a_locked_one_is_kept_unread(self):
-        assert plan.kept_why("x", True, None) == "it is locked"
+        assert plan.kept_why("x", True, None, lambda: None) == "it is locked"
 
     def test_one_with_uncommitted_changes_is_the_users(self):
-        assert plan.kept_why("unit stray has merged into bolt/t", False, (0, "?? note\n", "")) == (
+        assert plan.kept_why("unit stray has merged into bolt/t", False, (0, "?? note\n", ""), lambda: None) == (
             "unit stray has merged into bolt/t, and it has uncommitted changes, which are the user's to keep or discard")
 
     def test_one_git_cannot_read_is_kept(self):
-        assert plan.kept_why("x", False, (128, "", "fatal: not a git repository\n")) == "git cannot read its status: fatal: not a git repository"
+        assert plan.kept_why("x", False, (128, "", "fatal: not a git repository\n"), lambda: None) == "git cannot read its status: fatal: not a git repository"
 
     def test_a_clean_one_goes(self):
-        assert plan.kept_why("x", False, (0, "", "")) is None
+        assert plan.kept_why("x", False, (0, "", ""), lambda: None) is None
 
     def test_a_landings_place_whose_submission_is_still_with_sluice_is_kept_and_named(self):
-        assert plan.kept_why("bolt gone is in no plan", False, (0, "", ""), True) == (
+        assert plan.kept_why("bolt gone is in no plan", False, (0, "", ""), lambda: None, True) == (
             "bolt gone is in no plan, and its submission is still with sluice")
+
+
+    def test_a_clean_one_sluice_has_a_run_in_is_kept_and_named_for_it_and_only_then_is_the_overview_read(self):
+        ran = "sluice's overview lists a run in it, `sleep 25`, started 2026-10-22T23:31:30Z"
+        assert plan.kept_why("unit a has merged into bolt/t", False, (0, "", ""), lambda: ran) == (
+            f"unit a has merged into bolt/t, and {ran}")
+
+        def unread():
+            raise AssertionError("the overview is read only for a worktree nothing else keeps")
+        assert plan.kept_why("x", True, None, unread) == "it is locked"
+        assert plan.kept_why("x", False, (0, " M a\n", ""), unread).endswith("uncommitted changes, which are the user's to keep or discard")
+
+
+def recorded(name):
+    return json.loads((RECORDED / f"{name}.json").read_text())
+
+
+class TestRun:
+    """Whether sluice has a run in a worktree the tidy would detach or remove (plan.9; sluice ADR 0024 and 0035): read
+    from `sluice overview --json` as sluice 0.36.4 prints it, and named; one crew can't read keeps it (read.1)."""
+
+    def test_the_overview_lists_the_worktree_a_run_is_in_and_none_once_it_has_ended(self):
+        assert plan.overview_runs(recorded("overview-run")) == {
+            "/scratch/places/a": {"command": "sleep 25", "started": "2026-10-22T23:31:30Z"}}
+        assert plan.overview_runs(recorded("overview-ended")) == {}
+
+    @pytest.mark.parametrize("d", [
+        None, {}, dict(recorded("overview-run"), schema="sluice/overview@2"),
+        {k: v for k, v in recorded("overview-run").items() if k != "sessions"},
+        dict(recorded("overview-run"), sessions=[{"run": {"started": "2026-10-22T23:31:30Z"}}])])
+    def test_a_document_sluice_0_36_4_would_not_print_is_no_overview(self, d):
+        assert plan.overview_runs(d) is None
+
+    def test_a_run_is_named_by_its_command_or_as_its_checks_with_when_it_started(self):
+        assert plan.run_kept({"command": "sleep 25", "started": "2026-10-22T23:31:30Z"}, None) == (
+            "sluice's overview lists a run in it, `sleep 25`, started 2026-10-22T23:31:30Z")
+        assert plan.run_kept({"started": "2026-10-22T23:31:30Z", "tasks": []}, None) == (
+            "sluice's overview lists a run of its checks in it, started 2026-10-22T23:31:30Z")
+        assert plan.run_kept({}, None) == "sluice's overview lists a run of its checks in it"
+
+    def test_no_run_lets_it_go_and_an_overview_crew_cannot_read_keeps_it(self):
+        assert plan.run_kept(None, None) is None
+        assert plan.run_kept(None, "this host has no sluice on its path") == (
+            "sluice's overview can't be read (this host has no sluice on its path), so crew can't tell whether a run is in it")
 
 
 class TestWt:
@@ -252,8 +340,9 @@ class TestTidied:
 
 class TestBoltBranch:
     """A bolt is a branch and no worktree (record 0026): the branch crew marked when it gave the bolt goes once no plan
-    has the bolt and no worktree holds it (plan.9), and a landed bolt's only when git cherry finds nothing on it whose
-    patch main lacks, kept and named otherwise (plan.10, record 0003)."""
+    has the bolt and no worktree holds it (plan.9), a landed bolt's only when git cherry finds nothing on it whose patch
+    main lacks, kept and named otherwise (plan.10, record 0003), and any other by sluice's delete alone, a dropped
+    bolt's kept branch asked again only once main holds its tip (plan.19)."""
     NOW = "refs/remotes/origin/main"
 
     def test_a_bolt_no_plan_has_goes(self):
@@ -263,27 +352,43 @@ class TestBoltBranch:
         assert plan.bolt_branch_over("b", {"b"}, False) is None
         assert plan.bolt_branch_over("b", set(), True) is None
 
-    @pytest.mark.parametrize("mark", ["given", "landed", None])
+    def test_a_mark_whose_branch_sluice_deleted_is_read_as_gone(self):
+        """plan.19: sluice's delete leaves the branch's git config section, so the tidy unsets each mark whose branch is
+        gone, saying nothing, rather than judge a branch that is not there on every read."""
+        marks = {"bolt/a": "given", "bolt/b": "landed", "bolt/c": "given"}
+        assert plan.marks_gone(marks, {"bolt/a"}) == ["bolt/b", "bolt/c"]
+        assert plan.marks_gone(marks, {"bolt/a", "bolt/b", "bolt/c", "bolt/d"}) == []
+        assert plan.marks_gone({}, set()) == []
+
+    @pytest.mark.parametrize("mark", ["given", "landed", "dropped", None])
     def test_a_bolt_still_planned_or_held_by_a_worktree_is_left_whatever_its_mark(self, mark):
-        assert plan.bolt_branch_judged("b", {"b"}, False, mark, self.NOW, (0, "+ 1a2b3c\n", "")) is None
-        assert plan.bolt_branch_judged("b", set(), True, mark, self.NOW, (0, "+ 1a2b3c\n", "")) is None
+        assert plan.bolt_branch_judged("b", {"b"}, False, mark, True, self.NOW, (0, "+ 1a2b3c\n", "")) is None
+        assert plan.bolt_branch_judged("b", set(), True, mark, True, self.NOW, (0, "+ 1a2b3c\n", "")) is None
 
     def test_a_landed_bolt_whose_every_commit_main_holds_goes_saying_so(self):
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "", "")) == (
-            "bolt b has landed, and origin/main holds every commit of it (git cherry)", None)
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "- 1a2b3c\n", ""))[1] is None
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (0, "", "")) == (
+            "delete", "bolt b has landed, and origin/main holds every commit of it (git cherry)", None)
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (0, "- 1a2b3c\n", ""))[0] == "delete"
 
     def test_a_landed_bolt_holding_a_commit_main_lacks_is_kept_and_counted(self):
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
-            "bolt b has landed", ("it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete", 1))
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (0, "- 1a2b3c\n+ 4d5e6f\n", "")) == (
+            "keep", "bolt b has landed", ("it holds 1 commit whose patch origin/main lacks (git cherry), the user's to keep or delete", 1))
 
     def test_a_landed_bolt_git_cannot_compare_with_main_is_kept(self):
-        assert plan.bolt_branch_judged("b", set(), False, "landed", self.NOW, (128, "", "fatal: bad revision\n")) == (
-            "bolt b has landed", ("git cannot compare it with origin/main: fatal: bad revision", None))
+        assert plan.bolt_branch_judged("b", set(), False, "landed", False, self.NOW, (128, "", "fatal: bad revision\n")) == (
+            "keep", "bolt b has landed", ("git cannot compare it with origin/main: fatal: bad revision", None))
 
     @pytest.mark.parametrize("mark", ["given", None])
-    def test_a_dropped_bolts_or_one_landed_before_the_mark_goes_as_before_unread(self, mark):
-        assert plan.bolt_branch_judged("b", set(), False, mark, self.NOW, None) == ("bolt b is in no plan", None)
+    def test_a_dropped_bolts_or_one_landed_before_the_mark_is_sluices_to_delete_unread(self, mark):
+        """plan.19: a bolt branch marked given that no plan has, a drop's whatever its host answered, or a legacy bolt
+        worktree's with no mark, is asked of sluice's delete, never git's, whose answer keeps a tip main lacks."""
+        assert plan.bolt_branch_judged("b", set(), False, mark, False, self.NOW, None) == ("ask", "bolt b is in no plan", None)
+
+    def test_a_dropped_bolts_kept_branch_is_asked_again_only_once_main_holds_its_tip(self):
+        """bolt-plan "Main comes to hold a dropped bolt's work" and "A dropped bolt's kept branch while main lacks it"."""
+        assert plan.bolt_branch_judged("b", set(), False, "dropped", True, self.NOW, None) == (
+            "ask", "main now holds bolt b's tip", None)
+        assert plan.bolt_branch_judged("b", set(), False, "dropped", False, self.NOW, None) is None
 
     def test_what_is_said_of_a_landed_bolts_branch(self):
         assert plan.branch_said("bolt/b", None, "1a2b3c4", "bolt b has landed, and origin/main holds every commit of it "
