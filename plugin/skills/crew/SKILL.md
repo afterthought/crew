@@ -49,8 +49,8 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | offer a `manual` environment a deploy, its card raised in main-level ops's name with the kit's changelog and after-deploy steps (the kit's deployer) | `crew ops offer <env> --to <sha> --from <sha\|none> [--notes <file>] [--steps <file>] --label L` |
 | record the user's word for a deploy the rail offers (main-level ops, on the user's yes) | `crew ops approve <env> --to <sha> --label L` |
 | record an operation done or declined | `crew ops step <env> [--to <sha>] --key <key> --state done\|declined --label L` |
-| see what crew did lately, on every host of a partition, or as it happens | `crew events [--label L] [--about <object>] [--follow]` |
-| carry this host's run record to the partition's branch now | `crew events --push [--label L]` |
+| see what crew did lately in a partition, read from its branch, or as it reaches the branch | `crew events [--label L] [--about <object>] [--follow]` |
+| push what of this host's run record a refused push left (each entry is pushed as it is written) | `crew events --push [--label L]` |
 | create a partition's flywheel branch, adopting its old plan | `crew state init <label>` |
 | answer what happened to a bolt, a unit, a chore or a signal, each stage's end with how it ended (`Ended`) and what it delivered (`Delivered`) | `crew trace <bolt|unit|chore|signal>` |
 | see a partition's board as a page that opens from disk, its lanes drawn as the flywheel mockup draws them, narrowed to one team (kept across reloads) and linking each other partition's page beside it, in the layout of its own file, with how work flowed, signals to agenda items to proposals to units to bolts, each object's history a click away, one switch away, and each environment's deploys, with the word, checks and outcome of each and the bolts it carried, another | `crew page <label> [--out <file>] [--since <time>]` |

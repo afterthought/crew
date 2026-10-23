@@ -11,17 +11,20 @@ crew's PostToolUse hook (plugin/hooks/cards) appends three acts of its own, one 
 posts (card.post), updates (card.update), or withdraws or closes (card.close): each names the rail row's object in On,
 the card's id in Card and the row's key in Key, and nothing written on the card.
 
-Each write to a flywheel's branch of its state repository also carries the host's entries there, to the same path
-under runs/<host>/: the branch's file becomes the union by Id of what it had and what the host has, so a host only
-ever adds to its own files and a host that is asleep or rebuilt loses nothing it had carried. Reading takes the
-branch first, then whatever each host it can reach has not yet carried.
+Each entry reaches the flywheel's branch of its state repository as it is written: the command that appended it
+pushes it there, to the same path under runs/<host>/, as a commit of its own from this host, before it goes on. The
+branch's file becomes the union by Id of what it had and what the host has, so a host only ever adds to its own files
+and a host that is asleep or rebuilt loses nothing it pushed. A push that is refused is said once and changes nothing
+the command does; the entry waits in the host's file and goes first with the host's next. Every read, crew events,
+crew trace, the batches, the rail, the board and the page, reads the branch alone and asks no host (read.5).
 
   record.py emit --label L --act A [--on X]... [--from X]... [--commit C]... [--why W] [--refused R] [--field K=V]...
                 [--id I]                  append one entry, with the id a commit already names if given; prints its id
   record.py session                       the caller's Claude session as <host>:<id>, what a forwarded command carries
   record.py events [--label L] [--about <object>] [--since <time>] [--follow] [--json]
-                                          the entries of the partition's branch and of every host it runs on, in time order
-  record.py events --push [--label L]     carry this host's entries to the branch now, in a commit of their own
+                                          the entries on the partition's branch, in time order; --follow reads it again
+                                          every five seconds
+  record.py events --push [--label L]     push what of this host's entries a refused push left, each a commit of its own
   record.py trace <object> [--label L]    one bolt's, unit's, chore's or signal's history, read from the entries alone
 
 An object is a typed name: unit/<unit>, chore/<chore>, bolt/<bolt>, queue/<kit>, signals/<id>, agenda/<n>, team/<team>,

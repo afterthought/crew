@@ -20,7 +20,7 @@
 
 ## 4. What the docs say
 
-- [ ] 4.1 README, the crew skill, `crew`'s usage header, `record.py`'s usage and the operator's brief say the record is read from the partition's branch, each entry pushed as it is written (design, Task notes 4.1); passes `tests/suite t-docs t-briefs`.
+- [x] 4.1 README, the crew skill, `crew`'s usage header, `record.py`'s usage and the operator's brief say the record is read from the partition's branch, each entry pushed as it is written (design, Task notes 4.1); passes `tests/suite t-docs t-briefs`.
 
 ## 5. The affected tests
 
