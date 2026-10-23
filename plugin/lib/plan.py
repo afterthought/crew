@@ -2688,8 +2688,10 @@ printf 'MARKED=%q\n' "$marked"
 """
 
 
-# sluice's own record of main's submissions, read in the kit's main checkout on the team's host once a landing's
-# submission found sluice itself failing with the bolt's tip not on main now (submission_of): every submission sluice
+# sluice's own record of main's submissions, read in the kit's main checkout on the team's host before a landing's
+# pull request is readied, so crew can tell the submission sluice makes for the landing from any made before it
+# (landing_submitted), and after, for that submission, when sluice answered with a pull request or an earlier
+# submission, or sluice itself failed with the bolt's tip not on main now (submission_of): every submission sluice
 # keeps of main, the decided among them.
 SUBMISSIONS = r"""cd "$1" || exit 2
 exec sluice status main --all --json
@@ -2730,15 +2732,11 @@ def sluice_failed(said, before):
     return None if why or (now != before and held["HELD_GITHUB" if ref == "origin/main" else "HELD_OWN"] == "yes") else f["TIP"]
 
 
-def submission_of(tip, code, out, err, pull=None):
-    """sluice's own record of a landing's submission, from what SUBMISSIONS printed on the team's host, read by facts
-    checked against sluice 0.36.4's `sluice status main --all --json` (read.2, tests/py/sluice-0.36.4/status-all.json):
-    its submissions[], each a sluice/submission@1 with its id and head, the last of them whose head is the tip that was
-    submitted; with pull, the pull request sluice answered the landing's submission with (SUBMIT's PULL), the last of
-    those sluice made from its place, `pull/<n>` in the record's from.worktree, as sluice's own wait on a pull request
-    finds it (lib.rs submit_pull, pulls.rs follow). Returns {"id", "state"}, or the words why crew has none: sluice
-    records no submission of that tip, holds it in a state crew does not read, did not answer, or printed what crew
-    can't read."""
+def submissions_listed(code, out, err):
+    """main's submissions as SUBMISSIONS printed them on the team's host, read by facts checked against sluice 0.36.4's
+    `sluice status main --all --json` (read.2, tests/py/sluice-0.36.4/status-all.json): its submissions[], each a
+    sluice/submission@1 with its id and head; or the words why crew has none: sluice did not answer, or printed what
+    crew can't read."""
     try:
         doc = json.loads(out)
     except ValueError:
@@ -2752,10 +2750,26 @@ def submission_of(tip, code, out, err, pull=None):
     if not isinstance(subs, list) or not all(isinstance(s, dict) and s.get("schema") == SUBMISSION and type(s.get("id")) is int
                                              and isinstance(s.get("head"), str) for s in subs):
         return f"sluice status main --all printed no listing of submissions crew reads: {cut((out or '').strip(), 200) or 'nothing'}"
+    return subs
+
+
+def submission_of(tip, code, out, err, pull=None, after=0):
+    """sluice's own record of a landing's submission, from what SUBMISSIONS printed on the team's host
+    (submissions_listed): the last of main's submissions whose head is the tip that was submitted, made after the last
+    sluice had recorded before the landing (after, landing_submitted), so that no submission made before it is ever
+    read as its own; with pull, the pull request sluice answered the landing's submission with (SUBMIT's PULL), the
+    last of those sluice made from its place, `pull/<n>` in the record's from.worktree, as sluice's own wait on a pull
+    request finds it (lib.rs submit_pull, pulls.rs follow). Returns {"id", "state"}, or the words why crew has none:
+    sluice records no such submission, holds it in a state crew does not read, did not answer, or printed what crew
+    can't read."""
+    subs = submissions_listed(code, out, err)
+    if isinstance(subs, str):
+        return subs
     made = lambda s: pull is None or isinstance(s.get("from"), dict) and s["from"].get("worktree") == f"pull/{pull}"
-    mine = [s for s in subs if s["head"] == tip and made(s)]
+    mine = [s for s in subs if s["head"] == tip and s["id"] > after and made(s)]
     if not mine:
-        return f"sluice records no submission of {tip[:7]} to main" + (f" from pull request #{pull}" if pull is not None else "")
+        return (f"sluice records no submission of {tip[:7]} to main" + (f" from pull request #{pull}" if pull is not None else "")
+                + (f" newer than #{after}" if after else ""))
     s = max(mine, key=lambda s: s["id"])
     if s.get("state") not in STANDING and s.get("state") not in OUT:
         return f"sluice records #{s['id']} in a state crew does not read: {cut(json.dumps(s.get('state')), 60)}"
@@ -2787,26 +2801,61 @@ def wait_outcome(n, code, out):
     return str(code)
 
 
-def submitted_line(bolt, name, f):
+def answered_before(f, after):
+    """The submission sluice answered a landing's submission with (f, SUBMIT's assignments) when sluice had recorded it
+    before the landing, its id no newer than the last sluice had recorded then (after): sluice 0.36.4 answers a pull
+    request sent back on the head submitted, and not marked ready for review since as its intake reads it, with that
+    earlier submission's record and its exit, queueing nothing (lib.rs submit_pull, Reached::Before; pulls.rs
+    consider), which is no outcome of this landing's. {"id", "state", "pull"}, its state and the pull request it was
+    made from, `pull/<n>` in its record's from.worktree, each None when the answer does not say; None when the answer
+    names no submission, or one made since."""
+    if not f["ID"] or int(f["ID"]) > after:
+        return None
+    try:
+        doc = json.loads(base64.b64decode(f["ANSWER"]).decode(errors="replace"))
+    except ValueError:
+        doc = None
+    doc = doc if isinstance(doc, dict) and doc.get("schema") == SUBMISSION and doc.get("id") == int(f["ID"]) else {}
+    place = re.fullmatch(r"pull/(\d+)", str((doc.get("from") if isinstance(doc.get("from"), dict) else {}).get("worktree")))
+    state = doc.get("state") if doc.get("state") in STANDING or doc.get("state") in OUT else None
+    return {"id": int(f["ID"]), "state": state, "pull": place.group(1) if place else None}
+
+
+def submitted_line(bolt, name, f, was=None):
     """What crew says once a landing's submission has answered (f, SUBMIT's assignments, its ID that of the submission
-    sluice made for its pull request once crew has found it, landing_submitted): sluice's number for the submission,
-    and the pull request it came from; with none, the pull request alone, sluice refusing it at once, or an answer
-    naming no submission crew reads."""
+    sluice made for it once crew has found it, landing_submitted): sluice's number for the submission, and the pull
+    request it came from; with none, the pull request alone, the earlier submission sluice answered with (was,
+    answered_before), sluice refusing it at once, or an answer naming no submission crew reads."""
     if f["ID"]:
         return f"bolt/{bolt} submitted to {name}'s main, sluice's #{f['ID']}" + (f" from pull request #{f['PULL']}" if f["PULL"] else "")
     if f["PULL"]:
         return f"bolt/{bolt} submitted to {name}'s main as pull request #{f['PULL']}"
+    if was:
+        return f"bolt/{bolt} submitted to {name}'s main, sluice answering with #{was['id']}, an earlier one"
     return f"bolt/{bolt} submitted to {name}'s main, " + ("sluice queueing nothing" if f["RC"] != "0" else
                                                            "sluice's answer naming no submission crew reads")
 
 
-def left_standing(bolt, name, path, f, why=None):
+def left_standing(bolt, name, path, f, why=None, was=None):
     """The words for a landing whose submission sluice answered with nothing crew can wait on (f, SUBMIT's
-    assignments, its RC 0 and its ID empty): a pull request, f's PULL, whose submission crew did not find in sluice's
-    record (why, submission_of's words), named with the state sluice's answer gave it; or an answer crew can't read,
-    named as sluice printed it (ANSWER). Whatever sluice queued is left standing: crew drafts and withdraws nothing on
-    its reading of its own output, and records no refusal to hold the bolt's row for a fix (landing_ended)."""
+    assignments, its RC 0 and its ID empty): an earlier submission (was, answered_before), named with the pull request
+    it was made from and the state it is in, whose landing's own crew did not find in sluice's record (why,
+    submission_of's words), and, when it was sent back, how sluice takes its pull request again (pulls.rs comment); a
+    pull request, f's PULL, whose submission crew did not find there, named with the state sluice's answer gave it; or
+    an answer crew can't read, named as sluice printed it (ANSWER). Whatever sluice queued is left standing: crew
+    drafts and withdraws nothing on its reading of its own output, and records no refusal to hold the bolt's row for a
+    fix (landing_ended)."""
     answer = base64.b64decode(f["ANSWER"]).decode(errors="replace").strip()
+    if was:
+        held = OUT.get(was["state"]) or STANDING.get(was["state"])
+        said = (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: sluice answered its submission with "
+                f"#{was['id']}, an earlier one" + (f" from pull request #{was['pull']}" if was["pull"] else "")
+                + (f", {held}" if held else "") + f", and {why}. crew withdraws nothing: ")
+        if not was["pull"]:
+            return said + f"what sluice queued stands, its place {path} kept, and sluice status main says where it is."
+        again = (", which sluice takes again on that head only once it is marked a draft and then ready for review"
+                 if was["state"] in ("failed", "conflict") else "")
+        return said + f"the pull request stands as sluice has it{again}, and sluice wait main from {path} follows it."
     if f["PULL"]:
         try:
             state = json.loads(answer).get("state")
@@ -3028,19 +3077,28 @@ def submit_order(bolts, hosts):
 def landing_submitted(fleet, t, bolt):
     """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held) and its
     landing pull request, a draft, readied, since the submission is the user's word (pull_hold, bolt-teams): {bolt, t,
-    before, path, RC, TIP, OLD, ID, PULL, ANSWER, SAID, said, standing}, said the last line SUBMIT's submission said on
-    standard error, sluice's words when it refused it at once, said as it is queued (submitted_line). Queued as a pull
-    request, sluice answering with its number and no submission, its ID is the submission sluice made for it, found in
-    sluice's record on the team's host (SUBMISSIONS, submission_of with the pull request), and waited on as any other;
-    standing, when sluice's answer gives crew none to wait on, its words (left_standing). Or {bolt, t, refused},
-    nothing submitted, when main now could not be read, the pull request could not be readied, or the submission could
-    not be made, in crew's, gh's or the host's words."""
+    before, path, RC, TIP, OLD, ID, PULL, ANSWER, SAID, said, standing, last}, said the last line SUBMIT's submission
+    said on standard error, sluice's words when it refused it at once, said as it is queued (submitted_line). Its ID is
+    only ever a submission sluice made for this landing, newer than last, the last of main's submissions sluice had
+    recorded before its pull request was readied (SUBMISSIONS, submissions_listed). Queued as a pull request, sluice
+    answering with its number and no submission, or answered with an earlier submission (answered_before), whose exit
+    is that one's and refuses nothing of this one, its ID is the submission sluice made for it, found in sluice's
+    record on the team's host (SUBMISSIONS, submission_of with the pull request and last), and waited on as any other;
+    standing, when crew finds none to wait on, its words (left_standing). Or {bolt, t, refused}, nothing submitted,
+    when main now or sluice's record of main could not be read, the pull request could not be readied, or the
+    submission could not be made, in crew's, sluice's, gh's or the host's words."""
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     try:
         before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
         not why or fail(why)
     except Refusal as e:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted: {e}")
+    s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
+    subs = submissions_listed(s.returncode, s.stdout, s.stderr)
+    if isinstance(subs, str):  # read.1: no submission sluice answers with could be told from one made before it
+        return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted: crew can't read sluice's record of {name}'s main "
+                                            f"on {host}, so could not tell its submission from any made before it: {subs}")
+    last = max((x["id"] for x in subs), default=0)
     try:  # its pull request live on the user's word, which this is (bolt-teams)
         said = pull_said(bolt, *pull_hold(fleet, t, bolt, "live"), True, t["kit"]["repo"])
     except Refusal as e:
@@ -3051,16 +3109,18 @@ def landing_submitted(fleet, t, bolt):
     f, told = submit_ran(fleet, host, main, path, bolt)
     if f is None:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted on {host}: {told}", attempted=True)
-    standing = None
+    standing, was = None, answered_before(f, last)
+    if was:  # an earlier submission's record and exit: this landing's own is looked for as a pull request's is
+        f = dict(f, RC="0", ID="", PULL=was["pull"] or "")
     if f["RC"] == "0" and not f["ID"]:
         why = None
-        if f["PULL"]:  # queued as a pull request: the submission sluice made for it, from its place pull/<n>
+        if f["PULL"] or was:  # the submission sluice made for it since, from its place pull/<n> for a pull request
             s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
-            sub = submission_of(f["TIP"], s.returncode, s.stdout, s.stderr, int(f["PULL"]))
+            sub = submission_of(f["TIP"], s.returncode, s.stdout, s.stderr, int(f["PULL"]) if f["PULL"] else None, last)
             f["ID"], why = (str(sub["id"]), None) if isinstance(sub, dict) else ("", sub)
-        standing = None if f["ID"] else left_standing(bolt, name, path, f, why)
-    print(submitted_line(bolt, name, f))
-    return dict(bolt=bolt, t=t, before=before, path=path, **f, said=told, standing=standing)
+        standing = None if f["ID"] else left_standing(bolt, name, path, f, why, was)
+    print(submitted_line(bolt, name, f, was))
+    return dict(bolt=bolt, t=t, before=before, path=path, **f, said=told, standing=standing, last=last)
 
 
 def submit_ran(fleet, host, main, path, bolt, *again):
@@ -3095,7 +3155,8 @@ def landing_ended(fleet, label, p, a):
     words when it gave any, from its wait or from SUBMIT when it refused the submission at once (landing_said, recorded),
     with the head that was submitted, which holds its row on its kit's landings card (refused_at), and the kit's card
     raised so (land_hand). When sluice itself failed with the bolt's tip not on main now, sluice's own record of the
-    submission is read on the team's host (SUBMISSIONS, submission_of), and while it has the submission standing crew
+    submission is read on the team's host (SUBMISSIONS, submission_of, among those made since the landing began, newer
+    than its last), and while it has the submission standing crew
     says so and waits on it again (wait_again), SUBMIT given the submission's id and the tip it submitted, then its
     outcome waited on and its end read as before. Its words printed, standard error for one that did not land. Returns
     (bolt, landed)."""
@@ -3135,7 +3196,7 @@ def landing_ended(fleet, label, p, a):
         tip, sub = sluice_failed(r.stdout, p["before"]), None
         if tip:  # sluice itself failed, the bolt not on main now: its record of the submission says what comes next
             s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
-            sub = submission_of(tip, s.returncode, s.stdout, s.stderr)
+            sub = submission_of(tip, s.returncode, s.stdout, s.stderr, after=p["last"])
         landed, words = landing_said(bolt, name, host, r.stdout, p["before"], sub=sub, again=again)
         refused = landing_said(bolt, name, host, r.stdout, p["before"], sub=sub, again=again, recorded=True)[1]
         n = wait_again(sub, again) if tip else None
