@@ -27,6 +27,10 @@ ok "a dependency listed after its dependent is told nothing of it, and the depen
 
 change "$kd/places/s" s 2 2; commit_all "$kd/places/s" "feat(s): done"; crew unit wait s >/dev/null
 change "$kd/places/d" d 2 2; commit_all "$kd/places/d" "feat(d): done"; crew unit wait d >/dev/null
+mkdir -p "$reports"
+for u in s d; do  # each verified, as a unit's merge needs (record 0007)
+  crew unit run $u verify >/dev/null; echo "the report" > "$reports/verify-$u-20261013-1000.md"; crew unit wait $u >/dev/null
+done
 git -C "$kd/places/s" merge -q --no-ff -m "merge d, as the note once asked" unit/d
 expect_fail "unit s does not merge while unit/s holds the change of d open, which bolt/tenant-environments does not hold archived" crew unit run s merge
 has "$out" "d comes after s: take that work out of unit/s"
