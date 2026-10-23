@@ -10287,15 +10287,12 @@ def words_refusal(head, v, what, advice):
     return f"{head}: the words are " + ("crew's own message" if v.asserted_by == "crew" else "a tool's output") + ", not the user's"
 
 
-def settled_refusal(n, kit, kind, v):
+def settled_refusal(n, kit, v):
     """Why crew record <kit> <n> --proposed --settled-in-pane records no record settled in the pane (briefs.15,
-    signals.5), or None: the caller is not the record's partition's design agent, whose kind it is (role, "design"), or
-    the verdict v on the user's yes in its own transcript (words_refusal) does not read the words as the user's. Each
-    refusal of the words sends the record to its card. A decision of facts alone (code.7)."""
+    signals.5), or None: the verdict v on the user's yes in the caller's own transcript (words_refusal) does not read
+    the words as the user's. No caller is refused by who it is (roles.2): the record names who ran it and in which
+    session. Each refusal sends the record to its card. A decision of facts alone (code.7)."""
     head = f"crew records record {n:04d} in {kit} as settled in no pane"
-    if kind != "design":
-        return (f"{head}: only the design agent records a record the user settled in its pane, in the user's own words; "
-                "run crew record without --settled-in-pane, and the user answers on its card")
     why = words_refusal(head, v, "settle a record", "the user settles a record in your pane or on its card")
     return why and f"{why}; run crew record {kit} {n} --proposed without --settled-in-pane, and the user answers on its card"
 
@@ -11122,8 +11119,8 @@ def record_status(fleet, a):
     alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
     record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
     changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane, in the
-    words --excerpt gives, which crew reads in the design agent's own transcript on this host as the user's before it
-    reads the kit (settled_refusal), and records naming the transcript record and the words' length, never the words
+    words --excerpt gives, which crew reads in the caller's own transcript on this host as the user's before it
+    reads the kit (settled_refusal), whoever the caller is (roles.2), and records naming the transcript record and the words' length, never the words
     (record.3), raising nothing; --alternatives makes the card the choice a rule decided; and --accepted or
     --rejected closes the card with the commit, under either key form (record_card_close)."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
@@ -11144,10 +11141,8 @@ def record_status(fleet, a):
     p["machine"] == here or fail(f"crew record runs on {p['machine']}, where {label}'s design agent holds its records' cards")
     v = sid = None
     if a.settled_in_pane:
-        kind, of = role(fleet, agent())
-        if kind == "design" and of == label:
-            v, sid = CardActs(fleet).heard(a.excerpt)
-        why = settled_refusal(a.number, a.kit, kind if of == label else "other", v)
+        v, sid = CardActs(fleet).heard(a.excerpt)
+        why = settled_refusal(a.number, a.kit, v)
         not why or fail(why)
     checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
     alternatives = None
