@@ -2,7 +2,7 @@
 
 ## 1. crew's record names the pane, and is read by pane
 
-- [ ] 1.1 crew's session-start hook records the herdr session and pane each crew agent's session started in, at a start through crew and at herdr's resume alike (design, Decision 1; Task notes 1.1); verify `tests/suite t-session-hook` ends with "0 failed".
+- [x] 1.1 crew's session-start hook records the herdr session and pane each crew agent's session started in, at a start through crew and at herdr's resume alike (design, Decision 1; Task notes 1.1); verify `tests/suite t-session-hook` ends with "0 failed".
 - [ ] 1.2 `questions.py` answers, for an agent's herdr session and pane, the newest session crew recorded of that agent starting there and that session's question mark, or no session (design, Decision 2; Task notes 1.2); passes `tests/py/test_questions.py`, verify `tests/suite logic` ends with "0 failed".
 
 ## 2. A tell reaches a pane herdr names no session for
