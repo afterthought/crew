@@ -14,7 +14,9 @@ is writing and which partition is theirs.
 
 So at every start this records a crew agent's session in ~/.local/state/crew/sessions/<session id>, which a
 resume keeps, with the definition its brief comes from and the folder it began in: Claude Code finds a conversation again only from that folder, so crew
-resumes a role there (crew.py last_conversation). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
+resumes a role there (crew.py last_conversation). It records too the herdr session and pane the session started in
+(CREW_HERDR_SESSION and CREW_PANE, from HERDR_SESSION and HERDR_PANE_ID, empty outside herdr), at herdr's resume the
+pane it resumed in, so that a tell finds the agent's session by its pane when herdr names none for it (questions.py --pane). A session that starts without CREW_AGENT but has a record is one herdr resumed: it gets the two
 variables back, and SLUICE_AGENT, the same name for sluice, as crew-role sets them, through CLAUDE_ENV_FILE, which Claude Code applies to
 each of its Bash commands, and its pane gets its name back, and a team's conductor's or ops's pane the token naming its bolt's
 branch for sluice's plugins (teams.20); its SLUICE_BRANCH, which sluice's board reads from the Claude process, no hook can give
@@ -63,6 +65,11 @@ def loaded(source, saved, launch):
     return f"CREW_COMMIT={commit or ''}\nCREW_VERSION={version or ''}\nCREW_LAUNCH={launch}\n"
 
 
+def pane_lines():
+    """The lines of a session's record naming the herdr session and pane it starts in, each empty outside herdr."""
+    return f"CREW_HERDR_SESSION={os.environ.get('HERDR_SESSION', '')}\nCREW_PANE={os.environ.get('HERDR_PANE_ID', '')}\n"
+
+
 def withheld(crew, name, label):
     """What a main level's agent herdr resumed is told in place of its identity, or None on its main level's host:
     read from the teams file, whose refusal withholds it too (read.1)."""
@@ -91,7 +98,7 @@ def main():
         cwd = hook.get("cwd") if isinstance(hook.get("cwd"), str) else os.getcwd()
         record.write_text(f"CREW_AGENT={agent}\nCREW_LABEL={os.environ.get('CREW_LABEL', '')}\nCREW_CWD={cwd}\n"
                           f"CREW_ROLE={os.environ.get('CREW_ROLE', '')}\nCREW_BRANCH={os.environ.get('SLUICE_BRANCH', '')}\n"
-                          + loaded(hook.get("source"), saved, os.environ.get("CREW_LAUNCH", "")))
+                          + pane_lines() + loaded(hook.get("source"), saved, os.environ.get("CREW_LAUNCH", "")))
         return
     agent = saved.get("CREW_AGENT")
     if not agent:
@@ -105,8 +112,9 @@ def main():
             return
     if hook.get("source") in LOADS:  # herdr's resume loads crew's plugin anew, its launch the one it began with,
         # and the process has no SLUICE_BRANCH, crew's environment being gone (teams.20)
-        record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH", "CREW_BRANCH"))
-                          + "CREW_BRANCH=\n" + loaded(hook.get("source"), saved, saved.get("CREW_LAUNCH", "")))
+        record.write_text("".join(f"{k}={v}\n" for k, v in saved.items() if k not in ("CREW_COMMIT", "CREW_VERSION", "CREW_LAUNCH", "CREW_BRANCH",
+                                                                                        "CREW_HERDR_SESSION", "CREW_PANE"))
+                          + "CREW_BRANCH=\n" + pane_lines() + loaded(hook.get("source"), saved, saved.get("CREW_LAUNCH", "")))
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file:
         with open(env_file, "a") as f:

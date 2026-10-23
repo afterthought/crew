@@ -2,7 +2,8 @@
 what the reviewer is sent, plan.batch_due_said for what the planner is told, plan.notices for whom a write to the plan
 tells, and crew.tell_refusal for a tell that types nothing. Which changes are due, and when a batch is, are
 test_batches'; starting the reviewer, recording the batch and the tells themselves, the review journey's
-(t-journey-review)."""
+(t-journey-review). crew.agent_reading for the session a tell reads an agent's question mark of, herdr's or the one
+crew recorded in its pane, on herdr's answer and questions.py's as plain facts."""
 import pytest
 
 import crew
@@ -64,11 +65,51 @@ class TestTell:
     @pytest.mark.parametrize("status, asking, unread, said", [
         ("blocked", True, None, WAIT), ("idle", True, None, WAIT),
         (None, False, None, f"could not tell swb-1-conductor on {BOX}: it is not up"),
-        ("idle", False, "herdr names no session for it",
-         f"could not tell swb-1-conductor on {BOX}: herdr names no session for it, so crew can't tell whether it is waiting on a question; nothing was sent"),
+        ("idle", False, f"no host {BOX}",
+         f"could not tell swb-1-conductor on {BOX}: no host {BOX}, so crew can't tell whether it is waiting on a question; nothing was sent"),
         ("idle", False, None, None)])
     def test_a_tell_reaches_its_agent_as_a_prompt_or_not_at_all(self, status, asking, unread, said):
         assert crew.tell_refusal("swb-1-conductor", BOX, status, asking, unread) == said
+
+    def read(self, monkeypatch, item, answers):
+        """agent_reading of wldn-planner, in wldn-2, on herdr's item and questions.py's answers by their arguments,
+        with the arguments it asked."""
+        asked = []
+        monkeypatch.setattr(crew, "read_agent", lambda fleet, name: (item, None))
+        monkeypatch.setattr(crew, "piped", lambda fleet, host, script, what, *args: asked.append(args) or answers[args])
+        monkeypatch.setattr(crew, "place_of_agent", lambda fleet, name: (BOX, "wldn-2"))
+        return crew.agent_reading({}, "wldn-planner"), asked
+
+    PANE = ("--pane", "wldn-2", "w1:p2", "wldn-planner")
+
+    def test_an_agent_herdr_names_no_session_for_is_read_by_the_session_crew_recorded_in_its_pane(self, monkeypatch):
+        got, asked = self.read(monkeypatch, {"agent_status": "idle", "pane_id": "w1:p2"},
+                               {self.PANE: {"session": "sid-1", "question": "open", "id": "toolu_01"}})
+        assert (got, asked) == (("idle", True, "sid-1", None), [self.PANE])
+        got, _ = self.read(monkeypatch, {"agent_status": "idle", "pane_id": "w1:p2"},
+                           {self.PANE: {"session": "sid-1", "question": "answered", "id": "toolu_01"}})
+        assert got == ("idle", False, "sid-1", None)
+
+    def test_a_session_herdr_names_is_read_as_it_was_and_crews_record_is_not_asked(self, monkeypatch):
+        got, asked = self.read(monkeypatch, {"agent_status": "idle", "pane_id": "w1:p2", "agent_session": {"value": "sid-9"}},
+                               {("sid-9",): {"question": None}})
+        assert (got, asked) == (("idle", False, "sid-9", None), [("sid-9",)])
+
+    @pytest.mark.parametrize("item", [{"agent_status": "idle", "pane_id": "w1:p2"}, {"agent_status": "idle"}])
+    def test_an_idle_agent_neither_herdr_nor_crew_names_a_session_for_is_told(self, monkeypatch, item):
+        got, _ = self.read(monkeypatch, item, {self.PANE: {"session": None, "question": None}})
+        assert got == ("idle", False, None, None)
+        monkeypatch.setattr(crew, "agent_reading", lambda fleet, name: got)
+        assert crew.tell_refusal("wldn-planner", BOX, *crew.waits_on_question({}, "wldn-planner")) is None
+
+    @pytest.mark.parametrize("answer, unread", [
+        (f"crew's reading of its questions on {BOX} failed (boom)", f"crew's reading of its questions on {BOX} failed (boom)"),
+        ({"session": 7, "question": None}, f"crew's reading of its questions on {BOX} gave no answer crew reads"),
+        ({"session": "sid-1", "question": "maybe"}, f"crew's reading of its questions on {BOX} gave no answer crew reads")])
+    def test_a_record_crew_cannot_read_refuses_the_tell_naming_what(self, monkeypatch, answer, unread):
+        got, _ = self.read(monkeypatch, {"agent_status": "idle", "pane_id": "w1:p2"}, {self.PANE: answer})
+        assert got[1:] in ((False, None, unread), (False, "sid-1", unread))
+        assert crew.tell_refusal("wldn-planner", BOX, got[0], got[1], got[3]).startswith(f"could not tell wldn-planner on {BOX}: {unread}")
 
 
 def test_a_tell_herdr_refused_to_type_says_why_in_crews_words():

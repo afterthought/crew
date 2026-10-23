@@ -340,6 +340,31 @@ def place_base(said, bolt):
     return f"origin/bolt/{bolt}" if bolt_lives(said, bolt) else f"bolt/{bolt}"
 
 
+def split_remote(said, bolt):
+    """The remote whose bolt/<bolt> a merge into the bolt reads for a split (plan.19), from what BOLT_AT printed in the
+    kit's main checkout: the one the policy at the host's own bolt/<bolt> names for it (bolt_lives), or None when the
+    host has no bolt/<bolt> of its own or its tip names no remote, whatever origin's tracking ref of it says."""
+    return None if said_of(said).get("LOCAL") == "-" else bolt_lives(said, bolt)
+
+
+def bolt_split(said, bolt):
+    """What BOLT_SPLIT printed of a bolt's branch on its remote (plan.19), as {"local", "there", "held", "merges",
+    "read"}: read, git's words when the remote could not be asked or fetched, the rest None; there "-" when the remote
+    has no bolt/<bolt>; else both commits, held "yes" or "no", whether the remote's holds the host's, and merges, how
+    many the host holds beyond it. Refused, naming what was printed, on anything else (read.2)."""
+    f = said_of(said)
+    none = dict(local=None, there=None, held=None, merges=None, read=None)
+    if "READ" in f:
+        return {**none, "read": f["READ"].strip() or "git said nothing"}
+    if f.get("THERE") == "-":
+        return {**none, "there": "-"}
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    if not (all(sha.fullmatch(f.get(k) or "") for k in ("LOCAL", "THERE")) and f.get("HELD") in ("yes", "no")
+            and (f.get("MERGES") or "").isdigit()):
+        crew.fail(f"crew can't read whether bolt/{bolt} is split from: {(said or '').strip()[:200] or 'nothing'}")
+    return {**none, "local": f["LOCAL"], "there": f["THERE"], "held": f["HELD"], "merges": int(f["MERGES"])}
+
+
 def delete_ran(said):
     """sluice's document and exit as BOLT_DELETE printed them, SAID, base64, and RC (read.2): (document, exit). Refused,
     naming what was printed, when they are not there."""
