@@ -8750,10 +8750,31 @@ def row_owner(fleet, plan, row):
     return f"{l}-{'ops' if row['group'] == 'operations' else 'planner'}", fleet["partitions"][l]["machine"]
 
 
-def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None)):
+def older_than_card(key, proposed):
+    """Whether the plan the rail read is older than a proposal's card under key (record 0031 §1, briefs.11): it holds
+    no proposal by the number the key names, proposed being the numbers its proposals.rec holds, open or closed, or
+    None when they were not read. A proposal is numbered once and never removed (plan.4), and its card is raised at the
+    commit that proposed it or past it, so a read that holds the proposal is at or past that commit, and one that does
+    not is older than the card: a fresh proposal's row missing from it says nothing of whether the proposal stands.
+    False for a key that is no proposal's."""
+    m = re.fullmatch(r"proposal/(\d+)", key or "")
+    return bool(m) and (proposed is None or int(m.group(1)) not in proposed)
+
+
+def proposals_held(found):
+    """The numbers of the proposals each plan read holds, open or closed, {label: {n}}, from proposals.rec at the tip
+    it was read at (found, as plans() gives it), an empty set where the branch holds none; a label whose plan was not
+    read is left out, so its proposals' cards are judged against no read (older_than_card)."""
+    return {l: {int(p.get("Proposal")) for p in Plan(show(repo, tip, "proposals.rec") or "").recs("Proposal")}
+            for l, repo, tip, pl in found if pl}
+
+
+def sweep_judged(here, rows, cards_, entries, owners, blind, proposed, now, planner=(None, None)):
     """What the rail's read does with one partition's cards, of those posted on this host (here), the only ones its
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
-    be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
+    be told (blind, the bolts whose team's host did not answer) and a proposal's card on a plan read older than it
+    (older_than_card, proposed the numbers of the proposals the read holds), which is left for a later read, its
+    proposal maybe still open; each question, whose asker herdr is asked for; and
     each row's card with its row, which Pending You is asked whether it still finds; a deploy's card whose word stands
     left for the deploy's end to close (ops.word_stands); and each decision record's card, under either key form,
     whose record crew record has recorded accepted or rejected since, to close with its status (record_settled). Then
@@ -8780,7 +8801,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
         elif c["key"] in rowed:
             out["held"].append((c, rowed[c["key"]]))
         elif (not (c["key"].startswith("land/") and c["key"].split("/")[1] in blind) and not refused_lately(entries, now, card=c["card"])
-              and not ops.word_stands(c["key"], entries)):
+              and not ops.word_stands(c["key"], entries) and not older_than_card(c["key"], proposed)):
             out["gone"].append((c, *row_gone(c["key"], entries)))
     carded = {c["key"] for c in cards_}
     out["none"] = [r for r in rows if r["key"] not in carded and cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
@@ -8847,8 +8868,8 @@ def rail_read(fleet, labels, board=False, sweep=False):
     record did not answer, the landings and gives, the operations' entries, every entry read, and the rows. The survey
     is of each host holding a bolt; with board, of every team of the labels, with the bolt it holds or none, and its
     dev servers, slots and explorations too, for the board (board.py), from which the rail's text is made as well.
-    With sweep, once the rows are made, the cards on this host are swept under its sign-in (sweep_cards), the cards
-    read then being those open once it acted, and the card sessions whose card is closed or whose row is gone are
+    With sweep, once the rows are made, the cards on this host are swept under its sign-in (sweep_cards), against the
+    proposals the plans read hold (proposals_held), the cards read then being those open once it acted, and the card sessions whose card is closed or whose row is gone are
     ended on every host of the labels read; what the sweeps did, and which hosts were not checked, are in the read
     (sweep_sessions). No state is written but by those sweeps' acts."""
     errors = {}
@@ -8862,6 +8883,7 @@ def rail_read(fleet, labels, board=False, sweep=False):
     read = dict(found=found, errors=errors, sv=sv, props=props, times=times, cards=cards_, unread=unread, landings=landings,
                 gives=gives, ops=opses, logs=logs, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
     if sweep:
+        read["proposed"] = proposals_held(found)
         read["swept"] = sweep_cards(fleet, read)
         read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc))
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
@@ -10870,7 +10892,9 @@ def sweep_cards(fleet, read, acts=None):
     """The rail read's sweep of the cards on this host, under its sign-in (record 0031 §1, §2, read.4): for each
     partition whose plan was read, and whose run record answered on its branch, on this host and on its main level's
     host, where its cards and rows are written, it closes each card of a row that is gone with why
-    (sweep_judged, row_gone), and each decision record's card, under either key form, at the record's status
+    (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"], proposals_held),
+    at or past the commit its card was raised at (older_than_card), and each decision record's card, under either key
+    form, at the record's status
     (record_settled), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
     card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
@@ -10900,7 +10924,8 @@ def sweep_cards(fleet, read, acts=None):
         owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
         blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
         planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner)
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind,
+                         read["proposed"].get(l), now, planner)
         for key, why in j.pop("settled"):
             got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
                             Key=key, Outcome=why)
