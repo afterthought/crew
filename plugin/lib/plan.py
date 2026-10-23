@@ -54,6 +54,11 @@ five times. A write that changes several files is one commit, and it carries the
                                              holds; its worktree then goes from its team's host, unless it has
                                              uncommitted changes; a bolt no team holds lands once each unit's change
                                              is on its kit's main
+  crew bolt submit <bolt> [--excerpt "<the user's words>"] [--label L]
+                                             main-level ops's landing through sluice; with --excerpt, on the user's
+                                             words in ops's pane, submitted only once crew reads them in ops's own
+                                             transcript as the user's, no words in the run record, and the landing card
+                                             closed with them at crew bolt land
   crew unit add <unit> "<intent>" --bolt <bolt>|--repo <kit> [--source S]... [--after U]... [--before U] [--signal ID]
                                              [--unblocks <bolt>]
   crew unit split <unit> "<narrowed intent>" --into <unit> "<intent>" [--into ...]

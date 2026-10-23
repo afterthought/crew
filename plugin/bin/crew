@@ -113,10 +113,12 @@
 #                                      worktree, refused in a kit whose .config/sluice.toml there names no checks for
 #                                      its bolt branches, and while a bolt the team holds is not proven (every unit
 #                                      and chore merged, sluice green at its head) or it holds two
-#   crew bolt  submit <bolt> [--label L]
+#   crew bolt  submit <bolt> [--excerpt "<the user's words>"] [--label L]
 #                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
 #                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
-#                                      sluice pushes it to GitHub, and the landing pushes nothing and levels no host
+#                                      sluice pushes it to GitHub, and the landing pushes nothing and levels no host;
+#                                      with --excerpt, on the user's words in ops's pane, submitted only once crew
+#                                      reads them in ops's own transcript as the user's, no words in the run record
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
