@@ -12,10 +12,10 @@ runner = "moon"
 [executor]
 kind = "open"
 
-# A merge into a bolt and a landing each take every check-full task, run open and afresh: neither trusts a replay
-# (tests.5, tests.10). A run takes about two minutes and has taken seven on a loaded host, so one past twenty is stuck
-# and is ended rather than holding the queue for sluice's default hour; a task that both passes and fails on the same
-# tree fails.
+# A merge into a bolt and a landing each take the required check-full tasks the change affects, run open and afresh:
+# neither trusts a replay, and a change that affects none lands with nothing run (sluice ADR 0044; tests.5, tests.10).
+# A run takes about two minutes and has taken seven on a loaded host, so one past twenty is stuck and is ended rather
+# than holding the queue for sluice's default hour; a task that both passes and fails on the same tree fails.
 [branches."bolt/*"]
 required = ["#check-full"]
 flaky = "fail"
