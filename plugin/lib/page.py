@@ -11,15 +11,21 @@ the fleet page, every partition at once.
                                      outcome, and the bolts it carried with their changes' proposals as its release
                                      notes; written whole to ~/.local/state/crew/<label>/page.html on this host, or to
                                      --out, and its path printed with what it was made from
-  crew page --fleet [--out <file>]   the fleet page: every partition of the teams file at once, a block to each, from
-                                     one read of all of them, the one crew board makes: where it runs, each host and
-                                     the herdr sessions its agents run in with each one's Claude account; its kits,
-                                     each main's last landing and what is queued for it; its teams, each one's bolt,
-                                     slots and what its conductor waits on; and what needs attention; each partition
-                                     a link to its page and each team to its dock there, in the layout of the file:
-                                     <label>.html beside index.html, <label>/page.html beside page.html, none, said
-                                     so, for any other name; written whole to ~/.local/state/crew/page.html, beside
-                                     the partitions' folders, or to --out
+  crew page --fleet [--out <file>]   the fleet page: first its Claude subscriptions, each account a session or a
+                                     reading names, with its five-hour, seven-day and per-model use as the host
+                                     holding its sign-in published it in ~/.local/state/crew/usage/<host>.json, which
+                                     host read it and how long ago, a reading not made marked, and the sessions and
+                                     partitions on it; then every partition of the teams file at once, a block to
+                                     each, from one read of all of them, the one crew board makes: where it runs,
+                                     each host and the herdr sessions its agents run in with each one's Claude
+                                     account; its kits, each main's last landing and what is queued for it; its
+                                     teams, each one's bolt, slots and what its conductor waits on; and what needs
+                                     attention; each partition a link to its page and each team to its dock there,
+                                     in the layout of the file: <label>.html beside index.html, <label>/page.html
+                                     beside page.html, none, said so, for any other name; written whole to
+                                     ~/.local/state/crew/page.html, beside the partitions' folders, or to --out, with
+                                     each published file it could not read printed, and that no use is published
+                                     when none is
 
 The board is the one read crew board makes (board.flow_read), of the one partition. Which objects the lineage holds,
 how they are linked and each one's history are read from the run record's entries alone, by the walk crew trace makes
@@ -28,10 +34,12 @@ the board read, at the commit the entries were read at, which a command fetches 
 (record.3). The deploys are the ops entries of the main level's host and the landings, as ops.environments reads them
 (plan.14), a deploy's release notes the proposals the lineage joins to each bolt it carried. The fleet page is the
 board of every partition from the one read crew board makes of them all, each slot's stage read from the starts and
-ends the run record holds in the board's window (read.5), and each session's account from the hosts file (code.5).
+ends the run record holds in the board's window (read.5), and each session's account from the hosts file (code.5);
+its subscriptions' use is what each host published in this host's ~/.local/state/crew/usage/, which swancloud's
+reader writes and crew only reads, by no ssh and no credential (read.5), beside the work of the sessions on each.
 Each file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and making it
 appends no entry (state.4, record.1)."""
-import argparse, datetime, html, json, os, pathlib, sys, tempfile
+import argparse, datetime, html, json, math, os, pathlib, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -186,16 +194,23 @@ def deploys(d, entries, machine, since=None):
 
 # ------------------------------------------------------------------------------------------------- the fleet
 
-def fleet_data(fleet, bd, logs, now):
+def fleet_data(fleet, bd, logs, usage, now):
     """The fleet page's data: every partition of the teams file in its order, from the board of all of them (bd, as
-    board.board_data gives it), each partition's run-record entries (logs, by label) and the time. The record is read in
-    its window, the board's (WINDOW). Each partition is where it runs, its kits and their mains, its teams and how busy
-    each is, and what needs attention, each with the words the page says of it; nothing here reads (code.7)."""
+    board.board_data gives it), each partition's run-record entries (logs, by label), the use the hosts published (usage,
+    as usage_files reads it) and the time. The record is read in its window, the board's (WINDOW). Each partition is
+    where it runs, its kits and their mains, its teams and how busy each is, and what needs attention; each subscription
+    its use, who read it and how long ago, and the sessions and partitions on it; and each published file crew could not
+    read, with why: each with the words the page says of it; nothing here reads (code.7)."""
     since = board.iso(now - WINDOW)
     by = {p["label"]: p for p in bd["partitions"]}
+    parts = [fleet_partition(fleet, by[l], bd["unread"], sorted((e for e in logs.get(l, []) if e["At"] >= since), key=lambda e: (e["At"], e["Id"])), since)
+             for l in fleet["partitions"] if l in by]
+    readings, unread = usage_checked(usage)
+    read = [h for h in usage if h not in {u["host"] for u in unread}]
+    said = ("no host has published any use" if not usage else f"as published by {', '.join(read)}" if read else "no published use could be read")
     return {"made": {"at": board.iso(now), "since": since},
-            "partitions": [fleet_partition(fleet, by[l], bd["unread"], sorted((e for e in logs.get(l, []) if e["At"] >= since), key=lambda e: (e["At"], e["Id"])), since)
-                           for l in fleet["partitions"] if l in by]}
+            "subscriptions": {"said": said, "items": subscriptions(fleet, readings, {t["team"]: t for p in parts for t in p["teams"]}, now)},
+            "unread_usage": unread, "partitions": parts}
 
 
 def fleet_partition(fleet, part, unread, entries, since):
@@ -223,18 +238,10 @@ def where(fleet, label, asked):
     standing roles, then its dispatcher there, and the account the hosts file gives the session, said when it names
     none (read.2). A session no agent of the partition runs in is left out."""
     p = fleet["partitions"][label]
-    ran = crew.partition_hosts(fleet, label)
+    placed = agents_in(fleet, label)
     out = []
     for h in sorted(set(asked) | {p["machine"]}):
-        agents = {}
-        for t in p["teams"]:
-            if fleet["teams"][t]["machine"] == h:
-                agents.setdefault(fleet["teams"][t]["session"], []).append(t)
-        if p["machine"] == h:
-            for r in crew.MAIN_STANDING:
-                agents.setdefault(p["sessions"][r], []).append(f"{label}-{r}")
-        if h in ran:
-            agents.setdefault(crew.dispatch_place(fleet, label, h), []).append(f"{label}-dispatch-{h}")
+        agents = {s: v for (x, s), v in placed.items() if x == h}
         known = fleet["hosts"].get(h, {}).get("sessions", {})
         v = asked.get(h)
         answered = None if h not in asked else v is True
@@ -243,6 +250,21 @@ def where(fleet, label, asked):
                     "sessions": [{"session": s, "agents": agents[s], "account": known.get(s, {}).get("account") or None,
                                   "account_said": account_said(known.get(s, {}).get("account"))}
                                  for s in dict.fromkeys(list(known) + list(agents)) if s in agents]})
+    return out
+
+
+def agents_in(fleet, label):
+    """Which of a partition's agents crew starts in which session, {(host, session): [agent]}: its teams, each in its
+    host's session, then its main level's standing roles in theirs on its host, then its dispatcher on each host its
+    teams run on (crew.dispatch_place)."""
+    p = fleet["partitions"][label]
+    out = {}
+    for t in p["teams"]:
+        out.setdefault((fleet["teams"][t]["machine"], fleet["teams"][t]["session"]), []).append(t)
+    for r in crew.MAIN_STANDING:
+        out.setdefault((p["machine"], p["sessions"][r]), []).append(f"{label}-{r}")
+    for h in crew.partition_hosts(fleet, label):
+        out.setdefault((h, crew.dispatch_place(fleet, label, h)), []).append(f"{label}-dispatch-{h}")
     return out
 
 
@@ -368,11 +390,209 @@ def fleet_links(path, labels):
 
 def linked(d, links):
     """Each partition of the fleet's data given its page's link, and each team its dock there (#dock=team:<name>, the
-    address the dock keeps); none where links is None."""
+    address the dock keeps), and each subscription's partitions the same link as their blocks; none where links is
+    None."""
     for p in d["partitions"]:
         p["link"] = links[p["label"]] if links else None
         for t in p["teams"]:
             t["link"] = f"{p['link']}#dock=team:{t['team']}" if p["link"] else None
+    for s in d["subscriptions"]["items"]:
+        for p in s["partitions"]:
+            p["link"] = links[p["label"]] if links else None
+
+
+# ------------------------------------------------------------------------------------------------- the subscriptions
+
+# A reading's windows, under Claude Code's own names for its /usage data (rate_limits), each with the page's name for it:
+# the two every reading shows, then the weekly ones by model, model_scoped's after them under the server's own names.
+USE = (("five_hour", "five-hour"), ("seven_day", "seven-day"))
+MODELS = (("seven_day_opus", "Opus"), ("seven_day_sonnet", "Sonnet"))
+
+
+def usage_files(folder):
+    """The use the hosts published, one *.json file in folder (a Path) for each host, named for it, by host: {host:
+    {file, data}} for a file parsed, {host: {file, why}} for one that could not be opened or is not JSON. A folder that
+    is not there holds no file."""
+    out = {}
+    for f in sorted(folder.glob("*.json")):
+        try:
+            out[f.stem] = {"file": str(f), "data": json.loads(f.read_text())}
+        except OSError as e:
+            out[f.stem] = {"file": str(f), "why": f"it could not be opened: {e.strerror or e}"}
+        except ValueError as e:
+            out[f.stem] = {"file": str(f), "why": f"it is not JSON: {e}"}
+    return out
+
+
+def shown(v):
+    """A value as a reason quotes it, cut short."""
+    text = json.dumps(v, ensure_ascii=False)
+    return text if len(text) <= 40 else text[:39] + "…"
+
+
+def is_time(at):
+    return isinstance(at, str) and "T" in at and board.when(at) is not None
+
+
+def window_wrong(w):
+    """What is wrong with a window, or None: absent or null, or an object whose utilization is a number or null and
+    whose resets_at is an ISO time or null."""
+    if w is None:
+        return None
+    if not isinstance(w, dict):
+        return f"is not a window: {shown(w)}"
+    u = w.get("utilization")
+    if u is not None and (isinstance(u, bool) or not isinstance(u, (int, float)) or not math.isfinite(u)):
+        return f"has a utilization that is not a number: {shown(u)}"
+    if w.get("resets_at") is not None and not is_time(w["resets_at"]):
+        return f"has a resets_at that is not an ISO time: {shown(w['resets_at'])}"
+    return None
+
+
+def reading_wrong(r):
+    """What is wrong with a reading, or None: an account crew takes as a name (code.4), an at that is an ISO time, and
+    either the host's words for why it could not read (unread) or its windows, each absent, null or a window, and
+    model_scoped a list of windows each with its display_name."""
+    if not isinstance(r, dict):
+        return f"it is not an object: {shown(r)}"
+    if not isinstance(r.get("account"), str) or not crew.NAME.fullmatch(r["account"]):
+        return f"its account is not a name crew takes: {shown(r.get('account'))}"
+    if not is_time(r.get("at")):
+        return f"its at is not an ISO time: {shown(r.get('at'))}"
+    if r.get("unread") is not None and not (isinstance(r["unread"], str) and r["unread"].strip()):
+        return f"its unread is not the host's words: {shown(r['unread'])}"
+    for k, _ in USE + MODELS:
+        why = window_wrong(r.get(k))
+        if why:
+            return f"its {k} {why}"
+    ms = r.get("model_scoped")
+    if ms is not None and not isinstance(ms, list):
+        return f"its model_scoped is not a list: {shown(ms)}"
+    for m in ms or []:
+        if not isinstance(m, dict) or not isinstance(m.get("display_name"), str) or not m["display_name"].strip():
+            return f"its model_scoped holds a window with no display_name: {shown(m)}"
+        why = window_wrong(m)
+        if why:
+            return f"its model_scoped window {m['display_name']} {why}"
+    return None
+
+
+def file_wrong(host, data):
+    """What is wrong with a host's published file, or None: an object whose host is the file's name and whose readings
+    are a list, each of the shape (reading_wrong)."""
+    if not isinstance(data, dict):
+        return f"it is not an object: {shown(data)}"
+    if data.get("host") != host:
+        return f"its host is {shown(data.get('host'))}, not {host}, the file's name"
+    if not isinstance(data.get("readings"), list):
+        return f"its readings are not a list: {shown(data.get('readings'))}"
+    for i, r in enumerate(data["readings"], 1):
+        why = reading_wrong(r)
+        if why:
+            return f"reading {i}: {why}"
+    return None
+
+
+def usage_checked(files):
+    """The published use checked against its shape before any of it is used (read.2), from the files read (usage_files):
+    a file that could not be read or is not of the shape is unread as a whole, named with what is wrong, and the other
+    files' readings kept (read.3). Returns (readings [{host, account, at, unread, windows}], unread [{host, file, why}]),
+    by host, each reading's at in UTC and its windows under their own names, None where the reading gives none."""
+    readings, unread = [], []
+    for host, f in files.items():
+        why = f.get("why") or file_wrong(host, f["data"])
+        if why:
+            unread.append({"host": host, "file": f["file"], "why": why})
+            continue
+        readings += [{"host": host, "account": r["account"], "at": board.iso(board.when(r["at"])), "unread": r.get("unread"),
+                      "windows": {k: r.get(k) for k in [k for k, _ in USE + MODELS] + ["model_scoped"]}}
+                     for r in f["data"]["readings"]]
+    return readings, unread
+
+
+def age_said(at, now):
+    """How long before now a reading was made, in whole minutes, hours and minutes past sixty."""
+    m = int((now - board.when(at)).total_seconds() // 60)
+    if m < 1:
+        return "under a minute ago"
+    h, m = divmod(m, 60)
+    return (f"{h} h " if h else "") + (f"{m} min " if m or not h else "") + "ago"
+
+
+def reset_said(at, now):
+    """When a window resets, in the page's own form: its time alone on the page's day, else with its date."""
+    t = board.when(at).astimezone(datetime.timezone.utc)
+    return t.strftime("%H:%MZ" if t.date() == now.astimezone(datetime.timezone.utc).date() else "%Y-%m-%d %H:%MZ")
+
+
+def window(key, name, w, now):
+    """A window as published: its percentage rounded to a whole number and when it resets, or that it is not given when
+    the reading leaves it out or gives no figure; pct, its number for the bar alone, clamped to 0 to 100."""
+    u, resets = (w or {}).get("utilization"), (w or {}).get("resets_at")
+    if u is None:
+        return {"window": key, "name": name, "utilization": None, "pct": None, "resets_at": resets, "said": f"{name} not given"}
+    return {"window": key, "name": name, "utilization": u, "pct": max(0, min(100, u)), "resets_at": resets,
+            "said": f"{name} {math.floor(u + 0.5)}%" + (f", resets {reset_said(resets, now)}" if resets else "")}
+
+
+def figures(r, now):
+    """A made reading's figures: the five-hour and seven-day windows, always; then by model Opus, Sonnet and each of
+    model_scoped in its order, each only where the reading gives it."""
+    w = r["windows"]
+    return {"windows": [window(k, n, w[k], now) for k, n in USE],
+            "models": [window(k, n, w[k], now) for k, n in MODELS if w[k] is not None]
+                      + [window("model_scoped", m["display_name"], m, now) for m in w["model_scoped"] or []]}
+
+
+def reading_said(r, now):
+    return (f"{r['host']} could not read {age_said(r['at'], now)}: {r['unread']}" if r["unread"]
+            else f"{r['host']} read {age_said(r['at'], now)}")
+
+
+def subscriptions(fleet, readings, teams, now):
+    """Every Claude subscription, by name: each account a session of the hosts file names and each a reading is of
+    (usage_checked). Each shows the figures of its newest reading made, which host read it and how long before now; each
+    other reading, its host's and how long ago, or the host's words for why it could not read; else that its use could
+    not be read, or that no host has published it. Nothing is made of the figures but their words (record 0038 §5)."""
+    named = {s["account"] for h in fleet["hosts"].values() for s in h.get("sessions", {}).values() if s.get("account")}
+    out = []
+    for a in sorted(named | {r["account"] for r in readings}):
+        mine = sorted((r for r in readings if r["account"] == a), key=lambda r: (-board.when(r["at"]).timestamp(), r["host"]))
+        newest = next((r for r in mine if not r["unread"]), None)
+        if newest:
+            state, said = "read", f"read by {newest['host']} {age_said(newest['at'], now)}"
+        else:
+            state, said = ("unread", "its use could not be read") if mine else ("none", "no host has published its use")
+        out.append(dict({"account": a, "state": state, "said": said, "host": newest and newest["host"], "at": newest and newest["at"]},
+                        **(figures(newest, now) if newest else {"windows": [], "models": []}),
+                        others=[{"host": r["host"], "at": r["at"], "unread": r["unread"], "said": reading_said(r, now)} for r in mine if r is not newest],
+                        **on_subscription(fleet, a, teams)))
+    return out
+
+
+def on_subscription(fleet, account, teams):
+    """The sessions and partitions on a subscription, beside its use and computed from nothing of it: each session the
+    hosts file gives account, by host and on each in the file's order, with crew's agents in it across every partition
+    (agents_in), teams first, then main levels' roles, then dispatchers, and each team's slots at work and its
+    conductor's wait as its partition's block says them (teams, by name, as fleet_team gives them); and the partitions
+    with an agent in one of them, in the teams file's order, each linked as its block is (linked)."""
+    labels = list(fleet["partitions"])
+    placed = {l: agents_in(fleet, l) for l in labels}
+    sessions, on = [], set()
+    for h in sorted(fleet["hosts"]):
+        for s, v in fleet["hosts"][h].get("sessions", {}).items():
+            if v.get("account") != account:
+                continue
+            here = [(l, a) for l in labels for a in placed[l].get((h, s), [])]
+            here.sort(key=lambda x: 0 if x[1] in fleet["teams"] else 2 if x[1] == f"{x[0]}-dispatch-{h}" else 1)
+            agents = [a for _, a in here]
+            on |= {l for l, _ in here}
+            sessions.append({"host": h, "session": s, "agents": agents, "said": ", ".join(agents) or "runs no crew agent",
+                             "teams": [{"team": t, "at_work_said": teams[t]["at_work_said"], "waits_said": teams[t]["waits"]["said"]}
+                                       for t in agents if t in teams]})
+    return {"sessions": sessions, "sessions_said": None if sessions else "no session of herdr-hosts is on it",
+            "partitions": [{"label": l, "link": None} for l in labels if l in on],
+            "partitions_said": None if on else "no partition's agents run on it"}
 
 
 # ------------------------------------------------------------------------------------------------- the docks
@@ -807,14 +1027,18 @@ def page(fleet, a):
 
 def fleet_page(fleet, a):
     """crew page --fleet: one read of every partition in the teams file, the read crew board makes of all of them, made
-    into the fleet page and written whole to --out or beside the partitions' pages; its path printed, then as of when
-    and which commit of each plan, each host or plan of a partition that did not answer, and that the partitions are
-    not linked when the file's name gives no layout. Nothing is refused for a silent host (read.3)."""
+    into the fleet page with the use the hosts published in this host's ~/.local/state/crew/usage/, and written whole to
+    --out or beside the partitions' pages; its path printed, then as of when and which commit of each plan, each host or
+    plan of a partition that did not answer, that the partitions are not linked when the file's name gives no layout,
+    each published file that could not be read, and that no use is published when the folder holds none. Nothing is
+    refused for a silent host or an unreadable file (read.3)."""
     labels = list(fleet["partitions"])
     read = board.flow_read(fleet, labels)
     now = datetime.datetime.now(datetime.timezone.utc)
     bd = board.board_data(fleet, labels, read, now)
-    d = fleet_data(fleet, bd, read.get("logs", {}), now)
+    folder = record.ROOT / "usage"
+    usage = usage_files(folder)
+    d = fleet_data(fleet, bd, read.get("logs", {}), usage, now)
     out = pathlib.Path(a.out).expanduser().absolute() if a.out else record.ROOT / "page.html"
     links = fleet_links(out, labels)
     linked(d, links)
@@ -831,6 +1055,10 @@ def fleet_page(fleet, a):
                 print(f"{p['label']}: {board.attention_text(x)}")
     if links is None:
         print(f"the partitions are not linked: {out} is named neither index.html nor page.html")
+    for u in d["unread_usage"]:
+        print(f"the use published in {u['file']} could not be read: {u['why']}")
+    if not usage:
+        print(f"no subscription's use is published in {folder}")
 
 
 def main(argv):

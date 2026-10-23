@@ -29,10 +29,11 @@ def main(label, partition, machine, session, teams, sessions=None):
 
 # madswan, swancloud and wldn, in the teams file's order. swancloud's main level runs on deneb in its session swancloud
 # and crw-6 beside it in swancloud-2, on another account; crw-7 runs on mac-studio, away from the main level, in a
-# session the hosts file names no account for; deneb's swancloud-3 is the partition's, and no agent of it runs there.
+# session the hosts file names no account for; deneb's swancloud-3 is the partition's, and no agent of it runs there;
+# deneb's agentplot-2 is on madswan, and no agent of any partition runs there.
 FLEET = {
     "hosts": {"deneb": {"sessions": {"madswan": sess("business"), "swancloud": sess("personal"), "swancloud-2": sess("personal", "madswan-2"),
-                                     "swancloud-3": sess("personal")}},
+                                     "swancloud-3": sess("personal"), "agentplot-2": sess("agentplot")}},
               "mac-studio": {"sessions": {"wldn": sess("clients/willdan", "willdan-alex"), "swancloud-4": sess("personal", None)}},
               "chuck-herdr-alpha": {"sessions": {"wldn-1": sess("clients/willdan", "ia")}}},
     "partitions": {"madswan": main("madswan", "business", "deneb", "madswan", ["mad-1"]),
@@ -103,8 +104,8 @@ BOARD = {"read_at": "2026-10-23T12:00:00Z", "from": "deneb", "unread": {"the pla
              part("wldn", {"chuck-herdr-alpha": True})]}
 
 
-def fleet(board=BOARD, logs=LOGS):
-    return page.fleet_data(FLEET, board, logs, NOW)
+def fleet(board=BOARD, logs=LOGS, usage=None):
+    return page.fleet_data(FLEET, board, logs, usage or {}, NOW)
 
 
 def of(d, label):
@@ -273,6 +274,253 @@ class TestLinks:
         page.linked(d, None)
         assert {p["link"] for p in d["partitions"]} == {None} and {t["link"] for p in d["partitions"] for t in p["teams"]} == {None}
 
+
+# Decision 1's file: deneb's readings of madswan, made, and of credits, not made.
+WINDOW_AT = "2026-10-27T09:00:00Z"
+
+
+def made(account, at, **w):
+    return {"account": account, "at": at, **w}
+
+
+MADSWAN = made("madswan", "2026-10-23T11:58:04Z",
+               five_hour={"utilization": 34.0, "resets_at": "2026-10-23T14:00:00Z"},
+               seven_day={"utilization": 61.0, "resets_at": WINDOW_AT},
+               seven_day_opus=None,
+               seven_day_sonnet={"utilization": 20.0, "resets_at": WINDOW_AT},
+               model_scoped=[{"display_name": "Fable", "utilization": 40.0, "resets_at": WINDOW_AT}])
+CREDITS = {"account": "credits", "at": "2026-10-23T11:58:06Z", "unread": "the usage endpoint answered 401"}
+
+
+def published(host, *readings):
+    return {"file": f"/u/{host}.json", "data": {"host": host, "readings": list(readings)}}
+
+
+class TestPublishedUse:
+    def test_a_file_of_two_readings_one_made_and_one_not(self):
+        readings, unread = page.usage_checked({"deneb": published("deneb", MADSWAN, CREDITS)})
+        assert unread == []
+        assert [(r["host"], r["account"], r["at"], r["unread"]) for r in readings] == [
+            ("deneb", "madswan", "2026-10-23T11:58:04Z", None), ("deneb", "credits", "2026-10-23T11:58:06Z", "the usage endpoint answered 401")]
+        assert readings[0]["windows"] == {"five_hour": MADSWAN["five_hour"], "seven_day": MADSWAN["seven_day"], "seven_day_opus": None,
+                                          "seven_day_sonnet": MADSWAN["seven_day_sonnet"], "model_scoped": MADSWAN["model_scoped"]}
+        assert readings[1]["windows"] == dict.fromkeys(("five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "model_scoped"))
+
+    def test_each_file_not_of_the_shape_is_named_with_what_is_wrong_and_the_good_files_readings_kept(self):
+        """fleet-page "A file that is not of the shape": each bad file unread as a whole (read.2), the rest read (read.3)."""
+        files = {"box": dict(published("deneb", MADSWAN), file="/u/box.json"),
+                 "capital": published("capital", made("Madswan", "2026-10-23T11:58:04Z")),
+                 "deneb": published("deneb", MADSWAN),
+                 "string": published("string", MADSWAN, made("ia", "2026-10-23T11:00:00Z", five_hour={"utilization": "34", "resets_at": None})),
+                 "scoped": published("scoped", made("ia", "2026-10-23T11:00:00Z", model_scoped={"display_name": "Fable"})),
+                 "nojson": {"file": "/u/nojson.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}}
+        readings, unread = page.usage_checked(files)
+        assert [(r["host"], r["account"]) for r in readings] == [("deneb", "madswan")]
+        assert unread == [
+            {"host": "box", "file": "/u/box.json", "why": 'its host is "deneb", not box, the file\'s name'},
+            {"host": "capital", "file": "/u/capital.json", "why": 'reading 1: its account is not a name crew takes: "Madswan"'},
+            {"host": "string", "file": "/u/string.json", "why": 'reading 2: its five_hour has a utilization that is not a number: "34"'},
+            {"host": "scoped", "file": "/u/scoped.json", "why": 'reading 1: its model_scoped is not a list: {"display_name": "Fable"}'},
+            {"host": "nojson", "file": "/u/nojson.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}]
+
+    def test_a_reading_is_checked_for_its_at_its_unread_and_each_window(self):
+        def why(r):
+            return page.usage_checked({"deneb": published("deneb", r)})[1][0]["why"]
+        assert why(made("ia", "yesterday")) == 'reading 1: its at is not an ISO time: "yesterday"'
+        assert why(made("ia", "2026-10-23")) == 'reading 1: its at is not an ISO time: "2026-10-23"'
+        assert why(made("ia", "2026-10-23T11:00:00Z", unread=401)) == "reading 1: its unread is not the host's words: 401"
+        assert why(made("ia", "2026-10-23T11:00:00Z", seven_day=[61])) == "reading 1: its seven_day is not a window: [61]"
+        assert why(made("ia", "2026-10-23T11:00:00Z", seven_day_opus={"utilization": True})) == (
+            "reading 1: its seven_day_opus has a utilization that is not a number: true")
+        assert why(made("ia", "2026-10-23T11:00:00Z", five_hour={"utilization": 1, "resets_at": "soon"})) == (
+            'reading 1: its five_hour has a resets_at that is not an ISO time: "soon"')
+        assert why(made("ia", "2026-10-23T11:00:00Z", model_scoped=[{"utilization": 1}])) == (
+            'reading 1: its model_scoped holds a window with no display_name: {"utilization": 1}')
+        assert why(made("ia", "2026-10-23T11:00:00Z", model_scoped=[{"display_name": "Fable", "utilization": "x"}])) == (
+            'reading 1: its model_scoped window Fable has a utilization that is not a number: "x"')
+        assert page.usage_checked({"deneb": {"file": "/u/deneb.json", "data": [1]}})[1][0]["why"] == "it is not an object: [1]"
+        assert page.usage_checked({"deneb": {"file": "/u/deneb.json", "data": {"host": "deneb"}}})[1][0]["why"] == "its readings are not a list: null"
+
+    def test_a_window_may_be_absent_null_or_without_a_figure(self):
+        r = made("ia", "2026-10-23T11:00:00+02:00", five_hour={"resets_at": None}, seven_day={"utilization": None, "resets_at": WINDOW_AT},
+                 model_scoped=[{"display_name": "Fable", "utilization": None, "resets_at": None}], seven_day_oauth_apps={"x": 1})
+        readings, unread = page.usage_checked({"deneb": published("deneb", r)})
+        assert unread == [] and readings[0]["at"] == "2026-10-23T09:00:00Z" and "seven_day_oauth_apps" not in readings[0]["windows"]
+
+    def test_the_folder_is_read_one_file_per_host_a_file_not_json_named_and_a_missing_folder_holding_none(self, tmp_path):
+        assert page.usage_files(tmp_path / "usage") == {}
+        (tmp_path / "deneb.json").write_text(json.dumps({"host": "deneb", "readings": [MADSWAN]}))
+        (tmp_path / "mac-studio.json").write_text("not json")
+        (tmp_path / "notes.txt").write_text("not a host's")
+        files = page.usage_files(tmp_path)
+        assert list(files) == ["deneb", "mac-studio"]
+        assert files["deneb"] == {"file": str(tmp_path / "deneb.json"), "data": {"host": "deneb", "readings": [MADSWAN]}}
+        assert files["mac-studio"] == {"file": str(tmp_path / "mac-studio.json"), "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}
+        readings, unread = page.usage_checked(files)
+        assert [r["account"] for r in readings] == ["madswan"] and [u["host"] for u in unread] == ["mac-studio"]
+
+
+def subs(*readings, now=NOW, logs=LOGS):
+    rs, _ = page.usage_checked({h: published(h, *[r for x, r in readings if x == h]) for h in dict.fromkeys(x for x, _ in readings)})
+    teams = {t["team"]: t for p in fleet(logs=logs)["partitions"] for t in p["teams"]}
+    return {s["account"]: s for s in page.subscriptions(FLEET, rs, teams, now)}
+
+
+def ago(m):
+    return (NOW - datetime.timedelta(minutes=m)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class TestSubscriptions:
+    def test_every_account_of_the_sessions_and_of_the_readings_by_name(self):
+        """fleet-page "Accounts from sessions and from readings": fable-test is published for and no session names it."""
+        assert list(subs(("deneb", MADSWAN), ("deneb", made("fable-test", ago(3))))) == ["fable-test", "ia", "madswan", "madswan-2", "willdan-alex"]
+
+    def test_the_madswan_reading_as_published_with_a_model_the_server_names_and_no_opus_line(self):
+        """fleet-page "Use with a model the server names"."""
+        m = subs(("deneb", MADSWAN))["madswan"]
+        assert (m["state"], m["host"], m["at"], m["said"]) == ("read", "deneb", "2026-10-23T11:58:04Z", "read by deneb 1 min ago")
+        assert [w["said"] for w in m["windows"]] == ["five-hour 34%, resets 14:00Z", "seven-day 61%, resets 2026-10-27 09:00Z"]
+        assert [w["said"] for w in m["models"]] == ["Sonnet 20%, resets 2026-10-27 09:00Z", "Fable 40%, resets 2026-10-27 09:00Z"]
+        assert [(w["window"], w["name"], w["utilization"], w["pct"], w["resets_at"]) for w in m["windows"] + m["models"]] == [
+            ("five_hour", "five-hour", 34.0, 34.0, "2026-10-23T14:00:00Z"), ("seven_day", "seven-day", 61.0, 61.0, WINDOW_AT),
+            ("seven_day_sonnet", "Sonnet", 20.0, 20.0, WINDOW_AT), ("model_scoped", "Fable", 40.0, 40.0, WINDOW_AT)]
+
+    def test_a_window_with_no_figure_is_said_not_given_and_one_left_out_too(self):
+        """fleet-page "A window with no figure": never a blank or 0%."""
+        r = made("ia", ago(5), five_hour={"utilization": None, "resets_at": "2026-10-23T14:00:00Z"}, seven_day_opus={"utilization": 12.5},
+                 model_scoped=[{"display_name": "Fable", "utilization": None, "resets_at": None}])
+        ia = subs(("deneb", r))["ia"]
+        assert [w["said"] for w in ia["windows"]] == ["five-hour not given", "seven-day not given"]
+        assert [w["said"] for w in ia["models"]] == ["Opus 13%", "Fable not given"]
+        assert [w["pct"] for w in ia["windows"] + ia["models"]] == [None, None, 12.5, None]
+
+    def test_a_figure_past_a_hundred_is_said_as_published_and_clamped_for_the_bar_alone(self):
+        w = subs(("deneb", made("ia", ago(5), five_hour={"utilization": 104, "resets_at": None})))["ia"]["windows"][0]
+        assert (w["said"], w["utilization"], w["pct"]) == ("five-hour 104%", 104, 100)
+
+    def test_read_on_two_hosts_the_newest_is_shown_and_the_other_listed_with_its_age(self):
+        """fleet-page "Read on two hosts"."""
+        m = subs(("mac-studio", made("madswan", ago(9), seven_day={"utilization": 50})),
+                 ("deneb", made("madswan", ago(2), seven_day={"utilization": 61})))["madswan"]
+        assert (m["host"], m["said"], m["windows"][1]["said"]) == ("deneb", "read by deneb 2 min ago", "seven-day 61%")
+        assert m["others"] == [{"host": "mac-studio", "at": ago(9), "unread": None, "said": "mac-studio read 9 min ago"}]
+
+    def test_a_newer_reading_not_made_lists_its_failure_and_the_made_ones_figures_are_shown(self):
+        m = subs(("deneb", made("madswan", ago(65), five_hour={"utilization": 10})),
+                 ("mac-studio", made("madswan", ago(4), unread="the token had expired")))["madswan"]
+        assert (m["state"], m["said"], m["windows"][0]["said"]) == ("read", "read by deneb 1 h 5 min ago", "five-hour 10%")
+        assert [o["said"] for o in m["others"]] == ["mac-studio could not read 4 min ago: the token had expired"]
+
+    def test_only_a_failed_reading_shows_no_figures_and_names_the_host_with_its_words_and_when_it_tried(self):
+        """fleet-page "Only a failed reading"."""
+        c = subs(("deneb", dict(CREDITS, at=ago(4))))["credits"]
+        assert (c["state"], c["said"], c["host"], c["at"], c["windows"], c["models"]) == ("unread", "its use could not be read", None, None, [], [])
+        assert c["others"] == [{"host": "deneb", "at": ago(4), "unread": "the usage endpoint answered 401",
+                                "said": "deneb could not read 4 min ago: the usage endpoint answered 401"}]
+
+    def test_a_subscription_no_host_published_for_says_so(self):
+        """fleet-page "Nothing published"."""
+        ia = subs(("deneb", MADSWAN))["ia"]
+        assert (ia["state"], ia["said"], ia["windows"], ia["others"]) == ("none", "no host has published its use", [], [])
+
+    def test_ages_in_whole_minutes_and_hours_past_sixty(self):
+        assert [page.age_said(ago(m), NOW) for m in (0, 0.9, 2, 59, 60, 65, -3)] == [
+            "under a minute ago", "under a minute ago", "2 min ago", "59 min ago", "1 h ago", "1 h 5 min ago", "under a minute ago"]
+
+
+
+class TestOnASubscription:
+    def test_two_partitions_on_one_subscription_each_session_with_its_agents_and_its_teams_work(self):
+        """fleet-page "Two partitions on one subscription" and "A session crew runs nothing in": mad-1 with 1 of 4 slots
+        at work in deneb's madswan, swancloud's main level in its swancloud, and swancloud-3 and agentplot-2 running none."""
+        logs = dict(LOGS, madswan=[entry("stage.start", ["stage/k/code", "unit/k", "agent/mad-1-unit-1"], "2026-10-23T11:30:00Z")])
+        m = subs(logs=logs)["madswan"]
+        assert [(s["host"], s["session"], s["agents"], s["said"]) for s in m["sessions"]] == [
+            ("deneb", "madswan", ["mad-1", "madswan-design", "madswan-planner", "madswan-ops", "madswan-operator", "madswan-dispatch-deneb"],
+             "mad-1, madswan-design, madswan-planner, madswan-ops, madswan-operator, madswan-dispatch-deneb"),
+            ("deneb", "swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"],
+             "swancloud-design, swancloud-planner, swancloud-ops, swancloud-operator, swancloud-dispatch-deneb"),
+            ("deneb", "swancloud-3", [], "runs no crew agent"), ("deneb", "agentplot-2", [], "runs no crew agent")]
+        assert m["sessions"][0]["teams"] == [{"team": "mad-1", "at_work_said": "1 of 4 slots at work", "waits_said": "waits on 1 stage: code of k"}]
+        assert [s["teams"] for s in m["sessions"][1:]] == [[], [], []]
+        assert (m["partitions"], m["sessions_said"], m["partitions_said"]) == ([{"label": "madswan", "link": None}, {"label": "swancloud", "link": None}], None, None)
+
+    def test_a_teams_work_is_its_partitions_block_word_for_word(self):
+        m2 = subs()["madswan-2"]
+        crw6 = team_of(of(fleet(), "swancloud"), "crw-6")
+        assert [(s["host"], s["session"], s["agents"]) for s in m2["sessions"]] == [("deneb", "swancloud-2", ["crw-6"])]
+        assert m2["sessions"][0]["teams"] == [{"team": "crw-6", "at_work_said": crw6["at_work_said"], "waits_said": crw6["waits"]["said"]}]
+        assert m2["partitions"] == [{"label": "swancloud", "link": None}]
+
+    def test_a_dispatcher_away_from_its_main_level_and_a_session_with_no_account_on_no_subscription(self):
+        s = subs()
+        assert [(x["host"], x["session"], x["agents"]) for x in s["ia"]["sessions"]] == [("chuck-herdr-alpha", "wldn-1", ["swb-1", "wldn-dispatch-chuck-herdr-alpha"])]
+        assert [(x["host"], x["session"]) for x in s["willdan-alex"]["sessions"]] == [("mac-studio", "wldn")]
+        assert all(x["session"] != "swancloud-4" for v in s.values() for x in v["sessions"])
+
+    def test_a_subscription_no_session_runs_on_says_so(self):
+        f = subs(("deneb", made("fable-test", ago(3))))["fable-test"]
+        assert (f["sessions"], f["sessions_said"], f["partitions"], f["partitions_said"]) == (
+            [], "no session of herdr-hosts is on it", [], "no partition's agents run on it")
+
+    def test_where_a_partition_runs_reads_the_same_placement(self):
+        assert page.agents_in(FLEET, "swancloud") == {
+            ("deneb", "swancloud-2"): ["crw-6"], ("mac-studio", "swancloud-4"): ["crw-7", "swancloud-dispatch-mac-studio"],
+            ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"]}
+
+
+
+class TestTheSection:
+    USAGE = {"deneb": published("deneb", MADSWAN, CREDITS),
+             "mac-studio": {"file": "/u/mac-studio.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}}
+
+    def test_the_fleets_data_holds_the_subscriptions_beside_the_partitions_and_each_unreadable_file(self):
+        """fleet-page "A file that is not of the shape": deneb's readings shown, mac-studio's file named."""
+        d = fleet(usage=self.USAGE)
+        assert list(d) == ["made", "subscriptions", "unread_usage", "partitions"]
+        assert d["subscriptions"]["said"] == "as published by deneb"
+        assert [(s["account"], s["state"]) for s in d["subscriptions"]["items"]] == [
+            ("credits", "unread"), ("ia", "none"), ("madswan", "read"), ("madswan-2", "none"), ("willdan-alex", "none")]
+        assert d["unread_usage"] == [{"host": "mac-studio", "file": "/u/mac-studio.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}]
+
+    def test_with_nothing_published_each_subscription_says_no_host_published_its_use(self):
+        """fleet-page "No use published"."""
+        d = fleet()
+        assert (d["subscriptions"]["said"], d["unread_usage"]) == ("no host has published any use", [])
+        assert {s["state"] for s in d["subscriptions"]["items"]} == {"none"}
+        assert fleet(usage={"deneb": self.USAGE["mac-studio"]})["subscriptions"]["said"] == "no published use could be read"
+
+    def test_a_subscriptions_partitions_link_as_their_blocks_do(self):
+        d = fleet()
+        page.linked(d, page.fleet_links(PurePath("/srv/board/index.html"), ["madswan", "swancloud", "wldn"]))
+        m = next(s for s in d["subscriptions"]["items"] if s["account"] == "madswan")
+        assert m["partitions"] == [{"label": "madswan", "link": "madswan.html"}, {"label": "swancloud", "link": "swancloud.html"}]
+        page.linked(d, None)
+        assert {p["link"] for s in d["subscriptions"]["items"] for p in s["partitions"]} == {None}
+
+    def test_the_section_stands_above_the_partitions_sets_every_text_as_text_and_loads_nothing(self):
+        """fleet-page "Offline", with the subscriptions drawn: a bar's width a number, never markup."""
+        out, block, rest = TestFile().rendered(fleet(usage=self.USAGE))
+        assert rest.index('<section class="subs"') < rest.index('<main class="fleet"')
+        assert json.loads(block)["subscriptions"]["items"][2]["windows"][0]["said"] == "five-hour 34%, resets 14:00Z"
+        for no in ("innerHTML", "outerHTML", "innerText", "insertAdjacentHTML", "document.write", "fetch(", "XMLHttpRequest", "WebSocket",
+                   "EventSource", "src=", "<link", "url(", "cssText", "setAttribute(\"style\""):
+            assert no not in rest, no
+        script = rest[rest.index("// The subscriptions:"):rest.index('var fleet = document.getElementById("fleet")')]
+        assert "textContent" in script and re.findall(r"\.style\.\w+ = [^;]*", script) == ['.style.width = Number(w.pct) + "%"']
+
+    def test_an_unread_reason_is_kept_as_text_and_cannot_end_the_data_block(self):
+        why = "</script><b>here</b> & more"
+        usage = {"deneb": published("deneb", dict(CREDITS, unread=why)), "box": {"file": "/u/box.json", "why": why}}
+        out, block, rest = TestFile().rendered(fleet(usage=usage))
+        data = json.loads(block)
+        assert "<b>here</b>" not in block and out.count("</script>") == 2
+        assert data["unread_usage"][0]["why"] == why and data["subscriptions"]["items"][0]["others"][0]["unread"] == why
+
+    def test_the_subscriptions_sit_side_by_side_and_stack_under_760_px(self):
+        rest = TestFile().rendered()[2]
+        assert "grid-template-columns:repeat(auto-fit,minmax(300px,1fr))" in rest
+        assert re.search(r"@media \(max-width:759px\)\{[^@]*?\.subs-grid\{grid-template-columns:1fr", rest, re.S)
 
 def tokens(text):
     """The colour tokens' blocks of a page's style, light, dark as preferred and dark as chosen, each as written; a

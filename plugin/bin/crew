@@ -319,15 +319,21 @@
 #                                      printed with as of when and which commit it was drawn from
 #   crew page     --fleet [--out <file>]
 #                                      the fleet page, every partition of the teams file at once from the one read
-#                                      crew board makes of them all, a block to each: each host it runs on and the
-#                                      herdr sessions its agents run in, with each session's Claude account; each kit
-#                                      its teams build, its main's last landing and what is queued for it; each team's
-#                                      bolt, its slots at work, holding or free, and what its conductor waits on; and
-#                                      what needs attention; each partition a link to its page and each team to its
-#                                      dock there (<label>.html beside one written as index.html, <label>/page.html
-#                                      beside page.html, none, said so, for any other name); written whole to
+#                                      crew board makes of them all, under its Claude subscriptions: each account a
+#                                      session or a reading names, with its five-hour, seven-day and per-model use as
+#                                      the host holding its sign-in published it in
+#                                      ~/.local/state/crew/usage/<host>.json, which host read it and how long ago, a
+#                                      reading not made marked, and the sessions and partitions on it; then a block to
+#                                      each partition: each host it runs on and the herdr sessions its agents run in,
+#                                      with each session's Claude account; each kit its teams build, its main's last
+#                                      landing and what is queued for it; each team's bolt, its slots at work, holding
+#                                      or free, and what its conductor waits on; and what needs attention; each
+#                                      partition a link to its page and each team to its dock there (<label>.html
+#                                      beside one written as index.html, <label>/page.html beside page.html, none,
+#                                      said so, for any other name); written whole to
 #                                      ~/.local/state/crew/page.html, beside the partitions' folders, or --out, its
-#                                      path printed with each partition's commit and each host that did not answer
+#                                      path printed with each partition's commit, each host that did not answer, each
+#                                      published file it could not read, and that no use is published when none is
 #
 # A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
 # "git" tab (gitgui in the kit and the blueprints repo), and "<team> units", one pane per slot in flight, which
