@@ -2,6 +2,8 @@
 and each partition's run-record entries; page.fleet_links and page.linked for its links. That crew page --fleet makes
 it from one read of every partition and writes it whole is the board journey's (t-journey-board)."""
 import datetime
+import json
+import re
 from pathlib import PurePath
 
 import page
@@ -268,3 +270,46 @@ class TestLinks:
         d = fleet()
         page.linked(d, None)
         assert {p["link"] for p in d["partitions"]} == {None} and {t["link"] for p in d["partitions"] for t in p["teams"]} == {None}
+
+
+def tokens(text):
+    """The colour tokens' blocks of a page's style, light, dark as preferred and dark as chosen, each as written; a
+    block setting no colour, as the phone's layout tokens, is not one."""
+    return [b for b in re.findall(r'(:root\{.*?\}|:root:not\(\[data-theme="light"\]\)\{.*?\}|:root\[data-theme="dark"\]\{.*?\})', text, re.S) if "--bg:" in b]
+
+
+class TestFile:
+    def rendered(self, d=None):
+        out = page.render_fleet(d or fleet())
+        block, = re.findall(r'<script type="application/json" id="data">(.*?)</script>', out, re.S)
+        return out, block, out.replace(block, "")
+
+    def test_one_file_holding_its_data_once_that_loads_nothing_and_holds_no_control_but_links(self):
+        """fleet-page "Offline": every block draws from the file alone, and the browser makes no request."""
+        assert page.FLEET.read_text().count(page.DATA) == 1
+        out, block, rest = self.rendered()
+        assert [p["label"] for p in json.loads(block)["partitions"]] == ["madswan", "swancloud", "wldn"]
+        for no in ("<script src", "<link", "@import", "http://", "https://", "src=", "url(", "{{DATA}}", "innerHTML", "outerHTML",
+                   "insertAdjacentHTML", "document.write", "fetch(", "XMLHttpRequest", "WebSocket", "EventSource", "<button", "<input",
+                   "<select", "<textarea", "<form", "onclick", "addEventListener"):
+            assert no not in rest, no
+        assert "textContent" in rest and 'setAttribute("href"' in rest
+
+    def test_its_colour_tokens_are_the_partition_pages_light_and_dark(self):
+        """The two templates share their tokens by copy, so a case holds them equal (design, Risks)."""
+        fleet_tokens, page_tokens = tokens(page.FLEET.read_text()), tokens(page.TEMPLATE.read_text())
+        assert len(fleet_tokens) == 3 and fleet_tokens == page_tokens
+
+    def test_its_partitions_sit_side_by_side_and_stack_under_760_px(self):
+        rest = self.rendered()[2]
+        assert "grid-template-columns:repeat(auto-fit,minmax(380px,1fr))" in rest
+        assert re.search(r"@media \(max-width:759px\)\{.*?\.fleet\{grid-template-columns:1fr", rest, re.S)
+
+    def test_typed_words_are_kept_as_text_and_cannot_end_the_data_block(self):
+        """fleet-page "Typed words": an attention item holding </script><b>here</b>, a host's error as it was read."""
+        said = "mac-studio did not answer (its kits: </script><b>here</b> & more)"
+        b = dict(BOARD, partitions=[part("wldn", {"chuck-herdr-alpha": True},
+                                         attention=[{"what": "host", "name": "mac-studio", "why": "its kits: </script><b>here</b> & more"}])])
+        out, block, rest = self.rendered(fleet(b))
+        assert "<b>here</b>" not in block and of(json.loads(block), "wldn")["attention"] == [said]
+        assert out.count("</script>") == 2

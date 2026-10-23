@@ -409,15 +409,29 @@ def nav(labels, label, path):
     return (f'<a class="part fleet" href="{html.escape(back)}" title="every partition">fleet</a>' if back else "") + "".join(part(l) for l in labels)
 
 
+def embedded(d):
+    """The data as JSON a script block can hold, every < escaped so nothing in it can end the block."""
+    text = json.dumps(d, separators=(",", ":"), ensure_ascii=False)
+    return text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+
+
+def template(path, *marks):
+    """A template's text, refused unless it holds each placeholder once."""
+    text = path.read_text()
+    for mark in marks:
+        text.count(mark) == 1 or fail(f"{path} must hold its placeholder {mark} once")
+    return text
+
+
 def render(d, path):
     """The page to be written to path: the template with the partitions' links in their placeholder, and the data in
-    its own, as JSON a script block can hold, every < escaped so nothing in it can end the block."""
-    text = json.dumps(d, separators=(",", ":"), ensure_ascii=False)
-    text = text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-    page = TEMPLATE.read_text()
-    for mark in (DATA, PARTITIONS):
-        page.count(mark) == 1 or fail(f"{TEMPLATE} must hold its placeholder {mark} once")
-    return page.replace(PARTITIONS, nav(d["partitions"], d["label"], path)).replace(DATA, text)
+    its own (embedded)."""
+    return template(TEMPLATE, DATA, PARTITIONS).replace(PARTITIONS, nav(d["partitions"], d["label"], path)).replace(DATA, embedded(d))
+
+
+def render_fleet(d):
+    """The fleet page: its template with the fleet's data in its placeholder (embedded)."""
+    return template(FLEET, DATA).replace(DATA, embedded(d))
 
 
 def write(path, text):
