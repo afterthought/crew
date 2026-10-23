@@ -5417,9 +5417,9 @@ def place_branch(fleet, t, place):
 def fix_cmd(fleet, a):
     """What crew fix decides before its stage, a.mode start, merge, drop or wait: the fix's bolt (BOLT, fix_bolt, by
     a.bolt while the team holds two) and its kit (REPO), the fix (FIX), its place (PLACE) and the slot holding it, if
-    any (SLOT); for a merge, how it merges into the bolt
-    (MERGE), by a submission to sluice as a unit's does, the bolt's landing pull request held first (merge_holds); for a drop, its branch when it is there (BRANCH). A name crew
-    does not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
+    any (SLOT); for a merge, how it merges into the bolt (MERGE), by a submission to sluice as a unit's does, the bolt's
+    landing pull request held first (merge_holds); for a drop, its branch when it is there (BRANCH). A name crew does
+    not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
     already there (fix.start), a merge from a place not the fix's own (fix.merge), and a drop of a merged fix, of one
     nothing holds or of a place not the fix's own (fix.drop) are refused and recorded (teams.3, teams.5, record
     0028)."""
