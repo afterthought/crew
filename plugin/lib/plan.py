@@ -2087,7 +2087,7 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
     landing_facts), the row's facts as cards.landings_card takes them with what the reading's writer needs beside them,
     the team, its conductor, its host and where the bolt last met main (base); (None, why) while it does not. With
     fixes_hold False, a fix in flight on it does not keep it from reading proven, and the facts hold each such fix with
-    the words it started with ({fix: words or None}, fix_notes) and the bolt's last landing sluice did not land
+    the words it started with ({fix: words or None}, fix_words) and the bolt's last landing sluice did not land
     ((head, words), refusals) or None, for landing_rows to hold its row by. Refused when its kit can't be read (read.1)."""
     bolt = b.name()
     st = stages_for(fleet, plan, held_by(plan, t["name"]) or [b])
@@ -2117,20 +2117,28 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
                          dict(team=t["name"], next=frees[1]) if frees and frees[0] == "frees" else None)
     if not card:
         return None, batch_waits([n for n, kind, _ in work if kind == "unit"], due, unanswered)
-    held = {} if fixes_hold else dict(fixes=fix_notes(entries, fixes), refusal=refusals(entries).get(bolt))
+    held = {} if fixes_hold else dict(fixes={f: fix_words(t, f) for f in fixes}, refusal=refusals(entries).get(bolt))
     return dict(card, team=t["name"], conductor=f"{t['name']}-conductor", host=t["machine"], base=base, **held), None
 
 
-def fix_notes(entries, fixes):
-    """The words each fix in flight (fixes, its branch, fix/<bolt>/<name>) started with, from its fix.start's Note in
-    the run record's entries, the words crew fix took: {fix: words, or None when none is recorded}."""
-    notes = dict.fromkeys(fixes)
-    for e in entries:
-        if e.get("Act") == "fix.start" and not e.get("Refused") and e.get("Note"):
-            for o in e.get("On") or []:
-                if o in notes:
-                    notes[o] = e["Note"]
-    return notes
+def fix_said(t, fix, words):
+    """The words a fix started with (crew fix's), kept on the team's host beside its stages file, never in the run
+    record (record.3), for its bolt's row on its kit's landings card to say while it holds it (land_facts); what can't
+    be written is said, and the fix stands."""
+    f = team_state(t) / "fix-words" / fix.replace("/", "--")
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(words)
+    except OSError as e:
+        print(f"crew could not keep {fix}'s words for its bolt's landings row: {e.strerror or e}", file=sys.stderr)
+
+
+def fix_words(t, fix):
+    """The words a fix started with as fix_said kept them on the team's host, or None when none are kept."""
+    try:
+        return (team_state(t) / "fix-words" / fix.replace("/", "--")).read_text().strip() or None
+    except OSError:
+        return None
 
 
 def landing_retry(why, fresh, fresh_why):
@@ -8579,8 +8587,8 @@ def fix_run(fleet, a):
     else:
         if unready:
             print(f"{unready.splitlines()[0].rstrip(':')}; {agent} starts on the fix all the same, told what failed")
-        run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"],
-                  Note=a.words)
+        run_stage(fleet, team, slot, "fix", fix_prompt(a.words, place, unready), "fix.start", fix, obj, on + [f"agent/{agent}"])
+        fix_said(t, fix, a.words)
         print(f"{agent} has {fix}: code, in {place}")
         landing_held(fleet, t, bolt, a.words)
 
@@ -9992,7 +10000,7 @@ def row_gone(key, entries, kits=(), kit_of=None):
     else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them, and a batch that waits on
     nothing with the words of crew's close (batch_settled). A kit's landings card, land/<kit> (kits, the partition's
     kits' names), that nothing waits to land on its main; and a landing card of a bolt's own, from before a kit's card,
-    whose bolt still waits (kit_of, {bolt: its kit} in the plan), that it is now a row of its kit's landings card
+    whose bolt its kit's landing row names (kit_of, {bolt: its kit}), that it is now a row of its kit's landings card
     (rail-cards "A bolt's own landing card gives way to its kit's")."""
     kind, _, rest = (key or "").partition("/")
     thing, _, head = rest.partition("/")
@@ -12271,7 +12279,8 @@ def sweep_cards(fleet, read, acts=None):
         blind |= {b.get("Repo") for b in pl.bolts() if b.name() in blind and b.get("Repo")}  # a kit's card, a bolt of it unread
         planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
         j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner,
-                         partition_kits(fleet, l), {b.name(): b.get("Repo") for b in pl.bolts()})
+                         partition_kits(fleet, l), {x["bolt"]: r["key"].split("/", 1)[1] for r in rows if r["group"] == "land"
+                                                    for x in r.get("bolts", [])})
         for key, why in j.pop("settled"):
             got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
                             Key=key, Outcome=why)
