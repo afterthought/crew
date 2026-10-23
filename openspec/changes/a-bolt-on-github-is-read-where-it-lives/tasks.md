@@ -4,7 +4,7 @@
 
 - [x] 1.1 One pure decision says where a bolt is read, GitHub's copy when the host holds it and its own policy names a remote, else the host's branch, with the policy matching moved into gather.py and kit.py using it unchanged in what it decides (design, Decision 1; Task notes 1.1); passes `tests/py/test_bolt_commands.py` and `tests/py/test_kit.py`, verified by `tests/suite logic` ending with "0 failed".
 - [x] 1.2 gather reads every bolt's head, verdict, changes and chores, a chore's place's own commits and a fix's merge at that ref, and a bolt whose policy crew can't read is unknown in the stages (design, Decision 2; Task notes 1.2); passes `tests/contract/test_gather.py` and the logic case, verified by `tests/suite contract` and `tests/suite logic` each ending with "0 failed".
-- [ ] 1.3 Every other read of a bolt in plan.py, the landing card's base, the verify's undeclared paths, a forecast's and a rebase's words, a dependent's rebase and take, and where a unit landed on its bolt, reads at that ref (design, Decision 2; Task notes 1.3); passes `tests/contract/test_git.py` and `tests/py/test_forecast.py`, verified by `tests/suite contract` and `tests/suite logic` each ending with "0 failed".
+- [x] 1.3 Every other read of a bolt in plan.py, the landing card's base, the verify's undeclared paths, a forecast's and a rebase's words, a dependent's rebase and take, and where a unit landed on its bolt, reads at that ref (design, Decision 2; Task notes 1.3); passes `tests/contract/test_git.py` and `tests/py/test_forecast.py`, verified by `tests/suite contract` and `tests/suite logic` each ending with "0 failed".
 
 ## 2. When a bolt on GitHub is fetched
 

@@ -324,7 +324,7 @@ def test_a_dependents_place_takes_a_chores_head_and_a_chores_own_work_leaves_out
     k.commit(a, "feat(a): its work")
     cp = k.dir / "places" / "chore-pin"
     repo.git("worktree", "add", "-q", "--track", "-b", "chore/pin", str(cp), "bolt/te")
-    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(cp), "pin", "te", "unit/a"], capture_output=True, text=True)
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(cp), "pin", "refs/heads/bolt/te", "unit/a"], capture_output=True, text=True)
     assert (took.returncode, took.stdout.split()) == (0, ["a", repo.git("rev-parse", "--short=7", "unit/a")])
     assert k.read()["chore_places"]["pin"]["ahead"] == 0
     assert gather.own_head(str(repo.path), "chore/pin", "te") == (None, None)
@@ -336,7 +336,7 @@ def test_a_dependents_place_takes_a_chores_head_and_a_chores_own_work_leaves_out
     own = plan.chore_log(repo.git(*plan.CHORE_LOG, "refs/heads/bolt/te..refs/heads/chore/pin"))
     assert [(subject, names) for _, subject, names in own] == [("chore: pin", ["pin"])]
     b = k.place("b")
-    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(b), "b", "te", "chore/pin"], capture_output=True, text=True)
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(b), "b", "refs/heads/bolt/te", "chore/pin"], capture_output=True, text=True)
     assert (took.returncode, took.stdout.split()) == (0, ["pin", repo.git("rev-parse", "--short=7", "chore/pin")])
     repo.git("-C", str(b), "merge-base", "--is-ancestor", "chore/pin", "HEAD")
 
