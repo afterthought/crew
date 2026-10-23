@@ -39,6 +39,7 @@ plugin/lib/kit.py
 tests/py/test_landing.py
 tests/py/test_kit.py
 tests/py/test_bolt_commands.py
+tests/py/test_pane_landing.py
 tests/contract/test_git.py
 tests/t-journey-land.sh
 tests/moon.yml
