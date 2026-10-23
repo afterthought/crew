@@ -1773,7 +1773,8 @@ def held_object(kind, name, bolt=""):
         return f"unit/{name}"
     if name.startswith("fix/") and "/" in name[4:]:
         return name
-    return f"fix/{bolt[5:] if bolt.startswith('bolt/') else bolt}/{name[4:] if name.startswith('fix/') else name}"
+    import gather  # standard library only, as every host's crew pipes it
+    return f"fix/{gather.bolt_of(bolt) or bolt}/{name[4:] if name.startswith('fix/') else name}"
 
 
 def slot_pane_at(panes, live):

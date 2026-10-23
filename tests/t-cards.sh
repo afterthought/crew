@@ -188,13 +188,14 @@ ok "the owner's crew card read finds the approval the user declined and closes i
 
 # crew record (briefs.15, record 0031 §1): the design agent's record at each turn of its status, read on switchboard-kit's
 # main as this host's checkout of it holds it, raising, changing and closing the record's one card in its name.
-# adr <status> <subject> [<number>]: a record committed on the kit's main, as sluice lands the design agent's
+# adr <status> <subject> [<number>]: a record committed on the kit's main and pushed, as sluice lands the design agent's
+# on GitHub
 adr() {
   local n=${3:-32}
   mkdir -p "$k/docs/adr"
   printf -- '---\nnumber: %s\ntitle: switchboard runs the workflows\nstatus: %s\n---\n\n# switchboard runs the workflows\n\nStatus: %s.\n\nDeciders: the user (“no fleet”); wldn-design.\n\n## Context and problem statement\n\nThe runners cost. %s\n' \
     "$n" "$1" "$1" "$2" > "$k/docs/adr/00$n-switchboard-runs-the-workflows.md"
-  git -C "$k" add docs/adr; git -C "$k" commit -qm "$2"
+  git -C "$k" add docs/adr; git -C "$k" commit -qm "$2"; push "$k"
   sha=$(git -C "$k" rev-parse --short=7 HEAD)
 }
 # design <args...>: crew record as wldn-design on the box, in its pane's folder
@@ -302,7 +303,7 @@ ok "a card waiting on the user is changed in place; once they answer it, it is a
 # A batch's card and its one reading session, raised by crew in the planner's name once the reviewer's summary is
 # there, on the main level's host, the box: v1's change read at its commit in switchboard-kit.
 export PLANNOTATOR_URL_HOST=auto PLANNOTATOR_PORT=19432-19451
-change "$k" v1 0 2; commit_all "$k" "docs(v1): the change"; sha=$(git -C "$k" rev-parse HEAD)
+change "$k" v1 0 2; commit_all "$k" "docs(v1): the change"; push "$k"; sha=$(git -C "$k" rev-parse HEAD)
 reports=$(home_of $box)/.local/state/crew/wldn-main/reports; mkdir -p "$reports"
 cards_dir=$(home_of $box)/.local/state/crew/cards/wldn
 batch() {  # batch <n>: batch n of v1 recorded on the box, and its summary written

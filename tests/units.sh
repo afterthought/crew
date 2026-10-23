@@ -21,7 +21,7 @@ echo "\$(pwd -P) \$* \${TOOLCHAIN_FROM:-none}" >> "$T/moon.log"
 exit 0
 MOON
 chmod +x "$k/tools/print" "$k/tools/bin/moon"; printf 'one\ntwo\nthree\n' > "$k/shared.txt"
-commit_all "$k" "chore: the kit's toolchain and runner, and a file the units share"
+commit_all "$k" "chore: the kit's toolchain and runner, and a file the units share"; push "$k"
 # ready <worktree>: how many times moon setup ran in that worktree, inside the toolchain printed for it
 ready() { local w; w=$(cd "$1" && pwd -P); grep -c "^$w setup $w\$" "$T/moon.log" || true; }
 export CREW_LABEL=wldn
