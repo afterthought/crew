@@ -10,15 +10,21 @@
 # remote moved meanwhile, and the local branch then set to it. <n> counts the kit's submissions, in its git common dir.
 # It exits as sluice does: 0 landed; 1 the checks failed, while $CREW_TEST_ROOT/sluice-fails exists, its words the
 # failure; 2 refused or in conflict; nothing moved but on 0. It removes no worktree: crew always passes --no-remove,
-# and a call without it is refused. Every call is logged to $CREW_TEST_LOG as `<host> wt submit <args> from <worktree>
-# as <SLUICE_AGENT>`.
+# and a call without it is refused. With --no-wait --json, as crew's landing submits, it is the stub sluice's `submit
+# <branch> --no-wait --json`, which lands at once through this stub and answers {id, branch, ahead}, its outcome
+# waiting for `sluice wait`. Every call is logged to $CREW_TEST_LOG as `<host> wt submit <args> from <worktree> as
+# <SLUICE_AGENT>`.
 set -uo pipefail
 here=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "sluice: not in a git worktree" >&2; exit 2; }
 [[ -n ${CREW_TEST_LOG:-} ]] && printf '%s wt submit %s from %s as %s\n' "${CREW_TEST_HOST:-?}" "$*" "$here" "${SLUICE_AGENT:-}" >> "$CREW_TEST_LOG"
-target= remove=yes
-for a in "$@"; do case $a in --no-remove) remove=no ;; -*) echo "wt-submit stub: $a is not stubbed" >&2; exit 2 ;; *) target=$a ;; esac; done
-[[ -n $target ]] || { echo "usage: wt submit <BRANCH> [--no-remove]" >&2; exit 2; }
+target= remove=yes queued=
+for a in "$@"; do case $a in --no-remove) remove=no ;; --no-wait | --json) queued+=" $a" ;; -*) echo "wt-submit stub: $a is not stubbed" >&2; exit 2 ;; *) target=$a ;; esac; done
+[[ -n $target ]] || { echo "usage: wt submit <BRANCH> [--no-remove] [--no-wait --json]" >&2; exit 2; }
 [[ $remove == no ]] || { echo "wt-submit stub: crew submits with --no-remove" >&2; exit 2; }
+if [[ -n $queued ]]; then
+  [[ $queued == " --no-wait --json" ]] || { echo "wt-submit stub: --no-wait goes with --json, as crew passes them" >&2; exit 2; }
+  exec sluice submit "$target" --no-wait --json
+fi
 from=$(git symbolic-ref -q --short HEAD) || { echo "sluice: $here is on a detached head; submit from a branch" >&2; exit 2; }
 remote=$(python3 "$(dirname "$0")/route.py" "$target")
 if [[ -n $remote ]]; then

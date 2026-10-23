@@ -82,11 +82,15 @@ class TestRows:
         assert not [r for r in rows() if "checked" in r["key"] or "stale" in r["key"]]
         assert {r["group"] for r in rows()} <= set(plan.RAIL) and "verify" not in plan.RAIL
 
-    def test_a_bolt_whose_every_unit_merged_waits_to_land_timed_by_its_last_merge(self):
+    HEAD = f"{KIT} (wldn): 1 bolt waits to land on its main, in the plan's order; wldn-ops lands them"
+
+    def test_a_kit_with_a_bolt_whose_every_unit_merged_is_one_row_timed_by_its_last_merge(self):
+        """crew-rail "The last unit merges": one row a kit, main-level ops's, naming the bolt with its team."""
         land, = [r for r in rows() if r["group"] == "land"]
-        assert (land["key"], land["at"]) == ("land/apex-zones", plan.utc(iso(30)))
-        assert land["what"] == [f"bolt apex-zones (wldn), swb-2 on {BOX}: every unit merged; waits to land; wldn-ops lands it"]
-        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert (land["key"], land["at"]) == (f"land/{KIT}", plan.utc(iso(30)))
+        assert land["what"] == [self.HEAD, f"apex-zones, swb-2 on {BOX}: can land"]
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
+        assert land["bolts"] == [dict(bolt="apex-zones", team="swb-2", host=BOX, can=True)]
 
     def two_bolts(self, merged, planned=True):
         """swb-2 holds apex-zones, proven, and beta, given after it, whose unit b-one has merged or not."""
@@ -100,53 +104,70 @@ class TestRows:
 
     def test_a_landing_row_names_the_bolt_its_team_builds_meanwhile(self):
         land = self.two_bolts(merged=False)
-        assert list(land) == ["land/apex-zones"]
-        assert land["land/apex-zones"]["what"][1] == "swb-2 builds beta meanwhile"
-        assert land["land/apex-zones"]["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert list(land) == [f"land/{KIT}"]
+        assert land[f"land/{KIT}"]["what"][1] == f"apex-zones, swb-2 on {BOX}: swb-2 builds beta meanwhile; can land"
+        assert land[f"land/{KIT}"]["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
 
-    def test_once_both_are_proven_each_row_says_a_yes_frees_the_team_for_its_next_planned_bolt(self):
-        land = self.two_bolts(merged=True)
-        assert [r["what"][1] for r in land.values()] == ["a yes frees swb-2 for d", "a yes frees swb-2 for d"]
+    def test_two_bolts_of_one_kit_are_one_row_its_tell_naming_both_in_order_each_saying_a_yes_frees_the_team(self):
+        """crew-rail "Two bolts of one kit" and "A yes frees the team"."""
+        land, = self.two_bolts(merged=True).values()
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: a yes frees swb-2 for d; can land",
+                                    f"beta, swb-2 on {BOX}: a yes frees swb-2 for d; can land"]
+        assert land["what"][0].startswith(f"{KIT} (wldn): 2 bolts wait to land on its main")
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones, beta."')] and land["at"] == plan.utc(iso(30))
 
     def test_with_nothing_planned_a_yes_frees_the_team_for_nothing(self):
         land = self.two_bolts(merged=True, planned=False)
-        assert land["land/apex-zones"]["what"][1] == "a yes frees swb-2, and nothing is planned for it"
+        assert land[f"land/{KIT}"]["what"][1] == f"apex-zones, swb-2 on {BOX}: a yes frees swb-2, and nothing is planned for it; can land"
 
     def test_a_bolt_with_a_fix_in_flight_lands_once_it_has_merged_or_been_dropped(self):
         sv = survey()
         sv[BOX]["kits"]["/kit/main"]["fixes"] = [{"fix": "fix/apex-zones/gap", "bolt": "apex-zones", "merged": False},
                                                 {"fix": "fix/apex-zones/done", "bolt": "apex-zones", "merged": True}]
         land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert (land["key"], land["what"][1], land["cmds"]) == (
-            "land/apex-zones", "lands once fix/apex-zones/gap has merged or been dropped", [])
+        assert (land["what"][1], land["cmds"]) == (f"apex-zones, swb-2 on {BOX}: lands once fix/apex-zones/gap has merged or been dropped", [])
+        assert land["bolts"][0]["can"] is False
         sv[BOX]["kits"]["/kit/main"]["fixes"][0]["dropped"] = True  # dropped, its place not yet removed
         land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land" and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
+
+    def test_a_landing_sluice_refused_at_the_bolts_head_is_held_in_its_words(self):
+        """crew-rail "A refused landing"."""
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {},
+                         "refused": {"apex-zones": ("abc1234" + "0" * 33, "bolt/apex-zones did not land: sluice found a conflict")}}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: held: sluice refused its landing at abc1234, until its team's fix "
+                                   "moves its head: bolt/apex-zones did not land: sluice found a conflict")
+        assert land["cmds"] == []
+        held["wldn"]["refused"] = {"apex-zones": ("c" * 40, "an older head's")}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land"
 
     def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
         sv = survey()
         sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"]["verdict"] = ""
         land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert land["what"][1] == "lands once its verification is green; now its head abc1234 is no landing of sluice's, so it has no verdict"
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: lands once its verification is green; now its head abc1234 is no "
+                                   "landing of sluice's, so it has no verdict")
         assert land["cmds"] == []
 
     def test_a_bolt_lands_only_once_every_units_latest_change_has_been_in_a_batch(self):
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": {"zone-one"}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1] == "lands once zone-one has been in a batch, which is due for them" and land["cmds"] == []
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: lands once zone-one has been in a batch, which is due for them" and land["cmds"] == []
         held["wldn"]["due"] = None
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1] == "whether every unit's latest change has been in a batch can't be told: a host did not answer"
+        assert land["what"][1].endswith("whether every unit's latest change has been in a batch can't be told: a host did not answer")
 
     def test_a_bolt_lands_only_once_the_user_has_answered_each_batch_holding_a_units_latest_change(self):
         """briefs.12: the user, 2026-10-19, on card req_5ff4d31d: "Wait for my answer on the batch card"."""
         held = {"wldn": {"batches": [(8, iso(10), [("zone-one", "swb-2", "abc1234")])], "closed": set(), "posts": set(), "due": set(),
                          "unanswered": {"zone-one": 8, "early": 7}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1:] == ["lands once you have answered batch 8"] and land["cmds"] == []
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: lands once you have answered batch 8"] and land["cmds"] == []
         held["wldn"]["unanswered"] = {}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: can land"] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
 
     def test_a_landing_row_names_both_the_units_due_a_batch_and_the_batches_that_wait_on_the_user(self):
         p = plan.Plan(plan_text(bolts=[("apex-zones", KIT, "swb-2")], units=[(u, KIT, "apex-zones", []) for u in ("zone-one", "zone-two", "zone-three")]))
@@ -154,7 +175,8 @@ class TestRows:
         sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"].update(changes=zones, archived=zones)
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": {"zone-one"}, "unanswered": {"zone-two": 8, "zone-three": 9}}}
         land, = [r for r in plan.rail_rows(FLEET, [("wldn", "WilldanGroup/crew-state", "tip", p)], sv, [], {}, held) if r["group"] == "land"]
-        assert land["what"][1:] == ["lands once zone-one has been in a batch, which is due for them", "lands once you have answered batches 8 and 9"]
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: lands once zone-one has been in a batch, which is due for them; "
+                                    "lands once you have answered batches 8 and 9"]
         assert land["cmds"] == []
 
     def test_a_proposal_is_timed_by_its_entry_else_its_opened_date_naming_whom_it_waits_on(self):
@@ -192,7 +214,7 @@ class TestText:
         rs = rows([proposal(1)])
         out = text(rs, cards=[dict(label="wldn", card="req_prop-1", key="proposal/1", by="wldn-planner", host="mac-studio", at=NOW)])
         assert "    card:   proposal/1, open, asked by wldn-planner (req_prop-1)" in out
-        assert "    card:   land/apex-zones, none open" in out
+        assert f"    card:   land/{KIT}, none open" in out
 
     def test_an_open_card_whose_row_is_gone_is_listed_with_the_host_whose_rail_read_closes_it(self):
         old = dict(label="wldn", card="req_old-1", key="verify/checked/20260101-0000", by="swb-1-conductor", host=BOX, at=NOW)
@@ -391,13 +413,14 @@ class TestRecord:
                   "From": ["session/s-1/u-1"], "At": "2026-10-12T10:20:00Z"}
         held = self.read([made, batch, post("req_8", "batch/8", minutes=11)])["held"]
         land, = [x for x in rows(held={"wldn": held}) if x["group"] == "land"]
-        assert land["what"][1:] == ["lands once you have answered batch 8"] and land["cmds"] == []
+        assert land["what"][1:] == ["apex-zones, swb-2 on chuck-herdr-alpha: lands once you have answered batch 8"] and land["cmds"] == []
         r = self.read([made, batch, post("req_8", "batch/8", minutes=11), answer])
         assert ([c["card"] for c in r["cards"]], r["held"]["unanswered"]) == (["req_8"], {})
         rs = rows(held={"wldn": r["held"]})
         assert not [x for x in rs if x["group"] == "batches"]
         land, = [x for x in rs if x["group"] == "land"]
-        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert land["what"][1:] == ["apex-zones, swb-2 on chuck-herdr-alpha: can land"] and land["cmds"] == [
+            ("answer", 'crew tell wldn-ops "Land apex-zones."')]
 
 
 def card(key, cid, by, host="mac-studio", minutes=0):
@@ -418,8 +441,8 @@ OWNERS = {"proposal/4": ("wldn-planner", "mac-studio"), "deploy/dev": ("wldn-ops
 
 
 class TestSweepJudged:
-    def judged(self, rows=(), cards_=(), entries=(), blind=()):
-        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind), NOW)
+    def judged(self, rows=(), cards_=(), entries=(), blind=(), kits=(), kit_of=None):
+        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind), NOW, kits=kits, kit_of=kit_of)
 
     def test_a_rows_card_whose_row_is_gone_is_closed_with_its_events_outcome_or_withdrawn_with_why(self):
         p4, y = card("proposal/4", "req_p4", "wldn-planner"), card("land/y", "req_l1", "swb-1-conductor")
@@ -557,7 +580,7 @@ class TestSweepJudged:
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
 
-    MOVED = {"batch/13": ("wldn-planner", BOX), "proposal/13": ("wldn-planner", BOX), "land/y": ("swb-1-conductor", BOX),
+    MOVED = {"batch/13": ("wldn-planner", BOX), "proposal/13": ("wldn-planner", BOX), f"land/{KIT}": ("wldn-ops", BOX),
              "deploy/dev": ("wldn-ops", BOX), "op/dev/2": ("wldn-ops", BOX)}
     B13 = did("card.post", 60, Card="req_b13", Key="batch/13", On=["batch/13"])
     LOST = did("card.close", 50, Card="req_b13", Key="batch/13", On=["batch/13"], State="lost", Outcome="lost to its owner: Not found")
@@ -585,8 +608,9 @@ class TestSweepJudged:
         assert (j["again"], j["none"], j["held"]) == ([], [], [(card("batch/13", "req_b14", "wldn-planner", host=BOX), r)])
 
     # Every other row's card held or lost so, each in its owner's name (rail-cards, "A proposal's card left on the host
-    # the main level left", "A deploy's and a step's card left behind", "A landing's card left on the host its team left").
-    STRANDED = [("proposal/13", "proposals", "wldn-planner"), ("land/y", "land", "swb-1-conductor"),
+    # the main level left", "A deploy's and a step's card left behind", "A landings card left on the host the main level
+    # left").
+    STRANDED = [("proposal/13", "proposals", "wldn-planner"), (f"land/{KIT}", "land", "wldn-ops"),
                 ("deploy/dev", "operations", "wldn-ops"), ("op/dev/2", "operations", "wldn-ops")]
 
     @pytest.mark.parametrize("key, group, by", STRANDED)
@@ -655,11 +679,27 @@ class TestSweepJudged:
         assert self.recorded("mac-studio", self.R21) == []
         assert plan.sweep_judged(BOX, [], [], self.R21, {}, set(), NOW)["again"] == []
 
+    def test_an_old_card_of_a_bolts_own_is_withdrawn_as_a_row_of_its_kits_card(self):
+        """rail-cards "A card from before": the conductor's land/y, swept on its host, while y waits to land."""
+        y = card("land/y", "req_l1", "swb-1-conductor")
+        j = self.judged(cards_=[y], kits=("crew",), kit_of={"y": "crew"})
+        assert j["gone"] == [(y, None, "y is now a row of crew's landings card")]
+        assert plan.row_gone("land/y", [{"Act": "bolt.land", "On": ["bolt/y"]}], ("crew",), {"y": "crew"}) == ("its bolt landed", None)
+
+    def test_a_kits_card_whose_row_is_gone_is_withdrawn_saying_nothing_waits_on_its_main(self):
+        assert plan.row_gone("land/crew", [], ("crew",), {}) == (None, "nothing waits to land on crew's main")
+
+    def test_a_kits_card_is_left_while_the_host_of_a_bolt_of_it_does_not_answer(self):
+        p = plan.Plan(plan_text(bolts=[("apex-zones", KIT, "swb-2")], units=[]))
+        assert plan.blind_land(FLEET, p, survey(ok=False), f"land/{KIT}") is True
+        assert plan.blind_land(FLEET, p, survey(), f"land/{KIT}") is False
+        assert plan.blind_land(FLEET, p, survey(ok=False), "land/other-kit") is False
+
     def test_a_rows_owner_and_its_host(self):
         pl = the_plan()
         assert plan.row_owner(FLEET, pl, row("proposal/4")) == ("wldn-planner", BOX)
         assert plan.row_owner(FLEET, pl, row("deploy/dev", "operations")) == ("wldn-ops", BOX)
-        assert plan.row_owner(FLEET, pl, row("land/apex-zones/abc1234", "land")) == ("swb-2-conductor", BOX)
+        assert plan.row_owner(FLEET, pl, row(f"land/{KIT}", "land")) == ("wldn-ops", BOX)  # the kit's landings card, main-level ops's
 
 
 class Py:
@@ -720,6 +760,9 @@ class Acts:
     def caller(self):
         return "chuck@mac-studio"
 
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
     def now(self):
         return NOW
 
@@ -730,10 +773,11 @@ class Acts:
         return self.raises.get(kind)
 
     def reading_again(self, label, key):
-        """The reading tried again, as readings gives it for the key: its link, or a refusal's words."""
+        """The reading tried again, as readings gives it for the key: its link, None for a kit's landings card's, whose
+        links are its rows', or a refusal's words."""
         self.raised.append(("reading", key))
         got = self.readings[key]
-        if got.startswith("http"):
+        if got is None or got.startswith("http"):
             return got, None, True
         raise crew.Refusal(got)
 
@@ -872,8 +916,8 @@ class TestSweep:
         def raise_land(fleet, r, acts=None):
             seen.append(r["key"])
             return None
-        out, acts = swept(rows_=[row("land/apex-zones", "land")], raises={"land": raise_land}, here=BOX)
-        assert seen == ["land/apex-zones"] and out == {"done": [], "unswept": []} and acts.emitted == []
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], raises={"land": raise_land})
+        assert seen == [f"land/{KIT}"] and out == {"done": [], "unswept": []} and acts.emitted == []
 
     def test_a_raise_that_refuses_is_said_and_refuses_nothing_else(self):
         def raise_proposal(fleet, r, acts=None):
@@ -906,41 +950,46 @@ class TestSweep:
         assert f"  batch/3 (wldn), wldn-planner's req_b3: opened: its reading opened at {self.LINK}" in text(
             [row("batch/3", "batches")], cards=[b3], swept=out)
 
-    def test_a_waiting_landing_card_posted_without_its_reading_long_ago_is_tried_and_listed_opened(self):
-        """card-sessions "A landing card raised without its reading": its waiting is read in its conductor's name."""
-        y = card("land/y", "req_l1", "swb-1-conductor")
-        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
-                          answers={"get_request": self.owners("pending")}, readings={"land/y": self.LINK})
-        assert acts.raised == [("reading", "land/y")]
-        assert [(n, t) for n, t, _ in acts.calls] == [("crew", "get_request"), ("swb-1-conductor", "get_request")]
-        assert out["done"] == [dict(label="wldn", key="land/y", card="req_l1", by="swb-1-conductor", did="opened",
-                                    words=f"its reading opened at {self.LINK}", new=None)]
+    def test_a_waiting_landings_card_posted_without_a_rows_reading_long_ago_is_tried_and_listed_opened(self):
+        """card-sessions "A landings card raised without a row's reading": its waiting is read in main-level ops's name."""
+        k = card(f"land/{KIT}", "req_k1", "wldn-ops")
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], cards_=[k], entries=self.unread(k),
+                          answers={"get_request": self.owners("pending")}, readings={f"land/{KIT}": None})
+        assert acts.raised == [("reading", f"land/{KIT}")]
+        assert [(n, t) for n, t, _ in acts.calls] == [("crew", "get_request"), ("wldn-ops", "get_request")]
+        assert out["done"] == [dict(label="wldn", key=f"land/{KIT}", card="req_k1", by="wldn-ops", did="opened",
+                                    words="its rows' readings opened", new=None)]
 
-    def test_a_landing_cards_try_that_refuses_is_listed_left_with_why(self):
-        """card-sessions "A landing's try that fails is left for later"."""
-        y = card("land/y", "req_l1", "swb-1-conductor")
-        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
-        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
-                          answers={"get_request": self.owners("pending")}, readings={"land/y": why})
-        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("land/y", "left", f"its reading could not be opened: {why}")]
+    def test_a_landings_cards_try_that_refuses_is_listed_left_with_why(self):
+        """card-sessions "A landings card's try that fails is left for later"."""
+        k = card(f"land/{KIT}", "req_k1", "wldn-ops")
+        why = "y: plannotator is not on this host's path, and a card's session is a plannotator session"
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], cards_=[k], entries=self.unread(k),
+                          answers={"get_request": self.owners("pending")}, readings={f"land/{KIT}": why})
+        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [(f"land/{KIT}", "left", f"its reading could not be opened: {why}")]
 
-    def test_the_sweeps_try_of_a_landing_goes_the_landings_way_and_prints_no_link(self, monkeypatch):
-        """A landing's key is tried as crew card session land/<bolt> tries it, silenced, since the rail lists the link;
-        every other key as before."""
-        seen = []
-        monkeypatch.setattr(plan, "land_session", lambda fleet, label, key, acts, say=None: seen.append(("land", key, say(self.LINK, False)))
-                            or (self.LINK, False, True))
+    def test_the_sweeps_try_of_a_landings_card_is_its_raise_and_refused_while_a_row_still_stands_unread(self, monkeypatch):
+        """A kit's landings card's key is tried by raising it again with RELINKED as its note, which tries each row's
+        reading on its team's host; refused in the words its card is left standing without one in; every other key as
+        before (reading_again)."""
+        seen, posted = [], []
+        monkeypatch.setattr(plan, "raise_landings", lambda fleet, label, kit, acts, note=None: seen.append(("land", kit, note)))
         monkeypatch.setattr(plan, "reading_again", lambda fleet, label, key, acts: seen.append(("again", key)) or (self.LINK, False, True))
+        monkeypatch.setattr(plan.SweepActs, "entries", lambda self, label: posted)
         acts = plan.SweepActs(FLEET)
-        assert acts.reading_again("wldn", "land/y") == (self.LINK, False, True)
+        posted[:] = [did("card.post", 5, Key=f"land/{KIT}", Card="req_k1", By="wldn-ops")]
+        assert acts.reading_again("wldn", f"land/{KIT}") == (None, False, True)
+        posted.append(did("card.update", 1, Key=f"land/{KIT}", Card="req_k1", By="wldn-ops", Unread="y: it still will not open"))
+        with pytest.raises(crew.Refusal, match="^y: it still will not open$"):
+            acts.reading_again("wldn", f"land/{KIT}")
         acts.reading_again("wldn", "batch/3")
-        assert seen == [("land", "land/y", None), ("again", "batch/3")]
+        assert seen == [("land", KIT, plan.RELINKED), ("land", KIT, plan.RELINKED), ("again", "batch/3")]
 
-    def test_an_answered_landing_card_is_not_tried(self):
-        """card-sessions "A card the user has answered", for a landing's."""
-        y = card("land/y", "req_l1", "swb-1-conductor")
-        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
-                          answers={"get_request": self.owners("answered")}, readings={"land/y": self.LINK})
+    def test_an_answered_landings_card_is_not_tried(self):
+        """card-sessions "A card the user has answered", for a kit's landings card."""
+        k = card(f"land/{KIT}", "req_k1", "wldn-ops")
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], cards_=[k], entries=self.unread(k),
+                          answers={"get_request": self.owners("answered")}, readings={f"land/{KIT}": None})
         assert acts.raised == [] and out["done"] == []
 
     def test_a_try_that_refuses_is_listed_left_with_why(self):
@@ -1027,12 +1076,12 @@ class TestSweep:
     STRANDED = [("proposal/13", "proposals", "proposal", "wldn-planner", "mac-studio", BOX),
                 ("deploy/dev", "operations", "deploy", "wldn-ops", "mac-studio", BOX),
                 ("op/dev/2", "operations", "op", "wldn-ops", "mac-studio", BOX),
-                ("land/apex-zones", "land", "land", "swb-2-conductor", BOX, "mac-studio")]
+                (f"land/{KIT}", "land", "land", "wldn-ops", "mac-studio", BOX)]
 
     @pytest.mark.parametrize("key, group, kind, by, here, there", STRANDED)
     def test_a_rows_card_held_on_another_host_is_posted_again_through_its_kinds_raise_handed_the_older_copy(self, key, group, kind, by, here, there):
         """rail-cards, "A proposal's card left on the host the main level left", "A deploy's and a step's card left
-        behind" and "A landing's card left on the host its team left"."""
+        behind" and "A landings card left on the host the main level left"."""
         seen = []
 
         def raise_(fleet, r, acts=None):

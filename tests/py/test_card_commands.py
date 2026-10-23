@@ -8,6 +8,8 @@ what each sends and records, the line that adopts a card and whom it is told to,
 its new version under the key's revision rather than changed, and each failure said and recorded. Then the port
 range a card's session starts plannotator on, plan.session_env.
 The bridge itself, and every command's wiring, are t-cards'."""
+import json
+
 import pytest
 
 import cards
@@ -278,6 +280,9 @@ class Acts:
 
     def caller(self):
         return self.who
+
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
 
 
 MATCHED = {"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}
@@ -656,3 +661,71 @@ def test_the_rest_of_the_environment_passes_through_and_the_one_given_is_not_cha
     env = plan.session_env(environ)
     assert env["PLANNOTATOR_URL_HOST"] == "auto" and env["PATH"] == "/bin"
     assert environ == {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}
+
+
+# ------------------------------------------------------------------------------- crew card wait on a bolt's row
+
+class TestLandWait:
+    """crew card wait land/<bolt> (card-sessions "A wait on a landing card starts its reading when none runs"): while
+    the bolt is a row of its kit's landings card that can land, its reading started on its team's host and the kit's
+    card raised on the main machine to carry its link; refused while it is no row, and for the kit's own key."""
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "teams": ["swb-1"]}},
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha",
+                                 "kit": {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}}},
+             "hosts": {}}
+    LINK = "http://chuck-herdr-alpha.ts.swancloud.net:19432"
+
+    def wait(self, monkeypatch, tmp_path, row, key="land/y"):
+        import argparse
+        handed = []
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(crew, "this_host", lambda: "chuck-herdr-alpha")
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", "y"), ("Repo", "switchboard-kit")]),
+                                                                           self.FLEET["teams"]["swb-1"]))
+        monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (row, None) if row else (None, "unit a has not merged"))
+        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((kit, note)))
+
+        def opened(fleet, label, key, facts):  # the reading started, and the user's notes in it at once
+            d = tmp_path / label / key
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "session.json").write_text(json.dumps({"pid": 42, "document": "/c/00-y.md", "url": self.LINK, "started": "2026-10-23T10:00:00Z"}))
+            (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "y: say what the zone is."}))
+            return self.LINK, False, True
+        monkeypatch.setattr(plan, "reading_open", opened)
+        plan.card_wait(self.FLEET, argparse.Namespace(key=key, unit=None, label="wldn", sub="wait"))
+        return handed
+
+    def test_a_wait_on_a_row_starts_its_reading_and_the_kits_card_is_raised_to_carry_its_link(self, monkeypatch, tmp_path, capsys):
+        row = dict(bolt="y", box=True, facts=dict(bolt="y", kit="switchboard-kit", head="a" * 40))
+        assert self.wait(monkeypatch, tmp_path, row) == [("switchboard-kit", "y: Its reading is open again at a new link")]
+        assert capsys.readouterr().out == (f"{self.LINK}\nland/y: notes from its reading, as notes on the landing card:\n"
+                                           "y: say what the zone is.\n")
+
+    def test_a_wait_on_a_bolt_that_is_no_row_is_refused_and_starts_nothing(self, monkeypatch, tmp_path):
+        with pytest.raises(crew.Refusal, match="^no session was started for card land/y, and y is no row of its kit's landings card$"):
+            self.wait(monkeypatch, tmp_path, None)
+        assert not (tmp_path / "wldn" / "land/y").exists()
+
+    def test_a_wait_on_the_kits_own_card_is_refused(self, monkeypatch, tmp_path):
+        with pytest.raises(crew.Refusal, match="^land/switchboard-kit is switchboard-kit's landings card, wldn-ops's"):
+            self.wait(monkeypatch, tmp_path, None, key="land/switchboard-kit")
+
+
+# ------------------------------------------------------------------------- crew card read of a kit's landings card
+
+def test_a_sent_landings_card_reads_the_ticked_bolts_in_its_order_and_the_submit_that_lands_them():
+    """rail-cards "Landing approved": a and c ticked, b cleared."""
+    heads = plan.card_heads("a@abc1234 b@abc1234 c@def5678")
+    got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:c", "land:a"], "note": {"text": "c first"}}}
+    assert plan.landing_lines("swancloud", got, heads) == [
+        "  to land, in the card's order: a and c", "  lands them: crew bolt submit a c --label swancloud"]
+    assert "  note: c first" in cards.answer_lines("land/crew", "req_k1", got)
+
+
+def test_a_lone_row_approved_lands_it_and_a_send_ticking_none_lands_nothing():
+    one = plan.card_heads("y@abc1234")
+    approved = {"status": "answered", "turn": "agent", "answer": {"approved": True}}
+    assert plan.landing_lines("wldn", approved, one)[-1] == "  lands them: crew bolt submit y --label wldn"
+    none = {"status": "answered", "turn": "agent", "answer": {"choiceIds": []}}
+    assert plan.landing_lines("wldn", none, one) == ["  no bolt ticked: nothing lands"]
+    assert plan.landing_lines("wldn", {"status": "pending", "turn": "you"}, one) == []
