@@ -4825,6 +4825,61 @@ def carried_refusal(kind, name, bolt, carried, after_of):
                            if first else [])))
 
 
+def archives_owed(name, units, opened, ticked, specs):
+    """The archives a unit's merge makes itself before its own (teams.17, record 0006): while its branch holds its own
+    change open (opened), each other change it holds open that no unit of the plan has (units), every task ticked
+    (ticked, change: bool), whose deltas touch a capability its own change's do, or one such change's do (specs,
+    change: its capabilities), since openspec folds a delta only over the requirements the specs already hold. Another
+    unit's change is that unit's own merge's to archive (carried_in). [] once its own is archived."""
+    if name not in opened:
+        return []
+    can = {c for c in opened if c != name and c not in units and ticked.get(c)}
+    caps, owed = set(specs.get(name, ())), set()
+    while more := {c for c in can - owed if caps & set(specs.get(c, ()))}:
+        owed |= more
+        caps |= {cap for c in more for cap in specs.get(c, ())}
+    return sorted(owed)
+
+
+def archives_refusal(name, owed):
+    """Why a unit's merge does not stop short while its branch holds archives it can make itself (archives_owed),
+    naming each, and what it does instead: archives them, then its own, and submits."""
+    both = lambda xs: xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+    one = len(owed) == 1
+    return (f"merge on {name} does not stop short for archives it can make: unit/{name} holds {both(owed)} open, "
+            + ("every task ticked, no unit's of the plan, and touching specs its change does" if one else
+               "each with every task ticked, no unit's of the plan, and touching specs its change does")
+            + "; a merge archives what its own archive needs first: archive " + ("it" if one else "each, oldest first,")
+            + " with `openspec archive <change> --yes`, committed as `docs(openspec): archive <change>`, then "
+            f"{name}'s own, and submit. If openspec refuses one of them, say so again with its words, and crew passes "
+            "it on")
+
+
+def merge_owes(fleet, t, name):
+    """The archives a unit's merge stage could make itself (archives_owed), read on the team's host: the plan's units,
+    and in git the changes its branch holds open, the tasks of each no unit of the plan has, and the capabilities each
+    one's deltas touch. Refused when either can't be read (read.1)."""
+    label = t["label"]
+    plan = plan_of(fleet, label) or fail(f"can't tell which archives the merge on {name} can make: {label}/main could not be read")
+    kt = unit_kit_team(fleet, label, t, name)
+    main, ref = kt["kit"]["main"], f"refs/heads/unit/{name}"
+    _, out = kit_git(fleet, kt, main, "ls-tree", "-r", "--name-only", ref, "openspec/changes/")
+    files = {}
+    for path in out.splitlines():
+        c, _, rest = path[len("openspec/changes/"):].partition("/")
+        if path.startswith("openspec/changes/") and rest and c != "archive":
+            files.setdefault(c, []).append(rest)
+    units = {u.name() for u in plan.units()}
+    specs = {c: {r.split("/")[1] for r in rs if r.startswith("specs/") and r.count("/") > 1} for c, rs in files.items()}
+    ticked = {}
+    for c in sorted(set(files) - units - {name}):
+        if "tasks.md" in files[c]:
+            _, text = kit_git(fleet, kt, main, "show", f"{ref}:openspec/changes/{c}/tasks.md")
+            tasks = gather.tasks_of(text)
+            ticked[c] = bool(tasks) and all(done for done, _ in tasks)
+    return archives_owed(name, units, sorted(files), ticked, specs)
+
+
 def run_kind_refusal(kind, chore, name, stage):
     """Why a stage asked of a unit or chore is refused for its kind (plan.11), or None: crew unit run on a chore, which
     has no construct and no settle, or crew chore run (chore) on a unit, said with the command that runs it."""
@@ -5409,7 +5464,9 @@ def tidy(fleet, a):
     detached there, a bolt given before record 0026, or directly in <kit>/places/ on unit/<its folder>, on
     chore/<name> in chore-<name>, on bolt/<bolt> in land-<bolt>, or on a fix/ branch; nothing else is touched. While its
     bolt lasts, a bolt's worktree still on its branch is detached at the bolt's tip when it is clean, its branch then
-    marked as crew's, and named as kept on the branch while it is not (bolt_detach, plan.18). The landing's place, which
+    marked as crew's, and named as kept on the branch while it is not (bolt_detach, plan.18). A worktree the tidy would
+    detach or remove is left as it is, named, while sluice's overview lists a run in it, or can't be read, read once and
+    only then (run_kept, plan.9; sluice ADR 0024). The landing's place, which
     git could not remove after its submission or a stopped landing left, goes with its bolt, kept and named while its
     submission is still with sluice (landing_now), and leaves the bolt's branch to be judged in the same read. A bolt's
     branch crew marked, which no worktree holds, goes once no plan has the bolt, a landed bolt's only when main holds
@@ -5463,6 +5520,15 @@ def tidy(fleet, a):
             chores_on[ref] = set(gather.chores(main, now if ref == "main" else f"refs/heads/{ref}"))
         return chores_on[ref]
     freed = set()  # the branches of the landings' places removed here
+    overview = {}  # the runs sluice's overview lists, by canonical path, read once and only for a worktree that would go
+
+    def run_in(p):
+        if not overview:
+            doc, why = sluice_read(main, "overview")
+            runs = overview_runs(doc) if doc is not None else None
+            overview.update(runs={os.path.realpath(k): v for k, v in (runs or {}).items()},
+                            why=why or (None if runs is not None else f"it is not the {OVERVIEW} sluice 0.36.4 prints"))
+        return run_kept(overview["runs"].get(os.path.realpath(p)), overview["why"])
     for w in trees:
         path, branch = w["path"], w.get("branch") or ""
         crews = tidy_over(path, branch, kdir, ups.get(branch, ""), bolts, units, on_main,
@@ -5476,14 +5542,15 @@ def tidy(fleet, a):
         def status(p=path):
             r = subprocess.run(["git", "-C", p, "status", "--porcelain"], capture_output=True, text=True, env=gitenv())
             return r.returncode, r.stdout, r.stderr
-        detach = bolt_detach(path, branch, kdir, over, w.get("locked"), status)
+        detach = bolt_detach(path, branch, kdir, over, w.get("locked"), status, lambda p=path: run_in(p))
         if detach:
             print(bolt_detached(main, path, branch) if detach[0] else f"{path} is kept on {branch}: {detach[1]}")
             continue
         if not over or name in held or path in held:
             continue
         landing = branch.startswith("bolt/") and name == f"land-{branch[5:]}"  # the landing's place (tidy_over)
-        why = kept_why(over, w.get("locked"), None if w.get("locked") else status(), landing and landing_now(t, branch[5:])[2])
+        why = kept_why(over, w.get("locked"), None if w.get("locked") else status(), lambda p=path: run_in(p),
+                       landing and landing_now(t, branch[5:])[2])
         held_too = f", and {branch} with it" if branch else ""  # a bolt's worktree the tidy detached holds no branch
         if why:
             print(f"{path} is kept{held_too}: {why}")
@@ -5774,13 +5841,14 @@ def bolt_merged(main, now):
     return set((gather.run(["git", "for-each-ref", f"--merged={now}", "--format=%(refname:short)", "refs/heads/bolt/"], main) or "").split())
 
 
-def bolt_detach(path, branch, kdir, over, locked, status):
+def bolt_detach(path, branch, kdir, over, locked, status, run):
     """Whether the tidy detaches a bolt's worktree from before record 0026 at its bolt's tip, so that no worktree of
     crew's holds a bolt branch (plan.9, plan.18): None for any worktree but one directly in <kit>/bolts/ on bolt/<its
     folder> while its bolt lasts (over, None), one whose bolt is over going as any finished worktree does; else (True,
     None) when it is clean, or (False, why it stays on the branch) when it is locked, git status (status(), read only
-    then: exit, output, error) says it has uncommitted changes, or git cannot read it, which is said on every read
-    until it is clean."""
+    then: exit, output, error) says it has uncommitted changes, git cannot read it, or, once it is clean, sluice's
+    overview lists a run in it or can't be read (run(), run_kept's words or None, read only then), which is said on
+    every read until it is clean and no run is in it."""
     if over or os.path.dirname(path) != os.path.join(kdir, "bolts") or branch != f"bolt/{os.path.basename(path)}":
         return None
     if locked:
@@ -5791,6 +5859,9 @@ def bolt_detach(path, branch, kdir, over, locked, status):
     if out.strip():
         return False, ("it has uncommitted changes, which are the user's to keep or discard, and crew detaches it at the "
                        "bolt's tip once it is clean")
+    ran = run()
+    if ran:
+        return False, f"{ran}, and crew detaches it at the bolt's tip once no run is in it"
     return True, None
 
 
@@ -5850,10 +5921,11 @@ def unread_plans(errors):
     return "no worktree was removed: " + "; ".join(f"{k} could not be read: " + " ".join(v.split()) for k, v in errors.items())
 
 
-def kept_why(over, locked, status, submitting=False):
+def kept_why(over, locked, status, run, submitting=False):
     """Why a worktree whose work is over is kept, or None when it may go (plan.9): it is a landing's place whose
     submission is still with sluice (submitting, landing_now), it is locked, or git status (exit, output, error) says
-    it has uncommitted changes, or git could not read it."""
+    it has uncommitted changes, or git could not read it, or, when nothing else keeps it, sluice's overview lists a run
+    in it or can't be read (run(), run_kept's words or None, read only then)."""
     if submitting:
         return f"{over}, and its submission is still with sluice"
     if locked:
@@ -5861,7 +5933,41 @@ def kept_why(over, locked, status, submitting=False):
     code, out, err = status
     if code:
         return f"git cannot read its status: {err.strip()}"
-    return f"{over}, and it has uncommitted changes, which are the user's to keep or discard" if out.strip() else None
+    if out.strip():
+        return f"{over}, and it has uncommitted changes, which are the user's to keep or discard"
+    ran = run()
+    return f"{over}, and {ran}" if ran else None
+
+
+def overview_runs(doc):
+    """The worktrees a run is in, as `sluice overview --json` lists them in sluice 0.36.4 (sluice ADR 0024 and 0035): the
+    document is sluice/overview@1, each of its sessions[] names its worktree by its canonical path, and carries run,
+    with when it started and, for a run of a command, the command, while a `sluice exec` runs there. Returns
+    {worktree: its run}, or None when the document is not one sluice 0.36.4 prints."""
+    if not isinstance(doc, dict) or doc.get("schema") != OVERVIEW or not isinstance(doc.get("sessions"), list):
+        return None
+    runs = {}
+    for s in doc["sessions"]:
+        if not isinstance(s, dict) or not isinstance(s.get("worktree"), str):
+            return None
+        if isinstance(s.get("run"), dict):
+            runs[s["worktree"]] = s["run"]
+    return runs
+
+
+def run_kept(run, unread):
+    """Why the tidy leaves a worktree it would detach or remove as it is, for a run sluice has in it (plan.9; wldn's
+    signal 2026-10-20-swb-2-ops-20f43d6b/01, a legacy bolt worktree detached 45 s into a run in it): its run, as
+    overview_runs reads it (run), named by its command, or as its checks, and when it started; or why sluice's overview
+    could not be read (unread), so crew can't tell that no run is in it (read.1). None when neither."""
+    if unread:
+        return f"sluice's overview can't be read ({unread}), so crew can't tell whether a run is in it"
+    if run is None:
+        return None
+    command = run.get("command")
+    what = f"a run in it, `{command}`" if isinstance(command, str) and command else "a run of its checks in it"
+    since = f", started {run['started']}" if isinstance(run.get("started"), str) else ""
+    return f"sluice's overview lists {what}{since}"
 
 
 def wt_refused(code, stderr, host, main):
@@ -7258,7 +7364,10 @@ def owed_of(t, slot, lines, held):
 def stage_needs(fleet, a):
     """crew needs: the caller's stage ends short, recorded with Ended short and never the words (record.3), and the
     words go to the conductor: to the wait running on the stage when there is one, through needs/<slot>, else in a
-    tell marked as from the agent (roles.4). Only the agent of a stage crew owes an end may say it."""
+    tell marked as from the agent (roles.4). Only the agent of a stage crew owes an end may say it. A unit's merge that
+    stops short while its branch holds archives it can make itself (merge_owes) is refused once in the stage, naming
+    them, so no stopped merge reaches the conductor for work its own stage does (teams.17, roles.3); told, it says so
+    again only when openspec refuses one of them, and that stop-short is passed on."""
     t = at_work(fleet, a.team)
     agent, conductor = f"{t['name']}-{a.slot}", f"{t['name']}-conductor"
     a.words.strip() or fail('say what you need: crew needs "<what you tried and what you need>"')
@@ -7276,6 +7385,13 @@ def stage_needs(fleet, a):
     with stages_file(t, shared=True) as lines:
         owed += owed_of(t, a.slot, lines, held)
     o = owed[0]
+    told = needs.with_name(f".{a.slot}.archives")
+    if o.stage == "merge" and o.kind == "unit" and not o.fix and not (told.exists() and told.read_text().strip() == o.eid):
+        archives = merge_owes(fleet, t, o.name)
+        if archives:
+            told.parent.mkdir(parents=True, exist_ok=True)
+            told.write_text(f"{o.eid}\n")
+            fail(archives_refusal(o.name, archives))
     end_owed(fleet, t, o, "short", then=hand) or fail(f"{agent} runs no stage crew is waiting on")
     # The words are the wait's once it takes the file; when no wait holds its lock, or the one there ends without
     # taking them, they are told. A wait takes the file only while it holds the lock, so a free lock with the file
