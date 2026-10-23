@@ -15,7 +15,7 @@
 - [x] 3.1 `record.gather` reads the branch alone and names only the branch when it cannot read it, `hosts_of` and the per-host read gone (design, Decision 6; Task notes 3.1); passes `tests/py/test_record.py`, `tests/suite logic`.
 - [x] 3.2 The batch clock, a review, the landing's guard and the rail refuse or hold back only when the branch cannot be read, and a silent host hides no card's close (design, Decision 6; Task notes 3.2); passes `tests/py/test_batches.py`, `tests/py/test_rail.py` and `tests/py/test_landing.py` in `tests/suite logic`, and `tests/suite t-journey-review`.
 - [x] 3.3 The board names a host for its kits alone, never for its run record (design, Decision 6; Task notes 3.3); passes `tests/py/test_board.py` in `tests/suite logic` and `tests/suite t-journey-board`.
-- [ ] 3.4 The page names the branch it read and no host for its record (design, Decision 6; Task notes 3.4); passes `tests/py/test_page.py`, `tests/suite logic`.
+- [x] 3.4 The page names the branch it read and no host for its record (design, Decision 6; Task notes 3.4); passes `tests/py/test_page.py`, `tests/suite logic`.
 - [x] 3.5 `crew events --follow` follows the branch every five seconds and starts nothing on any host (design, Decision 7; Task notes 3.5); passes `tests/py/test_record.py` in `tests/suite logic` and `tests/suite t-journey-state`.
 
 ## 4. What the docs say
