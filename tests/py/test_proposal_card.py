@@ -1,12 +1,13 @@
 """A proposal's Pending You card (plan-proposals spec, briefs.9, record 0031): cards.proposal_card, as crew raises it,
 on the plan at the tip and the plan its commands leave, with its picture. The logic tier starts no process, so drawing
-it here proves crew needs nothing installed to draw it. Raising the card is the proposals journey's (t-journey-plan)."""
+it here proves crew needs nothing installed to draw it. The rail's sweep raises it again only on the plan as it stands
+(plan.raise_proposal, chain_closed). Raising the card is the proposals journey's (t-journey-plan)."""
 import struct
 import zlib
 
 import pytest
 
-from facts import FactsWrite, apply, plan_text
+from facts import FLEET, FactsWrite, apply, plan_text
 
 import cards
 import plan
@@ -221,3 +222,93 @@ def test_a_reading_opened_after_the_card_was_raised_changes_the_planners_card_to
     a change noting the reading is open again, for the planner's own proposal alone."""
     assert plan.proposal_act("relink", 4, mine=True) == ("change", plan.RELINKED)
     assert plan.proposal_act("relink", 4, mine=False) is None
+
+
+# The rail's sweep raises a proposal's card again on the plan as it stands, not on the plan its read holds: wldn's
+# proposal 538 was approved at 9b8c8c1 and its card closed, and the sweep, on a read from before, posted it again 15 s
+# after (signal 2026-10-23-swancloud-planner-727dc1ea/01).
+SWEPT_FLEET = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], state="WilldanGroup/crew-state",
+                                                   checkout="/w/willdan-blueprints/main", blueprints=["WilldanGroup/willdan-blueprints"])})
+TODAY = "2026-10-23"
+
+
+def chain(*closes):
+    """proposals.rec with proposal 1 opened by the planner, then each close (n, state) or rewrite (n, "rewritten") in
+    turn, a rewrite of n opening n + 1 in its place."""
+    pl = plan.Plan(plan.PROPOSALS)
+    plan.open_proposal(pl, 1, "Order first.", ["unit order d-fourth --first"], "wldn-planner", TODAY)
+    for n, state in closes:
+        if state == "rewritten":
+            plan.open_proposal(pl, n + 1, "Order last.", ["unit order d-fourth --last"], "wldn-planner", TODAY, n, "wldn")
+        else:
+            plan.close(plan.proposal(pl, n, "wldn"), state, TODAY, "Not now." if state == "dropped" else None)
+    return pl
+
+
+@pytest.mark.parametrize("closes, first, said", [
+    ((), 1, None), (((1, "approved"),), 1, ("its proposal was applied", None)), (((1, "dropped"),), 1, (None, "its proposal was dropped")),
+    (((1, "rewritten"),), 1, None), (((1, "rewritten"), (2, "approved")), 1, ("its proposal was applied", None)),
+    (((1, "rewritten"), (2, "dropped")), 1, (None, "its proposal was dropped")), (((1, "rewritten"), (2, "approved")), 2, None),
+    (((1, "approved"),), 7, None)])
+def test_the_plan_as_it_stands_shows_a_chain_applied_or_dropped_and_nothing_while_one_of_it_is_open(closes, first, said):
+    """plan.chain_closed: the chain's last proposal decides, a rewrite's drop of the one it replaces no word on the chain;
+    a key that is a later link's, or no proposal's, is no chain's."""
+    assert plan.chain_closed(chain(*closes), first) == said
+
+
+class TestSweptOnThePlanAsItStands:
+    """plan.raise_proposal at the sweep, on a stand-in for the act and the branch: the chain read at the tip fetched
+    anew, a card raised only while a proposal of it stands open there."""
+
+    class Acts:
+        def __init__(self, held=()):
+            self.held = list(held)
+
+        def entries(self, label):
+            return self.held
+
+        def host(self):
+            return "mac-studio"
+
+    @pytest.fixture(autouse=True)
+    def tips(self, monkeypatch):
+        """The branch as the rail read it, "read", holding proposal 1 open, and as it stands, "now", holding it as the
+        case gives it: a fetch reads "now" only when fetched anew."""
+        self.fetched, self.called, self.now, read = [], [], chain(), chain()
+
+        def fetch(repo, ref, fresh=False):
+            self.fetched.append(fresh)
+            return "now" if fresh else "read"
+        monkeypatch.setattr(plan, "fetch", fetch)
+        monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+        monkeypatch.setattr(plan, "read", lambda repo, ref, tip: fresh().plan)
+        monkeypatch.setattr(plan, "show", lambda repo, tip, path: (self.now if tip == "now" else read).text()
+                            if path == "proposals.rec" else None)
+        for name in ("row_card_post", "row_card_change", "row_card_close"):
+            monkeypatch.setattr(plan, name, lambda *a, name=name, **kw: self.called.append((name, a, kw)) or "req_2")
+
+    def swept(self, held=(), event="sweep"):
+        acts = self.Acts([{"Act": "card.post", "Key": "proposal/1", "By": "wldn-planner", "Card": c} for c in held])
+        return plan.raise_proposal(SWEPT_FLEET, {"label": "wldn", "key": "proposal/1", "group": "proposals"}, acts, event), acts
+
+    def test_a_proposal_approved_since_the_read_raises_no_card_and_its_card_left_open_is_closed_as_applied(self, capsys):
+        self.now = chain((1, "approved"))
+        got, acts = self.swept(held=["req_1"])
+        assert (got, self.fetched) == (None, [True])
+        assert self.called == [("row_card_close", (SWEPT_FLEET, "wldn", "wldn-planner", "proposal/1", "its proposal was applied", None),
+                                {"acts": acts})]
+        assert capsys.readouterr().out == "card proposal/1 not raised: its proposal was applied, as the plan stands\n"
+
+    def test_a_proposal_dropped_since_the_read_with_no_card_open_here_raises_none_and_closes_none(self, capsys):
+        self.now = chain((1, "dropped"))
+        assert self.swept()[0] is None and self.called == []
+        assert capsys.readouterr().out == "card proposal/1 not raised: its proposal was dropped, as the plan stands\n"
+
+    def test_a_proposal_still_open_as_the_plan_stands_is_raised_again(self):
+        got, _ = self.swept()
+        assert (got, self.fetched, [n for n, *_ in self.called]) == ("req_2", [True], ["row_card_change"])
+
+    def test_a_relink_reads_the_tip_the_command_holds(self):
+        self.now = chain((1, "approved"))
+        got, _ = self.swept(event="relink")
+        assert (got, self.fetched, [n for n, *_ in self.called]) == ("req_2", [False], ["row_card_change"])

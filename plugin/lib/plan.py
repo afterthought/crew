@@ -5117,28 +5117,61 @@ def proposal_act(event, n, mine, was_mine=False, held=True, home=True, agreed=()
     return ("close", outcome, None) if event == "approve" else ("close", DROPPED, reason)
 
 
+def chain_closed(pl, first):
+    """How the chain keyed proposal/<first> stands closed in proposals.rec (pl), in row_gone's words, as its card is
+    closed once the plan shows it so (raise_proposal): (outcome, None) when its last proposal was approved, its card
+    closed as applied; (None, reason) when it was dropped, its card withdrawn; None while a proposal of it is open, and
+    for a chain pl holds no proposal of."""
+    chain = [p for p in pl.recs("Proposal") if proposal_chain(pl, int(p.get("Proposal")))[0] == first]
+    if not chain or any(p.get("State") == "open" for p in chain):
+        return None
+    last = max(chain, key=lambda p: int(p.get("Proposal")))
+    return ("its proposal was applied", None) if last.get("State") == "approved" else (None, "its proposal was dropped")
+
+
+def tip_write(fleet, label, fresh=False):
+    """The flywheel's branch at its tip, as a write; with fresh, the tip fetched anew, the plan as it stands and not
+    as this command first read it (fetch). None when the branch has no tip."""
+    repo, ref = state_of(fleet, label)
+    tip = fetch(repo, ref, fresh)
+    return Write(repo, label, tip, read(repo, ref, tip)) if tip else None
+
+
 def chain_read(fleet, label, first):
     """The open proposal of the chain keyed proposal/<first>, read at the branch's tip: (w, n), the write as the tip
     holds it and the proposal's number; None when the branch has no tip or the chain has no proposal open."""
-    repo, ref = state_of(fleet, label)
-    tip = fetch(repo, ref)
-    if not tip:
-        return None
-    w = Write(repo, label, tip, read(repo, ref, tip))
-    n = chain_open(proposals(w), first)
+    w = tip_write(fleet, label)
+    n = chain_open(proposals(w), first) if w else None
     return (w, n) if n is not None else None
 
 
 def raise_proposal(fleet, row, acts=None, event="sweep"):
     """The rail's sweep's raise of a proposal row's card (record 0031 §1), for a row whose card is missing or lost:
-    the open proposal of the chain its key names, read at the branch's tip from the row's label and key (chain_read),
-    raised through row_card_change, which posts it when none is held and posts it again, its summary saying the older
-    copy is dead, when Pending You no longer finds it, and when the sweep hands it the older copy this host can't reach
-    as the row's dead; or, with event relink, its card changed to carry its reading's link (reading_again). None,
-    raising nothing, when the key is no proposal chain's or the chain has no proposal open. The card's id, or None."""
+    the open proposal of the chain its key names, read at the branch's tip from the row's label and key, fetched anew
+    at the sweep (tip_write), raised through row_card_change, which posts it when none is held and posts it again, its
+    summary saying the older copy is dead, when Pending You no longer finds it, and when the sweep hands it the older
+    copy this host can't reach as the row's dead; or, with event relink, its card changed to carry its reading's link
+    (reading_again). The rail's read of the plan can be older than an approval or a drop its run record already holds
+    (wldn's proposal 538 on 2026-10-23, approved at 9b8c8c1 and its card closed, then posted again by the sweep 15 s
+    after on the read's tip, signal 2026-10-23-swancloud-planner-727dc1ea/01), so the sweep's raise fetches the tip
+    again, the one fetch of the state branch past a command's first (plan.12), made only for a card about to be posted:
+    a chain the plan as it stands shows approved or dropped raises none, and a card the planner still holds open under
+    its key on this host is closed as one whose row is gone (chain_closed), so the user is not asked what was answered.
+    None, raising nothing, when the key is no proposal chain's or the chain has no proposal open. The card's id, or
+    None."""
     label, m = row["label"], re.fullmatch(r"proposal/(\d+)", row.get("key") or "")
-    got = chain_read(fleet, label, int(m.group(1))) if m else None
-    return raise_proposal_at(fleet, label, *got, event, acts, dead=bool(row.get("dead"))) if got else None
+    w = tip_write(fleet, label, fresh=event == "sweep") if m else None
+    pl = proposals(w) if w else None
+    n = chain_open(pl, int(m.group(1))) if pl else None
+    if n is not None:
+        return raise_proposal_at(fleet, label, w, n, event, acts, dead=bool(row.get("dead")))
+    closed = chain_closed(pl, int(m.group(1))) if pl and event == "sweep" else None
+    if closed:
+        acts, owner = acts or CardActs(fleet), f"{label}-planner"
+        print(f"card {row['key']} not raised: {closed[0] or closed[1]}, as the plan stands")
+        if cards.card_under(acts.entries(label), row["key"], owner):
+            row_card_close(fleet, label, owner, row["key"], *closed, acts=acts)
+    return None
 
 
 def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None, dead=False):
