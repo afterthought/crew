@@ -482,3 +482,37 @@ class TestSplitBolt:
         assert self.refusal("chore", "c", read="fatal: 'gone.git' does not appear to be a git repository") == (
             "crew can't tell whether bolt/b is split, so chore c's merge waits: fatal: 'gone.git' does not appear to be "
             "a git repository")
+
+
+class TestWhereABoltIsRead:
+    """bolt-plan "A bolt on GitHub is read where it lives" (plan.19, design Decision 1): GitHub's copy when the host holds
+    it and the policy in it names a remote for the bolt, else the host's own branch, the only copy the host then has."""
+
+    def test_githubs_copy_naming_a_remote_is_where_the_bolt_is_read(self):
+        assert plan.gather.bolt_at("b", True, True, "origin") == "refs/remotes/origin/bolt/b"
+        assert plan.gather.bolt_at("b", True, False, "origin") == "refs/remotes/origin/bolt/b"
+
+    def test_a_bolt_kept_on_its_host_is_read_at_the_hosts_branch(self):
+        """bolt-plan "A bolt kept on its host"."""
+        assert plan.gather.bolt_at("b", True, True, None) == "refs/heads/bolt/b"
+
+    def test_a_bolt_whose_github_copy_the_host_has_not_got_is_read_at_the_hosts(self):
+        """bolt-plan "A bolt GitHub's copy of which this host has not got"."""
+        assert plan.gather.bolt_at("b", False, True, None) == "refs/heads/bolt/b"
+        assert plan.gather.bolt_at("b", False, False, None) is None
+        assert plan.gather.bolt_at("b", True, False, None) is None
+
+    def test_the_remote_a_policy_names_for_a_bolt(self):
+        assert plan.gather.policy_remote(POLICY, "bolt/b") == "origin"
+        specific = '[branches."*"]\nremote = "origin"\n[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+        assert plan.gather.policy_remote(specific, "bolt/b") is None
+        assert plan.gather.policy_remote('[branches."main"]\nremote = "origin"\n', "bolt/b") is None
+        assert plan.gather.policy_remote(None, "bolt/b") is None
+        assert plan.gather.policy_remote("", "bolt/b") is None
+
+    def test_a_policy_that_is_not_toml_raises(self):
+        with pytest.raises(ValueError):
+            plan.gather.policy_remote("[branches\n", "bolt/b")
+
+    def test_kit_matches_branches_as_gather_does(self):
+        assert plan.kit.branch_table is plan.gather.branch_table

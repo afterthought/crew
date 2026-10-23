@@ -21,7 +21,7 @@ portless routes; with board, each team's slots, one {slot, kind, name, place} pe
 folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
 system, devurl and portless and, for a change whose workflow it does not read itself, openspec, and changes nothing.
 It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
-import json, os, re, subprocess, sys
+import fnmatch, json, os, re, subprocess, sys, tomllib
 
 
 def run(args, cwd):
@@ -145,6 +145,58 @@ def bolt_of(up):
     """The bolt a place's branch was cut from, from its upstream (plan.19, bolt_ref): bolt/<bolt>, a bolt made before
     gives went through sluice, or origin/bolt/<bolt>, a bolt on GitHub; None for any other upstream, or none."""
     return bolt_ref(up or "")[0]
+
+
+# A kit's policy, where sluice reads how each branch is gated and routed (kit.DECLARATION).
+POLICY = ".config/sluice.toml"
+
+
+def branch_table(branches, branch):
+    """The [branches."<pattern>"] table of a policy's branches whose pattern matches the branch, the most specific
+    first, as sluice matches it; None when none does."""
+    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
+                      key=lambda p: (p.count("*"), -len(p)))
+    return branches[matching[0]] if matching and isinstance(branches[matching[0]], dict) else None
+
+
+def policy_remote(text, branch):
+    """The remote a policy's text names for a branch, as sluice routes it (plan.19): the `remote` of the matching
+    [branches."<pattern>"] table (branch_table) when it is a non-empty string; None for no policy (text None), no
+    matching table or no remote, which sluice reads as a branch kept in the host's own refs. Raises ValueError
+    (tomllib's TOMLDecodeError) on text that is not TOML."""
+    if text is None:
+        return None
+    table = branch_table(tomllib.loads(text).get("branches", {}), branch)
+    remote = table.get("remote") if table else None
+    return remote if isinstance(remote, str) and remote else None
+
+
+def bolt_at(bolt, tracked, local, remote_at_tracked):
+    """The ref a bolt is read at (plan.19): GitHub's copy, refs/remotes/origin/bolt/<bolt> as this host last fetched
+    it, when the host holds it (tracked) and the policy in it names a remote for the bolt's branch (remote_at_tracked);
+    else the host's own refs/heads/bolt/<bolt> when it is there (local), the bolt itself for a bolt kept on its host or
+    one this host has not fetched; None when the host has neither, the bolt missing. The host's copy of a bolt on
+    GitHub is sluice's, and nothing of the bolt is read from it."""
+    if tracked and remote_at_tracked is not None:
+        return f"refs/remotes/origin/bolt/{bolt}"
+    return f"refs/heads/bolt/{bolt}" if local else None
+
+
+def bolt_read(main, bolt):
+    """Where a bolt is read in a kit's main checkout (bolt_at), from what the host holds of it: (ref, None), (None,
+    None) when the host has no copy of it, or (None, why) when the policy at GitHub's copy is not TOML, which reads
+    nothing from the host's copy (read.1)."""
+    def there(ref):
+        return run(["git", "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], main) is not None
+    github = f"refs/remotes/origin/bolt/{bolt}"
+    tracked = there(github)
+    remote = None
+    if tracked:
+        try:
+            remote = policy_remote(run(["git", "show", f"{github}:{POLICY}"], main), f"bolt/{bolt}")
+        except ValueError as e:
+            return None, f"{POLICY} at origin/bolt/{bolt} is not TOML, so crew can't read where bolt/{bolt} lives: {e}"
+    return bolt_at(bolt, tracked, there(f"refs/heads/bolt/{bolt}"), remote), None
 
 
 def holds(main, ref, branch):
