@@ -23,7 +23,7 @@
 
 ## 5. The rail, the board and the agents' views
 
-- [ ] 5.1 The rail has one landing row per kit, owned by `<label>-ops` on the partition's machine, naming each bolt in order with what it waits on and the tell that lands those that can, and its sweep withdraws an old `land/<bolt>` card as a row of its kit's card (design, Decision 9; Task notes 5.1); passes `tests/py/test_rail.py`.
+- [x] 5.1 The rail has one landing row per kit, owned by `<label>-ops` on the partition's machine, naming each bolt in order with what it waits on and the tell that lands those that can, and its sweep withdraws an old `land/<bolt>` card as a row of its kit's card (design, Decision 9; Task notes 5.1); passes `tests/py/test_rail.py`.
 - [ ] 5.2 The board and the agents' bands mark each bolt from its kit's landing row and draw the card above ops's prompt (design, Decision 9; Task notes 5.2; `code.8`); passes `tests/py/test_board.py`, and `tests/suite mod` ends with "0 failed".
 
 ## 6. The briefs and the docs

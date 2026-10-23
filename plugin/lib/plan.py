@@ -1883,7 +1883,12 @@ def refused_at(entries, bolt, head):
     """sluice's refusal of the bolt's landing at head, in crew's words, or None (rail-cards "A refused landing is held
     on its row"): its last bolt.submit was refused with head submitted; one refused at another head, the bolt's head
     moved since by its team's fix, holds nothing."""
-    at, words = refusals(entries).get(bolt, (None, None))
+    return held_at(refusals(entries), bolt, head)
+
+
+def held_at(refused, bolt, head):
+    """refused_at from the refusals already read ({bolt: (head, words)}, refusals)."""
+    at, words = refused.get(bolt, (None, None))
     return words if at and head and (at.startswith(head) or head.startswith(at)) else None
 
 
@@ -9816,7 +9821,7 @@ def record_reading(l, entries, plan, fresh, missing=None):
     closed = {k for k in closed if not k.startswith("batch/")} | batch_closed(entries) | set(settled)  # a batch card posted again reopens its row
     held = dict(batches=batches(entries), closed=closed, settled=settled, posts=batch_posts(entries),
                 due=None if missing else {u for u, *_ in due_changes(plan, entries)},
-                unanswered=None if missing else awaiting_answer(entries))
+                unanswered=None if missing else awaiting_answer(entries), refused=refusals(entries))
     return dict(times=times, cards=list(posted.values()), landings=landings, gives=gives, held=held)
 
 
@@ -9830,11 +9835,14 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     verify report is no row: its findings are fixed in one round with no card (teams.17). A batch is one row, keyed
     batch/<n>, holding every unit, until its card closes or it waits on nothing (batch_settled); a batch posted as cards
     of five before a batch was one card is a row for each card posted, keyed batch/<n>-<k>, until it closes or the units
-    it holds wait on nothing. A bolt with every unit merged is a landing row,
-    offered for landing only once its verification is green, sluice's verdict on its last landing (kit.verification,
-    record 0025), and every unit's latest change has been in a batch whose card the user has answered: until then the
-    row says which units no batch has held and which batches wait on the user's answer, and offers nothing
-    (briefs.12)."""
+    it holds wait on nothing. Each kit with a bolt a team holds whose every unit has merged is one landing row, keyed
+    land/<kit>, main-level ops's (record 0031 as amended 2026-10-23), naming each such bolt in the plan's order with its
+    team, what a yes frees of it and what it waits on (bolts, each {bolt, team, host, can}): a bolt can land only once
+    its verification is green, sluice's verdict on its last landing (kit.verification, record 0025), every unit's latest
+    change has been in a batch whose card the user has answered, no fix is in flight on it and sluice did not refuse its
+    landing at its head (refusals, held's refused); until then its line says which units no batch has held, which
+    batches wait on the user's answer, the fix or sluice's words (briefs.12). The row's answer tells ops to land those
+    that can, in order, and offers nothing while none can."""
     rows, here, held = [], crew.this_host(), held or {}
     for d in props:
         l, n = d["label"], d["proposal"]
@@ -9865,7 +9873,7 @@ def rail_rows(fleet, found, sv, props, times, held=None):
     for l, _, _, plan in found:
         if not plan:
             continue
-        st = Stages(fleet, plan, sv)
+        st, kits = Stages(fleet, plan, sv), {}
         for b in plan.bolts():
             if not b.get("Team"):
                 continue
@@ -9876,30 +9884,43 @@ def rail_rows(fleet, found, sv, props, times, held=None):
             units = plan.work_of(b.name())
             stages = [st.of(u.name())["stage"] for u in units]
             at, head = k["bolts"].get(b.name(), {}).get("head_at"), k["bolts"].get(b.name(), {}).get("head")
-            if stages and at and head and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages):
-                due, waits = held.get(l, {}).get("due"), held.get(l, {}).get("unanswered") or {}
-                outside = [u.name() for u in units if due is not None and u.name() in due]
-                unread = sorted({waits[u.name()] for u in units if u.name() in waits})
-                what = [f"bolt {b.name()} ({l}), {team} on {host}: every unit merged; waits to land; {l}-ops lands it"]
-                what += [x for x in [frees_said(team, frees_of(st, plan, k["team"], b.name()))] if x]
-                cmds = [("answer", f'crew tell {l}-ops "Land bolt {b.name()}."')]
-                state, said = kit.verification(head, k["bolts"].get(b.name(), {}).get("verdict"))
-                if state != "green":  # a bolt's proof is its verification (record 0025, tests.5)
-                    what, cmds = what + [f"lands once its verification is green; now {said}"], []
-                elif due is None and l in held:
-                    what, cmds = what + ["whether every unit's latest change has been in a batch can't be told: a host did not answer"], []
-                elif outside or unread:  # in a batch whose card the user has answered (briefs.12)
-                    if outside:
-                        what = what + [f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have")
-                                       + " been in a batch, which is due for them"]
-                    if unread:
-                        what = what + [f"lands once you have answered batch{'' if len(unread) == 1 else 'es'} {joined([str(n) for n in unread])}"]
-                    cmds = []
-                fixes = fixes_in_flight(k.get("fixes", []), b.name())
-                if fixes and cmds:  # a fix started on the bolt holds its landing (landing_held)
-                    what, cmds = what + [f"lands once {either(sorted(fixes))} has merged or been dropped"], []
-                rows.append(dict(group="land", label=l, key=f"land/{b.name()}", at=utc(at), doc=None, what=what, cmds=cmds))
+            if not (stages and at and head and all(x in ("merged", "landed") for x in stages) and not all(x == "landed" for x in stages)):
+                continue
+            due, waits = held.get(l, {}).get("due"), held.get(l, {}).get("unanswered") or {}
+            outside = [u.name() for u in units if due is not None and u.name() in due]
+            unread = sorted({waits[u.name()] for u in units if u.name() in waits})
+            said = [x for x in [frees_said(team, frees_of(st, plan, k["team"], b.name()))] if x]
+            state, verdict = kit.verification(head, k["bolts"].get(b.name(), {}).get("verdict"))
+            if state != "green":  # a bolt's proof is its verification (record 0025, tests.5)
+                lands = [f"lands once its verification is green; now {verdict}"]
+            elif due is None and l in held:
+                lands = ["whether every unit's latest change has been in a batch can't be told: a host did not answer"]
+            else:  # in a batch whose card the user has answered (briefs.12)
+                lands = ([f"lands once {either(outside)} " + ("has" if len(outside) == 1 else "have") + " been in a batch, which is due for them"]
+                         if outside else []) + ([f"lands once you have answered batch{'' if len(unread) == 1 else 'es'} "
+                                                 f"{joined([str(n) for n in unread])}"] if unread else [])
+            fixes = fixes_in_flight(k.get("fixes", []), b.name())
+            refused = held_at(held.get(l, {}).get("refused") or {}, b.name(), head)
+            if not lands and fixes:  # a fix started on the bolt holds its landing (landing_held)
+                lands = [f"lands once {either(sorted(fixes))} has merged or been dropped"]
+            elif not lands and refused:  # sluice refused its landing at this head (refused_at)
+                lands = [f"held: sluice refused its landing at {head[:7]}, until its team's fix moves its head: {refused}"]
+            kits.setdefault(b.get("Repo") or k["kit"]["name"], []).append(
+                dict(bolt=b.name(), team=team, host=host, at=at, can=not lands, line=f"{b.name()}, {team} on {host}: "
+                     + "; ".join(said + (lands or ["can land"]))))
+        for kit_name, bolts in kits.items():
+            can = [x["bolt"] for x in bolts if x["can"]]
+            what = [f"{kit_name} ({l}): {plural_of(len(bolts), 'bolt waits', 'bolts wait')} to land on its main, in the plan's order; "
+                    f"{l}-ops lands them"] + [x["line"] for x in bolts]
+            rows.append(dict(group="land", label=l, key=f"land/{kit_name}", at=min(utc(x["at"]) for x in bolts), doc=None, what=what,
+                             cmds=[("answer", f'crew tell {l}-ops "Land {", ".join(can)}."')] if can else [],
+                             bolts=[{k_: x[k_] for k_ in ("bolt", "team", "host", "can")} for x in bolts]))
     return rows
+
+
+def plural_of(n, one, more):
+    """n with the words for one or for more."""
+    return f"{n} {one if n == 1 else more}"
 
 
 def card_kind(key):
@@ -9949,12 +9970,15 @@ def stray_cards(fleet, found, sv, rows, cards, unread, logs=None):
 
 
 def blind_land(fleet, plan, sv, key):
-    """Whether a card's key is a landing's of a bolt whose team's host did not answer, so whether its row is gone
-    can't be told."""
+    """Whether a card's key is a landing's whose row can't be told, since the host of a team holding its bolt, or for a
+    kit's landings card, land/<kit>, a bolt of the kit, did not answer."""
     m = re.match(r"land/([a-z0-9][a-z0-9-]*)", key)
-    b = plan.bolt(m.group(1)) if m else None
-    t = bolt_team(fleet, b) if b else None
-    return bool(t) and t["machine"] in sv and not sv[t["machine"]]["ok"]
+    if not m:
+        return False
+    down = lambda b: (lambda t: bool(t) and t["machine"] in sv and not sv[t["machine"]]["ok"])(bolt_team(fleet, b))
+    if plan.bolt(m.group(1)):
+        return down(plan.bolt(m.group(1)))
+    return any(down(b) for b in plan.bolts() if b.get("Repo") == m.group(1) and b.get("Team"))
 
 
 # How long crew leaves a card, or a row's card, whose last post or close Pending You refused before the sweep tries it
@@ -9962,13 +9986,18 @@ def blind_land(fleet, plan, sv, key):
 CARD_RETRY = 600
 
 
-def row_gone(key, entries):
+def row_gone(key, entries, kits=(), kit_of=None):
     """Why a row's card has no row now, from the run record's entries, oldest first: (outcome, None) when the event
     that ends its row was recorded, so its card is closed with what was done, a proposal applied or a bolt landed;
     else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them, and a batch that waits on
-    nothing with the words of crew's close (batch_settled)."""
+    nothing with the words of crew's close (batch_settled). A kit's landings card, land/<kit> (kits, the partition's
+    kits' names), that nothing waits to land on its main; and a landing card of a bolt's own, from before a kit's card,
+    whose bolt still waits (kit_of, {bolt: its kit} in the plan), that it is now a row of its kit's landings card
+    (rail-cards "A bolt's own landing card gives way to its kit's")."""
     kind, _, rest = (key or "").partition("/")
     thing, _, head = rest.partition("/")
+    if kind == "land" and not head and thing in kits:
+        return None, f"nothing waits to land on {thing}'s main"
 
     def last(on, *acts):
         return next((e["Act"] for e in reversed(entries) if e.get("Act") in acts and not e.get("Refused") and on in (e.get("On") or [])), None)
@@ -9980,6 +10009,7 @@ def row_gone(key, entries):
         act = last(f"bolt/{thing}", "bolt.land", "bolt.drop")
         return (("its bolt landed", None) if act == "bolt.land" else
                 (None, "its bolt was dropped" if act == "bolt.drop" else
+                 f"{thing} is now a row of {(kit_of or {})[thing]}'s landings card" if (kit_of or {}).get(thing) else
                  "its bolt no longer waits to land" + (f" at {head}" if head else "")))
     settled = batch_settled(entries) if kind == "batch" else {}
     if key in settled:
@@ -10026,17 +10056,13 @@ def last_refusal(entries, key):
 
 def row_owner(fleet, plan, row):
     """Whose a rail row's card is and the host it runs on, where its card is posted under that host's sign-in: the
-    planner's a proposal's and a batch's, and main-level ops's an operation's, on the partition's main machine; a
-    bolt's landing the conductor's of the team holding it, on that team's host; None when no team holds the bolt."""
+    planner's a proposal's and a batch's, and main-level ops's an operation's and a kit's landings card's, land/<kit>,
+    on the partition's main machine (rail-cards, record 0031 as amended 2026-10-23)."""
     l = row["label"]
-    if row["group"] == "land":
-        b = plan.bolt(row["key"].split("/")[1])
-        t = bolt_team(fleet, b) if b else None
-        return (f"{b.get('Team')}-conductor", t["machine"]) if t else None
-    return f"{l}-{'ops' if row['group'] == 'operations' else 'planner'}", fleet["partitions"][l]["machine"]
+    return f"{l}-{'planner' if row['group'] in ('proposals', 'batches') else 'ops'}", fleet["partitions"][l]["machine"]
 
 
-def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None)):
+def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None), kits=(), kit_of=None):
     """What the rail's read does with one partition's cards, of those posted on this host (here), the only ones its
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
     be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
@@ -10067,7 +10093,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
             out["held"].append((c, rowed[c["key"]]))
         elif (not (c["key"].startswith("land/") and c["key"].split("/")[1] in blind) and not refused_lately(entries, now, card=c["card"])
               and not ops.word_stands(c["key"], entries)):
-            out["gone"].append((c, *row_gone(c["key"], entries)))
+            out["gone"].append((c, *row_gone(c["key"], entries, kits, kit_of)))
     carded = {c["key"] for c in cards_}
     out["none"] = [r for r in rows if r["key"] not in carded and cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
                    and not refused_lately(entries, now, key=r["key"])]
@@ -10090,7 +10116,8 @@ def sweep_sessions(fleet, found, sv, rows, cards, unread, batched):
     for l, _, _, plan in found:
         if not plan:
             continue
-        rowed = {r["key"] for r in rows if r["label"] == l}
+        rowed = {r["key"] for r in rows if r["label"] == l} | {f"land/{b['bolt']}" for r in rows if r["label"] == l and r["group"] == "land"
+                                                               for b in r.get("bolts", []) if b["can"]}  # each row's reading and preview
         judged = json.dumps(sweep_judgment(l, rowed, cards, unread.get(l), batched.get(l, {})))
         for h in sorted({crew.partition_of(fleet, l)["machine"], *crew.partition_hosts(fleet, l)}):
             if h in sv and not sv[h]["ok"]:
@@ -10378,7 +10405,7 @@ def card_of(fleet, a, unit_needed=True):
     whole batch, a batch/<n>-<k> key with no unit where one is needed, and a unit with any other key."""
     label = default_label(fleet, a) or fail("crew card runs as the card's partition: run it as a crew agent, or add --label")
     any(re.fullmatch(k, a.key) for k in CARD_KEYS) or fail(
-        f"{a.key} is not a card key: proposal/<n>, batch/<n> or land/<bolt>")
+        f"{a.key} is not a card key: proposal/<n>, batch/<n>, land/<kit> or land/<bolt>")
     old = old_batch(a.key)
     if old:
         a.unit or not unit_needed or fail(f"a batch card posted as cards of five has a session for each of its units: "
@@ -12241,8 +12268,10 @@ def sweep_cards(fleet, read, acts=None):
         rows = [r for r in read["rows"] if r["label"] == l]
         owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
         blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
+        blind |= {b.get("Repo") for b in pl.bolts() if b.name() in blind and b.get("Repo")}  # a kit's card, a bolt of it unread
         planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner)
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner,
+                         partition_kits(fleet, l), {b.name(): b.get("Repo") for b in pl.bolts()})
         for key, why in j.pop("settled"):
             got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
                             Key=key, Outcome=why)

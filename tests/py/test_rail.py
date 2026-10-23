@@ -82,11 +82,15 @@ class TestRows:
         assert not [r for r in rows() if "checked" in r["key"] or "stale" in r["key"]]
         assert {r["group"] for r in rows()} <= set(plan.RAIL) and "verify" not in plan.RAIL
 
-    def test_a_bolt_whose_every_unit_merged_waits_to_land_timed_by_its_last_merge(self):
+    HEAD = f"{KIT} (wldn): 1 bolt waits to land on its main, in the plan's order; wldn-ops lands them"
+
+    def test_a_kit_with_a_bolt_whose_every_unit_merged_is_one_row_timed_by_its_last_merge(self):
+        """crew-rail "The last unit merges": one row a kit, main-level ops's, naming the bolt with its team."""
         land, = [r for r in rows() if r["group"] == "land"]
-        assert (land["key"], land["at"]) == ("land/apex-zones", plan.utc(iso(30)))
-        assert land["what"] == [f"bolt apex-zones (wldn), swb-2 on {BOX}: every unit merged; waits to land; wldn-ops lands it"]
-        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert (land["key"], land["at"]) == (f"land/{KIT}", plan.utc(iso(30)))
+        assert land["what"] == [self.HEAD, f"apex-zones, swb-2 on {BOX}: can land"]
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
+        assert land["bolts"] == [dict(bolt="apex-zones", team="swb-2", host=BOX, can=True)]
 
     def two_bolts(self, merged, planned=True):
         """swb-2 holds apex-zones, proven, and beta, given after it, whose unit b-one has merged or not."""
@@ -100,53 +104,70 @@ class TestRows:
 
     def test_a_landing_row_names_the_bolt_its_team_builds_meanwhile(self):
         land = self.two_bolts(merged=False)
-        assert list(land) == ["land/apex-zones"]
-        assert land["land/apex-zones"]["what"][1] == "swb-2 builds beta meanwhile"
-        assert land["land/apex-zones"]["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert list(land) == [f"land/{KIT}"]
+        assert land[f"land/{KIT}"]["what"][1] == f"apex-zones, swb-2 on {BOX}: swb-2 builds beta meanwhile; can land"
+        assert land[f"land/{KIT}"]["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
 
-    def test_once_both_are_proven_each_row_says_a_yes_frees_the_team_for_its_next_planned_bolt(self):
-        land = self.two_bolts(merged=True)
-        assert [r["what"][1] for r in land.values()] == ["a yes frees swb-2 for d", "a yes frees swb-2 for d"]
+    def test_two_bolts_of_one_kit_are_one_row_its_tell_naming_both_in_order_each_saying_a_yes_frees_the_team(self):
+        """crew-rail "Two bolts of one kit" and "A yes frees the team"."""
+        land, = self.two_bolts(merged=True).values()
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: a yes frees swb-2 for d; can land",
+                                    f"beta, swb-2 on {BOX}: a yes frees swb-2 for d; can land"]
+        assert land["what"][0].startswith(f"{KIT} (wldn): 2 bolts wait to land on its main")
+        assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones, beta."')] and land["at"] == plan.utc(iso(30))
 
     def test_with_nothing_planned_a_yes_frees_the_team_for_nothing(self):
         land = self.two_bolts(merged=True, planned=False)
-        assert land["land/apex-zones"]["what"][1] == "a yes frees swb-2, and nothing is planned for it"
+        assert land[f"land/{KIT}"]["what"][1] == f"apex-zones, swb-2 on {BOX}: a yes frees swb-2, and nothing is planned for it; can land"
 
     def test_a_bolt_with_a_fix_in_flight_lands_once_it_has_merged_or_been_dropped(self):
         sv = survey()
         sv[BOX]["kits"]["/kit/main"]["fixes"] = [{"fix": "fix/apex-zones/gap", "bolt": "apex-zones", "merged": False},
                                                 {"fix": "fix/apex-zones/done", "bolt": "apex-zones", "merged": True}]
         land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert (land["key"], land["what"][1], land["cmds"]) == (
-            "land/apex-zones", "lands once fix/apex-zones/gap has merged or been dropped", [])
+        assert (land["what"][1], land["cmds"]) == (f"apex-zones, swb-2 on {BOX}: lands once fix/apex-zones/gap has merged or been dropped", [])
+        assert land["bolts"][0]["can"] is False
         sv[BOX]["kits"]["/kit/main"]["fixes"][0]["dropped"] = True  # dropped, its place not yet removed
         land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land" and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
+
+    def test_a_landing_sluice_refused_at_the_bolts_head_is_held_in_its_words(self):
+        """crew-rail "A refused landing"."""
+        held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": set(), "unanswered": {},
+                         "refused": {"apex-zones": ("abc1234" + "0" * 33, "bolt/apex-zones did not land: sluice found a conflict")}}}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: held: sluice refused its landing at abc1234, until its team's fix "
+                                   "moves its head: bolt/apex-zones did not land: sluice found a conflict")
+        assert land["cmds"] == []
+        held["wldn"]["refused"] = {"apex-zones": ("c" * 40, "an older head's")}
+        land, = [r for r in rows(held=held) if r["group"] == "land"]
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: can land"
 
     def test_a_bolt_lands_only_once_its_verification_is_green(self, monkeypatch):
         sv = survey()
         sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"]["verdict"] = ""
         land, = [r for r in rows(sv=sv) if r["group"] == "land"]
-        assert land["what"][1] == "lands once its verification is green; now its head abc1234 is no landing of sluice's, so it has no verdict"
+        assert land["what"][1] == (f"apex-zones, swb-2 on {BOX}: lands once its verification is green; now its head abc1234 is no "
+                                   "landing of sluice's, so it has no verdict")
         assert land["cmds"] == []
 
     def test_a_bolt_lands_only_once_every_units_latest_change_has_been_in_a_batch(self):
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": {"zone-one"}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1] == "lands once zone-one has been in a batch, which is due for them" and land["cmds"] == []
+        assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: lands once zone-one has been in a batch, which is due for them" and land["cmds"] == []
         held["wldn"]["due"] = None
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1] == "whether every unit's latest change has been in a batch can't be told: a host did not answer"
+        assert land["what"][1].endswith("whether every unit's latest change has been in a batch can't be told: a host did not answer")
 
     def test_a_bolt_lands_only_once_the_user_has_answered_each_batch_holding_a_units_latest_change(self):
         """briefs.12: the user, 2026-10-19, on card req_5ff4d31d: "Wait for my answer on the batch card"."""
         held = {"wldn": {"batches": [(8, iso(10), [("zone-one", "swb-2", "abc1234")])], "closed": set(), "posts": set(), "due": set(),
                          "unanswered": {"zone-one": 8, "early": 7}}}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1:] == ["lands once you have answered batch 8"] and land["cmds"] == []
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: lands once you have answered batch 8"] and land["cmds"] == []
         held["wldn"]["unanswered"] = {}
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1:] == [] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: can land"] and land["cmds"] == [("answer", 'crew tell wldn-ops "Land apex-zones."')]
 
     def test_a_landing_row_names_both_the_units_due_a_batch_and_the_batches_that_wait_on_the_user(self):
         p = plan.Plan(plan_text(bolts=[("apex-zones", KIT, "swb-2")], units=[(u, KIT, "apex-zones", []) for u in ("zone-one", "zone-two", "zone-three")]))
@@ -154,7 +175,8 @@ class TestRows:
         sv[BOX]["kits"]["/kit/main"]["bolts"]["apex-zones"].update(changes=zones, archived=zones)
         held = {"wldn": {"batches": [], "closed": set(), "posts": set(), "due": {"zone-one"}, "unanswered": {"zone-two": 8, "zone-three": 9}}}
         land, = [r for r in plan.rail_rows(FLEET, [("wldn", "WilldanGroup/crew-state", "tip", p)], sv, [], {}, held) if r["group"] == "land"]
-        assert land["what"][1:] == ["lands once zone-one has been in a batch, which is due for them", "lands once you have answered batches 8 and 9"]
+        assert land["what"][1:] == [f"apex-zones, swb-2 on {BOX}: lands once zone-one has been in a batch, which is due for them; "
+                                    "lands once you have answered batches 8 and 9"]
         assert land["cmds"] == []
 
     def test_a_proposal_is_timed_by_its_entry_else_its_opened_date_naming_whom_it_waits_on(self):
@@ -192,7 +214,7 @@ class TestText:
         rs = rows([proposal(1)])
         out = text(rs, cards=[dict(label="wldn", card="req_prop-1", key="proposal/1", by="wldn-planner", host="mac-studio", at=NOW)])
         assert "    card:   proposal/1, open, asked by wldn-planner (req_prop-1)" in out
-        assert "    card:   land/apex-zones, none open" in out
+        assert f"    card:   land/{KIT}, none open" in out
 
     def test_an_open_card_whose_row_is_gone_is_listed_with_the_host_whose_rail_read_closes_it(self):
         old = dict(label="wldn", card="req_old-1", key="verify/checked/20260101-0000", by="swb-1-conductor", host=BOX, at=NOW)
@@ -388,8 +410,8 @@ OWNERS = {"proposal/4": ("wldn-planner", "mac-studio"), "deploy/dev": ("wldn-ops
 
 
 class TestSweepJudged:
-    def judged(self, rows=(), cards_=(), entries=(), blind=()):
-        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind), NOW)
+    def judged(self, rows=(), cards_=(), entries=(), blind=(), kits=(), kit_of=None):
+        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind), NOW, kits=kits, kit_of=kit_of)
 
     def test_a_rows_card_whose_row_is_gone_is_closed_with_its_events_outcome_or_withdrawn_with_why(self):
         p4, y = card("proposal/4", "req_p4", "wldn-planner"), card("land/y", "req_l1", "swb-1-conductor")
@@ -474,11 +496,27 @@ class TestSweepJudged:
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
 
+    def test_an_old_card_of_a_bolts_own_is_withdrawn_as_a_row_of_its_kits_card(self):
+        """rail-cards "A card from before": the conductor's land/y, swept on its host, while y waits to land."""
+        y = card("land/y", "req_l1", "swb-1-conductor")
+        j = self.judged(cards_=[y], kits=("crew",), kit_of={"y": "crew"})
+        assert j["gone"] == [(y, None, "y is now a row of crew's landings card")]
+        assert plan.row_gone("land/y", [{"Act": "bolt.land", "On": ["bolt/y"]}], ("crew",), {"y": "crew"}) == ("its bolt landed", None)
+
+    def test_a_kits_card_whose_row_is_gone_is_withdrawn_saying_nothing_waits_on_its_main(self):
+        assert plan.row_gone("land/crew", [], ("crew",), {}) == (None, "nothing waits to land on crew's main")
+
+    def test_a_kits_card_is_left_while_the_host_of_a_bolt_of_it_does_not_answer(self):
+        p = plan.Plan(plan_text(bolts=[("apex-zones", KIT, "swb-2")], units=[]))
+        assert plan.blind_land(FLEET, p, survey(ok=False), f"land/{KIT}") is True
+        assert plan.blind_land(FLEET, p, survey(), f"land/{KIT}") is False
+        assert plan.blind_land(FLEET, p, survey(ok=False), "land/other-kit") is False
+
     def test_a_rows_owner_and_its_host(self):
         pl = the_plan()
         assert plan.row_owner(FLEET, pl, row("proposal/4")) == ("wldn-planner", BOX)
         assert plan.row_owner(FLEET, pl, row("deploy/dev", "operations")) == ("wldn-ops", BOX)
-        assert plan.row_owner(FLEET, pl, row("land/apex-zones/abc1234", "land")) == ("swb-2-conductor", BOX)
+        assert plan.row_owner(FLEET, pl, row(f"land/{KIT}", "land")) == ("wldn-ops", BOX)  # the kit's landings card, main-level ops's
 
 
 class Py:
@@ -686,8 +724,8 @@ class TestSweep:
         def raise_land(fleet, r, acts=None):
             seen.append(r["key"])
             return None
-        out, acts = swept(rows_=[row("land/apex-zones", "land")], raises={"land": raise_land}, here=BOX)
-        assert seen == ["land/apex-zones"] and out == {"done": [], "unswept": []} and acts.emitted == []
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], raises={"land": raise_land})
+        assert seen == [f"land/{KIT}"] and out == {"done": [], "unswept": []} and acts.emitted == []
 
     def test_a_raise_that_refuses_is_said_and_refuses_nothing_else(self):
         def raise_proposal(fleet, r, acts=None):
