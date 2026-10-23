@@ -859,7 +859,8 @@ def gathered(fleet, host, req):
                 f.write(f"{host} gather\n")
         try:
             running = gather.routes() if req.get("sites") else None
-            return json.loads(json.dumps({k["main"]: gather.kit(k, req.get("sites"), running, req.get("board")) for k in req["kits"]})), None
+            return json.loads(json.dumps({k["main"]: gather.kit(k, req.get("sites"), running, req.get("board"), req.get("fetch"))
+                                          for k in req["kits"]})), None
         except Exception as e:
             import traceback
             return None, traceback.format_exception_only(e)[-1].strip()
@@ -869,14 +870,16 @@ def gathered(fleet, host, req):
     return json.loads(r.stdout), None
 
 
-def survey(fleet, held, sites=False, board=False):
+def survey(fleet, held, sites=False, board=False, fetch=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)] or [(team, bolt, kit)], the kit the bolt's
     as the plan's Repo names it. The answer is
     per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
     the host's running portless routes too; board implies sites and adds each team's slots and the explorations on
     each kit's main, for the board. With board, each kit is asked for the slots of every team that builds it on that
-    host. A kit the command has already read is not asked again, and what a host answers is
-    kept for the command's later steps; a sites survey is neither served nor kept."""
+    host. With fetch, each kit's GitHub is fetched on its host before it is read, for a read a decision of the moment
+    rests on (plan.18, plan.19), and a fetch that fails reads that kit unread with git's words. A kit the command has
+    already read is not asked again, but by a survey that fetches, which must read after its own fetch; what a host
+    answers is kept for the command's later steps; a sites survey is neither served nor kept."""
     sites = sites or board
     hosts = {}
     for team, bolt, *repo in held:
@@ -897,10 +900,10 @@ def survey(fleet, held, sites=False, board=False):
                 k["bolts"].append(bolt)
     out = {}
     for host, kits in sorted(hosts.items()):
-        have = {} if sites else {m: k for m, k in READ.kits(host).items() if m in kits}
+        have = {} if sites or fetch else {m: k for m, k in READ.kits(host).items() if m in kits}
         ask = [k for m, k in kits.items() if m not in have]
         if ask:
-            req = {"kits": ask, "sites": sites, **({"board": True} if board else {})}
+            req = {"kits": ask, "sites": sites, **({"board": True} if board else {}), **({"fetch": True} if fetch else {})}
             got, error = gathered(fleet, host, req)
             if error:
                 out[host] = {"ok": False, "error": error}
@@ -1068,10 +1071,11 @@ class Stages:
         return "active"
 
 
-def stages_for(fleet, plan, bolts):
-    """Stages for the units of the given bolts, reading only the hosts that hold them."""
+def stages_for(fleet, plan, bolts, fetch=False):
+    """Stages for the units of the given bolts, reading only the hosts that hold them, each kit's GitHub fetched first
+    with fetch (survey)."""
     held = [(b.get("Team"), b.name(), b.get("Repo")) for b in bolts if b.get("Team")]
-    return Stages(fleet, plan, survey(fleet, held))
+    return Stages(fleet, plan, survey(fleet, held, fetch=fetch))
 
 
 # ------------------------------------------------------------------------------------------- finding the plans
@@ -1393,7 +1397,8 @@ def bolt_give(fleet, a):
         built = team_building(fleet, plan, t)
         held = sorted(held, key=lambda b: b.name() == built)
     if held:
-        why = give_refusal(t["name"], proven_facts(stages_for(fleet, plan, held), plan, held))
+        # Read after a fetch, since a merge sluice landed on GitHub may be what proves the bolt (plan.19).
+        why = give_refusal(t["name"], proven_facts(stages_for(fleet, plan, held, fetch=True), plan, held))
         not why or fail(why)
     checked = {b.name() for b in held}
     # The bolt's kit, one of the team's (record 0035), decides the policy read and the branch made; the write gives
@@ -9266,7 +9271,8 @@ def bolts_view(fleet, a):
     errors = {}
     found = plans(fleet, labels, errors)
     held = [(b.get("Team"), b.name(), b.get("Repo")) for _, _, _, p in found if p for b in p.bolts() if b.get("Team") and a.bolt in (None, b.name())]
-    data = bolts_data(fleet, labels, found, survey(fleet, held), errors, a.bolt)
+    # Each kit's GitHub fetched once on its host before it is read: what has merged into a bolt is on GitHub (plan.19).
+    data = bolts_data(fleet, labels, found, survey(fleet, held, fetch=True), errors, a.bolt)
     if a.bolt and not any(b for p in data["partitions"] for pl in p["plans"] for b in pl["bolts"]):
         fail(f"no bolt {a.bolt} in the plans of " + ", ".join(labels))
     if a.json:

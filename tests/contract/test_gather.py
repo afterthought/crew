@@ -461,3 +461,23 @@ def test_a_bolt_whose_policy_on_github_is_not_toml_is_read_nowhere(repo, tmp_pat
     got = k.read()["bolts"]["te"]
     assert (got["exists"], got["at"], got["head"], got["changes"]) == (False, None, None, [])
     assert got["error"].startswith(".config/sluice.toml at origin/bolt/te is not TOML, so crew can't read bolt te: ")
+
+
+def test_a_read_that_asks_a_fetch_reads_what_github_holds_now_and_every_other_as_last_fetched(repo, tmp_path):
+    """crew bolts, a give's proven check (plan.survey with fetch) and every other read (plan.18, plan.19): a request
+    with fetch runs `git fetch -q origin` in the kit's main checkout first and reads a merge pushed to GitHub's bolt
+    since; one without reads the bolt as the host last fetched it; a fetch that fails reads the kit unread, naming
+    GitHub and git's words, and nothing from the host's copy."""
+    k, other = on_github(repo, tmp_path)
+    head = landed_on_github(other, {"one": "1\n"}, "Merge unit/u into bolt/te\n\nSluice-Result: passed (9 run, 0 replayed)")
+    req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"]}
+    assert gather.kit(req)["bolts"]["te"]["head"] == repo.git("rev-parse", "origin/bolt/te") != head
+    got = gather.kit(req, fetch=True)["bolts"]["te"]
+    assert (got["head"], got["verdict"]) == (head, "passed (9 run, 0 replayed)")
+    repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    got = gather.kit(req, fetch=True)
+    assert got["ok"] is False and got["error"].startswith(f"cannot fetch {repo.path} from GitHub: ")
+    assert "gone.git" in got["error"]
+    assert gather.fetched(str(repo.path)).startswith("fatal:")
+    repo.git("remote", "remove", "origin")
+    assert gather.fetched(str(repo.path)) is None

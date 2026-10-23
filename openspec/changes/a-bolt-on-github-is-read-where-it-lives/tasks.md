@@ -8,7 +8,7 @@
 
 ## 2. When a bolt on GitHub is fetched
 
-- [ ] 2.1 `crew bolts` and a give's proven check fetch the kit's origin once before reading, a fetch that fails reads the kit unknown with git's words, and every other read fetches nothing (design, Decision 3; Task notes 2.1); passes `tests/py/test_bolt_commands.py` and `tests/contract/test_gather.py`, verified by `tests/suite logic` and `tests/suite contract` each ending with "0 failed".
+- [x] 2.1 `crew bolts` and a give's proven check fetch the kit's origin once before reading, a fetch that fails reads the kit unknown with git's words, and every other read fetches nothing (design, Decision 3; Task notes 2.1); passes `tests/py/test_bolt_commands.py` and `tests/contract/test_gather.py`, verified by `tests/suite logic` and `tests/suite contract` each ending with "0 failed".
 - [ ] 2.2 Each look a wait takes at a merge stage fetches before it reads the bolt, and a fetch that fails delivers nothing and says why (design, Decision 3; Task notes 2.2); passes `tests/py/test_stage_ends.py`, verified by `tests/suite logic` ending with "0 failed".
 - [ ] 2.3 A give fetches the bolt's branch sluice made before its plan write (design, Decision 3; Task notes 2.3); verified by `tests/suite t-journey-plan` ending with "0 failed".
 

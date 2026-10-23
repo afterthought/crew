@@ -531,3 +531,63 @@ class TestWhereABoltIsRead:
         assert (st.of("bump")["stage"], st.of("bump")["why"]) == ("unknown", why)
         assert st.of("done")["stage"] == "landed"
         assert st.bolt_state(p.bolt("b")) == "unknown"
+
+
+class TestWhenABoltIsFetched:
+    """bolt-plan "A bolt on GitHub is fetched where a decision rests on it" (plan.18, plan.19, design Decision 3): crew
+    bolts and a give's proven check ask each kit's GitHub fetched first; every other read fetches nothing."""
+    FLEET = {"partitions": {"wldn": {"teams": ["swb-1"]}},
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box",
+                                 "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
+    KIT_READ = {"ok": True, "main": [], "chores": [], "places": {}, "chore_places": {}, "fixes": [],
+                "bolts": {"b": {"exists": True, "at": "origin/bolt/b", "changes": [], "archived": [], "open": {}, "chores": [],
+                                "head": "d" * 40, "head_at": "2026-10-23T09:00:00Z", "verdict": ""}}}
+
+    def asked(self, monkeypatch, kept=None):
+        asks = []
+        monkeypatch.setattr(plan, "READ", plan.Reading())
+        if kept:
+            plan.READ.keep_kits("box", kept)
+
+        def gathered(fleet, host, req):
+            asks.append(req)
+            return {k["main"]: self.KIT_READ for k in req["kits"]}, None
+        monkeypatch.setattr(plan, "gathered", gathered)
+        return asks
+
+    def plan(self):
+        return plan.Plan(plan_text(bolts=[("b", KIT, "swb-1")], units=[("a", KIT, "b", [])]))
+
+    def test_crew_bolts_asks_each_kit_fetched(self, monkeypatch):
+        """bolt-plan "crew bolts after a landing elsewhere"."""
+        import argparse
+        asks = self.asked(monkeypatch)
+        p = self.plan()
+        monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("wldn", "o/state", "f" * 40, p)])
+        with pytest.raises(SystemExit) as e:
+            plan.bolts_view(self.FLEET, argparse.Namespace(label="wldn", bolt=None, json=True))
+        assert e.value.code == 0
+        assert [a.get("fetch") for a in asks] == [True]
+
+    def test_a_read_on_every_team_read_fetches_nothing(self, monkeypatch):
+        """bolt-plan "The board does not fetch"."""
+        asks = self.asked(monkeypatch)
+        plan.stages_for(self.FLEET, self.plan(), self.plan().bolts())
+        assert [("fetch" in a) for a in asks] == [False]
+
+    def test_a_fetching_survey_is_asked_though_the_command_has_read_the_kit(self, monkeypatch):
+        asks = self.asked(monkeypatch, kept={"/kit/main": self.KIT_READ})
+        plan.stages_for(self.FLEET, self.plan(), self.plan().bolts())
+        assert asks == []
+        st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
+        assert [a.get("fetch") for a in asks] == [True]
+        assert st.kit(self.plan().bolt("b"))[0]["bolts"]["b"]["at"] == "origin/bolt/b"
+
+    def test_a_fetch_that_fails_reads_the_kit_unknown_with_gits_words(self, monkeypatch):
+        """bolt-plan "A fetch that fails"."""
+        self.asked(monkeypatch)
+        why = "cannot fetch /kit/main from GitHub: fatal: unable to access 'https://github.com/o/k/': Could not resolve host"
+        monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: ({"/kit/main": {"ok": False, "error": why}}, None))
+        st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
+        assert (st.of("a")["stage"], st.of("a")["why"]) == ("unknown", f"box: {why}")
+        assert st.bolt_state(self.plan().bolt("b")) == "unknown"

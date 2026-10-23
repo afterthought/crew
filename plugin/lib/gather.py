@@ -6,7 +6,8 @@
 The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
 "slots": {<team>: <its slots file, ~ allowed>}}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
-"board": <true to also read each team's slots file and the explorations on the kit's main>}.
+"board": <true to also read each team's slots file and the explorations on the kit's main>,
+"fetch": <true to fetch each kit's GitHub, its origin, before reading it>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
 read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
@@ -488,6 +489,25 @@ def has_origin(main):
     return run(["git", "remote", "get-url", "origin"], main) is not None
 
 
+def ran(args, cwd):
+    """A command's exit and what it said, (exit, stdout, stderr); (None, "", why) when it can't be started."""
+    try:
+        r = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    except (FileNotFoundError, NotADirectoryError) as e:
+        return None, "", str(e)
+    return r.returncode, r.stdout, r.stderr
+
+
+def fetched(main):
+    """A kit's GitHub fetched into its main checkout, as a read a decision of the moment rests on fetches it (plan.18,
+    plan.19), `git fetch -q origin`: None once it fetched, or for a kit with no origin remote, which has no GitHub;
+    git's words when the fetch failed."""
+    if not has_origin(main):
+        return None
+    code, out, err = ran(["git", "fetch", "-q", "origin"], main)
+    return None if code == 0 else (err or out).strip() or f"git fetch exited {code}"
+
+
 def now_ref(origin):
     """The ref a kit's main is read at now (plan.18), from whether it has an origin remote: GitHub's,
     refs/remotes/origin/main as this host last fetched it, for a kit with one, since sluice lands there and the host's
@@ -511,10 +531,15 @@ def explorations(main, ref="main"):
     return out
 
 
-def kit(req, sites=False, running=None, board=False):
+def kit(req, sites=False, running=None, board=False, fetch=False):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
         return {"ok": False, "error": f"no checkout at {main}"}
+    # A read a decision of the moment rests on fetches GitHub first (fetch, fetched); every other reads it as this host
+    # last fetched it.
+    why = fetched(main) if fetch else None
+    if why:
+        return {"ok": False, "error": f"cannot fetch {main} from GitHub: {why}"}
     trees = worktrees(main)
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
@@ -583,4 +608,4 @@ def kit(req, sites=False, running=None, board=False):
 if __name__ == "__main__":
     request = json.loads(sys.argv[1])
     running = routes() if request.get("sites") else None
-    print(json.dumps({k["main"]: kit(k, request.get("sites"), running, request.get("board")) for k in request["kits"]}))
+    print(json.dumps({k["main"]: kit(k, request.get("sites"), running, request.get("board"), request.get("fetch")) for k in request["kits"]}))
