@@ -86,6 +86,41 @@ def test_words_crew_cannot_read_land_nothing():
         assert landing(out)[1].startswith("crew can't read what the submission of bolt/b to k's main came to: "), out
 
 
+class TestARefusedLandingIsRecordedInSluicesWords:
+    """rail-cards "A refused landing is held on its row", crew-rail "A refused landing", Decision 6: what a bolt.submit
+    that did not land is recorded refused with, which its row, its rail line and the card's close say, is sluice's own
+    last line when it exited non-zero and said any; else crew's for why and where main is. Never what crew tells ops
+    in its terminal, "sluice's words above" pointing at nothing on a card, nor the worktree it kept."""
+
+    def recorded(self, out):
+        return plan.landing_said("b", "k", "h", out, OLD, recorded=True)
+
+    def test_sluices_words_are_recorded(self):
+        conflict = "sluice: bolt/b conflicts with main"
+        for out in (said(2, new=OLD, sluice=conflict), said(2, new=OLD, github=OLD, held="no", level="''", sluice=conflict),
+                    said(2, new=OLD, sluice=conflict, kept="/k/places/land-b", why="busy")):
+            assert self.recorded(out) == (False, conflict), out
+        assert self.recorded(said(1, new=OLD, sluice="sluice: bolt/b failed main's checks: t-cards"))[1] == (
+            "sluice: bolt/b failed main's checks: t-cards")
+
+    def test_crews_words_when_sluice_said_nothing(self):
+        assert self.recorded(said(1, new=OLD)) == (False, "bolt/b did not land: main's checks failed on it, and main is where it was.")
+        assert self.recorded(said(2, new=OLD, kept="/k/places/land-b", why="busy"))[1] == (
+            "bolt/b did not land: sluice refused it or found a conflict, and main is where it was.")
+
+    def test_crews_words_when_sluice_exited_0(self):
+        """sluice's words of a submission it ended well are no refusal: main moving without the bolt is crew's to say."""
+        assert self.recorded(said(0, held="no", sluice="sluice: #7 bolt/b landed on main"))[1] == (
+            "bolt/b did not land: the submission exited 0; k's main moved to bbbbbbb without it.")
+
+    def test_crews_words_when_it_cant_tell(self):
+        assert self.recorded(said(3, new=OLD, github="-", level="''", sluice=SIGNAL, kept="/k/places/land-b"))[1] == (
+            "crew can't tell whether bolt/b landed on k's main: k's GitHub has no main, fetched on h; the submission exited 3.")
+
+    def test_a_landing_is_said_as_ever(self):
+        assert self.recorded(said(0)) == landing(said(0))
+
+
 def test_the_anchor_is_detached_and_the_landing_says_nothing_of_levelling_it():
     """bolt-teams "The anchor is detached" (plan.18): the fleet's timer moves a detached main checkout, so a landing
     neither levels it nor says anything of it."""
@@ -159,7 +194,7 @@ def ran_as(code, out="", err=""):
     return type("R", (), {"returncode": code, "stdout": out, "stderr": err})()
 
 
-QUEUED = ran_as(0, f"RC=0 TIP={TIP} OLD={OLD} ID=7\n", "sluice: queued #7\n")
+QUEUED = ran_as(0, f"RC=0 TIP={TIP} OLD={OLD} ID=7 SAID={base64.b64encode(b'sluice: queued #7').decode()}\n", "sluice: queued #7\n")
 
 
 class TestTheSubmission:
@@ -177,7 +212,7 @@ class TestTheSubmission:
         and POLICY said, a policy at main taking no pull requests unless given, and each script crew runs there
         answering in turn from outs; what ran (the script and its bolt, the submission's number or gh's act), what was
         recorded, and which bolts crew bolt land closed, kept on self."""
-        ran_, emitted, closed = self.ran, self.emitted, self.closed = [], [], []
+        ran_, emitted, closed, argvs = self.ran, self.emitted, self.closed, self.argvs = [], [], [], []
         said = said or policy(TAKES_NONE)
         monkeypatch.setattr(plan, "CONTEXT", {})
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
@@ -190,7 +225,8 @@ class TestTheSubmission:
         names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK", plan.PULL: "PULL",
                  plan.PULL_MARK: "PULL_MARK"}
         at = {plan.SUBMIT: 6, plan.WAIT: 5, plan.LANDED: 6, plan.LANDED_MARK: 5, plan.PULL: 5, plan.PULL_MARK: 6}
-        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: ran_.append((names[argv[2]], argv[at[argv[2]]])) or outs.pop(0))
+        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: argvs.append(argv) or ran_.append((names[argv[2]], argv[at[argv[2]]]))
+                            or outs.pop(0))
         monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: emitted.append((act, on, f)))
         monkeypatch.setattr(plan.record, "who", lambda: "wldn-ops")
         monkeypatch.setattr(plan, "may_write", lambda fleet, key, a: None)
@@ -240,15 +276,35 @@ class TestTheSubmission:
                 "host box port 22: timed out.") in capsys.readouterr().out
         assert self.emitted and self.closed == ["b"]
 
+    def handed_landed(self):
+        """What crew handed LANDED as sluice's last line, decoded."""
+        return base64.b64decode([a for a in self.argvs if a[2] == plan.LANDED][-1][-1]).decode()
+
     def test_a_bolt_that_did_not_land_is_recorded_at_its_head_and_the_command_exits_non_zero(self, monkeypatch, capsys):
+        """Recorded in sluice's words from its wait, which hold its row (rail-cards "A refused landing is held on its
+        row"); ops's terminal has crew's, after sluice's own."""
+        conflict = "sluice: bolt/b conflicts with main"
         with pytest.raises(plan.Stopped):
-            self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(2, "{}", "sluice: bolt/b conflicts with main\n"),
-                                                   ran_as(0, said(2, new=OLD, github=OLD, held="no", level="''"))])
+            self.submit(monkeypatch, self.BEFORE, [QUEUED, ran_as(2, "{}", f"{conflict}\n"),
+                                                   ran_as(0, said(2, new=OLD, github=OLD, held="no", level="''", sluice=conflict))])
         assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "POLICY"] and self.closed == [] and self.handed == ["k"]
+        assert self.handed_landed() == conflict
         (act, on, f), = self.emitted
-        assert (act, on, f["Head"]) == ("bolt.submit", ["bolt/b"], TIP)
-        assert f["refused"].startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was")
-        assert "sluice: bolt/b conflicts with main" in capsys.readouterr().err
+        assert (act, on, f["Head"], f["refused"]) == ("bolt.submit", ["bolt/b"], TIP, conflict)
+        err = capsys.readouterr().err
+        assert conflict in err and "bolt/b did not land: sluice refused it or found a conflict, and main is where it was. Tell" in err
+
+    def test_a_submission_sluice_refused_at_once_is_recorded_in_its_words(self, monkeypatch, capsys):
+        """sluice refused the submission itself, so there is no wait: SUBMIT's last line of what it said is handed to
+        LANDED as sluice's, and recorded so."""
+        no_gate = "sluice: main has no gate for bolt/b"
+        refused = ran_as(0, f"RC=2 TIP={TIP} OLD={OLD} ID= SAID={base64.b64encode(f'{no_gate}\n'.encode()).decode()}\n", f"{no_gate}\n")
+        with pytest.raises(plan.Stopped):
+            self.submit(monkeypatch, self.BEFORE, [refused, ran_as(0, said(2, new=OLD, github=OLD, held="no", level="''", sluice=no_gate))])
+        assert self.scripts() == ["MAIN", "POLICY", "SUBMIT", "LANDED", "POLICY"] and self.handed_landed() == no_gate
+        (_, _, f), = self.emitted
+        assert (f["Head"], f["refused"]) == (TIP, no_gate)
+        assert "bolt/b submitted to k's main, sluice queueing nothing" in capsys.readouterr().out
 
     def test_a_refused_landing_leaves_its_pull_request_a_draft(self, monkeypatch):
         """bolt-teams "A refused landing leaves its pull request a draft": the one sluice's submission left ready is
@@ -270,7 +326,7 @@ class TestTheSubmission:
             self.submit(monkeypatch, self.BEFORE, outs, said=policy(TAKES))
         (_, _, f), = self.emitted
         assert f["refused"].startswith("bolt/b was not submitted on box: wt submit needs sluice's wt-submit, which is not on "
-                                       "box's path Its pull request ")
+                                       "box's path. Its pull request ")
         assert self.scripts()[-2:] == ["PULL", "PULL_MARK"]
 
     def test_the_next_landing_readies_its_draft_before_it_submits(self, monkeypatch, capsys):
@@ -317,7 +373,7 @@ class TestTheSubmission:
 
     def test_three_bolts_on_one_host_are_queued_in_order_and_one_refused_holds_back_none(self, monkeypatch, capsys):
         """bolt-teams "Three bolts queued as one chain" and "One refused, the rest go on"."""
-        q = lambda n: ran_as(0, f"RC=0 TIP={TIP} OLD={OLD} ID={n}\n")
+        q = lambda n: ran_as(0, f"RC=0 TIP={TIP} OLD={OLD} ID={n} SAID=\n")
         outs = [q(1), q(2), q(3),
                 ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n"),
                 ran_as(2, "{}", "sluice: bolt/z conflicts with main\n"), ran_as(0, said(2, new=NEW, github=NEW, held="no")),

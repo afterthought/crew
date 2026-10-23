@@ -474,8 +474,9 @@ ok "two proven bolts of one kit are one landings card in main-level ops's name, 
 
 # A third bolt proven joins the card in place; the user sends it with all three ticked, and one crew bolt submit lands
 # them in the card's order, each queued behind the one before on the one host, each closed as it lands: south, which
-# conflicts with north on main once north has landed, is refused, recorded at its head and held on its row, and east
-# lands all the same; the command exits non-zero naming south, and the card closes with what landed and what was held.
+# conflicts with north on main once north has landed, is refused, recorded at its head in sluice's words and held on
+# its row saying them, and east lands all the same; the command exits non-zero naming south, and the card closes with
+# what landed and what was held.
 crew bolt give swb-1 east >/dev/null 2>&1
 crew unit add east-files "East's files." --bolt east >/dev/null
 proven east east-files east.txt east || fail "east's unit did not merge"
@@ -495,10 +496,11 @@ has "$out" "bolt/south did not land: sluice refused it or found a conflict; swit
 has "$out" "bolt/east landed on switchboard-kit's main at"
 eq "$(plan -t Bolt -e "Bolt = 'north' || Bolt = 'east'" -c) $(plan -t Bolt -e "Bolt = 'south'" -c)" "0 1"
 eq "$(field mac-studio bolt.submit Head bolt/south)" "$south"
-has "$(field mac-studio bolt.submit Refused bolt/south)" "bolt/south did not land: sluice refused it or found a conflict"
+has "$(field mac-studio bolt.submit Refused bolt/south)" "sluice: bolt/south conflicts with main"
 has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"Landed on GitHub's main: north at"
 closed=$(field $box card.close Outcome kit/switchboard-kit)  # whole in the run record, cut on the card
 has "$closed" "and east at"
-has "$closed" "Held: south, held: sluice refused its landing at ${south:0:7}, and it waits for its team's fix: bolt/south did not land"
+has "$closed" "Held: south, held: sluice refused its landing at ${south:0:7}, and it waits for its team's fix: sluice: bolt/south conflicts with main"
+case $closed in *"words above"*) fail "the card's close points at words above, which are in ops's terminal, not on the card" ;; esac
 calls | grep -q "^$box pendingyou post_request " && fail "a card was posted though no row can land"
 ok "one crew bolt submit lands the ticked bolts in the card's order, each queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and held on its row, the third landing all the same; it exits non-zero naming the one held, and the card closes with what landed and what was held"

@@ -495,16 +495,18 @@ def landing(repo, tmp_path):
     file git does not ignore in the landing's worktree; with on_github, it forms the merge on origin/main and pushes it
     there, leaving the host's own main where it was, then fails releasing a place, its outcome sluice's exit 3, as
     sluice 0.36.4 does on a release that fails after its push; with refused, it pushes nothing, its outcome a conflict,
-    exit 2. It names no submission, so SUBMIT leaves no `sluice wait` running; the outcome sluice's wait would give is
-    handed to LANDED as crew hands it, with sluice's last line. Each run is LANDED's result, SUBMIT's said on its
-    standard error before LANDED's, or SUBMIT's own when it refused, and the commit main now was at before it."""
+    exit 2; with at_once, sluice refuses the submission itself, saying why on standard error and exiting 2. It names no
+    submission, so SUBMIT leaves no `sluice wait` running; the outcome sluice's wait would give is handed to LANDED as
+    crew hands it, with sluice's last line, or, with none, SUBMIT's exit and the last line SUBMIT says the submission
+    said, as landing_ended hands them. Each run is LANDED's result, SUBMIT's said on its standard error before LANDED's,
+    or SUBMIT's own when it refused, and the commit main now was at before it."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
     bin_.mkdir()
     wt = shutil.which("wt") or pytest.skip("worktrunk's wt is not on this host's path")
     os.symlink(wt, bin_ / "wt")
-    for tool in ("git", "bash", "sh", "env", "hostname", "mktemp", "xargs", "dirname", "cat", "printf", "rm"):
+    for tool in ("git", "bash", "sh", "env", "hostname", "mktemp", "xargs", "dirname", "cat", "printf", "rm", "base64", "tr"):
         if shutil.which(tool):
             os.symlink(shutil.which(tool), bin_ / tool)
     outcome = tmp_path / "outcome"
@@ -518,13 +520,14 @@ def landing(repo, tmp_path):
         if r.returncode:
             return r, before
         f = dict(w.split("=", 1) for w in shlex.split(r.stdout.strip().splitlines()[-1]))
-        rc, said = outcome.read_text().split("\n", 1) if outcome.exists() else (f["RC"], "")
+        told = base64.b64decode(f["SAID"], validate=True).decode().strip().splitlines()
+        rc, said = outcome.read_text().split("\n", 1) if outcome.exists() else (f["RC"], told[-1] if told else "")
         outcome.unlink(missing_ok=True)
         e = subprocess.run(["bash", "-c", plan.LANDED, "crew", str(repo.path), str(land), "b", f["TIP"], f["OLD"], rc,
                             base64.b64encode(said.encode()).decode()], capture_output=True, text=True, env=env)
         return subprocess.CompletedProcess(e.args, e.returncode, e.stdout, r.stderr + e.stderr), before
 
-    def stand_in(stray=False, on_github=False, refused=False):
+    def stand_in(stray=False, on_github=False, refused=False, at_once=False):
         onto = "refs/remotes/origin/main" if on_github else "main"
         moved = ('git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
                  'echo "sluice: releasing try/b: its command failed" >&2\n'
@@ -535,6 +538,7 @@ def landing(repo, tmp_path):
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
 {f"echo 'sluice: bolt/b conflicts with main' >&2; printf '2\\nsluice: bolt/b conflicts with main' > '{outcome}'; exit 0" if refused else ""}
+{"echo 'sluice: main has no gate for bolt/b' >&2; exit 2" if at_once else ""}
 {"echo s > stray.txt" if stray else ""}
 {"git fetch -q origin" if on_github else ""}
 tree=$(printf 'x\\n' | git hash-object -w --stdin)
@@ -641,7 +645,9 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
     swancloud's a-landed-places-preview-is-released (signal 2026-10-22-swancloud-ops-b237b51b/01). LANDED's fetch
     after sluice's outcome reads GitHub's main moved and holding the bolt's tip, so the bolt landed there, sluice's exit
     and its last line named as what came after the push, nothing said of levelling a main that did not move, and the
-    branch is then marked landed. A stand-in that pushes nothing and exits 2 lands nothing, and main is where it was."""
+    branch is then marked landed. A stand-in that pushes nothing and exits 2 lands nothing, and main is where it was,
+    its refusal recorded in sluice's words, from its wait's or, when sluice refused the submission at once, from what
+    SUBMIT says it said (rail-cards "A refused landing is held on its row")."""
     import plan
     pushed = kit_with_github(repo, tmp_path)
     pushed("from-a-mac")
@@ -655,6 +661,10 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
     assert before == repo.git("rev-parse", "origin/main") and "RC=2 " in r.stdout, r.stdout + r.stderr
     landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
     assert not landed and words.startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was."), words
+    assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True) == (False, "sluice: bolt/b conflicts with main")
+    r, before = stand_in(at_once=True)()
+    assert "RC=2 " in r.stdout and "sluice: main has no gate for bolt/b" in r.stderr, r.stdout + r.stderr
+    assert plan.landing_said("b", "kit", "h", r.stdout, before, recorded=True) == (False, "sluice: main has no gate for bolt/b")
     r, before = stand_in(on_github=True)()
     assert "RC=3 " in r.stdout and "sluice: releasing try/b: its command failed" in r.stderr, r.stdout + r.stderr
     github = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "main"],
