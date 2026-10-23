@@ -714,7 +714,8 @@ def landings_card(f):
     high that never carries highStakes; two to BOXES, one list of boxes carrying highStakes, each `<n>. <bolt>`, its
     detail the row's counts, batches, verdict and conductor, its consequence its forecast, each ticked as crew
     proposes but one the user cleared on their last send; more, lists of BOXES at most, in order, each a question
-    about the kit's main (landings_form). On its face, one Markdown artifact, a paragraph a row (row_paragraph), then
+    about the kit's main (landings_form). What follows a yes is its rationale, each list's own when it has several,
+    since Pending You refuses a card's rationale beside questions. On its face, one Markdown artifact, a paragraph a row (row_paragraph), then
     the rows held with no box and why; in its details, every row's reading first, then its previews and pull request,
     as many as the card's artifacts leave room for. f: kit, rows (each the facts landing_card takes, with team,
     conductor, forecast, forecast_why, link or unread and preview), held ([{bolt, why}]), left (the bolts the user
@@ -752,16 +753,20 @@ def landings_card(f):
                 "consequence": by_words(forecast_said(r.get("forecast") or [], r.get("forecast_why")), DETAIL)}
     options = [option(i, r) for i, r in enumerate(rows, 1)]
     ticked = [o["id"] for o, r in zip(options, rows) if not r["left"]]
+    then = by_words("After they land: main-level ops lands them through sluice in this order, closing each as it lands, "
+                    "and every host takes them.", DETAIL)
     if form == "multi":
-        shape = dict(kind="multi", intent="decide", options=options, multi={"min": 0, "max": n}, recommendedIds=ticked)
-    else:
+        shape = dict(kind="multi", intent="decide", options=options, multi={"min": 0, "max": n}, recommendedIds=ticked,
+                     rationale=then)
+    else:  # Pending You refuses a card's rationale beside questions, so each list carries what follows a yes
         g = -(-n // BOXES)
         sizes = [n // g + (1 if k < n % g else 0) for k in range(g)]
         groups = [options[sum(sizes[:k]):sum(sizes[:k + 1])] for k in range(g)]
         shape = dict(intent="decide", about={"kind": "other", "title": cut(f"Land on {about}", 120)},
                      questions=[dict(id=f"rows-{k}", kind="multi", title=f"Bolts {grp[0]['label'].split('.')[0]} to "
                                      f"{grp[-1]['label'].split('.')[0]} of {n}, in order", options=grp,
-                                     multi={"min": 0, "max": len(grp)}, recommendedIds=[o["id"] for o in grp if o["id"] in ticked])
+                                     multi={"min": 0, "max": len(grp)}, recommendedIds=[o["id"] for o in grp if o["id"] in ticked],
+                                     rationale=then)
                                 for k, grp in enumerate(groups, 1)])
     reads = [(f"Read {r['bolt']}", r["link"]) for r in rows if r.get("link")]
     previews = [(f"Preview {r['bolt']}: {label}", url) for r in rows for label, url in preview_said(r.get("preview"))[1]]
@@ -777,9 +782,7 @@ def landings_card(f):
                     "box until its fix merges.")
     shown = [markdown(f"What lands on {about}, in order", f"land-{kit}.md", face)]
     out = built(key, f"Land on {about}: {n} bolts in order", summary, background, links,
-                shown + [link(t, u) for t, u in links[:ARTIFACTS - len(shown)]], f.get("follows"), highStakes=True,
-                rationale=by_words("After they land: main-level ops lands them through sluice in this order, closing each "
-                                   "as it lands, and every host takes them.", DETAIL), **shape)
+                shown + [link(t, u) for t, u in links[:ARTIFACTS - len(shown)]], f.get("follows"), highStakes=True, **shape)
     out.update(heads=heads, linked=True, **({"unread": why} if why else {}))
     return out
 

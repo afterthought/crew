@@ -192,3 +192,23 @@ has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is a draft, so
 eq "$(drafted "$pr")" true
 eq "$(grep -E "^$box (gh pr ready $pr -R $gh_repo --undo|wldn-1 agent prompt swb-1-unit-1 'Merge a)" "$CREW_TEST_LOG" | cut -d' ' -f2-3)" $'gh pr\nwldn-1 agent'
 ok "once main takes pull requests, a merge whose gh fails does not start, naming the repository in gh's words, and a merge drafts the bolt's ready landing pull request before its prompt is sent"
+
+# A merge sluice lands on GitHub's bolt pushing as its app moves neither the host's own bolt/tenant-environments nor its
+# tracking ref (sluice 0.36.4 on deneb, 2026-10-23): the merge's wait fetches at its look and sees it delivered at
+# GitHub's head, and crew bolts shows the unit merged (plan.19).
+rm -f "$T/sluice-overview.json" "$T/sluice-status-7.json"
+d=$(date -u +%Y-%m-%d); mkdir -p "$kd/places/a/openspec/changes/archive"
+git -C "$kd/places/a" mv openspec/changes/a "openspec/changes/archive/$d-a"; commit_all "$kd/places/a" "docs(openspec): archive a"
+copy=$(git -C "$k" rev-parse bolt/tenant-environments)
+touch "$T/sluice-leaves-copy"
+merge_as swb-1-unit-1 "$kd/places/a" bolt/tenant-environments || fail "a's merge did not land"
+rm "$T/sluice-leaves-copy"
+github=$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/tenant-environments)
+tracked=$(git -C "$k" rev-parse refs/remotes/origin/bolt/tenant-environments)
+eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$copy"
+[[ $tracked != "$github" ]] || fail "the landing moved the host's tracking ref"
+git -C "$k" merge-base --is-ancestor unit/a "$tracked" && fail "the host's tracking ref already holds a's merge"
+expect_ok crew unit wait a
+eq "$(head -1 <<<"$out")" "swb-1-unit-1 delivered merge on a: bolt/tenant-environments holds it at ${github:0:7}"
+eq "$(stage a)" "merged"
+ok "a merge landed on GitHub leaving the host's copy and tracking ref behind is delivered at GitHub's head, and crew bolts shows it merged"
