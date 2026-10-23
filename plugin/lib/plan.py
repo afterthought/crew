@@ -1555,7 +1555,8 @@ def landing_card_keys(entries, bolt, owner):
 def landing_act(event, head=None, words=None):
     """Which act a bolt's landing card takes at its event (record 0031 §1, plan.16), from facts alone: ("change", note)
     once the bolt reads proven, at the merge's end or the rail's read, which row_card_change posts when no card is held,
-    changes in place, its head moved, while the user has not answered it, and follows with a new card once they have;
+    changes in place, its head moved, while the user has not answered it, and once they have leaves as it is, or
+    follows with a new card when the head moved since their answer;
     ("close", None, reason) when a fix starts on the bolt, withdrawn as held for the fix, in its words; ("close",
     outcome, None) when it lands, the outcome landed_words'."""
     if event == "proven":
@@ -1779,14 +1780,16 @@ def raise_land(fleet, row, acts=None, note=None):
     """A bolt's landing card raised (record 0031 §1, plan.16), for its rail row land/<bolt>, on the host of the team
     holding the bolt, where its conductor's cards are: once the bolt reads proven (land_facts), in the conductor's name,
     following its own card a fix held (follows_of), posted through row_card_change, so a card the conductor holds is
-    changed in place, its head moved, or followed by a new one once the user answered it, and one Pending You no longer
-    finds is posted again; its reading session, on what the bolt brings to main, is opened first on this host, twice if
-    it must be, the second time on the landing read afresh, and its link or why it could not be opened put on the card
-    (landing_opened), a session on an older head ended (reading_open); a preview of its head, in a kit whose policy at
-    the head declares one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and
-    nothing said, while the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's
-    sweep for a row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or
-    None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
+    changed in place while it waits on the user, and one Pending You no longer finds is posted again; once the user
+    answered it, it is left as it is and their answer goes on to ops (plan.16), unless the head moved since the head it
+    asked about (cards.head_anew), when it is followed by a new card saying the head moved since the approval; its
+    reading session, on what the bolt brings to main, is opened first on this host, twice if it must be, the second
+    time on the landing read afresh, and its link or why it could not be opened put on the card (landing_opened), a
+    session on an older head ended (reading_open); a preview of its head, in a kit whose policy at the head declares
+    one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and nothing said, while
+    the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's sweep for a row whose
+    card is missing or lost, a team freed with what a yes frees (team_freed) and a preview's end with its change note
+    (note). The card's id, or None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
     m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", row.get("key") or "")
     if not m:
         return None
@@ -1801,11 +1804,12 @@ def raise_land(fleet, row, acts=None, note=None):
     card = landing_opened(fleet, label, plan, b, t, card, acts)
     if not card:
         return None
-    owner = f"{t['name']}-conductor"
-    card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
+    owner, entries = f"{t['name']}-conductor", acts.entries(label)
+    card["follows"] = cards.follows_of("land", {"bolt": bolt}, entries, owner)
     card["preview"] = landing_preview(fleet, t, label, bolt, card, acts)
     note = note or landing_act("proven", head=card["head"])[1]
-    return row_card_change(fleet, label, owner, cards.landing_card, card, note, card_where(t["kit"]), acts)
+    anew = cards.head_anew(entries, cards.card_under(entries, f"land/{bolt}", owner), card["head"])
+    return row_card_change(fleet, label, owner, cards.landing_card, card, note, card_where(t["kit"]), acts, anew=anew)
 
 
 def head_previewed(fleet, t, head):
@@ -3651,7 +3655,9 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
     proposal_facts, and posted, changed or closed by the act in the planner's name under its chain's key,
     proposal/<first>, filed in the area of the kit of the first bolt or unit its commands name. A rewrite whose card
     takes another form than the replaced proposal's (cards.proposal_form: a hold-to-approve, a choice, one list or
-    lists), which update_request never changes, has the card followed as a card whose kind changed. A card crew cannot
+    lists), which update_request never changes, has the card followed as a card whose kind changed; a rewrite asks
+    anew, and follows a card the user answered, where an agreement or the sweep's raise leaves it as it is, its answer
+    going on to the approval (row_card_change). A card crew cannot
     build, or Pending You refuses, refuses nothing of the proposal: it is said, and the rail shows the row with no card.
     The card's id, or None."""
     acts = acts or CardActs(fleet)
@@ -3680,7 +3686,8 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
             return row_card_post(fleet, label, owner, cards.proposal_card, facts, where, acts)
         moved = event == "replace" and replaced is not None and (
             cards.proposal_form([do_args(label, d) for d in replaced.all("Do")]) != cards.proposal_form(facts["argvs"]))
-        return row_card_change(fleet, label, owner, cards.proposal_card, facts, act[1], where, acts, kind_changed=moved)
+        return row_card_change(fleet, label, owner, cards.proposal_card, facts, act[1], where, acts, kind_changed=moved,
+                               anew={} if event == "replace" else None)
     except Refusal as e:
         print(f"card {key} not raised: {e}", file=sys.stderr)
         return None
@@ -10550,11 +10557,18 @@ def unread_of(b):
     return {"Unread": b["unread"]} if b.get("unread") else {}
 
 
+def asked_of(b):
+    """A built card's post or change entry's Head: the head a landing's or a deploy's card asks about, so a card the
+    user answered is asked again only once the head moved (cards.head_anew); nothing for any other card."""
+    return {"Head": b["head"]} if b.get("head") else {}
+
+
 def card_posted(acts, label, owner, b, where, entries=None):
     """A built card posted, recorded, printed and heard; or said and recorded refused, refusing nothing else. It is
     posted under the row's key, or the key with its revision once a card of the owner's under it closed, either filled
     out to Pending You's eight characters when shorter (post_key, from entries, this host's run record unless given),
-    and recorded under the row's key, with why its reading could not open when it did not (unread_of). A post Pending
+    and recorded under the row's key, with why its reading could not open when it did not (unread_of) and the head it
+    asks about (asked_of). A post Pending
     You answers
     with the card this host's record holds open under the key already, another command's post of it recorded while
     this one was asked, as two rail reads at once ask (record 0031 §1: two readers of one event make one card), is
@@ -10586,7 +10600,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
         print(f"card {key}: {card}{url}, its post recorded already")
         print(cards.adopt_line(card, owner))
         return card
-    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key, **unread_of(b))
+    acts.emit(label, "card.post", [obj], by=owner, Card=card, Key=key, **unread_of(b), **asked_of(b))
     print(f"card {key}: {card}{url}")
     card_heard(acts, key, card, owner)
     if held:
@@ -10694,20 +10708,22 @@ def card_lost(acts, label, owner, key, card, words):
     print(f"card {key}: {card} is lost to {owner} (Pending You: \"{words}\")", file=sys.stderr)
 
 
-def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False):
+def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False, anew=None):
     """The act that changes a card of crew's own when its thing changes (record 0031 §3): build(facts) sent as
     update_request takes it, with note as the change note the user sees, at the version Pending You reports, to the
-    card the owner holds under the row's key on this host, while it waits on the user; once they have answered it,
-    which Pending You changes no longer, the card acked with note as its outcome and closed, and build(facts) posted as
-    a new card that follows it, under the key with its revision (post_key). A card whose kind changed (kind_changed),
-    or one built again that carries questions, a proposal's whose rows fill more than one list, neither of which
-    update_request ever changes, is followed the same way, withdrawn with note while it waits. Posted instead when the
-    owner holds none, and posted again, its summary saying the older copy is dead, when Pending You no longer finds it.
-    A landing's card and a long proposal's are built with their reading session's link, as a post's is (card_built),
-    a landing's session on a moved head started anew there, so the card changed carries the new link, and its entry
-    why it could not open when it did not (unread_of). A refusal is said and recorded as the change refused, refusing
-    nothing of the event. The card's id, the new card's when one was
-    posted, or None."""
+    card the owner holds under the row's key on this host, while it waits on the user. Once they have answered it,
+    which Pending You changes no longer, it is final for what it asked (cards.revision): left as it is, the act their
+    answer calls for going on, unless what it asks changed since (anew, None while it has not; else the facts that say
+    so, {} for none, a landing's head moved since their approval among them, cards.head_anew), or its kind; then acked
+    with note as its outcome and closed, and build(facts and anew) posted as a new card that follows it, under the key
+    with its revision (post_key). A card whose kind changed (kind_changed), or one built again that carries questions,
+    a proposal's whose rows fill more than one list, neither of which update_request ever changes, is followed the same
+    way, withdrawn with note while it waits. Posted instead when the owner holds none, and posted again, its summary
+    saying the older copy is dead, when Pending You no longer finds it. A landing's card and a long proposal's are
+    built with their reading session's link, as a post's is (card_built), a landing's session on a moved head started
+    anew there, so the card changed carries the new link, and its entry why it could not open when it did not
+    (unread_of), and a landing's or a deploy's the head it asks about (asked_of). A refusal is said and recorded as the
+    change refused, refusing nothing of the event. The card's id, the new card's when one was posted, or None."""
     acts = acts or CardActs(fleet)
     b = card_built(acts, label, build, facts)
     key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
@@ -10722,7 +10738,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
             got, lost = py.answer("get_request", {"requestId": card, "name": owner})
             if lost is None:
                 state = cards.ended(got)
-                how = "ended" if state else cards.revision(got, kind_changed, "questions" in b["card"])
+                how = cards.revision(got, kind_changed, "questions" in b["card"], anew is not None)
             if lost is None and how == "follow":
                 tool, args, state = cards.close_call(got, card, owner, outcome=cut(note, 120))
                 _, lost = py.answer(tool, args)
@@ -10739,10 +10755,15 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
         acts.emit(label, "card.update", [obj], by=owner, refused=str(e), Card=card, Key=key, **unread_of(b))
         print(f"card {key} not changed: {e}", file=sys.stderr)
         return None
+    if how == "leave":
+        print(f"card {key}: {card} is left as it is: the user has answered it")
+        return card
     closed = entries + [dict(Act="card.close", Card=card, Key=key, By=owner)]
     if lost is not None:
         card_lost(acts, label, owner, key, card, lost)
         return card_posted(acts, label, owner, dict(b, card=cards.posted_again(b["card"])), where, closed)
+    if state == "closed" and anew:  # what it asks changed since the user answered it, which the new card says
+        b = card_built(acts, label, build, dict(facts, **anew))
     if how == "ended":
         acts.emit(label, "card.close", [obj], by=owner, Card=card, Key=key, State=state, Outcome=ENDED_ELSEWHERE)
         print(f"card {key}: {card} was {state} in Pending You already, and its new version follows it")
@@ -10754,7 +10775,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
         print(f"card {key}: {card} " + ("closed, the user having answered it" if state == "closed" else f"withdrawn, {why}")
               + ", and its new version follows it")
         return card_posted(acts, label, owner, dict(b, card=dict(b["card"], follows=card)), where, closed)
-    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key, **unread_of(b))
+    acts.emit(label, "card.update", [obj], by=owner, Card=card, Key=key, **unread_of(b), **asked_of(b))
     v = got.get("version")
     print(f"card {key}: {card} changed" + (f", now version {v}" if isinstance(v, int) else ""))
     return card
@@ -10875,9 +10896,9 @@ def raise_record(fleet, label, facts, where, note, acts=None):
     """A decision record's card raised in its design agent's name (record 0031 §1, briefs.15), record/<kit>/<number>,
     from the record's facts (record_facts), from where, the kit's checkout on this host and its remote: posted the
     first time, and while the design agent holds it open, changed in place with note, naming the new commit, or once the
-    user has answered it, closed with note and followed by a new card (row_card_change). A
+    user has answered it, closed with note and followed by a new card, since a revision asks anew (row_card_change). A
     refusal is said and recorded and refuses nothing of the status, already recorded. The card's id, or None."""
-    return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts)
+    return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts, anew={})
 
 
 def record_card_close(fleet, label, owner, obj, outcome, acts=None):
