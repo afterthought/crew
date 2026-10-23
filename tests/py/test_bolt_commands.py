@@ -482,3 +482,112 @@ class TestSplitBolt:
         assert self.refusal("chore", "c", read="fatal: 'gone.git' does not appear to be a git repository") == (
             "crew can't tell whether bolt/b is split, so chore c's merge waits: fatal: 'gone.git' does not appear to be "
             "a git repository")
+
+
+class TestWhereABoltIsRead:
+    """bolt-plan "A bolt on GitHub is read where it lives" (plan.19, design Decision 1): GitHub's copy when the host holds
+    it and the policy in it names a remote for the bolt, else the host's own branch, the only copy the host then has."""
+
+    def test_githubs_copy_naming_a_remote_is_where_the_bolt_is_read(self):
+        assert plan.gather.bolt_at("b", True, True, "origin") == "refs/remotes/origin/bolt/b"
+        assert plan.gather.bolt_at("b", True, False, "origin") == "refs/remotes/origin/bolt/b"
+
+    def test_a_bolt_kept_on_its_host_is_read_at_the_hosts_branch(self):
+        """bolt-plan "A bolt kept on its host"."""
+        assert plan.gather.bolt_at("b", True, True, None) == "refs/heads/bolt/b"
+
+    def test_a_bolt_whose_github_copy_the_host_has_not_got_is_read_at_the_hosts(self):
+        """bolt-plan "A bolt GitHub's copy of which this host has not got"."""
+        assert plan.gather.bolt_at("b", False, True, None) == "refs/heads/bolt/b"
+        assert plan.gather.bolt_at("b", False, False, None) is None
+        assert plan.gather.bolt_at("b", True, False, None) is None
+
+    def test_the_remote_a_policy_names_for_a_bolt(self):
+        assert plan.gather.policy_remote(POLICY, "bolt/b") == "origin"
+        specific = '[branches."*"]\nremote = "origin"\n[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+        assert plan.gather.policy_remote(specific, "bolt/b") is None
+        assert plan.gather.policy_remote('[branches."main"]\nremote = "origin"\n', "bolt/b") is None
+        assert plan.gather.policy_remote(None, "bolt/b") is None
+        assert plan.gather.policy_remote("", "bolt/b") is None
+
+    def test_a_policy_that_is_not_toml_raises(self):
+        with pytest.raises(ValueError):
+            plan.gather.policy_remote("[branches\n", "bolt/b")
+
+    def test_kit_matches_branches_as_gather_does(self):
+        assert plan.kit.branch_table is plan.gather.branch_table
+
+    def test_a_bolt_whose_policy_crew_cant_read_is_unknown_for_all_that_has_not_landed(self):
+        """bolt-plan "A policy crew can't read": nothing is read from the host's bolt/b in its place."""
+        why = ".config/sluice.toml at origin/bolt/b is not TOML, so crew can't read bolt b: Expected ']'"
+        fleet = {"partitions": {"wldn": {"teams": ["swb-1"]}},
+                 "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box", "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
+        p = plan.Plan(plan_text(bolts=[("b", KIT, "swb-1")], units=[("a", KIT, "b", []), ("done", KIT, "b", []), ("bump", KIT, "b", [], "chore")]))
+        k = {"ok": True, "main": ["done"], "chores": [], "places": {"a": {"path": "/kit/places/a", "tasks": [2, 2], "planning": True, "open": [], "head": "h"}},
+             "chore_places": {}, "fixes": [], "bolts": {"b": {"exists": False, "at": None, "changes": [], "archived": [], "open": {}, "chores": [],
+                                                              "head": None, "head_at": None, "verdict": None, "error": why}}}
+        st = plan.Stages(fleet, p, {"box": {"ok": True, "kits": {"/kit/main": k}}})
+        assert (st.of("a")["stage"], st.of("a")["why"]) == ("unknown", why)
+        assert (st.of("bump")["stage"], st.of("bump")["why"]) == ("unknown", why)
+        assert st.of("done")["stage"] == "landed"
+        assert st.bolt_state(p.bolt("b")) == "unknown"
+
+
+class TestWhenABoltIsFetched:
+    """bolt-plan "A bolt on GitHub is fetched where a decision rests on it" (plan.18, plan.19, design Decision 3): crew
+    bolts and a give's proven check ask each kit's GitHub fetched first; every other read fetches nothing."""
+    FLEET = {"partitions": {"wldn": {"teams": ["swb-1"]}},
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "box",
+                                 "kit": {"main": "/kit/main", "dir": "/kit", "name": KIT}}}}
+    KIT_READ = {"ok": True, "main": [], "chores": [], "places": {}, "chore_places": {}, "fixes": [],
+                "bolts": {"b": {"exists": True, "at": "origin/bolt/b", "changes": [], "archived": [], "open": {}, "chores": [],
+                                "head": "d" * 40, "head_at": "2026-10-23T09:00:00Z", "verdict": ""}}}
+
+    def asked(self, monkeypatch, kept=None):
+        asks = []
+        monkeypatch.setattr(plan, "READ", plan.Reading())
+        if kept:
+            plan.READ.keep_kits("box", kept)
+
+        def gathered(fleet, host, req):
+            asks.append(req)
+            return {k["main"]: self.KIT_READ for k in req["kits"]}, None
+        monkeypatch.setattr(plan, "gathered", gathered)
+        return asks
+
+    def plan(self):
+        return plan.Plan(plan_text(bolts=[("b", KIT, "swb-1")], units=[("a", KIT, "b", [])]))
+
+    def test_crew_bolts_asks_each_kit_fetched(self, monkeypatch):
+        """bolt-plan "crew bolts after a landing elsewhere"."""
+        import argparse
+        asks = self.asked(monkeypatch)
+        p = self.plan()
+        monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors: [("wldn", "o/state", "f" * 40, p)])
+        with pytest.raises(SystemExit) as e:
+            plan.bolts_view(self.FLEET, argparse.Namespace(label="wldn", bolt=None, json=True))
+        assert e.value.code == 0
+        assert [a.get("fetch") for a in asks] == [True]
+
+    def test_a_read_on_every_team_read_fetches_nothing(self, monkeypatch):
+        """bolt-plan "The board does not fetch"."""
+        asks = self.asked(monkeypatch)
+        plan.stages_for(self.FLEET, self.plan(), self.plan().bolts())
+        assert [("fetch" in a) for a in asks] == [False]
+
+    def test_a_fetching_survey_is_asked_though_the_command_has_read_the_kit(self, monkeypatch):
+        asks = self.asked(monkeypatch, kept={"/kit/main": self.KIT_READ})
+        plan.stages_for(self.FLEET, self.plan(), self.plan().bolts())
+        assert asks == []
+        st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
+        assert [a.get("fetch") for a in asks] == [True]
+        assert st.kit(self.plan().bolt("b"))[0]["bolts"]["b"]["at"] == "origin/bolt/b"
+
+    def test_a_fetch_that_fails_reads_the_kit_unknown_with_gits_words(self, monkeypatch):
+        """bolt-plan "A fetch that fails"."""
+        self.asked(monkeypatch)
+        why = "cannot fetch /kit/main from GitHub: fatal: unable to access 'https://github.com/o/k/': Could not resolve host"
+        monkeypatch.setattr(plan, "gathered", lambda fleet, host, req: ({"/kit/main": {"ok": False, "error": why}}, None))
+        st = plan.stages_for(self.FLEET, self.plan(), self.plan().bolts(), fetch=True)
+        assert (st.of("a")["stage"], st.of("a")["why"]) == ("unknown", f"box: {why}")
+        assert st.bolt_state(self.plan().bolt("b")) == "unknown"

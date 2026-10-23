@@ -268,7 +268,7 @@ def test_a_bolt_whose_remote_cannot_be_read_gives_gits_words(repo, tmp_path):
 
 
 def onto(place, bolt, *heads):
-    """plan.ONTO as rebase_dependents runs it in a dependent's place: <place> <bolt> [<head left out>...]."""
+    """plan.ONTO as rebase_dependents runs it in a dependent's place: <place> <the bolt's ref> [<head left out>...]."""
     import plan
     return subprocess.run(["bash", "-c", plan.ONTO, "crew", str(place), bolt, *heads], capture_output=True, text=True)
 
@@ -315,10 +315,10 @@ def test_a_dependents_rebase_replaying_its_settled_dependencys_old_commit_confli
     took left out, only its own commit is replayed, and the rebase is clean."""
     place, took = settled_and_merged(repo, tmp_path)
     tip = repo.git("rev-parse", "unit/b")
-    r = onto(place, "t")
+    r = onto(place, "refs/heads/bolt/t")
     assert r.returncode == 3 and r.stdout.startswith("conflict ") and "a/design.md" in r.stdout.split()
     assert repo.git("rev-parse", "unit/b") == tip
-    r = onto(place, "t", took[:7])
+    r = onto(place, "refs/heads/bolt/t", took[:7])
     assert (r.returncode, r.stdout.strip()) == (0, "rebased")
     assert repo.git("log", "--format=%s", "bolt/t..unit/b") == "feat(b): its own"
 
@@ -332,7 +332,7 @@ def test_a_dependents_rebase_leaves_out_the_bolts_commits_with_the_head_it_took(
     assert r.returncode != 0
     assert unmerged(place) == ["f"]
     subprocess.run(["git", "-C", str(place), "rebase", "--abort"], check=True)
-    r = onto(place, "t", took[:7])
+    r = onto(place, "refs/heads/bolt/t", took[:7])
     assert (r.returncode, r.stdout.strip()) == (0, "rebased")
     assert repo.git("log", "--format=%s", "--no-merges", "bolt/t..unit/b") == "feat(b): its own"
     assert repo.git("for-each-ref", "--format=%(refname)", "refs/heads").split() == [
@@ -350,7 +350,7 @@ def test_the_rebase_a_dependent_is_told_makes_crews_upstream_again_and_meets_onl
     has no ref, and run in its place by bash meets the same conflict and none on the dependency's own files."""
     import plan
     place, took = settled_and_merged(repo, tmp_path, moved=True, own={"shared.txt": "one\ntwo, as b has it\nthree\n"})
-    r = onto(place, "t", took[:7])
+    r = onto(place, "refs/heads/bolt/t", took[:7])
     assert r.returncode == 3 and r.stdout.split()[1:] == ["shared.txt"]
     words = plan.rebase_words("t", [f"a@{took[:7]}"])
     command = words[words.index("(git rebase ") + 1:-1]
@@ -875,3 +875,51 @@ def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt
     assert again.returncode == 0 and "GITDIR=" in again.stdout and "KEPT=" not in again.stdout
     assert "KEPT=" not in cut(repo, tmp_path, "v")
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/v") == "bolt/b"
+
+
+def test_a_dependent_rebases_onto_and_takes_beside_the_bolt_where_it_is_read_on_github(repo, tmp_path):
+    """plan.ONTO, plan.TAKE and plan.landed_at given GitHub's copy, refs/remotes/origin/bolt/<bolt> (plan.19,
+    gather.bolt_read): with the host's bolt/<bolt> left behind it, a dependent's place is rebased onto GitHub's bolt,
+    a place holding nothing of its own beyond GitHub's bolt takes what it comes after, and the commit that brought a
+    unit's change to the bolt is found on GitHub's."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    origin = tmp_path / "github.git"
+    repo.git("branch", "bolt/b")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "bolt/b", str(origin), str(other)], check=True)
+    o = lambda *a: subprocess.run(["git", "-C", str(other), *a], check=True, capture_output=True, text=True).stdout.strip()
+    (other / "openspec" / "changes" / "a").mkdir(parents=True)
+    (other / "openspec" / "changes" / "a" / "proposal.md").write_text("p\n")
+    o("add", "-A"); o("commit", "-qm", "docs(a): the change")
+    made = o("rev-parse", "HEAD")
+    (other / "x").write_text("x\n")
+    o("add", "x"); o("commit", "-qm", "feat: the bolt's own")
+    o("push", "-q", "origin", "HEAD:bolt/b")
+    repo.git("fetch", "-q", "origin")
+    github = "refs/remotes/origin/bolt/b"
+    assert repo.git("rev-parse", "bolt/b") != repo.git("rev-parse", github)
+    assert plan.landed_at(str(repo.path), "b", "a", at=github) == made
+    assert plan.landed_at(str(repo.path), "b", "a", at="refs/heads/bolt/b") is None
+    place = tmp_path / "place"
+    repo.git("worktree", "add", "-q", "-b", "unit/c", str(place), "bolt/b")
+    (place / "c").write_text("c\n")
+    subprocess.run(["git", "-C", str(place), "add", "c"], check=True)
+    subprocess.run(["git", "-C", str(place), "commit", "-qm", "feat(c): its own"], check=True)
+    r = onto(place, github)
+    assert (r.returncode, r.stdout.strip()) == (0, "rebased")
+    assert repo.git("merge-base", "--is-ancestor", github, "unit/c") == ""
+    assert repo.git("log", "--format=%s", f"{github}..unit/c") == "feat(c): its own"
+    d = tmp_path / "d"
+    repo.git("worktree", "add", "-q", "-b", "unit/d", str(d), made)
+    (d / "d").write_text("d\n")
+    subprocess.run(["git", "-C", str(d), "add", "d"], check=True)
+    subprocess.run(["git", "-C", str(d), "commit", "-qm", "feat(d): its own"], check=True)
+    fresh = tmp_path / "fresh"
+    repo.git("worktree", "add", "-q", "-b", "unit/e", str(fresh), github)
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", "refs/heads/bolt/b", "unit/d"], capture_output=True, text=True)
+    assert (took.returncode, took.stdout) == (0, ""), "read at the host's copy, GitHub's own commit counts as the place's"
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", github, "unit/d"], capture_output=True, text=True)
+    assert (took.returncode, took.stdout.split()) == (0, ["d", repo.git("rev-parse", "--short=7", "unit/d")])
