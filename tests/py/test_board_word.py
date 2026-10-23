@@ -10,6 +10,8 @@ import pytest
 
 import crew
 import facts
+import plan
+import transcript
 
 FLEET = {**facts.FLEET, "partitions": {**facts.FLEET["partitions"], "swancloud": {"label": "swancloud", "machine": "mac-studio"}},
          "teams": {**facts.FLEET["teams"], "crw-5": {"name": "crw-5", "label": "swancloud", "machine": "mac-studio"}}}
@@ -89,6 +91,37 @@ class TestRefused:
 
     def test_a_word_of_the_most_characters_passes(self):
         assert crew.board_word(FLEET, word(text="x" * 1000))[1].endswith("x" * 1000)
+
+
+class TestAnswersNothing:
+    """board-page "A word from the board answers nothing": words verified as the user's only in a tell from the board
+    land no bolt, answer no batch and settle no record, each saying where the user answers instead; the same words
+    typed in the pane, a verdict not from the board, still do."""
+    FROM_BOARD = "the words came from the board, which answers nothing"
+
+    def heard(self, board):
+        return transcript.Verdict("verified", raw=b'{"type": "user"}', n=4, value={"uuid": "u-60"}, asserted_by="user", board=board)
+
+    def test_a_landing_asked_from_the_board_submits_nothing(self):
+        """board-page "A landing asked from the board"."""
+        assert plan.submit_word_refusal("y", self.heard(True)) == (
+            f"crew submits nothing of bolt y: {self.FROM_BOARD}; the user lands a bolt on its landing card or in main-level ops's pane")
+        assert plan.submit_word_refusal("y", self.heard(False)) is None
+
+    def test_a_batch_answered_from_the_board_is_not_answered(self):
+        """board-page "A batch answered from the board"."""
+        held = [{"Act": "review.batch", "Batch": "14", "Units": "x1:crw-1@aaa1", "At": "2026-10-22T19:00:00Z", "On": []},
+                {"Act": "card.post", "Key": "batch/14", "Card": "req_14", "By": "swancloud-planner", "Host": "deneb",
+                 "At": "2026-10-22T19:01:00Z", "On": ["batch/14"]}]
+        assert plan.pane_answer_refusal(14, held, self.heard(True), "planner") == (
+            f"crew records no answer of batch 14: {self.FROM_BOARD}; the user answers a batch on its card or in your pane")
+        assert plan.pane_answer_refusal(14, held, self.heard(False), "planner") is None
+
+    def test_a_record_settled_from_the_board_is_settled_in_no_pane(self):
+        why = plan.settled_refusal(38, "crew", self.heard(True))
+        assert why == (f"crew records record 0038 in crew as settled in no pane: {self.FROM_BOARD}; the user settles a record in "
+                       "your pane or on its card; run crew record crew 38 --proposed without --settled-in-pane, and the user answers on its card")
+        assert plan.settled_refusal(38, "crew", self.heard(False)) is None
 
 
 class TestSenders:
