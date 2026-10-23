@@ -13,7 +13,7 @@
 ## 3. Docs and stubs
 
 - [ ] 3.1 README, the crew skill and `crew`'s usage header say a landing that does not land leaves its pull request a draft and the next `crew bolt submit` readies it (Task notes 3.1, `docs.2`). Verify `tests/suite t-docs` ends with "0 failed".
-- [ ] 3.2 The tests' `gh` is a stub that `tests/run` requires, and `tests/moon.yml` is regenerated with `tests/moon-tasks` (Decision 6; Task notes 3.2). Verify `tests/suite logic` ends with "0 failed".
+- [x] 3.2 The tests' `gh` is a stub that `tests/run` requires, and `tests/moon.yml` is regenerated with `tests/moon-tasks` (Decision 6; Task notes 3.2). Verify `tests/suite logic` ends with "0 failed".
 
 ## 4. The affected tests
 
