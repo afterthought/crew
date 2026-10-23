@@ -1,5 +1,7 @@
 """What crew assumes of git, each case naming what assumes it."""
+import base64
 import os
+import shlex
 import shutil
 import subprocess
 
@@ -486,39 +488,53 @@ def test_a_landings_verdict_is_its_trailer(repo):
 
 
 def landing(repo, tmp_path):
-    """plan.LANDING as bolt_submit runs it on the team's host, for bolt b of the kit at repo, after plan.MAIN has read
-    main now there, with a path holding wt and the tools LANDING runs but no wt-submit; and stand_in(), which puts a
-    stand-in wt-submit there that lands as sluice does: a merge commit moved onto main by git update-ref, which leaves a
-    checkout on main behind its HEAD, and, with stray, leaves a file git does not ignore in the landing's worktree; with
-    on_github, it forms the merge on origin/main and pushes it there, leaving the host's own main where it was, then
-    fails releasing a place and exits 3, as sluice 0.36.4 does on a release that fails after its push; with refused, it
-    pushes nothing and exits 2. Each run is LANDING's result and the commit main now was at before it."""
+    """plan.SUBMIT and plan.LANDED as bolt_submit runs them on the team's host, for bolt b of the kit at repo, after
+    plan.MAIN has read main now there, with a path holding wt and the tools they run but no wt-submit; and stand_in(),
+    which puts a stand-in wt-submit there that takes `main --no-wait --json --no-remove` and lands as sluice does: a merge
+    commit moved onto main by git update-ref, which leaves a checkout on main behind its HEAD, and, with stray, leaves a
+    file git does not ignore in the landing's worktree; with on_github, it forms the merge on origin/main and pushes it
+    there, leaving the host's own main where it was, then fails releasing a place, its outcome sluice's exit 3, as
+    sluice 0.36.4 does on a release that fails after its push; with refused, it pushes nothing, its outcome a conflict,
+    exit 2. It names no submission, so SUBMIT leaves no `sluice wait` running; the outcome sluice's wait would give is
+    handed to LANDED as crew hands it, with sluice's last line. Each run is LANDED's result, SUBMIT's said on its
+    standard error before LANDED's, or SUBMIT's own when it refused, and the commit main now was at before it."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
     bin_.mkdir()
     wt = shutil.which("wt") or pytest.skip("worktrunk's wt is not on this host's path")
     os.symlink(wt, bin_ / "wt")
-    for tool in ("git", "bash", "sh", "env", "hostname", "mktemp", "xargs", "dirname", "cat", "printf"):
+    for tool in ("git", "bash", "sh", "env", "hostname", "mktemp", "xargs", "dirname", "cat", "printf", "rm"):
         if shutil.which(tool):
             os.symlink(shutil.which(tool), bin_ / tool)
+    outcome = tmp_path / "outcome"
 
     def land_with(path):
         _, (_, before, why) = main_at(repo)
         assert not why, why
-        return subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
-                              capture_output=True, text=True, env=dict(os.environ, PATH=path)), before
+        env = dict(os.environ, PATH=path)
+        r = subprocess.run(["bash", "-c", plan.SUBMIT, "crew", str(repo.path), str(land), "b", "wldn-ops"],
+                           capture_output=True, text=True, env=env)
+        if r.returncode:
+            return r, before
+        f = dict(w.split("=", 1) for w in shlex.split(r.stdout.strip().splitlines()[-1]))
+        rc, said = outcome.read_text().split("\n", 1) if outcome.exists() else (f["RC"], "")
+        outcome.unlink(missing_ok=True)
+        e = subprocess.run(["bash", "-c", plan.LANDED, "crew", str(repo.path), str(land), "b", f["TIP"], f["OLD"], rc,
+                            base64.b64encode(said.encode()).decode()], capture_output=True, text=True, env=env)
+        return subprocess.CompletedProcess(e.args, e.returncode, e.stdout, r.stderr + e.stderr), before
 
     def stand_in(stray=False, on_github=False, refused=False):
         onto = "refs/remotes/origin/main" if on_github else "main"
         moved = ('git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
-                 'echo "sluice: releasing try/b: its command failed" >&2\necho\nexit 3' if on_github else
-                 'git update-ref refs/heads/main "$new"\necho "landed #1"')
+                 'echo "sluice: releasing try/b: its command failed" >&2\n'
+                 f'printf "3\\nsluice: releasing try/b: its command failed" > "{outcome}"' if on_github else
+                 f'git update-ref refs/heads/main "$new"\necho "landed #1"\nprintf "0\\n" > "{outcome}"')
         (bin_ / "wt-submit").write_text(f'''#!/bin/sh
-[ "$1 $2" = "main --no-remove" ] || exit 9
+[ "$1 $2 $3 $4" = "main --no-wait --json --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
-{"echo 'sluice: bolt/b conflicts with main' >&2; exit 2" if refused else ""}
+{f"echo 'sluice: bolt/b conflicts with main' >&2; printf '2\\nsluice: bolt/b conflicts with main' > '{outcome}'; exit 0" if refused else ""}
 {"echo s > stray.txt" if stray else ""}
 {"git fetch -q origin" if on_github else ""}
 tree=$(printf 'x\\n' | git hash-object -w --stdin)
@@ -541,7 +557,7 @@ def marked(repo):
 
 def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(repo, tmp_path):
     """plan.bolt_submit (plan.16, record 0026): sluice takes a submission only from a worktree on its branch, so the
-    landing makes one on bolt/<bolt>, runs `wt submit main` there, which the real worktrunk runs as wt-submit from the
+    landing makes one on bolt/<bolt>, runs `wt submit main --no-wait --json` there, which the real worktrunk runs as wt-submit from the
     path, removes it, and brings the kit's main checkout level with what sluice moved while it is on branch main,
     keeping an untracked file there. With no wt-submit on the path the landing is refused, naming it, with nothing
     made. Once crew has read that it landed, the bolt's branch crew marked given is marked landed in the kit's git
@@ -587,8 +603,8 @@ def test_a_landing_of_a_bolt_branch_crew_did_not_mark_leaves_it_unmarked(repo, t
 
 
 def test_a_landings_worktree_git_cannot_remove_is_kept_and_named_in_gits_words(repo, tmp_path):
-    """plan.LANDING and plan.landing_said (read.1, plan.19): a landing's worktree holding a file git does not ignore is
-    one git worktree remove refuses; the landing still lands, and names the worktree with git's words, which LANDING
+    """plan.LANDED and plan.landing_said (read.1, plan.19): a landing's worktree holding a file git does not ignore is
+    one git worktree remove refuses; the landing still lands, and names the worktree with git's words, which LANDED
     keeps rather than discarding, for crew bolt land to sweep it with the bolt or name it there."""
     import plan
     repo.commit("main", {"README": "r\n"})
@@ -620,9 +636,9 @@ def test_a_landing_against_a_detached_main_checkout_leaves_it_untouched_and_says
 
 
 def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tmp_path):
-    """plan.LANDING, plan.landing_said and plan.LANDED_MARK (plan.18, plan.16): sluice forms the landing on GitHub's
+    """plan.LANDED, plan.landing_said and plan.LANDED_MARK (plan.18, plan.16): sluice forms the landing on GitHub's
     main and pushes it, then fails releasing a place and exits 3 with the host's own main where it was, as it did for
-    swancloud's a-landed-places-preview-is-released (signal 2026-10-22-swancloud-ops-b237b51b/01). LANDING's fetch
+    swancloud's a-landed-places-preview-is-released (signal 2026-10-22-swancloud-ops-b237b51b/01). LANDED's fetch
     after sluice's outcome reads GitHub's main moved and holding the bolt's tip, so the bolt landed there, sluice's exit
     and its last line named as what came after the push, nothing said of levelling a main that did not move, and the
     branch is then marked landed. A stand-in that pushes nothing and exits 2 lands nothing, and main is where it was."""

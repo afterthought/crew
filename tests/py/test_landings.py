@@ -220,9 +220,11 @@ def test_a_bolt_left_on_the_last_send_stays_unticked_while_its_head_stands():
     assert plan.landings_step([box("y"), box("z", H2)], waiting("y@abc1234", "z@abc1234:left"), None, {"y", "z"})[3] == []
 
 
-def test_an_answered_card_is_left_while_a_ticked_bolt_can_still_land():
+def test_an_answered_card_is_left_while_a_ticked_bolt_is_still_in_the_plan_and_not_held():
     assert plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"}) == ("leave",)
     assert plan.landings_step([box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"z"}) == ("leave",)
+    # z landed and not yet closed: in the plan, no row now, and still waited for
+    assert plan.landings_step([hold("y")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"}) == ("leave",)
 
 
 def test_once_every_ticked_bolt_landed_it_is_closed_naming_where_and_nothing_follows():

@@ -18,7 +18,7 @@
 
 ## 4. Landing the ticked bolts in order
 
-- [ ] 4.1 `crew bolt submit <bolt>...` submits one kit's bolts in order, each queued behind the one before on its host or after it ended on another, closes each with `crew bolt land` as it lands, records a refused one at its head and goes on, exiting non-zero naming each that did not land (design, Decision 6; Task notes 4.1); passes `tests/py/test_landing.py`, and `tests/suite t-journey-land` ends with "0 failed".
+- [x] 4.1 `crew bolt submit <bolt>...` submits one kit's bolts in order, each queued behind the one before on its host or after it ended on another, closes each with `crew bolt land` as it lands, records a refused one at its head and goes on, exiting non-zero naming each that did not land (design, Decision 6; Task notes 4.1); passes `tests/py/test_landing.py`, and `tests/suite t-journey-land` ends with "0 failed".
 - [ ] 4.2 `crew card read land/<kit>` prints the ticked bolts in the card's order and the `crew bolt submit` that lands them (design, Decision 8; Task notes 4.2); passes `tests/py/test_card_commands.py`.
 
 ## 5. The rail, the board and the agents' views
