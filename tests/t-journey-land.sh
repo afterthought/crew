@@ -15,8 +15,9 @@
 # its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's wait then
 # starts, changing the card to carry its link, and waits on until the landing ends it; the bolt read proven, its team
 # is given its next bolt beside it and refused a third (teams.16); on the user's send the submission then readies the
-# bolt's pull request and lands it, sluice answering with the pull request and crew waiting on the submission it made
-# from it, taking up the place a stopped landing left on it and leaving the kit's detached main
+# bolt's pull request and lands it at GitHub's head, the host's copy, which the fix's merge sluice landed on GitHub
+# left behind, levelled to it first and said (plan.19), sluice answering with the pull request and crew waiting on the
+# submission it made from it, taking up the place a stopped landing left on it and leaving the kit's detached main
 # checkout as it was, and closes it as it lands, recording the commit main holds, sluice deleting its branch from GitHub
 # (plan.19), the kit's landings card closed with where GitHub's main holds it, the row's reading ended and its preview
 # released, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
@@ -191,7 +192,12 @@ gp=$kd/places/fix-tenant-environments--gap
 echo four >> "$gp/shared.txt"; commit_all "$gp" "fix(a): the zone list holds every zone"
 expect_ok crew fix swb-1 gap --wait
 expect_ok crew fix swb-1 gap --merge
+# sluice lands the gap fix on GitHub's bolt pushing as its app, leaving the host's copy without its merge (plan.19).
+lag=$(git -C "$k" rev-parse bolt/tenant-environments)
+touch "$T/sluice-leaves-copy"
 merge_as swb-1-unit-1 "$gp" bolt/tenant-environments || fail "the gap fix's submission failed"
+rm "$T/sluice-leaves-copy"
+eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$lag"
 (unset CREW_AGENT; crew bolt new ssh-fix "Hosts reach each other over ssh." --repo switchboard-kit >/dev/null)  # swb-1's next
 p=$(as $box herdr --session wldn-3 workspace create --cwd / --label "wldn dispatch" | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-3 stub agent "$p" wldn-dispatch-chuck-herdr-alpha
@@ -200,7 +206,8 @@ echo 2 > "$refusals"  # both of the reading's starts fail
 expect_ok crew fix swb-1 gap --wait
 again=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
 [[ -n $again && $again != "$card" ]] || fail "the landings card was not raised again:"$'\n'"$out"
-h2=$(git -C "$k" rev-parse bolt/tenant-environments)
+h2=$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/tenant-environments)  # GitHub's, where it lives
+git -C "$k" merge-base --is-ancestor "$h2" "$lag" && fail "the host's copy holds the gap fix's merge"
 posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
 lacks "$posted" '"follows"'
 refused="plannotator ended before land/tenant-environments's session was ready: stub: refused to start"
@@ -275,9 +282,14 @@ git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the flee
 # The branch the conductor's pane tells sluice's plugins it works for (teams.20), "none" when it carries none.
 branch() { herdr_state $box wldn-1 ".panes[\"$(awk '$1=="conductor"{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].tokens.sluice_branch // \"none\""; }
 eq "$(branch)" "bolt/ssh-fix"
-tip=$(short bolt/tenant-environments) bolt_tip=$(git -C "$k" rev-parse bolt/tenant-environments)
+bolt_tip=$h2 tip=${h2:0:7}
+eq "$(git -C "$k" rev-parse bolt/tenant-environments)" "$lag"
 : > "$CREW_TEST_LOG"
 expect_ok crew bolt submit tenant-environments
+# The host's copy lags GitHub's by the gap fix's merge: the landing levels it to GitHub's head first, says so, and
+# submits that head, the worktree a stopped landing left on the copy brought along (bolt-teams "The host's copy lags
+# GitHub's").
+has "$out" "levelled $box's copy of bolt/tenant-environments from ${lag:0:7} to GitHub's $tip, 1 merge it lacked"
 has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
 has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is ready for review again, so sluice takes it at the head bolt/tenant-environments has now."
 eq "$(drafted "$pr")" false
@@ -288,8 +300,9 @@ has "$out" " from pull request #$pr"
 eq "$(calls | grep -c "^$box sluice status main --all --json in ")" 2
 eq "$(calls | grep -E "^$box (gh pr ready|wt submit) " | cut -d' ' -f2-4)" $'gh pr ready\nwt submit main'
 eq "$(calls | grep -c "^$box gh pr ready .* --undo$")" 0
-grep -q level <<<"$out" && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
+grep -v "copy of bolt/tenant-environments" <<<"$out" | grep -q level && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
 eq "$(git -C "$k" log -1 --format='%an %P' main)" "sluice $main_before $bolt_tip"
+git -C "$k" merge-base --is-ancestor "$bolt_tip" main || fail "main lacks the merge the host's copy lacked"
 eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchboard-kit, main's"
 eq "$(git -C "$k" status --porcelain)" ""
 [[ ! -e $land ]] || fail "the landing's worktree is still there"
@@ -318,7 +331,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt, submitted on the user's word, lands, its worktree, a stopped landing's taken up, removed and the detached main checkout left as it was, and is closed as it lands, recording the commit main holds, sluice deleting its branch from GitHub and the host, closing the kit's landings card with where GitHub's main holds it and the timer, ending its row's reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
+ok "a drop frees the last slot and closes the units workspace; the bolt, submitted on the user's word, lands at GitHub's head, the host's lagging copy levelled to it first and said, its worktree, a stopped landing's taken up and brought along, removed and the detached main checkout left as it was, and is closed as it lands, recording the commit main holds, sluice deleting its branch from GitHub and the host, closing the kit's landings card with where GitHub's main holds it and the timer, ending its row's reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
 
 # swb-1's other bolt dropped: the team holds none, its pane carries no branch, and each of its conductor and ops, whose
 # session carried the bolt's branch, which only a start changes, is restarted at its next stop.

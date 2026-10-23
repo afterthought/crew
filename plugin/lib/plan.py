@@ -1188,10 +1188,11 @@ def host_run(fleet, host, script, *args):
 # Where a bolt's branch lives, for kit.bolt_lives (plan.19), read in a checkout of its kit with $bolt and $file set:
 # LOCAL and TRACKED, the commit of the host's own bolt/<bolt> and of origin's tracking ref of it, as this host last
 # fetched it, or -; AT_LOCAL and AT_TRACKED, the policy ($file) at each, base64, or - when it holds none, read from the
-# commit as sluice reads a branch's policy.
-BOLT_AT = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
+# commit as sluice reads a branch's policy. Its two reads, ref and pol, are REFS, which LAND_COPIES reads with too.
+REFS = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
 pol() { if [ "$1" != - ] && text=$(git show "$1:$file" 2>/dev/null); then printf '%s\n' "$text" | base64 | tr -d '\n'; else printf -; fi; }
-l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
+"""
+BOLT_AT = REFS + r"""l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
 echo "LOCAL=$l"; echo "TRACKED=$o"; echo "AT_LOCAL=$(pol "$l")"; echo "AT_TRACKED=$(pol "$o")"
 """
 
@@ -2708,23 +2709,45 @@ def bolt_land(fleet, a):
 # shell assignments, RC, the submission's exit; TIP, the bolt's tip that was submitted; OLD, the host's own main before,
 # empty when it has none; ID, the submission's number from sluice's JSON, and PULL, the pull request's, each empty when
 # it gave none; ANSWER, what sluice printed on standard output, base64, for crew to name an answer it can't read; and
-# SAID, what it said on standard error, base64, sluice's words when it refused the submission at once. Given a
-# submission (the fifth word) and the tip it submitted (the sixth), it waits on that submission again in place of
-# submitting: the place made again, the `sluice wait` on it holding crew-landing as for one sluice queued, ID that
-# submission and TIP that tip, as landing_ended asks once sluice itself failed and its record has the submission
+# SAID, what it said on standard error, base64, sluice's words when it refused the submission at once; and LEVEL, the
+# value the host's bolt/<bolt> had when it levelled it, - for none, or empty when it wrote nothing. The fifth word is
+# the head to submit (landing_head), empty for the host's copy as it stands, and the sixth the copy's value as
+# LAND_COPIES read it, - for none: given a head the copy is not at, it first sets the host's bolt/<bolt> to it with `git
+# update-ref` guarded by that value, before anything is cut (plan.19), the one write sluice's guard lets through, its
+# value the branch as sluice's route reads it on GitHub; git refuses it when the copy moved since the read, and the
+# guard when GitHub's branch did, either way in their words with nothing cut or submitted. A landing's worktree that
+# stands from an earlier attempt is brought along with `read-tree -m -u`, which writes no ref, git's words when it
+# cannot; and a worktree whose HEAD is not the head given submits nothing. Given a submission (the seventh word) and the
+# tip it submitted (the eighth), the head and value empty, it levels nothing and waits on that submission again in
+# place of submitting: the place made again, the `sluice wait` on it holding crew-landing as for one sluice queued, ID
+# that submission and TIP that tip, as landing_ended asks once sluice itself failed and its record has the submission
 # standing (submission_of).
-SUBMIT = r"""main=$1 path=$2 bolt=$3
+SUBMIT = r"""main=$1 path=$2 bolt=$3 head=$5 from=$6
 export SLUICE_AGENT=$4
 cd "$main" || exit 2
 command -v wt-submit >/dev/null || { echo "wt submit needs sluice's wt-submit, which is not on $(hostname -s)'s path" >&2; exit 2; }
 old=$(git rev-parse --verify -q refs/heads/main) || old=
+now=$(git rev-parse --verify -q "refs/heads/bolt/$bolt") || now=
+level=
+if [ -n "$head" ] && [ "$head" != "$now" ]; then
+  was=$from; [ "$was" != - ] || was=$(printf '%0*d' ${#head} 0)
+  err=$(git update-ref -m "crew: level to GitHub's bolt/$bolt for its landing" "refs/heads/bolt/$bolt" "$head" "$was" 2>&1) || {
+    echo "$(hostname -s)'s copy of bolt/$bolt was not levelled to GitHub's ${head:0:7}: $(printf '%s' "$err" | tr '\n' ' ')" >&2; exit 2; }
+  level=$from
+fi
 git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main has no branch bolt/$bolt" >&2; exit 2; }
-[ -d "$path" ] || { git worktree add -q --no-checkout "$path" "bolt/$bolt" >&2 && git -C "$path" read-tree -m -u HEAD >&2; } || exit 2
+if [ ! -d "$path" ]; then
+  { git worktree add -q --no-checkout "$path" "bolt/$bolt" >&2 && git -C "$path" read-tree -m -u HEAD >&2; } || exit 2
+elif [ -n "$level" ] && [ "$level" != - ]; then
+  err=$(git -C "$path" read-tree -m -u "$level" HEAD 2>&1) || {
+    echo "the landing's worktree $path could not be brought to ${head:0:7}: $(printf '%s' "$err" | tr '\n' ' ')" >&2; exit 2; }
+fi
 tip=$(git -C "$path" rev-parse HEAD) || exit 2
-[ -z "$6" ] || tip=$6
+[ -z "$head" ] || [ "$tip" = "$head" ] || { echo "the landing's worktree $path is at ${tip:0:7}, not bolt/$bolt's head ${head:0:7}, so nothing was submitted" >&2; exit 2; }
+[ -z "$8" ] || tip=$8
 mark=$(git -C "$path" rev-parse --absolute-git-dir)/crew-landing && echo $$ > "$mark" || exit 2
 out=$(mktemp) || exit 2
-if [ -n "$5" ]; then printf '{"id":%s}\n' "$5" >"$out"; : >"$out.err"; rc=0
+if [ -n "$7" ]; then printf '{"id":%s}\n' "$7" >"$out"; : >"$out.err"; rc=0
 else (cd "$path" && wt submit main --no-wait --json --no-remove) >"$out" 2>"$out.err" </dev/null; rc=$?; fi
 cat "$out.err" >&2
 id=; [[ $(cat "$out") =~ \"id\":[[:space:]]*([0-9]+) ]] && id=${BASH_REMATCH[1]}
@@ -2741,7 +2764,7 @@ elif [ "$rc" = 0 ] && [ -n "$pull" ]; then
 else
   : > "$mark"
 fi
-printf 'RC=%s TIP=%s OLD=%s ID=%s PULL=%s ANSWER=%s SAID=%s\n' "$rc" "$tip" "$old" "$id" "$pull" "$answer" "$said"
+printf 'RC=%s TIP=%s OLD=%s ID=%s PULL=%s ANSWER=%s SAID=%s LEVEL=%s\n' "$rc" "$tip" "$old" "$id" "$pull" "$answer" "$said" "$level"
 """
 
 # sluice's outcome of a landing's submission, waited on in the kit's main checkout on the team's host, a call at a time
@@ -3188,8 +3211,11 @@ def submit_order(bolts, hosts):
 
 
 def landing_submitted(fleet, t, bolt):
-    """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held) and its
-    landing pull request, a draft, readied, since the submission is the user's word (pull_hold, bolt-teams): {bolt, t,
+    """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held), the
+    bolt's two copies read there after one fetch (LAND_COPIES, kit.land_copies) and the head it submits decided
+    (landing_head, plan.19), and its landing pull request, a draft, readied, since the submission is the user's word
+    (pull_hold, bolt-teams). SUBMIT is given that head and the host's copy's value as read, and levels the copy to it
+    first; what the decision says of the copy is printed once SUBMIT has run, a level only when SUBMIT made it: {bolt, t,
     before, path, RC, TIP, OLD, ID, PULL, ANSWER, SAID, said, standing, last}, said the last line SUBMIT's submission
     said on standard error, sluice's words when it refused it at once, said as it is queued (submitted_line). Its ID is
     only ever a submission sluice made for this landing, newer than last, the last of main's submissions sluice had
@@ -3198,14 +3224,23 @@ def landing_submitted(fleet, t, bolt):
     is that one's and refuses nothing of this one, its ID is the submission sluice made for it, found in sluice's
     record on the team's host (SUBMISSIONS, submission_of with the pull request and last), and waited on as any other;
     standing, when crew finds none to wait on, its words (left_standing). Or {bolt, t, refused}, nothing submitted,
-    when main now or sluice's record of main could not be read, the pull request could not be readied, or the
-    submission could not be made, in crew's, sluice's, gh's or the host's words."""
+    when main now, the bolt's copies or sluice's record of main could not be read, the bolt's two copies have diverged,
+    the pull request could not be readied, or the submission could not be made, in crew's, sluice's, gh's, git's or the
+    host's words; refused before its submission ran, its pull request is left as it was."""
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     try:
         before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
         not why or fail(why)
+        r = crew.on_machine(fleet, host, ["bash", "-c", LAND_COPIES, "crew", main, bolt, kit.DECLARATION])
+        r.returncode == 0 or fail(f"crew can't read bolt/{bolt}'s copies on {host}: "
+                                  + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
+        copies = kit.land_copies(r.stdout, bolt)
     except Refusal as e:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted: {e}")
+    decided = landing_head(bolt, host, copies)
+    if isinstance(decided, str):  # the copy on GitHub unread, or the two diverged: nothing levelled or submitted
+        return dict(bolt=bolt, t=t, refused=decided)
+    head, own = (decided["head"], copies["own"]) if decided["head"] else ("", "")
     s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
     subs = submissions_listed(s.returncode, s.stdout, s.stderr)
     if isinstance(subs, str):  # read.1: no submission sluice answers with could be told from one made before it
@@ -3219,9 +3254,11 @@ def landing_submitted(fleet, t, bolt):
     if said:
         print(said)
     path = f"{t['kit']['dir']}/places/land-{bolt}"
-    f, told = submit_ran(fleet, host, main, path, bolt)
+    f, told = submit_ran(fleet, host, main, path, bolt, head, own)
     if f is None:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted on {host}: {told}", attempted=True)
+    if decided["said"] and (f["LEVEL"] or not decided["level"]):
+        print(decided["said"])
     standing, was = None, answered_before(f, last)
     if was:  # an earlier submission's record and exit: this landing's own is looked for as a pull request's is
         f = dict(f, RC="0", ID="", PULL=was["pull"] or "")
@@ -3236,11 +3273,13 @@ def landing_submitted(fleet, t, bolt):
     return dict(bolt=bolt, t=t, before=before, path=path, **f, said=told, standing=standing, last=last)
 
 
-def submit_ran(fleet, host, main, path, bolt, *again):
-    """SUBMIT run on the team's host, a landing's submission, or, given a submission and the tip it submitted (again),
-    a wait on it again: (its assignments, RC, TIP, OLD, ID, PULL, ANSWER and SAID, and the last line it says the
-    submission said on standard error), or (None, the host's last words) when they can't be read."""
-    r = crew.on_machine(fleet, host, ["bash", "-c", SUBMIT, "crew", main, path, bolt, record.who(), *again])
+def submit_ran(fleet, host, main, path, bolt, head="", own="", *again):
+    """SUBMIT run on the team's host, a landing's submission of head (landing_head), empty for the host's copy as it
+    stands, the copy levelled to it first from own, its value as read (LAND_COPIES); or, given a submission and the tip
+    it submitted (again), head and own empty, a wait on it again: (its assignments, RC, TIP, OLD, ID, PULL, ANSWER, SAID
+    and LEVEL, and the last line it says the submission said on standard error), or (None, the host's last words) when
+    they can't be read."""
+    r = crew.on_machine(fleet, host, ["bash", "-c", SUBMIT, "crew", main, path, bolt, record.who(), head, own, *again])
     READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.rstrip(), file=sys.stderr)
@@ -3250,7 +3289,7 @@ def submit_ran(fleet, host, main, path, bolt, *again):
         base64.b64decode(f.get("ANSWER", ""), validate=True)
     except (ValueError, IndexError):
         f = {}
-    if not {"RC", "TIP", "OLD", "ID", "PULL", "ANSWER", "SAID"} <= set(f):
+    if not {"RC", "TIP", "OLD", "ID", "PULL", "ANSWER", "SAID", "LEVEL"} <= set(f):
         return None, ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
     return f, next((l.strip() for l in reversed(told.splitlines()) if l.strip()), "")
 
@@ -3318,7 +3357,7 @@ def landing_ended(fleet, label, p, a):
         if n is None:
             break
         print(words, flush=True)
-        f, told = submit_ran(fleet, host, main, p["path"], bolt, str(n), tip)
+        f, told = submit_ran(fleet, host, main, p["path"], bolt, "", "", str(n), tip)
         if f is None:
             words = refused = (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: crew could not wait on #{n} "
                                f"again on {host}: {told}")
@@ -3445,6 +3484,31 @@ there=$(git rev-parse --verify -q "refs/remotes/$remote/bolt/$bolt^{commit}")
 echo "LOCAL=$l"; echo "THERE=$there"
 git merge-base --is-ancestor "$l" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
 echo "MERGES=$(git rev-list --count --merges "$there..$l" 2>/dev/null)"
+"""
+
+# The bolt's two copies a landing reads (plan.19), in its kit's main checkout with $file the policy, with one fetch of
+# the bolt from origin (plan.18), for kit.land_copies: THERE=- when the kit has no origin or origin has no
+# bolt/<bolt>, fetching nothing; READ with git's words when origin can't be asked or fetched; else OWN, the host's own
+# bolt/<bolt>, or - when it has none; THERE, origin's after the fetch; AT_THERE, the policy at it, base64, or - when it
+# holds none, read as BOLT_AT reads one; HELD, yes when the host's copy is an ancestor of origin's or there is none;
+# AHEAD, yes when origin's is an ancestor of the host's; LACKS, the merges the host's copy holds beyond origin's, and
+# BEYOND, the merges origin's holds beyond the host's; AHEAD, LACKS and BEYOND each - when the host has no copy.
+LAND_COPIES = r"""cd "$1" || exit 1
+bolt=$2 file=$3
+git remote get-url origin >/dev/null 2>&1 || { echo "THERE=-"; exit 0; }
+err=$(git ls-remote --exit-code origin "refs/heads/bolt/$bolt" 2>&1); rc=$?
+if [ $rc = 2 ]; then echo "THERE=-"; exit 0; fi
+if [ $rc != 0 ]; then echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0; fi
+if ! err=$(git fetch -q origin "+refs/heads/bolt/$bolt:refs/remotes/origin/bolt/$bolt" 2>&1); then
+  echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+fi
+""" + REFS + r"""own=$(ref "refs/heads/bolt/$bolt") there=$(ref "refs/remotes/origin/bolt/$bolt")
+echo "OWN=$own"; echo "THERE=$there"; echo "AT_THERE=$(pol "$there")"
+if [ "$own" = - ]; then printf 'HELD=yes\nAHEAD=-\nLACKS=-\nBEYOND=-\n'; exit 0; fi
+git merge-base --is-ancestor "$own" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
+git merge-base --is-ancestor "$there" "$own" 2>/dev/null; case $? in 0) echo "AHEAD=yes" ;; 1) echo "AHEAD=no" ;; esac
+echo "LACKS=$(git rev-list --count --merges "$there..$own" 2>/dev/null)"
+echo "BEYOND=$(git rev-list --count --merges "$own..$there" 2>/dev/null)"
 """
 
 
@@ -6201,6 +6265,41 @@ def split_refusal(kind, name, bolt, host, remote, f):
             f"{kind} {name}'s merge on {remote}'s bolt/{bolt} at {f['there'][:7]}, which lacks {lacks}, and drop "
             f"{'them' if n > 1 else 'it'}. The bolt takes no merge until it lands: its landing (crew bolt submit {bolt}, "
             f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one")
+
+
+def landing_head(bolt, host, f):
+    """The head a bolt's landing submits, from what it read of the bolt's two copies after one fetch (f,
+    kit.land_copies; plan.19): {"head", "level", "said"}, or why it submits nothing. A bolt lands from where it lives.
+    One whose copy on GitHub crew could not read submits nothing, in git's words (read.1). One that lives on its host,
+    GitHub having no copy or GitHub's copy naming no remote for it, is submitted from the host's copy as it stands
+    (head None), nothing levelled and nothing said. A bolt on GitHub is submitted at GitHub's head: the host's copy
+    made there when the host has none, and levelled to it when it is behind, each said with both commits, or left
+    alone when it is level. A host's copy ahead of GitHub's is the split a merge into the bolt is refused for, whose
+    way on is this landing: its tip is submitted, nothing levelled, and its push moves GitHub's branch forward,
+    dropping nothing. Two copies that have diverged submit nothing, naming both commits and what each lacks, since
+    either submission would drop the other's merges. level is whether SUBMIT writes the host's copy first."""
+    def merges(n):
+        return f"{n} merge{'' if n == 1 else 's'}"
+    if f["read"]:
+        return f"bolt/{bolt} was not submitted: crew can't read bolt/{bolt} on GitHub: {f['read']}"
+    if f["there"] == "-" or f["remote"] is None:
+        return dict(head=None, level=False, said=None)
+    own, there = f["own"], f["there"]
+    if own == "-":
+        return dict(head=there, level=True, said=f"made {host}'s copy of bolt/{bolt} at GitHub's {there[:7]}")
+    if own == there:
+        return dict(head=there, level=False, said=None)
+    if f["held"] == "yes":
+        lacked = f", {merges(f['beyond'])} it lacked" if f["beyond"] else ""
+        return dict(head=there, level=True,
+                    said=f"levelled {host}'s copy of bolt/{bolt} from {own[:7]} to GitHub's {there[:7]}{lacked}")
+    if f["ahead"] == "yes":
+        return dict(head=own, level=False,
+                    said=(f"bolt/{bolt} is split: {host}'s tip {own[:7]} holds {merges(f['lacks'])} GitHub's {there[:7]} "
+                          "lacks; the landing submits that tip, its push moving GitHub's branch forward"))
+    return (f"bolt/{bolt} was not submitted: its two copies have diverged: {host}'s {own[:7]} holds {merges(f['lacks'])} "
+            f"GitHub's {there[:7]} lacks, and GitHub's holds {merges(f['beyond'])} {host}'s lacks, so either submission "
+            "would drop merges")
 
 
 def chore_check(fleet, a, label, plan, c):
