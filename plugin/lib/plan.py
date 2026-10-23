@@ -3188,6 +3188,8 @@ def tell_planner(fleet, label, text):
 # <owner>/<name> and a colon or a space come right before it. The lookbehinds keep a path's tail from reading as a
 # repository, and other/docs/adr/ from reading as a record.
 RECORD_REF = re.compile(r"(?:(?<![\w./-])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)[:\s])?(?<![\w./-])docs/adr/(\d{4})(?!\d)")
+UNACCEPTED = "crew refuses the proposal: it rests on records the user has not accepted."
+UNACCEPTED_AFTER = "Propose it once each record is accepted on its kit's main."
 
 
 def record_refs(source, kit_repo):
@@ -3195,6 +3197,52 @@ def record_refs(source, kit_repo):
     (RECORD_REF), of the repository written before it, else of kit_repo, the repository of the kit whose work names it.
     A record named only in words ("record 0026") is no record here, since nothing in the words says whose it is."""
     return list(dict.fromkeys((m.group(1) or kit_repo, int(m.group(2))) for m in RECORD_REF.finditer(source)))
+
+
+def record_items(fleet, label, plan, argvs):
+    """The records a proposal's new work names (plan-proposals, briefs.15): for each bolt its `bolt new`s create, then
+    each unit or chore it makes new to a bolt or the queue (new_units), as the plan its commands leave holds them, each
+    record its sources name (record_refs), as (kind, name, kit, repo, number): kit the record's kit as a refusal names
+    it, the work's kit by its name, or <owner>/<name> when the record is another repository's, and repo the repository
+    it is read in, from the teams file (code.5). Work whose sources name a record and whose kit no team of the partition
+    builds is refused, since crew can't tell whose records they are (read.1)."""
+    work = [("bolt", a.bolt, plan.bolt(a.bolt)) for a in argvs if (a.cmd, a.sub) == ("bolt", "new")]
+    work += [(kind_of(plan.item(u)) if plan.item(u) else "unit", u, plan.item(u)) for u in new_units(argvs)]
+    out = []
+    for kind, name, r in work:
+        sources = [s for s in (r.all("Source") if r else []) if RECORD_REF.search(s)]
+        if not sources:
+            continue
+        kit = r.get("Repo")
+        teams = kit_teams(fleet, kit, label)
+        teams or fail(f"{kind} {name} names a decision record, and no team of {label} builds {kit}, so crew can't tell whose it is")
+        k = next(k for k in crew.kits_of(teams[0]) if kit in (k.get("name"), k.get("repo")))
+        for s in sources:
+            out += [(kind, name, k["name"] if repo == k["repo"] else repo, repo, n) for repo, n in record_refs(s, k["repo"])]
+    return list(dict.fromkeys(out))
+
+
+def unaccepted(items, held):
+    """Why a proposal can't be written because its new work rests on records the user has not accepted, or None when
+    every one is (plan-proposals, roles.3 on briefs.15): one line for each item, (kind, name, kit, repo, number) as
+    record_items gives them, whose record its main does not hold accepted, saying what it holds, read from held, which
+    maps (repo, number) to the files main holds by that number with the one file's status and whether an amendment is
+    marked proposed ({"files", "status", "marked"}), or to why it could not be read ({"why"}, read.1)."""
+    lines = []
+    for kind, name, kit, repo, number in items:
+        h, n = held[(repo, number)], f"{number:04d}"
+        if "why" in h:
+            says = h["why"]
+        elif not h["files"]:
+            says = f"{kit}'s main holds no record {n} in docs/adr/"
+        elif len(h["files"]) > 1:
+            says = f"{kit}'s main holds {len(h['files'])} records numbered {n}: {', '.join(h['files'])}"
+        elif record_accepted(h["status"], h["marked"]):
+            continue
+        else:
+            says = f"{kit}'s main holds it " + ("" if h["status"] else "with ") + record_says(h["status"], h["marked"])
+        lines.append(f"  {kind} {name} names record {n} of {kit}: {says}")
+    return "\n".join([UNACCEPTED, *lines, UNACCEPTED_AFTER]) if lines else None
 
 
 def plan_propose(fleet, a):
