@@ -6,7 +6,7 @@
 - [x] 1.2 crew finds the records a source names by their `docs/adr/<number>` path, of the item's kit or of the `<owner>/<name>` before it, and none named only in words (design, Decision 2; Task notes 1.2); passes `tests/py/test_proposals.py`, via `tests/suite logic`.
 - [x] 1.3 crew judges the records read and words one refusal naming each unit or bolt, the record and what its main holds, and refuses nothing when every one is accepted (design, Decisions 4 and 5; Task notes 1.3); passes `tests/py/test_proposals.py`, via `tests/suite logic`.
 - [x] 1.4 `crew plan propose` reads the records named by the bolts it creates and the units and chores it adds or moves into a bolt, on each repository's main as GitHub holds it, and refuses before anything is written or a card raised (design, Decisions 1 and 3; Task notes 1.4); Verify `tests/suite logic` ends with "0 failed".
-- [ ] 1.5 A proposal whose new unit names a proposed record is refused naming it, with the plan and the cards unchanged, and is written once the record is accepted on the kit's main (Task notes 1.5); Verify `tests/suite t-journey-plan` ends with "0 failed".
+- [x] 1.5 A proposal whose new unit names a proposed record is refused naming it, with the plan and the cards unchanged, and is written once the record is accepted on the kit's main (Task notes 1.5); Verify `tests/suite t-journey-plan` ends with "0 failed".
 
 ## 2. README says so
 
