@@ -3184,10 +3184,108 @@ def tell_planner(fleet, label, text):
         crew.tell(fleet, planner, text)
 
 
+# A decision record a source names by its path (plan-proposals): docs/adr/ and its four digits, the repository's when
+# <owner>/<name> and a colon or a space come right before it. The lookbehinds keep a path's tail from reading as a
+# repository, and other/docs/adr/ from reading as a record.
+RECORD_REF = re.compile(r"(?:(?<![\w./-])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)[:\s])?(?<![\w./-])docs/adr/(\d{4})(?!\d)")
+UNACCEPTED = "crew refuses the proposal: it rests on records the user has not accepted."
+UNACCEPTED_AFTER = "Propose it once each record is accepted on its kit's main."
+
+
+def record_refs(source, kit_repo):
+    """The decision records a source names, [(repo, number)] in the order they appear and each once: each by its path
+    (RECORD_REF), of the repository written before it, else of kit_repo, the repository of the kit whose work names it.
+    A record named only in words ("record 0026") is no record here, since nothing in the words says whose it is."""
+    return list(dict.fromkeys((m.group(1) or kit_repo, int(m.group(2))) for m in RECORD_REF.finditer(source)))
+
+
+def record_items(fleet, label, plan, argvs):
+    """The records a proposal's new work names (plan-proposals, briefs.15): for each bolt its `bolt new`s create, then
+    each unit or chore it makes new to a bolt or the queue (new_units), as the plan its commands leave holds them, each
+    record its sources name (record_refs), as (kind, name, kit, repo, number): kit the record's kit as a refusal names
+    it, the work's kit by its name, or <owner>/<name> when the record is another repository's, and repo the repository
+    it is read in, from the teams file (code.5). Work whose sources name a record and whose kit no team of the partition
+    builds is refused, since crew can't tell whose records they are (read.1)."""
+    work = [("bolt", a.bolt, plan.bolt(a.bolt)) for a in argvs if (a.cmd, a.sub) == ("bolt", "new")]
+    work += [(kind_of(plan.item(u)) if plan.item(u) else "unit", u, plan.item(u)) for u in new_units(argvs)]
+    out = []
+    for kind, name, r in work:
+        sources = [s for s in (r.all("Source") if r else []) if RECORD_REF.search(s)]
+        if not sources:
+            continue
+        kit = r.get("Repo")
+        teams = kit_teams(fleet, kit, label)
+        teams or fail(f"{kind} {name} names a decision record, and no team of {label} builds {kit}, so crew can't tell whose it is")
+        k = next(k for k in crew.kits_of(teams[0]) if kit in (k.get("name"), k.get("repo")))
+        for s in sources:
+            out += [(kind, name, k["name"] if repo == k["repo"] else repo, repo, n) for repo, n in record_refs(s, k["repo"])]
+    return list(dict.fromkeys(out))
+
+
+def unaccepted(items, held):
+    """Why a proposal can't be written because its new work rests on records the user has not accepted, or None when
+    every one is (plan-proposals, roles.3 on briefs.15): one line for each item, (kind, name, kit, repo, number) as
+    record_items gives them, whose record its main does not hold accepted, saying what it holds, read from held, which
+    maps (repo, number) to the files main holds by that number with the one file's status and whether an amendment is
+    marked proposed ({"files", "status", "marked"}), or to why it could not be read ({"why"}, read.1)."""
+    lines = []
+    for kind, name, kit, repo, number in items:
+        h, n = held[(repo, number)], f"{number:04d}"
+        if "why" in h:
+            says = h["why"]
+        elif not h["files"]:
+            says = f"{kit}'s main holds no record {n} in docs/adr/"
+        elif len(h["files"]) > 1:
+            says = f"{kit}'s main holds {len(h['files'])} records numbered {n}: {', '.join(h['files'])}"
+        elif record_accepted(h["status"], h["marked"]):
+            continue
+        else:
+            says = f"{kit}'s main holds it " + ("" if h["status"] else "with ") + record_says(h["status"], h["marked"])
+        lines.append(f"  {kind} {name} names record {n} of {kit}: {says}")
+    return "\n".join([UNACCEPTED, *lines, UNACCEPTED_AFTER]) if lines else None
+
+
+def proposal_records(fleet, label, scratch, argvs):
+    """The records a proposal's new work names, read on each repository's main as GitHub holds it now (plan.18): the
+    items record_items finds in the plan its commands leave (scratch), and what each repository's main holds by each
+    number, for unaccepted. Each repository is fetched once into crew's cache, held for the command (plan.12), its
+    docs/adr/ listed at that tip and the one file by a number read; a main that can't be fetched, or a file that can't
+    be read as text, gives why, naming it (read.1, read.2). Returns (items, held)."""
+    items, held = record_items(fleet, label, scratch.plan, argvs), {}
+    for repo in dict.fromkeys(i[3] for i in items):
+        numbers = sorted({i[4] for i in items if i[3] == repo})
+        try:
+            tip = fetch(repo, "main")
+            listed = git(repo, "ls-tree", "--name-only", tip, "docs/adr/").splitlines() if tip else []
+        except Refusal as e:
+            held.update({(repo, n): {"why": str(e)} for n in numbers})
+            continue
+        for n in numbers:
+            if not tip:
+                held[(repo, n)] = {"why": f"{repo} has no main on GitHub"}
+                continue
+            files = [f for f in listed if re.fullmatch(rf"docs/adr/{n:04d}-[^/]*\.md", f)]
+            held[(repo, n)] = {"files": files, "status": "", "marked": False}
+            if len(files) != 1:
+                continue
+            try:
+                text = show(repo, tip, files[0])
+            except UnicodeDecodeError:
+                text = None
+            if text is None:
+                held[(repo, n)] = {"why": f"crew can't read {files[0]} on {repo}'s main at {tip[:7]} as text"}
+                continue
+            status, marked = record_status_held(text)
+            held[(repo, n)].update(status=status, marked=bool(marked))
+    return items, held
+
+
 def plan_propose(fleet, a):
     """crew plan propose <file> [--replaces <n>]: the planner's proposal, checked against the plan at the tip, written
-    open with the next number; the conductor of each bolt in flight it touches is told. Once it is written, crew raises
-    its card in the planner's name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
+    open with the next number; the conductor of each bolt in flight it touches is told. Refused, with nothing written,
+    when a bolt it creates, or a unit or chore it adds or moves into a bolt, names a decision record its main on GitHub
+    does not hold accepted (proposal_records, unaccepted). Once it is written, crew raises its card in the planner's
+    name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
     kind, of = role(fleet, os.environ.get("CREW_AGENT"))
     kind in ("planner", "user") or fail(proposer_refusal(fleet, os.environ.get("CREW_AGENT"), kind, of))
     label = of if kind == "planner" else proposal_label(fleet, a)
@@ -3200,7 +3298,9 @@ def plan_propose(fleet, a):
     def change(w):
         pl = proposals(w)
         n = next_proposal(pl)
-        check_ops(fleet, label, w, argvs, n)
+        scratch = check_ops(fleet, label, w, argvs, n)
+        said = unaccepted(*proposal_records(fleet, label, scratch, argvs))
+        not said or fail(said)
         per = touched_by(w.plan, argvs)
         seen["old_by"] = open_proposal(pl, n, case, dos, agent(), datetime.date.today().isoformat(), a.replaces, label)
         w.replace("proposals.rec", pl.text())
@@ -11143,6 +11243,33 @@ def card_closed(acts, label, owner, key, outcome, reason):
 
 # ------------------------------------------------------------------------------------------------ crew record
 
+def record_split(md):
+    """A decision record's Markdown as crew reads it: its frontmatter's fields, its body and the body's paragraphs."""
+    m = re.match(r"---\n(.*?)\n---\n", md, re.S)
+    fields = dict(l.split(":", 1) for l in m.group(1).splitlines() if re.match(r"[a-z][\w-]*:", l)) if m else {}
+    body = (md[m.end():] if m else md).strip()
+    return {k: v.strip().strip("'\"") for k, v in fields.items()}, body, [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+
+
+def record_status_held(md):
+    """A decision record's status as its file holds it, the one reading crew record and a proposal's check share
+    (briefs.15): its frontmatter's status, and the paragraphs that mark an amendment proposed ("Status: proposed" past
+    the record's own status line)."""
+    fields, _, paras = record_split(md)
+    own = next((i for i, p in enumerate(paras) if p.startswith("Status:")), None)
+    return fields.get("status", "").lower(), [p for i, p in enumerate(paras) if i != own and "Status: proposed" in p]
+
+
+def record_says(status, marked):
+    """What a record's file holds, in crew's words, from its status and the amendments marked proposed."""
+    return "accepted, with an amendment still marked proposed" if marked and status == "accepted" else status or "no status in its frontmatter"
+
+
+def record_accepted(status, marked):
+    """Whether a record's file holds it accepted: its status accepted, with no amendment still marked proposed."""
+    return status == "accepted" and not marked
+
+
 def record_facts(kit, number, text, status, before=None, alternatives=None):
     """A decision record's facts as its card is built from them (cards.record_card), from its Markdown at a commit, and
     whether the file holds the status the design agent records (briefs.15): its title, its frontmatter's or else its
@@ -11156,22 +11283,11 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     the commit before) held is gone, the amendment taken in or out. Refused naming what the file holds when it holds no
     such status, and refused when what the card is built from can't be read (read.1)."""
     n = f"{number:04d}"
-
-    def split(md):  # its frontmatter's fields, its body and the body's paragraphs
-        m = re.match(r"---\n(.*?)\n---\n", md, re.S)
-        fields = dict(l.split(":", 1) for l in m.group(1).splitlines() if re.match(r"[a-z][\w-]*:", l)) if m else {}
-        body = (md[m.end():] if m else md).strip()
-        return {k: v.strip().strip("'\"") for k, v in fields.items()}, body, [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
-
-    def held(md):  # its status, and the paragraphs that mark an amendment proposed
-        fields, _, paras = split(md)
-        own = next((i for i, p in enumerate(paras) if p.startswith("Status:")), None)
-        return fields.get("status", "").lower(), [p for i, p in enumerate(paras) if i != own and "Status: proposed" in p]
-    fields, body, paras = split(text)
-    now, marked = held(text)
-    then, was = held(before) if before else ("", [])
+    fields, body, paras = record_split(text)
+    now, marked = record_status_held(text)
+    then, was = record_status_held(before) if before else ("", [])
     holds = ["proposed"] if now == "accepted" and marked else ["accepted", "rejected"] if now == "accepted" and then == "accepted" and was else [now]
-    says = "accepted, with an amendment still marked proposed" if marked and now == "accepted" else now or "no status in its frontmatter"
+    says = record_says(now, marked)
     status in holds or fail(f"crew refuses record {n} in {kit} as {status}: its file on main says {says}. Commit it {status} "
                             f"and land it on main, then run crew record again.")
     head = next((p for p in paras if p.startswith("# ")), "")
@@ -11186,7 +11302,7 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     quoted = [a or b for a, b in re.findall(r"“([^”]+)”|\"([^\"]+)\"", deciders)]
     alt = None
     if alternatives is not None:
-        afields, abody, _ = split(alternatives)
+        afields, abody, _ = record_split(alternatives)
         rules = [r.strip() for r in afields.get("rules", "").split(",") if r.strip()]
         other, rec = afields.get("other", ""), afields.get("recommended", "accept")
         why = ("their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>" if not rules else
