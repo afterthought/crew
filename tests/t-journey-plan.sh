@@ -1,7 +1,8 @@
 # The plan changed through proposals, and the writes that race on its branch, through the crew command on the stubs
 # (tests.11, record 0022): the planner proposes and crew raises its card, a held bolt's conductor is told and agrees,
 # the user approves, leaves units out on the card and answers it, each closing the card, a proposal is dropped and
-# replaced, its card withdrawn or changed in place, a unit from a signal is routed, an
+# replaced, its card withdrawn or changed in place, one resting on a record its kit's main does not hold accepted is
+# refused, a unit from a signal is routed, an
 # approval's rebases are undone when one conflicts, amendments hand their constructs to the team's host, and two writes
 # racing on one branch, or on two branches of one repository, both land. Whether a proposal holds, whom it waits on,
 # what its page and card say and who may write the plan are logic cases (tests/py/test_proposals.py,
@@ -138,6 +139,25 @@ n=$(grep -c "^Refused:" <<<"$(record_of mac-studio)")
 expect_fail "the planner changes the plan through a proposal: crew plan propose, not crew unit add" crew unit add d "Unit d." --repo switchboard-kit
 eq "$(grep -c "^Refused:" <<<"$(record_of mac-studio)")" "$((n + 1))"
 ok "a refused proposal and a refused direct write each leave a Refused entry holding nothing typed"
+
+# A new unit resting on a record the kit's main on GitHub holds proposed is refused, nothing written and no card raised;
+# once main holds it accepted, the same proposal is written.
+wk=$T/kit-record; clone WilldanGroup/switchboard-kit "$wk"; mkdir -p "$wk/docs/adr"
+printf -- '---\nstatus: proposed\n---\n# 1. A record\n\nThe kit decides something.\n' > "$wk/docs/adr/0001-a-record.md"
+commit_all "$wk" "docs(adr): propose record 0001"; git -C "$wk" push -q origin HEAD:main
+rests=$(proposal 'Case: The record decides it.' \
+  'Do: unit add rests-on-a-record "A unit resting on a record." --repo switchboard-kit --source docs/adr/0001-a-record.md')
+before=$(tip); : > "$CREW_TEST_LOG"
+expect_fail "unit rests-on-a-record names record 0001 of switchboard-kit: switchboard-kit's main holds it proposed" crew plan propose "$rests"
+has "$out" "crew refuses the proposal: it rests on records the user has not accepted."
+eq "$(tip)" "$before"
+lacks "$(calls)" "pendingyou post_request"
+rewrite "$wk/docs/adr/0001-a-record.md" 's/^status: proposed$/status: accepted/'
+commit_all "$wk" "docs(adr): accept record 0001"; git -C "$wk" push -q origin HEAD:main
+expect_ok crew plan propose "$rests"
+has "$out" "proposal $(last) is open"
+CREW_AGENT= crew plan drop "$(last)" "the record's work waits" >/dev/null
+ok "a proposal whose new unit rests on a proposed record is refused naming it, and is written once main holds it accepted"
 
 # The user leaves a new unit out, approving directly and through the card's answers.
 crew plan propose "$(proposal 'Case: Two units replace one.' 'Do: unit drop a-drop "Replaced."' \

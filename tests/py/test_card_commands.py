@@ -8,6 +8,8 @@ what each sends and records, the line that adopts a card and whom it is told to,
 is unless what it asked changed since, a landing's head among it, and then followed by its new version under the key's
 revision rather than changed, and each failure said and recorded.
 The bridge itself, and every command's wiring, are t-cards'."""
+import json
+
 import pytest
 
 import cards
@@ -279,6 +281,9 @@ class Acts:
     def caller(self):
         return self.who
 
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
 
 MATCHED = {"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}
 POSTED = {"requestId": "req_c1", "url": "https://www.pendingyou.com/app/r/req_c1", "version": 1}
@@ -475,61 +480,6 @@ def test_a_card_asks_anew_only_once_the_head_moved_since_the_head_its_last_post_
     assert cards.head_anew(entries, held, head) == anew
 
 
-# raise_land, the landing card's raise at a merge's end, a team freed, a preview's end and the rail's sweep, on the
-# act's stand-in with a reading and a preview (test_cards.ReadingActs): a card the user approved is left as it is, the
-# approval going on to ops, until the bolt's head moves after it and before the landing (plan.16), when the card is
-# followed by one saying the head moved since the approval.
-def landing_raised(monkeypatch, tmp_path, status, asked, note=None):
-    """raise_land of land/b1 proven at abc1234, the conductor's card req_l1 in status and posted at the head asked
-    (None for none recorded): the act's stand-in and the card raise_land gives."""
-    from test_cards import FLEET as CARDED, LANDING, ReadingActs
-    team = dict(CARDED["teams"]["swb-1"], machine="mac-studio")
-    monkeypatch.setattr(plan, "PREVIEWS", tmp_path / "previews")
-    monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
-    monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
-    monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (False, None))
-    held = [post("land/b1", "swb-1-conductor", "req_l1", On=["bolt/b1"], **({"Head": asked} if asked else {}))]
-    acts = ReadingActs({"get_request": ({"status": status, "turn": "agent" if status == "answered" else "you", "version": 3}, None),
-                        "ack_answer": ({"version": 4}, None), "update_request": ({"version": 4}, None), "match_area": (MATCHED, None),
-                        "post_request": (dict(POSTED, requestId="req_l2"), None)}, held)
-    return acts, plan.raise_land(CARDED, {"label": "wldn", "key": "land/b1"}, acts, note=note)
-
-
-@pytest.mark.parametrize("note", [None, "A yes now frees swb-1 for b2", "Its preview of abc1234 is up"])
-def test_a_landing_card_the_user_approved_at_the_head_it_shows_is_left_as_it_is(monkeypatch, tmp_path, capsys, note):
-    """A merge's end or the rail's sweep on the same head, a team freed (team_freed's note) and a preview's end, after
-    the user approved the landing: nothing is acked, closed, posted or recorded, so the approval goes on to ops."""
-    acts, card = landing_raised(monkeypatch, tmp_path, "answered", "abc1234", note)
-    assert card == "req_l1"
-    assert [t for t, _ in acts.calls] == ["get_request"] and acts.emitted == []
-    assert capsys.readouterr().out.splitlines()[-1] == "card land/b1: req_l1 is left as it is: the user has answered it"
-
-
-@pytest.mark.parametrize("asked, said", [
-    ("0123abc", "Its head moved since your approval, from 0123abc to abc1234: approving this lands abc1234."),
-    (None, "Its head is now abc1234, and crew holds no record of the head you approved: approving this lands abc1234.")])
-def test_a_landing_card_whose_head_moved_after_the_users_approval_is_followed_by_one_saying_so(monkeypatch, tmp_path, asked, said):
-    """A merge into the bolt after the user approved its landing, before ops landed it: the approval was of another
-    head, so the card is acked with the change note and a new one follows it, asking for the head the landing would
-    carry and saying the head moved since the approval, its post recording that head."""
-    acts, card = landing_raised(monkeypatch, tmp_path, "answered", asked)
-    assert card == "req_l2"
-    assert [t for t, _ in acts.calls if t != "tell"] == ["get_request", "ack_answer", "match_area", "post_request"]
-    ack, sent = acts.calls[1][1], acts.calls[3][1]
-    assert ack["outcome"] == "Its head is now abc1234"
-    assert sent["follows"] == "req_l1" and sent["summary"].startswith(said)
-    assert [(e["Act"], e["Card"], e.get("State"), e.get("Head")) for e in acts.emitted] == [
-        ("card.close", "req_l1", "closed", None), ("card.post", "req_l2", None, "abc1234")]
-
-
-def test_a_landing_card_waiting_on_the_user_is_changed_in_place_at_the_new_head_and_records_it(monkeypatch, tmp_path):
-    acts, card = landing_raised(monkeypatch, tmp_path, "pending", "0123abc")
-    assert card == "req_l1"
-    change = next(a for t, a in acts.calls if t == "update_request")
-    assert change["changeNote"] == "Its head is now abc1234" and not change["summary"].startswith("Its head moved")
-    assert [(e["Act"], e["Card"], e.get("Head")) for e in acts.emitted] == [("card.update", "req_l1", "abc1234")]
-
-
 STEP = dict(env="srv", n=1, text="restart crew's teams", doer="swancloud-ops", held=True, why=None, where=None, commands=[], done=None,
             consequences={"now": "It runs at once; no stage is working on srv now"})
 
@@ -721,3 +671,71 @@ def test_a_close_with_no_card_held_closes_nothing_and_says_so(capsys):
 
 PLAN = "%rec: Bolt\n%key: Bolt\n\n%rec: Unit\n%key: Unit\n"
 PLAN_AFTER = PLAN + "\nUnit: g-one\nRepo: switchboard-kit\nIntent: One unit.\n"
+
+
+# ------------------------------------------------------------------------------- crew card wait on a bolt's row
+
+class TestLandWait:
+    """crew card wait land/<bolt> (card-sessions "A wait on a landing card starts its reading when none runs"): while
+    the bolt is a row of its kit's landings card that can land, its reading started on its team's host and the kit's
+    card raised on the main machine to carry its link; refused while it is no row, and for the kit's own key."""
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "chuck-herdr-alpha", "teams": ["swb-1"]}},
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha",
+                                 "kit": {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}}},
+             "hosts": {}}
+    LINK = "http://chuck-herdr-alpha.ts.swancloud.net:19432"
+
+    def wait(self, monkeypatch, tmp_path, row, key="land/y"):
+        import argparse
+        handed = []
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(crew, "this_host", lambda: "chuck-herdr-alpha")
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, plan.Rec("Bolt", [("Bolt", "y"), ("Repo", "switchboard-kit")]),
+                                                                           self.FLEET["teams"]["swb-1"]))
+        monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (row, None) if row else (None, "unit a has not merged"))
+        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((kit, note)))
+
+        def opened(fleet, label, key, facts):  # the reading started, and the user's notes in it at once
+            d = tmp_path / label / key
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "session.json").write_text(json.dumps({"pid": 42, "document": "/c/00-y.md", "url": self.LINK, "started": "2026-10-23T10:00:00Z"}))
+            (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "y: say what the zone is."}))
+            return self.LINK, False, True
+        monkeypatch.setattr(plan, "reading_open", opened)
+        plan.card_wait(self.FLEET, argparse.Namespace(key=key, unit=None, label="wldn", sub="wait"))
+        return handed
+
+    def test_a_wait_on_a_row_starts_its_reading_and_the_kits_card_is_raised_to_carry_its_link(self, monkeypatch, tmp_path, capsys):
+        row = dict(bolt="y", box=True, facts=dict(bolt="y", kit="switchboard-kit", head="a" * 40))
+        assert self.wait(monkeypatch, tmp_path, row) == [("switchboard-kit", "y: Its reading is open again at a new link")]
+        assert capsys.readouterr().out == (f"{self.LINK}\nland/y: notes from its reading, as notes on the landing card:\n"
+                                           "y: say what the zone is.\n")
+
+    def test_a_wait_on_a_bolt_that_is_no_row_is_refused_and_starts_nothing(self, monkeypatch, tmp_path):
+        with pytest.raises(crew.Refusal, match="^no session was started for card land/y, and y is no row of its kit's landings card$"):
+            self.wait(monkeypatch, tmp_path, None)
+        assert not (tmp_path / "wldn" / "land/y").exists()
+
+    def test_a_wait_on_the_kits_own_card_is_refused(self, monkeypatch, tmp_path):
+        with pytest.raises(crew.Refusal, match="^land/switchboard-kit is switchboard-kit's landings card, wldn-ops's"):
+            self.wait(monkeypatch, tmp_path, None, key="land/switchboard-kit")
+
+
+# ------------------------------------------------------------------------- crew card read of a kit's landings card
+
+def test_a_sent_landings_card_reads_the_ticked_bolts_in_its_order_and_the_submit_that_lands_them():
+    """rail-cards "Landing approved": a and c ticked, b cleared."""
+    heads = plan.card_heads("a@abc1234 b@abc1234 c@def5678")
+    got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:c", "land:a"], "note": {"text": "c first"}}}
+    assert plan.landing_lines("swancloud", got, heads) == [
+        "  to land, in the card's order: a and c", "  lands them: crew bolt submit a c --label swancloud"]
+    assert "  note: c first" in cards.answer_lines("land/crew", "req_k1", got)
+
+
+def test_a_lone_row_approved_lands_it_and_a_send_ticking_none_lands_nothing():
+    one = plan.card_heads("y@abc1234")
+    approved = {"status": "answered", "turn": "agent", "answer": {"approved": True}}
+    assert plan.landing_lines("wldn", approved, one)[-1] == "  lands them: crew bolt submit y --label wldn"
+    none = {"status": "answered", "turn": "agent", "answer": {"choiceIds": []}}
+    assert plan.landing_lines("wldn", none, one) == ["  no bolt ticked: nothing lands"]
+    assert plan.landing_lines("wldn", {"status": "pending", "turn": "you"}, one) == []

@@ -1,31 +1,38 @@
 # A bolt landed through sluice, through the crew command on the stubs (tests.11, record 0022), a part of the units
 # journey (t-journey-units): no unit starts on a bolt while its landing is in flight; a unit merges into the bolt by a
 # submission, and crew bolts reads the bolt's verification from sluice's verdict on it; crew bolt submit lands the
-# bolt by a submission to main from a short-lived worktree, naming a conflict for the team and moving nothing; a fix
-# takes main into the bolt by a submission to the bolt, and its merge's end raises the bolt's landing card, keyed by
-# the bolt, in its conductor's name, with its reading of what the bolt brings to main started first on the team's
-# host, tried a second time when its first start fails, and linked from it, which crew card session gives again, and
-# the address of a preview of its head, which the
+# bolt by a submission to main from a short-lived worktree, naming a conflict for the team and moving nothing, its
+# pull request into main, in a kit whose main takes pull requests, left a draft and said so (bolt-teams); a fix
+# takes main into the bolt by a submission to the bolt, and its merge's end raises the kit's landings card, keyed by
+# the kit, in main-level ops's name on the partition's main machine, the bolt its one row, with the row's reading of
+# what the bolt brings to main started first on the team's host, tried a second time when its first start fails, and
+# linked from it, which crew card session gives again, and the address of a preview of its head, which the
 # kit's policy there declares, asked of sluice first; the preview's stack failing is said on the card, changed in
-# place by the process that waited on it; a fix started on the bolt withdraws the card, held for it, ending its
-# reading and releasing its preview, and once the fix merges and the bolt reads proven again, the dispatcher told its
-# team is free for its next bolt, a new card follows it
-# with a preview of the new head, raised without its reading when both its starts fail, naming crew card session and
-# keeping why in the run record, whose reading the conductor's wait then starts, changing the card to carry its link,
-# and waits on until the landing ends it; the bolt read proven, its team is given its next bolt beside it and refused
-# a third (teams.16); the landing then lands, leaving the kit's detached main checkout
-# as it was and marking the bolt's branch landed; the bolt lands in the plan once every unit has, recording the commit
-# main holds, sluice deleting its branch from GitHub (plan.19), and removing the place a stopped landing left on it,
-# its landing card closed on the team's host with where GitHub's main holds it, ending its reading and releasing its
-# preview, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
+# place by the process that waited on it; a fix started on the bolt holds its row, so the card, with no row left that
+# can land, is withdrawn naming it, the row's reading ended and its preview released, its pull request, ready again,
+# drafted, and once the fix merges and the bolt reads proven again, the dispatcher told its team is free for its next
+# bolt, a new card is posted, following nothing, with a preview of the new head, raised without its reading when both
+# its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's wait then
+# starts, changing the card to carry its link, and waits on until the landing ends it; the bolt read proven, its team
+# is given its next bolt beside it and refused a third (teams.16); on the user's send the submission then readies the
+# bolt's pull request and lands it, taking up the place a stopped landing left on it and leaving the kit's detached main
+# checkout as it was, and closes it as it lands, recording the commit main holds, sluice deleting its branch from GitHub
+# (plan.19), the kit's landings card closed with where GitHub's main holds it, the row's reading ended and its preview
+# released, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
 # that bolt is dropped too the team holds none and its conductor and ops start again at their next stop without it;
-# a landed bolt's branch holding a commit main lacks is kept on GitHub, sluice refusing its delete, and on the host,
+# a bolt its conductor submits lands and is named as not closed, crew bolt land being main-level ops's, and its branch
+# taking a commit main lacks after the landing is kept on GitHub, sluice refusing its delete, and on the host,
 # named, its mark unset and the keeping recorded, and the team's next read leaves it; a bolt no team holds lands once
 # its unit's change is on main; a delete sluice refuses is named in its words, the branch kept on GitHub; a bolt made
 # before gives went through sluice is deleted there once its landing's pull request put it there, no create run for
 # it; and dropping a held bolt removes its places and has sluice delete its branch, which holding a merge main lacks
 # is kept on GitHub and the host, marked, named and recorded, the team's next read leaving it, until a landing brings
-# its tip into main and the next read has sluice delete it.
+# its tip into main and the next read has sluice delete it. Then two bolts of one kit proven at once are one landings
+# card of two boxes in the plan's order, the lower forecast to conflict with the one above, changed in place when a
+# head moves and when a third joins it; and one crew bolt submit lands the three the user ticked in that order, each
+# queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and
+# held, the third landing all the same, the command exiting non-zero naming the held one, and the card closed with
+# what landed and what was held.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
 # command's wiring once.
@@ -59,7 +66,10 @@ unset CREW_AGENT
 git -C "$k" worktree remove "$land"
 ok "no unit starts on a bolt while its landing is in flight, and one starts once the outcome is in though the landing's worktree stands"
 crew bolt give swb-2 console-pages >/dev/null 2>&1; place "$k" console-pages c >/dev/null
-echo "# switchboard-kit, main's" > "$k/README.md"; commit_all "$k" "docs: main's title"; push "$k"
+echo "# switchboard-kit, main's" > "$k/README.md"
+# From here main takes pull requests, as crew's own does: a landing opens one from the bolt's branch (bolt-teams).
+rewrite "$k/.config/sluice.toml" '/^\[branches.main\]$/,/^remote/ s/^remote = "origin"$/&\n\n[branches.main.pull_requests]\nreviews = 0/'
+commit_all "$k" "docs: main's title, and main takes pull requests"; push "$k"
 expect_ok crew bolts --label wldn
 has "$out" "verification: green, sluice's verdict on its last landing, $(short bolt/tenant-environments): passed (stub)"
 ok "a unit merges into the bolt by a submission, and crew bolts reads the bolt's verification from sluice's verdict on it"
@@ -71,13 +81,19 @@ expect_ok crew unit drop b "folded into a"
 has "$out" "swb-1-unit-1 is free: b was dropped from the plan"
 eq "$(herdr_state $box wldn-1 '[.workspaces[].label] | join(",")')" "swb-1"
 main_before=$(git -C "$k" rev-parse main)
+gh_repo=WilldanGroup/switchboard-kit
+pr=$(pull $gh_repo bolt/tenant-environments false)  # the pull request sluice's submission opens, ready for review
 : > "$CREW_TEST_LOG"
 expect_fail "bolt/tenant-environments did not land: sluice refused it or found a conflict, and main is where it was" crew bolt submit tenant-environments
 has "$out" "sluice: bolt/tenant-environments conflicts with main"
-eq "$(calls | grep "^$box wt submit ")" "$box wt submit main --no-remove from $land as $me@mac-studio"
+eq "$(calls | grep "^$box wt submit ")" "$box wt submit main --no-wait --json --no-remove from $land as $me@mac-studio"
+has "$out" "tenant-environments did not land, as said above; none landed"
 eq "$(git -C "$k" rev-parse main)" "$main_before"
 [[ ! -e $land ]] || fail "the landing's worktree is still there"
-ok "crew bolt submit lands a bolt by a submission to main from a short-lived worktree, and a conflict lands nothing and is named for the team"
+has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is a draft, so no merge into bolt/tenant-environments lands it; the next crew bolt submit tenant-environments, on the user's word, makes it live again."
+eq "$(drafted "$pr")" true
+eq "$(calls | grep -A100 "^$box wt submit " | grep -c "^$box gh pr ready $pr -R $gh_repo --undo$")" 1
+ok "crew bolt submit lands a bolt by a submission to main from a short-lived worktree, and a conflict lands nothing, is named for the team and leaves its pull request a draft, said with its link"
 
 # The team takes main into the bolt: a fix merges main in its place, resolving the title, and submits to the bolt.
 # The team's host gives a plannotator session a link on its tailnet name, as swancloud sets it.
@@ -106,18 +122,21 @@ refusals=$(home_of $box)/.stub-plannotator/refuse-starts
 mkdir -p "${refusals%/*}"; echo 1 > "$refusals"  # the reading's first start fails
 expect_ok crew fix swb-1 take-main --wait
 has "$out" "delivered merge of $tm: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
-# The merge's end finds the bolt proven, and raises its landing card in its conductor's name, keyed by the bolt, with a
-# preview of its head asked of sluice first, once, in the kit's main checkout, and its address listed.
-card=$(grep -o "^card land/tenant-environments: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
-[[ -n $card ]] || fail "the merge's end raised no landing card:"$'\n'"$out"
-has "$out" "call get_request (requestId $card, name swb-1-conductor)"
+# The merge's end finds the bolt proven, and raises the kit's landings card in main-level ops's name on the
+# partition's main machine, keyed by the kit, the bolt its one row, with a preview of its head asked of sluice first,
+# once, in the kit's main checkout on the team's host, and its address listed.
+card=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
+[[ -n $card ]] || fail "the merge's end raised no landings card:"$'\n'"$out"
+has "$out" "call get_request (requestId $card, name wldn-ops)"
 posted=$(calls | grep "^$box pendingyou post_request ")
-has "$posted" '"idempotencyKey": "land/tenant-environments"'
+has "$posted" '"idempotencyKey": "land/switchboard-kit"'
+has "$posted" '"label": "wldn-ops"'
+has "$posted" "\"title\": \"Land the bolt tenant-environments on switchboard-kit's main\""
 h1=$(git -C "$k" rev-parse bolt/tenant-environments)
 eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h1 --wait --json in $(cd "$k" && pwd -P)"
 has "$posted" "Try it running: a preview of ${h1:0:7} sluice brings up, at these addresses once it is up."
 has "$posted" "web: http://web-${h1:0:7}--bolt-tenant-environments--kit"
-ok "a fix takes main into the bolt by a submission to the bolt, and the merge's end raises the bolt's landing card once it reads proven, keyed by the bolt, printing the line that adopts it, with the address of a preview of its head asked of sluice first"
+ok "a fix takes main into the bolt by a submission to the bolt, and the merge's end raises the kit's landings card in main-level ops's name once the bolt reads proven, keyed by the kit, printing the line that adopts it, with the address of a preview of its head asked of sluice first"
 
 # The landing card's reading, started with it on the team's host: one session on the head's folder, the bolt's page
 # first and its diff against main last, its link on the card, and crew card session giving it again.
@@ -126,7 +145,7 @@ url=$(jq -r .url "$reading/session.json"); pid=$(jq -r .pid "$reading/session.js
 eq "$(listed)" "$pid"
 eq "$(cat "$refusals")" "0"
 has "$out" "card land/tenant-environments: its reading could not be opened on the tailnet: plannotator ended before land/tenant-environments's session was ready: stub: refused to start; crew fetches switchboard-kit's main and tries once more"
-lacks "$(field $box card.post Unread bolt/tenant-environments)" "refused"
+lacks "$(field $box card.post Unread kit/switchboard-kit)" "refused"
 folder=$(cd "$reading/$(git -C "$k" rev-parse --short=7 bolt/tenant-environments)" && pwd -P)
 eq "$(jq -r '.argv | map(select(startswith("/") and (endswith("/result.json") | not))) | map(sub(".*/"; "")) | join(" ")' \
   "$(home_of $box)/.stub-plannotator/$pid.json")" \
@@ -143,25 +162,29 @@ ok "the landing card's reading is started with it on the team's host, a second t
 # The preview's stack fails: the process crew handed the ask to changes the card in place while it waits on the user.
 previews=$(home_of $box)/.local/state/crew/previews/wldn
 touch "$CREW_TEST_ROOT/sluice-preview-fails"; rm "$CREW_TEST_ROOT/sluice-preview-holds"
-until_ok grep -q "^card land/tenant-environments: $card changed" "$previews/tenant-environments.log" ||
+until_ok grep -q "^card land/switchboard-kit: $card changed" "$previews/tenant-environments.log" ||
   fail "the card was not changed for its preview's end:"$'\n'"$(cat "$previews/tenant-environments.log")"
 changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
-has "$changed" "\"changeNote\": \"Its preview of ${h1:0:7} did not come up\""
+has "$changed" "\"changeNote\": \"tenant-environments: Its preview of ${h1:0:7} did not come up\""
 has "$changed" "A preview of ${h1:0:7} was asked for and is not there: starting web / stub: the preview command failed: web did not come up."
 lacks "$changed" "web: http://"
 rm "$CREW_TEST_ROOT/sluice-preview-fails"
 ok "a preview whose stack fails is said on the card, changed in place while it waits on the user"
 
-# A defect noted on the card: a fix started on the bolt withdraws it, held for the fix, ending its reading and releasing
-# its preview; once the fix merges and the bolt reads proven again, the merge's end raises the card again, following
-# the one the fix held, with a new reading and a preview of the new head.
+# A defect noted on the card: a fix started on the bolt holds its row, ending its reading and releasing its preview,
+# its ready pull request drafted, and the card, with no row left that can land, is withdrawn naming the fix's words;
+# once the fix merges and the bolt reads proven again, the merge's end raises a new card, following nothing, with a new
+# reading and a preview of the new head.
+as $box gh pr ready "$pr" -R $gh_repo 2>/dev/null  # ready again, as a refused landing crew could not draft leaves it
 : > "$CREW_TEST_LOG"
 expect_ok crew fix swb-1 gap "The zone list misses one zone."
-has "$out" "card land/tenant-environments: $card withdrawn"
+has "$out" "card land/switchboard-kit: $card withdrawn"
+has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is a draft, so no merge into bolt/tenant-environments lands it"
+eq "$(drafted "$pr")" true
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid"
 has "$out" "released land/tenant-environments's preview of ${h1:0:7}"
 gone "$pid"; eq "$(listed)" ""
-has "$(calls | grep "^$box pendingyou cancel_request ")" '"reason": "held for a fix: The zone list misses one zone."'
+has "$(calls | grep "^$box pendingyou cancel_request ")" '"reason": "every bolt waiting to land is held: tenant-environments, held for a fix: The zone list misses one zone. (fix/tenant-environments/gap)"'
 eq "$(calls | grep -c "^$box sluice release ")" "1"
 gp=$kd/places/fix-tenant-environments--gap
 echo four >> "$gp/shared.txt"; commit_all "$gp" "fix(a): the zone list holds every zone"
@@ -174,24 +197,24 @@ as $box herdr --session wldn-3 stub agent "$p" wldn-dispatch-chuck-herdr-alpha
 : > "$CREW_TEST_LOG"
 echo 2 > "$refusals"  # both of the reading's starts fail
 expect_ok crew fix swb-1 gap --wait
-again=$(grep -o "^card land/tenant-environments: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
-[[ -n $again && $again != "$card" ]] || fail "the landing card was not raised again:"$'\n'"$out"
+again=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
+[[ -n $again && $again != "$card" ]] || fail "the landings card was not raised again:"$'\n'"$out"
 h2=$(git -C "$k" rev-parse bolt/tenant-environments)
 posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
-has "$posted" "\"follows\": \"$card\""
+lacks "$posted" '"follows"'
 refused="plannotator ended before land/tenant-environments's session was ready: stub: refused to start"
-has "$posted" "Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session land/tenant-environments, and this card then carries its link."
+has "$posted" "Its reading could not be opened on the tailnet: swb-1-conductor starts it with crew card session land/tenant-environments, and this card then carries its link."
 has "$posted" "The reading could not be opened on the tailnet: $refused"
 has "$out" "card land/tenant-environments: its reading could not be opened on the tailnet: $refused; crew card session land/tenant-environments starts it"
 [[ ! -e $reading/session.json ]] || fail "a reading is recorded though both its starts failed"
 eq "$(listed)" ""; eq "$(cat "$refusals")" "0"
-eq "$(field $box card.post Card bolt/tenant-environments) $(field $box card.post Unread bolt/tenant-environments)" "$again $refused"
+eq "$(field $box card.post Card kit/switchboard-kit) $(field $box card.post Unread kit/switchboard-kit)" "$again $refused"
 has "$posted" "web: http://web-${h2:0:7}--bolt-tenant-environments--kit"
 eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-environments $h2 --wait --json in $(cd "$k" && pwd -P)"
 # The merge that makes the bolt proven frees its team for its next bolt, planned for it: the dispatcher is told (teams.16).
 has "$(grep "^$box wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha " "$CREW_TEST_LOG")" \
   "swb-1 can take its next bolt: bolt tenant-environments reads proven. Give a free team its next bolt."
-ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
+ok "a fix started on the bolt drafts its ready pull request and holds its row, ending its reading and releasing its preview, the card withdrawn with no row left that can land, and once the fix merges a new card is posted with a preview of the new head, raised without its row's reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
 
 # The conductor's wait finds no reading and starts it, changing the card to carry its link, then waits on it until the
 # landing's close ends it.
@@ -203,10 +226,10 @@ pid2=$(jq -r .pid "$reading/session.json"); url2=$(jq -r .url "$reading/session.
 relinked() { calls | grep "^$box pendingyou update_request " | grep -q "$url2"; }
 until_ok relinked || fail "the card was not changed to carry the reading's link:"$'\n'"$(cat "$T/land-wait.out")"
 changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
-has "$changed" "\"requestId\": \"$again\""; has "$changed" "\"changeNote\": \"Its reading is open again at a new link\""
+has "$changed" "\"requestId\": \"$again\""; has "$changed" "\"changeNote\": \"tenant-environments: Its reading is open again at a new link\""
 eq "$(listed)" "$pid2"
 kill -0 "$waiting" 2>/dev/null || fail "the wait returned rather than waiting on the reading:"$'\n'"$(cat "$T/land-wait.out")"
-ok "the conductor's wait on a landing card with no reading starts it, prints its link, changes the card to carry it and waits on it"
+ok "the conductor's wait on its bolt's row with no reading starts it, prints its link, changes the kit's card to carry it and waits on it"
 unset CREW_AGENT
 
 # The bolt reads proven, so its team is free for its next bolt while it waits to land (teams.16): the give hands swb-1
@@ -224,8 +247,8 @@ crew bolt new third-one "The bolt after." --repo switchboard-kit >/dev/null
 expect_fail "swb-1 holds tenant-environments and ssh-fix; tenant-environments waits to land, and its landing frees swb-1" crew bolt give swb-1
 ok "a team whose bolt reads proven is given its next bolt beside it, and a third is refused, naming the bolt whose landing frees the team"
 
-# The give restarts neither the conductor, which waits on its landing card, nor ops at once: each starts again at its
-# next stop, once idle, the conductor fresh and greeted with both bolts and the line that adopts its landing card.
+# The give restarts neither the conductor, which waits on its bolt's reading, nor ops at once: each starts again at its
+# next stop, once idle, the conductor fresh and greeted with both bolts and the waiting one's row on the kit's card.
 has "$given" "swb-1-conductor and swb-1-ops start again on bolt/ssh-fix at their next stop"
 lacks "$given" "swb-1-conductor started"
 for a in swb-1-conductor swb-1-ops; do
@@ -235,41 +258,43 @@ for a in swb-1-conductor swb-1-ops; do
 done
 greeted=$(calls | grep "^$box wldn-1 agent prompt swb-1-conductor '\[crew\] crew restarted you")
 has "$greeted" "bolt is now bolt/ssh-fix, which sluice"
-has "$greeted" "Your team now builds the bolt ssh-fix. Bolt tenant-environments waits to land; its landing card land/tenant-environments is yours: call get_request (requestId $again, name swb-1-conductor), then run crew card wait land/tenant-environments in the background."
+has "$greeted" "Your team now builds the bolt ssh-fix. Bolt tenant-environments waits to land, a row of switchboard-kit"  # the log quotes each '
+has "$greeted" "run crew card wait land/tenant-environments in the background for its reading"
+lacks "$greeted" "get_request"
 eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
-ok "a give beside a waiting bolt restarts its conductor and ops at their next stop, the conductor greeted with both bolts and its landing card"
-git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)
-expect_ok crew bolt submit tenant-environments
-has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
-grep -q level <<<"$out" && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
-eq "$(git -C "$k" log -1 --format='%an %P' main)" "sluice $main_before $(git -C "$k" rev-parse bolt/tenant-environments)"
-eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchboard-kit, main's"
-eq "$(git -C "$k" status --porcelain)" ""
-[[ ! -e $land ]] || fail "the landing's worktree is still there"
-eq "$(field mac-studio bolt.submit On)" "bolt/tenant-environments"
-eq "$(git -C "$k" config branch.bolt/tenant-environments.crew)" "landed"
-ok "the landing then lands, its worktree removed, the detached main checkout left as it was and the bolt's branch marked landed"
-git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
-
-# The user approves the landing card raised again. A landing stopped before it removed its worktree left one on the
-# bolt's branch, its process gone, which the landing sweeps with the bolt's branch.
+ok "a give beside a waiting bolt restarts its conductor and ops at their next stop, the conductor greeted with both bolts and the waiting one's row"
+# The user approves the landings card raised again, and main-level ops submits the bolt: it lands, the kit's detached main
+# checkout left as it was, and is closed as it lands. A landing stopped before it removed its worktree left one on the
+# bolt's branch, its process gone, which the submission takes up and removes.
 mkdir -p "$(home_of $box)/.stub-pendingyou/answered"
 echo '{"answer": {"approved": true}}' > "$(home_of $box)/.stub-pendingyou/answered/$again.json"
 git -C "$k" worktree add -q "$land" bolt/tenant-environments
 sh -c 'echo $$' > "$(git -C "$land" rev-parse --absolute-git-dir)/crew-landing"
-: > "$CREW_TEST_LOG"
+git -C "$k" switch -q --detach  # the kit's main checkout as the anchor the fleet's timer moves (plan.18)
 # The branch the conductor's pane tells sluice's plugins it works for (teams.20), "none" when it carries none.
 branch() { herdr_state $box wldn-1 ".panes[\"$(awk '$1=="conductor"{print $2}' "$(home_of $box)/.local/state/swb-1-team/panes")\"].tokens.sluice_branch // \"none\""; }
 eq "$(branch)" "bolt/ssh-fix"
-tip=$(short bolt/tenant-environments)
-expect_ok crew bolt land tenant-environments
+tip=$(short bolt/tenant-environments) bolt_tip=$(git -C "$k" rev-parse bolt/tenant-environments)
+: > "$CREW_TEST_LOG"
+expect_ok crew bolt submit tenant-environments
+has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
+has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is ready for review again, so sluice takes it at the head bolt/tenant-environments has now."
+eq "$(drafted "$pr")" false
+eq "$(calls | grep -E "^$box (gh pr ready|wt submit) " | cut -d' ' -f2-4)" $'gh pr ready\nwt submit main'
+eq "$(calls | grep -c "^$box gh pr ready .* --undo$")" 0
+grep -q level <<<"$out" && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"
+eq "$(git -C "$k" log -1 --format='%an %P' main)" "sluice $main_before $bolt_tip"
+eq "$(git -C "$k" rev-parse HEAD) $(cat "$k/README.md")" "$main_before # switchboard-kit, main's"
+eq "$(git -C "$k" status --porcelain)" ""
+[[ ! -e $land ]] || fail "the landing's worktree is still there"
+eq "$(field mac-studio bolt.submit On) $(field mac-studio bolt.submit Head)" "bolt/tenant-environments $bolt_tip"
+git -C "$k" switch -q main  # the timer's move, for the steps below that commit on the kit's main
 has "$out" "tenant-environments has landed at switchboard-kit's $(git -C "$k" rev-parse --short=7 main); swb-1 builds ssh-fix"
 # The branch the conductor carries is the bolt it builds, so the landing makes no restart due.
 eq "$(branch)" "bolt/ssh-fix"
 eq "$(jq -r 'select(.agent == "swb-1-conductor") | .branch' "$CREW_TEST_CLAUDE_LOG" | tail -1)" "bolt/ssh-fix"
-n=$(git -C "$k" log -1 --format='%(trailers:key=Sluice-Submission,valueonly)' main)
-has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"landed on GitHub's main at $(short main) (#$n); every host's folder follows by swancloud's timer within minutes\""
-has "$out" "card land/tenant-environments: $again closed"
+has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"Landed on GitHub's main: tenant-environments at $(short main); every host's folder follows by swancloud's timer within minutes.\""
+has "$out" "card land/switchboard-kit: $again closed"
 has "$out" "released land/tenant-environments's preview of ${h2:0:7}"
 eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid2"
@@ -278,8 +303,6 @@ wait "$waiting" || fail "the conductor's wait failed:"$'\n'"$(cat "$T/land-wait.
 eq "$(head -1 "$T/land-wait.out")" "$url2"
 eq "$(tail -1 "$T/land-wait.out")" "land/tenant-environments: crew ended its session, as its card closed or crew card end was run"
 [[ ! -e $reading ]] || fail "the landing's reading outlived its card"
-has "$out" "$land is removed: bolt tenant-environments is in no plan"
-[[ ! -e $land ]] || fail "the landing's worktree outlived the landing"
 has "$out" "sluice deleted bolt/tenant-environments from GitHub at $tip"
 git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still on GitHub"
 eq "$(git -C "$k" config branch.bolt/tenant-environments.crew || true)" ""
@@ -289,7 +312,7 @@ eq "$(plan -t Unit -e "Bolt = 'tenant-environments'" -c)" "0"
 git -C "$k" rev-parse --verify -q bolt/tenant-environments >/dev/null && fail "bolt/tenant-environments is still there"
 eq "$(field mac-studio bolt.land On) $(field mac-studio bolt.land Commit)" "bolt/tenant-environments unit/a WilldanGroup/crew-state@$(git --git-dir "$ws" rev-parse wldn/main)"
 eq "$(field mac-studio bolt.land Repo) $(field mac-studio bolt.land Head)" "switchboard-kit $(git -C "$k" rev-parse main)"
-ok "a drop frees the last slot and closes the units workspace; the bolt lands once every unit has, recording the commit main holds, sluice deleting its branch from GitHub and the host and crew removing the place a stopped landing left and what is over, closing its landing card on the team's host with where GitHub's main holds it and the timer, ending its reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
+ok "a drop frees the last slot and closes the units workspace; the bolt, submitted on the user's word, lands, its worktree, a stopped landing's taken up, removed and the detached main checkout left as it was, and is closed as it lands, recording the commit main holds, sluice deleting its branch from GitHub and the host, closing the kit's landings card with where GitHub's main holds it and the timer, ending its row's reading and releasing its preview, and its conductor is told, its pane carrying the branch of the bolt its team builds"
 
 # swb-1's other bolt dropped: the team holds none, its pane carries no branch, and each of its conductor and ops, whose
 # session carried the bolt's branch, which only a start changes, is restarted at its next stop.
@@ -315,7 +338,9 @@ on_bolt() { git -C "$k" worktree add -q "$T/zone-lists" bolt/zone-lists && echo 
   commit_all "$T/zone-lists" "$2" && git -C "$k" worktree remove "$T/zone-lists" &&
   git -C "$k" push -q origin bolt/zone-lists; }  # as sluice pushes a landing on a bolt on GitHub
 on_bolt north "feat: the zone list" || fail "the bolt took no commit"
-expect_ok crew bolt submit zone-lists
+# Submitted by its conductor, whom crew bolt land refuses (roles.1): it lands, and is named as not closed.
+out=$(export CREW_AGENT=swb-1-conductor; crew bolt submit zone-lists 2>&1) || fail "the conductor's submission did not land:"$'\n'"$out"
+has "$out" "bolt/zone-lists landed and was not closed: swb-1-conductor does not write the plan with crew bolt land: tell wldn-planner, who proposes it; crew bolt land zone-lists closes it"
 eq "$(git -C "$k" config branch.bolt/zone-lists.crew)" "landed"
 on_bolt south "feat: one zone more, after the landing" || fail "the bolt took no commit after its landing"
 at=$(short bolt/zone-lists)
@@ -370,7 +395,6 @@ commit_all "$k" "chore(openspec): archive mb"; push "$k"
 git -C "$k" update-ref refs/heads/bolt/made-before "$(git -C "$k" commit-tree "main^{tree}" -p bolt/made-before -p main -m "chore(land): #20 chore/bolts-on-github")"
 git -C "$k" push -q origin bolt/made-before  # as sluice pushes the branch its landing's pull request opens from
 expect_ok crew bolt submit made-before
-expect_ok crew bolt land made-before
 has "$out" "sluice deleted bolt/made-before from GitHub at"
 git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse --verify -q bolt/made-before >/dev/null && fail "bolt/made-before is still on GitHub"
 git -C "$k" rev-parse --verify -q bolt/made-before >/dev/null && fail "bolt/made-before is still on the host"
@@ -412,3 +436,72 @@ has "$out" "bolt/kept-work is removed: main now holds bolt kept-work's tip, and 
 github bolt/kept-work && fail "bolt/kept-work is still on GitHub"
 git -C "$k" rev-parse --verify -q bolt/kept-work >/dev/null && fail "bolt/kept-work is still on the host"
 ok "once main holds a dropped bolt's tip, the team's next read has sluice delete its kept branch from GitHub and the host"
+
+# Two bolts of one kit proven at once: one landings card in main-level ops's name, on the partition's main machine, a
+# box a bolt in the plan's order, the lower row forecast to conflict with the one above it; a merge that moves the
+# second's head changes the card in place, naming it.
+# proven <bolt> <unit> <file> <line>: the unit's change, adding the line to the file, archived and merged into the bolt
+# by its submission, its place and branch gone, so the bolt reads proven at sluice's green head
+proven() {
+  local p; p=$(place "$k" "$1" "$2") || return 1
+  change "$p" "$2" 1 1; echo "$4" >> "$p/$3"; commit_all "$p" "feat($2): its change" || return 1
+  mkdir -p "$p/openspec/changes/archive"; git -C "$p" mv "openspec/changes/$2" "openspec/changes/archive/2026-10-23-$2" &&
+    git -C "$p" commit -qm "docs(openspec): archive $2" && merge_as swb-1-unit-1 "$p" "bolt/$1" &&
+    git -C "$k" worktree remove "$p" && git -C "$k" branch -qD "unit/$2"
+}
+for b in north south east; do crew bolt new "$b" "The $b regions." --repo switchboard-kit >/dev/null; done
+crew bolt give swb-1 north >/dev/null 2>&1; crew bolt give swb-2 south >/dev/null 2>&1
+crew unit add north-regions "North's regions." --bolt north >/dev/null; crew unit add south-regions "South's regions." --bolt south >/dev/null
+proven north north-regions regions.txt north || fail "north's unit did not merge"
+proven south south-regions regions.txt south || fail "south's unit did not merge"
+: > "$CREW_TEST_LOG"
+expect_ok on_box _land-card wldn switchboard-kit
+kit=$(grep -o "^card land/switchboard-kit: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
+[[ -n $kit ]] || fail "no landings card was raised for north and south:"$'\n'"$out"
+posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
+eq "$(jq -c '[.idempotencyKey, .session.label, .kind, .highStakes, [.options[].label], .recommendedIds]' <<<"${posted#* post_request }")" \
+  '["land/switchboard-kit:3","wldn-ops","multi",true,["1. north","2. south"],["land:north","land:south"]]'  # two closed before it
+has "$posted" "It is forecast to conflict with north on regions.txt."
+eq "$(field $box card.post Heads kit/switchboard-kit)" "north@$(short bolt/north) south@$(short bolt/south)"
+crew unit add south-more "More of south." --bolt south >/dev/null
+proven south south-more south.txt more || fail "south's second unit did not merge"
+: > "$CREW_TEST_LOG"
+expect_ok on_box _land-card wldn switchboard-kit
+has "$out" "card land/switchboard-kit: $kit changed"
+changed=$(calls | grep "^$box pendingyou update_request ")
+has "$changed" "\"changeNote\": \"south's head is now $(short bolt/south)\""
+calls | grep -q "^$box pendingyou post_request " && fail "the card was posted again rather than changed in place"
+ok "two proven bolts of one kit are one landings card in main-level ops's name, a box each in the plan's order, the lower forecast to conflict with the one above, and a merge moving the second's head changes it in place"
+
+# A third bolt proven joins the card in place; the user sends it with all three ticked, and one crew bolt submit lands
+# them in the card's order, each queued behind the one before on the one host, each closed as it lands: south, which
+# conflicts with north on main once north has landed, is refused, recorded at its head in sluice's words and held on
+# its row saying them, and east lands all the same; the command exits non-zero naming south, and the card closes with
+# what landed and what was held.
+crew bolt give swb-1 east >/dev/null 2>&1
+crew unit add east-files "East's files." --bolt east >/dev/null
+proven east east-files east.txt east || fail "east's unit did not merge"
+: > "$CREW_TEST_LOG"
+expect_ok on_box _land-card wldn switchboard-kit
+has "$out" "card land/switchboard-kit: $kit changed"
+has "$(calls | grep "^$box pendingyou update_request ")" "\"changeNote\": \"east reads proven and joins the card\""
+echo '{"answer": {"choiceIds": ["land:north", "land:south", "land:east"]}}' > "$(home_of $box)/.stub-pendingyou/answered/$kit.json"
+out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
+has "$out" "lands them: crew bolt submit north south east --label wldn"
+south=$(git -C "$k" rev-parse bolt/south)
+: > "$CREW_TEST_LOG"
+expect_fail "south did not land, as said above; north and east landed" crew bolt submit north south east
+eq "$(calls | grep "^$box wt submit " | sed 's/.* from //; s/ as .*//; s/.*land-//')" $'north\nsouth\neast'
+has "$out" "bolt/north landed on switchboard-kit's main at"
+has "$out" "bolt/south did not land: sluice refused it or found a conflict; switchboard-kit's main moved to"
+has "$out" "bolt/east landed on switchboard-kit's main at"
+eq "$(plan -t Bolt -e "Bolt = 'north' || Bolt = 'east'" -c) $(plan -t Bolt -e "Bolt = 'south'" -c)" "0 1"
+eq "$(field mac-studio bolt.submit Head bolt/south)" "$south"
+has "$(field mac-studio bolt.submit Refused bolt/south)" "sluice: bolt/south conflicts with main"
+has "$(calls | grep "^$box pendingyou ack_answer ")" "\"outcome\": \"Landed on GitHub's main: north at"
+closed=$(field $box card.close Outcome kit/switchboard-kit)  # whole in the run record, cut on the card
+has "$closed" "and east at"
+has "$closed" "Held: south, held: sluice refused its landing at ${south:0:7}, and it waits for its team's fix: sluice: bolt/south conflicts with main"
+case $closed in *"words above"*) fail "the card's close points at words above, which are in ops's terminal, not on the card" ;; esac
+calls | grep -q "^$box pendingyou post_request " && fail "a card was posted though no row can land"
+ok "one crew bolt submit lands the ticked bolts in the card's order, each queued behind the one before and closed as it lands, the second refused for its conflict, recorded at its head and held on its row, the third landing all the same; it exits non-zero naming the one held, and the card closes with what landed and what was held"
