@@ -13,4 +13,4 @@
 ## 3. Docs and the affected tests
 
 - [x] 3.1 README's main-level paragraph says how a tell is guarded when herdr names no session for the agent's pane (design, Decision 4; Task notes 3.1); verify `tests/suite t-docs t-briefs` ends with "0 failed".
-- [ ] 3.2 The tests this change affects pass (Task notes 3.2); verify `tests/suite --affected` ends with "0 failed".
+- [x] 3.2 The tests this change affects pass (Task notes 3.2); verify `tests/suite --affected` ends with "0 failed".
