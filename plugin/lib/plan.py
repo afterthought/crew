@@ -10140,20 +10140,40 @@ def pane_answer_refusal(n, entries, v, kind):
     settled = batch_settled(entries)
     if all(k in settled for k in keys):
         return f"{head}: {settled[keys[0]]}"
+    return words_refusal(head, v, "answer a batch", "the user answers a batch on its card or in your pane")
+
+
+def words_refusal(head, v, what, advice):
+    """Why crew takes no words the user said in the caller's pane to what, after head, or None: the verdict v on the
+    words in the caller's own transcript (transcript.check, want="user") reads them as the user's (signals.5); else
+    why not, naming who said them, and for another agent's tell, telling the caller to tell that agent advice. A
+    decision of facts alone (code.7)."""
     if v.grade == "verified" and v.asserted_by == "user":
         return None
     if v.grade == "unverified":
         return f"{head}: crew can't read your session's transcript, so it can't tell the words are the user's: {v.reason}"
     if v.grade == "refused":
-        return (f"{head}: the words are not in a record your session received; only the user's own words answer a batch, "
+        return (f"{head}: the words are not in a record your session received; only the user's own words {what}, "
                 "quoted as they wrote them in your pane, never your own")
     if v.grade == "found":
         return f"{head}: the words are in a record of your transcript crew can't read as anyone's, so it can't tell they are the user's"
     if v.asserted_by.startswith("agent:"):
         other = v.asserted_by[6:]
-        return (f"{head}: the words are {other}'s, passed on with crew tell, and not the user's; tell {other} that the user "
-                "answers a batch on its card or in your pane")
+        return f"{head}: the words are {other}'s, passed on with crew tell, and not the user's; tell {other} that {advice}"
     return f"{head}: the words are " + ("crew's own message" if v.asserted_by == "crew" else "a tool's output") + ", not the user's"
+
+
+def settled_refusal(n, kit, kind, v):
+    """Why crew record <kit> <n> --proposed --settled-in-pane records no record settled in the pane (briefs.15,
+    signals.5), or None: the caller is not the record's partition's design agent, whose kind it is (role, "design"), or
+    the verdict v on the user's yes in its own transcript (words_refusal) does not read the words as the user's. Each
+    refusal of the words sends the record to its card. A decision of facts alone (code.7)."""
+    head = f"crew records record {n:04d} in {kit} as settled in no pane"
+    if kind != "design":
+        return (f"{head}: only the design agent records a record the user settled in its pane, in the user's own words; "
+                "run crew record without --settled-in-pane, and the user answers on its card")
+    why = words_refusal(head, v, "settle a record", "the user settles a record in your pane or on its card")
+    return why and f"{why}; run crew record {kit} {n} --proposed without --settled-in-pane, and the user answers on its card"
 
 
 def answer_said(n, by, words):

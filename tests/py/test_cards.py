@@ -21,6 +21,7 @@ from facts import FLEET as BASE, START
 
 import crew
 import plan
+import transcript
 
 HOOK = pathlib.Path(__file__).resolve().parents[2] / "plugin" / "hooks" / "cards"
 _loader = importlib.machinery.SourceFileLoader("cards_hook", str(HOOK))
@@ -1518,6 +1519,18 @@ def recorded(text, status, before=None, alternatives=None):
     return plan.record_facts("switchboard-kit", 32, text, status, before, alternatives)
 
 
+def heard(asserted_by="user", grade="verified", uuid="u-32", reason=None):
+    """A verdict on the user's yes in the design agent's transcript, as transcript.check gives it."""
+    if grade == "unverified":
+        return transcript.unverified(reason)
+    return transcript.Verdict(grade, raw=b'{"type": "user"}', n=4, value={"uuid": uuid} if uuid else {},
+                              asserted_by=asserted_by if grade == "verified" else "unknown")
+
+
+SETTLED = "crew records record 0032 in switchboard-kit as settled in no pane"
+TO_CARD = "run crew record switchboard-kit 32 --proposed without --settled-in-pane, and the user answers on its card"
+
+
 class TestRecordCommand:
     def test_a_record_proposed_is_put_on_its_card_in_its_own_words_with_the_users_own(self):
         f = recorded(MADR, "proposed")
@@ -1578,6 +1591,29 @@ class TestRecordCommand:
         a = argparse.Namespace(**dict(dict(kit=kit, number=n, status=status, settled_in_pane=False, alternatives=None, label="wldn"), **more))
         with pytest.raises(crew.Refusal, match=re.escape(said)):
             plan.record_status(FLEET, a)
+
+    def test_the_users_yes_in_the_design_agents_own_pane_settles_the_record(self):
+        assert plan.settled_refusal(32, "switchboard-kit", "design", heard()) is None
+        assert plan.settled_refusal(32, "switchboard-kit", "design", heard(uuid=None)) is None
+
+    @pytest.mark.parametrize("kind", ["planner", "operator", "conductor", "main-ops", "dispatcher", "team", "user", "other"])
+    def test_any_caller_but_the_design_agent_is_refused(self, kind):
+        assert plan.settled_refusal(32, "switchboard-kit", kind, heard()) == (
+            f"{SETTLED}: only the design agent records a record the user settled in its pane, in the user's own words; "
+            "run crew record without --settled-in-pane, and the user answers on its card")
+
+    @pytest.mark.parametrize("v, words", [
+        (heard(grade="refused"), "the words are not in a record your session received; only the user's own words settle a "
+                                 "record, quoted as they wrote them in your pane, never your own"),
+        (heard("agent:swancloud-planner"), "the words are swancloud-planner's, passed on with crew tell, and not the user's; "
+                                           "tell swancloud-planner that the user settles a record in your pane or on its card"),
+        (heard("crew"), "the words are crew's own message, not the user's"),
+        (heard("tool"), "the words are a tool's output, not the user's"),
+        (heard(grade="found"), "the words are in a record of your transcript crew can't read as anyone's, so it can't tell they are the user's"),
+        (heard(grade="unverified", reason="session s-9 is on deneb, not mac-studio"),
+         "crew can't read your session's transcript, so it can't tell the words are the user's: session s-9 is on deneb, not mac-studio")])
+    def test_words_crew_does_not_read_as_the_users_are_refused_naming_who_said_them_and_sent_to_the_card(self, v, words):
+        assert plan.settled_refusal(32, "switchboard-kit", "design", v) == f"{SETTLED}: {words}; {TO_CARD}"
 
     def test_the_records_card_is_raised_in_the_design_agents_name_changed_at_a_new_commit_and_followed_once_answered(self, capsys):
         from test_card_commands import Acts, MATCHED, POSTED
