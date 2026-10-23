@@ -303,6 +303,26 @@ class TestCheck:
             v = transcript.check("s-want", words, want="user")
             assert " ".join(str(x) for x in (v.grade, v.asserted_by, v.n, v.uuid)) == grade
 
+    def test_a_word_from_the_board_is_the_users_and_its_verdict_says_it_came_from_the_board(self, put):
+        """board-page "The agent reads it as the user's": a signal captured from it is the user's (signals.5); that it
+        answers nothing is plan.words_refusal's (test_board_word)."""
+        assert transcript.asserter({}, "[crew tell from chuck@board] (on unit a) x") == "user"
+        put("s-board", user("u-60", "[crew tell from chuck@board] (on unit a) Batch 14 is fine"),
+            user("u-61", "[crew tell from chuck@deneb] On batch 15: fine"))
+        assert said("s-board", "Batch 14 is fine") == "verified user 1 u-60"
+        for words, uuid, board in (("Batch 14 is fine", "u-60", True), ("On batch 15: fine", "u-61", False)):
+            v = transcript.check("s-board", words, want="user")
+            assert (v.grade, v.asserted_by, v.uuid, v.board) == ("verified", "user", uuid, board)
+
+    def test_wanting_the_users_record_the_same_words_typed_after_or_before_the_boards_are_the_source(self, put):
+        """board-page "Typed in the pane after the board"."""
+        board = user("u-62", "[crew tell from chuck@board] (on unit a) Batch 14 is fine")
+        put("s-after", board, user("u-63", "Batch 14 is fine"))
+        put("s-before", user("u-64", "Batch 14 is fine"), board)
+        for session, uuid in (("s-after", "u-63"), ("s-before", "u-64")):
+            v = transcript.check(session, "Batch 14 is fine", want="user")
+            assert (v.grade, v.asserted_by, v.uuid, v.board) == ("verified", "user", uuid, False)
+
     def test_with_an_excerpt_file_the_records_that_wrote_it_are_not_searched(self, put):
         put("s-file", user("u-16", [{"type": "tool_result", "tool_use_id": "t3", "content": "File created successfully at: /tmp/e.txt"}],
                            toolUseResult={"type": "create", "filePath": "/tmp/e.txt", "content": "the words I wrote myself"}))

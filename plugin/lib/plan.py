@@ -12134,9 +12134,12 @@ def pane_answer_refusal(n, entries, v, kind):
 
 def words_refusal(head, v, what, advice):
     """Why crew takes no words the user said in the caller's pane to what, after head, or None: the verdict v on the
-    words in the caller's own transcript (transcript.check, want="user") reads them as the user's (signals.5); else
-    why not, naming who said them, and for another agent's tell, telling the caller to tell that agent advice. A
+    words in the caller's own transcript (transcript.check, want="user") reads them as the user's (signals.5), and not
+    only in a word from the board, which answers nothing (record 0038 §3, record 0010), so the caller is given advice;
+    else why not, naming who said them, and for another agent's tell, telling the caller to tell that agent advice. A
     decision of facts alone (code.7)."""
+    if v.grade == "verified" and v.asserted_by == "user" and v.board:
+        return f"{head}: the words came from the board, which answers nothing; {advice}"
     if v.grade == "verified" and v.asserted_by == "user":
         return None
     if v.grade == "unverified":

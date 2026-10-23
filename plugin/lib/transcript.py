@@ -66,6 +66,9 @@ import datetime, json, pathlib, re, sys
 # its line, a backslash-newline running it on, when a word after it starts --excerpt.
 COMMAND = re.compile(r"crew signal(?:\\\n|.)*?(?<!\S)--excerpt(?:\\\n|.)*")
 TELL = re.compile(r"^\[crew tell from ([^\]\s]+)\]")
+# How a tell's sender ends when it carries the user's word from the board, crew tell --board's <user>@board (record
+# 0038 §3): the user's words, which answer nothing.
+BOARD = "@board"
 # A stage's own prompt, as crew's run_stage sends it: a fix, a chore's code or verify, a merge, or construct, code and
 # verify as slash commands. A merge is a submission to the bolt through sluice; one sent before record 0026 merged with
 # wt merge, and a transcript of then still reads as the conductor's.
@@ -137,10 +140,11 @@ def kind(value):
 
 class Verdict:
     """What the check found: the grade, its reason when unverified, and for verified and found the source record:
-    its line as written, its number, its uuid and time when it has them, and who asserted the excerpt."""
+    its line as written, its number, its uuid and time when it has them, who asserted the excerpt, and whether the
+    record is the user's word from the board, a tell from <user>@board."""
 
-    def __init__(self, grade, reason=None, raw=None, n=None, value=None, asserted_by="unknown"):
-        self.grade, self.reason, self.raw, self.n, self.asserted_by = grade, reason, raw, n, asserted_by
+    def __init__(self, grade, reason=None, raw=None, n=None, value=None, asserted_by="unknown", board=False):
+        self.grade, self.reason, self.raw, self.n, self.asserted_by, self.board = grade, reason, raw, n, asserted_by, board
         v = value if isinstance(value, dict) else {}
         self.uuid = v["uuid"] if isinstance(v.get("uuid"), str) and v["uuid"] else None
         self.at = v["timestamp"] if isinstance(v.get("timestamp"), str) and v["timestamp"] else None
@@ -202,6 +206,12 @@ def asserter(value, hit, stage_by=None, expansion=False):
     return "user"
 
 
+def from_board(hit):
+    """Whether the string that holds an excerpt is a tell from the board, its sender <user>@board."""
+    m = TELL.match(hit.lstrip())
+    return bool(m) and m.group(1).endswith(BOARD)
+
+
 def holds_tool_result(v):
     """Whether a JSON value holds a tool_result block anywhere: a record of a tool's output."""
     if isinstance(v, dict):
@@ -219,8 +229,9 @@ def check(session, excerpt, skip=(), stage_by=None, want=None):
     file: none of them is searched, and the rest of a string that holds such a command line is. stage_by is
     the conductor whose stage the session runs, None for a session that runs none, where a prompt of a stage's form is
     the user's. The source is the last received record that holds the excerpt; with want="user", the last one the user
-    asserted, so that a later echo of the user's words in a tool's output or a tell does not hide them, and the last
-    received record only when the user asserted none. Returns a Verdict; refused is one too."""
+    asserted, so that a later echo of the user's words in a tool's output or a tell does not hide them, one not from the
+    board before one that is, so the same words typed in the pane count however the board's word fell beside them, and
+    the last received record only when the user asserted none. Returns a Verdict; refused is one too."""
     if not session:
         return unverified("herdr names no session")
     path = find(session)
@@ -237,7 +248,7 @@ def check(session, excerpt, skip=(), stage_by=None, want=None):
         return unverified(f"session {session}'s transcript has not been written for {int(age.total_seconds() // 60)} "
                           "minutes: crew may be reading another session's")
     needle = collapse(excerpt)
-    received = received_user = other = args = None  # args: the words of the stage command just received, which its expansion ends with
+    received = received_user = received_board = other = args = None  # args: the words of the stage command just received, which its expansion ends with
     for n, raw, v in found:
         if kind(v) in WROTE:
             continue
@@ -254,14 +265,18 @@ def check(session, excerpt, skip=(), stage_by=None, want=None):
         if kind(v) == "user":
             received = (n, raw, v, hits, expansion)
             if asserter(v, hits[-1], stage_by, expansion) == "user":
-                received_user = received
+                if from_board(hits[-1]):
+                    received_board = received
+                else:
+                    received_user = received
         else:
             other = (n, raw, v, hits)
-    if want == "user" and received_user:
-        received = received_user
+    if want == "user" and (received_user or received_board):
+        received = received_user or received_board
     if received:
         n, raw, v, hits, expansion = received
-        return Verdict("verified", raw=raw, n=n, value=v, asserted_by=asserter(v, hits[-1], stage_by, expansion))
+        by = asserter(v, hits[-1], stage_by, expansion)
+        return Verdict("verified", raw=raw, n=n, value=v, asserted_by=by, board=by == "user" and from_board(hits[-1]))
     if other:
         n, raw, v, _ = other
         return Verdict("found", raw=raw, n=n, value=v)

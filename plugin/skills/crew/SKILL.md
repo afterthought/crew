@@ -45,6 +45,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | lift a hold: every standing agent brought back with its conversation and greeted, or told to carry on | `crew go <host>\|--all` |
 | restart now each standing agent an update of crew or of its brief made due, once it is idle | `crew update [<host>\|--all]` |
 | send an agent crew started a message, wherever it runs | `crew tell <agent> "<text>"` |
+| tell a dock's word to its item's agent, as the board's listener pipes it, `{label, key, to, text}`: checked against the agent the item's kind goes to, one line of at most 1000 characters, and marked `[crew tell from <user>@board] (on <kind> <name>)`, the user's word that answers no card | `crew tell --board < word.json` |
 | send something to another team or partition: it reaches that partition's operator, its one door, marked with who sent it and whom it was for | `crew send <team or partition> "<text>"` |
 | see what runs where, with the URL to open | `crew sites [<label>]` |
 | offer a `manual` environment a deploy, its card raised in main-level ops's name with the kit's changelog and after-deploy steps (the kit's deployer) | `crew ops offer <env> --to <sha> --from <sha\|none> [--notes <file>] [--steps <file>] --label L` |
@@ -54,7 +55,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | carry this host's run record to the partition's branch now | `crew events --push [--label L]` |
 | create a partition's flywheel branch, adopting its old plan | `crew state init <label>` |
 | answer what happened to a bolt, a unit, a chore or a signal, each stage's end with how it ended (`Ended`) and what it delivered (`Delivered`) | `crew trace <bolt|unit|chore|signal>` |
-| see a partition's board as a page that opens from disk, its lanes drawn as the flywheel mockup draws them, a click on any item opening its dock over the board with its details and history (the board answering nothing), the strip naming the teams, narrowed to one team (kept across reloads) and linking each other partition's page beside it, in the layout of its own file, with how work flowed, signals to agenda items to proposals to units to bolts, each object's history a click away, one switch away, and each environment's deploys, with the word, checks and outcome of each and the bolts it carried, another | `crew page <label> [--out <file>] [--since <time>]` |
+| see a partition's board as a page that opens from disk, its lanes drawn as the flywheel mockup draws them, a click on any item opening its dock over the board with its details and history, ending with a word to the item's agent, named in it, sent to the page's own address for `crew tell --board` (the board answering nothing, a word from it answering no card), the strip naming the teams, narrowed to one team (kept across reloads) and linking each other partition's page beside it, in the layout of its own file, with how work flowed, signals to agenda items to proposals to units to bolts, each object's history a click away, one switch away, and each environment's deploys, with the word, checks and outcome of each and the bolts it carried, another | `crew page <label> [--out <file>] [--since <time>]` |
 | read a signal: its excerpt, how well crew could check it, and where it came from | `crew signal show <id>` |
 | land a program's capture, a deployer's or another adapter's, with its signals, on the flywheel's branch, run as the program on the host that banked its raw record | `crew signal land <capture-dir> --label L` |
 
@@ -71,7 +72,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 
 ## What is not yours
 
-You keep teams running. You do not do a team's work or steer it: no stages started, no plan written, no design answers, no edits to a team's repositories. If a conductor has gone off course, restart it, and if that does not fix it, tell the user what you saw. Text sitting in an agent's input box is usually Claude Code's suggested prompt, not something the user typed; never submit it. In a pane, a message beginning `[crew tell from <name>]` was sent with crew tell, and one beginning `[crew]` by crew itself.
+You keep teams running. You do not do a team's work or steer it: no stages started, no plan written, no design answers, no edits to a team's repositories. If a conductor has gone off course, restart it, and if that does not fix it, tell the user what you saw. Text sitting in an agent's input box is usually Claude Code's suggested prompt, not something the user typed; never submit it. In a pane, a message beginning `[crew tell from <name>]` was sent with crew tell, one from `<user>@board` being the user's word from the board on the item it names, and one beginning `[crew]` by crew itself.
 
 ## Defining a team
 

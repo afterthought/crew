@@ -422,7 +422,7 @@ class TestDocks:
                     "D.docks", 'ev.key === "Escape"', 'ev.key === "Enter"', 'ev.key === " "', '$("scrim").addEventListener("click", closeDock)',
                     'x.setAttribute("role", "button")', "x.tabIndex = 0", 'el("span", "host tm")', "preventScroll: true", "opener.focus"):
             assert has in rest
-        for no in (".dk-f", "innerHTML", "fetch(", "XMLHttpRequest", "WebSocket", "<script src", "<link", "@import", "url("):
+        for no in (".dk-f", "innerHTML", "XMLHttpRequest", "WebSocket", "<script src", "<link", "@import", "url("):
             assert no not in rest
 
     def test_the_open_dock_is_kept_in_the_address_and_a_key_the_page_no_longer_holds_is_dropped(self):
@@ -440,6 +440,51 @@ class TestDocks:
         block, = re.findall(r'<script type="application/json" id="data">(.*?)</script>', out, re.S)
         assert "</script>" not in block
         assert json.loads(block)["docks"][f"signal:{self.SIG}"]["parts"][0]["rows"] == [{"text": "Ends </script><b>here</b> & more."}]
+
+
+class TestWord:
+    """board-page "A word goes to the agent its item's kind names": every dock page names the agent its word goes to
+    (page.word_to), on TestDocks's board."""
+
+    @pytest.fixture(autouse=True)
+    def here(self, monkeypatch):
+        import crew
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+
+    def test_each_kinds_word_goes_to_its_agent(self):
+        """board-page "Each kind's agent"."""
+        d = TestDocks().paged()
+        to = {k: p["to"] for k, p in d["docks"].items()}
+        deploy = next(k for k in to if k.startswith("deploy:"))
+        assert [to[k] for k in ("bolt:tenant-environments", "unit:a", "fix:tenant-environments/edge")] == ["swb-1-conductor"] * 3
+        assert [to[k] for k in ("bolt:apex-zones", "unit:zone-one", "unit:zone-two")] == ["wldn-operator"] * 3
+        assert (to["proposal:2"], to[f"signal:{TestDocks.SIG}"]) == ("wldn-planner", "wldn-design")
+        assert [to[k] for k in ("landing:atlas-maps", deploy, "operation:mac-studio/rotate-key")] == ["wldn-ops"] * 3
+        assert [to[k] for k in ("team:swb-1", "subscription:madswan-2")] == ["wldn-operator"] * 2
+
+    def test_every_dock_page_names_its_agent(self):
+        d = TestDocks().paged()
+        assert d["docks"] and all(p["to"] for p in d["docks"].values())
+
+    def test_every_dock_ends_with_a_word_to_its_agent_posted_to_the_pages_own_address_as_its_one_request(self):
+        """board-page "A unit's dock", "Opened from disk", "The dock says what became of the word" and "Only the word is
+        posted": the dock's last section names whom the word goes to and that a card is answered on the rail; Send
+        posts it to the page's own address, `word`, and says the listener's answer as text, or that it did not answer;
+        a page opened from disk sends nothing."""
+        rest = TestDocks().rest()
+        for has in ('class="word"', 'maxlength="1000"', 'new URL("word", location.href)', '"POST"', "JSON.stringify({ label: D.label, key: key, to: page.to, text: text })",
+                    'location.protocol === "file:"', "a card is answered on the rail", "the board's listener did not answer: nothing was sent",
+                    "a word is sent only from the served board", "r.status === 200 || r.status === 422", "wordSend.disabled = true", "wordSaid.textContent = words",
+                    "if (ok) wordText.value = \"\";", "dkB.append(wordSec)", 'aria-live="polite"'):
+            assert has in rest
+        assert rest.count("fetch(") == 1
+        for no in ("XMLHttpRequest", "WebSocket", "innerHTML", ".dk-f", "sendBeacon", "<form action", "method=\""):
+            assert no not in rest
+
+    def test_a_kind_with_no_dock_yet_goes_to_its_role_and_any_other_to_the_operator(self):
+        d = TestDocks().paged()
+        assert [page.word_to(k, d, "wldn") for k in ("batch:14", "record:0038", "partition:wldn", "unit:nosuch")] == [
+            "wldn-planner", "wldn-design", "wldn-operator", "wldn-operator"]
 
 
 def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labelled_by_its_words():
