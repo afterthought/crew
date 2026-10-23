@@ -8,7 +8,7 @@ import datetime
 
 import pytest
 
-from facts import START, card_closed, constructed, plan_of, reviewed, told
+from facts import FLEET, START, at, card_closed, constructed, plan_of, reviewed, told
 
 import plan
 
@@ -57,6 +57,17 @@ class TestAnswered:
         assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, state="lost")]) == {"x1": 7}
         assert plan.awaiting_answer(held + [card_closed("batch/7", "req_7", 20, refused="Pending You did not answer")]) == {"x1": 7}
 
+    def test_a_batch_crew_recorded_read_in_its_session_with_no_card_closed_waits_on_nothing_until_a_newer_card_is_posted(self):
+        """review-batches, "The batch's session sent with no card held": crew's close of batch 7, in the planner's name,
+        answers it; a card posted under its key after opens it again, and a close refused closes nothing."""
+        held = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10)]
+        read = {"Act": "batch.close", "Key": "batch/7", "On": ["batch/7"], "By": "wldn-planner", "State": "read",
+                "Outcome": "Read; no notes", "At": "2026-10-12T10:20:00Z"}
+        assert plan.awaiting_answer(held + [read]) == {} and plan.batch_closed(held + [read]) == {"batch/7"}
+        posted = {"Act": "card.post", "Key": "batch/7", "Card": "req_8", "At": "2026-10-12T10:21:00Z", "On": []}
+        assert plan.awaiting_answer(held + [read, posted]) == {"x1": 7}
+        assert plan.awaiting_answer(held + [dict(read, Refused="the run record could not be written")]) == {"x1": 7}
+
     def test_a_card_posted_again_under_the_key_after_its_close_waits_until_that_card_closes(self):
         held = [constructed("x1", "bbb1"), reviewed(7, [("x1", "swb-1", "bbb1")], 10)]
         posted = lambda card, minutes: {"Act": "card.post", "Key": "batch/7", "Card": card, "At": f"2026-10-12T10:{minutes:02d}:00Z", "On": []}
@@ -86,6 +97,47 @@ class TestAnswered:
             {"Act": "card.post", "Key": k, "Card": f"req_{k}", "At": "2026-10-12T10:11:00Z", "On": []} for k in ("batch/3-1", "batch/3-2")]
         entries.append(card_closed("batch/3-1", "req_batch/3-1", 20))
         assert plan.awaiting_answer(entries) == {"u5": 3, "u6": 3}
+
+
+def pane_answer(n, by="swancloud-planner", at="2026-10-22T20:17:04Z", refused=None):
+    """A run-record entry: batch n answered in the user's own words in by's pane, as crew card answer records it."""
+    return {"Act": "batch.answer", "On": [f"batch/{n}"], "Key": f"batch/{n}", "Batch": str(n), "Chars": "28", "By": by, "At": at,
+            "From": [f"session/s-1/u-{n}"], "Refused": refused}
+
+
+class TestPaneAnswer:
+    """A batch is answered by the user's own words in a main-level pane (review-batches; record 0031 as amended
+    2026-10-22): the answer closes every key of its batch for good, as a tap closes its card."""
+
+    HELD = [constructed("x1", "bbb1"), reviewed(13, [("x1", "swb-1", "bbb1")], 10),
+            {"Act": "card.post", "Key": "batch/13", "Card": "req_13", "At": at(11), "On": ["batch/13"]}]
+
+    def test_an_answer_in_a_pane_closes_its_batch(self):
+        assert plan.batch_closed(self.HELD + [pane_answer(13)]) == {"batch/13"}
+
+    def test_a_card_posted_under_its_key_after_the_answer_leaves_it_closed(self):
+        entries = self.HELD + [pane_answer(13), {"Act": "card.post", "Key": "batch/13", "Card": "req_14", "At": at(30), "On": ["batch/13"]}]
+        assert plan.batch_closed(entries) == {"batch/13"}
+
+    def test_an_answer_of_a_batch_posted_as_cards_of_five_before_closes_each_card(self):
+        posts = [{"Act": "card.post", "Key": k, "Card": f"req_{k}", "At": at(11), "On": []} for k in ("batch/6-1", "batch/6-2")]
+        assert plan.batch_closed(posts + [pane_answer(6)]) == {"batch/6", "batch/6-1", "batch/6-2"}
+
+    def test_a_refused_answer_closes_nothing(self):
+        assert plan.batch_closed(self.HELD + [pane_answer(13, refused="the words are the agent's own")]) == set()
+        assert plan.awaiting_answer(self.HELD + [pane_answer(13, refused="x")]) == {"x1": 13}
+
+    def test_the_units_of_a_batch_answered_in_a_pane_wait_on_nothing(self):
+        assert plan.awaiting_answer(self.HELD) == {"x1": 13}
+        assert plan.awaiting_answer(self.HELD + [pane_answer(13)]) == {}
+
+    def test_its_card_is_closed_answered_naming_whose_pane_and_when(self):
+        assert plan.row_gone("batch/13", self.HELD + [pane_answer(13)]) == ("Answered in swancloud-planner's pane at 20:17Z", None)
+        assert plan.pane_answered(self.HELD + [pane_answer(13), pane_answer(13, by="swancloud-operator", at="2026-10-22T20:19:00Z")]) == {
+            "batch/13": ("swancloud-planner", "2026-10-22T20:17:04Z")}
+
+    def test_no_card_is_raised_again_for_a_batch_answered_in_a_pane(self):
+        assert plan.batch_facts(13, self.HELD + [pane_answer(13)], "## x1\n\nIt works.", {}) is None
 
 
 def landed(bolt, units, minutes=0, refused=None):
@@ -243,6 +295,72 @@ class TestCards:
     def test_a_batch_posted_as_cards_of_five_before_keeps_a_card_for_each_posted(self):
         assert plan.batch_cards(5, self.UNITS, ["batch/5-2", "batch/5-1", "batch/6"]) == [
             ("batch/5-1", self.UNITS[:5]), ("batch/5-2", self.UNITS[5:])]
+
+
+class RaiseActs:
+    """A stand-in for the act's reach as a batch's raise uses it: each start of the batch's reading refused in turn with
+    the words of refusals, None for one that opens; Pending You's area matched and the card posted as req_b3."""
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+
+    def __init__(self, entries, refusals=()):
+        self.held, self.refusals = list(entries), list(refusals)
+        self.sessions, self.emitted, self.calls = [], [], []
+
+    def session(self, label, key, facts):
+        self.sessions.append(key)
+        why = self.refusals.pop(0) if self.refusals else None
+        if why:
+            raise plan.Refusal(why)
+        return self.LINK
+
+    def bridge(self, name, later, held=None):
+        acts = self
+
+        class Py:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+            def call(self, tool, args):
+                acts.calls.append((tool, args))
+                return {"match_area": {"decision": "use", "suggestions": [{"areaId": "prj_kit"}]},
+                        "post_request": {"requestId": "req_b3", "version": 1}}[tool]
+        return Py()
+
+    def emit(self, label, act, on, **fields):
+        self.emitted.append(dict(fields, Act=act))
+
+    def entries(self, label):
+        return self.held
+
+    def host(self):
+        return "mac-studio"
+
+    def caller(self):
+        return "wldn-planner"
+
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
+
+def test_a_batch_whose_first_start_fails_and_second_opens_is_posted_with_its_link(monkeypatch, tmp_path, capsys):
+    """card-sessions "The first start fails and the second opens": crew review --wait's raise posts the card with the
+    second start's link, and its card.post entry holds no reason."""
+    (tmp_path / "batch-wldn-3.md").write_text(SUMMARY)
+    monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+    kit = {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}
+    fleet = dict(FLEET, teams={t: dict(v, kit=kit) for t, v in FLEET["teams"].items()})
+    acts = RaiseActs([reviewed(3, [("x1", "swb-1", "aaa1")])], refusals=["plannotator did not list batch/3's session within 10 seconds"])
+    assert plan.raise_batch(fleet, {"label": "wldn", "key": "batch/3", "group": "batches"}, acts) == "req_b3"
+    assert acts.sessions == ["batch/3", "batch/3"]
+    card = next(a for t, a in acts.calls if t == "post_request")
+    assert card["context"]["links"][0] == {"label": "Read batch 3", "url": RaiseActs.LINK}
+    post, = acts.emitted
+    assert (post["Act"], post["Card"], post["Key"], post.get("Unread")) == ("card.post", "req_b3", "batch/3", None)
+    assert "crew tries once more" in capsys.readouterr().err
 
 
 SUMMARY = """# Batch 3 of wldn

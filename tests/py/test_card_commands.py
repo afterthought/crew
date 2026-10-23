@@ -6,7 +6,8 @@ own error; and what `crew card read` prints. Then the act that sends crew's own 
 row_card_change and row_card_close, on a stand-in for the bridge, the run record, a tell and an upload (record 0031):
 what each sends and records, the line that adopts a card and whom it is told to, a card the user answered left as it
 is unless what it asked changed since, a landing's head among it, and then followed by its new version under the key's
-revision rather than changed, and each failure said and recorded.
+revision rather than changed, and each failure said and recorded. Then the port range a card's session starts
+plannotator on, plan.session_env.
 The bridge itself, and every command's wiring, are t-cards'."""
 import json
 
@@ -627,6 +628,26 @@ def test_a_close_acks_an_answered_card_with_its_outcome_and_withdraws_a_waiting_
     assert capsys.readouterr().out.splitlines()[-1] == "card land/b1: req_c1 withdrawn"
 
 
+def test_a_landing_on_the_users_words_sends_them_answered_here_and_records_the_outcome_without_them(capsys):
+    """plan.16, main-level spec "The card closes with the user's words": a landing card still waiting closes as answered
+    in the conversation, Pending You sent the user's words, the run record the outcome alone (record.3); one the user
+    also tapped is acked with the words."""
+    landed = plan.landed_words("c" * 40, "24")
+    outcome, said = plan.pane_landed(landed, "wldn-ops", "2026-10-22T21:04:00Z", "Land swb-1's bolt")
+    acts = Acts({"get_request": ({"status": "pending", "version": 1}, None)}, entries=HELD)
+    assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True) == "req_c1"
+    assert acts.calls[1] == ("cancel_request", {"requestId": "req_c1", "name": "swb-1-conductor", "reason": cards.cut(said, cards.OUTCOME),
+                                                "answeredHere": True})
+    assert acts.calls[1][1]["reason"].startswith('Landed on the user\'s word in wldn-ops\'s pane, "Land swb-1\'s bolt"; landed on')
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", outcome)
+    assert "Land swb-1's bolt" not in repr(acts.emitted)
+    assert capsys.readouterr().out.splitlines()[0] == "card land/b1: req_c1 closed"
+    acts = Acts({"get_request": ({"status": "answered", "version": 3}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True)
+    assert acts.calls[1][0] == "ack_answer" and "answeredHere" not in acts.calls[1][1]
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", outcome)
+
+
 LONG = ("Applied: added " + ", ".join(f"the-unit-that-does-thing-{i}" for i in range(1, 9))
         + "; 3 other changes. Left out on your word: the-briefs-say-never-wt-submit-help.")
 
@@ -671,6 +692,37 @@ def test_a_close_with_no_card_held_closes_nothing_and_says_so(capsys):
 
 PLAN = "%rec: Bolt\n%key: Bolt\n\n%rec: Unit\n%key: Unit\n"
 PLAN_AFTER = PLAN + "\nUnit: g-one\nRepo: switchboard-kit\nIntent: One unit.\n"
+
+
+# ------------------------------------------------------------------------------------ the port a session takes
+# plan.session_env: the environment a card's session starts plannotator in, so it takes the first free port of a
+# range wherever crew runs (card-sessions), read against plannotator 0.28.26's reading of PLANNOTATOR_PORT.
+
+def test_a_session_with_no_port_named_takes_crews_range():
+    assert plan.session_env({})["PLANNOTATOR_PORT"] == "19432-19451" == plan.CARD_PORTS
+
+
+def test_a_range_the_environment_names_is_kept():
+    assert plan.session_env({"PLANNOTATOR_PORT": "19440-19460"})["PLANNOTATOR_PORT"] == "19440-19460"
+
+
+@pytest.mark.parametrize("named", ["19432", "abc", "19451-19432", "0-10", "19432-70000", ""])
+def test_one_port_or_one_plannotator_cant_read_gives_crews_range(named):
+    assert plan.session_env({"PLANNOTATOR_PORT": named})["PLANNOTATOR_PORT"] == "19432-19451"
+
+
+@pytest.mark.parametrize("environ", [{}, {"PLANNOTATOR_PORT": "19440-19460"},
+                                     {"PLANNOTATOR_REMOTE": "0", "PLANNOTATOR_SKIP_BROWSER_OPEN": "0"}])
+def test_every_session_is_remote_and_opens_no_browser(environ):
+    env = plan.session_env(environ)
+    assert env["PLANNOTATOR_REMOTE"] == "1" and env["PLANNOTATOR_SKIP_BROWSER_OPEN"] == "1"
+
+
+def test_the_rest_of_the_environment_passes_through_and_the_one_given_is_not_changed():
+    environ = {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}
+    env = plan.session_env(environ)
+    assert env["PLANNOTATOR_URL_HOST"] == "auto" and env["PATH"] == "/bin"
+    assert environ == {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}
 
 
 # ------------------------------------------------------------------------------- crew card wait on a bolt's row

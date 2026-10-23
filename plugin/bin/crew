@@ -126,7 +126,7 @@
 #                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
 #                                      while main lacks its tip, and deleted once main holds it. A bolt made before
 #                                      gives went through sluice stays local until it lands
-#   crew bolt  submit <bolt>... [--label L]
+#   crew bolt  submit <bolt>... [--excerpt "<the user's words>"] [--label L]
 #                                      main-level ops's landing of one kit's bolts, in the order the user's landings
 #                                      card gives: each bolt's branch submitted to its kit's main through sluice from a
 #                                      short-lived worktree on its team's host, queued behind the one before on one host,
@@ -136,7 +136,9 @@
 #                                      pushes nothing and levels no host. In a kit whose main takes pull requests, it
 #                                      readies each bolt's draft pull request first, and a landing that does not land
 #                                      leaves it a draft, as a fix's start or a merge into the bolt keeps it, until the
-#                                      next submit readies it
+#                                      next submit readies it; with --excerpt, on the user's words in ops's pane,
+#                                      submitted only once crew reads them in ops's own transcript as the user's, no
+#                                      words in the run record
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
@@ -153,9 +155,17 @@
 #                                      whose row is gone. It sweeps the cards on this host under its sign-in: closes
 #                                      a card whose row is gone, withdraws a question whose asker has ended, and
 #                                      posts again a row's card Pending You no longer finds and a row's card that
-#                                      has none, through its kind's raise; and it ends, on every host of the
-#                                      partition, each card session crew started whose card is closed or whose row
-#                                      is gone. It says what each did, and each host it could not check
+#                                      has none, through its kind's raise, and on its owner's host every row's card
+#                                      posted from another host or lost to its owner, and a still-proposed decision
+#                                      record's, built again from the record on the kit's main, saying the older
+#                                      copy is dead, one raised with alternatives named with the crew record that
+#                                      raises it again; tries again the reading of a batch's, a long proposal's or a
+#                                      kit's landings card that stands without it, ten minutes on, a landings card's
+#                                      by raising it again, which tries each row's on its team's host as crew card
+#                                      session land/<bolt> does, changing the card to carry its links; and it ends,
+#                                      on every host of the partition, each card session crew
+#                                      started whose card is closed or whose row is gone. It says what each did, and
+#                                      each host it could not check
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
 #                                      no move has taken, explorations), Bolt plan (proposals, planned bolts, the
 #                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and
@@ -169,16 +179,21 @@
 #                                      browser), a batch card's one on the whole batch, on the main level's host, a
 #                                      bolt's (land/<bolt>) one on what it brings to main, on the host of the team
 #                                      holding it while it is a row of its kit's landings card, the kit's card changed to
-#                                      carry a new link while it waits on the user, land/<kit> having none of its own,
-#                                      a proposal's only for one of more than fifteen new units, and an old
+#                                      carry a new link, or one it stands without, while it waits on the user, land/<kit>
+#                                      having none of its own, as a batch's and a long proposal's change the planner's,
+#                                      recording the start, a proposal's only for one of more than fifteen new units, and an old
 #                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
 #                                      waits for the user's decision in it and prints it with their words, for a batch
 #                                      card waits on the card too, printing its note and every annotation, and closes
-#                                      the card, and for a bolt's reading prints its annotations as notes on its row
+#                                      the card, recording the batch read in the planner's name when the session is
+#                                      sent and no card of it closes there, and for a bolt's reading prints its
+#                                      annotations as notes on its row
 #                                      and its approval as landing nothing, leaving the card, starting the reading
 #                                      first when none runs while the bolt is a row that can land, refused naming crew
-#                                      card session land/<bolt> when it will not open; end ends it, as the card's
-#                                      close does
+#                                      card session land/<bolt> when it will not open, a batch's starting it first
+#                                      too, and when it will not open saying why once, naming crew card session
+#                                      batch/<n>, and waiting on the card alone; end ends it, as the card's close
+#                                      does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use
@@ -187,6 +202,14 @@
 #                                      an approval the user declined is closed with their words; for a kit's landings
 #                                      card (land/<kit>), the bolts the user ticked in its order and the crew bolt
 #                                      submit that lands them
+#   crew card  answer batch/<n> --excerpt "<words>" [--label L]
+#                                      the planner's or the operator's: the user's answer to a batch in their own words
+#                                      in its pane, recorded once crew reads the words in that agent's own session
+#                                      transcript as the user's, never an agent's, a tool's or crew's own, with no
+#                                      words in the run record; closes the batch's card held on this host with the
+#                                      words, or names the host whose rail closes it, ends the planner's wait on it,
+#                                      and tells the planner the words when the operator ran it; refused for a batch
+#                                      answered already or waiting on nothing
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
@@ -211,14 +234,18 @@
 #                                      review tab beside the planner; --wait waits for its summary, records the batch,
 #                                      raises its card with its reading session in the planner's name, and closes the
 #                                      tab
-#   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane] [--alternatives <file>]
+#   crew record   <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
 #                                      the design agent's, at each turn of a decision record's status once it is on the
 #                                      kit's main: the status recorded with its commit; --proposed raises the record's
 #                                      card in the design agent's name, or at a new commit changes it, a new card
 #                                      following it once the user has answered it, unless --settled-in-pane says the
-#                                      user said yes in the pane; --alternatives <file> makes it a choice, loosen the
-#                                      rules as drafted, accept as ruled or send back; --accepted or --rejected closes
-#                                      it with the commit. A status the file does not hold is refused
+#                                      user said yes in the pane, in the words --excerpt gives, which crew reads in the
+#                                      design agent's transcript as the user's; --alternatives <file> makes it a
+#                                      choice, loosen the rules as drafted, accept as ruled or send back, recorded on
+#                                      the status with none of the file's words; a card held on a host the main level
+#                                      left, or lost to the design agent, is posted again saying the older copy is
+#                                      dead; --accepted or --rejected closes it with the commit. A status the file
+#                                      does not hold is refused
 #   crew console  up|down <label>      the partition's console in this host's operator session <label>, starting no
 #                                      agent: a flow tab following the run record, a rail tab (crew rail above, a shell
 #                                      below) and a board tab drawn from the rail tab's read, each tab's command run
