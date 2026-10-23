@@ -3245,10 +3245,47 @@ def unaccepted(items, held):
     return "\n".join([UNACCEPTED, *lines, UNACCEPTED_AFTER]) if lines else None
 
 
+def proposal_records(fleet, label, scratch, argvs):
+    """The records a proposal's new work names, read on each repository's main as GitHub holds it now (plan.18): the
+    items record_items finds in the plan its commands leave (scratch), and what each repository's main holds by each
+    number, for unaccepted. Each repository is fetched once into crew's cache, held for the command (plan.12), its
+    docs/adr/ listed at that tip and the one file by a number read; a main that can't be fetched, or a file that can't
+    be read as text, gives why, naming it (read.1, read.2). Returns (items, held)."""
+    items, held = record_items(fleet, label, scratch.plan, argvs), {}
+    for repo in dict.fromkeys(i[3] for i in items):
+        numbers = sorted({i[4] for i in items if i[3] == repo})
+        try:
+            tip = fetch(repo, "main")
+            listed = git(repo, "ls-tree", "--name-only", tip, "docs/adr/").splitlines() if tip else []
+        except Refusal as e:
+            held.update({(repo, n): {"why": str(e)} for n in numbers})
+            continue
+        for n in numbers:
+            if not tip:
+                held[(repo, n)] = {"why": f"{repo} has no main on GitHub"}
+                continue
+            files = [f for f in listed if re.fullmatch(rf"docs/adr/{n:04d}-[^/]*\.md", f)]
+            held[(repo, n)] = {"files": files, "status": "", "marked": False}
+            if len(files) != 1:
+                continue
+            try:
+                text = show(repo, tip, files[0])
+            except UnicodeDecodeError:
+                text = None
+            if text is None:
+                held[(repo, n)] = {"why": f"crew can't read {files[0]} on {repo}'s main at {tip[:7]} as text"}
+                continue
+            status, marked = record_status_held(text)
+            held[(repo, n)].update(status=status, marked=bool(marked))
+    return items, held
+
+
 def plan_propose(fleet, a):
     """crew plan propose <file> [--replaces <n>]: the planner's proposal, checked against the plan at the tip, written
-    open with the next number; the conductor of each bolt in flight it touches is told. Once it is written, crew raises
-    its card in the planner's name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
+    open with the next number; the conductor of each bolt in flight it touches is told. Refused, with nothing written,
+    when a bolt it creates, or a unit or chore it adds or moves into a bolt, names a decision record its main on GitHub
+    does not hold accepted (proposal_records, unaccepted). Once it is written, crew raises its card in the planner's
+    name, or, for a rewrite, changes its chain's card in place (raise_proposal_at)."""
     kind, of = role(fleet, os.environ.get("CREW_AGENT"))
     kind in ("planner", "user") or fail(proposer_refusal(fleet, os.environ.get("CREW_AGENT"), kind, of))
     label = of if kind == "planner" else proposal_label(fleet, a)
@@ -3261,7 +3298,9 @@ def plan_propose(fleet, a):
     def change(w):
         pl = proposals(w)
         n = next_proposal(pl)
-        check_ops(fleet, label, w, argvs, n)
+        scratch = check_ops(fleet, label, w, argvs, n)
+        said = unaccepted(*proposal_records(fleet, label, scratch, argvs))
+        not said or fail(said)
         per = touched_by(w.plan, argvs)
         seen["old_by"] = open_proposal(pl, n, case, dos, agent(), datetime.date.today().isoformat(), a.replaces, label)
         w.replace("proposals.rec", pl.text())
