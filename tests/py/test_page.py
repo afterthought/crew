@@ -215,6 +215,233 @@ class TestMore:
             record.when("yesterday-ish")
 
 
+class TestDocks:
+    """board-page: every item the page draws opens a dock with what the page's data and lineage hold of it (page.docks),
+    on the board of test_board's fixture: a signal, a proposal waiting with its card open, a planned bolt and a queued
+    unit, tenant-environments held by swb-1 with a in code and a fix, atlas-maps landed by atl-1 and deployed to
+    mac-studio, a newer deploy waiting on the word, and operations waiting on the environment."""
+    SIG = "2026-10-01-planning/01-zones"
+
+    @pytest.fixture(autouse=True)
+    def here(self, monkeypatch):
+        import crew
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+
+    def fleet(self):
+        import copy
+        from test_board import BOX, FLEET
+        f = copy.deepcopy(FLEET)
+        f["hosts"][BOX]["sessions"] = {"crew-a": {"account": "madswan-2"}, "crew-b": {"account": "madswan-2"}, "brd": {}}
+        f["hosts"]["mac-studio"]["sessions"] = {"wldn": {"account": "madswan-2"}, "atlas": {"account": "willdan"}}
+        for t, s in (("swb-1", "crew-a"), ("swb-2", "crew-b"), ("brd-1", "brd"), ("atl-1", "atlas")):
+            f["teams"][t]["session"] = s
+        f["partitions"]["wldn"]["sessions"] = {r: "wldn" for r in ("design", "planner", "ops", "operator", "reviewer")}
+        return f
+
+    def paged(self, label=None):
+        import datetime
+        from test_board import NOW, OPS, SIGS, WAITS, data
+        card = dict(label="wldn", card="req_2", key="proposal/2", by="wldn-planner", host="mac-studio", at=NOW)
+        landing = dict(label="wldn", bolt="atlas-maps", units=["map-one"], at=NOW - datetime.timedelta(hours=1), by="chuck@mac-studio", host="mac-studio")
+        bd = data(signals=SIGS, props=WAITS, cards=[card], entries=OPS, landings=[landing], gives={("wldn", "atlas-maps"): "atl-1"})
+        lineage = [entry("capture", [f"signals/{self.SIG}"], why="captured"), entry("plan.propose", ["proposal/2", "unit/d", "bolt/tenant-environments"]),
+                   entry("unit.add", ["unit/a", "bolt/tenant-environments"], ["signals/" + self.SIG]), entry("unit.add", ["unit/d", "bolt/tenant-environments"], ["proposal/2"]),
+                   entry("bolt.land", ["bolt/atlas-maps", "unit/map-one"], minutes=5), entry("unit.add", ["unit/x", "bolt/c"], ["agenda/8"])]
+        d = page.data(lineage + OPS)
+        for n in d["nodes"]:
+            n["label"] = label if n["id"] == f"signals/{self.SIG}" and label else n.get("label")
+        d["board"] = dict(bd["partitions"][0], read_at=bd["read_at"], unread=bd["unread"])
+        d["deploys"] = page.deploys(d, OPS, "mac-studio")
+        d["docks"] = page.docks(d, self.fleet(), "wldn")
+        return d
+
+    def test_every_item_of_each_kind_and_every_team_carries_the_key_of_a_dock_the_page_holds(self):
+        """board-page "Every item has its dock"."""
+        d = self.paged()
+        B = d["board"]
+        drawn = list(page.walk(B, d["deploys"]))
+        assert drawn and all(x["dock"] in d["docks"] for x in drawn)
+        kinds = {d["docks"][x["dock"]]["kind"] for x in drawn}
+        assert kinds == {"signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation", "team"}
+        assert [t["dock"] for t in B["teams"]] == ["team:swb-1", "team:swb-2", "team:brd-1", "team:atl-1"]
+        assert B["bolt_plan"]["planned"][0]["dock"] == "bolt:apex-zones" and B["bolt_plan"]["queue"][0]["dock"] == "unit:zone-two"
+        assert B["construction"][0]["fixes"][0]["dock"] == "fix:tenant-environments/edge"
+
+    def test_a_units_dock_in_a_ledger_says_its_bolt_as_a_link_its_stage_its_tasks_and_its_slot(self):
+        """board-page "A unit being built"."""
+        a = self.paged()["docks"]["unit:a"]
+        assert (a["kind"], a["title"], a["tail"], a["form"]) == ("unit", "a", "unit · in tenant-environments", None)
+        facts = {f[0]: f[1:] for f in a["facts"]}
+        assert facts["bolt"] == ["tenant-environments", "bolt:tenant-environments"]
+        assert (facts["stage"], facts["tasks"], facts["slot"]) == (["code"], ["1 of 2 tasks"], ["unit-1"])
+        assert facts["server"] == ["https://unit-a--switchboard-kit--box.dev"]
+
+    def test_the_same_deploy_from_the_operation_lane_and_the_deploys_view_has_one_key(self):
+        """board-page "A deploy from either view"."""
+        from test_board import S1, S2
+        d = self.paged()
+        lane = [x["dock"] for e in d["board"]["environments"] for x in e["deploys"]]
+        view = [x["dock"] for e in d["deploys"] for x in e["deploys"]]
+        assert sorted(lane) == sorted(view) and len(set(lane)) == 2
+        assert all(k.startswith(f"deploy:mac-studio/{s}/") for k, s in zip(lane, (S2, S1)))
+
+    def test_a_key_names_its_item_not_its_lane(self):
+        assert [page.key_of(n) for n in ("signals/2026-10-12-x/01", "proposal/3", "unit/a", "chore/bump", "bolt/b", "agenda/8")] == [
+            "signal:2026-10-12-x/01", "proposal:3", "unit:a", "unit:bump", "bolt:b", None]
+        d = self.paged()
+        queued = d["board"]["bolt_plan"]["queue"].pop()
+        d["board"]["bolt_plan"]["planned"][0]["units"].append(dict(queued, stage="ready"))
+        assert "unit:zone-two" in page.docks(d, self.fleet(), "wldn") and d["board"]["bolt_plan"]["planned"][0]["units"][-1]["dock"] == "unit:zone-two"
+
+    def test_a_link_is_set_only_where_a_dock_is_and_an_agenda_item_is_named_as_text(self):
+        """board-page "A dock links the items it names"."""
+        d = self.paged()
+        keys = [r["key"] for p in d["docks"].values() for part in p["parts"] for r in part["rows"] if "key" in r]
+        keys += [f[2] for p in d["docks"].values() for f in p["facts"] if len(f) > 2]
+        assert keys and all(k in d["docks"] for k in keys)
+        x = next(n for n in d["nodes"] if n["id"] == "unit/x")
+        assert page.key_of(x["id"]) not in d["docks"]
+
+    def test_a_signals_dock_holds_its_whole_assertion_kind_who_captured_it_when_and_its_history_as_crew_trace_walks_it(self):
+        """board-page "A signal's history"."""
+        d = self.paged(label="Every apex should be a zone of its own, whatever its tenants say.")
+        s = d["docks"][f"signal:{self.SIG}"]
+        assert (s["title"], s["tail"].split(" · ")[:2]) == ("Every apex should be a zone of its own.", ["ask", "captured by wldn-planner"])
+        assert s["tail"].endswith(" ago")
+        assert {f[0]: f[1] for f in s["facts"]} == {"signal": self.SIG, "kind": "ask", "captured by": "wldn-planner", "captured": "2026-10-01", "home": "blueprints"}
+        assert s["parts"][0] == {"title": "assertion", "rows": [{"text": "Every apex should be a zone of its own, whatever its tenants say."}]}
+        assert s["history"] == d["histories"][f"signals/{self.SIG}"] and d["entries"][s["history"][0]]["Act"] == "capture"
+        assert {"text": "unit a", "key": "unit:a"} in next(p["rows"] for p in s["parts"] if p["title"] == "linked")
+
+    def test_a_proposal_waiting_is_a_sheet_carrying_its_card_and_no_control_that_approves_it(self):
+        """board-page "A proposal waiting"."""
+        p = self.paged()["docks"]["proposal:2"]
+        assert (p["form"], p["title"], p["tail"]) == ("sheet", "Tenants get d.", "proposal 2 · by wldn-planner · opened 2026-10-12")
+        assert p["facts"] == [["waiting on", "swb-1-conductor"]]
+        assert [(m["glyph"], m["card"]["by"]) for m in p["markers"]] == [("✓", "wldn-planner")]
+        assert {"title": "units and bolts", "rows": [{"text": "unit d"}]} in p["parts"]
+        assert {"title": "teams", "rows": [{"text": "swb-1", "key": "team:swb-1"}]} in p["parts"]
+
+    def test_a_held_bolts_dock_is_a_ledger_of_its_units_and_fixes_and_a_planned_ones_says_no_team(self):
+        d = self.paged()
+        b = d["docks"]["bolt:tenant-environments"]
+        assert (b["form"], b["title"], b["tail"]) == ("ledger", "tenant-environments", "switchboard-kit · swb-1 on chuck-herdr-alpha · active")
+        assert ["team", "swb-1", "team:swb-1"] in b["facts"]
+        units = next(p["rows"] for p in b["parts"] if p["title"] == "units")
+        assert units == [{"text": "a · code 1/2", "key": "unit:a"}, {"text": "b · planned", "key": "unit:b"}]
+        assert next(p["rows"] for p in b["parts"] if p["title"] == "fixes") == [
+            {"text": "fix/tenant-environments/edge · not merged", "key": "fix:tenant-environments/edge"}]
+        assert b["history"] == d["histories"]["bolt/tenant-environments"]
+        z = d["docks"]["bolt:apex-zones"]
+        assert (z["tail"], z["markers"]) == ("switchboard-kit · planned, no team", [])
+
+    def test_a_queued_unit_is_a_slip_with_its_sources(self):
+        q = self.paged()["docks"]["unit:zone-two"]
+        assert (q["form"], q["tail"]) == ("slip", "unit · queued")
+        assert {f[0]: f[1] for f in q["facts"]} == {"repository": "switchboard-kit", "stage": "queued", "sources": "docs/zones.md"}
+
+    def test_a_fix_says_whether_it_merged_its_slot_and_server_and_links_its_bolt(self):
+        """board-page "A fix"."""
+        f = self.paged()["docks"]["fix:tenant-environments/edge"]
+        assert (f["title"], f["tail"]) == ("fix/tenant-environments/edge", "fix of tenant-environments")
+        assert {x[0]: x[1] for x in f["facts"]} == {"state": "not merged", "slot": "unit-4", "worktree": "/kit/places/fix-edge"}
+        assert f["parts"] == [{"title": "bolt", "rows": [{"text": "tenant-environments", "key": "bolt:tenant-environments"}]}]
+        assert f["history"] == []
+
+    def test_a_landing_is_a_record_with_its_team_units_the_deploys_carrying_it_and_its_bolt_land_entry(self):
+        d = self.paged()
+        o = d["docks"]["landing:atlas-maps"]
+        at = d["board"]["operation"][0]["at"]
+        assert (o["form"], o["title"], o["tail"]) == ("record", "atlas-maps", f"landed {at} by chuck@mac-studio")
+        assert ["team", "atl-1", "team:atl-1"] in o["facts"]
+        carried = next(p["rows"] for p in o["parts"] if p["title"] == "carried by")
+        assert [r["text"] for r in carried] == ["deploy aaaaaaa to mac-studio"]
+        assert [d["entries"][i]["Act"] for i in o["history"]] == ["bolt.land", "bolt.land"]
+
+    def test_a_deploys_dock_holds_its_commits_the_word_its_steps_and_the_bolts_it_carried_with_their_proposals(self):
+        """board-page "A deploy's release notes"."""
+        from test_board import S1
+        d = self.paged()
+        key = next(x["dock"] for e in d["deploys"] for x in e["deploys"] if x["to"] == S1)
+        x = d["docks"][key]
+        facts = {f[0]: f[1] for f in x["facts"]}
+        assert (x["form"], x["title"], x["tail"]) == ("record", f"deploy {S1[:7]}", "on mac-studio · done")
+        assert (facts["to"], facts["from"], facts["outcome"]) == (S1, "nothing deployed", "done")
+        assert facts["word"].startswith("approved by wldn-ops, ")
+        assert next(p["rows"] for p in x["parts"] if p["title"] == "carried") == [{"text": "bolt atlas-maps", "key": "landing:atlas-maps"}]
+        waits = d["docks"][next(k for k in d["docks"] if k.startswith("deploy:") and k != key)]
+        assert (waits["tail"], [m["key"] for m in waits["markers"]]) == ("on mac-studio · waits on your word", ["deploy/mac-studio"])
+
+    def test_an_operation_says_where_it_stands_as_the_board_does(self):
+        d = self.paged()
+        w = d["docks"]["operation:mac-studio/rotate-key"]
+        assert (w["form"], w["title"], w["tail"]) == ("record", "rotate-key", "on mac-studio · waits on you")
+        assert w["parts"] == [{"title": "text", "rows": [{"text": "Rotate the key."}]}]
+        assert [m["key"] for m in w["markers"]] == ["op/mac-studio/2"]
+        assert d["docks"]["operation:mac-studio/restart-teams/1"]["tail"] == "on mac-studio · handed to wldn-dispatch-mac-studio"
+
+    def test_a_team_with_no_bolt_shows_its_kits_host_session_and_account_and_says_it_holds_no_bolt(self):
+        """board-page "A team with no bolt"."""
+        t = self.paged()["docks"]["team:swb-2"]
+        assert (t["title"], t["tail"]) == ("swb-2", "switchboard-kit on chuck-herdr-alpha")
+        assert t["facts"] == [["kits", "switchboard-kit"], ["host", "chuck-herdr-alpha"], ["session", "crew-b"], ["account", "madswan-2", "subscription:madswan-2"]]
+        assert t["parts"][0] == {"title": "bolts held", "rows": [{"text": "holds no bolt"}]}
+
+    def test_a_teams_dock_names_its_bolts_landings_signals_and_the_environment_on_its_host(self):
+        d = self.paged()
+        assert d["docks"]["team:swb-1"]["parts"][0] == {"title": "bolts held", "rows": [{"text": "tenant-environments", "key": "bolt:tenant-environments"}]}
+        parts = {p["title"]: p["rows"] for p in d["docks"]["team:atl-1"]["parts"]}
+        assert parts["landings"][0]["key"] == "landing:atlas-maps"
+        assert [r["key"] for r in parts["environment mac-studio"]] == [k for k in d["docks"] if k.startswith(("deploy:", "operation:"))]
+
+    def test_an_account_the_hosts_file_does_not_name_is_said_not_named_never_blank(self):
+        t = self.paged()["docks"]["team:brd-1"]
+        assert ["account", page.NO_ACCOUNT] in t["facts"] and page.NO_ACCOUNT == "no account named in herdr-hosts"
+
+    def test_a_subscriptions_dock_lists_the_partitions_sessions_on_it_teams_and_main_level_agents(self):
+        """board-page "Two teams on one account"."""
+        d = self.paged()
+        s = d["docks"]["subscription:madswan-2"]
+        assert (s["title"], s["tail"]) == ("madswan-2", "Claude account")
+        assert s["parts"] == [{"title": "sessions on it", "rows": [
+            {"text": "swb-1 · chuck-herdr-alpha session crew-a", "key": "team:swb-1"}, {"text": "swb-2 · chuck-herdr-alpha session crew-b", "key": "team:swb-2"}]
+            + [{"text": f"wldn-{r} · mac-studio session wldn"} for r in ("design", "planner", "ops", "operator", "reviewer")]}]
+        assert [r["text"] for r in d["docks"]["subscription:willdan"]["parts"][0]["rows"]] == ["atl-1 · mac-studio session atlas"]
+
+    def rest(self):
+        return re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D, PurePath("/s/wldn/page.html")), flags=re.S)
+
+    def test_the_dock_is_drawn_over_the_board_in_the_mockups_forms_with_no_foot_and_loads_nothing(self):
+        """board-page "The dock opens over the board and the board does not move", "On a phone", "The dock answers
+        nothing": the dock slides over the board's right on its own layer, fills the screen under 760 px, and has no
+        foot; every item opens it by a click, Enter or space, and Esc, × or the scrim closes it."""
+        rest = self.rest()
+        for has in ('class="dock"', 'role="dialog"', 'aria-modal="false"', 'aria-labelledby="dk-title"', 'class="scrim"', ".dk-h.dk-sheet", ".dk-h.dk-ledger",
+                    ".dk-h.dk-record", ".dk-h.dk-slip", "transform:translateX(102%)", "body.docked .dock{transform:none",
+                    ".dock{width:100%;position:fixed;top:0;bottom:0;left:0;right:0}", ".dk-h .back.solo{display:inline-flex}",
+                    "D.docks", 'ev.key === "Escape"', 'ev.key === "Enter"', 'ev.key === " "', '$("scrim").addEventListener("click", closeDock)',
+                    'x.setAttribute("role", "button")', "x.tabIndex = 0", 'el("span", "host tm")', "preventScroll: true", "opener.focus"):
+            assert has in rest
+        for no in (".dk-f", "innerHTML", "fetch(", "XMLHttpRequest", "WebSocket", "<script src", "<link", "@import", "url("):
+            assert no not in rest
+
+    def test_the_open_dock_is_kept_in_the_address_and_a_key_the_page_no_longer_holds_is_dropped(self):
+        """board-page "The page is written again", "The item is gone"."""
+        rest = self.rest()
+        assert 'keep("dock", key)' in rest and 'keep("dock", "")' in rest
+        assert "if (f.dock && DOCKS[f.dock]) {" in rest and "if (f.dock) keep(\"dock\", \"\");" in rest
+        assert 'if (k !== "dock") store(k, v);' in rest
+
+    def test_a_signals_typed_words_are_kept_as_they_are_in_the_dock_and_the_pages_block(self):
+        """board-page "A dock of typed words"."""
+        d = self.paged(label="Ends </script><b>here</b> & more.")
+        d.update(label="wldn", partitions=["wldn"], made=TestFile.D["made"])
+        out = page.render(d, PurePath("/s/wldn/page.html"))
+        block, = re.findall(r'<script type="application/json" id="data">(.*?)</script>', out, re.S)
+        assert "</script>" not in block
+        assert json.loads(block)["docks"][f"signal:{self.SIG}"]["parts"][0]["rows"] == [{"text": "Ends </script><b>here</b> & more."}]
+
+
 def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labelled_by_its_words():
     """page.data and page.labelled: a chore is work like a unit, so it is in the units' column, where it moved from is not
     what it came from, and its label and stage are read from the plan and its kit (plan.11)."""
