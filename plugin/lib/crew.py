@@ -15,6 +15,9 @@
                                       --taken, read back from its transcript and sent once more when not taken
   crew.py send <team|label> "<text>"  send the text to the partition's operator, the door of the team's partition or
                                       the label's, marked [crew tell from <sender>] (sent to <team|label>)
+  crew.py found <agent>               an agent of this host as herdr lists it, one JSON object, its name given back in
+                                      the pane crew keeps for it when herdr dropped it there from the session crew
+                                      started (read_agent from another host)
 
 The agents themselves, a team's and a main level's, are started, greeted and ended by plan.py's commands, through
 Agents and Team here.
@@ -427,22 +430,96 @@ def unanswered(host, r):
 
 def read_agent(fleet, name, fresh=True):
     """An agent crew starts, as herdr answers wherever it runs: (the agent, None), (None, None) when it is not up, or
-    (None, what could not be read) when its host does not answer or herdr's answer can't be read. On this host, with
-    fresh False, it is answered from its session's listing as this command read it (Herdr)."""
+    (None, what could not be read) when its host does not answer or herdr's answer can't be read. One herdr lists by no
+    name is looked for in the pane crew keeps for it there and given its name back (found_again), the host's own crew
+    looking when it is another host (crew.py found). On this host, with fresh False, it is answered from its session's
+    listing as this command read it (Herdr)."""
     host, session = place_of_agent(fleet, name)
     if host == this_host():
         try:
-            return herdr_in(session).agent(name, fresh), None
+            a = herdr_in(session).agent(name, fresh)
+            return (a, None) if a else found_again(fleet, name, fresh)
         except Refusal as e:
             return None, str(e)
-    r = on_machine(fleet, host, ["herdr", "--session", session, "agent", "get", name])
-    if r.returncode:
-        return None, unanswered(host, r)
     try:
-        a = json.loads(r.stdout)["result"]["agent"]
-    except (ValueError, KeyError, TypeError):
-        a = None
-    return (a, None) if isinstance(a, dict) else (None, f"herdr's answer on {host} about it can't be read")
+        found = shlex.join(["python3", f"{crew_at(fleet, host).rsplit('/bin/', 1)[0]}/lib/crew.py", "found", name])
+    except Refusal as e:
+        return None, str(e)
+    r = on_machine(fleet, host, ["sh", "-c", f"{shlex.join(['herdr', '--session', session, 'agent', 'get', name])} || exec {found}"])
+    return found_answer(host, r)
+
+
+def found_answer(host, r):
+    """read_agent's reading of an agent on another host, from what ran there, as subprocess.run gives it: herdr's agent
+    get, or that host's crew.py found when herdr lists no agent by its name, each answering herdr's
+    {"result": {"agent": ...}}, which found answers too, its agent null when it is not up, or found's {"unread": why}.
+    A host that does not answer, a found that fails, as one on a host whose crew is older, and an answer crew can't read
+    are each a read it names (read.1)."""
+    if r.returncode:
+        return None, unanswered(host, r) or (f"crew on {host} could not look for it in the pane it keeps for it: "
+                                             + ((r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1])
+    try:
+        got = json.loads(r.stdout)
+    except ValueError:
+        got = None
+    if isinstance(got, dict) and isinstance(got.get("unread"), str) and got["unread"]:
+        return None, got["unread"]
+    a = got.get("result", {}).get("agent", False) if isinstance(got, dict) and isinstance(got.get("result"), dict) else False
+    return (a, None) if a is None or isinstance(a, dict) else (None, f"herdr's answer on {host} about it can't be read")
+
+
+def name_back(name, pane, agent, started):
+    """Whether crew gives an agent it started its name back in its pane (briefs.17), from the pane crew keeps for it
+    ("" when none), the agent herdr lists in that pane (None when none) and the Claude session crew's last start of it
+    on this host recorded (start_of; None when none): (True, None) when herdr lists an agent there by no name whose
+    session is that one, herdr having dropped its name when another session reported itself in the pane; (False, None)
+    when crew keeps no pane for it or herdr lists no agent there, so it is not up; and (False, why) when the pane holds
+    an agent crew did not start as it, another agent's or a session crew started for none, which is never given its
+    name and is a read crew names (read.1)."""
+    if not pane or agent is None:
+        return False, None
+    if agent.get("name"):
+        return False, f"herdr lists no agent named {name}, and its pane {pane} holds {agent['name']}"
+    sess = agent.get("agent_session")
+    sid = sess.get("value") if isinstance(sess, dict) else None
+    if not isinstance(sid, str) or not sid:
+        return False, f"herdr lists the agent in its pane {pane} by no name and names no session for it, so crew can't tell it is {name}"
+    if sid != started:
+        return False, f"herdr lists the agent in its pane {pane} by no name, in session {sid}, which crew did not start as {name}"
+    return True, None
+
+
+def found_again(fleet, name, fresh=True):
+    """An agent crew started on this host that herdr lists by no name, found in the pane crew keeps for it and given its
+    name back when its session there is the one crew started (name_back): (the agent, None), (None, None) when it is not
+    up, or (None, why) when its pane holds an agent crew does not name so, or herdr would not take the name. It is said
+    on standard error when given back."""
+    held = held_in(fleet, name)
+    if not held:
+        return None, None
+    agents, role = held
+    pane = agents.pane(role)
+    a = agents.herdr.agent(pane, fresh) if pane else None
+    started = start_of(name) if a is not None and not a.get("name") else None
+    back, why = name_back(name, pane, a, started and started["session"])
+    if not back:
+        return None, why
+    r = agents.herdr.run("agent", "rename", pane, name)
+    if r.returncode:
+        return None, f"herdr dropped its name in its pane {pane} and would not take it back: " + (
+            (r.stderr or "").strip().splitlines() or [f"exit {r.returncode}"])[-1]
+    print(f"herdr had dropped {name}'s name in its pane {pane}, whose session crew started as {name}; crew gave it back", file=sys.stderr)
+    return dict(a, name=name), None
+
+
+def found_here(fleet, name):
+    """crew.py found: read_agent of an agent of this host, its dropped name given back (found_again), as one JSON
+    object found_answer reads: herdr's {"result": {"agent": ...}}, or {"unread": why}."""
+    host, _ = place_of_agent(fleet, name)
+    if host != this_host():
+        return {"unread": f"{name} runs on {host}, not on {this_host()}, where crew looked for it"}
+    a, why = read_agent(fleet, name)
+    return {"unread": why} if why else {"result": {"agent": a}}
 
 
 def agent_get(fleet, name, fresh=True):
@@ -470,18 +547,26 @@ def pane_holds(name, pane, item, agent):
     return agent is not None, None
 
 
+def held_in(fleet, name):
+    """The Agents an agent crew starts is kept in on its host and its role there, from its name alone: a team's for
+    its conductor, ops or a unit slot, a main level's for its roles and its reviewer, or a dispatcher's; None for a
+    name crew starts no agent by."""
+    t = team_of_agent(fleet, name)
+    if t:
+        return Team(fleet, t), name[len(t["name"]) + 1:]
+    label = label_of_agent(fleet, name)
+    if not label:
+        return None
+    role = name[len(label) + 1:]
+    if role.startswith("dispatch-"):
+        return standing(fleet, "dispatch", label), "dispatcher"
+    return main_holding(fleet, label, role), role
+
+
 def holding_of(fleet, name):
     """The Agents a standing agent's role is kept in and that role, from its name alone: a team's, a main level's or a
     dispatcher's; None for a name that is no standing agent's (standing_role)."""
-    sr = standing_role(fleet, name)
-    if not sr:
-        return None
-    scope, role = sr
-    if scope in fleet["teams"]:
-        return Team(fleet, team_of(fleet, scope)), role
-    if role == "dispatcher":
-        return standing(fleet, "dispatch", scope), role
-    return main_holding(fleet, scope, role), role
+    return held_in(fleet, name) if standing_role(fleet, name) else None
 
 
 def read_pane_agent(fleet, name):
@@ -2402,6 +2487,8 @@ def main(a):
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)
     elif a[:1] == ["send"] and len(a) == 3:
         sys.exit(0 if send(fleet, a[1], a[2]) else 1)
+    elif a[:1] == ["found"] and len(a) == 2:
+        print(json.dumps(found_here(fleet, a[1])))
     else:
         sys.exit(__doc__)
 
