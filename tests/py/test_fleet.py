@@ -104,8 +104,8 @@ BOARD = {"read_at": "2026-10-23T12:00:00Z", "from": "deneb", "unread": {"the pla
              part("wldn", {"chuck-herdr-alpha": True})]}
 
 
-def fleet(board=BOARD, logs=LOGS):
-    return page.fleet_data(FLEET, board, logs, NOW)
+def fleet(board=BOARD, logs=LOGS, usage=None):
+    return page.fleet_data(FLEET, board, logs, usage or {}, NOW)
 
 
 def of(d, label):
@@ -468,6 +468,59 @@ class TestOnASubscription:
             ("deneb", "swancloud-2"): ["crw-6"], ("mac-studio", "swancloud-4"): ["crw-7", "swancloud-dispatch-mac-studio"],
             ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"]}
 
+
+
+class TestTheSection:
+    USAGE = {"deneb": published("deneb", MADSWAN, CREDITS),
+             "mac-studio": {"file": "/u/mac-studio.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}}
+
+    def test_the_fleets_data_holds_the_subscriptions_beside_the_partitions_and_each_unreadable_file(self):
+        """fleet-page "A file that is not of the shape": deneb's readings shown, mac-studio's file named."""
+        d = fleet(usage=self.USAGE)
+        assert list(d) == ["made", "subscriptions", "unread_usage", "partitions"]
+        assert d["subscriptions"]["said"] == "as published by deneb"
+        assert [(s["account"], s["state"]) for s in d["subscriptions"]["items"]] == [
+            ("credits", "unread"), ("ia", "none"), ("madswan", "read"), ("madswan-2", "none"), ("willdan-alex", "none")]
+        assert d["unread_usage"] == [{"host": "mac-studio", "file": "/u/mac-studio.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}]
+
+    def test_with_nothing_published_each_subscription_says_no_host_published_its_use(self):
+        """fleet-page "No use published"."""
+        d = fleet()
+        assert (d["subscriptions"]["said"], d["unread_usage"]) == ("no host has published any use", [])
+        assert {s["state"] for s in d["subscriptions"]["items"]} == {"none"}
+        assert fleet(usage={"deneb": self.USAGE["mac-studio"]})["subscriptions"]["said"] == "no published use could be read"
+
+    def test_a_subscriptions_partitions_link_as_their_blocks_do(self):
+        d = fleet()
+        page.linked(d, page.fleet_links(PurePath("/srv/board/index.html"), ["madswan", "swancloud", "wldn"]))
+        m = next(s for s in d["subscriptions"]["items"] if s["account"] == "madswan")
+        assert m["partitions"] == [{"label": "madswan", "link": "madswan.html"}, {"label": "swancloud", "link": "swancloud.html"}]
+        page.linked(d, None)
+        assert {p["link"] for s in d["subscriptions"]["items"] for p in s["partitions"]} == {None}
+
+    def test_the_section_stands_above_the_partitions_sets_every_text_as_text_and_loads_nothing(self):
+        """fleet-page "Offline", with the subscriptions drawn: a bar's width a number, never markup."""
+        out, block, rest = TestFile().rendered(fleet(usage=self.USAGE))
+        assert rest.index('<section class="subs"') < rest.index('<main class="fleet"')
+        assert json.loads(block)["subscriptions"]["items"][2]["windows"][0]["said"] == "five-hour 34%, resets 14:00Z"
+        for no in ("innerHTML", "outerHTML", "innerText", "insertAdjacentHTML", "document.write", "fetch(", "XMLHttpRequest", "WebSocket",
+                   "EventSource", "src=", "<link", "url(", "cssText", "setAttribute(\"style\""):
+            assert no not in rest, no
+        script = rest[rest.index("// The subscriptions:"):rest.index('var fleet = document.getElementById("fleet")')]
+        assert "textContent" in script and re.findall(r"\.style\.\w+ = [^;]*", script) == ['.style.width = Number(w.pct) + "%"']
+
+    def test_an_unread_reason_is_kept_as_text_and_cannot_end_the_data_block(self):
+        why = "</script><b>here</b> & more"
+        usage = {"deneb": published("deneb", dict(CREDITS, unread=why)), "box": {"file": "/u/box.json", "why": why}}
+        out, block, rest = TestFile().rendered(fleet(usage=usage))
+        data = json.loads(block)
+        assert "<b>here</b>" not in block and out.count("</script>") == 2
+        assert data["unread_usage"][0]["why"] == why and data["subscriptions"]["items"][0]["others"][0]["unread"] == why
+
+    def test_the_subscriptions_sit_side_by_side_and_stack_under_760_px(self):
+        rest = TestFile().rendered()[2]
+        assert "grid-template-columns:repeat(auto-fit,minmax(300px,1fr))" in rest
+        assert re.search(r"@media \(max-width:759px\)\{[^@]*?\.subs-grid\{grid-template-columns:1fr", rest, re.S)
 
 def tokens(text):
     """The colour tokens' blocks of a page's style, light, dark as preferred and dark as chosen, each as written; a

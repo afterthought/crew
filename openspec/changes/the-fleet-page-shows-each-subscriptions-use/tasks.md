@@ -8,7 +8,7 @@
 
 ## 2. The page and the command
 
-- [ ] 2.1 The fleet page shows the subscriptions above the partitions, each with its use as words and plain bars, its readings' hosts and ages, its sessions and partitions, and each unreadable file marked, every text set as text, still loading nothing and stacked under 760 px (design, Decision 5; Task notes 2.1); passes `tests/py/test_fleet.py`, verify `tests/suite logic` ends with "0 failed".
+- [x] 2.1 The fleet page shows the subscriptions above the partitions, each with its use as words and plain bars, its readings' hosts and ages, its sessions and partitions, and each unreadable file marked, every text set as text, still loading nothing and stacked under 760 px (design, Decision 5; Task notes 2.1); passes `tests/py/test_fleet.py`, verify `tests/suite logic` ends with "0 failed".
 - [ ] 2.2 `crew page --fleet` reads the published use beside crew's state, shows it on the page, prints each file it could not read and that no use is published when none is, and still writes the page (design, Decision 6; Task notes 2.2); verify `tests/suite t-journey-board` ends with "0 failed".
 
 ## 3. Docs

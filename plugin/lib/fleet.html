@@ -1,9 +1,11 @@
 <!doctype html>
-<!-- crew's fleet page: page.py puts the fleet's data in the placeholder below and writes the file whole. It shows every
-     partition in the teams file at once, a block to each: where it runs, its kits and their mains, its teams and how
-     busy each is, and what needs attention. Everything it draws is in this file: no font, script or style is loaded
-     from anywhere, and the only links are to each partition's page and each team's dock there, beside it. Every text is
-     set as text, never as markup, and nothing on it answers anything. -->
+<!-- crew's fleet page: page.py puts the fleet's data in the placeholder below and writes the file whole. It shows each
+     Claude subscription first, its use as the host holding its sign-in published it, who read it and how long ago, and
+     the sessions and partitions on it; then every partition in the teams file at once, a block to each: where it runs,
+     its kits and their mains, its teams and how busy each is, and what needs attention. Everything it draws is in this
+     file: no font, script or style is loaded from anywhere, and the only links are to each partition's page and each
+     team's dock there, beside it. Every text is set as text, never as markup, a bar's width as a number, and nothing on
+     it answers anything. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -41,6 +43,28 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
 .top{min-height:var(--top);display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
 .top h1{font-size:15px;letter-spacing:-.01em}
 .top .meta{margin-left:auto;color:var(--ink3);font-size:12px;overflow-wrap:anywhere}
+
+/* ---------- the subscriptions, above the partitions: each one's use, one colour, its bar's width its percentage ---------- */
+.subs{padding:14px 14px 0}
+.subs > .sec-h{margin-top:0}
+.subs-said{display:block;margin-bottom:6px}
+.subs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start;margin-top:8px}
+.sub{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:1px;padding:10px 12px 12px;box-shadow:3px 3px 0 var(--line2);min-width:0}
+.sub-h{border-bottom:1px solid var(--ink);padding-bottom:4px}
+.sub-h .sub-name{font:800 15px var(--mono);letter-spacing:-.01em}
+.sub-from{display:block;margin-top:5px;font:600 11px var(--mono);color:var(--ink2)}
+.sub-from.unread{color:var(--warn)}
+.sub-from.none{color:var(--ink3);font-weight:400}
+.use{margin-top:8px;font:11.5px var(--mono)}
+.use .uw{display:block}
+.use .um{display:block;margin-top:6px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.bar{height:6px;background:var(--surface2);border:1px solid var(--line);margin:2px 0 5px}
+.bar > span{display:block;height:100%;background:var(--accent)}
+.others{list-style:none;margin:6px 0 0;padding:0;font:11px var(--mono);color:var(--ink3)}
+.others li.unread{color:var(--warn)}
+.sub .host{margin-top:2px}
+.sub-parts{display:flex;flex-wrap:wrap;gap:4px 12px;font:600 12px var(--mono)}
+.sub-parts a:hover{color:var(--accent)}
 
 /* ---------- the partitions, side by side ---------- */
 .fleet{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;padding:14px;align-items:start}
@@ -94,12 +118,14 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
 .slots li.free::before{content:"○ "}
 .tm-f{display:flex;flex-wrap:wrap;gap:4px 12px;padding:4px 9px;border-top:1px dashed var(--ink3);font:11px var(--mono);color:var(--ink2)}
 .tm-f .wt{font-weight:600}
-.pt-h,.pt-name,.host,.sessions,.kit,.tm-h,.tm-bolt,.slots,.tm-f,.mark{overflow-wrap:anywhere}
+.pt-h,.pt-name,.host,.sessions,.kit,.tm-h,.tm-bolt,.slots,.tm-f,.mark,.sub-h,.sub-from,.use,.others,.sub-parts{overflow-wrap:anywhere}
 
 @media (max-width:759px){
   .top{gap:6px 8px;padding:6px 10px}
   .top .meta{margin-left:0;flex-basis:100%}
   .fleet{grid-template-columns:1fr;padding:10px;gap:10px}
+  .subs{padding:10px 10px 0}
+  .subs-grid{grid-template-columns:1fr;gap:10px}
 }
 </style>
 </head>
@@ -108,6 +134,12 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
   <h1>crew fleet</h1>
   <span class="meta mono" id="made"></span>
 </header>
+<section class="subs" aria-labelledby="subs-h">
+  <h2 class="sec-h" id="subs-h">subscriptions</h2>
+  <span class="empty subs-said" id="subs-said"></span>
+  <div class="marks" id="subs-unread"></div>
+  <div class="subs-grid" id="subs"></div>
+</section>
 <main class="fleet" id="fleet" aria-label="Partitions"></main>
 <script type="application/json" id="data">/*{{DATA}}*/</script>
 <script>
@@ -134,6 +166,70 @@ h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
 
   document.getElementById("made").textContent = "as of " + D.made.at.slice(0, 10) + " " + D.made.at.slice(11, 16) + "Z · run record since "
     + D.made.since.slice(0, 10);
+
+  // The subscriptions: each one's use as its host published it, who read it and how long ago, every other host's
+  // reading, then the sessions and partitions on it, set beside its use and made from nothing of it.
+  document.getElementById("subs-said").textContent = D.subscriptions.said;
+  var unread = document.getElementById("subs-unread");
+  D.unread_usage.forEach(function (u) {
+    unread.append(el("span", "mark attention", "! the use published in " + u.file + " could not be read: " + u.why));
+  });
+  var subs = document.getElementById("subs");
+  D.subscriptions.items.forEach(function (s) {
+    var card = el("section", "sub"), h = el("div", "sub-h");
+    card.setAttribute("aria-label", s.account);
+    h.append(el("h3", "sub-name", s.account));
+    card.append(h, el("span", "sub-from " + s.state, s.said));
+
+    // Its use: a row per window, its words and a plain bar, its width the percentage as a number.
+    if (s.windows.length) {
+      var use = el("div", "use");
+      var row = function (w) {
+        use.append(el("span", "uw", w.said));
+        if (w.pct === null) return;
+        var bar = el("div", "bar"), fill = el("span");
+        fill.style.width = Number(w.pct) + "%";
+        bar.append(fill);
+        use.append(bar);
+      };
+      s.windows.forEach(row);
+      if (s.models.length) use.append(el("span", "um", "by model"));
+      s.models.forEach(row);
+      card.append(use);
+    }
+    if (s.others.length) {
+      var others = el("ul", "others");
+      s.others.forEach(function (o) { others.append(el("li", o.unread ? "unread" : null, o.said)); });
+      card.append(others);
+    }
+
+    // The sessions on it, by host, each with crew's agents and each team's work; then the partitions on it.
+    card.append(el("h4", "sec-h", "sessions"));
+    if (!s.sessions.length) card.append(el("span", "empty", s.sessions_said));
+    var at = null, ul = null;
+    s.sessions.forEach(function (x) {
+      if (x.host !== at) {
+        at = x.host;
+        var pill = el("span", "host");
+        pill.append(el("span", "hn", x.host));
+        ul = el("ul", "sessions");
+        card.append(pill, ul);
+      }
+      var li = el("li");
+      li.append(el("span", "sn", x.session), document.createTextNode(" "), el("span", "sa", x.said));
+      x.teams.forEach(function (t) { li.append(el("span", "acct", t.team + ": " + t.at_work_said + " · " + t.waits_said)); });
+      ul.append(li);
+    });
+    card.append(el("h4", "sec-h", "partitions"));
+    if (s.partitions.length) {
+      var ps = el("div", "sub-parts");
+      s.partitions.forEach(function (p) { ps.append(link(p.link, null, p.label)); });
+      card.append(ps);
+    } else {
+      card.append(el("span", "empty", s.partitions_said));
+    }
+    subs.append(card);
+  });
 
   var fleet = document.getElementById("fleet");
   D.partitions.forEach(function (p) {

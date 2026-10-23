@@ -186,16 +186,23 @@ def deploys(d, entries, machine, since=None):
 
 # ------------------------------------------------------------------------------------------------- the fleet
 
-def fleet_data(fleet, bd, logs, now):
+def fleet_data(fleet, bd, logs, usage, now):
     """The fleet page's data: every partition of the teams file in its order, from the board of all of them (bd, as
-    board.board_data gives it), each partition's run-record entries (logs, by label) and the time. The record is read in
-    its window, the board's (WINDOW). Each partition is where it runs, its kits and their mains, its teams and how busy
-    each is, and what needs attention, each with the words the page says of it; nothing here reads (code.7)."""
+    board.board_data gives it), each partition's run-record entries (logs, by label), the use the hosts published (usage,
+    as usage_files reads it) and the time. The record is read in its window, the board's (WINDOW). Each partition is
+    where it runs, its kits and their mains, its teams and how busy each is, and what needs attention; each subscription
+    its use, who read it and how long ago, and the sessions and partitions on it; and each published file crew could not
+    read, with why: each with the words the page says of it; nothing here reads (code.7)."""
     since = board.iso(now - WINDOW)
     by = {p["label"]: p for p in bd["partitions"]}
+    parts = [fleet_partition(fleet, by[l], bd["unread"], sorted((e for e in logs.get(l, []) if e["At"] >= since), key=lambda e: (e["At"], e["Id"])), since)
+             for l in fleet["partitions"] if l in by]
+    readings, unread = usage_checked(usage)
+    read = [h for h in usage if h not in {u["host"] for u in unread}]
+    said = ("no host has published any use" if not usage else f"as published by {', '.join(read)}" if read else "no published use could be read")
     return {"made": {"at": board.iso(now), "since": since},
-            "partitions": [fleet_partition(fleet, by[l], bd["unread"], sorted((e for e in logs.get(l, []) if e["At"] >= since), key=lambda e: (e["At"], e["Id"])), since)
-                           for l in fleet["partitions"] if l in by]}
+            "subscriptions": {"said": said, "items": subscriptions(fleet, readings, {t["team"]: t for p in parts for t in p["teams"]}, now)},
+            "unread_usage": unread, "partitions": parts}
 
 
 def fleet_partition(fleet, part, unread, entries, since):
@@ -375,11 +382,15 @@ def fleet_links(path, labels):
 
 def linked(d, links):
     """Each partition of the fleet's data given its page's link, and each team its dock there (#dock=team:<name>, the
-    address the dock keeps); none where links is None."""
+    address the dock keeps), and each subscription's partitions the same link as their blocks; none where links is
+    None."""
     for p in d["partitions"]:
         p["link"] = links[p["label"]] if links else None
         for t in p["teams"]:
             t["link"] = f"{p['link']}#dock=team:{t['team']}" if p["link"] else None
+    for s in d["subscriptions"]["items"]:
+        for p in s["partitions"]:
+            p["link"] = links[p["label"]] if links else None
 
 
 # ------------------------------------------------------------------------------------------------- the subscriptions
@@ -1015,7 +1026,7 @@ def fleet_page(fleet, a):
     read = board.flow_read(fleet, labels)
     now = datetime.datetime.now(datetime.timezone.utc)
     bd = board.board_data(fleet, labels, read, now)
-    d = fleet_data(fleet, bd, read.get("logs", {}), now)
+    d = fleet_data(fleet, bd, read.get("logs", {}), usage_files(record.ROOT / "usage"), now)
     out = pathlib.Path(a.out).expanduser().absolute() if a.out else record.ROOT / "page.html"
     links = fleet_links(out, labels)
     linked(d, links)
