@@ -28,7 +28,7 @@
 
 ## 6. The briefs and the docs
 
-- [ ] 6.1 Main-level ops's brief takes the kit's landings card and its send as the word and lands the ticked bolts with one `crew bolt submit` in the card's order, saying nothing of one bolt at a time; the conductor's brief raises and passes no landing card and tells ops its bolt is proven; the planner's brief, crew's card words, the skill, README and the command's usage say the same (design, Decision 10; Task notes 6.1); `tests/suite t-briefs t-docs` ends with "0 failed".
+- [x] 6.1 Main-level ops's brief takes the kit's landings card and its send as the word and lands the ticked bolts with one `crew bolt submit` in the card's order, saying nothing of one bolt at a time; the conductor's brief raises and passes no landing card and tells ops its bolt is proven; the planner's brief, crew's card words, the skill, README and the command's usage say the same (design, Decision 10; Task notes 6.1); `tests/suite t-briefs t-docs` ends with "0 failed".
 
 ## 7. Integration
 
