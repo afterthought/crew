@@ -529,17 +529,20 @@ def commit(repo, parent, files, message):
 
 
 def land(repo, ref, path, make):
-    """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses. Every
-    file the commit holds is checked first, the carried run record among them. The first attempt starts from the tip
-    the command holds; the commit is pushed without force, and when the push is refused because the branch moved, the
-    branch is fetched afresh and make runs again on the new tip, up to five times (plan.1, state.1). The command then
-    holds the commit it pushed, so its later steps see its own write."""
+    """make(tip) gives a file's new text (or, with path None, {path: text}) and the commit message, or refuses; or a
+    chain of them, a list, each committed on the one before, as the run record's entries are, one commit each. Every
+    file a commit holds is checked first. The first attempt starts from the tip the command holds; the last commit is
+    pushed without force, and when the push is refused because the branch moved, the branch is fetched afresh and make
+    runs again on the new tip, the whole chain made again, up to five times (plan.1, state.1). The command then holds
+    the commit it pushed, so its later steps see its own write."""
     tip = fetch(repo, ref)
     for _ in range(1 + REPLAYS):
-        text, message = make(tip)
-        files = text if path is None else {path: text}
-        checked(files)
-        sha = commit(repo, tip, files, message)
+        made = make(tip)
+        sha = tip
+        for text, message in made if isinstance(made, list) else [made]:
+            files = text if path is None else {path: text}
+            checked(files)
+            sha = commit(repo, sha, files, message)
         r = git(repo, "push", "--quiet", url(repo), f"{sha}:refs/heads/{ref}", check=False)
         if r.returncode == 0:
             git(repo, "update-ref", f"refs/crew/{ref}", sha)

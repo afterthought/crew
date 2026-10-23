@@ -3,7 +3,7 @@
 ## 1. Every entry is pushed as it is written
 
 - [x] 1.1 `record.unpushed` gives the host's entries the branch lacks, oldest first, each with its day file as it stands once added, and `record.entry_message` gives each its own commit message naming it (design, Decisions 2 and 4; Task notes 1.1); passes `tests/py/test_record.py` in the logic tier, `tests/suite logic`.
-- [ ] 1.2 `plan.land` commits a chain of entries one on another, checks each file, pushes the last without force and replays the whole chain on a moved tip (design, Decision 3; Task notes 1.2); passes `tests/contract/test_record.py`, `tests/suite contract`.
+- [x] 1.2 `plan.land` commits a chain of entries one on another, checks each file, pushes the last without force and replays the whole chain on a moved tip (design, Decision 3; Task notes 1.2); passes `tests/contract/test_record.py`, `tests/suite contract`.
 - [ ] 1.3 `record.emit` pushes through `record.reach` before it returns, and a push that fails is said once on standard error and changes nothing the command does, the logic tier standing in for `reach` (design, Decisions 1, 4 and 8; Task notes 1.3); passes `tests/py/test_record.py` and `tests/suite t-journey-state`.
 
 ## 2. A write carries nothing
