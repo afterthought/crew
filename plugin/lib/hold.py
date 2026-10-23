@@ -35,6 +35,8 @@ from crew import Refusal, Stopped, fail
 RENEW = pathlib.Path.home() / ".local/state/crew/renew"
 # How long a restart handed at the end of an agent's turn waits for herdr to read it idle.
 SETTLE = 120
+# How many times a restart looks for its agent's exit after its stop gave up, five seconds apart: ten minutes.
+EXITING = 120
 # How often a hold's wait looks again, in seconds.
 LOOK = 10
 
@@ -98,6 +100,22 @@ def renew_ready(status, asking, unread, own):
     if own:
         return False, f"it runs background work of its own: {'; '.join(c or '?' for c in own)}"
     return True, None
+
+
+def renew_exited(holds, unread, marked, session, down):
+    """Whether a restart for an update starts an agent it finds not up, with no stop (teams.19): only one an earlier
+    restart's keys ended, from facts: whether herdr lists its pane with an agent in it (pane_holds: False for none,
+    None when unread), what crew could not read of the pane, the session an earlier restart that could not see it exit
+    typed its exit into (its mark, None when none), the session of its last start, and whether its team, main level or
+    dispatcher was taken down. An agent the user ended by hand, or one a crash took, has no mark naming its session and
+    stays crew revive's. Returns (start, why not)."""
+    if down:
+        return False, "it was taken down; it stays down"
+    if unread:
+        return False, f"crew can't tell whether its pane holds it: {unread}"
+    if holds is False and marked and marked == session:
+        return True, None
+    return False, "it is not up"
 
 
 def renew_notice(was, now, changes):
@@ -171,6 +189,22 @@ def facts_here(fleet):
     r = subprocess.run(["python3", "-c", ops.SLOTS], capture_output=True, text=True)
     tests = int(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip().isdigit() else 0
     return facts, tests
+
+
+def marked_exit(name, session):
+    """The session an earlier restart of an agent typed its exit into and did not see go (RENEW/<agent>.exiting), or
+    None when no restart left one. A mark of another session than the agent's last start is stale, another start having
+    come since, and is removed as it is read."""
+    mark = RENEW / f"{name}.exiting"
+    try:
+        marked = mark.read_text().strip()
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        fail(f"crew can't read {mark}: {e}")
+    if marked != session:
+        mark.unlink(missing_ok=True)
+    return marked or None
 
 
 def changes_for(was, now):
@@ -342,7 +376,10 @@ def renew(fleet, a):
     restarted on crew as it now is, once herdr reads it
     idle with no question open and no background work of its own but crew's waits (renew_ready), within a.wait seconds;
     a conductor fresh, as its restart always is, and every other role with its conversation; greeted, or told what
-    changed, and recorded. One process at a time per agent; nothing while the host is held."""
+    changed, and recorded. One process at a time per agent; nothing while the host is held. It ends with the agent
+    running: one still up when its stop gives up is watched for EXITING looks and started the moment it goes, or left
+    as it was, still due, when it never does, with a mark naming the session its exit was typed into; and one a later
+    restart finds those keys ended (renew_exited) is started with no stop."""
     name = a.agent
     host, _ = crew.place_of_agent(fleet, name)
     host == crew.this_host() or fail(f"{name} runs on {host}: crew _renew runs there")
@@ -355,6 +392,7 @@ def renew(fleet, a):
         return
     deadline = time.monotonic() + a.wait
     branch = crew.branch_now(fleet, name)  # read once: it reads the plan
+    gone = False  # an earlier restart's keys ended it, so it is started with no stop
     while True:
         if crew.held():
             print(f"{host} is held; crew go {host} restarts {name}")
@@ -364,10 +402,17 @@ def renew(fleet, a):
             print(f"{name} is not due a restart" + (f": {why}" if why else ""))
             return
         status, asking, unread = crew.waits_on_question(fleet, name)
-        own, unread2 = own_work(crew.agent_get(fleet, name)) if status and not unread else ([], None)
-        ready, not_yet = renew_ready(status, asking, unread or unread2, own)
-        if ready:
-            break
+        if status is None and not unread:
+            holds, unread = crew.read_pane_agent(fleet, name)
+            session = started["session"]
+            gone, not_yet = renew_exited(holds, unread, marked_exit(name, session), session, holding(fleet, name)[0].down())
+            if gone:
+                break
+        else:
+            own, unread2 = own_work(crew.agent_get(fleet, name)) if status and not unread else ([], None)
+            ready, not_yet = renew_ready(status, asking, unread or unread2, own)
+            if ready:
+                break
         if time.monotonic() >= deadline:
             print(f"{name} is not restarted: {not_yet}; the end of its next turn hands it back")
             return
@@ -375,13 +420,25 @@ def renew(fleet, a):
     agents, role = holding(fleet, name)
     agents.ensure()
     commit, version = crew.crew_version()
-    why = agents.stop(role, waits=True)  # renew_ready: nothing runs in its background but crew's waits, which end here
-    if why:
-        print(why, file=sys.stderr)
-        return
+    mark = RENEW / f"{name}.exiting"
+    if gone:
+        print(f"{name} was ended by the exit an earlier restart typed; crew starts it")
+    else:
+        why = agents.stop(role, waits=True)  # renew_ready: nothing runs in its background but crew's waits, which end here
+        if why == crew.working_said(name):  # it went to work since herdr read it idle, and nothing was typed to it
+            print(why, file=sys.stderr)
+            return
+        if why:  # its exit was typed and it has not gone yet: the keys may still end it
+            if started.get("session"):
+                mark.write_text(started["session"] + "\n")
+            print(f"{name} did not exit at once; crew watches for its exit")
+            if not agents.exited(role, EXITING):
+                print(f"{why}; it runs on as it was, still due: the end of its next turn hands it back", file=sys.stderr)
+                return
     fresh = role == "conductor"
     if not agents.start(role, None if fresh else "resume"):
         raise Stopped(1)
+    mark.unlink(missing_ok=True)
     agents.record("agent.renew", f"update({host}): restart {name}", [role])
     started = started or {}
     moved = crew.branch_due(started, branch)[1] if branch is not crew.UNREAD else None

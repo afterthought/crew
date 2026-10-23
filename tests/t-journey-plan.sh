@@ -50,7 +50,13 @@ for u, b, intent in (("the-deploy-names-its-host-tenant", "tenant-environments",
 open(f, "w").write(p.text())
 PY
 commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+# sluice makes the bolt's branch on GitHub pushing as its app, which moves no tracking ref; the give fetches it.
+touch "$T/sluice-leaves-copy"
 crew bolt give swb-1 tenant-environments >/dev/null 2>&1
+rm "$T/sluice-leaves-copy"
+made=$(git --git-dir "$(remote WilldanGroup/switchboard-kit)" rev-parse bolt/tenant-environments)
+eq "$(git -C "$k" rev-parse refs/remotes/origin/bolt/tenant-environments)" "$made"
+ok "a give fetches the bolt's branch sluice made on GitHub"
 for u in the-deploy-names-its-host-tenant in-verify; do p=$(place "$k" tenant-environments $u); done
 change "$kd/places/the-deploy-names-its-host-tenant" the-deploy-names-its-host-tenant 1 3; commit_all "$kd/places/the-deploy-names-its-host-tenant" "docs: the change"
 change "$kd/places/in-verify" in-verify 3 3; commit_all "$kd/places/in-verify" "docs(in-verify): the change"

@@ -1,0 +1,114 @@
+{
+  "at": "7cb18d32d707eb35e119b713bd5d71754e1d4480",
+  "branch": "main",
+  "depth": 1,
+  "parallel": 4,
+  "stale": null,
+  "submissions": [
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "main",
+      "conflict": {
+        "paths": [
+          "README.md",
+          "plugin/bin/crew",
+          "plugin/lib/plan.py",
+          "plugin/skills/crew/SKILL.md"
+        ],
+        "with": []
+      },
+      "from": {
+        "agent": "swancloud-ops",
+        "head": "bolt/a-reading-card-keeps-its-session-and-its-answer",
+        "worktree": "pull/100"
+      },
+      "head": "8458db1d890594269cf6c1d88f1bfd8cf44c7bed",
+      "id": 137,
+      "priority": 0,
+      "schema": "sluice/submission@1",
+      "state": "conflict",
+      "submitted": "2026-10-23T02:51:33Z",
+      "told": "2026-10-23T02:51:38Z"
+    },
+    {
+      "after": [],
+      "attempt": 2,
+      "branch": "main",
+      "from": {
+        "agent": "swancloud-ops",
+        "head": "bolt/crews-small-leftovers-of-late-october",
+        "worktree": "pull/99"
+      },
+      "head": "2111d21bb0604023b2d39ee2445d962ef936f0a0",
+      "id": 148,
+      "priority": 0,
+      "schema": "sluice/submission@1",
+      "state": "withdrawn",
+      "submitted": "2026-10-23T03:45:29Z",
+      "tested": {
+        "combination": "b6e50e6580c486278e4b68a54c1f37e8e85db7d8",
+        "on": "e8037fc0a55cf39f5645e4283f5a06b8d2dd70fc",
+        "submissions": [
+          148
+        ]
+      },
+      "withdrawn": {
+        "at": "2026-10-23T03:49:32Z",
+        "by": "swancloud-ops"
+      }
+    },
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "main",
+      "from": {
+        "agent": "swancloud-design",
+        "head": "design/split-ends-at-first-submit",
+        "worktree": "pull/106"
+      },
+      "head": "83a67d0c5577829a7cd31e3798cc28f24ffa9464",
+      "id": 153,
+      "landed_as": "52c742756bb7660eb6f1b3fe720a4e02dcf7fb9f",
+      "priority": 0,
+      "result": "passed",
+      "schema": "sluice/submission@1",
+      "state": "landed",
+      "submitted": "2026-10-23T04:03:03Z",
+      "tested": {
+        "combination": "9181bbb5f5698227d569976d5d3d57e9fb0eb39c",
+        "on": "e8037fc0a55cf39f5645e4283f5a06b8d2dd70fc",
+        "submissions": [
+          153
+        ]
+      },
+      "told": "2026-10-23T04:14:15Z"
+    },
+    {
+      "after": [],
+      "attempt": 1,
+      "branch": "main",
+      "from": {
+        "agent": "swancloud-design",
+        "head": "design/read-a-bolt-where-it-lives",
+        "worktree": "pull/109"
+      },
+      "head": "c2085a17f5ca733b5f6756696cbfd9946122e88d",
+      "id": 160,
+      "priority": 0,
+      "schema": "sluice/submission@1",
+      "state": "testing",
+      "submitted": "2026-10-23T04:27:20Z",
+      "tested": {
+        "combination": "30bf2f87bc27914773f9f51d0df2bb4ff1055eda",
+        "on": "7cb18d32d707eb35e119b713bd5d71754e1d4480",
+        "submissions": [
+          160
+        ]
+      }
+    }
+  ],
+  "testing": 1,
+  "warnings": [],
+  "window": 4
+}
