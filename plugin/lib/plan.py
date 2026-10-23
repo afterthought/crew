@@ -2392,6 +2392,17 @@ def bolts_local_said(fleet, t, plan):
     return out
 
 
+def bolt_split_check(fleet, t, bolt):
+    """What a merge into the bolt reads of a split (plan.19), on the team's host in the kit's main checkout: where the
+    bolt lives (BOLT_LIVES), and when the host's own tip names a remote for it (kit.split_remote), that remote's copy
+    after one fetch (BOLT_SPLIT); (remote, kit.bolt_split's facts), or None when there is nothing to read, so a bolt
+    whose tip names no remote fetches nothing."""
+    remote = kit.split_remote(host_run(fleet, t["machine"], BOLT_LIVES, t["kit"]["main"], bolt, kit.DECLARATION), bolt)
+    if not remote:
+        return None
+    return remote, kit.bolt_split(host_run(fleet, t["machine"], BOLT_SPLIT, t["kit"]["main"], bolt, remote), bolt)
+
+
 def bolt_upstream(fleet, t, bolt):
     """The ref a place of the bolt tracks, read on the team's host where the bolt lives (kit.place_base, plan.19):
     origin/bolt/<bolt> for a bolt on GitHub, bolt/<bolt> for one made before gives went through sluice."""
@@ -4846,7 +4857,7 @@ def run_check(fleet, a):
     the user, makes it; on a unit whose intent was amended, which the user approved, anyone starts its construct, and
     the prompt carries the amendment's words, read from the mark. Code starts once the change is committed, with no
     review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits until each After
-    unit has merged (teams.5), and a unit carried onto its bolt inside another's merge, whose place is gone, has its
+    unit has merged (teams.5), is refused while its bolt is split (split_refusal, plan.19), and a unit carried onto its bolt inside another's merge, whose place is gone, has its
     place made again from the bolt for its merge (teams.17); settle runs only for a unit that has delivered its verify.
     crew chore run asks with --chore, and a chore's stages are chore_check's; a stage asked of the other kind is refused
     naming it (plan.11)."""
@@ -4894,6 +4905,9 @@ def run_check(fleet, a):
         got = (k["places"].get(a.unit) or {}).get("touches") or {}
         facts = dict(loose=undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After")), touches=got)
     elif a.stage == "merge":
+        split = bolt_split_check(fleet, t, bolt)
+        why = split and split_refusal("unit", a.unit, bolt, t["machine"], *split)
+        not why or fail(why)
         if not s.get("worktree"):  # carried onto the bolt inside another's merge, its place gone: made again from the bolt
             make_place(fleet, t, place, f"unit/{a.unit}", bolt)
         merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "unit", a.unit)
@@ -5065,8 +5079,8 @@ def chore_check(fleet, a, label, plan, c):
     """Whether a chore's stage may start (chore_refusal), its place (made at its first code, on chore/<name> from the
     bolt, tracking it, and taking the head of each unmerged unit or chore it comes after, as a unit's construct's place
     does, TOOK, plan.13), and the prompt the stage is sent (chore_prompt), as facts for the stage's start, as run_check
-    gives a unit's. A merge is refused while a commit of its own lacks the chore's trailer, which is how its merge and
-    its landing are read (plan.11)."""
+    gives a unit's. A merge is refused while its bolt is split (split_refusal, plan.19), and while a commit of its own
+    lacks the chore's trailer, which is how its merge and its landing are read (plan.11)."""
     bolt = c.get("Bolt") or fail(f"chore {a.unit} is queued: move it into a bolt first")
     t = bolt_team(fleet, plan.bolt(bolt))
     st_all = Stages(fleet, plan, survey(fleet, [(t["name"], bolt, t["kit"]["name"])]))
@@ -5085,6 +5099,9 @@ def chore_check(fleet, a, label, plan, c):
             print(f"{place} starts from the kept chore/{a.unit}, at {kept}")
         took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], c), "chore")
     elif a.stage == "merge":
+        split = bolt_split_check(fleet, t, bolt)
+        why = split and split_refusal("chore", a.unit, bolt, t["machine"], *split)
+        not why or fail(why)
         loose = untrailed(chore_commits(fleet, t, bolt, a.unit), a.unit)
         not loose or fail(f"chore {a.unit} merges only once every commit of its own beyond bolt/{bolt} carries `Chore: {a.unit}`, and "
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
@@ -5421,7 +5438,8 @@ def fix_cmd(fleet, a):
     any (SLOT); for a merge, how it merges into the bolt
     (MERGE), by a submission to sluice as a unit's does; for a drop, its branch when it is there (BRANCH). A name crew
     does not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
-    already there (fix.start), a merge from a place not the fix's own (fix.merge), and a drop of a merged fix, of one
+    already there (fix.start), a merge from a place not the fix's own or into a split bolt (fix.merge, split_refusal,
+    plan.19), and a drop of a merged fix, of one
     nothing holds or of a place not the fix's own (fix.drop) are refused and recorded (teams.3, teams.5, record
     0028)."""
     t = at_work(fleet, a.team)
@@ -5446,6 +5464,9 @@ def fix_cmd(fleet, a):
             not why or fail(why)
         elif a.mode == "merge":
             why = own_place(place, *place_branch(fleet, t, place), fix, bolt)
+            not why or fail(why)
+            split = bolt_split_check(fleet, t, bolt)
+            why = split and split_refusal("fix", a.name, bolt, t["machine"], *split)
             not why or fail(why)
             said["MERGE"] = merge_command(bolt)
         elif a.mode == "drop":
