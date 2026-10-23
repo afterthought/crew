@@ -2,8 +2,14 @@
 plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
 plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
 goes with its place (plan.10) and plan.branch_said for what is said of it, plan.bolt_branch_judged for a bolt's own
-branch and plan.kept_record for what a kept one's record says, and plan.unread_plans for a tidy that removes nothing. How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
+branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing, and
+plan.overview_runs and plan.run_kept for a worktree sluice has a run in. The documents under sluice-0.36.4/ were
+recorded from sluice 0.36.4 on deneb, 2026-10-22, their scratch folder written /scratch: a kit whose place a ran
+`sluice exec main -- sleep 25` (overview-run.json) until it ended (overview-ended.json). How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
 settles, the journey's (t-journey-merge, t-journey-fix)."""
+import json
+import pathlib
+
 import pytest
 
 from facts import plan_of
@@ -11,6 +17,7 @@ from facts import plan_of
 import plan
 
 KD = "/kit"
+RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
 
 
 # A fix branch's facts as gather.fix_facts reads them: in flight, merged into its bolt, landed with it, or cut at a
@@ -141,8 +148,8 @@ class TestLegacyBolt:
     branch, is detached at the bolt's tip by the team's read while the bolt lasts when it is clean, and named as kept on
     the branch while it is not (plan.9, plan.18)."""
 
-    def detach(self, path="bolts/t", branch="bolt/t", over=None, locked=False, status=(0, "", "")):
-        return plan.bolt_detach(f"{KD}/{path}", branch, KD, over, locked, lambda: status)
+    def detach(self, path="bolts/t", branch="bolt/t", over=None, locked=False, status=(0, "", ""), run=None):
+        return plan.bolt_detach(f"{KD}/{path}", branch, KD, over, locked, lambda: status, lambda: run)
 
     def test_a_legacy_bolt_worktree_on_its_branch_with_nothing_modified_is_detached(self):
         assert self.detach() == (True, None)
@@ -151,6 +158,11 @@ class TestLegacyBolt:
         assert self.detach(status=(0, " M README.md\n", "")) == (False, (
             "it has uncommitted changes, which are the user's to keep or discard, and crew detaches it at the bolt's tip "
             "once it is clean"))
+
+    def test_a_clean_one_sluice_has_a_run_in_stays_on_its_branch_named_for_the_run(self):
+        # wldn's signal 2026-10-20-swb-2-ops-20f43d6b/01: the tidy detached one 45 s into a run in it (plan.9).
+        assert self.detach(run="sluice's overview lists a run in it, `sleep 25`") == (False, (
+            "sluice's overview lists a run in it, `sleep 25`, and crew detaches it at the bolt's tip once no run is in it"))
 
     def test_a_locked_one_or_one_git_cannot_read_stays_on_its_branch(self):
         assert self.detach(locked=True, status=None) == (False, "it is locked, and crew detaches it at the bolt's tip once it is not")
@@ -165,21 +177,65 @@ class TestLegacyBolt:
 
 class TestKept:
     def test_a_locked_one_is_kept_unread(self):
-        assert plan.kept_why("x", True, None) == "it is locked"
+        assert plan.kept_why("x", True, None, lambda: None) == "it is locked"
 
     def test_one_with_uncommitted_changes_is_the_users(self):
-        assert plan.kept_why("unit stray has merged into bolt/t", False, (0, "?? note\n", "")) == (
+        assert plan.kept_why("unit stray has merged into bolt/t", False, (0, "?? note\n", ""), lambda: None) == (
             "unit stray has merged into bolt/t, and it has uncommitted changes, which are the user's to keep or discard")
 
     def test_one_git_cannot_read_is_kept(self):
-        assert plan.kept_why("x", False, (128, "", "fatal: not a git repository\n")) == "git cannot read its status: fatal: not a git repository"
+        assert plan.kept_why("x", False, (128, "", "fatal: not a git repository\n"), lambda: None) == "git cannot read its status: fatal: not a git repository"
 
     def test_a_clean_one_goes(self):
-        assert plan.kept_why("x", False, (0, "", "")) is None
+        assert plan.kept_why("x", False, (0, "", ""), lambda: None) is None
 
     def test_a_landings_place_whose_submission_is_still_with_sluice_is_kept_and_named(self):
-        assert plan.kept_why("bolt gone is in no plan", False, (0, "", ""), True) == (
+        assert plan.kept_why("bolt gone is in no plan", False, (0, "", ""), lambda: None, True) == (
             "bolt gone is in no plan, and its submission is still with sluice")
+
+
+    def test_a_clean_one_sluice_has_a_run_in_is_kept_and_named_for_it_and_only_then_is_the_overview_read(self):
+        ran = "sluice's overview lists a run in it, `sleep 25`, started 2026-10-22T23:31:30Z"
+        assert plan.kept_why("unit a has merged into bolt/t", False, (0, "", ""), lambda: ran) == (
+            f"unit a has merged into bolt/t, and {ran}")
+
+        def unread():
+            raise AssertionError("the overview is read only for a worktree nothing else keeps")
+        assert plan.kept_why("x", True, None, unread) == "it is locked"
+        assert plan.kept_why("x", False, (0, " M a\n", ""), unread).endswith("uncommitted changes, which are the user's to keep or discard")
+
+
+def recorded(name):
+    return json.loads((RECORDED / f"{name}.json").read_text())
+
+
+class TestRun:
+    """Whether sluice has a run in a worktree the tidy would detach or remove (plan.9; sluice ADR 0024 and 0035): read
+    from `sluice overview --json` as sluice 0.36.4 prints it, and named; one crew can't read keeps it (read.1)."""
+
+    def test_the_overview_lists_the_worktree_a_run_is_in_and_none_once_it_has_ended(self):
+        assert plan.overview_runs(recorded("overview-run")) == {
+            "/scratch/places/a": {"command": "sleep 25", "started": "2026-10-22T23:31:30Z"}}
+        assert plan.overview_runs(recorded("overview-ended")) == {}
+
+    @pytest.mark.parametrize("d", [
+        None, {}, dict(recorded("overview-run"), schema="sluice/overview@2"),
+        {k: v for k, v in recorded("overview-run").items() if k != "sessions"},
+        dict(recorded("overview-run"), sessions=[{"run": {"started": "2026-10-22T23:31:30Z"}}])])
+    def test_a_document_sluice_0_36_4_would_not_print_is_no_overview(self, d):
+        assert plan.overview_runs(d) is None
+
+    def test_a_run_is_named_by_its_command_or_as_its_checks_with_when_it_started(self):
+        assert plan.run_kept({"command": "sleep 25", "started": "2026-10-22T23:31:30Z"}, None) == (
+            "sluice's overview lists a run in it, `sleep 25`, started 2026-10-22T23:31:30Z")
+        assert plan.run_kept({"started": "2026-10-22T23:31:30Z", "tasks": []}, None) == (
+            "sluice's overview lists a run of its checks in it, started 2026-10-22T23:31:30Z")
+        assert plan.run_kept({}, None) == "sluice's overview lists a run of its checks in it"
+
+    def test_no_run_lets_it_go_and_an_overview_crew_cannot_read_keeps_it(self):
+        assert plan.run_kept(None, None) is None
+        assert plan.run_kept(None, "this host has no sluice on its path") == (
+            "sluice's overview can't be read (this host has no sluice on its path), so crew can't tell whether a run is in it")
 
 
 class TestWt:

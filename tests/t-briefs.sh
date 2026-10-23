@@ -49,9 +49,16 @@ expect_ok crewpy brief swb-1 coder; has "$out" "Never run the whole suite by han
 has "$out" "run the tests of what you changed, as the kit's CLAUDE.md says"; lacks "$out" "moon run"
 expect_ok crewpy brief swb-1 verify; has "$out" "If the check runs tests, it runs only those the change affects"
 has "$out" "never the whole suite, which the merge gate runs"
-expect_ok crewpy brief swb-1 construct; has "$out" "ending with the tests its change affects green, not the whole suite, which the merge gate runs"
-lacks "$out" "ending with the suite green"
-ok "the coder, verify and construct run only the tests a change affects, and leave the whole suite to the merge gate"
+ok "the coder and verify run only the tests a change affects, and leave the whole suite to the merge gate"
+
+# A change's content is the kit's (briefs.3, record 0025): the construct brief names no proof list, task shape or
+# design section, points at the kit's openspec/config.yaml, and keeps the Touches block crew reads.
+expect_ok crewpy brief swb-1 construct
+has "$out" "openspec/config.yaml"; has "$out" "## Touches"
+for gone in "Proof in dev" "proof in dev" "Task notes" "one sentence saying what must be true" "ending with the tests its change affects"; do
+  lacks "$out" "$gone"
+done
+ok "the construct brief leaves a change's content to the kit's openspec/config.yaml and keeps only what crew reads"
 
 expect_ok crewpy brief swb-1 conductor
 for want in "tell wldn-design" "signal" "never by hand" "Don't create tracking files" "`wldn/main` of WilldanGroup/crew-state"; do
@@ -342,7 +349,7 @@ expect_ok crewpy brief wldn planner; has "$out" "\`wldn/main\` of WilldanGroup/c
 ok "every brief names the flywheel's branch for the plan and the moves, and none names plan/<label>"
 
 # Test, check and proof results reach the user as a glyph list (briefs.7): the six roles that report results carry
-# one section, built once in crew, word for word the same in each.
+# one section, built once in crew, word for word the same in each, which names no proof list (briefs.3).
 first=""
 for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-1 verify" "wldn main-ops"; do
   expect_ok crewpy brief $brief
@@ -352,10 +359,13 @@ for brief in "swb-1 conductor" "swb-1 ops" "swb-1 construct" "swb-1 coder" "swb-
   for want in "## Test, check and proof results" "- ✅" "- ❌" "- ⏳" "before any prose" "Never say a result only in a sentence"; do
     has "$cut" "$want"
   done
+  lacks "$cut" "Proof in dev"
   [[ -z $first ]] && first=$cut
   [[ $cut == "$first" ]] || fail "the $brief brief's results section differs from the swb-1 conductor's:"$'\n'"$cut"
 done
-ok "the six roles that report results carry one glyph-list section, the same in each"
+ok "the six roles that report results carry one glyph-list section, the same in each, naming no proof list"
+expect_ok crewpy brief swb-1 coder; has "$out" "Every task is yours."; lacks "$out" "what needs dev"
+ok "the coder's brief names no work that needs dev"
 
 # A stage ends at its deliverable (teams.4): the conductor waits for every stage and fix through crew and reads no pane
 # for an outcome, takes a stuck stage to the user and runs a stopped-short one again with the answer; the stage agents
@@ -534,11 +544,13 @@ lacks "$out" "decides with the user"; lacks "$out" "**amend**"
 expect_ok crewpy brief swb-1 coder
 for want in "you are the unit's one round of fixes after its verify" "marks fix, and only those" "No verify runs after you" \
   "\`openspec archive <unit> --yes\`" "crew reads the merge as delivered only once the bolt holds the change archived" \
-  "A chore or a fix has no change to archive"; do
+  "A chore or a fix has no change to archive" "A merge archives what its own archive needs first" \
+  "crew refuses a merge that stops short for an archive it can make" \
+  "Only when the archive needs one you cannot make, another unit's change or one with a task open, or openspec refuses one of them"; do
   has "$out" "$want"
 done
 lacks "$out" "When the prompt carries findings from a verify"; lacks "$out" "leave or amend"
-ok "a verify is one round with no card, grounded in the change as written: the report marks each finding fix or leave, one fresh coder fixes what it marks fix, nothing goes to the planner, and the merge archives the change first"
+ok "a verify is one round with no card, grounded in the change as written: the report marks each finding fix or leave, one fresh coder fixes what it marks fix, nothing goes to the planner, and the merge archives the change first, and what its own archive needs before it"
 expect_ok crewpy brief wldn reviewer
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/reviewer.md left ${BASH_REMATCH[0]} unfilled"
 for want in "# You are wldn-reviewer, the reviewer of wldn" "Write nothing but this file" "at the commit the prompt names" \

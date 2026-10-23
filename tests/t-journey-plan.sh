@@ -130,7 +130,7 @@ ok "a proposal is dropped with a reason, the planner told and its card withdrawn
 # A refused proposal is recorded naming its command, never the words typed in it.
 expect_fail '`unit add y "Typed ZQXA." --bolt nowhere`: no bolt nowhere in wldn/main' \
   crew plan propose "$(proposal 'Case: x' 'Do: unit add y "Typed ZQXA." --bolt nowhere')"
-has "$(as mac-studio bash -c 'recsel -t Entry -e "Act = '"'plan.propose'"'" -P Refused "$HOME"/.local/state/crew/wldn/runs/*/*.rec' | grep . | tail -1)" \
+has "$(as mac-studio bash -c 'for f in "$HOME"/.local/state/crew/wldn/runs/*/*.rec; do recsel -t Entry -e "Act = '"'plan.propose'"'" -P Refused "$f"; done' | grep . | tail -1)" \
   '`unit add y`: no bolt nowhere in wldn/main'
 [[ $(record_of mac-studio) != *ZQXA* ]] || fail "a refused proposal's entry holds typed text"
 n=$(grep -c "^Refused:" <<<"$(record_of mac-studio)")

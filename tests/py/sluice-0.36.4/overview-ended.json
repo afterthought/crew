@@ -1,0 +1,36 @@
+{
+  "at": "2026-10-22T23:32:00Z",
+  "branches": [],
+  "host": "deneb",
+  "hosts": [],
+  "previews": [],
+  "repository": "/scratch/kit/.git",
+  "room": {
+    "bound": 4,
+    "queue": 0,
+    "reserve": 0,
+    "sessions": 0
+  },
+  "schema": "sluice/overview@1",
+  "sessions": [
+    {
+      "branch": "main",
+      "last_result": {
+        "at": "2026-10-22T23:31:58Z",
+        "head": "a89257ee2f1a4c82d5c68da0df5600be2a1d3f4e",
+        "kind": "command",
+        "outcome": "pass",
+        "recorded": false
+      },
+      "last_run": "2026-10-22T23:31:30Z",
+      "ports": {},
+      "removed": false,
+      "worktree": "/scratch/places/a"
+    },
+    {
+      "branch": "main",
+      "holds_queued_branch": "main",
+      "worktree": "/scratch/kit"
+    }
+  ]
+}

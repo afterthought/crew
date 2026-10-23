@@ -5,8 +5,10 @@
 # branch kept while main lacks its tip (plan.19); CLAUDE.md
 # says a host loads crew live from crew/live/plugin or released at a tag swancloud pins, never from a checkout on main,
 # which nobody pulls or levels (plan.18, plan.19); a checkout carries the .envrc a person's direnv enters the shell
-# with, and ignores devenv's and direnv's working files and the tests' .venv.
-# Reads: README.md CLAUDE.md plugin/roles/ plugin/skills/ .envrc .gitignore
+# with, and ignores devenv's and direnv's working files and the tests' .venv. crew's openspec/config.yaml hands crew's
+# construct and coder crew's conventions for its changes (docs.6): each task names its check, no proof list, tick a
+# task once its check passes.
+# Reads: README.md CLAUDE.md plugin/roles/ plugin/skills/ .envrc .gitignore openspec/config.yaml
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 world
 usage=$(crew 2>&1 || true)
@@ -82,3 +84,11 @@ ok "CLAUDE.md says crew/main is an anchor, a host loads crew live from crew/live
 grep -qxF 'use devenv' "$CREW/.envrc" || fail ".envrc does not enter devenv"
 for line in .devenv/ .direnv/ '!.envrc' tests/.venv/; do grep -qxF -- "$line" "$CREW/.gitignore" || fail ".gitignore lacks $line"; done
 ok "a checkout carries the .envrc and ignores devenv's and direnv's working files and the tests' .venv"
+
+config=$(cat "$CREW/openspec/config.yaml")
+for want in "the check in crew's tiers that proves it" "tests/suite --affected" "*Task notes*" "no proof list of any name" \
+  "*After deploy* lists only the steps no check can be code" "is a check this change adds" \
+  "Tick a task only once the check it names passes"; do
+  has "$config" "$want"
+done
+ok "crew's openspec/config.yaml says crew's conventions for its changes: each task names its check, no proof list, and a task is ticked once its check passes"
