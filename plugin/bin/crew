@@ -124,7 +124,10 @@
 #   crew bolt  submit <bolt> [--label L]
 #                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
 #                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
-#                                      sluice pushes it to GitHub, and the landing pushes nothing and levels no host
+#                                      sluice pushes it to GitHub, and the landing pushes nothing and levels no host.
+#                                      In a kit whose main takes pull requests, it readies the bolt's draft pull
+#                                      request first, and a landing that does not land leaves it a draft, as a fix's
+#                                      start or a merge into the bolt keeps it, until the next submit readies it
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
