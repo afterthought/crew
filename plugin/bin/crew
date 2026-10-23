@@ -100,7 +100,9 @@
 #                                      wait for the fix's stage to end: its commits, or its merge on the bolt
 #   crew needs   "<what you need>"     run by a stage's agent that can't finish without
 #                                      something only someone else can give: its stage ends short, and the conductor
-#                                      is given the words, by its wait or by a tell
+#                                      is given the words, by its wait or by a tell; a unit's merge is refused, once
+#                                      in the stage and naming them, while its branch holds archives it can make
+#                                      itself, open changes no unit has, every task ticked, that its archive builds on
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
 # repository; a meeting's signals stay in the partition's first blueprints repo:
@@ -109,10 +111,16 @@
 #                                      every bolt, unit and chore of the plans, each one's stage read from its kit, and
 #                                      each held bolt's verification, sluice's verdict on its last landing
 #   crew bolt  new|give|order|drop|land ...
-#                                      give makes bolt/<bolt> from GitHub's main, origin/main after a fetch, with no
-#                                      worktree, refused in a kit whose .config/sluice.toml there names no checks for
-#                                      its bolt branches, and while a bolt the team holds is not proven (every unit
-#                                      and chore merged, sluice green at its head) or it holds two
+#                                      give has sluice make bolt/<bolt> on GitHub from main (sluice branch create, on the
+#                                      team's host), with no worktree, before the plan write; refused, nothing changed,
+#                                      in a kit whose .config/sluice.toml on origin/main names no checks or no remote
+#                                      for its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
+#                                      words when it makes none, and while a bolt the team holds is not proven (every
+#                                      unit and chore merged, sluice green at its head) or it holds two.
+#                                      land and drop have sluice delete it (sluice branch delete) once its worktrees
+#                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
+#                                      while main lacks its tip, and deleted once main holds it. A bolt made before
+#                                      gives went through sluice stays local until it lands
 #   crew bolt  submit <bolt> [--excerpt "<the user's words>"] [--label L]
 #                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
 #                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
@@ -278,7 +286,9 @@
 #                                      the partition's page, one HTML file that loads nothing: it opens on the board,
 #                                      its four lanes drawn as the flywheel mockup draws them, narrowed to one team
 #                                      when chosen, kept across reloads, and its header linking each other partition's
-#                                      page beside it (../<label>/page.html); one switch away, the lineage: signals,
+#                                      page in the layout of its own file (../<label>/page.html in crew's,
+#                                      <label>.html beside one written as <label>.html, none, said so, when its
+#                                      file and folder are not the partition's); one switch away, the lineage: signals,
 #                                      agenda items, proposals, units and bolts as columns, a line from each to what
 #                                      it led to, and each one's history as crew trace prints it; and the deploys,
 #                                      each environment's as a timeline, with the word, steps, checks and outcome of
@@ -395,7 +405,8 @@ case $cmd in
     one _needs -- "$words" ;;
   _tidy)  # crew _tidy <team> [--landed <bolt> --outcome <words>]: free the slots whose work has merged or been dropped,
     # and remove the worktrees whose work is over (a plan write that ends work asks for it on the team's host); after a
-    # landing, close the bolt's landing card there with the words
+    # landing, have sluice delete the bolt's branch once the landing's place is gone, and close the bolt's landing card
+    # there with the words
     need_team "${2:-}"; one _tidy "${args[@]:1}" ${forced[@]+"${forced[@]}"} ;;
   _construct-again)  # crew _construct-again <team> <unit> --by <what amended it> [--force]: an amendment's construct,
     # handed to the team's host by the plan write that made it, which answers once the host has it (plan.15, code.9)

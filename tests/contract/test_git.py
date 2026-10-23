@@ -78,10 +78,12 @@ def test_merge_tree_from_the_head_a_dependent_took_still_forecasts_its_own_overl
     assert plan.merge_tree(str(repo.path), "a", "b", took) == ["shared.txt"]
 
 
-def rebase(repo, tmp_path, unit, src, to):
-    """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit>."""
+def rebase(repo, tmp_path, unit, src, to, upstream=None):
+    """plan.REBASE as crew unit move runs it in the unit's place: <place> <from bolt> <to bolt> <unit> <kind> <the
+    upstream of the bolt it moves to>, bolt/<to> unless given."""
     import plan
-    return subprocess.run(["bash", "-c", plan.REBASE, "crew", str(tmp_path / "place"), src, to, unit], capture_output=True, text=True)
+    return subprocess.run(["bash", "-c", plan.REBASE, "crew", str(tmp_path / "place"), src, to, unit, "unit", upstream or f"bolt/{to}"],
+                          capture_output=True, text=True)
 
 
 def test_a_move_rebases_the_units_own_commits_onto_the_new_bolt_and_tracks_it(repo, tmp_path):
@@ -112,6 +114,83 @@ def test_a_move_whose_rebase_conflicts_leaves_the_branch_and_place_as_they_were(
     assert r.returncode == 3
     assert repo.git("rev-parse", "unit/d") == tip
     assert subprocess.run(["git", "-C", str(tmp_path / "place"), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
+
+
+def test_a_unit_moved_to_a_bolt_on_github_tracks_it_there(repo, tmp_path):
+    """plan.op_unit_move through REBASE and bolt_upstream (plan.19): a unit moved to a bolt on GitHub tracks
+    origin/bolt/<bolt>, as a place cut from it does."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/te"); repo.git("branch", "bolt/cp")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git")); repo.git("fetch", "-q", "origin")
+    repo.git("worktree", "add", "-q", "--track", "-b", "unit/c", str(tmp_path / "place"), "origin/bolt/te")
+    r = rebase(repo, tmp_path, "c", "te", "cp", "origin/bolt/cp")
+    assert r.returncode == 0, r.stderr
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/c") == "origin/bolt/cp"
+
+
+def bolt_on(repo, tmp_path, remote):
+    """A kit whose bolt/b names the remote for its bolts in its policy at the tip (or none), with GitHub's bolt/b one
+    commit ahead of the host's own, pushed from another clone, as a merge sluice landed from another host leaves it."""
+    policy = '[branches."bolt/*"]\nrequired = ["#check-full"]\n' + (f'remote = "{remote}"\n' if remote else "")
+    repo.commit("main", {".config/sluice.toml": policy})
+    repo.git("branch", "bolt/b")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git")); repo.git("fetch", "-q", "origin")
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "bolt/b", str(tmp_path / "github.git"), str(other)], check=True)
+    (other / "landed").write_text("from another host\n")
+    subprocess.run(["git", "-C", str(other), "add", "landed"], check=True)
+    subprocess.run(["git", "-C", str(other), "commit", "-qm", "chore(land): #1 unit/x"], check=True)
+    subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "bolt/b"], check=True)
+    return subprocess.run(["git", "-C", str(other), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+
+
+def cut(repo, tmp_path, unit, bolt="b"):
+    """plan.make_place's PLACE, as it runs it: first with no base, saying where the bolt lives, then with the base
+    kit.place_base chooses from that."""
+    import kit
+    run = lambda base: script("PLACE", str(repo.path), str(tmp_path / "places" / unit), f"unit/{unit}", bolt, base, kit.DECLARATION).stdout
+    said = run("")
+    assert "GITDIR=" not in said
+    return run(kit.place_base(said, bolt))
+
+
+def test_a_place_of_a_bolt_on_github_is_cut_from_it_there_after_a_fetch_and_tracks_it(repo, tmp_path):
+    """plan.make_place through PLACE (plan.19): a unit's place of a bolt whose policy names origin is cut from
+    origin/bolt/<bolt> after a fetch, tracking it, and holds the merge landed there from another host, which the host's
+    own bolt/<bolt> lags."""
+    import kit
+    landed = bolt_on(repo, tmp_path, "origin")
+    said = cut(repo, tmp_path, "x")
+    assert kit.place_said(said, "b")[0]
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/x") == "origin/bolt/b"
+    assert repo.git("rev-parse", "unit/x") == landed != repo.git("rev-parse", "bolt/b")
+
+
+def test_a_place_of_a_bolt_made_before_is_cut_from_the_hosts_own_branch_with_no_fetch(repo, tmp_path):
+    """plan.make_place through PLACE (plan.19, bolt-teams "A place of a bolt made before"): a bolt whose tip's policy
+    names no remote is cut from the host's own bolt/<bolt>, tracking it, and nothing is fetched for it."""
+    landed = bolt_on(repo, tmp_path, None)
+    repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))  # a fetch would fail
+    cut(repo, tmp_path, "x")
+    assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/x") == "bolt/b"
+    assert repo.git("rev-parse", "unit/x") == repo.git("rev-parse", "bolt/b") == repo.git("rev-parse", "origin/bolt/b") != landed
+
+
+def test_a_place_of_a_bolt_github_does_not_have_is_not_made_and_the_fetch_is_named(repo, tmp_path):
+    """plan.make_place through PLACE (bolt-teams "The bolt on GitHub cannot be fetched", read.1): a fetch that fails, as
+    when GitHub has no bolt/<bolt>, makes no place, and crew names the bolt and git's words."""
+    import kit
+    import pytest
+    from crew import Refusal
+    bolt_on(repo, tmp_path, "origin")
+    subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "branch", "-q", "-D", "bolt/b"], check=True)
+    said = cut(repo, tmp_path, "x")
+    with pytest.raises(Refusal, match=r"^no place is made: crew cannot fetch bolt/b from GitHub to cut it from: .*bolt/b"):
+        kit.place_said(said, "b")
+    assert not (tmp_path / "places" / "x").exists()
+    assert subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", "unit/x"], capture_output=True).returncode == 1
 
 
 def onto(place, bolt, *heads):
@@ -252,34 +331,29 @@ def script(name, *args, cwd=None):
     return subprocess.run(["bash", "-c", getattr(plan, name), "crew", *args], capture_output=True, text=True, cwd=cwd)
 
 
-def test_a_bolt_is_a_branch_from_main_as_it_stands_marked_as_crews_and_no_worktree(repo):
-    """plan.bolt_give (plan.8, record 0026): bolt/<bolt> is made from the kit's main with no worktree, marked in the
-    kit's git config as crew's, and the mark goes with the branch when git deletes it, so the tidy reads it as crew's
-    while the branch stands and never after (plan.9, read.4)."""
+def test_the_mark_crew_sets_on_a_bolts_branch_goes_when_git_deletes_the_branch(repo):
+    """plan.tidy (plan.9, read.4): crew marks a bolt's branch as its own in the kit's git config, branch.bolt/<bolt>.crew,
+    once sluice has made it (BOLT_CREATE), and the mark goes with the branch when git deletes it, so the tidy reads it as
+    crew's while the branch stands and never after."""
     head = repo.commit("main", {"README": "r\n"})
-    r = script("BOLT_BRANCH", str(repo.path), "b", head)
-    assert (r.returncode, r.stdout.strip()) == (0, head[:7])
-    assert repo.git("rev-parse", "bolt/b") == head
-    assert "bolt/b" not in repo.git("worktree", "list", "--porcelain")
+    repo.git("branch", "-q", "--no-track", "bolt/b", head)
+    repo.git("config", "branch.bolt/b.crew", "given")
     assert repo.git("config", "--get-regexp", r"^branch\.bolt/.*\.crew$") == "branch.bolt/b.crew given"
-    repo.commit("feat: more", {"more": "m\n"})
-    assert script("BOLT_BRANCH", str(repo.path), "b", repo.git("rev-parse", "HEAD")).stdout.strip() == head[:7]  # kept
     repo.git("branch", "-q", "-D", "bolt/b")
     assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
 
 
-def test_a_bolt_of_a_kit_on_github_is_cut_from_githubs_main_as_the_policys_read_fetched_it(repo, tmp_path):
-    """plan.bolt_give through POLICY and BOLT_BRANCH (plan.8, plan.18): the give's one fetch is the policy's, and the
-    bolt's branch is cut at the commit origin/main was at as it fetched it, ahead of the host's own main, tracking
-    nothing."""
-    import kit
-    pushed = kit_with_github(repo, tmp_path)
-    pushed("from-a-mac")
-    _, ref, at = kit.policy_said(script("POLICY", str(repo.path), ".config/sluice.toml").stdout, "k", "h")
-    github = repo.git("rev-parse", "origin/main")
-    assert (ref, at) == ("origin/main", github) and github != repo.git("rev-parse", "main")
-    assert script("BOLT_BRANCH", str(repo.path), "b", at).stdout.strip() == github[:7]
-    assert repo.git("for-each-ref", "--format=%(upstream)", "refs/heads/bolt/b") == ""
+def test_a_branch_removed_by_ref_edits_leaves_crews_mark_behind(repo):
+    """plan.tidy through bolt_branch_end (plan.19): sluice's branch delete removes the local branch by ref edits, as
+    git update-ref -d does, which leave the branch's git config section, crew's mark among it, so the tidy unsets a mark
+    whose branch is gone (read on sluice 0.36.4, tests/py/sluice-0.36.4/README)."""
+    head = repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "-q", "--no-track", "bolt/b", head)
+    repo.git("config", "branch.bolt/b.crew", "given")
+    repo.git("update-ref", "-d", "refs/heads/bolt/b")
+    assert repo.git("config", "--get-regexp", r"^branch\.bolt/.*\.crew$") == "branch.bolt/b.crew given"
+    repo.git("config", "--unset", "branch.bolt/b.crew")
+    assert subprocess.run(["git", "-C", str(repo.path), "config", "--get-regexp", r"^branch\.bolt/"], capture_output=True).returncode == 1
 
 
 def test_a_kits_policy_is_read_from_mains_commit(repo):
@@ -340,10 +414,13 @@ def test_a_landings_verdict_is_its_trailer(repo):
 
 
 def landing(repo, tmp_path):
-    """plan.LANDING as bolt_submit runs it on the team's host, for bolt b of the kit at repo, with a path holding wt
-    and the tools LANDING runs but no wt-submit; and stand_in(), which puts a stand-in wt-submit there that lands as
-    sluice does: a merge commit moved onto main by git update-ref, which leaves a checkout on main behind its HEAD, and,
-    with stray, leaves a file git does not ignore in the landing's worktree."""
+    """plan.LANDING as bolt_submit runs it on the team's host, for bolt b of the kit at repo, after plan.MAIN has read
+    main now there, with a path holding wt and the tools LANDING runs but no wt-submit; and stand_in(), which puts a
+    stand-in wt-submit there that lands as sluice does: a merge commit moved onto main by git update-ref, which leaves a
+    checkout on main behind its HEAD, and, with stray, leaves a file git does not ignore in the landing's worktree; with
+    on_github, it forms the merge on origin/main and pushes it there, leaving the host's own main where it was, then
+    fails releasing a place and exits 3, as sluice 0.36.4 does on a release that fails after its push; with refused, it
+    pushes nothing and exits 2. Each run is LANDING's result and the commit main now was at before it."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
@@ -355,25 +432,39 @@ def landing(repo, tmp_path):
             os.symlink(shutil.which(tool), bin_ / tool)
 
     def land_with(path):
+        _, (_, before, why) = main_at(repo)
+        assert not why, why
         return subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
-                              capture_output=True, text=True, env=dict(os.environ, PATH=path))
+                              capture_output=True, text=True, env=dict(os.environ, PATH=path)), before
 
-    def stand_in(stray=False):
+    def stand_in(stray=False, on_github=False, refused=False):
+        onto = "refs/remotes/origin/main" if on_github else "main"
+        moved = ('git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
+                 'echo "sluice: releasing try/b: its command failed" >&2\necho\nexit 3' if on_github else
+                 'git update-ref refs/heads/main "$new"\necho "landed #1"')
         (bin_ / "wt-submit").write_text(f'''#!/bin/sh
 [ "$1 $2" = "main --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
+{"echo 'sluice: bolt/b conflicts with main' >&2; exit 2" if refused else ""}
 {"echo s > stray.txt" if stray else ""}
+{"git fetch -q origin" if on_github else ""}
 tree=$(printf 'x\\n' | git hash-object -w --stdin)
-idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree main
+idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree {onto}
 GIT_INDEX_FILE=$idx git update-index --add --cacheinfo 100644,$tree,landed.txt
-new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p main -p HEAD -m "chore(land): #1 bolt/b")
-git update-ref refs/heads/main "$new"
-echo "landed #1"
+new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p {onto} -p HEAD -m "chore(land): #1 bolt/b")
+{moved}
 ''')
         (bin_ / "wt-submit").chmod(0o755)
         return lambda: land_with(f"{bin_}:{os.environ['PATH']}")
     return land, lambda: land_with(str(bin_)), stand_in
+
+
+def marked(repo):
+    """plan.LANDED_MARK as bolt_submit runs it once landing_said read the bolt landed: what plan.mark_said makes of it."""
+    import plan
+    m = script("LANDED_MARK", str(repo.path), "b")
+    return plan.mark_said(m.returncode, m.stdout, m.stderr)
 
 
 def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(repo, tmp_path):
@@ -381,21 +472,24 @@ def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(rep
     landing makes one on bolt/<bolt>, runs `wt submit main` there, which the real worktrunk runs as wt-submit from the
     path, removes it, and brings the kit's main checkout level with what sluice moved while it is on branch main,
     keeping an untracked file there. With no wt-submit on the path the landing is refused, naming it, with nothing
-    made. Once sluice has landed it and main moved, the bolt's branch crew marked given is marked landed in the kit's
-    git config, which a refused landing leaves as it was and git drops with the branch (record 0003)."""
+    made. Once crew has read that it landed, the bolt's branch crew marked given is marked landed in the kit's git
+    config by LANDED_MARK, which a refused landing leaves as it was and git drops with the branch (record 0003)."""
     import plan
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/b")
     repo.git("config", "branch.bolt/b.crew", "given")
     (repo.path / "notes.txt").write_text("the user's own\n")
     land, unready, stand_in = landing(repo, tmp_path)
-    r = unready()
+    r, _ = unready()
     assert r.returncode == 2 and "wt submit needs sluice's wt-submit, which is not on" in r.stderr, r.stderr
     assert not land.exists()
     assert repo.git("config", "branch.bolt/b.crew") == "given"
-    r = stand_in()()
-    landed, words = plan.landing_said("b", "kit", r.stdout)
-    assert landed and "MARKED=yes" in r.stdout and "mark" not in words, r.stdout + r.stderr
+    r, before = stand_in()()
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
+    assert landed and "MARKED" not in r.stdout, r.stdout + r.stderr
+    assert repo.git("config", "branch.bolt/b.crew") == "given"
+    assert marked(repo) == "yes"
+    assert "mark" not in plan.landing_said("b", "kit", "h", r.stdout, before, "yes")[1]
     assert repo.git("config", "branch.bolt/b.crew") == "landed"
     assert (tmp_path / "agent").read_text().strip() == "wldn-ops"
     assert not land.exists() and "land-b" not in repo.git("worktree", "list")
@@ -406,15 +500,17 @@ def test_a_landing_submits_from_a_worktree_on_the_bolt_and_brings_main_level(rep
 
 
 def test_a_landing_of_a_bolt_branch_crew_did_not_mark_leaves_it_unmarked(repo, tmp_path):
-    """plan.LANDING and plan.landing_said (read.4): a bolt's branch with no mark of crew's is not crew's, so its landing
-    sets none and says so."""
+    """plan.LANDED_MARK and plan.landing_said (read.4): a bolt's branch with no mark of crew's is not crew's, so its
+    landing sets none and says so."""
     import plan
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/b")
     _, _, stand_in = landing(repo, tmp_path)
-    r = stand_in()()
-    assert "MARKED=no" in r.stdout, r.stdout + r.stderr
-    assert plan.landing_said("b", "kit", r.stdout)[1].endswith("crew could not mark bolt/b landed: its branch carries no mark of crew's.")
+    r, before = stand_in()()
+    assert plan.landing_said("b", "kit", "h", r.stdout, before)[0], r.stdout + r.stderr
+    assert marked(repo) == "no"
+    assert plan.landing_said("b", "kit", "h", r.stdout, before, "no")[1].endswith(
+        "crew could not mark bolt/b landed: its branch carries no mark of crew's.")
     assert subprocess.run(["git", "-C", str(repo.path), "config", "--get", "branch.bolt/b.crew"]).returncode == 1
 
 
@@ -426,8 +522,8 @@ def test_a_landings_worktree_git_cannot_remove_is_kept_and_named_in_gits_words(r
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/b")
     land, _, stand_in = landing(repo, tmp_path)
-    r = stand_in(stray=True)()
-    landed, words = plan.landing_said("b", "kit", r.stdout)
+    r, before = stand_in(stray=True)()
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
     assert landed, r.stdout + r.stderr
     assert (land / "stray.txt").exists() and "land-b" in repo.git("worktree", "list")
     assert f"Its worktree {land} is kept, git refusing to remove it: fatal: '{land}' contains modified or untracked files" in words, words
@@ -443,12 +539,45 @@ def test_a_landing_against_a_detached_main_checkout_leaves_it_untouched_and_says
     repo.git("branch", "bolt/b")
     repo.git("switch", "-q", "--detach")
     land, _, stand_in = landing(repo, tmp_path)
-    r = stand_in()()
+    r, before = stand_in()()
     assert "LEVEL=detached" in r.stdout, r.stdout + r.stderr
-    landed, words = plan.landing_said("b", "kit", r.stdout)
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
     assert landed and "level" not in words, words
     assert repo.git("rev-parse", "HEAD") == was and repo.git("rev-parse", "main") != was
     assert not (repo.path / "landed.txt").exists() and repo.git("status", "--porcelain") == ""
+
+
+def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tmp_path):
+    """plan.LANDING, plan.landing_said and plan.LANDED_MARK (plan.18, plan.16): sluice forms the landing on GitHub's
+    main and pushes it, then fails releasing a place and exits 3 with the host's own main where it was, as it did for
+    swancloud's a-landed-places-preview-is-released (signal 2026-10-22-swancloud-ops-b237b51b/01). LANDING's fetch
+    after sluice's outcome reads GitHub's main moved and holding the bolt's tip, so the bolt landed there, sluice's exit
+    and its last line named as what came after the push, nothing said of levelling a main that did not move, and the
+    branch is then marked landed. A stand-in that pushes nothing and exits 2 lands nothing, and main is where it was."""
+    import plan
+    pushed = kit_with_github(repo, tmp_path)
+    pushed("from-a-mac")
+    repo.git("branch", "bolt/b", "origin/main")
+    repo.git("config", "branch.bolt/b.crew", "given")
+    tip = repo.git("commit-tree", "-p", "bolt/b", "-m", "feat: the bolt's", repo.git("rev-parse", "bolt/b^{tree}"))
+    repo.git("update-ref", "refs/heads/bolt/b", tip)
+    own = repo.git("rev-parse", "main")
+    _, _, stand_in = landing(repo, tmp_path)
+    r, before = stand_in(refused=True)()
+    assert before == repo.git("rev-parse", "origin/main") and "RC=2 " in r.stdout, r.stdout + r.stderr
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
+    assert not landed and words.startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was."), words
+    r, before = stand_in(on_github=True)()
+    assert "RC=3 " in r.stdout and "sluice: releasing try/b: its command failed" in r.stderr, r.stdout + r.stderr
+    github = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "main"],
+                            capture_output=True, text=True).stdout.strip()
+    assert github != before and repo.git("rev-parse", "main") == own
+    assert repo.git("rev-parse", f"{github}^2") == tip
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before)
+    assert (landed, words) == (True, f"bolt/b landed on kit's main at {github[:7]}: now crew bolt land b. sluice exited 3 after "
+                                     "its push: sluice: releasing try/b: its command failed. That is sluice's to report, apart "
+                                     "from the landing."), r.stdout
+    assert marked(repo) == "yes" and repo.git("config", "branch.bolt/b.crew") == "landed"
 
 
 def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):
@@ -547,8 +676,9 @@ def test_a_bolt_on_github_a_branch_tracks_is_found_at_the_ref_its_upstream_names
 def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt_and_prints_its_commit(repo, tmp_path):
     """plan.make_place through PLACE (record 0003, plan.10): unit/u, kept when u was dropped from bolt a, whose bolt's
     branch is gone, is taken by the place of a unit u added to bolt b as it stands, holding its kept commit; it then
-    tracks bolt/b, so the stages read it as b's, and PLACE prints the commit as KEPT, which kit.place_said passes over.
-    A place already there, or one made with a new branch, prints no KEPT."""
+    tracks bolt/b where it lives, the host's own branch for a bolt whose policy names no remote (plan.19), so the stages
+    read it as b's, and PLACE prints the commit as KEPT, which kit.place_said passes over. A place already there, or one
+    made with a new branch, prints no KEPT."""
     import kit
     repo.commit("main", {"README": "r\n"})
     repo.git("branch", "bolt/a")
@@ -559,15 +689,13 @@ def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt
     repo.git("branch", "-q", "-D", "bolt/a")
     repo.git("branch", "bolt/b")
     place = tmp_path / "places" / "u"
-    r = script("PLACE", str(repo.path), str(place), "unit/u", "bolt/b", "track", ".config/sluice.toml")
-    assert r.returncode == 0, r.stderr
-    assert f"KEPT={kept[:7]}" in r.stdout.splitlines()
-    assert kit.place_said(r.stdout)[1] is None
+    said = cut(repo, tmp_path, "u")
+    assert f"KEPT={kept[:7]}" in said.splitlines()
+    assert kit.place_said(said, "b")[1] is None
     assert subprocess.run(["git", "-C", str(place), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() == kept
     assert (place / "u").read_text() == "u\n"
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/u") == "bolt/b"
-    again = script("PLACE", str(repo.path), str(place), "unit/u", "bolt/b", "track", ".config/sluice.toml")
-    assert again.returncode == 0 and "KEPT=" not in again.stdout
-    fresh = script("PLACE", str(repo.path), str(tmp_path / "places" / "v"), "unit/v", "bolt/b", "track", ".config/sluice.toml")
-    assert fresh.returncode == 0 and "KEPT=" not in fresh.stdout
+    again = script("PLACE", str(repo.path), str(place), "unit/u", "b", "", kit.DECLARATION)
+    assert again.returncode == 0 and "GITDIR=" in again.stdout and "KEPT=" not in again.stdout
+    assert "KEPT=" not in cut(repo, tmp_path, "v")
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/v") == "bolt/b"

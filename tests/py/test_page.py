@@ -1,9 +1,10 @@
 """A flywheel's lineage page and its dev sites (the crew-page and crew-sites specs): page.data on the run record's
-entries, page.labelled and page.from_entries for each node's label and status, page.render, page.header and page.nav for
-the file; sites.url_of for where a worktree's dev server opens from here. That crew page writes the file whole from the
-branch and the board's read, and crew sites reads every host, are the board journey's (t-journey-board)."""
+entries, page.labelled and page.from_entries for each node's label and status, page.render, page.header, page.nav and
+page.beside for the file; sites.url_of for where a worktree's dev server opens from here. That crew page writes the file
+whole from the branch and the board's read, and crew sites reads every host, are the board journey's (t-journey-board)."""
 import json
 import re
+from pathlib import PurePath
 
 import pytest
 
@@ -110,7 +111,7 @@ class TestFile:
 
     def test_the_data_is_one_block_that_typed_text_cannot_end_and_nothing_loads_from_outside_the_file(self):
         self.D["nodes"][0]["label"] = "Ends </script><b>here</b> & more."
-        out = page.render(self.D)
+        out = page.render(self.D, PurePath("/s/wldn/page.html"))
         block, = re.findall(r'<script type="application/json" id="data">(.*?)</script>', out, re.S)
         assert json.loads(block)["nodes"][0]["label"] == "Ends </script><b>here</b> & more."
         rest = out.replace(block, "")
@@ -118,8 +119,27 @@ class TestFile:
             assert no not in rest
         assert '<body data-view="board">' in rest and "prefers-color-scheme" in rest
 
-    def test_the_header_names_every_partition_its_own_current_and_each_other_linked(self):
-        assert page.nav(["wldn", "madswan"], "wldn") == '<span class="part" aria-current="page">wldn</span><a class="part" href="../madswan/page.html">madswan</a>'
+    def test_the_header_names_every_partition_its_own_current_and_each_other_linked_in_crews_layout(self):
+        """board-page "Three partitions": a page in crew's folder layout links each other partition's folder beside it."""
+        assert page.nav(["wldn", "madswan"], "wldn", PurePath("/s/wldn/page.html")) == (
+            '<span class="part" aria-current="page">wldn</span><a class="part" href="../madswan/page.html">madswan</a>')
+
+    def test_a_page_named_for_its_partition_links_the_others_beside_it_as_they_are_served(self):
+        """board-page "Pages written side by side as they are served": <label>.html links <other>.html."""
+        assert page.beside(PurePath("/w/wldn.html"), "wldn", "madswan") == "madswan.html"
+        assert '<a class="part" href="madswan.html">madswan</a>' in page.nav(["wldn", "madswan"], "wldn", PurePath("/w/wldn.html"))
+
+    def test_a_folder_and_a_file_both_named_for_the_partition_swap_both(self):
+        """board-page "A folder and a file both named for the partition"."""
+        assert page.beside(PurePath("/s/wldn/wldn.html"), "wldn", "madswan") == "../madswan/madswan.html"
+
+    def test_a_page_whose_file_and_folder_name_no_partition_names_the_others_unlinked(self):
+        """board-page "A page written where its layout names no partition": crew cannot tell where the others are, so
+        it links none (read.1); a name that only contains the label does not name it."""
+        for path in ("/s/board.html", "/s/x/page.html", "/s/wldn-board.html"):
+            assert page.beside(PurePath(path), "wldn", "madswan") is None
+            assert page.nav(["wldn", "madswan"], "wldn", PurePath(path)) == (
+                '<span class="part" aria-current="page">wldn</span><span class="part">madswan</span>')
 
     def test_it_says_as_of_when_and_which_commit_and_both_when_the_board_read_another(self):
         assert page.header(self.D["made"]) == "as of 2026-10-12 10:00Z · wldn/main aaaaaaa"
@@ -162,7 +182,7 @@ class TestMore:
         assert [by["bolt/tenant-environments"].get(k) for k in ("status", "team")] == [None, "swb-1"]
 
     def test_the_page_opens_on_the_board_in_the_mockups_forms_with_a_phone_layout_and_the_teams_to_narrow_it_to(self):
-        rest = re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D), flags=re.S)
+        rest = re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D, PurePath("/s/wldn/page.html")), flags=re.S)
         for lane in ("Inception", "Bolt plan", "Construction", "Operation"):
             assert f'aria-label="{lane}"' in rest
         for has in ("@media (max-width:759px)", "prefers-color-scheme:dark", ':root[data-theme="dark"]', "repeating-linear-gradient",
@@ -179,7 +199,7 @@ class TestMore:
     def test_a_marker_whose_rows_post_was_refused_says_so_with_pending_yous_words_in_its_title(self):
         """board-page "A deploy whose card was refused": the marker says it has no card, its post refused, and pointing
         at it shows the words the board's read gives it (board.marker's refused)."""
-        rest = re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D), flags=re.S)
+        rest = re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D, PurePath("/s/wldn/page.html")), flags=re.S)
         assert 'k.refused ? "no card, its post refused" : "no card"' in rest
         assert 's.title = !k.card && k.refused ? k.key + ": " + k.refused : k.key;' in rest
 

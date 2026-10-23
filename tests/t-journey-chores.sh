@@ -4,8 +4,9 @@
 # comes after the chore waits for that commit and then builds on it, its place taking the chore's head, never waiting on
 # its merge (plan.13); verify ends at its report; a merge is refused while a commit lacks the chore's trailer, and merges
 # once its one round of fixes after its verify adds it, with no verify again (teams.5, teams.17), its wait ending once the bolt holds the trailer and rebasing the dependent onto the bolt; crew bolts
-# reads each stage from the kit; the team's read frees the slot and removes the place; crew unit run on a chore is
-# refused naming its kind; and crew trace finds it by its bare name.
+# reads each stage from the kit; the merge's wait frees the slot and keeps the place while sluice's overview lists a
+# run in it, which the team's next read removes once none is (plan.9); crew unit run on a chore is refused naming its
+# kind; and crew trace finds it by its bare name.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/test_chores.py); how git reads a chore's trailer, contract cases (tests/contract/). Each step checks
 # the command's wiring once.
@@ -32,7 +33,7 @@ eq "$(cat "$slots")" ""
 expect_ok crew chore run bump code
 has "$out" "swb-1-unit-1 has chore bump: code, in $cp"
 eq "$(cat "$slots")" "unit-1 chore bump $cp"
-eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/chore/bump)" "bolt/tenant-environments"
+eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/chore/bump)" "origin/bolt/tenant-environments"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $cp"
 eq "$(prompt_to swb-1-unit-1)" "'Chore bump: Biome follows the shell ZQXT.'"
 eq "$(field $box stage.start On stage/bump/code)" "stage/bump/code chore/bump agent/swb-1-unit-1"
@@ -69,6 +70,11 @@ expect_ok crew chore run bump merge
 eq "$(prompt_to swb-1-unit-1)" "'Merge bump into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 lacks "$out" "Pending You card"
 merge_as swb-1-unit-1 "$cp" bolt/tenant-environments || fail "the chore's submission failed"
+jq -n --arg repository "$(git -C "$k" rev-parse --path-format=absolute --git-common-dir)" --arg path "$(cd "$cp" && pwd -P)" '{
+  at: "2026-10-22T23:31:33Z", branches: [], host: "chuck-herdr-alpha", hosts: [], previews: [], repository: $repository,
+  room: {bound: 4, queue: 0, reserve: 0, sessions: 1}, schema: "sluice/overview@1", sessions: [{branch: "bolt/tenant-environments",
+    last_run: "2026-10-22T23:31:30Z", ports: {}, removed: false, run: {command: "sleep 25", started: "2026-10-22T23:31:30Z"},
+    worktree: $path}]}' > "$T/sluice-overview.json"
 expect_ok crew chore wait bump
 has "$out" "swb-1-unit-1 delivered merge on chore bump: bolt/tenant-environments holds it at $(short bolt/tenant-environments)"
 eq "$(stage_of)" "chore merged"
@@ -76,14 +82,17 @@ has "$out" "b is rebased onto bolt/tenant-environments, now that bump merged"
 git -C "$k" merge-base --is-ancestor bolt/tenant-environments unit/b || fail "b was not rebased onto the bolt"
 eq "$(field $box unit.rebase From unit/b)" "chore/bump"
 has "$out" "swb-1-unit-1 is free: bump has merged into its bolt"
-has "$out" "$cp and chore/bump are removed; the branch was at"
-ok "a merge is refused while a commit lacks the chore's trailer; once its one round of fixes adds it, it merges with no verify again, through sluice, and its wait ends once the bolt holds the trailer"
+has "$out" "$cp is kept, and chore/bump with it: chore bump has merged into bolt/tenant-environments, and sluice's overview lists a run in it, \`sleep 25\`, started 2026-10-22T23:31:30Z"
+[[ -d $cp ]] || fail "the chore's place went while sluice ran in it"
+ok "a merge is refused while a commit lacks the chore's trailer; once its one round of fixes adds it, it merges with no verify again, through sluice, and its wait ends once the bolt holds the trailer, freeing the slot and keeping the place while sluice runs in it"
 
+rm "$T/sluice-overview.json"
 expect_ok crew status swb-1
 lacks "$out" "swb-1-unit-1 is free"
+has "$out" "$cp and chore/bump are removed; the branch was at"
 [[ ! -d $cp ]] || fail "the chore's place is still there"
 eq "$(field $box slot.free On)" "agent/swb-1-unit-1 chore/bump"
 [[ $(record_of $box)$(record_of mac-studio) != *ZQXT* ]] || fail "a chore's words are in the run record"
 expect_ok crew trace bump
 has "$out" "chore.add"; has "$out" "stage/bump/merge chore/bump"
-ok "the merge's wait freed the chore's slot and removed its place before the team's next read; the record holds none of its words, and crew trace finds it by its bare name"
+ok "the team's next read, no run in the place, removes it; the record holds none of the chore's words, and crew trace finds it by its bare name"
