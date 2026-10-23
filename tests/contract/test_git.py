@@ -446,6 +446,7 @@ def landing(repo, tmp_path):
 [ "$1 $2" = "main --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
+git status --porcelain > "{tmp_path}/status"
 {"echo 'sluice: bolt/b conflicts with main' >&2; exit 2" if refused else ""}
 {"echo s > stray.txt" if stray else ""}
 {"git fetch -q origin" if on_github else ""}
@@ -578,6 +579,50 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
                                      "its push: sluice: releasing try/b: its command failed. That is sluice's to report, apart "
                                      "from the landing."), r.stdout
     assert marked(repo) == "yes" and repo.git("config", "branch.bolt/b.crew") == "landed"
+
+
+def test_a_landings_worktree_is_cut_on_a_split_legacy_bolt_writing_no_bolt_ref(repo, tmp_path):
+    """plan.LANDING (plan.19, sluice clause 124): a legacy bolt whose host branch is ahead of its stale copy on GitHub,
+    under a stand-in for sluice's guard that refuses a write to refs/heads/bolt/b differing from origin's copy, as
+    sluice's reference-transaction hook judges one (swancloud-ops's signal 2026-10-23-swancloud-ops-7c7811ae/01: "is
+    protected by sluice"). A plain git worktree add's checkout writes the branch to the value it holds, which the guard
+    refuses; the landing's --no-checkout add writes only the worktree's HEAD and read-tree -m -u HEAD its files and
+    index, no transaction on the branch, so the worktree stands clean on bolt/b at the host's tip and the landing lands
+    the host's tip as any bolt does."""
+    import plan
+    kit_with_github(repo, tmp_path)
+    repo.git("branch", "bolt/b", "origin/main")
+    repo.git("push", "-q", "origin", "bolt/b")
+    repo.git("fetch", "-q", "origin")
+    repo.git("checkout", "-q", "bolt/b")
+    tip = repo.commit("feat: the bolt's, on the host alone", {"bolt.txt": "b\n"})
+    repo.git("checkout", "-q", "main")
+    assert repo.git("rev-parse", "origin/bolt/b") != tip
+    log = tmp_path / "guard.log"
+    guard = repo.path / ".git" / "hooks" / "reference-transaction"
+    guard.parent.mkdir(exist_ok=True)
+    guard.write_text(f'''#!/bin/sh
+while read -r old new ref; do
+  echo "$1 $ref" >> "{log}"
+  if [ "$1" = prepared ] && [ "$ref" = refs/heads/bolt/b ] && [ "$new" != "$(git rev-parse -q --verify refs/remotes/origin/bolt/b)" ]; then
+    echo "bolt/b is protected by sluice" >&2; exit 1
+  fi
+done
+''')
+    guard.chmod(0o755)
+    plain = subprocess.run(["git", "-C", str(repo.path), "worktree", "add", "-q", str(tmp_path / "plain"), "bolt/b"],
+                           capture_output=True, text=True)
+    assert plain.returncode != 0 and "bolt/b is protected by sluice" in plain.stderr, plain.stderr
+    log.write_text("")
+    _, _, stand_in = landing(repo, tmp_path)
+    r, before = stand_in(on_github=True)()
+    assert "RC=3 " in r.stdout and f"TIP={tip} " in r.stdout, r.stdout + r.stderr
+    assert "refs/heads/bolt/b" not in log.read_text(), log.read_text()
+    assert (tmp_path / "status").read_text() == ""
+    github = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "main"],
+                            capture_output=True, text=True).stdout.strip()
+    assert repo.git("rev-parse", f"{github}^2") == tip and repo.git("rev-parse", "bolt/b") == tip
+    assert plan.landing_said("b", "kit", "h", r.stdout, before)[0], r.stdout
 
 
 def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):
