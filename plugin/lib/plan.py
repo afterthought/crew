@@ -1912,6 +1912,83 @@ def landing_rows(order, rows, held):
     return out
 
 
+def card_heads(text):
+    """A kit's landings card's rows as its post or change recorded them (built_fields): [(bolt, head, left)] in the
+    card's order, left whether the user cleared it on their last send; [] for none recorded."""
+    out = []
+    for w in (text or "").split():
+        m = re.fullmatch(r"([a-z0-9][a-z0-9-]*)@([0-9a-f]{7,40})(:left)?", w)
+        if m:
+            out.append((m.group(1), m.group(2), bool(m.group(3))))
+    return out
+
+
+def ticked_of(got, heads):
+    """The bolts the user ticked on a kit's landings card, in the card's order (heads, card_heads), from get_request's
+    answer on their turn: the one row of an approval they approved, none of one they declined; each box of a list,
+    land:<bolt>, from its choiceIds, or each question's of lists. None while they have not answered."""
+    answer = got.get("answer") if isinstance(got, dict) and got.get("status") == "answered" else None
+    if not isinstance(answer, dict):
+        return None
+    if isinstance(answer.get("approved"), bool):
+        return [heads[0][0]] if answer["approved"] and heads else []
+    picked = [c for c in answer.get("choiceIds") or [] if isinstance(c, str)]
+    for a in (answer.get("answers") or {}).values() if isinstance(answer.get("answers"), dict) else []:
+        picked += [c for c in (a.get("choiceIds") or [] if isinstance(a, dict) else []) if isinstance(c, str)]
+    return [b for b, _, _ in heads if f"land:{b}" in picked]
+
+
+def landings_step(rows, card, ticked, in_plan, landed=None, note=None):
+    """What the raise of a kit's landings card does with it (rail-cards, record 0031 as amended 2026-10-23), from facts
+    alone (code.7): rows, its rows as landing_rows gives them; card, None when ops holds none, else {status, heads},
+    status "waiting" or "answered" and heads its rows as its last post or change recorded them (card_heads); ticked,
+    the bolts the user ticked on it once answered (ticked_of); in_plan, the kit's bolts the plan still holds; landed,
+    {bolt: the commit GitHub's main holds} for each that landed (the bolt.land entries); note, the event's own change
+    note. Each act with the bolts the user cleared on their last send (left), which its card shows unticked:
+    ("none",) when no row can land and no card is held;
+    ("withdraw", why) when no row can land and a waiting card is held, each row held or none proven;
+    ("post", left) when rows can land and no card is held, following the kit's last card only when that one was
+    answered and closed with rows left (cards.follows_of);
+    ("change", note, kind_changed, left) when a waiting card is held and its rows, their heads or the event changed
+    it, its form changed or not (cards.landings_form), followed then rather than changed; ("leave",) when nothing did;
+    ("leave",) when an answered card is held while any bolt the user ticked is still in the plan and can land;
+    ("close", outcome, then) once none is, the outcome saying what landed and where GitHub's main holds it, what was
+    held and why, and what was left, then the bolts left when rows can land, for a new card that follows it, else None;
+    a send ticking none closes it at once, landing nothing."""
+    boxed = [r for r in rows if r["box"]]
+    now = [(r["bolt"], r["facts"]["head"][:7]) for r in boxed]
+    held = {r["bolt"]: r["why"] for r in rows if not r["box"]}
+    if card is None:
+        return ("post", []) if boxed else ("none",)
+    heads = card.get("heads") or []
+    if card["status"] != "answered":
+        if not boxed:
+            return ("withdraw", f"every bolt waiting to land is held: {joined(list(held))}" if held else "no bolt waits to land on its main")
+        was = {b: (h, left) for b, h, left in heads}
+        left = [b for b, h in now if b in was and was[b][1] and was[b][0] == h]
+        said = [f"{b} reads proven and joins the card" for b, _ in now if b not in was]
+        said += [f"{b}'s head is now {h}" for b, h in now if b in was and was[b][0] != h]
+        said += [f"{b} is {held[b]}" if b in held else f"{b} no longer waits to land" for b, _, _ in heads if b not in dict(now)]
+        said = ([note] if note else []) + said
+        if not said:
+            return ("leave",)
+        return ("change", "; ".join(said), cards.landings_form(len(heads)) != cards.landings_form(len(now)), left)
+    ticked = list(ticked or [])
+    if any(b in in_plan and b in dict(now) for b in ticked):
+        return ("leave",)
+    on = [b for b, _, _ in heads]
+    gone = [b for b in ticked if b not in in_plan]
+    said = ([f"Landed on GitHub's main: " + joined([f"{b} at {landed[b][:7]}" if b in (landed or {}) else b for b in gone]) + "."]
+            if gone and all(b in (landed or {}) for b in gone) else
+            [f"Landed or left the plan: {joined(gone)}."] if gone else [])
+    said += [f"Held: {b}, {held[b]}." for b in ticked if b in held]
+    cleared = [b for b in on if b not in ticked]
+    said += [f"Left: {joined(cleared)}."] if cleared else []
+    if not ticked:
+        said = ["Sent with no bolt ticked, so nothing lands."] + said
+    return ("close", " ".join(said), [b for b in cleared if b in dict(now)] if boxed else None)
+
+
 def row_forecasts(order, pairs):
     """Each row's forecast conflicts (rail-cards "The landings card forecasts each row's conflicts"), from facts alone
     (code.7): order, the bolts of the card's rows that can land, in its order; pairs(ours, theirs), the paths git

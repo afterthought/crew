@@ -154,3 +154,105 @@ def test_a_bolt_branch_crew_cannot_read_is_said_and_its_box_kept(monkeypatch):
                    "z": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's"}
     assert ("fetch", "-q", "origin") in calls
     assert [r for r in plan.landing_rows(["y", "z"], {"y": facts("y"), "z": facts("z")}, {}) if r["box"]] != []
+
+
+# ------------------------------------------------------------------------------------- what the raise does
+
+H1, H2 = "abc1234" + "0" * 33, "def5678" + "0" * 33
+
+
+def box(bolt, head=H1):
+    return dict(bolt=bolt, box=True, facts=facts(bolt, head))
+
+
+def hold(bolt, why="held for a fix: one zone is missing (fix/y/gap)"):
+    return dict(bolt=bolt, box=False, why=why, facts=facts(bolt))
+
+
+def waiting(*heads):
+    return {"status": "waiting", "heads": plan.card_heads(" ".join(heads))}
+
+
+def answered(*heads):
+    return {"status": "answered", "heads": plan.card_heads(" ".join(heads))}
+
+
+def test_no_row_that_can_land_and_no_card_is_nothing():
+    assert plan.landings_step([hold("y")], None, None, {"y"}) == ("none",)
+    assert plan.landings_step([], None, None, set()) == ("none",)
+
+
+def test_a_waiting_card_with_no_row_that_can_land_is_withdrawn_saying_why():
+    assert plan.landings_step([hold("y")], waiting("y@abc1234"), None, {"y"}) == (
+        "withdraw", "every bolt waiting to land is held: y")
+    assert plan.landings_step([], waiting("y@abc1234"), None, set()) == ("withdraw", "no bolt waits to land on its main")
+
+
+def test_rows_that_can_land_and_no_card_post_one():
+    assert plan.landings_step([box("y"), hold("z")], None, None, {"y", "z"}) == ("post", [])
+
+
+def test_a_waiting_card_whose_rows_head_moved_is_changed_in_place():
+    step = plan.landings_step([box("y"), box("z", H2)], waiting("y@abc1234", "z@abc1234"), None, {"y", "z"})
+    assert step == ("change", "z's head is now def5678", False, [])
+
+
+def test_a_second_bolt_proven_changes_the_cards_form_so_it_is_followed():
+    step = plan.landings_step([box("y"), box("z")], waiting("y@abc1234"), None, {"y", "z"})
+    assert step == ("change", "z reads proven and joins the card", True, [])
+
+
+def test_a_row_held_or_gone_is_named_and_the_events_own_note_comes_first():
+    step = plan.landings_step([box("y"), hold("z")], waiting("y@abc1234", "z@abc1234", "w@abc1234"), None, {"y", "z"},
+                              note="A yes now frees swc-1 for d")
+    assert step == ("change", "A yes now frees swc-1 for d; z is held for a fix: one zone is missing (fix/y/gap); "
+                              "w no longer waits to land", True, [])
+
+
+def test_a_waiting_card_nothing_changed_is_left():
+    assert plan.landings_step([box("y")], waiting("y@abc1234"), None, {"y"}) == ("leave",)
+
+
+def test_a_bolt_left_on_the_last_send_stays_unticked_while_its_head_stands():
+    assert plan.landings_step([box("y"), box("z")], waiting("y@abc1234", "z@abc1234:left"), None, {"y", "z"},
+                              note="x")[3] == ["z"]
+    assert plan.landings_step([box("y"), box("z", H2)], waiting("y@abc1234", "z@abc1234:left"), None, {"y", "z"})[3] == []
+
+
+def test_an_answered_card_is_left_while_a_ticked_bolt_can_still_land():
+    assert plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"y", "z"}) == ("leave",)
+    assert plan.landings_step([box("z")], answered("y@abc1234", "z@abc1234"), ["y", "z"], {"z"}) == ("leave",)
+
+
+def test_once_every_ticked_bolt_landed_it_is_closed_naming_where_and_nothing_follows():
+    step = plan.landings_step([], answered("y@abc1234", "z@abc1234"), ["y", "z"], set(), landed={"y": "1" * 40, "z": "2" * 40})
+    assert step == ("close", "Landed on GitHub's main: y at 1111111 and z at 2222222.", None)
+
+
+def test_one_left_out_is_closed_saying_so_and_a_new_card_follows_with_it_unticked():
+    step = plan.landings_step([box("z")], answered("y@abc1234", "z@abc1234"), ["y"], {"z"}, landed={"y": "1" * 40})
+    assert step == ("close", "Landed on GitHub's main: y at 1111111. Left: z.", ["z"])
+
+
+def test_a_ticked_bolt_sluice_refused_is_held_and_the_rest_close_the_card():
+    step = plan.landings_step([hold("z", "held: sluice refused its landing at abc1234, and it waits for its team's fix: x")],
+                              answered("y@abc1234", "z@abc1234", "w@abc1234"), ["y", "z", "w"], {"z"},
+                              landed={"y": "1" * 40, "w": "3" * 40})
+    assert step == ("close", "Landed on GitHub's main: y at 1111111 and w at 3333333. Held: z, held: sluice refused its "
+                             "landing at abc1234, and it waits for its team's fix: x.", None)
+
+
+def test_a_send_ticking_none_closes_it_at_once_landing_nothing():
+    step = plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), [], {"y", "z"})
+    assert step == ("close", "Sent with no bolt ticked, so nothing lands. Left: y and z.", ["y", "z"])
+
+
+def test_the_ticked_bolts_are_read_in_the_cards_order_from_each_form_of_answer():
+    heads = plan.card_heads("y@abc1234 z@abc1234:left w@def5678")
+    assert heads == [("y", "abc1234", False), ("z", "abc1234", True), ("w", "def5678", False)]
+    got = lambda answer: {"status": "answered", "turn": "agent", "answer": answer}
+    assert plan.ticked_of(got({"choiceIds": ["land:w", "land:y"]}), heads) == ["y", "w"]
+    assert plan.ticked_of(got({"answers": {"rows-1": {"choiceIds": ["land:z"]}, "rows-2": {"choiceIds": ["land:w"]}}}), heads) == ["z", "w"]
+    assert plan.ticked_of(got({"approved": True}), heads[:1]) == ["y"]
+    assert plan.ticked_of(got({"approved": False}), heads[:1]) == []
+    assert plan.ticked_of({"status": "pending", "turn": "you"}, heads) is None
