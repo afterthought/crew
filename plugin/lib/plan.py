@@ -2275,6 +2275,96 @@ def mark_said(code, out, err):
     return ((err or out).strip().splitlines() or [f"exit {code}"])[-1].strip() or f"exit {code}"
 
 
+# A bolt's open pull requests into main on GitHub, on the team's host, listed by gh as sluice's landing opens them,
+# from the bolt's branch: RC, gh's exit, on the first line, then what gh printed; its errors on standard error. It
+# decides nothing (code.7): kit.pull_said reads it.
+PULL = r"""repo=$1 bolt=$2
+out=$(gh pr list -R "$repo" --head "bolt/$bolt" --base main --state open --json number,isDraft,headRefOid,url </dev/null); rc=$?
+echo "RC=$rc"
+printf '%s\n' "$out"
+"""
+
+# A pull request marked a draft (act "draft", gh's --undo) or ready for review (act "ready"), on the team's host: RC,
+# gh's exit, and SAID, gh's last line, base64, as LANDING passes sluice's (kit.pull_marked).
+PULL_MARK = r"""repo=$1 n=$2 act=$3
+undo=(); [ "$act" = draft ] && undo=(--undo)
+out=$(gh pr ready "$n" -R "$repo" "${undo[@]}" 2>&1 </dev/null); rc=$?
+echo "RC=$rc"
+echo "SAID=$(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n 1 | base64 | tr -d '\n')"
+"""
+
+
+def pull_act(pull, want):
+    """What crew does to a bolt's landing pull request (pull, kit.pull_said's, or None) for whether the user's word to
+    land stands for its head (want "live") or not (want "held"): "draft" for a ready one held, "ready" for a draft one
+    live, None when there is none or it is already as wanted. A draft is the one state sluice's intake never submits
+    to main, however the branch moves (bolt-teams)."""
+    if not pull:
+        return None
+    if want == "held":
+        return None if pull["draft"] else "draft"
+    return "ready" if pull["draft"] else None
+
+
+def pull_said(bolt, pull, act, done, repo):
+    """The words crew says of what it did to a bolt's landing pull request (pull_act): nothing when it marked nothing;
+    for one drafted, that no merge into the bolt lands it and the next crew bolt submit on the user's word makes it live
+    again; for one readied, that sluice takes it at the head the bolt has now; and, when gh did not mark it (done, gh's
+    words, in place of True), why, with the command that drafts it, since the next merge would land it, or that nothing
+    is submitted."""
+    if not act:
+        return ""
+    url, n = pull["url"], pull["number"]
+    if done is True:
+        if act == "draft":
+            return (f"Its pull request {url} is a draft, so no merge into bolt/{bolt} lands it; the next crew bolt submit "
+                    f"{bolt}, on the user's word, makes it live again.")
+        return f"Its pull request {url} is ready for review again, so sluice takes it at the head bolt/{bolt} has now."
+    if act == "draft":
+        return (f"crew could not make bolt/{bolt}'s pull request {url} a draft: {done}; until it is one, the next merge "
+                f"into bolt/{bolt} lands it: gh pr ready {n} -R {repo} --undo makes it one.")
+    return (f"crew could not make bolt/{bolt}'s pull request {url} ready for review: {done}; sluice takes no draft into "
+            "main's queue, so nothing is submitted.")
+
+
+def pull_unread(bolt, repo, want, why):
+    """A refusal for a bolt's landing pull request gh could not list (kit.pull_said's, why): with, when it is to be held,
+    the command that drafts it by its branch, since crew can't tell whether the next merge would land it."""
+    if want == "held":
+        return (f"{why}; until bolt/{bolt}'s pull request into main is a draft, the next merge into bolt/{bolt} may land "
+                f"it: gh pr ready bolt/{bolt} -R {repo} --undo makes it one")
+    return f"{why}; nothing is submitted"
+
+
+def pull_hold(fleet, t, bolt, want):
+    """A bolt's landing pull request made to follow the user's word (bolt-teams, plan.16), on the team's host: in a kit
+    whose policy at main now, origin/main after a fetch (POLICY, kit.policy_said, plan.18), takes pull requests
+    (kit.takes_pulls), the bolt's open pull request into main listed (PULL, kit.pull_said), what to do decided
+    (pull_act) and done (PULL_MARK); a kit that takes none, or has no origin, is asked nothing of GitHub. (the pull
+    request or None, the act done or None); refused, marking nothing, when the policy or the pull requests can't be
+    read (pull_unread), and when gh does not mark it (pull_said, read.1)."""
+    name, host, main, repo = t["kit"]["name"], t["machine"], t["kit"]["main"], t["kit"]["repo"]
+    text, ref, _ = kit.policy_said(host_run(fleet, host, POLICY, main, kit.DECLARATION), name, host)
+    if ref != "origin/main" or not kit.takes_pulls(text, f"{name}'s {kit.DECLARATION} on {ref}"):
+        return None, None
+    r = crew.on_machine(fleet, host, ["bash", "-c", PULL, "crew", repo, bolt])
+    first, _, out = r.stdout.partition("\n")
+    m = re.fullmatch(r"RC=(\d+)", first.strip())
+    if r.returncode or not m:
+        said = ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].strip()
+        fail(pull_unread(bolt, repo, want, f"crew can't list {repo}'s pull requests on {host}: {said}"))
+    try:
+        pull = kit.pull_said(int(m.group(1)), out, r.stderr, repo, bolt)
+    except Refusal as e:
+        fail(pull_unread(bolt, repo, want, str(e)))
+    act = pull_act(pull, want)
+    if act:
+        r = crew.on_machine(fleet, host, ["bash", "-c", PULL_MARK, "crew", repo, str(pull["number"]), act])
+        code, said = kit.pull_marked(r.returncode, r.stdout, r.stderr)
+        code == 0 or fail(pull_said(bolt, pull, act, said or f"gh exited {code}", repo))
+    return pull, act
+
+
 def bolt_submit(fleet, a):
     """crew bolt submit <bolt>: main-level ops's landing of a bolt, its branch submitted to its kit's main through
     sluice from a short-lived worktree on the team's host, waiting for sluice's outcome, then the kit's main checkout

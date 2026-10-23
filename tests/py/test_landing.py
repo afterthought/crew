@@ -553,3 +553,122 @@ class TestWhatAYesFrees:
     def test_once_the_other_is_proven_a_yes_frees_the_team_for_its_next_planned_bolt_or_for_none(self):
         assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], "d") == ("frees", "d")
         assert plan.yes_frees("doctor-rows", [("ssh-fix", True)], None) == ("frees", None)
+
+
+DRAFT = dict(number=99, draft=True, head=TIP, url="https://github.com/o/k/pull/99")
+READY = dict(DRAFT, draft=False)
+TAKES = '[branches.main]\nrequired = ["#check-full"]\nremote = "origin"\n\n[branches.main.pull_requests]\nreviews = 0\n'
+TAKES_NONE = '[branches.main]\nrequired = ["#check-full"]\nremote = "origin"\n'
+
+
+def policy(text, origin="yes"):
+    """What POLICY prints of a kit's main: GitHub's main holding text, or, with origin "no", its own main holding it."""
+    b = base64.b64encode(text.encode()).decode() if text is not None else "-"
+    if origin == "no":
+        return f"ORIGIN=no\nGITHUB=-\nOWN={OLD}\nAT_GITHUB=-\nAT_OWN={b}\n"
+    return f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nAT_GITHUB={b}\nAT_OWN=-\n"
+
+
+def ran(code, out="", err=""):
+    return type("R", (), {"returncode": code, "stdout": out, "stderr": err})()
+
+
+def gh_list(*pulls):
+    import json
+    return "RC=0\n" + json.dumps([{"headRefOid": p["head"], "isDraft": p["draft"], "number": p["number"], "url": p["url"]}
+                                  for p in pulls]) + "\n"
+
+
+def gh_marked(rc, words):
+    return f"RC={rc}\nSAID={base64.b64encode(words.encode()).decode()}\n"
+
+
+class TestThePullRequest:
+    """A landing's pull request is live only on the user's word (bolt-teams "A landing's pull request is a draft
+    whenever the user's word does not stand", "The next landing on the user's word readies the pull request"): what
+    crew does to it, decided from facts alone (plan.pull_act), what it says (plan.pull_said), and its reads and marks on
+    the team's host, only in a kit whose main takes pull requests (plan.pull_hold)."""
+    T = {"name": "crw-5", "machine": "box", "kit": {"name": "k", "main": "/k/main", "dir": "/k", "repo": "o/k"}}
+
+    @pytest.mark.parametrize("pull, want, act", [
+        (None, "held", None), (None, "live", None),
+        (READY, "held", "draft"), (DRAFT, "held", None),
+        (DRAFT, "live", "ready"), (READY, "live", None),
+    ])
+    def test_what_crew_does_to_it(self, pull, want, act):
+        assert plan.pull_act(pull, want) == act
+
+    def test_a_drafted_pull_request_names_its_link_and_what_makes_it_live_again(self):
+        assert plan.pull_said("b", READY, "draft", True, "o/k") == (
+            "Its pull request https://github.com/o/k/pull/99 is a draft, so no merge into bolt/b lands it; the next crew "
+            "bolt submit b, on the user's word, makes it live again.")
+
+    def test_a_readied_pull_request_is_taken_at_the_bolts_head(self):
+        assert plan.pull_said("b", DRAFT, "ready", True, "o/k") == (
+            "Its pull request https://github.com/o/k/pull/99 is ready for review again, so sluice takes it at the head "
+            "bolt/b has now.")
+
+    def test_nothing_marked_says_nothing(self):
+        assert plan.pull_said("b", DRAFT, None, True, "o/k") == ""
+        assert plan.pull_said("b", None, None, True, "o/k") == ""
+
+    def test_one_gh_could_not_mark_is_named_with_its_words_and_the_command_that_drafts_it(self):
+        assert plan.pull_said("b", READY, "draft", "HTTP 403: Resource not accessible", "o/k") == (
+            "crew could not make bolt/b's pull request https://github.com/o/k/pull/99 a draft: HTTP 403: Resource not "
+            "accessible; until it is one, the next merge into bolt/b lands it: gh pr ready 99 -R o/k --undo makes it one.")
+        assert plan.pull_said("b", DRAFT, "ready", "HTTP 403: Resource not accessible", "o/k") == (
+            "crew could not make bolt/b's pull request https://github.com/o/k/pull/99 ready for review: HTTP 403: Resource "
+            "not accessible; sluice takes no draft into main's queue, so nothing is submitted.")
+
+    def hold(self, monkeypatch, said, outs, want="held"):
+        """pull_hold of bolt b, POLICY saying said on the team's host box and each script crew runs there answering in
+        turn from outs; what ran kept as self.ran."""
+        self.ran = []
+        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: self.ran.append((script, host, args)) or said)
+        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: self.ran.append((argv[2], host, tuple(argv[4:]))) or outs.pop(0))
+        return plan.pull_hold({}, self.T, "b", want)
+
+    def test_a_ready_one_is_drafted_on_the_teams_host(self, monkeypatch):
+        got = self.hold(monkeypatch, policy(TAKES), [ran(0, gh_list(READY)), ran(0, gh_marked(0, '✓ Pull request o/k#99 is converted to "draft"'))])
+        assert got == (READY, "draft")
+        assert self.ran == [(plan.POLICY, "box", ("/k/main", ".config/sluice.toml")), (plan.PULL, "box", ("o/k", "b")),
+                            (plan.PULL_MARK, "box", ("o/k", "99", "draft"))]
+
+    def test_a_draft_is_readied_when_the_users_word_stands(self, monkeypatch):
+        assert self.hold(monkeypatch, policy(TAKES), [ran(0, gh_list(DRAFT)), ran(0, gh_marked(0, "✓"))], "live") == (DRAFT, "ready")
+        assert self.ran[-1] == (plan.PULL_MARK, "box", ("o/k", "99", "ready"))
+
+    def test_one_already_as_wanted_or_none_marks_nothing(self, monkeypatch):
+        assert self.hold(monkeypatch, policy(TAKES), [ran(0, gh_list(DRAFT))]) == (DRAFT, None)
+        assert self.hold(monkeypatch, policy(TAKES), [ran(0, gh_list())], "live") == (None, None)
+        assert [s for s, _, _ in self.ran] == [plan.POLICY, plan.PULL]
+
+    @pytest.mark.parametrize("said", [policy(TAKES_NONE), policy(None), policy(TAKES, origin="no")])
+    def test_a_kit_that_takes_no_pull_requests_or_has_no_github_is_asked_nothing(self, monkeypatch, said):
+        """bolt-teams "A kit that takes no pull requests is asked nothing": no policy, no table, or no origin."""
+        assert self.hold(monkeypatch, said, []) == (None, None)
+        assert [s for s, _, _ in self.ran] == [plan.POLICY]
+
+    def test_a_listing_gh_refuses_is_refused_with_the_command_that_drafts_it(self, monkeypatch):
+        with pytest.raises(plan.Refusal) as e:
+            self.hold(monkeypatch, policy(TAKES), [ran(0, "RC=1\n", "HTTP 401: Bad credentials (https://api.github.com/graphql)\n")])
+        assert str(e.value) == (
+            "crew can't read o/k's open pull request from bolt/b into main: gh exited 1: HTTP 401: Bad credentials "
+            "(https://api.github.com/graphql); until bolt/b's pull request into main is a draft, the next merge into bolt/b "
+            "may land it: gh pr ready bolt/b -R o/k --undo makes it one")
+        with pytest.raises(plan.Refusal, match="; nothing is submitted$"):
+            self.hold(monkeypatch, policy(TAKES), [ran(0, "RC=1\n", "HTTP 401: Bad credentials\n")], "live")
+
+    def test_a_host_that_does_not_answer_is_named(self, monkeypatch):
+        with pytest.raises(plan.Refusal, match="^crew can't list o/k's pull requests on box: ssh: connect to host box port 22: timed out; "):
+            self.hold(monkeypatch, policy(TAKES), [ran(255, "", "ssh: connect to host box port 22: timed out\n")])
+
+    def test_a_mark_gh_refuses_is_refused_naming_the_pull_request(self, monkeypatch):
+        with pytest.raises(plan.Refusal) as e:
+            self.hold(monkeypatch, policy(TAKES), [ran(0, gh_list(READY)), ran(0, gh_marked(1, "HTTP 403: Resource not accessible"))])
+        assert str(e.value) == plan.pull_said("b", READY, "draft", "HTTP 403: Resource not accessible", "o/k")
+
+    def test_a_policy_crew_cannot_read_marks_nothing(self, monkeypatch):
+        with pytest.raises(plan.Refusal, match="cannot fetch k from GitHub on box"):
+            self.hold(monkeypatch, "ORIGIN=yes\nFETCHED=fatal: could not read\nGITHUB=-\nOWN=-\n", [])
+        assert [s for s, _, _ in self.ran] == [plan.POLICY]
