@@ -156,6 +156,43 @@ def test_a_bolt_branch_crew_cannot_read_is_said_and_its_box_kept(monkeypatch):
     assert [r for r in plan.landing_rows(["y", "z"], {"y": facts("y"), "z": facts("z")}, {}) if r["box"]] != []
 
 
+def where_read(monkeypatch, policy):
+    """forecast_rows over bolt y, whose GitHub copy is at 1… and the host's at 2…, GitHub's copy holding policy (None
+    for no policy file): the commit each merge-tree was given for y."""
+    trees = []
+
+    def git(fleet, t, where, *args, ok=(0,)):
+        if args[:2] == ("rev-parse", "--verify"):
+            return 0, ("1" if "refs/remotes/origin/" in args[3] else "2") * 40
+        if args[0] == "show":
+            return (128, "fatal: path does not exist") if policy is None else (0, policy)
+        if args[0] == "merge-tree":
+            trees.append(args[-1])
+        return (0, "tree\n") if args[0] == "merge-tree" else (0, "")
+    monkeypatch.setattr(plan, "kit_git", git)
+    return plan.forecast_rows(FLEET, "swancloud", "crew", ["y"]), trees
+
+
+def test_a_bolt_on_github_is_forecast_where_it_lives(monkeypatch):
+    """bolt-plan "A bolt on GitHub is read where it lives": GitHub's copy, whose policy names origin for the bolt, not
+    the host's lagging copy."""
+    (got, why), trees = where_read(monkeypatch, '[branches."bolt/*"]\nremote = "origin"\n')
+    assert why == {} and trees == ["1" * 40]
+
+
+def test_a_bolt_kept_on_its_host_is_forecast_at_the_hosts_branch(monkeypatch):
+    """bolt-plan "A bolt kept on its host": GitHub's copy names no remote for the bolt, or has no policy."""
+    for policy in ("[branches.main]\nremote = \"origin\"\n", None):
+        (got, why), trees = where_read(monkeypatch, policy)
+        assert why == {} and trees == ["2" * 40]
+
+
+def test_a_policy_crew_cannot_read_at_githubs_copy_is_said_and_forecasts_nothing(monkeypatch):
+    (got, why), trees = where_read(monkeypatch, "[branches\n")
+    assert got == {"y": [("main", None)]} and trees == []
+    assert why["y"].startswith(".config/sluice.toml at origin/bolt/y is not TOML, so crew can't read bolt y: ")
+
+
 # ------------------------------------------------------------------------------------- what the raise does
 
 H1, H2 = "abc1234" + "0" * 33, "def5678" + "0" * 33

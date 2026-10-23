@@ -2039,9 +2039,10 @@ def tree_paths(rc, out):
 
 def forecast_rows(fleet, label, kit, bolts):
     """The forecasts of a kit's landings card's rows (row_forecasts), made where the kit's first building team
-    (builder) has its main checkout: GitHub's main fetched there, a kit with no origin reading its own; each bolt's
-    branch read as origin's, else the host's when GitHub does not hold it, a bolt made before gives went through sluice;
-    and git merge-tree of each onto main and onto each bolt above it. Returns ({bolt: [(with, paths)]}, {bolt: why}),
+    (builder) has its main checkout: GitHub's main fetched there, a kit with no origin reading its own; each bolt read
+    where it lives (gather.bolt_at, plan.19), GitHub's copy when the policy in it names a remote for the bolt, else the
+    host's, a bolt made before gives went through sluice; and git merge-tree of each onto main and onto each bolt above
+    it. Returns ({bolt: [(with, paths)]}, {bolt: why}),
     why for each bolt whose forecast crew could not make, or that has one not made against another it could not read:
     a branch on no ref it can read, a fetch or a git that failed, or no team building the kit, said and holding nothing
     (read.1)."""
@@ -2057,11 +2058,22 @@ def forecast_rows(fleet, label, kit, bolts):
         return {b: [("main", None)] for b in bolts}, {b: str(e) for b in bolts}
     refs, why = {"main": "refs/remotes/origin/main" if origin else "refs/heads/main"}, {}
     for b in bolts:
-        for ref in ([f"refs/remotes/origin/bolt/{b}"] if origin else []) + [f"refs/heads/bolt/{b}"]:
-            rc, out = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}", ok=(0, 1))
-            if rc == 0 and out:
-                refs[b] = out
-                break
+        github, own, at = f"refs/remotes/origin/bolt/{b}", f"refs/heads/bolt/{b}", {}
+        try:
+            for ref in ([github] if origin else []) + [own]:
+                rc, out = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}", ok=(0, 1))
+                if rc == 0 and out:
+                    at[ref] = out
+            rc, text = kit_git(fleet, t, main, "show", f"{github}:{gather.POLICY}", ok=(0, 128)) if github in at else (1, None)
+            ref = gather.bolt_at(b, github in at, own in at, gather.policy_remote(text if rc == 0 else None, f"bolt/{b}"))
+        except Refusal as e:
+            why[b] = str(e)
+            continue
+        except ValueError as e:
+            why[b] = f"{gather.POLICY} at origin/bolt/{b} is not TOML, so crew can't read bolt {b}: {e}"
+            continue
+        if ref:
+            refs[b] = at[ref]
         else:
             why[b] = f"bolt/{b} is on no branch crew can read in {main} on {host}, GitHub's or the host's"
 
