@@ -159,6 +159,7 @@ def test_a_bolt_branch_crew_cannot_read_is_said_and_its_box_kept(monkeypatch):
 # ------------------------------------------------------------------------------------- what the raise does
 
 H1, H2 = "abc1234" + "0" * 33, "def5678" + "0" * 33
+TIMER = " every host's folder follows by swancloud's timer within minutes."
 
 
 def box(bolt, head=H1):
@@ -184,7 +185,7 @@ def test_no_row_that_can_land_and_no_card_is_nothing():
 
 def test_a_waiting_card_with_no_row_that_can_land_is_withdrawn_saying_why():
     assert plan.landings_step([hold("y")], waiting("y@abc1234"), None, {"y"}) == (
-        "withdraw", "every bolt waiting to land is held: y")
+        "withdraw", "every bolt waiting to land is held: y, held for a fix: one zone is missing (fix/y/gap)")
     assert plan.landings_step([], waiting("y@abc1234"), None, set()) == ("withdraw", "no bolt waits to land on its main")
 
 
@@ -226,20 +227,21 @@ def test_an_answered_card_is_left_while_a_ticked_bolt_can_still_land():
 
 def test_once_every_ticked_bolt_landed_it_is_closed_naming_where_and_nothing_follows():
     step = plan.landings_step([], answered("y@abc1234", "z@abc1234"), ["y", "z"], set(), landed={"y": "1" * 40, "z": "2" * 40})
-    assert step == ("close", "Landed on GitHub's main: y at 1111111 and z at 2222222.", None)
+    assert step == ("close", "Landed on GitHub's main: y at 1111111 and z at 2222222; every host's folder follows by "
+                             "swancloud's timer within minutes.", None)
 
 
 def test_one_left_out_is_closed_saying_so_and_a_new_card_follows_with_it_unticked():
     step = plan.landings_step([box("z")], answered("y@abc1234", "z@abc1234"), ["y"], {"z"}, landed={"y": "1" * 40})
-    assert step == ("close", "Landed on GitHub's main: y at 1111111. Left: z.", ["z"])
+    assert step == ("close", f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z.", ["z"])
 
 
 def test_a_ticked_bolt_sluice_refused_is_held_and_the_rest_close_the_card():
     step = plan.landings_step([hold("z", "held: sluice refused its landing at abc1234, and it waits for its team's fix: x")],
                               answered("y@abc1234", "z@abc1234", "w@abc1234"), ["y", "z", "w"], {"z"},
                               landed={"y": "1" * 40, "w": "3" * 40})
-    assert step == ("close", "Landed on GitHub's main: y at 1111111 and w at 3333333. Held: z, held: sluice refused its "
-                             "landing at abc1234, and it waits for its team's fix: x.", None)
+    assert step == ("close", f"Landed on GitHub's main: y at 1111111 and w at 3333333;{TIMER} Held: z, held: sluice "
+                             "refused its landing at abc1234, and it waits for its team's fix: x.", None)
 
 
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():
@@ -392,9 +394,10 @@ def test_an_answered_card_whose_ticked_bolts_all_landed_is_closed_naming_where_w
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan("%rec: Bolt\n\n%rec: Unit\n\n"))
     assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k1"
     ack = next(a for t, a in acts.calls if t == "ack_answer")
-    assert ack["outcome"] == "Landed on GitHub's main: y at 1111111 and z at 2222222."
+    said = f"Landed on GitHub's main: y at 1111111 and z at 2222222;{TIMER}"
+    assert ack["outcome"] == said
     assert acts.emitted[-1] == dict(Act="card.close", On=["kit/crew"], by="swancloud-ops", Card="req_k1", Key="land/crew",
-                                    State="closed", Outcome="Landed on GitHub's main: y at 1111111 and z at 2222222.", Rows="0")
+                                    State="closed", Outcome=said, Rows="0")
     assert not [t for t, _ in acts.calls if t == "post_request"]
 
 
@@ -406,7 +409,7 @@ def test_one_left_out_closes_the_card_and_a_new_one_follows_it_with_that_bolt_un
     monkeypatch.setattr(plan, "plan_of", lambda fleet, label: plan.Plan("%rec: Bolt\n\nBolt: z\nRepo: crew\nTeam: crw-1\n\n%rec: Unit\n\n"))
     assert plan.raise_landings(FLEET, "swancloud", "crew", acts) == "req_k2"
     close = next(e for e in acts.emitted if e["Act"] == "card.close")
-    assert (close["Outcome"], close["Rows"]) == ("Landed on GitHub's main: y at 1111111. Left: z.", "1")
+    assert (close["Outcome"], close["Rows"]) == (f"Landed on GitHub's main: y at 1111111;{TIMER} Left: z.", "1")
     post = next(a for t, a in acts.calls if t == "post_request")
     assert post["follows"] == "req_k1" and post["summary"].startswith("Left on your last send.")
     assert acts.emitted[-1]["Heads"] == "z@abc1234:left"

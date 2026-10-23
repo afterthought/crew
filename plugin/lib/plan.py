@@ -1963,7 +1963,8 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None):
     heads = card.get("heads") or []
     if card["status"] != "answered":
         if not boxed:
-            return ("withdraw", f"every bolt waiting to land is held: {joined(list(held))}" if held else "no bolt waits to land on its main")
+            return ("withdraw", "every bolt waiting to land is held: " + "; ".join(f"{b}, {w}" for b, w in held.items())
+                    if held else "no bolt waits to land on its main")
         was = {b: (h, left) for b, h, left in heads}
         left = [b for b, h in now if b in was and was[b][1] and was[b][0] == h]
         said = [f"{b} reads proven and joins the card" for b, _ in now if b not in was]
@@ -1978,7 +1979,8 @@ def landings_step(rows, card, ticked, in_plan, landed=None, note=None):
         return ("leave",)
     on = [b for b, _, _ in heads]
     gone = [b for b in ticked if b not in in_plan]
-    said = ([f"Landed on GitHub's main: " + joined([f"{b} at {landed[b][:7]}" if b in (landed or {}) else b for b in gone]) + "."]
+    said = ([f"Landed on GitHub's main: " + joined([f"{b} at {landed[b][:7]}" if b in (landed or {}) else b for b in gone])
+             + "; every host's folder follows by swancloud's timer within minutes."]
             if gone and all(b in (landed or {}) for b in gone) else
             [f"Landed or left the plan: {joined(gone)}."] if gone else [])
     said += [f"Held: {b}, {held[b]}." for b in ticked if b in held]
@@ -2167,11 +2169,14 @@ def landing_opened(fleet, label, plan, b, t, card, acts):
     if step == "none":
         return None
     if step == "stand":
-        return dict(card, unread=got)
-    try:
-        return dict(got, link=acts.reading(label, key, got)[0])
-    except Refusal as e:
-        return dict(got, unread=str(e))
+        why = got
+    else:
+        try:
+            return dict(got, link=acts.reading(label, key, got)[0])
+        except Refusal as e:
+            card, why = got, str(e)
+    print(f"card {key}: its reading could not be opened on the tailnet: {why}; crew card session {key} starts it", file=sys.stderr)
+    return dict(card, unread=why)
 
 
 def land_read(fleet, label, plan, b, t):
