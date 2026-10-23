@@ -4,8 +4,10 @@ remote as Pending You files by it; the area match_area chose, and the kit's
 area to make; a tool's reply read as Pending You's CLI reads it, its refusal in Pending You's words, and the bridge's
 own error; and what `crew card read` prints. Then the act that sends crew's own cards, plan.row_card_post,
 row_card_change and row_card_close, on a stand-in for the bridge, the run record, a tell and an upload (record 0031):
-what each sends and records, the line that adopts a card and whom it is told to, a card the user answered followed by
-its new version under the key's revision rather than changed, and each failure said and recorded.
+what each sends and records, the line that adopts a card and whom it is told to, a card the user answered left as it
+is unless what it asked changed since, a landing's head among it, and then followed by its new version under the key's
+revision rather than changed, and each failure said and recorded. Then the port range a card's session starts
+plannotator on, plan.session_env.
 The bridge itself, and every command's wiring, are t-cards'."""
 import json
 
@@ -301,7 +303,8 @@ def test_a_card_is_posted_in_its_owners_name_under_its_rows_key_filed_in_its_kit
     assert (sent["idempotencyKey"], sent["areaId"], sent["session"]) == (
         "land/b1_", "prj_kit", {"label": "swb-1-conductor", "machine": "chuck-herdr-alpha", "cwd": "/kit/main"})
     assert sent["approve"]["risk"] == "high"
-    assert acts.emitted == [dict(Act="card.post", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", label="wldn")]
+    assert acts.emitted == [dict(Act="card.post", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", Head="abc1234",
+                                 label="wldn")]
     assert capsys.readouterr().out == ("card land/b1: req_c1 https://www.pendingyou.com/app/r/req_c1\n"
                                        "call get_request (requestId req_c1, name swb-1-conductor)\n")
     assert acts.told == []
@@ -369,7 +372,8 @@ def test_a_change_goes_to_the_owners_card_at_the_version_pending_you_reports_wit
     assert tool == "update_request" and (sent["requestId"], sent["name"], sent["expectedVersion"], sent["changeNote"]) == (
         "req_c1", "swb-1-conductor", 3, "Head is now abc1234")
     assert "kind" not in sent and "idempotencyKey" not in sent
-    assert acts.emitted == [dict(Act="card.update", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", label="wldn")]
+    assert acts.emitted == [dict(Act="card.update", On=["bolt/b1"], by="swb-1-conductor", Card="req_c1", Key="land/b1", Head="abc1234",
+                                 label="wldn")]
     assert capsys.readouterr().out == "card land/b1: req_c1 changed, now version 4\n"
 
 
@@ -382,16 +386,22 @@ def test_a_change_that_finds_its_card_not_found_posts_it_again_saying_the_older_
     assert (acts.calls[-1][1]["idempotencyKey"], acts.emitted[-1]["Key"]) == ("land/b1:2", "land/b1")
 
 
-def test_a_change_to_a_card_the_user_answered_acks_it_with_the_note_and_posts_the_new_version_following_it(capsys):
-    acts = Acts({"get_request": ({"status": "answered", "turn": "agent", "version": 3}, None), "ack_answer": ({"version": 4}, None),
+ANSWERED = {"status": "answered", "turn": "agent", "version": 3}
+MOVED = {"approved": "0123abc" + "0" * 33}  # the head the user approved, before the bolt's head moved to abc1234
+
+
+def test_a_change_to_a_card_the_user_answered_asking_anew_acks_it_with_the_note_and_posts_the_new_version_following_it(capsys):
+    acts = Acts({"get_request": (ANSWERED, None), "ack_answer": ({"version": 4}, None),
                  "match_area": (MATCHED, None), "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=HELD)
-    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "Head is now abc1234", WHERE, acts) == "req_c2"
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "Head is now abc1234", WHERE, acts,
+                                anew=MOVED) == "req_c2"
     assert [t for t, _ in acts.calls] == ["get_request", "ack_answer", "match_area", "post_request"]
     assert acts.calls[1][1] == {"requestId": "req_c1", "name": "swb-1-conductor", "expectedVersion": 3, "outcome": "Head is now abc1234"}
     sent = acts.calls[3][1]
     assert (sent["idempotencyKey"], sent["follows"], sent["kind"]) == ("land/b1:2", "req_c1", "approve")
-    assert [(e["Act"], e.get("Card"), e["Key"], e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
-        ("card.close", "req_c1", "land/b1", "closed", plan.REVISED), ("card.post", "req_c2", "land/b1", None, None)]
+    assert sent["summary"].startswith("Its head moved since your approval, from 0123abc to abc1234: approving this lands abc1234.")
+    assert [(e["Act"], e.get("Card"), e["Key"], e.get("State"), e.get("Outcome"), e.get("Head")) for e in acts.emitted] == [
+        ("card.close", "req_c1", "land/b1", "closed", plan.REVISED, None), ("card.post", "req_c2", "land/b1", None, None, "abc1234")]
     out = capsys.readouterr().out
     assert out.startswith("card land/b1: req_c1 closed, the user having answered it, and its new version follows it\n"
                           "card land/b1: req_c2 https://") and "call get_request (requestId req_c2, name swb-1-conductor)" in out
@@ -403,19 +413,72 @@ def test_a_change_to_a_card_the_user_answered_acks_it_with_the_note_and_posts_th
 def test_a_close_refused_on_a_card_the_user_answered_posts_nothing_and_is_recorded_as_the_change_refused(capsys):
     acts = Acts({"get_request": ({"status": "answered", "version": 3}, None), "ack_answer": (None, "Your latest message asks them something.")},
                 entries=HELD)
-    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "x note", WHERE, acts) is None
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "x note", WHERE, acts, anew=MOVED) is None
     assert [t for t, _ in acts.calls] == ["get_request", "ack_answer"]
     assert acts.emitted[0]["refused"] == ("Pending You refused the close of the card the user answered: "
                                           "Your latest message asks them something.")
 
 
-@pytest.mark.parametrize("status, kind_changed, questions, how", [
-    ("pending", False, False, "change"), ("snoozed", False, False, "change"), ("answered", False, False, "follow"),
-    ("pending", True, False, "follow"), ("pending", False, True, "follow"), ("snoozed", False, True, "follow"),
-    ("answered", False, True, "follow")])
-def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_whose_kind_changed_or_with_questions_is_followed(
-        status, kind_changed, questions, how):
-    assert cards.revision({"status": status, "version": 2}, kind_changed, questions) == how
+@pytest.mark.parametrize("status, kind_changed, questions, anew, how", [
+    ("pending", False, False, False, "change"), ("snoozed", False, False, False, "change"), ("pending", True, False, False, "follow"),
+    ("pending", False, True, False, "follow"), ("snoozed", False, True, False, "follow"), ("pending", False, False, True, "change"),
+    ("answered", False, False, False, "leave"), ("answered", False, True, False, "leave"), ("answered", False, False, True, "follow"),
+    ("answered", True, False, False, "follow"), ("answered", False, True, True, "follow"),
+    ("resolved", False, False, False, "leave"), ("closed", False, True, False, "leave"), ("resolved", False, False, True, "ended"),
+    ("resolved", True, False, False, "ended"), ("cancelled", False, False, False, "ended"), ("expired", False, True, False, "ended")])
+def test_a_card_waiting_on_the_user_is_changed_in_place_and_one_they_answered_is_left_unless_what_it_asks_changed(
+        status, kind_changed, questions, anew, how):
+    """record 0031 §1 and §3: a card the user has answered is final for what it asked, picked up or acked since or not;
+    only its kind changed, or what it asks changed since (anew), follows it, or posts again once Pending You ended it;
+    a waiting card is changed in place, or followed when its kind or its questions would not change in place."""
+    assert cards.revision({"status": status, "version": 2}, kind_changed, questions, anew) == how
+
+
+@pytest.mark.parametrize("status", ["answered", "resolved", "closed"])
+@pytest.mark.parametrize("note", ["A yes now frees swb-1 for b2", "Its preview of abc1234 is up", "Its reading is at a new link"])
+def test_a_change_to_a_card_the_user_answered_that_asks_nothing_anew_leaves_it_as_it_is(capsys, status, note):
+    """A landing card the user approved, before ops lands it: a merge freeing the team's next bolt (teams.16), a
+    preview's end and a reading's new link change what it offers, not what it asked, so it is neither acked, closed nor
+    followed, nothing is recorded, and the approval goes on to ops (plan.16)."""
+    acts = Acts({"get_request": (dict(ANSWERED, status=status), None)}, entries=HELD)
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, note, WHERE, acts) == "req_c1"
+    assert [t for t, _ in acts.calls] == ["get_request"] and acts.emitted == [] and acts.told == []
+    assert capsys.readouterr().out == "card land/b1: req_c1 is left as it is: the user has answered it\n"
+
+
+def test_a_card_pending_you_ended_after_the_users_answer_asking_anew_is_recorded_closed_and_followed(capsys):
+    """The conductor acked the approval it passed on to ops, so Pending You reads the card resolved; a merge then moved
+    the head: the card is recorded closed as Pending You ended it, and the new card follows it, saying so."""
+    acts = Acts({"get_request": (dict(ANSWERED, status="resolved"), None), "match_area": (MATCHED, None),
+                 "post_request": (dict(POSTED, requestId="req_c2"), None)}, entries=HELD)
+    assert plan.row_card_change(None, "wldn", "swb-1-conductor", cards.landing_card, FACTS, "Its head is now abc1234", WHERE, acts,
+                                anew={"approved": ""}) == "req_c2"
+    assert [t for t, _ in acts.calls] == ["get_request", "match_area", "post_request"]
+    sent = acts.calls[2][1]
+    assert sent["follows"] == "req_c1" and sent["summary"].startswith(
+        "Its head is now abc1234, and crew holds no record of the head you approved: approving this lands abc1234.")
+    assert [(e["Act"], e.get("Card"), e.get("State"), e.get("Outcome")) for e in acts.emitted] == [
+        ("card.close", "req_c1", "closed", plan.ENDED_ELSEWHERE), ("card.post", "req_c2", None, None)]
+
+
+@pytest.mark.parametrize("entries, head, anew", [
+    ([], "abc1234", None),
+    ([post("land/b1", "swb-1-conductor", "req_c1", Head="abc1234")], "abc1234", None),
+    ([post("land/b1", "swb-1-conductor", "req_c1", Head="0123abc")], "abc1234", {"approved": "0123abc"}),
+    ([post("land/b1", "swb-1-conductor", "req_c1")], "abc1234", {"approved": ""}),
+    ([post("land/b1", "swb-1-conductor", "req_c1", Head="0123abc"), dict(Act="card.update", Card="req_c1", Key="land/b1", Head="abc1234")],
+     "abc1234", None),
+    ([post("land/b1", "swb-1-conductor", "req_c1", Head="0123abc"),
+      dict(Act="card.update", Card="req_c1", Key="land/b1", Head="abc1234", Refused="Pending You refused update_request: x")],
+     "abc1234", {"approved": "0123abc"}),
+    ([post("land/b1", "swb-1-conductor", "req_c0", Head="abc1234"), post("land/b1", "swb-1-conductor", "req_c1", Head="0123abc")],
+     "abc1234", {"approved": "0123abc"})])
+def test_a_card_asks_anew_only_once_the_head_moved_since_the_head_its_last_post_or_change_recorded(entries, head, anew):
+    """The head a landing's or a deploy's card asks about is the one its last post or change done recorded, a refused
+    change showing the user nothing; a card with none recorded, posted before crew recorded heads, asks anew, since
+    crew can't tell which head the user approved (read.1)."""
+    held = cards.card_under(entries, "land/b1", "swb-1-conductor")
+    assert cards.head_anew(entries, held, head) == anew
 
 
 STEP = dict(env="srv", n=1, text="restart crew's teams", doer="swancloud-ops", held=True, why=None, where=None, commands=[], done=None,
@@ -565,6 +628,26 @@ def test_a_close_acks_an_answered_card_with_its_outcome_and_withdraws_a_waiting_
     assert capsys.readouterr().out.splitlines()[-1] == "card land/b1: req_c1 withdrawn"
 
 
+def test_a_landing_on_the_users_words_sends_them_answered_here_and_records_the_outcome_without_them(capsys):
+    """plan.16, main-level spec "The card closes with the user's words": a landing card still waiting closes as answered
+    in the conversation, Pending You sent the user's words, the run record the outcome alone (record.3); one the user
+    also tapped is acked with the words."""
+    landed = plan.landed_words("c" * 40, "24")
+    outcome, said = plan.pane_landed(landed, "wldn-ops", "2026-10-22T21:04:00Z", "Land swb-1's bolt")
+    acts = Acts({"get_request": ({"status": "pending", "version": 1}, None)}, entries=HELD)
+    assert plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True) == "req_c1"
+    assert acts.calls[1] == ("cancel_request", {"requestId": "req_c1", "name": "swb-1-conductor", "reason": cards.cut(said, cards.OUTCOME),
+                                                "answeredHere": True})
+    assert acts.calls[1][1]["reason"].startswith('Landed on the user\'s word in wldn-ops\'s pane, "Land swb-1\'s bolt"; landed on')
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", outcome)
+    assert "Land swb-1's bolt" not in repr(acts.emitted)
+    assert capsys.readouterr().out.splitlines()[0] == "card land/b1: req_c1 closed"
+    acts = Acts({"get_request": ({"status": "answered", "version": 3}, None)}, entries=HELD)
+    plan.row_card_close(None, "wldn", "swb-1-conductor", "land/b1", outcome=outcome, acts=acts, said=said, here=True)
+    assert acts.calls[1][0] == "ack_answer" and "answeredHere" not in acts.calls[1][1]
+    assert (acts.emitted[0]["State"], acts.emitted[0]["Outcome"]) == ("closed", outcome)
+
+
 LONG = ("Applied: added " + ", ".join(f"the-unit-that-does-thing-{i}" for i in range(1, 9))
         + "; 3 other changes. Left out on your word: the-briefs-say-never-wt-submit-help.")
 
@@ -609,6 +692,37 @@ def test_a_close_with_no_card_held_closes_nothing_and_says_so(capsys):
 
 PLAN = "%rec: Bolt\n%key: Bolt\n\n%rec: Unit\n%key: Unit\n"
 PLAN_AFTER = PLAN + "\nUnit: g-one\nRepo: switchboard-kit\nIntent: One unit.\n"
+
+
+# ------------------------------------------------------------------------------------ the port a session takes
+# plan.session_env: the environment a card's session starts plannotator in, so it takes the first free port of a
+# range wherever crew runs (card-sessions), read against plannotator 0.28.26's reading of PLANNOTATOR_PORT.
+
+def test_a_session_with_no_port_named_takes_crews_range():
+    assert plan.session_env({})["PLANNOTATOR_PORT"] == "19432-19451" == plan.CARD_PORTS
+
+
+def test_a_range_the_environment_names_is_kept():
+    assert plan.session_env({"PLANNOTATOR_PORT": "19440-19460"})["PLANNOTATOR_PORT"] == "19440-19460"
+
+
+@pytest.mark.parametrize("named", ["19432", "abc", "19451-19432", "0-10", "19432-70000", ""])
+def test_one_port_or_one_plannotator_cant_read_gives_crews_range(named):
+    assert plan.session_env({"PLANNOTATOR_PORT": named})["PLANNOTATOR_PORT"] == "19432-19451"
+
+
+@pytest.mark.parametrize("environ", [{}, {"PLANNOTATOR_PORT": "19440-19460"},
+                                     {"PLANNOTATOR_REMOTE": "0", "PLANNOTATOR_SKIP_BROWSER_OPEN": "0"}])
+def test_every_session_is_remote_and_opens_no_browser(environ):
+    env = plan.session_env(environ)
+    assert env["PLANNOTATOR_REMOTE"] == "1" and env["PLANNOTATOR_SKIP_BROWSER_OPEN"] == "1"
+
+
+def test_the_rest_of_the_environment_passes_through_and_the_one_given_is_not_changed():
+    environ = {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}
+    env = plan.session_env(environ)
+    assert env["PLANNOTATOR_URL_HOST"] == "auto" and env["PATH"] == "/bin"
+    assert environ == {"PLANNOTATOR_URL_HOST": "auto", "PATH": "/bin", "PLANNOTATOR_PORT": "19432"}
 
 
 # ------------------------------------------------------------------------------- crew card wait on a bolt's row

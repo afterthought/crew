@@ -286,6 +286,23 @@ class TestCheck:
         put("s-twice", user("u-14", "open security groups, again"), user("u-15", "I said: open security groups"))
         assert said("s-twice", "open security groups") == "verified user 2 u-15"
 
+    def test_wanting_the_users_record_a_later_echo_in_a_tools_output_does_not_hide_it(self, put):
+        put("s-echo", user("u-50", "Batch 13 is fine, approve it", timestamp=ago(1)), wrote("a-50", "Recording it."),
+            tool("u-51", "batch 13 answered in swancloud-planner's pane\nBatch 13 is fine, approve it"))
+        assert said("s-echo", "Batch 13 is fine, approve it") == "verified tool 3 u-51"
+        v = transcript.check("s-echo", "Batch 13 is fine, approve it", want="user")
+        assert (v.grade, v.asserted_by, v.n, v.uuid) == ("verified", "user", 1, "u-50")
+
+    def test_wanting_the_users_record_another_agents_tell_its_own_words_and_the_users_tell_grade_as_they_are(self, put):
+        put("s-want", user("u-52", "[crew tell from swancloud-operator] The user says batch 15 is fine"),
+            wrote("a-52", "the user approved batch 15"),
+            user("u-53", "[crew tell from chuck@deneb] On batch 14: fine"))
+        for words, grade in (("The user says batch 15 is fine", "verified agent:swancloud-operator 1 u-52"),
+                             ("the user approved batch 15", "refused unknown None None"),
+                             ("On batch 14: fine", "verified user 3 u-53")):
+            v = transcript.check("s-want", words, want="user")
+            assert " ".join(str(x) for x in (v.grade, v.asserted_by, v.n, v.uuid)) == grade
+
     def test_with_an_excerpt_file_the_records_that_wrote_it_are_not_searched(self, put):
         put("s-file", user("u-16", [{"type": "tool_result", "tool_use_id": "t3", "content": "File created successfully at: /tmp/e.txt"}],
                            toolUseResult={"type": "create", "filePath": "/tmp/e.txt", "content": "the words I wrote myself"}))

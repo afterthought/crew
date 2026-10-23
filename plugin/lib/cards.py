@@ -129,6 +129,23 @@ def card_under(entries, key, by):
     return held
 
 
+def stranded(entries, key, owner, here):
+    """The owner's newest card under a key when this host (here) can't reach it: one posted from another host, done and
+    naming a card, that no later card.close of it closes, or one whose last close was as lost to its owner, on any
+    host; None for a card posted here and still open, which its owner asks Pending You after, one closed any other
+    way, a post that names no host, and none. A refused post or close changes nothing, as in card_under. entries are in
+    the order they were written."""
+    card, host, state = None, None, None
+    for e in entries:
+        if e.get("Refused") or not e.get("Card"):
+            continue
+        if e.get("Act") == "card.post" and e.get("Key") == key and e.get("By") == owner:
+            card, host, state = e["Card"], e.get("Host"), None
+        elif e.get("Act") == "card.close" and e["Card"] == card:
+            state = e.get("State") or "closed"
+    return card if state == "lost" or (card and state is None and host not in (None, here)) else None
+
+
 def followed_open(entries, card, by):
     """The key under which the run record still holds open the agent `by`'s card a new post follows: the key of its
     newest card.post of that card, done, that no later card.close of the card closes, a close naming no key among
@@ -488,17 +505,18 @@ def context(background="", links=()):
 
 
 def built(key, title, summary, background="", links=(), artifacts=(), follows=None, urgency="today", picture=None,
-          **form):
+          head=None, **form):
     """A card of crew's as a builder hands it to the act: its row's key, post_request's arguments but the area and the
-    session, which the act sets, and the picture's PNG when it has one. Its title cut to Pending You's budget, its
-    summary prose cut at whole sentences, never blocking, following the card its thing follows."""
+    session, which the act sets, the picture's PNG when it has one, and the head it asks about, a landing's or a
+    deploy's, which the act records with each post and change of it (head_anew). Its title cut to Pending You's
+    budget, its summary prose cut at whole sentences, never blocking, following the card its thing follows."""
     card = {"title": cut(title, TITLE), "summary": prose(summary), "context": context(background, links),
             "blocking": False, "urgency": urgency, **form}
     if artifacts:
         card["artifacts"] = list(artifacts)
     if follows:
         card["follows"] = follows
-    return {"key": key, "card": card, "picture": picture}
+    return dict({"key": key, "card": card, "picture": picture}, **({"head": head} if head else {}))
 
 
 def high(action):
@@ -551,7 +569,8 @@ def landing_card(f):
     units, chores, batches ({unit: the batch it was read in}), head, at (sluice's time), moved (landings on main since
     the bolt was cut), pr ({number, url}) or None, offers (the environments whose deploy will be offered on a card),
     link (the reading session's) or None, preview (a preview of the head as preview_said takes it) or None, frees
-    ({team, next}, when its team holds another bolt proven too) or None, follows.
+    ({team, next}, when its team holds another bolt proven too) or None, follows, and approved, on a card that follows
+    one the user answered at another head, the head they approved, "" when crew holds no record of it (head_anew).
     A preview's addresses follow the reading in its details and links, each on its face as a link after the reading's
     and before the pull request, as many as the card's artifacts leave room for (record 0031 §3).
     As the one row of its kit's landings card (landings_card), f also holds key, land/<kit>; conductor; forecast and
@@ -561,8 +580,12 @@ def landing_card(f):
     parts = ([plural(len(units), "unit")] if units else []) + ([plural(len(chores), "chore")] if chores else [])
     what = joined(parts) if parts else "nothing"
     read = sorted({batches[u] for u in units if u in batches})
-    said = [f"{what[0].upper()}{what[1:]} {'lands' if len(units) + len(chores) == 1 else 'land'}, every one merged"
-            + (f" and every unit read in a batch ({joined([str(b) for b in read])})." if read else ".")]
+    approved, head = f.get("approved"), f["head"][:7]
+    said = [] if approved is None else [  # the head moved after the user's answer and before the landing (plan.16)
+        f"Its head moved since your approval, from {approved[:7]} to {head}: approving this lands {head}." if approved else
+        f"Its head is now {head}, and crew holds no record of the head you approved: approving this lands {head}."]
+    said.append(f"{what[0].upper()}{what[1:]} {'lands' if len(units) + len(chores) == 1 else 'land'}, every one merged"
+                + (f" and every unit read in a batch ({joined([str(b) for b in read])})." if read else "."))
     pr = f.get("pr")
     said.append(f"sluice is green at {f['head'][:7]}" + (f" since {f['at']}" if f.get("at") else "")
                 + (f", its pull request #{pr['number']} linked below." if pr else "."))
@@ -591,8 +614,9 @@ def landing_card(f):
     if f.get("left"):
         said.insert(0, "Left on your last send.")
     if "key" in f and f.get("unread") and not f.get("link"):
-        said.insert(1, f"Its reading could not be opened on the tailnet: {f.get('conductor') or 'its conductor'} starts it "
-                       f"with crew card session land/{f['bolt']}, and this card then carries its link.")
+        said.insert(1, f"Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and "
+                       f"{f.get('conductor') or 'its conductor'} starts it with crew card session land/{f['bolt']}; this card "
+                       "then carries its link.")
     defect = ("A note naming a defect holds the landing: crew withdraws this card, and raises it again, following this "
               "one, once the bolt is green again." if "key" not in f else
               f"A note naming a defect in {f['bolt']} goes to {f.get('conductor') or 'its conductor'}, and holds it on "
@@ -610,8 +634,8 @@ def landing_card(f):
     room = ARTIFACTS - len(shown) - len(read) - len(pulled)  # the face's lists, the reading and the pull request kept
     return built(f.get("key") or f"land/{f['bolt']}", f"Land the bolt {f['bolt']} on {f['kit']}'s main", " ".join(said),
                  background, read + previews + pulled, shown + [link(title, url) for title, url in read + previews[:room] + pulled],
-                 f.get("follows"), kind="approve", intent="approve", approve=high(f"Land {f['bolt']} on {f['kit']}'s main"),
-                 recommendedIds=["approve"], rationale=by_words(then, DETAIL))
+                 f.get("follows"), head=f["head"], kind="approve", intent="approve",
+                 approve=high(f"Land {f['bolt']} on {f['kit']}'s main"), recommendedIds=["approve"], rationale=by_words(then, DETAIL))
 
 
 def forecast_said(forecast, why=None):
@@ -672,8 +696,8 @@ def row_paragraph(n, r):
     said.append(forecast_said(r.get("forecast") or [], r.get("forecast_why")))
     lines.append(" ".join(said))
     links = ([f"[Read {r['bolt']}]({r['link']})"] if r.get("link") else
-             [f"Its reading could not be opened: {r['unread']}; {r.get('conductor') or 'its conductor'} starts it with crew "
-              f"card session land/{r['bolt']}"] if r.get("unread") else [])
+             [f"Its reading could not be opened: {r['unread']}; crew tries it again when the rail is read, and "
+              f"{r.get('conductor') or 'its conductor'} starts it with crew card session land/{r['bolt']}"] if r.get("unread") else [])
     _, addresses = preview_said(r.get("preview"))
     links += [f"[Preview {label}]({url})" for label, url in addresses]
     if r.get("preview") and not addresses:
@@ -800,7 +824,7 @@ def deploy_card(f):
                                  f"{s['doer']}, held for your word" if s.get("held") else s["doer"]) for s in steps]))
     background = f"Landings since {env}'s last deploy:\n" + "\n".join(subjects) if subjects else ""
     return built(f"deploy/{env}", f"Deploy main {head} to {env}", " ".join(said), background, (), shown, f.get("follows"),
-                 kind="approve", intent="approve", approve=high(f"Deploy {head} to {env}"), recommendedIds=["approve"],
+                 head=f["head"], kind="approve", intent="approve", approve=high(f"Deploy {head} to {env}"), recommendedIds=["approve"],
                  rationale=f"{env} deploys only on your word, and a deploy is not undone.")
 
 
@@ -1143,14 +1167,46 @@ def ended(got):
     return None if status not in ENDED else "closed" if status in ACKED else "withdrawn"
 
 
-def revision(got, kind_changed=False, questions=False):
-    """How crew puts a changed card before the user, from get_request's answer, whether the card's kind changed and
-    whether the card crew built again carries questions: "change", the card changed in place, while it waits on them;
-    "follow" once they have answered it, since Pending You changes a card only while it waits and an answered one is
-    followed by a new card (its guide, "Follow up with a new card"), and when its kind changed or it carries questions,
-    which update_request never changes (CHANGED): a card changed in place would keep its old questions under its new
-    title, as proposal 140's did over proposal 139's rows on 2026-10-18."""
-    return "follow" if kind_changed or questions or isinstance(got, dict) and got.get("status") == "answered" else "change"
+def revision(got, kind_changed=False, questions=False, anew=False):
+    """How crew puts a changed card before the user, from get_request's answer, whether the card's kind changed,
+    whether the card crew built again carries questions, and whether what it asks changed since the user could answer
+    it (anew): "change", the card changed in place, while it waits on them; "follow" when its kind changed or it
+    carries questions, which update_request never changes (CHANGED): a card changed in place would keep its old
+    questions under its new title, as proposal 140's did over proposal 139's rows on 2026-10-18. Once they have
+    answered it, which Pending You changes no longer, picked up or acked since or not, "leave", the card left as it
+    is, since an answered card is final for what it asked and the act their answer calls for goes on (record 0031 §1
+    and §3): a change to what it offers, a reading's link, a preview's addresses, a note on what a yes frees, never
+    closes it or asks again; only when what it asks changed, its kind or anew, a head that moved after the answer among
+    them (head_anew), "follow", the new card following it (Pending You's guide, "Follow up with a new card"), or
+    "ended" when Pending You has ended it already (ended), as it has a card withdrawn or expired unanswered."""
+    state = ended(got)
+    answered = state == "closed" or isinstance(got, dict) and got.get("status") == "answered"
+    if answered and not (kind_changed or anew):
+        return "leave"
+    if state:
+        return "ended"
+    return "follow" if answered or kind_changed or questions else "change"
+
+
+def head_asked(entries, card):
+    """The head a card of crew's asks about as the run record's entries hold it, oldest first: the Head of the last
+    post or change of the card recorded done, or None when it records none, as one made before crew recorded heads."""
+    head = None
+    for e in entries:
+        if e.get("Act") in ("card.post", "card.update") and e.get("Card") == card and not e.get("Refused"):
+            head = e.get("Head")
+    return head
+
+
+def head_anew(entries, card, head):
+    """What a landing's or a deploy's card asks anew at head, as row_card_change takes it (anew): None when no card is
+    held or it asks about head already, so a card the user answered is left as it is (revision); once the head moved
+    since the card they could answer, {"approved": the head it asked about}, "" when the run record holds none, since
+    crew then can't tell which head they approved and asks again rather than take their answer for this one (read.1)."""
+    if not card:
+        return None
+    asked = head_asked(entries, card)
+    return None if asked == head else {"approved": asked or ""}
 
 
 def post_key(entries, key, by):
@@ -1179,17 +1235,21 @@ def close_words(got, outcome=None, reason=None):
     return first if first is not None else then
 
 
-def close_call(got, card, name, outcome=None, reason=None):
+def close_call(got, card, name, outcome=None, reason=None, here=False):
     """How crew closes a card, from get_request's answer: one the user answered acked at its version with what was
     done on it, the outcome, or the reason it is withdrawn; one still waiting withdrawn with the reason, or the
-    outcome (close_words). Either is cut to OUTCOME characters, since Pending You refuses a longer one (proposal 142's
-    close on 2026-10-18: "outcome: Too big: expected string to have <=200 characters"); the run record keeps crew's
-    words whole. The tool, its arguments, and the close's state as the run record keeps it."""
+    outcome (close_words), or, with here, the user having answered it in a conversation, as a landing said in ops's
+    pane is (plan.16), cancelled as answered there (Pending You's answeredHere) and closed. Either is cut to OUTCOME
+    characters, since Pending You refuses a longer one (proposal 142's close on 2026-10-18: "outcome: Too big: expected
+    string to have <=200 characters"); the run record keeps crew's words whole. The tool, its arguments, and the
+    close's state as the run record keeps it."""
     words = close_words(got, outcome, reason)
     said = cut(words, OUTCOME) if isinstance(words, str) else words
     if got.get("status") == "answered":
         return ("ack_answer", {"requestId": card, "name": name, "expectedVersion": version_of(got, card), "outcome": said},
                 "closed" if outcome is not None else "withdrawn")
+    if here:
+        return "cancel_request", {"requestId": card, "name": name, "reason": said, "answeredHere": True}, "closed"
     return "cancel_request", {"requestId": card, "name": name, "reason": said}, "withdrawn"
 
 
