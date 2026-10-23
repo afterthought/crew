@@ -150,8 +150,10 @@ def marker(r, cards, label, logs):
 
 
 def markers(rows, cards, label, group, obj, logs):
-    """The rail's rows for an object, as markers."""
-    return [marker(r, cards, label, logs) for r in rows if r["label"] == label and r["group"] == group and r["key"].split("/")[1] == obj]
+    """The rail's rows for an object, as markers: a held bolt's landing row is its kit's, land/<kit>, which names it
+    among its bolts (record 0031 as amended 2026-10-23); any other row is the object's by its key."""
+    return [marker(r, cards, label, logs) for r in rows if r["label"] == label and r["group"] == group
+            and (obj in [b["bolt"] for b in r.get("bolts", [])] if group == "land" else r["key"].split("/")[1] == obj)]
 
 
 def keyed(rows, cards, label, key, logs):
@@ -643,8 +645,8 @@ def operator_view(p):
     each environment with a deploy or an operation waiting under Operation, the rail's rows waiting on the user counted,
     and what needs attention."""
     inc, bp, lands, envs = p["inception"], p["bolt_plan"], p["operation"], [e for e in p.get("environments", []) if e["deploys"] or e["waiting"]]
-    approve = (sum(len(d["markers"]) for d in bp["proposals"]) + sum(len(b["markers"]) for b in p["construction"])
-               + sum(len(x["markers"]) for e in envs for x in e["deploys"] + e["waiting"]))
+    approve = (sum(len(d["markers"]) for d in bp["proposals"]) + len({m["key"] for b in p["construction"] for m in b["markers"]})
+               + sum(len(x["markers"]) for e in envs for x in e["deploys"] + e["waiting"]))  # a kit's landing row once, whatever it names
     last = f"the last {lands[0]['bolt']}, {plan.utc(lands[0]['at']).astimezone():%a %H:%M}" if lands else ""
     return ([row(fields((f"{p['label']} board", "bold"), f"read from {', '.join(h for h, v in p['hosts'].items() if v is True) or 'no host'}")),
              row(fields(("Inception", "bold"), many(len(inc["signals"]), "signal not moved", "signals not moved"),
@@ -660,10 +662,11 @@ def operator_view(p):
 
 
 def ops_view(p):
-    """Main-level ops's: the partition's operations in brief, then, environment by environment, each deploy waiting on
-    the user's word with its card, each approved and not yet deployed, each running, and each operation step waiting,
-    handed or failed, with the deploy it comes after, or whose gate it is, and its doer; and what keeps a host or the
-    plan from being read."""
+    """Main-level ops's: the partition's operations in brief; each kit's landing row, its landings card ops's, naming
+    the bolts that wait on its main in the plan's order, with its card; then, environment by environment, each deploy
+    waiting on the user's word with its card, each approved and not yet deployed, each running, and each operation step
+    waiting, handed or failed, with the deploy it comes after, or whose gate it is, and its doer; and what keeps a host
+    or the plan from being read."""
     pending = [(e["env"], d) for e in p.get("environments", []) for d in e["deploys"] if not d["ended"] and d["answer"] != "replaced"]
     steps = [(e["env"], w) for e in p.get("environments", []) for w in e["waiting"]]
     word = sum(d["answer"] == "waiting" for _, d in pending)
@@ -671,6 +674,13 @@ def ops_view(p):
     head = row(fields((f"{p['label']} operations", "bold"), many(word, "deploy waits on the user's word", "deploys wait on the user's word"),
                       many(running, "deploy running", "deploys running"), many(len(steps), "operation waiting", "operations waiting")))
     out = [head]
+    lands = {}
+    for b in p.get("construction", []):
+        for m in b["markers"]:
+            if m["group"] == "land":
+                lands.setdefault(m["key"], (m, []))[1].append(b["bolt"])
+    for key, (m, bolts) in lands.items():
+        out.append(row(fields(key, ", ".join(bolts), "wait to land" if len(bolts) > 1 else "waits to land"), gutter([m]), 0, [m]))
     for e in p.get("environments", []):
         for d in (d for env, d in pending if env == e["env"]):
             out.append(row(fields(e["env"], f"deploy {d['to'][:7]}", deploy_state(d)), gutter(d["markers"]), 0, d["markers"]))

@@ -328,6 +328,28 @@ class TestViews:
             "✓ switchboard-kit doctor-rows  swb-2 on chuck-herdr-alpha  waits to land  no card open", "    rows-one  merged",
             "  switchboard-kit ssh-fix  swb-2 on chuck-herdr-alpha", "    ssh-one  code 1/2  unit-1"]
 
+    def test_each_bolt_is_marked_from_its_kits_landing_row_and_ops_band_draws_the_row_with_its_card(self, monkeypatch):
+        """Two proven bolts of one kit are one landing row, land/<kit> (crew-rail "Two bolts of one kit"): each bolt's
+        marker is that row's, its card main-level ops's, which ops's band draws, the row naming both, and the card above
+        ops's prompt; the operator counts the row once (code.8)."""
+        two = plan.Plan(plan_text(bolts=[("doctor-rows", "switchboard-kit", "swb-1"), ("ssh-fix", "switchboard-kit", "swb-2")],
+                                  units=[("rows-one", "switchboard-kit", "doctor-rows", []), ("ssh-one", "switchboard-kit", "ssh-fix", [])]))
+        monkeypatch.setitem(globals(), "the_plan", lambda: two)
+        sv = kits()
+        sv[BOX]["kits"]["/kit/main"]["bolts"].update({
+            "doctor-rows": {"head": "f" * 40, "head_at": ago(30), "changes": ["rows-one"], "archived": ["rows-one"], "verdict": "passed (2 run)"},
+            "ssh-fix": {"head": "c" * 40, "head_at": ago(20), "changes": ["ssh-one"], "archived": ["ssh-one"], "verdict": "passed (1 run)"}})
+        card = dict(label="wldn", card="req_k1", key="land/switchboard-kit", by="wldn-ops", host="mac-studio", at=NOW)
+        d = data(sv=sv, cards=[card])
+        ledgers = {b["bolt"]: b["markers"] for b in d["partitions"][0]["construction"]}
+        assert [m["key"] for m in ledgers["doctor-rows"]] == [m["key"] for m in ledgers["ssh-fix"]] == ["land/switchboard-kit"]
+        assert ledgers["ssh-fix"][0]["card"]["by"] == "wldn-ops"
+        assert "✓ land/switchboard-kit  doctor-rows, ssh-fix  wait to land  card open, asked by wldn-ops" in view("wldn-ops", sv=sv, cards=[card])
+        v = board.agent_views(d)
+        assert "".join(t for t, _ in v["cards"]["wldn-ops"][0]).startswith("  your card  land/switchboard-kit  req_k1")
+        assert "✓ 1 to approve" in "\n".join(view("wldn-operator", sv=sv, cards=[card]))
+        assert view("swb-1-conductor", sv=sv, cards=[card])[0].endswith("doctor-rows  waits to land  1 of 1 merged  card open, asked by wldn-ops")
+
     def test_a_unit_waits_on_no_answer_so_it_has_no_marker_even_with_an_old_verify_card_open(self):
         card = dict(label="wldn", card="req_2", key="verify/a/20261012-1200", by="swb-1-conductor", host="mac-studio", at=NOW)
         assert view("swb-1-conductor", cards=[card])[1] == "    ◑  a  code 1/2  unit-1"

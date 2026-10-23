@@ -772,18 +772,22 @@ def waits_on_question(fleet, name):
     (hooks/questions) is still open in its session, read by questions.py on its host. Either is enough: herdr reads
     the dialog from the screen alone, and on 2026-10-07 took a tell into one it did not see. A host with no mark, such
     as an agent started before the hook, reads as no question open, and herdr's reading alone guards it (the
-    a-tell-never-lands-in-a-question design, decision 5, departing from read.1)."""
-    status, asking, sid, unread = agent_reading(fleet, name)
-    if status not in (None, "blocked") and not sid and not unread:
-        unread = "herdr names no session for it"
+    a-tell-never-lands-in-a-question design, decision 5, departing from read.1). So does an agent whose session neither
+    herdr nor crew's record of its pane names, which goes on rather than refusing, since every message between agents
+    is a tell (roles.4) and a refusal would leave it unreachable (the crew-tell-reaches-a-pane-with-no-recorded-session
+    design, decision 3, departing from read.1)."""
+    status, asking, _, unread = agent_reading(fleet, name)
     return status, asking, unread
 
 
 def agent_reading(fleet, name):
     """What waits_on_question reads of an agent, with its session: (herdr's status of it, None when it is not up;
-    whether it waits on a question in its pane; the Claude session herdr names for it, or None; what crew could not
-    read, or None). Whether it waits is read from crew's own mark only when herdr names its session."""
-    host, _ = place_of_agent(fleet, name)
+    whether it waits on a question in its pane; its Claude session, or None; what crew could not read, or None). Its
+    session is the one herdr names for its pane, or, when herdr names none, the newest crew's session-start hook
+    recorded of the agent starting in that herdr session and pane, read by questions.py --pane on its host; whether it
+    waits is read from crew's own mark of that session. With neither session it reads as waiting on nothing herdr does
+    not report, and herdr's reading alone guards it (waits_on_question)."""
+    host, session = place_of_agent(fleet, name)
     a, unread = read_agent(fleet, name)
     if a is None:
         return None, False, None, unread
@@ -794,10 +798,21 @@ def agent_reading(fleet, name):
     if status == "blocked":
         return status, True, sid, None
     if not sid:
-        return status, False, None, None
-    got = piped(fleet, host, QUESTIONS, "questions", sid)
-    if isinstance(got, str):
-        return status, False, sid, got
+        pane = a.get("pane_id")
+        if not isinstance(pane, str) or not pane:
+            return status, False, None, None
+        got = piped(fleet, host, QUESTIONS, "questions", "--pane", session, pane, name)
+        if isinstance(got, str):
+            return status, False, None, got
+        sid = got.get("session")
+        if sid is None:
+            return status, False, None, None
+        if not isinstance(sid, str) or not sid:
+            return status, False, None, f"crew's reading of its questions on {host} gave no answer crew reads"
+    else:
+        got = piped(fleet, host, QUESTIONS, "questions", sid)
+        if isinstance(got, str):
+            return status, False, sid, got
     if got.get("question") not in (None, "open", "answered"):
         return status, False, sid, f"crew's reading of its questions on {host} gave no answer crew reads"
     return status, got["question"] == "open", sid, None
@@ -827,10 +842,11 @@ def piped(fleet, host, script, what, *args):
 
 def here_reading(what, *args):
     """What questions.py or transcript.py answers on this host, as its own command line would print it, read in this
-    process: questions <session>, or transcript end <session> | received <session> <offset> <text>."""
+    process: questions <session> | --pane <herdr session> <pane> <agent>, or transcript end <session> | received
+    <session> <offset> <text>."""
     if what == "questions":
         import questions
-        return questions.read(*args)
+        return questions.answer(list(args))
     import transcript
     return transcript.end(args[1]) if args[0] == "end" else transcript.received(args[1], int(args[2]), args[3])
 
@@ -933,7 +949,7 @@ def send_taken(fleet, name, text, ready_wait=READY_WAIT, pane=None):
 
 def ready_for(pane, wait):
     """Wait, up to wait seconds, until the pane's agent is ready for input: herdr reports it idle or done, it waits on no
-    question in its pane, and herdr names its session. Returns (its session id, None), or (None, ("never", why)) when
+    question in its pane, and crew finds its session, herdr's or the one crew recorded in its pane. Returns (its session id, None), or (None, ("never", why)) when
     it is not ready in time, or (None, ("unread", what))."""
     deadline = pane.now() + wait
     while True:
@@ -944,7 +960,7 @@ def ready_for(pane, wait):
             return sid, None
         if pane.now() >= deadline:
             return None, ("never", "as it was not up" if status is None else "as it was waiting on a question in its pane"
-                          if asking else "as herdr named no session for it" if not sid else f"as herdr still reported it {status}")
+                          if asking else "as crew found no session for it" if not sid else f"as herdr still reported it {status}")
         pane.sleep(1)
 
 
@@ -1477,7 +1493,7 @@ def main_tokens(fleet, p, role, self_name):
         f"{label}'s main level ({p['partition']}) runs on {p['machine']}, in the `{label}` workspace of each of its sessions: {places}. "
         f"`{label}-design`, the design agent, keeps the design true on main and curates signals; `{label}-planner` plans the partition's "
         f"bolts and posts its review batches; `{label}-reviewer`, started fresh for each batch, summarizes its changes; `{label}-ops` lands "
-        f"proven bolts on the user's approval of their landing cards; and `{label}-operator`, the partition's door, works for the user. "
+        f"proven bolts on the user's send on each kit's landings card; and `{label}-operator`, the partition's door, works for the user. "
         f"A dispatcher on each host the partition's teams run on gives that host's teams their bolts: {tok['DISPATCHERS']}. "
         f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
         f"anything for another partition or one of its teams is sent with {SENDS}. {SENDERS}")
