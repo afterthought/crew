@@ -1,8 +1,9 @@
 # A verified unit fixed in its one round, settled and merged, through the crew command on the stubs (tests.11, record
 # 0022), a part of the units journey (t-journey-units): a forecast against the bolt starts the settle stage of a unit
 # verified and then fixed once (teams.14, teams.17); a dependent holding that unit's work as its place took it is not
-# forecast against the unit for the settle's revision of it; the unit merges through sluice once its change is
-# archived; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it, and undoes a
+# forecast against the unit for the settle's revision of it; a stop-short of the unit's merge for an archive it can
+# make itself is refused once in the stage, and a second is passed on; the unit merges through sluice once its change
+# is archived; the merge's wait rebases a dependent onto the bolt, leaving out that work as it took it, and undoes a
 # rebase that conflicts; the next read frees the merged unit's slot and removes its place; the dependent whose rebase
 # conflicted is told how to make that rebase's upstream again, its older forecast against the bolt dropped; and of two
 # unmerged units forecast to conflict, the later's settle that stops short lifts the order a forecast wrote before
@@ -49,7 +50,23 @@ eq "$(field $box forecast Heads unit/b unit/a)" ""
 expect_ok crew unit run a merge
 eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 lacks "$out" "Pending You card"
-mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
+# a's place holds a change no unit has, every task ticked and touching a's specs, as main's left open: a's merge
+# archives it first, and a stop-short for it is refused, the stage still owed.
+change "$kd/places/a" left 3 3; commit_all "$kd/places/a" "docs(left): a change main left open"
+CREW_AGENT=swb-1-unit-1 expect_fail "merge on a does not stop short for archives it can make: unit/a holds left open" \
+  crew needs "openspec archive a refuses: its delta modifies a requirement left adds"
+eq "$(field $box stage.end Ended stage/a/merge)" ""
+# Told, it stops short again in the same stage only when openspec refuses one of them: that stop-short is passed on,
+# and the conductor runs the merge again.
+CREW_AGENT=swb-1-unit-1 expect_ok crew needs "openspec archive left refuses: a requirement it modifies is not in the specs ZQXP"
+eq "$out" "merge on a is ended, stopped short: swb-1-conductor is told what you need"
+grep -qF "agent prompt swb-1-conductor '[crew tell from swb-1-unit-1] swb-1-unit-1 stopped short in merge on a. It needs: openspec archive left refuses: a requirement it modifies is not in the specs ZQXP'" "$CREW_TEST_LOG" \
+  || fail "the conductor was not told the merge's second stop-short"
+eq "$(field $box stage.end Ended stage/a/merge)" "short"
+expect_ok crew unit run a merge
+mkdir -p "$kd/places/a/openspec/changes/archive"; git -C "$kd/places/a" mv openspec/changes/left openspec/changes/archive/2026-10-13-left
+git -C "$kd/places/a" commit -qm "docs(openspec): archive left"
+git -C "$kd/places/a" mv openspec/changes/a openspec/changes/archive/2026-10-13-a
 git -C "$kd/places/a" commit -qm "docs(openspec): archive a"
 merge_as swb-1-unit-1 "$kd/places/a" bolt/tenant-environments || fail "a's submission failed"
 eq "$(git -C "$k" log -1 --format='%an %(trailers:key=Sluice-Result,valueonly)' bolt/tenant-environments)" "sluice passed (stub)"
