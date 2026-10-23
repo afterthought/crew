@@ -8,4 +8,4 @@
 
 ## 2. Integration
 
-- [ ] 2.1 The tests the change affects pass; Verify `tests/suite --affected` ends with "0 failed".
+- [x] 2.1 The tests the change affects pass; Verify `tests/suite --affected` ends with "0 failed".
