@@ -2,10 +2,14 @@
 plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
 plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
 goes with its place (plan.10) and plan.branch_said for what is said of it, plan.bolt_branch_judged for a bolt's own
-branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing, and
-plan.overview_runs and plan.run_kept for a worktree sluice has a run in. The documents under sluice-0.36.4/ were
-recorded from sluice 0.36.4 on deneb, 2026-10-22, their scratch folder written /scratch: a kit whose place a ran
-`sluice exec main -- sleep 25` (overview-run.json) until it ended (overview-ended.json). How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
+branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing,
+plan.overview_runs and plan.run_kept for a worktree sluice has a run in, and plan.release_kept for one sluice did not
+release before its removal. The documents under sluice-0.36.4/ were recorded from sluice 0.36.4 on deneb, 2026-10-22,
+their scratch folder written /scratch: a kit whose place a ran `sluice exec main -- sleep 25` (overview-run.json) until
+it ended (overview-ended.json); and on mac-studio, 2026-10-23, the same way: a kit whose policy's release command,
+`sh -c 'echo tearing down; exit 1'`, failed after a `sluice exec main -- true` in places/unit-u, `sluice release
+--worktree <place> --json` exiting 3 (release-failed.json), then, the command's exit taken out and merged in, exiting 0
+once with it released (release.json) and once with nothing left to release (release-nothing.json). How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
 settles, the journey's (t-journey-merge, t-journey-fix)."""
 import json
 import pathlib
@@ -29,8 +33,9 @@ CUT = dict(GOING, on_main=True, moved=False)
 
 
 def over(path, branch, up="", bolts=("t",), units=("planned",), on_main=(), merged=(), fix=GOING, dropped=()):
-    return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), set(units), set(on_main),
-                          lambda bolt: set(merged), lambda b: fix, dropped=set(dropped))
+    """units: each unit the plan holds, in bolt t, or as (unit, its bolt or None for the queue)."""
+    return plan.tidy_over(f"{KD}/{path}", branch, KD, up, set(bolts), dict((u, "t") if isinstance(u, str) else u for u in units),
+                          set(on_main), lambda bolt: set(merged), lambda b: fix, dropped=set(dropped))
 
 
 class TestOver:
@@ -48,6 +53,14 @@ class TestOver:
         assert over("places/a", "unit/a", "bolt/t", on_main={"a"}) == ("a", "unit a has landed on main")
         assert over("places/ignored-only", "unit/ignored-only", "bolt/t") == ("ignored-only", "unit ignored-only is in no plan")
         assert over("places/planned", "unit/planned", "bolt/t") == ("planned", None)
+
+    def test_a_units_place_is_over_once_it_has_left_the_bolt_its_place_tracks(self):
+        """teams.1: a unit added again to another bolt, or moved to the queue, leaves the place its old bolt's stage cut,
+        which goes as a dropped unit's does, its branch judged by git cherry (plan.10); one whose place tracks no bolt crew
+        can name stays (read.1)."""
+        assert over("places/a", "unit/a", "origin/bolt/gone", units=[("a", "t")]) == ("a", "unit a has left bolt/gone for bolt/t")
+        assert over("places/a", "unit/a", "bolt/t", units=[("a", None)]) == ("a", "unit a has left bolt/t for the queue")
+        assert over("places/a", "unit/a", "", units=[("a", "t")]) == ("a", None)
 
     def test_a_fixs_place_is_over_once_it_merged_was_dropped_or_its_bolt_left_every_plan(self):
         assert over("places/fix-t--y", "fix/t/y", "bolt/t", fix=MERGED) == ("fix/t/y", "fix/t/y has merged into bolt/t")
@@ -236,6 +249,30 @@ class TestRun:
         assert plan.run_kept(None, None) is None
         assert plan.run_kept(None, "this host has no sluice on its path") == (
             "sluice's overview can't be read (this host has no sluice on its path), so crew can't tell whether a run is in it")
+
+
+class TestRelease:
+    """Whether sluice released a place the tidy would remove, before the kit's worktree tool removes it (plan.9, as
+    amended 2026-10-23; wldn's signal 2026-10-23-wldn-planner-e42b04cf/01): `sluice release --worktree <place> --json` as
+    sluice 0.36.4 answers it; one it did not release is kept, in sluice's words (read.1)."""
+
+    @pytest.mark.parametrize("name", ["release", "release-nothing"])
+    def test_a_place_released_or_holding_nothing_to_release_may_go(self, name):
+        assert plan.release_kept(recorded(name), None) is None
+
+    def test_a_release_command_that_failed_keeps_it_in_sluices_words(self):
+        # sluice_read's words for release-failed.json, which sluice printed exiting 3
+        why = f"it exited 3: {recorded('release-failed')['error']['message']}"
+        assert plan.release_kept(None, why) == (
+            "sluice's release of it failed: it exited 3: the release command of /scratch/places/unit-u ended exit "
+            "status: 1: tearing down")
+        assert plan.release_kept(None, "this host has no sluice on its path") == (
+            "sluice's release of it failed: this host has no sluice on its path")
+
+    @pytest.mark.parametrize("d", [None, [], {}, {"preview": "--worktree", "released": False},
+                                   dict(recorded("release"), released="yes")])
+    def test_a_document_sluice_0_36_4_would_not_print_keeps_it(self, d):
+        assert plan.release_kept(d, None) == "sluice's release of it printed no document crew reads"
 
 
 class TestWt:
