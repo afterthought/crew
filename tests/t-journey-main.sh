@@ -2,7 +2,9 @@
 # the teams journey (t-journey-teams): crew main up starts the main level, its operator among it, and a dispatcher on
 # each host of the partition, each greeted once, one waiting on a question holding back no other; main status reaches
 # every host; a tell records its length and never its text; crew send reaches the partition's operator, marked with
-# whom it was for, and records its length; the console gets its tabs and starts no agent; a tell reaches an agent
+# whom it was for, and records its length; a word from the board, piped to crew tell --board as the board's listener
+# pipes it, reaches the agent its item's kind goes to marked as the user's from the board and naming the item, and
+# records its length, and one for an agent its kind does not go to types nothing; the console gets its tabs and starts no agent; a tell reaches an agent
 # whose pane herdr names no session for, refused while the session crew recorded in its pane has a question open;
 # crew revive brings back what a restart left empty, leaving down what was taken down; crew revive and crew main up
 # open again a pane herdr brought back dead; and a role its partition names a session for comes up there (record 0035).
@@ -61,6 +63,18 @@ grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from [^]]*@mac-stu
 eq "$(count mac-studio send) $(field mac-studio tell Chars)" "2 17"
 expect_fail "crew send takes a team or a partition, not 'nosuch': teams apk-1 atl-1 brd-1 swb-1 swb-2; partitions madswan swancloud wldn" crew send nosuch "x"
 eq "$(count mac-studio send)" "2"
+# A word from a proposal's dock, as the board's listener pipes it: the planner is told it as the user's from the board,
+# naming the item (record 0038 §3); one for another agent than the kind's types nothing.
+board_word() { printf '%s' "$1" | crew tell --board; }
+expect_ok board_word '{"label":"wldn","key":"proposal:4","to":"wldn-planner","text":"Words BRDW from the board"}'
+eq "$out" "sent to wldn-planner"
+grep -q "^$box wldn-3 agent prompt wldn-planner '\[crew tell from [^]@ ]*@board\] (on proposal 4) Words BRDW from the board'\$" "$CREW_TEST_LOG" ||
+  fail "crew tell --board did not reach wldn-planner marked from the board and naming the item"
+eq "$(field mac-studio tell Chars agent/wldn-planner)" "41"
+[[ $(as mac-studio bash -c 'cat "$HOME"/.local/state/crew/wldn/runs/*/*.rec') != *BRDW* ]] || fail "a word from the board's text is in the run record"
+expect_fail "a word on a proposal goes to wldn-planner, not swb-1-conductor" \
+  board_word '{"label":"wldn","key":"proposal:4","to":"swb-1-conductor","text":"Words BRDX for the conductor"}'
+grep -q BRDX "$CREW_TEST_LOG" && fail "a word for an agent its kind does not go to was typed"
 # herdr drops the planner's name in its pane, its session there the one crew started (briefs.17): a tell from another
 # host finds it in the pane crew keeps for it, and its host's crew gives the name back.
 p=$(as $box herdr --session wldn-3 agent get wldn-planner | jq -r .result.agent.pane_id)
@@ -90,7 +104,7 @@ expect_ok crew console up wldn
 grep -q "workspace create\|tab create\|pane run\|agent prompt" "$CREW_TEST_LOG" && fail "a second console up made, ran or greeted something"
 expect_ok crew operator up wldn
 has "$out" "crew operator up is crew console up now; the operator is <label>-operator, at the main level"
-ok "main status reaches every host, a tell and a send record their length and never their text, a send reaching the partition's operator, and the console comes up with its flow, rail and board tabs and no agent, crew operator up opening it too"
+ok "main status reaches every host, a tell and a send record their length and never their text, a send reaching the partition's operator, a word from the board its item's agent, and the console comes up with its flow, rail and board tabs and no agent, crew operator up opening it too"
 
 # herdr names no session for the planner's pane, as after its own restore: crew reads the session it recorded there.
 as $box herdr --session wldn-3 stub nosession wldn-planner on
