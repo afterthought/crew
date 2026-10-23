@@ -99,8 +99,10 @@
 #   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>] [--bolt <bolt>]
 #                                      wait for the fix's stage to end: its commits, or its merge on the bolt
 #   crew needs   "<what you need>"     run by a stage's agent that can't finish without
-#                                      something only someone else can give: its stage ends short, and the conductor
-#                                      is given the words, by its wait or by a tell
+#                                      something only someone else can give: its stage ends short, the conductor is
+#                                      given the words, by its wait or by a tell, and crew ends the agent's session once
+#                                      its turn ends, or half a minute on if it works on, so the slot's next start runs
+#                                      a fresh agent with no --force
 #
 # The plan, the moves and the signals crew records, on the flywheel's branch <label>/main of the partition's state
 # repository; a meeting's signals stay in the partition's first blueprints repo:
@@ -368,6 +370,9 @@ case $cmd in
     words=${2:-}
     [[ -n ${words//[[:space:]]/} ]] || { echo "usage: crew needs \"<what you tried and what you need>\"" >&2; exit 2; }
     one _needs -- "$words" ;;
+  _end-short)  # crew _end-short <team> <slot>: the agent of a slot's stage that stopped short ended once its turn ends,
+    # handed by crew needs to a process of its own on the team's host (record 0007, code.9)
+    need_team "${2:-}"; one _end-short "${@:2}" ;;
   _tidy)  # crew _tidy <team> [--landed <bolt> --outcome <words>]: free the slots whose work has merged or been dropped,
     # and remove the worktrees whose work is over (a plan write that ends work asks for it on the team's host); after a
     # landing, close the bolt's landing card there with the words
