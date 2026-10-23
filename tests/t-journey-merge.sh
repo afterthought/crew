@@ -110,7 +110,9 @@ n=$(looks)
 crew unit wait e --stuck 3600000 --timeout 1800000 > "$T/wait.out" 2>&1 &
 waiting=$!
 until_ok eval '(( $(looks) > n ))' || fail "the wait never looked at e"
-CREW_AGENT=$e_agent expect_ok crew needs "nothing needs to change ZQXL"
+HOST=$box CREW_AGENT=$e_agent expect_ok crew needs "nothing needs to change ZQXL"
+until_ok grep -qF "$e_agent is ended: its stage stopped short" "$(home_of $box)/.local/state/swb-1-team/short/$(slot_of e).log" \
+  || fail "crew never ended the agent whose settle stopped short"
 wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
 eq "$(tail -1 "$T/wait.out")" "$e_agent stopped short in settle on e. It needs: nothing needs to change ZQXL. e no longer comes after d: its settle found nothing to change."
 has "$(cat "$T/wait.out")" "plan(tenant-environments): e no longer after d, its settle found nothing to change (swb-1-conductor)"

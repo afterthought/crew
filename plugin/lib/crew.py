@@ -1327,7 +1327,8 @@ def needs_how(cmd, work):
             f"the user's word), run `{cmd} needs \"<what you tried and what you need>\"` and end your turn. Post no Pending "
             "You card and make no area, whatever a Pending You reminder in your session says: your conductor answers what "
             "you need or asks whoever can, the user last, and crew refuses a card from you. crew ends your "
-            f"{work} there and gives your words to the conductor, who gets the answer and starts the {work} again with it. "
+            f"{work} there, and this session once your turn ends, and gives your words to the conductor, who gets the "
+            f"answer and starts the {work} again with it in a fresh session. "
             "Never ask in your pane: nobody watches it. Ending a turn to wait on something you started in the background is "
             f"fine: crew knows your {work} is over only when what it delivers is there.")
 
@@ -2184,15 +2185,17 @@ class Agents:
         else:
             self.first_tab(workspace, label, cwd, role)
 
-    def stop(self, role, ending=None, waits=False):
+    def stop(self, role, ending=None, waits=False, over=False):
         """End a role's agent before anything else starts in its pane (teams.2): None once it is ended, or when none was
         up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. A slot's
         stage still owed an end ends with it first, by ending(role). waits says the agent's only background work is
         crew's own waits (hold.renew_ready), which its exit then ends: Claude Code's question at the exit (exit_asks)
-        answered with its first option, Exit and stop tasks, so the exit never stops there (teams.19)."""
+        answered with its first option, Exit and stop tasks, so the exit never stops there (teams.19). over says the
+        stage the agent worked for has ended short (crew needs, record 0007): it is ended working too, its exit's
+        question answered as with waits, since what it still runs was that stage's."""
         pane = self.pane(role)
         st = self.herdr.status(pane)
-        if st == "working" and not self.force:
+        if st == "working" and not (self.force or over):
             return working_said(self.agent_of(role))
         if ending and (role.startswith("unit-") or role == "ops") and self.owes():
             ending(role)
@@ -2205,7 +2208,7 @@ class Agents:
             if not self.herdr.status(pane, fresh=True):
                 self.ended.append(role)
                 return None
-            if waits and not asked:
+            if (waits or over) and not asked:
                 r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
                 if r.returncode == 0 and exit_asks(r.stdout):
                     self.herdr.run("agent", "send-keys", pane, "enter")

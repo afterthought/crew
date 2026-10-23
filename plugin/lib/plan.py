@@ -7034,7 +7034,8 @@ def owed_of(t, slot, lines, held):
 def stage_needs(fleet, a):
     """crew needs: the caller's stage ends short, recorded with Ended short and never the words (record.3), and the
     words go to the conductor: to the wait running on the stage when there is one, through needs/<slot>, else in a
-    tell marked as from the agent (roles.4). Only the agent of a stage crew owes an end may say it."""
+    tell marked as from the agent (roles.4); then its agent's end is handed on (short_hand), so the stage is ended in
+    fact. Only the agent of a stage crew owes an end may say it."""
     t = at_work(fleet, a.team)
     agent, conductor = f"{t['name']}-{a.slot}", f"{t['name']}-conductor"
     a.words.strip() or fail('say what you need: crew needs "<what you tried and what you need>"')
@@ -7058,6 +7059,7 @@ def stage_needs(fleet, a):
     # still there means nobody will.
     told = f"{agent} stopped short in {o.phrase()}. It needs: {a.words}"
     give_up, waits = time.monotonic() + 6 * POLL, team_state(t) / "waits" / f"{a.slot}.lock"
+    said, to = f"{o.phrase()} is ended, stopped short: {conductor}'s wait has what you need", sys.stdout
     while needs.exists():
         waits.parent.mkdir(parents=True, exist_ok=True)
         with open(waits, "a") as lock:
@@ -7069,13 +7071,146 @@ def stage_needs(fleet, a):
             if (free or time.monotonic() > give_up) and needs.exists():
                 needs.unlink(missing_ok=True)
                 if crew.tell(fleet, conductor, told, sender=agent):
-                    print(f"{o.phrase()} is ended, stopped short: {conductor} is told what you need")
+                    said = f"{o.phrase()} is ended, stopped short: {conductor} is told what you need"
                 else:
-                    print(f"{o.phrase()} is ended, stopped short, and {conductor} could not be told what you need: "
-                          "say it in your last message", file=sys.stderr)
-                return
+                    said, to = (f"{o.phrase()} is ended, stopped short, and {conductor} could not be told what you need: "
+                                "say it in your last message"), sys.stderr
+                break
         time.sleep(1)
-    print(f"{o.phrase()} is ended, stopped short: {conductor}'s wait has what you need")
+    print(f"{said}. {short_hand(fleet, t, a.slot, o)}", file=to)
+
+
+SHORT_GRACE = 30  # looks, a second apart, the agent of a stage that stopped short has to end its turn before crew ends it
+
+
+def short_path(t, slot):
+    """The mark of a slot whose stage stopped short (crew needs), there until its agent is ended or found gone: the
+    stage's start entry id, then the Claude session that said it."""
+    return team_state(t) / "short" / slot
+
+
+@contextlib.contextmanager
+def short_lock(t, slot):
+    """The slot's lock while the agent of its stage that stopped short is looked at and ended, held by crew _end-short
+    and by the slot's next start (short_taken), so neither ends an agent the other started."""
+    f = short_path(t, slot).with_name(f"{slot}.lock")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with open(f, "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def short_marked(t, slot):
+    """The Claude session a slot's mark names as the one whose stage stopped short, or None with no mark."""
+    try:
+        lines = short_path(t, slot).read_text().split("\n")
+    except OSError:
+        return None
+    return lines[1].strip() if len(lines) > 1 else ""
+
+
+def agent_facts(info):
+    """Whether an agent is up, herdr's status of it and the Claude session it runs, from its item (crew.agent_get),
+    the status and the session None when herdr gives none (read.2)."""
+    if not isinstance(info, dict):
+        return False, None, None
+    status, sid = info.get("agent_status"), info.get("agent_session")
+    sid = sid.get("value") if isinstance(sid, dict) else None
+    return True, status if isinstance(status, str) else None, sid if isinstance(sid, str) and sid else None
+
+
+def short_end(marked, up, status, session, looked, grace=SHORT_GRACE):
+    """What crew does with the agent of a slot whose stage stopped short (record 0007), from the Claude session that
+    said it (marked), whether an agent is up in the slot, herdr's status of it and the session it runs, and how many
+    looks crew has given it: "gone" with none up; "other" when it runs another session than the one that stopped
+    short, which is left be; "unread" when, past the grace, crew still can't read its status or which session it runs,
+    so it ends none (read.1); "end" once it has stopped working, or still works past the grace, since its stage is over
+    and nothing it does now is the stage's; else "wait", for its turn to end."""
+    if not up:
+        return "gone"
+    if status is None or session is None:
+        return "wait" if looked < grace else "unread"
+    if session != marked:
+        return "other"
+    return "end" if status != "working" or looked >= grace else "wait"
+
+
+def short_said(agent, how):
+    """What crew says of the agent of a stage that stopped short once short_end has decided."""
+    return {"end": f"{agent} is ended: its stage stopped short", "gone": f"{agent} is no longer up",
+            "other": f"{agent} runs another session than the one that stopped short: crew leaves it be",
+            "unread": f"crew could not read which session {agent} runs, so it ends none"}[how]
+
+
+def short_over(team, slot, how):
+    """short_end's decision acted on, under the slot's lock: the agent ended when "end", its exit's question answered
+    and what it still runs stopped, since that was its stage's (Agents.stop's over); the mark then gone, as it goes for
+    an agent gone, running another session or unread. None, or what crew says of an agent it could not end, whose mark
+    stays for the slot's next start."""
+    if how == "end":
+        why = team.stop(slot, over=True)
+        if why:
+            return why
+    short_path(team.t, slot).unlink(missing_ok=True)
+    return None
+
+
+def short_hand(fleet, t, slot, o):
+    """crew needs' last act on a slot's stage (record 0007): the slot marked with the asker's Claude session
+    (short_path), and the end of its agent handed to crew _end-short, a process of its own on this host that outlives
+    this command (code.9); what crew needs then says of the session. A stage of ops's ends no session, and an asker
+    whose session crew can't read is marked by none and ended by none (read.1)."""
+    if not slot.startswith("unit-"):
+        return "End your turn."
+    host, _, sid = (record.session() or "").partition(":")
+    if host != crew.this_host() or not sid:
+        return "crew could not read which Claude session this is, so it ends none: end your turn."
+    mark = short_path(t, slot)
+    with short_lock(t, slot):
+        tmp = mark.with_name(f".{slot}.new")
+        tmp.write_text(f"{o.eid}\n{sid}\n")
+        tmp.replace(mark)
+    argv = ["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "crew"), "_end-short", t["name"], slot]
+    try:
+        with open(mark.with_name(f"{slot}.log"), "a") as out:
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+    except OSError as e:
+        return f"crew could not hand this session's end on ({e}): end your turn, and the slot's next start ends it."
+    return "crew ends this session once your turn ends: end it now."
+
+
+def short_taken(fleet, team, slot):
+    """Before a stage starts in a slot (run_stage): the agent of the slot's stage that stopped short, still up in its
+    session, ended at once, working or not, its grace the start's to cut short (short_end), under the slot's lock, so
+    the conductor's next start neither waits on it nor needs --force. None, or what crew says of an agent it could not
+    end."""
+    with short_lock(team.t, slot):
+        marked = short_marked(team.t, slot)
+        if marked is None:
+            return None
+        return short_over(team, slot, short_end(marked, *agent_facts(crew.agent_get(fleet, team.agent_of(slot))), SHORT_GRACE))
+
+
+def end_short(fleet, a):
+    """crew _end-short <team> <slot>, handed by crew needs to a process of its own on the team's host (short_hand): the
+    agent of the slot's stage that stopped short ended as a stage's agent is ended for the next (teams.2), once it has
+    ended its turn or SHORT_GRACE looks have passed (short_end), so no agent goes on after its needs as if its stage
+    stood and the conductor's next start finds the slot free. Each look is under the slot's lock, as the next start's
+    is (short_taken); a mark that start took first leaves nothing to end."""
+    t = at_work(fleet, a.team)
+    team = on_team_host(fleet, t)
+    agent = team.agent_of(a.slot)
+    for looked in range(SHORT_GRACE + 1):
+        with short_lock(t, a.slot):
+            marked = short_marked(t, a.slot)
+            if marked is None:
+                print(f"{agent}'s mark is gone: the slot's next start took it")
+                return
+            how = short_end(marked, *agent_facts(crew.agent_get(fleet, agent)), looked)
+            if how != "wait":
+                print(short_over(team, a.slot, how) or short_said(agent, how))
+                return
+        crew.nap(1)
 
 
 # ------------------------------------------------------------------------------ a team's commands, one process each
@@ -7182,8 +7317,8 @@ def run_stage(fleet, team, slot, stage, prompt, act, what, obj, on, **extra):
     agent started, and its prompt sent, taken or sent again. The start is recorded as act, with extra's fields, and its
     end is owed in the stages file. A prompt the agent never took, or one crew can't tell it took, starts no stage: the
     start is recorded refused, no end is owed, the slot and its idle agent stay, and the command stops saying how to
-    run the stage again."""
-    why = team.stop(slot, ending(fleet, team.t))
+    run the stage again. An agent whose stage stopped short is ended working or not (short_taken)."""
+    why = short_taken(fleet, team, slot) or team.stop(slot, ending(fleet, team.t))
     if why:
         stopped(team.label, act, on, why)
     if not team.start(slot, stage):
@@ -7206,8 +7341,8 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
     """A unit's stage, or a chore's (kind, plan.11), started in its slot on the team's host (teams.1, teams.2, plan.6):
     refused, and recorded so, while the team is down, when every slot is in flight, and for a construct whose slot's
     agent works unless forced, each before the plan can be written, so an amended unit whose construct can't start keeps
-    its mark and reads amended. The team's read frees first what is over, and a slot another team of this host holds the
-    unit in. Whether the stage may start, the place and the stage's prompt are run_check's, a chore's chore_check's,
+    its mark and reads amended; an agent whose stage stopped short works for nothing, and is ended first (short_taken).
+    The team's read frees first what is over, and a slot another team of this host holds the unit in. Whether the stage may start, the place and the stage's prompt are run_check's, a chore's chore_check's,
     its start run_stage's. It stops (Stopped), or is refused (Refusal), having said and recorded why."""
     t, label = team.t, team.label
     on = [f"stage/{unit}/{stage}", f"{kind}/{unit}"]
@@ -7223,6 +7358,11 @@ def run_unit_stage(fleet, team, unit, stage, words="", kind="unit"):
         record.emit(label, "stage.start", on, refused=f"all {t['units']} of {t['name']}'s slots are in flight")
         raise Stopped(1)
     agent = team.agent_of(slot)
+    why = short_taken(fleet, team, slot)  # its stage is over, so a construct is not refused for its working
+    if why:
+        if taken:
+            team.drop("slots", slot)
+        stopped(label, "stage.start", on + [f"agent/{agent}"], why)
     if stage == "construct" and not team.force and team.status(slot) == "working":
         if taken:
             team.drop("slots", slot)
@@ -11553,6 +11693,9 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x = sub.add_parser("_needs")
     x.add_argument("words")
     x.set_defaults(team=None, slot=None)
+    x = sub.add_parser("_end-short")
+    x.add_argument("team")
+    x.add_argument("slot")
     x = sub.add_parser("_main")
     x.add_argument("act", choices=("up", "down", "status"))
     x.add_argument("label")
@@ -11590,13 +11733,13 @@ COMMANDS = {
     ("_review", None): review_cmd, ("_console", None): console_cmd, ("_revive", None): revive_cmd,
     ("signal", None): signal, ("signal-move", None): signal_move,
     ("signal-show", None): signal_show, ("signal-land", None): signal_land,
-    ("_needs", None): needs_cmd,
+    ("_needs", None): needs_cmd, ("_end-short", None): end_short,
     ("plan", "propose"): plan_propose, ("plan", "proposed"): plan_proposed, ("plan", "agree"): plan_agree,
     ("plan", "approve"): plan_approve, ("plan", "drop"): plan_drop, ("plan", "answer"): plan_answer,
 }
 # The commands on a team and on a main level, each one process on the host its agents run on.
 TEAM_COMMANDS = {(c, None) for c in ("_status", "_unit-run", "_unit-wait", "_fix-run", "_construct-again", "_tidy", "_unit-free",
-                                      "_team", "_needs", "_main", "_dispatch", "_review", "_console", "_revive")}
+                                      "_team", "_needs", "_end-short", "_main", "_dispatch", "_review", "_console", "_revive")}
 # The act a command that moves work records, done or refused. A command that only reads records nothing.
 ACTS = {
     ("state", "init"): "state.init", ("bolt", "new"): "bolt.new", ("bolt", "give"): "bolt.give", ("bolt", "order"): "bolt.order",

@@ -34,8 +34,10 @@ expect_fail "a wait on swb-1-unit-3's stage is already running: its answer is th
 # The stop-short is said once the wait looks at its stage: a wait still forecasting and reckoning the batch, which a
 # loaded host can stretch past crew needs' minute, has not reached its first look (tests.8).
 until_ok eval '(( $(looks) > n ))' || fail "the wait never looked at c"
-CREW_AGENT=swb-1-unit-3 expect_ok crew needs "the user's word ZQXM"
-eq "$out" "code on c is ended, stopped short: swb-1-conductor's wait has what you need"
+HOST=$box CREW_AGENT=swb-1-unit-3 expect_ok crew needs "the user's word ZQXM"
+eq "$out" "code on c is ended, stopped short: swb-1-conductor's wait has what you need. crew ends this session once your turn ends: end it now."
+until_ok grep -qF "swb-1-unit-3 is ended: its stage stopped short" "$(home_of $box)/.local/state/swb-1-team/short/unit-3.log" \
+  || fail "crew never ended the agent whose stage stopped short"
 wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
 eq "$(tail -1 "$T/wait.out")" "swb-1-unit-3 stopped short in code on c. It needs: the user's word ZQXM"
 grep -q "agent prompt swb-1-conductor .*ZQXM" "$CREW_TEST_LOG" && fail "the conductor was told words its wait already had"
