@@ -5,7 +5,7 @@ import datetime
 
 import pytest
 
-from facts import AFTER, BEFORE, owed, saved
+from facts import AFTER, BEFORE, owed, plan_of, saved
 
 import plan
 
@@ -200,3 +200,54 @@ class TestSavedSince:
 def gather_report():
     import gather
     return gather.REPORT
+
+
+class TestMergeLookFetches:
+    """bolt-plan "A wait on a merge sees it at once" (plan.19, design Decision 3): each look a wait takes at a merge
+    fetches the kit's GitHub before it reads the bolt, and reads the bolt where it lives; a fetch that fails delivers
+    nothing and says why, reading nothing from the host's copy."""
+    T = {"name": "swb-1", "label": "wldn", "kit": {"main": "/kit/main", "dir": "/kit"}}
+    POLICY = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
+
+    def look(self, monkeypatch, fetch=(0, "", "")):
+        calls = []
+
+        def run(argv, cwd):
+            calls.append(argv)
+            if argv[:3] == ["git", "remote", "get-url"]:
+                return "https://github.com/o/k.git\n"
+            if argv[:2] == ["git", "rev-parse"] and argv[-1].endswith("^{commit}"):
+                return "d" * 40 + "\n"
+            if argv[:2] == ["git", "show"] and argv[-1] == "refs/remotes/origin/bolt/b:.config/sluice.toml":
+                return self.POLICY
+            if argv[:2] == ["git", "log"] and argv[-2] == "refs/remotes/origin/bolt/b":
+                return "c\n"
+            if argv[:3] == ["git", "rev-parse", "--short"] and argv[-1] == "refs/remotes/origin/bolt/b":
+                return "def5678\n"
+            raise AssertionError(f"an unexpected read: {argv}")
+
+        def ran(argv, cwd):
+            calls.append(argv)
+            return fetch
+        monkeypatch.setattr(plan.gather, "run", run)
+        monkeypatch.setattr(plan.gather, "ran", ran)
+        monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors=None: [("wldn", "o/state", "tip", plan_of({"b": "swb-1"}, {"c": "b"}))])
+        o = owed("merge", name="c", obj="chore/c")
+        return calls, o, plan.deliverable_facts({}, self.T, o)
+
+    def test_a_merge_look_fetches_before_it_reads_the_bolt_and_reads_it_on_github(self, monkeypatch):
+        calls, o, f = self.look(monkeypatch)
+        fetched = calls.index(["git", "fetch", "-q", "origin"])
+        assert not any("bolt/b" in " ".join(c) for c in calls[:fetched])
+        assert not any("refs/heads/bolt/b" in a for c in calls for a in c if not a.endswith("^{commit}"))
+        assert plan.delivered(o, f) == ("bolt/b@def5678", "bolt/b holds it at def5678")
+
+    def test_a_fetch_that_fails_delivers_nothing_and_says_why(self, monkeypatch):
+        calls, o, f = self.look(monkeypatch, fetch=(128, "", "fatal: unable to access 'https://github.com/o/k.git/': Could not resolve host\n"))
+        assert calls[-1] == ["git", "fetch", "-q", "origin"]
+        assert plan.delivered(o, f) == (None, "can't fetch bolt/b from GitHub: fatal: unable to access 'https://github.com/o/k.git/': "
+                                              "Could not resolve host")
+
+    def test_a_bolt_crew_cant_read_delivers_nothing_and_says_why(self):
+        assert plan.delivered(owed("merge"), {"bolt": "b", "unread": "this host has neither bolt/b nor origin/bolt/b"}) == (
+            None, "can't read bolt/b: this host has neither bolt/b nor origin/bolt/b")

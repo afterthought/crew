@@ -112,6 +112,17 @@ def test_a_landing_after_a_refusal_holds_nothing():
     assert plan.refusals([submitted("y", "c" * 40, "no"), submitted("y", "c" * 40)]) == {}
 
 
+def test_a_landing_left_standing_in_sluice_holds_its_row_for_no_fix():
+    """A landing whose submission sluice answered with nothing crew can wait on, a pull request crew found no
+    submission of, is recorded with its words and no refusal (plan.left_standing), since what sluice queued stands: its
+    row keeps its box, never held for a fix the bolt does not need."""
+    head = "d" * 40
+    f = dict(RC="0", ID="", PULL="113", ANSWER="")
+    standing = dict(submitted("y", head), Why=plan.left_standing("y", "crew", "/c/places/land-y", f, "sluice records none"))
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, plan.refusals([submitted("y", head, "no"), standing]))
+    assert row["box"] and plan.refused_at([standing], "y", head) is None
+
+
 # ---------------------------------------------------------------------------------------------- the forecasts
 
 def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():
@@ -154,6 +165,43 @@ def test_a_bolt_branch_crew_cannot_read_is_said_and_its_box_kept(monkeypatch):
                    "z": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's"}
     assert ("fetch", "-q", "origin") in calls
     assert [r for r in plan.landing_rows(["y", "z"], {"y": facts("y"), "z": facts("z")}, {}) if r["box"]] != []
+
+
+def where_read(monkeypatch, policy):
+    """forecast_rows over bolt y, whose GitHub copy is at 1… and the host's at 2…, GitHub's copy holding policy (None
+    for no policy file): the commit each merge-tree was given for y."""
+    trees = []
+
+    def git(fleet, t, where, *args, ok=(0,)):
+        if args[:2] == ("rev-parse", "--verify"):
+            return 0, ("1" if "refs/remotes/origin/" in args[3] else "2") * 40
+        if args[0] == "show":
+            return (128, "fatal: path does not exist") if policy is None else (0, policy)
+        if args[0] == "merge-tree":
+            trees.append(args[-1])
+        return (0, "tree\n") if args[0] == "merge-tree" else (0, "")
+    monkeypatch.setattr(plan, "kit_git", git)
+    return plan.forecast_rows(FLEET, "swancloud", "crew", ["y"]), trees
+
+
+def test_a_bolt_on_github_is_forecast_where_it_lives(monkeypatch):
+    """bolt-plan "A bolt on GitHub is read where it lives": GitHub's copy, whose policy names origin for the bolt, not
+    the host's lagging copy."""
+    (got, why), trees = where_read(monkeypatch, '[branches."bolt/*"]\nremote = "origin"\n')
+    assert why == {} and trees == ["1" * 40]
+
+
+def test_a_bolt_kept_on_its_host_is_forecast_at_the_hosts_branch(monkeypatch):
+    """bolt-plan "A bolt kept on its host": GitHub's copy names no remote for the bolt, or has no policy."""
+    for policy in ("[branches.main]\nremote = \"origin\"\n", None):
+        (got, why), trees = where_read(monkeypatch, policy)
+        assert why == {} and trees == ["2" * 40]
+
+
+def test_a_policy_crew_cannot_read_at_githubs_copy_is_said_and_forecasts_nothing(monkeypatch):
+    (got, why), trees = where_read(monkeypatch, "[branches\n")
+    assert got == {"y": [("main", None)]} and trees == []
+    assert why["y"].startswith(".config/sluice.toml at origin/bolt/y is not TOML, so crew can't read bolt y: ")
 
 
 # ------------------------------------------------------------------------------------- what the raise does
@@ -460,6 +508,83 @@ def test_crew_land_row_prints_the_row_as_one_line_of_json(monkeypatch, capsys):
     plan.land_row_cmd(FLEET, argparse.Namespace(label="swancloud", bolt="y", json=True))
     out, err = capsys.readouterr()
     assert (out, err) == ('{"bolt": "y", "why": "no"}\n', "ended land/y's session\n")
+
+
+# --------------------------------------------------------------------- a row's reading ends with its row, not a card
+
+class OldCardActs(LandActs):
+    """LandActs where a reading and a preview would end: each end and release asked, recorded."""
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.ended, self.released = [], []
+
+    def end(self, label, key):
+        self.ended.append(key)
+        return f"ended {key}'s session"
+
+    def release_preview(self, label, key):
+        self.released.append(key)
+        return f"released {key}'s preview"
+
+
+@pytest.mark.parametrize("key", ["land/y", "land/y/abc1234"])
+@pytest.mark.parametrize("answers", [{"get_request": ({"status": "pending", "version": 1}, None)},
+                                     {"get_request": ({"status": "answered", "version": 2}, None)}])
+def test_an_old_card_of_a_bolts_own_closed_ends_neither_its_rows_reading_nor_its_preview(key, answers, capsys):
+    """A closed card of the old per-bolt form is no word on the bolt's row: its reading and preview end with the row
+    (land_end), whether crew withdrew the card waiting on the user or closed one they answered."""
+    acts = OldCardActs({}, entries=[dict(Act="card.post", Key=key, By="crw-1-conductor", Card="req_l1", On=["bolt/y"])], answers=answers)
+    assert plan.row_card_close(None, "swancloud", "crw-1-conductor", key, reason="y is now a row of crew's landings card", acts=acts) == "req_l1"
+    assert (acts.ended, acts.released) == ([], [])
+    assert "ended" not in capsys.readouterr().out
+
+
+def test_the_sweep_keeps_a_rows_reading_live_though_a_card_of_the_bolts_own_was_closed_under_its_key():
+    """sweep_judgment: y is a row of crew's landings card and its old land/y card was withdrawn, no card open under it;
+    a batch closed with no card open is still taken out, and so is a reading whose bolt is no row."""
+    closed = {"closed": {"land/y", "land/w", "batch/3"}}
+    assert plan.sweep_judgment("swancloud", {"land/crew", "land/y", "batch/3"}, [], None, closed, {"land/y"}) == {
+        "live": ["land/crew", "land/y"], "blind": []}
+    assert plan.sweep_judgment("swancloud", {"land/crew"}, [], None, closed, set())["live"] == ["land/crew"]
+
+
+def test_a_wait_whose_reading_crew_ended_says_it_ended_with_its_row_or_crew_card_end():
+    assert plan.land_waited("land/y", None, False) == (
+        "land/y: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run")
+
+
+class TestWaitAcrossAnOldCardsClose:
+    """crew card wait land/y while y is a row of crew's landings card, its reading recorded, and y's old land/y card is
+    withdrawn by the rail's sweep meanwhile: the wait goes on, and returns the notes the user then sends."""
+    FLEET = {"partitions": {"swancloud": {"label": "swancloud", "machine": "mac-studio", "teams": ["crw-1"]}},
+             "teams": {"crw-1": FLEET["teams"]["crw-1"]}, "hosts": {}}
+    S = {"pid": 42, "document": "/c/00-y.md", "url": "http://mac-studio:19432/y", "started": "2026-10-23T10:00:00Z"}
+
+    def test_the_wait_outlasts_the_close_and_returns_the_readings_notes(self, monkeypatch, tmp_path, capsys):
+        d = tmp_path / "swancloud" / "land/y"
+        d.mkdir(parents=True)
+        (d / "session.json").write_text(json.dumps(self.S))
+        monkeypatch.setattr(plan, "CARDS", tmp_path)
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "plannotator_sessions", lambda: (None, "plannotator sessions did not answer in 8 seconds"))
+        acts = LandActs({}, entries=[dict(Act="card.post", Key="land/y", By="crw-1-conductor", Card="req_l1", On=["bolt/y"])],
+                        answers={"get_request": ({"status": "pending", "version": 1}, None)})
+        acts.end = lambda label, key: plan.end_session(label, key)[0]
+        acts.release_preview = lambda label, key: plan.fail(f"{key}'s preview released at its old card's close")
+        polls = []
+
+        def poll(seconds):
+            polls.append(seconds)
+            if len(polls) == 1:
+                plan.row_card_close(None, "swancloud", "crw-1-conductor", "land/y", reason="y is now a row of crew's landings card", acts=acts)
+            else:
+                (d / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "y: say what the zone is."}))
+        monkeypatch.setattr(plan.time, "sleep", poll)
+        plan.card_wait(self.FLEET, argparse.Namespace(key="land/y", unit=None, label="swancloud", sub="wait"))
+        assert capsys.readouterr().out.splitlines()[-2:] == [
+            "land/y: notes from its reading, as notes on the landing card:", "y: say what the zone is."]
+        assert len(polls) == 2 and not (d / "session.json").exists() and (d / "result.20261023T100000Z.json").exists()
 
 
 # ------------------------------------------------------------------- a landing in ops's pane, a card left elsewhere

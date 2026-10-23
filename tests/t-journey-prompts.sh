@@ -16,6 +16,7 @@ crew unit run b construct >/dev/null; change "$kd/places/b" b 0 2; commit_all "$
 crew unit run c construct >/dev/null; change "$kd/places/c" c 0 2
 printf 'one\ntwo, as c has it\nthree\n' > "$kd/places/c/shared.txt"; commit_all "$kd/places/c" "docs(c): the change"; crew unit wait c >/dev/null
 on_branch "$k" bolt/tenant-environments "feat: the bolt's own line" shared.txt $'one\ntwo, as the bolt has it\nthree\n'
+git -C "$k" push -q origin bolt/tenant-environments  # landed on GitHub's bolt, where crew reads it (plan.19)
 : > "$CREW_TEST_LOG"
 expect_ok crew unit wait c --timeout 0
 eq "$(field $box forecast Reached unit/c bolt/tenant-environments)" "prompt"

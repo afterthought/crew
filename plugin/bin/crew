@@ -193,7 +193,8 @@
 #                                      card session land/<bolt> when it will not open, a batch's starting it first
 #                                      too, and when it will not open saying why once, naming crew card session
 #                                      batch/<n>, and waiting on the card alone; end ends it, as the card's close
-#                                      does
+#                                      does, and a bolt's reading as its row's end does, which no close of a card of
+#                                      the bolt's own does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use

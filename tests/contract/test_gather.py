@@ -2,8 +2,12 @@
 stage from the changes main and its bolt's branch hold, its place, and its fix (state.2, plan.12; crew bolts, crew
 board and crew sites read every host's kits through gather.kit, once per host)."""
 import os
+import subprocess
 
 import gather
+
+# A kit whose bolts live on GitHub (plan.19): the policy names origin for its bolt branches.
+ON_GITHUB = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
 
 
 def change(root, name, done=0, total=2):
@@ -193,8 +197,10 @@ def test_a_fix_whose_bolt_landed_with_its_place_standing_reads_on_main_and_moved
 def test_a_fix_tracking_its_bolt_on_github_reads_its_bolt_and_merges_at_that_ref(repo, tmp_path):
     """slot_stage, the tidy and the drop's and the merge's fix_merged (plan.19): a fix whose place was cut from
     origin/bolt/<bolt> tracks the remote-tracking branch, %(upstream:short) prints origin/bolt/<bolt>, and the fix
-    reads its bolt from it and merged once that ref, not the host's own bolt/<bolt>, holds its tip."""
+    reads its bolt from it and merged once that ref, where its bolt on GitHub is read, not the host's own
+    bolt/<bolt>, holds its tip."""
     import subprocess
+    repo.commit("chore: bolts live on GitHub", {".config/sluice.toml": ON_GITHUB})
     k = Kit(repo, tmp_path)
     origin = tmp_path / "github.git"
     subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
@@ -318,7 +324,7 @@ def test_a_dependents_place_takes_a_chores_head_and_a_chores_own_work_leaves_out
     k.commit(a, "feat(a): its work")
     cp = k.dir / "places" / "chore-pin"
     repo.git("worktree", "add", "-q", "--track", "-b", "chore/pin", str(cp), "bolt/te")
-    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(cp), "pin", "te", "unit/a"], capture_output=True, text=True)
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(cp), "pin", "refs/heads/bolt/te", "unit/a"], capture_output=True, text=True)
     assert (took.returncode, took.stdout.split()) == (0, ["a", repo.git("rev-parse", "--short=7", "unit/a")])
     assert k.read()["chore_places"]["pin"]["ahead"] == 0
     assert gather.own_head(str(repo.path), "chore/pin", "te") == (None, None)
@@ -330,7 +336,7 @@ def test_a_dependents_place_takes_a_chores_head_and_a_chores_own_work_leaves_out
     own = plan.chore_log(repo.git(*plan.CHORE_LOG, "refs/heads/bolt/te..refs/heads/chore/pin"))
     assert [(subject, names) for _, subject, names in own] == [("chore: pin", ["pin"])]
     b = k.place("b")
-    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(b), "b", "te", "chore/pin"], capture_output=True, text=True)
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(b), "b", "refs/heads/bolt/te", "chore/pin"], capture_output=True, text=True)
     assert (took.returncode, took.stdout.split()) == (0, ["pin", repo.git("rev-parse", "--short=7", "chore/pin")])
     repo.git("-C", str(b), "merge-base", "--is-ancestor", "chore/pin", "HEAD")
 
@@ -364,3 +370,114 @@ def test_a_kit_whose_main_now_is_missing_is_not_read(repo, tmp_path):
     repo.git("remote", "add", "origin", str(tmp_path / "never-fetched.git"))
     got = k.read()
     assert got["ok"] is False and "has no origin/main to read" in got["error"]
+
+
+def on_github(repo, tmp_path, policy=ON_GITHUB):
+    """A kit whose main and bolt/te carry policy, and its GitHub: a bare clone as origin, fetched; and a clone of
+    GitHub on bolt/te, where sluice lands the bolt's merges from another host."""
+    if policy is not None:
+        repo.commit("chore: the kit's policy", {".config/sluice.toml": policy})
+    k = Kit(repo, tmp_path)
+    origin = tmp_path / "github.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    repo.git("fetch", "-q", "origin")
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "bolt/te", str(origin), str(other)], check=True)
+    return k, type(repo)(other)
+
+
+def landed_on_github(other, files, message):
+    """A merge sluice lands on GitHub's bolt/te, pushed from the other clone, its verdict a trailer on its commit."""
+    other.commit(message, files)
+    other.git("push", "-q", "origin", "HEAD:bolt/te")
+    return other.git("rev-parse", "HEAD")
+
+
+def test_a_merge_landed_on_github_is_read_there_with_the_hosts_copy_left_behind(repo, tmp_path):
+    """Stages, crew bolts and the landing card (bolt-plan "A merge landed on GitHub while the host's copy stayed
+    behind"): a bolt on GitHub is read at origin/bolt/<bolt> as the host last fetched it, its archived change, its
+    chore, its head and the verdict at that head, never at the host's own bolt/<bolt>, sluice's copy."""
+    k, other = on_github(repo, tmp_path)
+    before = repo.git("rev-parse", "bolt/te")
+    other.commit("chore: pin\n\nChore: c", {"pin": "1\n"})
+    archive = "openspec/changes/archive/2026-10-23-u"
+    head = landed_on_github(other, {f"{archive}/proposal.md": "# u\n", f"{archive}/tasks.md": "- [x] 1.1 t\n"},
+                            "Merge unit/u into bolt/te\n\nSluice-Result: passed (9 run, 0 replayed)")
+    repo.git("fetch", "-q", "origin")
+    got = k.read()["bolts"]["te"]
+    assert repo.git("rev-parse", "bolt/te") == before != head
+    assert (got["at"], got["exists"], got["head"], got["verdict"]) == ("origin/bolt/te", True, head, "passed (9 run, 0 replayed)")
+    assert (got["archived"], got["chores"], "u" in got["changes"]) == (["u"], ["c"], True)
+    assert gather.bolt_read(str(repo.path), "te") == ("refs/remotes/origin/bolt/te", None)
+
+
+def test_a_chores_place_and_a_fix_beside_a_bolt_on_github_are_read_against_githubs_copy(repo, tmp_path):
+    """Stages and slot_stage (bolt-plan "A chore's place and a fix beside a bolt on GitHub"): a chore's place one
+    commit of its own beyond GitHub's bolt reads ahead 1, which the host's copy two commits behind would read 3, and
+    its own head is that commit (gather.own_head); a fix tracking the host's bolt/<bolt> whose tip only GitHub's bolt
+    holds reads merged."""
+    k, other = on_github(repo, tmp_path)
+    f = k.place("te/edge", prefix="fix")
+    (f / "edge").write_text("e\n")
+    k.commit(f, "fix(te): the edge")
+    repo.git("push", "-q", "origin", "fix/te/edge:bolt/te")
+    other.git("pull", "-q", "--ff-only", "origin", "bolt/te")
+    landed_on_github(other, {"one": "1\n"}, "feat: one")
+    repo.git("fetch", "-q", "origin")
+    cp = k.dir / "places" / "chore-bump"
+    repo.git("worktree", "add", "-q", "--track", "-b", "chore/bump", str(cp), "origin/bolt/te")
+    (cp / "pin").write_text("1\n")
+    k.commit(cp, "chore: pin")
+    got = k.read()
+    assert repo.git("rev-list", "--count", "bolt/te..chore/bump") == "3"
+    assert got["chore_places"]["bump"]["ahead"] == 1
+    assert gather.own_head(str(repo.path), "chore/bump", "te")[0] == repo.git("rev-parse", "--short", "chore/bump")
+    assert (got["fixes"][0]["bolt"], got["fixes"][0]["merged"]) == ("te", True)
+    assert gather.fix_merged(str(repo.path), "fix/te/edge", "te") is True
+    assert subprocess.run(["git", "-C", str(repo.path), "merge-base", "--is-ancestor", "fix/te/edge", "bolt/te"]).returncode == 1
+
+
+def test_a_bolt_kept_on_its_host_is_read_at_its_own_branch_with_the_merges_github_lacks(repo, tmp_path):
+    """Stages (bolt-plan "A bolt kept on its host"): a bolt made before gives went through sluice, whose copy on GitHub
+    a refused landing's pull request pushed before the merge that brought its policy naming origin, is read at the
+    host's bolt/<bolt>, where its later merges are."""
+    k, _ = on_github(repo, tmp_path, policy=None)
+    b = k.dir / "bolts" / "te"
+    (b / ".config").mkdir()
+    (b / ".config" / "sluice.toml").write_text(ON_GITHUB)
+    k.commit(b, "Merge main into bolt/te")
+    got = k.read()["bolts"]["te"]
+    assert (got["at"], got["head"]) == ("bolt/te", repo.git("rev-parse", "bolt/te"))
+    assert repo.git("rev-parse", "origin/bolt/te") != got["head"]
+
+
+def test_a_bolt_whose_policy_on_github_is_not_toml_is_read_nowhere(repo, tmp_path):
+    """Stages (bolt-plan "A policy crew can't read", read.1): the bolt is marked missing with why, naming the file and the
+    bolt, and nothing is read from the host's bolt/<bolt>."""
+    k, other = on_github(repo, tmp_path)
+    landed_on_github(other, {".config/sluice.toml": "[branches\n"}, "chore: a broken policy")
+    repo.git("fetch", "-q", "origin")
+    got = k.read()["bolts"]["te"]
+    assert (got["exists"], got["at"], got["head"], got["changes"]) == (False, None, None, [])
+    assert got["error"].startswith(".config/sluice.toml at origin/bolt/te is not TOML, so crew can't read bolt te: ")
+
+
+def test_a_read_that_asks_a_fetch_reads_what_github_holds_now_and_every_other_as_last_fetched(repo, tmp_path):
+    """crew bolts, a give's proven check (plan.survey with fetch) and every other read (plan.18, plan.19): a request
+    with fetch runs `git fetch -q origin` in the kit's main checkout first and reads a merge pushed to GitHub's bolt
+    since; one without reads the bolt as the host last fetched it; a fetch that fails reads the kit unread, naming
+    GitHub and git's words, and nothing from the host's copy."""
+    k, other = on_github(repo, tmp_path)
+    head = landed_on_github(other, {"one": "1\n"}, "Merge unit/u into bolt/te\n\nSluice-Result: passed (9 run, 0 replayed)")
+    req = {"main": str(repo.path), "dir": str(k.dir), "bolts": ["te"]}
+    assert gather.kit(req)["bolts"]["te"]["head"] == repo.git("rev-parse", "origin/bolt/te") != head
+    got = gather.kit(req, fetch=True)["bolts"]["te"]
+    assert (got["head"], got["verdict"]) == (head, "passed (9 run, 0 replayed)")
+    repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    got = gather.kit(req, fetch=True)
+    assert got["ok"] is False and got["error"].startswith(f"cannot fetch {repo.path} from GitHub: ")
+    assert "gone.git" in got["error"]
+    assert gather.fetched(str(repo.path)).startswith("fatal:")
+    repo.git("remote", "remove", "origin")
+    assert gather.fetched(str(repo.path)) is None

@@ -34,7 +34,7 @@ git -C "$k" push -q origin bolt/tenant-environments
 : > "$CREW_TEST_LOG"
 expect_ok crew unit wait b --timeout 0
 eq "$(field $box forecast Reached unit/a bolt/tenant-environments)" "settle"
-has "$(prompt_to swb-1-unit-1)" "'Settle a: Your branch is forecast to conflict with bolt/tenant-environments on shared.txt. Rebase your place onto the bolt (git rebase bolt/tenant-environments)"
+has "$(prompt_to swb-1-unit-1)" "'Settle a: Your branch is forecast to conflict with bolt/tenant-environments on shared.txt. Rebase your place onto the bolt (git fetch origin && git rebase origin/bolt/tenant-environments)"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $kd/places/a"
 eq "$(field $box stage.start By stage/a/settle)" "swb-1-conductor"
 git -C "$kd/places/a" rebase -q bolt/tenant-environments >/dev/null 2>&1 && fail "a's rebase onto the bolt did not conflict"
@@ -101,8 +101,8 @@ ok "the next read finds a merged unit's slot freed and its place gone already"
 # c's next prompt carries its rebase's conflict, naming the upstream that rebase used, made again by the command given,
 # and not c's older forecast against the bolt, read before a merged, which this one replaces.
 expect_ok crew unit run c code
-has "$(prompt_to swb-1-unit-3)" "work as your place took it, which the bolt holds as merged (git rebase --onto bolt/tenant-environments \$(git commit-tree -p bolt/tenant-environments -p $c_took -m upstream"
-lacks "$(prompt_to swb-1-unit-3)" "(git rebase bolt/tenant-environments)"
+has "$(prompt_to swb-1-unit-3)" "work as your place took it, which the bolt holds as merged (git fetch origin && git rebase --onto origin/bolt/tenant-environments \$(git commit-tree -p origin/bolt/tenant-environments -p $c_took -m upstream"
+lacks "$(prompt_to swb-1-unit-3)" "git rebase origin/bolt/tenant-environments)"
 ok "a dependent whose rebase conflicts is told the upstream crew's rebase used, as a command that makes it again, and only its newest forecast against the bolt"
 
 # d and e, ahead of b and c in the file and after nothing, each add other.txt, d once e is verified and waits to merge.
