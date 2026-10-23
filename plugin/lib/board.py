@@ -223,7 +223,7 @@ def board_data(fleet, labels, read, now):
             v = sv.get(h)
             hosts[h] = f"its kits: {v['error']}" if v and not v["ok"] else True
         attention = [{"what": "host", "name": h, "why": v} for h, v in hosts.items() if v is not True]
-        attention += [{"what": "plan", "name": n, "why": why} for n, why in unread.items()]
+        attention += [{"what": "plan", "name": n, "why": f"its run record: {why}"} for n, why in unread.items()]
         attention += [{"what": "plan", "name": n, "why": why} for n, why in read["errors"].items() if n.startswith(f"{l}/main of ") or n == f"the plan of {l}"]
         if found and not tip:
             attention.append({"what": "plan", "name": f"{l}/main of {repo}", "why": "not started, so there is no plan to read"})
