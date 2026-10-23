@@ -1559,6 +1559,26 @@ def landed_words(head, submission):
     return f"landed on GitHub's main at {head[:7]}{n}; every host's folder follows by swancloud's timer within minutes"
 
 
+def pane_word_of(entries, bolt):
+    """The user's word to land the bolt given in a pane (plan.16, crew bolt submit --excerpt), from the run record's
+    entries, oldest first: (who submitted it, when, the transcript record its words were read from, the host it ran
+    on) for the last bolt.submit on bolt/<bolt> not refused, when it names a session's record (From session/<sid>/
+    <record>); None for a landing on the card's approval, or when no submission of the bolt landed."""
+    done = [e for e in entries if e.get("Act") == "bolt.submit" and not e.get("Refused") and f"bolt/{bolt}" in (e.get("On") or [])]
+    frm = [f for f in (done[-1].get("From") or []) if f.startswith("session/")] if done else []
+    return (done[-1].get("By"), done[-1].get("At"), frm[0], done[-1].get("Host")) if frm else None
+
+
+def pane_landed(landed, by, at, words):
+    """What a landing on the user's word in by's pane closes its card with (plan.16), landed the landed_words: (the
+    outcome the run record keeps, naming the pane and none of the words, record.3; what Pending You is sent, the word
+    and the user's words first, since the close is cut to Pending You's length from its end, or, with no words read
+    back, the time the word was given, at, as HH:MMZ)."""
+    pane = f"Landed on the user's word in {by}'s pane"
+    said = f'{pane}, "{words}"; {landed}' if words else f"{pane} at {(at or '')[11:16]}Z; {landed}"
+    return f"{pane}; {landed}", said
+
+
 def landing_card_keys(entries, bolt, owner):
     """The keys under which the bolt's conductor (owner) holds an open landing card, from its host's run record:
     land/<bolt>, as crew raises it (record 0031), and land/<bolt>/<head>, as a conductor posted one before."""
@@ -2096,25 +2116,41 @@ def submit_word_refusal(bolt, v):
 
 
 def bolt_submit(fleet, a):
-    """crew bolt submit <bolt>: main-level ops's landing of a bolt, its branch submitted to its kit's main through
-    sluice from a short-lived worktree on the team's host, waiting for sluice's outcome, then the kit's main checkout
-    brought level with what landed while it is on branch main (plan.16, record 0026). Nothing is refused for the
-    host's own main lagging GitHub's: sluice forms the landing on GitHub's main and pushes it with a lease (plan.8). It
-    moves no branch itself."""
+    """crew bolt submit <bolt> [--excerpt "<the user's words>"]: main-level ops's landing of a bolt, its branch
+    submitted to its kit's main through sluice from a short-lived worktree on the team's host, waiting for sluice's
+    outcome, then the kit's main checkout brought level with what landed while it is on branch main (plan.16, record
+    0026). Nothing is refused for the host's own main lagging GitHub's: sluice forms the landing on GitHub's main and
+    pushes it with a lease (plan.8). It moves no branch itself. With --excerpt, the word to land is the user's own
+    words in the caller's pane: read first in the caller's own session transcript on this host, and nothing submitted
+    unless crew reads them as the user's (submit_word_refusal); the landing's bolt.submit then names the transcript
+    record they were read from and their length, never the words (record.3), and this host keeps the words for crew
+    bolt land to close the landing card with (landing_word_keep). Without it, the word is the landing card's approval."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     CONTEXT["label"] = label
     b = plan.bolt(a.bolt)
     t = bolt_team(fleet, b) or fail(f"bolt {a.bolt} is held by no team, so it has no branch to submit")
+    words, frm = getattr(a, "excerpt", None), []
+    if words is not None:
+        words.strip() or fail("crew bolt submit needs the user's words: --excerpt \"<their words, as they wrote them>\"")
+        v, sid = CardActs(fleet).heard(words)
+        why = submit_word_refusal(a.bolt, v)
+        not why or fail(why)
+        frm = [f"session/{sid}/{v.uuid or f'line-{v.line_hash()[:16]}'}"]
     path = f"{t['kit']['dir']}/places/land-{a.bolt}"
     r = crew.on_machine(fleet, t["machine"], ["bash", "-c", LANDING, "crew", t["kit"]["main"], path, a.bolt, record.who()])
     READ.drop_kit(t["machine"], t["kit"]["main"])
     if r.stderr.strip():
         print(r.stderr.rstrip(), file=sys.stderr)
     r.returncode == 0 or fail(f"on {t['machine']}: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
-    landed, words = landing_said(a.bolt, t["kit"]["name"], r.stdout)
-    landed or fail(words)
-    record.emit(label, "bolt.submit", [f"bolt/{a.bolt}"], why=f"bolt({a.bolt}): landed on main at {r.stdout.split('NEW=')[-1][:7]}")
-    print(words)
+    landed, said = landing_said(a.bolt, t["kit"]["name"], r.stdout)
+    landed or fail(said)
+    record.emit(label, "bolt.submit", [f"bolt/{a.bolt}"], frm=frm, why=f"bolt({a.bolt}): landed on main at {r.stdout.split('NEW=')[-1][:7]}",
+                Chars=len(words) if frm else None)
+    if frm:
+        at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        landing_word_keep(label, a.bolt, words, record.who(), at, frm[0])
+        print(f"bolt {a.bolt} landed on the user's word in {record.who()}'s pane; crew bolt land closes its card with their words")
+    print(said)
 
 # ---------------------------------------------------------------------------------------------------- units
 
@@ -10693,6 +10729,49 @@ def preview_release(label, bolt):
         return preview_released(label, bolt, r)
 
 
+# ------------------------------------------------------------------------------------- a landing's words, kept
+
+# The user's words to land a bolt, given in main-level ops's pane, kept on the host crew bolt submit ran on until crew
+# bolt land closes the landing card with them (plan.16), ~/.local/state/crew/landings/<label>/<bolt>.json: the words,
+# who submitted them, when, and the transcript record they were read from (from), as the bolt.submit entry names it.
+# Host state, like a preview's record, never the run record, which holds no words (record.3).
+LANDINGS = pathlib.Path.home() / ".local/state/crew/landings"
+
+
+def landing_word_path(label, bolt):
+    return LANDINGS / label / f"{bolt}.json"
+
+
+def landing_word_keep(label, bolt, words, by, at, frm):
+    """The user's words to land the bolt kept on this host, replacing any kept before for a bolt of that name."""
+    p = landing_word_path(label, bolt)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f".{p.name}.{os.getpid()}")
+    tmp.write_text(json.dumps({"words": words, "by": by, "at": at, "from": frm}, ensure_ascii=False))
+    tmp.replace(p)
+
+
+def landing_word_read(label, bolt, frm):
+    """The user's words kept on this host for the bolt's landing whose bolt.submit names the transcript record frm,
+    or None when none are kept here or the words kept are another landing's; refused naming the file when it is
+    there but can't be read (read.1)."""
+    p = landing_word_path(label, bolt)
+    try:
+        r = json.loads(p.read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as e:
+        fail(f"crew can't read the user's words kept for bolt {bolt}'s landing in {p}: {e}")
+    isinstance(r, dict) and isinstance(r.get("words"), str) or fail(
+        f"crew can't read the user's words kept for bolt {bolt}'s landing in {p}: it holds no words")
+    return r["words"] if r.get("from") == frm else None
+
+
+def landing_word_drop(label, bolt):
+    """The words kept for the bolt's landing removed from this host, once its landing is written."""
+    landing_word_path(label, bolt).unlink(missing_ok=True)
+
+
 # ------------------------------------------------------------------------------- crew's own cards: the act
 
 class CardActs:
@@ -11722,6 +11801,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("--label")
     x = bo.add_parser("submit")
     x.add_argument("bolt")
+    x.add_argument("--excerpt", help="the user's words in your pane that said to land it, as they wrote them")
     x.add_argument("--label")
 
     un = sub.add_parser("unit").add_subparsers(dest="sub", required=True)
