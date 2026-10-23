@@ -258,6 +258,8 @@ def page(fleet, a):
     write(out, render(d, out))
     print(out)
     print(header(d["made"]))
+    if any(beside(out, label, l) is None for l in d["partitions"] if l != label):
+        print(f"the other partitions are not linked: {out} is neither named {label}.html nor in a folder {label}")
     if not d["entries"]:
         print("nothing has been recorded" + (f" since {stamp}" if stamp else ""))
     for h, why in missing.items():
