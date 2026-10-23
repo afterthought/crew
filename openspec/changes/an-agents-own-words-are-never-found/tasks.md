@@ -7,4 +7,4 @@
 
 ## 2. The whole change
 
-- [ ] 2.1 `tests/suite --affected` ends with "0 failed" (Task notes 2.1; `tests.5`).
+- [x] 2.1 `tests/suite --affected` ends with "0 failed" (Task notes 2.1; `tests.5`).
