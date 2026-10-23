@@ -464,7 +464,7 @@ def board_text(data, width=None, color=False, stale=None):
         heading("Construction")
         for b in p["construction"]:
             line(fields(named(b["repo"], b["bolt"]), f"{b['team']} on {b['host']}" if b["host"] else b["team"],
-                        "" if b["state"] == "active" else b["state"]), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
+                        state_said(b["state"])), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
             for u in b["units"]:
                 line(fields(u["unit"], stage_of(u), u["slot"] or "", u["url"] or ""), " ", 2)
             for f in b["fixes"]:
@@ -520,11 +520,17 @@ def held(p, team):
     return [b for b in p["construction"] if b["team"] == team]
 
 
+def state_said(state):
+    """A held bolt's state as a line draws it: nothing while active, "waits to land" once proven (teams.16), else the
+    state."""
+    return "" if state == "active" else "waits to land" if state == "waits" else state
+
+
 def bolt_row(b, team=None):
     """A held bolt on one line, led by its product, the repository it builds, and, when given, the team holding it,
-    dim; then its pips, its name, its state unless active and how many of its units have merged; its landing's marker
-    in the gutter, or attention once every unit has landed."""
-    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], "" if b["state"] == "active" else b["state"],
+    dim; then its pips, its name, its state unless active (state_said) and how many of its units have merged; its
+    landing's marker in the gutter, or attention once every unit has landed."""
+    return row(fields(b["repo"] or "", (team, "dim") if team else "", pips(b["units"]), b["bolt"], state_said(b["state"]),
                       merged(b)), gutter(b["markers"], b["state"] == "landed"), 0, b["markers"])
 
 

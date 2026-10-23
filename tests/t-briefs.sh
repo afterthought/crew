@@ -60,6 +60,11 @@ done
 lacks "$out" "plannotator-tui"; lacks "$out" "unit approve"; lacks "$out" "review/<unit>"
 for want in "open nothing for a batch" "never its number alone"; do has "$out" "$want"; done
 has "$out" "You post, change and close no landing card"
+# A team builds one bolt and may hold one more that waits to land (teams.16).
+for want in "Your team builds one bolt at a time" "it waits to land on the user's yes, and your team may be given its next bolt beside it" \
+  "name the fix's bolt with \`--bolt <bolt>\`" "\`--bolt <the bolt that waits to land>\`, and goes in the first slot that frees"; do
+  has "$out" "$want"
+done
 for want in "The card links a reading of the bolt, first in its details" "crew starts that reading with the card and ends it when the card closes" \
   "crew card wait land/<bolt>\` as a background command" "crew card session land/<bolt>\` prints its link, or starts the reading again" \
   "Notes the user sends from the reading are notes on the landing card" "An approval in the reading lands nothing" \
@@ -208,6 +213,7 @@ done
 expect_ok crewpy brief wldn design; has "$out" 'crew refuses `--bolt` from you'
 expect_ok crewpy brief wldn dispatcher
 for want in "bolt give <team>" "up <team>" "account ia" "makes its branch from the kit's main with no worktree" "It is the one tell not about a bolt that is yours" "ops step\` command that records it done or failed"; do has "$out" "$want"; done
+for want in "may hold one more that waits to land" "once crew tells you its bolt reads proven" "so a refusal is no fault"; do has "$out" "$want"; done
 has "$out" $'The teams here:\n\n- `atl-1` builds Atlas'; has "$out" $'its conductor is `atl-1-conductor`\n\nYou give these teams'
 expect_ok crewpy brief wldn main-ops
 lacks "$out" "one bolt deploy at a time"
@@ -252,6 +258,16 @@ HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
 ok "the operator brief prints for wldn, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
 
+# The operator carries what crew send brings it, and sends a teams change from a box to a Mac's partition with crew
+# send, never with a tell to another operator (briefs.10).
+HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
+for want in "A message that reaches you marked \`(sent to <team or partition>)\`" "in the sender's words and naming the sender" \
+  "you record as a signal, its excerpt the words as sent" "a message for a team to that team's conductor, \`<team>-conductor\`" \
+  "Don't answer it in the sender's place" "crew refuses a send of yours to your own partition or one of its teams" \
+  "one of \`madswan\`, \`swancloud\`, with \`" "/crew send <label> \"<the request>\"\`, which reaches that partition's operator"; do has "$out" "$want"; done
+lacks "$out" "TEAMS_OPERATORS"; lacks "$out" "TEAMS_DOORS"; lacks "$out" "to an operator whose main level runs on a Mac"
+ok "the operator carries what is sent to it in the sender's words, and sends a teams change from a box with crew send to a Mac's partition"
+
 # Every brief says who is speaking in the agent's pane; the six that record findings say how, with the excerpt, and
 # where crew writes the signal.
 for role in conductor ops construct coder verify; do
@@ -276,6 +292,21 @@ expect_ok crewpy brief wldn design; lacks "$out" "crew writes signals straight t
 expect_ok crewpy brief wldn planner; has "$out" "signal show <signal id>"
 has "$out" "Never pass on a word to land, and never tell \`wldn-ops\` to land or deploy"
 ok "every brief says who speaks in its pane, and the six that record findings quote the words and say what a refusal means"
+
+# Anything for another team or partition goes with crew send, to that partition's operator, and to nobody else
+# (briefs.10): every brief says so in one line beside its roster.
+for role in conductor ops construct coder verify; do
+  expect_ok crewpy brief swb-1 $role
+  has "$out" 'anything for another team, of this partition or another, or for another partition, is sent with `'
+  has "$out" '/crew send <team or partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+  lacks "$out" "Agents outside the team are reached with"
+done
+for role in design planner main-ops dispatcher operator reviewer; do
+  expect_ok crewpy brief wldn $role
+  has "$out" 'anything for another partition or one of its teams is sent with `'
+  has "$out" '/crew send <team or partition> "<text>"`, which reaches that partition'"'"'s operator, its one door, and to nobody else.'
+done
+ok "every brief sends anything for another team or partition with crew send, to that partition's operator and to nobody else"
 ok "a signal names where what it points at lives, a unit carries it as a source, and the construct reads it, stops when it can't, and builds from its sources over its intent"
 
 # Every message an agent sends another goes through crew tell, marked: no brief prompts an agent through herdr.
@@ -349,6 +380,7 @@ for role in construct coder verify; do
 done
 expect_ok crewpy brief swb-1 ops
 has "$out" 'tell swb-1-conductor "<what you wait on, and why>"`'; lacks "$out" "needs \"<what you tried"; lacks "$out" "proof-<bolt>"
+has "$out" "may hold one more, proven, that waits to land beside it"
 expect_ok crewpy brief swb-1 verify
 has "$out" "unchanged and whole"; has "$out" "crew ends the stage once it is there"
 ok "the conductor waits for every stage through crew, takes sluice's word on a submission as no answer and never reads a pane for an outcome; every stage stops short with crew needs, and ops tells the conductor"

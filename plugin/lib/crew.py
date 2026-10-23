@@ -13,6 +13,8 @@
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
                                       --taken, read back from its transcript and sent once more when not taken
+  crew.py send <team|label> "<text>"  send the text to the partition's operator, the door of the team's partition or
+                                      the label's, marked [crew tell from <sender>] (sent to <team|label>)
 
 The agents themselves, a team's and a main level's, are started, greeted and ended by plan.py's commands, through
 Agents and Team here.
@@ -314,6 +316,23 @@ def label_of_agent(fleet, name):
     return None
 
 
+def send_door(fleet, name, caller):
+    """Where crew send delivers (briefs.10, record 0035): a team's partition, or a partition named by its label, as
+    (label, its operator, the team or None). A name that is neither is refused, never placed by a guess (read.1), and so
+    is the operator sending to its own partition, which it carries on with crew tell."""
+    if name in fleet["teams"]:
+        label, team = fleet["teams"][name]["label"], name
+    elif name in fleet["partitions"]:
+        label, team = name, None
+    else:
+        fail(f"crew send takes a team or a partition, not '{name}': teams {' '.join(sorted(fleet['teams'])) or 'none'}; "
+             f"partitions {' '.join(sorted(fleet['partitions'])) or 'none'}")
+    door = f"{label}-operator"
+    if caller == door:
+        fail(f"you are {label}'s door: carry it on with `crew tell <agent>`")
+    return label, door, team
+
+
 def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again=""):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
@@ -341,6 +360,19 @@ def tell(fleet, name, text, record=True, sender=None, taken=False, what="its pro
     if sent and record:
         import record as rec  # record imports this module
         rec.emit(label_of_agent(fleet, name), "tell", on=[f"agent/{name}"], why=f"tell {name}", Chars=len(text))
+    return sent
+
+
+def send(fleet, name, text):
+    """Send the text to the door of the team or partition named (briefs.10): a tell to its operator, marked with who
+    sent it and `(sent to <name>)` before the text, so the operator knows whom it is for. A send is one `send` entry in
+    the receiving partition's record, with its length and never its text, and no tell entry; one that typed nothing
+    records nothing."""
+    import record as rec  # record imports this module
+    label, door, team = send_door(fleet, name, os.environ.get("CREW_AGENT"))
+    sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who())
+    if sent:
+        rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
     return sent
 
 
@@ -894,19 +926,21 @@ def greet(fleet, team, first="", wait=90):
                        f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
 
 
-def greet_ops(fleet, team, bolt, unread=None, wait=90):
+def greet_ops(fleet, team, bolt, unread=None, wait=90, waiting=None):
     """Give a team's ops its first message (teams.7): who it is, what its team holds, and to wait to be told."""
     t = team_of(fleet, team)
     name = f"{t['name']}-ops"
-    return greet_agent(fleet, name, ops_greeting(t["name"], bolt, unread), [f"agent/{name}", f"team/{t['name']}"],
+    return greet_agent(fleet, name, ops_greeting(t["name"], bolt, unread, waiting), [f"agent/{name}", f"team/{t['name']}"],
                        t["label"], f"team({t['name']}): greet {name}", f"crew up {t['name']} starts and greets it", wait)
 
 
-def ops_greeting(team, bolt, unread=None):
-    """What a team's ops is greeted with (teams.7): who it is, the bolt its team holds or that it holds none, and that it
-    waits to be told, so it starts nothing of its own; when crew could not read the plan (unread), it says so rather
-    than name no bolt (read.1)."""
+def ops_greeting(team, bolt, unread=None, waiting=None):
+    """What a team's ops is greeted with (teams.7): who it is, the bolt its team holds or that it holds none, and, when
+    it holds two, the one it builds and the one that waits to land (waiting, teams.16), and that it waits to be told,
+    so it starts nothing of its own; when crew could not read the plan (unread), it says so rather than name no bolt
+    (read.1)."""
     holds = (f"crew could not read which bolt your team holds ({' '.join(unread.split())})" if unread
+             else f"your team builds the bolt {bolt}. Bolt {waiting} waits to land" if bolt and waiting
              else f"your team holds the bolt {bolt}" if bolt else "your team holds no bolt")
     return OPS_GREETING.format(team=team, holds=holds)
 
@@ -1026,8 +1060,9 @@ def slot_of(t, slot):
 
 
 def team_bolt(t, then=""):
-    """The bolt a team holds, from the plan; None when it holds none. A plan that can't be read is reported, with what
-    crew does then, and taken as no bolt."""
+    """The bolt a team builds, the one given last when it holds two (plan.team_building, teams.16), from the plan; None
+    when it holds none. A plan that can't be read, or a pair of bolts crew can't tell the newer of, is reported, with
+    what crew does then, and taken as no bolt."""
     import crew as this, plan  # read in this process; plan imports this module by name, which crew.py run as a script is not
     try:
         return plan.bolt_of_team(this.load(), t)
@@ -1214,6 +1249,11 @@ SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sen
            "the user when the name is `<user>@<host>`; one that begins `[crew]` is crew's own; anything else typed there "
            "is the user.")
 
+# How anything for another team or partition is sent, beside every brief's roster (briefs.10): to that partition's
+# operator, its one door, and to nobody else.
+SENDS = (f"`{HOME}/plugin/bin/crew send <team or partition> \"<text>\"`, which reaches that partition's operator, its "
+         "one door, and to nobody else")
+
 # How an agent reports results, the same in every brief that reports them.
 RESULTS = ("## Test, check and proof results\n\n"
            "Whenever you report how tests, checks or proofs went (a suite you ran, a merge's checks, the bolt's verification, "
@@ -1259,8 +1299,8 @@ def team_tokens(fleet, t, role, self_name):
         f"host's teams their bolts; `{label}-ops` lands a proven bolt on main; and `{label}-operator` is the partition's door "
         f"to the user. " + (f"The team holds the kits {', '.join(k['name'] for k in kits_of(t))}, and takes a bolt of any of them; "
                             f"the kit this brief names, {kit['name']}, is its bolt's. " if len(kits_of(t)) > 1 else "")
-        + f"Agents outside the team are reached with "
-        f"`{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run. {SENDERS}")
+        + f"The agents named here are reached with `{HOME}/plugin/bin/crew tell <agent> \"<text>\"`, wherever they run; "
+        f"anything for another team, of this partition or another, or for another partition, is sent with {SENDS}. {SENDERS}")
     return tok
 
 
@@ -1278,9 +1318,9 @@ def main_tokens(fleet, p, role, self_name):
     account = lambda s: fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account", "")
     places = "; ".join(f"`{label}-{r}` in session {s}" + (f" (account {account(s)})" if account(s) else "")
                        for r, s in ((r, role_session(p, r)) for r in MAIN_STANDING + ("reviewer",)))
-    # The partitions whose operator can change the teams: one whose main level runs on a Mac keeping swancloud's
-    # checkout, where lib/crew-teams.nix is edited.
-    doors = sorted(f"`{o['label']}-operator`" for o in fleet["partitions"].values()
+    # The partitions whose operator can change the teams, by label for crew send: one whose main level runs on a Mac
+    # keeping swancloud's checkout, where lib/crew-teams.nix is edited.
+    doors = sorted(f"`{o['label']}`" for o in fleet["partitions"].values()
                    if fleet["hosts"].get(o["machine"], {}).get("kind") == "darwin" and kept_on(fleet, o["machine"], "afterthought/swancloud"))
     tok = {
         "SELF": self_name or names[role], "LABEL": label, "PARTITION": p["partition"], "HOST": host, "TEAM_CMD": cmd,
@@ -1296,7 +1336,7 @@ def main_tokens(fleet, p, role, self_name):
         "HOST_TEAMS": "\n".join(team_line(t) for t in here) or "- no team on this host",
         "DISPATCHERS": ", ".join(f"`{label}-dispatch-{h}` on {h}" for h in hosts) or "none yet",
         "OPERATORS": f"`{label}-operator` on {p['machine']}",
-        "TEAMS_OPERATORS": ", ".join(doors) or "none",
+        "TEAMS_DOORS": ", ".join(doors) or "none",
         "SHOWING": (f"{host} is a Mac: open the site the user picks in terminal-browser beside your pane, "
                     "`terminal-browser open <url> --split right`." if fleet["hosts"].get(host, {}).get("kind") == "darwin" else
                     f"{host} is a box, which can't open the dev.swancloud.net names: say so, and give the user the URL "
@@ -1308,8 +1348,8 @@ def main_tokens(fleet, p, role, self_name):
         f"bolts and posts its review batches; `{label}-reviewer`, started fresh for each batch, summarizes its changes; `{label}-ops` lands "
         f"proven bolts on the user's approval of their landing cards; and `{label}-operator`, the partition's door, works for the user. "
         f"A dispatcher on each host the partition's teams run on gives that host's teams their bolts: {tok['DISPATCHERS']}. "
-        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs. "
-        f"{SENDERS}")
+        f"The partition's teams:\n\n{tok['TEAMS']}\n\nAny of these is reached with `{cmd} tell <agent> \"<text>\"`, wherever it runs; "
+        f"anything for another partition or one of its teams is sent with {SENDS}. {SENDERS}")
     return tok
 
 
@@ -1384,6 +1424,33 @@ def brief_due(source, launched, saved):
     if source != "compact" or launched:
         return None
     return saved.get("CREW_AGENT") or None
+
+
+def main_named(name, label):
+    """The main-level role a session's recorded agent is, from its record alone: its role when the name is
+    <label>-design, -planner, -ops, -operator or -reviewer, else None, as for a team's agent, a dispatcher or a
+    record with no label. Only such a session's identity is tied to a host, so no other reads the teams file for it."""
+    if not name or not label:
+        return None
+    return next((r for r in MAIN_STANDING + ("reviewer",) if name == f"{label}-{r}"), None)
+
+
+def main_elsewhere_said(name, label, main, here):
+    """Why a main level's agent is not started, nor given its identity back, on this host: crew-role's refusal."""
+    return f"{label}'s main level runs on {main}, not {here}, and crew starts {name} only there"
+
+
+def identity_withheld(name, label, here, main, unread=None):
+    """What a session herdr resumed as a main level's agent is told in place of its identity, or None when it gets
+    its identity back: on its main level's host, the teams file read. Off that host, or with the teams file unread
+    (unread, the refusal's words), it is told it is no agent of crew's here and to do nothing of crew's (read.1)."""
+    if unread is None and main == here:
+        return None
+    why = (f"it can't tell where {label}'s main level runs, {unread.rstrip('.')}" if unread is not None
+           else main_elsewhere_said(name, label, main, here))
+    return (f"[crew] This session was {name}, and crew gives it no identity here: {why}. In this session you are no "
+            "agent of crew's: run no crew command, which crew would record as the user's, write nothing to the plan, "
+            "a kit, a card or another agent, and wait for the user.")
 
 
 def brief_role(fleet, name, recorded):
@@ -1619,7 +1686,11 @@ def resolve(fleet, scope, role, extra):
 def launch_shell(fleet, scope, role, extra):
     """crew-role's start, as shell assignments: CWD, NAME, LABEL, ROLE (the definition its brief comes from), LAUNCH
     (what the start is made of besides crew's plugin, launch_digest), BRANCH (the branch sluice's plugins are told it
-    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh."""
+    works for, empty for none: hint_branch) and the claude arguments in `args`. A resume with no conversation to pick up starts the role fresh.
+    A main level's role, fresh or resumed, is refused on any host but its main level's (main_elsewhere_said)."""
+    if scope not in fleet["teams"] and role in MAIN_STANDING + ("reviewer",):
+        p, here = partition_of(fleet, scope), this_host()
+        p["machine"] == here or fail(main_elsewhere_said(f"{p['label']}-{role}", p["label"], p["machine"], here))
     l, session = resolve(fleet, scope, role, extra)
     args = ["--model", l["model"], "--effort", l["effort"], "--permission-mode", "bypassPermissions"]
     for d in l["dirs"]:
@@ -2263,6 +2334,8 @@ def main(a):
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
         import record as rec  # record imports this module
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)
+    elif a[:1] == ["send"] and len(a) == 3:
+        sys.exit(0 if send(fleet, a[1], a[2]) else 1)
     else:
         sys.exit(__doc__)
 

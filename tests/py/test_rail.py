@@ -85,8 +85,32 @@ class TestRows:
     def test_a_bolt_whose_every_unit_merged_waits_to_land_timed_by_its_last_merge(self):
         land, = [r for r in rows() if r["group"] == "land"]
         assert (land["key"], land["at"]) == ("land/apex-zones", plan.utc(iso(30)))
-        assert land["what"] == [f"bolt apex-zones (wldn), swb-2 on {BOX}: every unit merged; wldn-ops lands it"]
+        assert land["what"] == [f"bolt apex-zones (wldn), swb-2 on {BOX}: every unit merged; waits to land; wldn-ops lands it"]
         assert land["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+
+    def two_bolts(self, merged, planned=True):
+        """swb-2 holds apex-zones, proven, and beta, given after it, whose unit b-one has merged or not."""
+        p = plan.Plan(plan_text(bolts=[("tenant-environments", KIT, "swb-1"), ("apex-zones", KIT, "swb-2"), ("beta", KIT, "swb-2")]
+                                + ([("d", KIT, None)] if planned else []),
+                                units=[("zone-one", KIT, "apex-zones", []), ("b-one", KIT, "beta", [])]))
+        sv = survey()
+        sv[BOX]["kits"]["/kit/main"]["bolts"]["beta"] = {"head": "bbb1234" + "0" * 33, "head_at": iso(20), "verdict": "passed (2 run)",
+                                                         "changes": ["b-one"] if merged else [], "archived": ["b-one"] if merged else []}
+        return {r["key"]: r for r in plan.rail_rows(FLEET, [("wldn", "WilldanGroup/crew-state", "tip", p)], sv, [], {}) if r["group"] == "land"}
+
+    def test_a_landing_row_names_the_bolt_its_team_builds_meanwhile(self):
+        land = self.two_bolts(merged=False)
+        assert list(land) == ["land/apex-zones"]
+        assert land["land/apex-zones"]["what"][1] == "swb-2 builds beta meanwhile"
+        assert land["land/apex-zones"]["cmds"] == [("answer", 'crew tell wldn-ops "Land bolt apex-zones."')]
+
+    def test_once_both_are_proven_each_row_says_a_yes_frees_the_team_for_its_next_planned_bolt(self):
+        land = self.two_bolts(merged=True)
+        assert [r["what"][1] for r in land.values()] == ["a yes frees swb-2 for d", "a yes frees swb-2 for d"]
+
+    def test_with_nothing_planned_a_yes_frees_the_team_for_nothing(self):
+        land = self.two_bolts(merged=True, planned=False)
+        assert land["land/apex-zones"]["what"][1] == "a yes frees swb-2, and nothing is planned for it"
 
     def test_a_bolt_with_a_fix_in_flight_lands_once_it_has_merged_or_been_dropped(self):
         sv = survey()
@@ -756,7 +780,7 @@ class TestBolts:
         b = {x["bolt"]: x for x in self.data()["partitions"][0]["plans"][0]["bolts"]}
         assert {u["unit"]: u["stage"] for u in b["tenant-environments"]["units"]} == {"early": "planned", "checked": "verify", "stale": "verify"}
         assert (b["tenant-environments"]["team"], b["tenant-environments"]["host"], b["tenant-environments"]["state"]) == ("swb-1", BOX, "active")
-        assert b["apex-zones"]["state"] == "active" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None)]
+        assert b["apex-zones"]["state"] == "waits" and b["apex-zones"]["units"] == [dict(unit="zone-one", kind="unit", after=[], sources=[], stage="merged", tasks=None, worktree=None)]
 
     def test_the_text_names_the_branch_each_bolt_and_each_units_stage_and_place(self):
         out = plan.bolts_text(self.data())

@@ -2,7 +2,7 @@
 # crew: run bolt teams of agents in herdr, and each partition's main level. Teams and partitions are data in
 # ~/.config/crew/teams.json.
 #
-# A team builds one bolt at a time:
+# A team builds one bolt at a time, and may hold one more, proven, that waits to land:
 #   crew list                          the teams that are defined
 #   crew status  [team]                the conductor and ops (state, context use, compactions, age), and each unit
 #                                      slot with the unit or fix it holds and its stage, a unit carried onto its
@@ -80,20 +80,23 @@
 #                                      running, or is gone, or the timeout (an hour) passes, and says which
 #                                      first saying, in sluice's words, each conflict or failed check sluice's
 #                                      overview shows for a submission from the stage's place
-#   crew fix     <team> <name> "<what is wrong>"
+#   crew fix     <team> <name> "<what is wrong>" [--bolt <bolt>]
 #                                      a fix on the team's bolt: fix/<bolt>/<name> at places/fix-<bolt>--<name>,
 #                                      built by a fresh code agent; a name already in use on the bolt is refused.
+#                                      While the team holds two bolts a new fix names its bolt with --bolt, and
+#                                      each form below takes --bolt too; a fix in flight is found by its name.
 #                                      A place that could not be made ready refuses no fix: its agent starts there,
 #                                      told the step that failed, since a fix is how a bolt is repaired. Its prompt,
 #                                      and its merge's, is taken or sent again as a unit stage's is
-#   crew fix     <team> <name> --merge merge the fix into the bolt: a merge stage, its submission to sluice as a
+#   crew fix     <team> <name> --merge [--bolt <bolt>]
+#                                      merge the fix into the bolt: a merge stage, its submission to sluice as a
 #                                      unit's is
-#   crew fix     <team> <name> --drop [--force]
+#   crew fix     <team> <name> --drop [--force] [--bolt <bolt>]
 #                                      end a fix not wanted: its slot freed, its agent ended (a working one only with
 #                                      --force), its place and branch removed as a dropped unit's, its branch kept and
 #                                      named when git cherry finds commits of its own beyond the bolt; a merged fix is
 #                                      refused
-#   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>]
+#   crew fix     <team> <name> --wait [--timeout <ms>] [--stuck <ms>] [--bolt <bolt>]
 #                                      wait for the fix's stage to end: its commits, or its merge on the bolt
 #   crew needs   "<what you need>"     run by a stage's agent that can't finish without
 #                                      something only someone else can give: its stage ends short, and the conductor
@@ -109,12 +112,13 @@
 #                                      give has sluice make bolt/<bolt> on GitHub from main (sluice branch create, on the
 #                                      team's host), with no worktree, before the plan write; refused, nothing changed,
 #                                      in a kit whose .config/sluice.toml on origin/main names no checks or no remote
-#                                      for its bolt branches, on a host whose sluice is older than 0.20.0, and in
-#                                      sluice's words when it makes none. land and drop have sluice delete it
-#                                      (sluice branch delete) once its worktrees are gone, a refusal named in sluice's
-#                                      words; a dropped bolt's is kept and named while main lacks its tip, and deleted
-#                                      once main holds it. A bolt made before gives went through sluice
-#                                      stays local until it lands
+#                                      for its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
+#                                      words when it makes none, and while a bolt the team holds is not proven (every
+#                                      unit and chore merged, sluice green at its head) or it holds two.
+#                                      land and drop have sluice delete it (sluice branch delete) once its worktrees
+#                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
+#                                      while main lacks its tip, and deleted once main holds it. A bolt made before
+#                                      gives went through sluice stays local until it lands
 #   crew bolt  submit <bolt> [--label L]
 #                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
 #                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
@@ -204,6 +208,10 @@
 #                                      again where a restart left its pane a shell; down closes them
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
+#   crew send     <team or partition> "<text>"
+#                                      send anything for another team or partition to that partition's operator, its
+#                                      one door, wherever it runs: a team by its partition, a partition by its label;
+#                                      marked with who sent it and whom it was for, and recorded with its length
 #   crew revive                        after a restart, every standing agent of this host whose pane came back with no
 #                                      agent in it, or dead, closed and opened again in its layout first, picked up
 #                                      from its last conversation and greeted when it is a conductor or an agent
@@ -320,6 +328,7 @@ case $cmd in
   board | _views | _board) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
   hold | go | update | _hold | _go | _update | _renew) exec python3 "$here/../lib/hold.py" "${args[@]}" ;;
   tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
+  send) py send "${2:?usage: crew send <team or partition> \"<text>\"}" "${3:?usage: crew send <team or partition> \"<text>\"}" ;;
   status)
     if [[ -n ${2:-} ]]; then one _status "$2" ${forced[@]+"${forced[@]}"}
     else first=1; for t in $(teams); do [[ $first == 1 ]] || echo; first=0; bash "$0" status "$t" || true; done; fi ;;
@@ -345,12 +354,21 @@ case $cmd in
     esac ;;
   fix)
     need_team "${2:-}"
-    name=${3:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --drop | --wait}; words=${4:?usage: crew fix <team> <name> \"<what is wrong>\" | --merge | --drop | --wait}
+    usage='usage: crew fix <team> <name> "<what is wrong>" | --merge | --drop | --wait, each with [--bolt <bolt>]'
+    team=$2 name=${3:?$usage} bolt=() rest=()
+    set -- "${args[@]:3}"
+    while (( $# )); do  # --bolt <bolt> may follow the words or a mode flag (teams.16)
+      case $1 in
+        --bolt) [[ -n ${2:-} ]] || { echo "--bolt takes the bolt the fix is of" >&2; exit 2; }; bolt=(--bolt "$2"); shift 2 ;;
+        *) rest+=("$1"); shift ;;
+      esac
+    done
+    words=${rest[0]:?$usage}
     case $words in
-      --wait) limits "${@:5}"; one _fix-run "$2" "$name" wait ${limit[@]+"${limit[@]}"} ;;
-      --merge) one _fix-run "$2" "$name" merge ${forced[@]+"${forced[@]}"} ;;
-      --drop) one _fix-run "$2" "$name" drop ${forced[@]+"${forced[@]}"} ;;
-      *) one _fix-run "$2" "$name" start ${forced[@]+"${forced[@]}"} -- "$words" ;;
+      --wait) limits "${rest[@]:1}"; one _fix-run "$team" "$name" wait ${limit[@]+"${limit[@]}"} ${bolt[@]+"${bolt[@]}"} ;;
+      --merge) one _fix-run "$team" "$name" merge ${forced[@]+"${forced[@]}"} ${bolt[@]+"${bolt[@]}"} ;;
+      --drop) one _fix-run "$team" "$name" drop ${forced[@]+"${forced[@]}"} ${bolt[@]+"${bolt[@]}"} ;;
+      *) one _fix-run "$team" "$name" start ${forced[@]+"${forced[@]}"} ${bolt[@]+"${bolt[@]}"} -- "$words" ;;
     esac ;;
   needs)  # run by a stage's agent: the team and slot are its own name's
     words=${2:-}
