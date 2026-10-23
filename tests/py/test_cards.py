@@ -666,6 +666,45 @@ class TestSessions:
         assert plan.raise_batch(FLEET, row, acts) == "req_b4"
         assert next(a for t, a in acts.calls if t == "post_request")["summary"].startswith("1 change to read")
 
+    POSTED = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+              "post_request": ({"requestId": "req_n2", "version": 1}, None)}
+
+    def summaries(self, acts):
+        return [a["summary"] for t, a in acts.calls if t == "post_request"]
+
+    def test_the_sweeps_raise_of_a_proposal_handed_an_older_copy_posts_it_saying_that_copy_is_dead(self, monkeypatch):
+        """rail-cards, "A proposal's card left on the host the main level left": proposal 1's card is held under another
+        host's sign-in, so this host holds none, and its raise at the sweep, handed dead, posts one card saying the older
+        copy is dead; without it, the plain card."""
+        from test_proposal_life import CARDED, proposals_with, write
+        monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+        w = write()
+        w.files["proposals.rec"] = proposals_with(("Console first.", ['unit add a-new "A new unit." --bolt console-pages'])).text()
+        acts = ReadingActs(self.POSTED)
+        assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "sweep", acts, dead=True) == "req_n2"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_n2")]
+        plain = ReadingActs(self.POSTED)
+        assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "sweep", plain) == "req_n2"
+        (dead,), (bare,) = self.summaries(acts), self.summaries(plain)
+        assert dead == f"{built.DEAD}\n\n{bare}"
+
+    def test_the_sweeps_raise_of_a_landing_handed_an_older_copy_posts_it_saying_that_copy_is_dead(self, monkeypatch):
+        """rail-cards, "A landing's card left on the host its team left": an approval of risk high, saying an older copy
+        was lost."""
+        team = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
+        monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
+        monkeypatch.setattr(plan, "landing_opened", lambda fleet, label, p, b, t, card, acts: dict(card, link="http://mac-studio.ts.swancloud.net:19432"))
+        monkeypatch.setattr(plan, "landing_preview", lambda fleet, t, label, bolt, card, acts: None)
+        row = {"label": "wldn", "key": "land/b1", "group": "land"}
+        acts, plain = ReadingActs(self.POSTED), ReadingActs(self.POSTED)
+        assert plan.raise_land(FLEET, dict(row, dead="req_l1"), acts) == "req_n2"
+        assert plan.raise_land(FLEET, row, plain) == "req_n2"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_n2")]
+        (dead,), (bare,) = self.summaries(acts), self.summaries(plain)
+        assert dead == f"{built.DEAD}\n\n{bare}"
+        assert next(a for t, a in acts.calls if t == "post_request")["approve"]["risk"] == "high"
+
 LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="abc1234", at=None, moved=0, pr=None)
 
 
@@ -1831,6 +1870,31 @@ class TestRecordCommand:
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
         assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
+
+    def test_the_sweeps_raise_of_a_record_posts_it_again_from_its_record_saying_an_older_copy_was_lost(self, monkeypatch):
+        """rail-cards, "A record's card left on the host the main level left": the record read with status proposed on
+        the kit's main, as crew record reads it, and its card posted in the design agent's name; one raised with
+        alternatives refused naming the command that raises it again, nothing read or posted."""
+        from test_card_commands import Acts, MATCHED, POSTED
+        where, reads = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), []
+
+        def read(fleet, label, kit, number, status, alternatives=None):
+            reads.append((label, kit, number, status, alternatives))
+            return recorded(MADR, status), where, "abc1234" + "0" * 33, "switchboard runs GitHub's workflows itself"
+        monkeypatch.setattr(plan, "record_read", read)
+        row = dict(label="wldn", key="record/switchboard-kit/0032", group="records", alternatives=False, dead="req_c0")
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
+        assert plan.raise_record_again(None, row, acts) == "req_c1"
+        assert reads == [("wldn", "switchboard-kit", 32, "proposed", None)]
+        sent = next(a for t, a in acts.calls if t == "post_request")
+        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032")
+        assert sent["summary"] == f"{built.DEAD}\n\n" + built.record_card(recorded(MADR, "proposed"))["card"]["summary"]
+        acts = Acts({}, caller="wldn-design")
+        with pytest.raises(crew.Refusal) as e:
+            plan.raise_record_again(None, dict(row, alternatives=True), acts)
+        assert str(e.value) == ("crew keeps no copy of record 0032's alternatives, so wldn-design raises it again with "
+                                "crew record switchboard-kit 32 --proposed --alternatives <file>")
+        assert (acts.calls, len(reads)) == ([], 1)
 
     def test_a_card_pending_you_ended_already_is_recorded_closed_and_followed_never_changed_or_closed_again(self, capsys):
         from test_card_commands import Acts, MATCHED, POSTED

@@ -133,13 +133,15 @@
 #                                      whose row is gone. It sweeps the cards on this host under its sign-in: closes
 #                                      a card whose row is gone, withdraws a question whose asker has ended, and
 #                                      posts again a row's card Pending You no longer finds and a row's card that
-#                                      has none, through its kind's raise, and on the main level's host a batch's
-#                                      card posted from another host or lost to the planner, saying the older copy
-#                                      is dead; tries again the reading of a batch's or a long proposal's card that
-#                                      stands without it, ten minutes on, changing the card to carry its link; and
-#                                      it ends, on every host of the partition, each card session crew started whose
-#                                      card is closed or whose row is gone. It says what each did, and each host it
-#                                      could not check
+#                                      has none, through its kind's raise, and on its owner's host every row's card
+#                                      posted from another host or lost to its owner, and a still-proposed decision
+#                                      record's, built again from the record on the kit's main, saying the older
+#                                      copy is dead, one raised with alternatives named with the crew record that
+#                                      raises it again; tries again the reading of a batch's or a long proposal's
+#                                      card that stands without it, ten minutes on, changing the card to carry its
+#                                      link; and it ends, on every host of the partition, each card session crew
+#                                      started whose card is closed or whose row is gone. It says what each did, and
+#                                      each host it could not check
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
 #                                      no move has taken, explorations), Bolt plan (proposals, planned bolts, the
 #                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and
@@ -211,9 +213,11 @@
 #                                      following it once the user has answered it, unless --settled-in-pane says the
 #                                      user said yes in the pane, in the words --excerpt gives, which crew reads in the
 #                                      design agent's transcript as the user's; --alternatives <file> makes it a
-#                                      choice, loosen the rules as drafted, accept as ruled or send back; --accepted
-#                                      or --rejected closes it with the commit. A status the file does not hold is
-#                                      refused
+#                                      choice, loosen the rules as drafted, accept as ruled or send back, recorded on
+#                                      the status with none of the file's words; a card held on a host the main level
+#                                      left, or lost to the design agent, is posted again saying the older copy is
+#                                      dead; --accepted or --rejected closes it with the commit. A status the file
+#                                      does not hold is refused
 #   crew console  up|down <label>      the partition's console in this host's operator session <label>, starting no
 #                                      agent: a flow tab following the run record, a rail tab (crew rail above, a shell
 #                                      below) and a board tab drawn from the rail tab's read, each tab's command run

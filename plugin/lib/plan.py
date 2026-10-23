@@ -18,13 +18,16 @@ five times. A write that changes several files is one commit, and it carries the
   crew rail [--label L]                      what waits on the user: open proposals, review batches and bolts to
                                              land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
-                                             whose row is gone; its sweep tries again the reading of a batch's or a
-                                             long proposal's card that stands without it, ten minutes on
+                                             whose row is gone; its sweep posts again, on its owner's host, each row's
+                                             card and still-proposed record's another host holds or its owner lost,
+                                             saying the older copy is dead, and tries again the reading of a batch's
+                                             or a long proposal's card that stands without it, ten minutes on
   crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
                                              the design agent's record at each turn of its status, read on the kit's
                                              main, raising its card unless settled in the pane, the user's yes read in
                                              the design agent's transcript as theirs, a choice when a rule decided,
-                                             changing it on a revision and closing it on accepted or rejected
+                                             saying an older copy is dead when another host holds one, changing it on
+                                             a revision and closing it on accepted or rejected
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
@@ -1795,8 +1798,10 @@ def raise_land(fleet, row, acts=None, note=None):
     (landing_opened), a session on an older head ended (reading_open); a preview of its head, in a kit whose policy at
     the head declares one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and
     nothing said, while the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's
-    sweep for a row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or
-    None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
+    sweep for a row whose card is missing or lost, and for one whose card this host can't reach, handed that older copy
+    as the row's dead, when the card is posted saying first that an older copy was lost (built_again), and a preview's
+    end with its change note (note). The card's id, or None; what crew can't read is refused (read.1), refusing nothing
+    of the bolt."""
     m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", row.get("key") or "")
     if not m:
         return None
@@ -1815,7 +1820,8 @@ def raise_land(fleet, row, acts=None, note=None):
     card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
     card["preview"] = landing_preview(fleet, t, label, bolt, card, acts)
     note = note or landing_act("proven", head=card["head"])[1]
-    return row_card_change(fleet, label, owner, cards.landing_card, card, note, card_where(t["kit"]), acts)
+    build = built_again(cards.landing_card) if row.get("dead") else cards.landing_card
+    return row_card_change(fleet, label, owner, build, card, note, card_where(t["kit"]), acts)
 
 
 def head_previewed(fleet, t, head):
@@ -3654,23 +3660,24 @@ def raise_proposal(fleet, row, acts=None, event="sweep"):
     """The rail's sweep's raise of a proposal row's card (record 0031 §1), for a row whose card is missing or lost:
     the open proposal of the chain its key names, read at the branch's tip from the row's label and key (chain_read),
     raised through row_card_change, which posts it when none is held and posts it again, its summary saying the older
-    copy is dead, when Pending You no longer finds it; or, with event relink, its card changed to carry its reading's
-    link (reading_again). None, raising nothing, when the key is no proposal chain's or the chain has no proposal open.
-    The card's id, or None."""
+    copy is dead, when Pending You no longer finds it, and when the sweep hands it the older copy this host can't reach
+    as the row's dead; or, with event relink, its card changed to carry its reading's link (reading_again). None,
+    raising nothing, when the key is no proposal chain's or the chain has no proposal open. The card's id, or None."""
     label, m = row["label"], re.fullmatch(r"proposal/(\d+)", row.get("key") or "")
     got = chain_read(fleet, label, int(m.group(1))) if m else None
-    return raise_proposal_at(fleet, label, *got, event, acts) if got else None
+    return raise_proposal_at(fleet, label, *got, event, acts, dead=bool(row.get("dead"))) if got else None
 
 
-def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None):
+def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None, dead=False):
     """Proposal n's card at its event (record 0031 §1, briefs.11), once the event's write is made (code.9), from the
     write w as it left the branch: the act proposal_act decides; the card built by the proposal's builder from
     proposal_facts, and posted, changed or closed by the act in the planner's name under its chain's key,
     proposal/<first>, filed in the area of the kit of the first bolt or unit its commands name. A rewrite whose card
     takes another form than the replaced proposal's (cards.proposal_form: a hold-to-approve, a choice, one list or
-    lists), which update_request never changes, has the card followed as a card whose kind changed. A card crew cannot
-    build, or Pending You refuses, refuses nothing of the proposal: it is said, and the rail shows the row with no card.
-    The card's id, or None."""
+    lists), which update_request never changes, has the card followed as a card whose kind changed. With dead, an
+    older copy this host can't reach standing, the card is built saying first that it was lost (built_again). A card
+    crew cannot build, or Pending You refuses, refuses nothing of the proposal: it is said, and the rail shows the row
+    with no card. The card's id, or None."""
     acts = acts or CardActs(fleet)
     owner, part = f"{label}-planner", crew.partition_of(fleet, label)
     pl = proposals(w)
@@ -3693,11 +3700,12 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
         facts = proposal_facts(fleet, label, w, n)
         team = builder(fleet, label, named_kit(w.plan, facts["argvs"]))
         where = card_where(team["kit"] if team else {"main": part["checkout"], "repo": part["blueprints"][0]})
+        build = built_again(cards.proposal_card) if dead else cards.proposal_card
         if act[0] == "post":
-            return row_card_post(fleet, label, owner, cards.proposal_card, facts, where, acts)
+            return row_card_post(fleet, label, owner, build, facts, where, acts)
         moved = event == "replace" and replaced is not None and (
             cards.proposal_form([do_args(label, d) for d in replaced.all("Do")]) != cards.proposal_form(facts["argvs"]))
-        return row_card_change(fleet, label, owner, cards.proposal_card, facts, act[1], where, acts, kind_changed=moved)
+        return row_card_change(fleet, label, owner, build, facts, act[1], where, acts, kind_changed=moved)
     except Refusal as e:
         print(f"card {key} not raised: {e}", file=sys.stderr)
         return None
@@ -8792,6 +8800,15 @@ def record_settled(key, entries):
     return last["Act"].split(".")[1].capitalize() + (f" at {commit}" if commit else "")
 
 
+def record_proposed(key, entries):
+    """A decision record's last record.proposed entry, done, under its key in either form (cards.row_object), from the
+    run record's entries, oldest first: its State says whether the user settled it in the pane, its Form whether its
+    card offered alternatives; None when crew record recorded it proposed nowhere."""
+    obj = cards.row_object(key or "")
+    return next((e for e in reversed(entries) if obj and e.get("Act") == "record.proposed" and not e.get("Refused")
+                 and obj in (e.get("On") or [])), None)
+
+
 def refused_lately(entries, now, key=None, card=None):
     """Whether crew's last post under a row's key, or its last close of a card, was refused under CARD_RETRY seconds
     before now, so the sweep leaves it for a later read."""
@@ -8842,7 +8859,7 @@ def row_owner(fleet, plan, row):
     return f"{l}-{'ops' if row['group'] == 'operations' else 'planner'}", fleet["partitions"][l]["machine"]
 
 
-def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None)):
+def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None), design=(None, None)):
     """What the rail's read does with one partition's cards, of those posted on this host (here), the only ones its
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
     be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
@@ -8851,11 +8868,15 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     whose record crew record has recorded accepted or rejected since, to close with its status (record_settled). Then
     each row in record 0031's
     form with no card open on any host, whose owner runs here (owners, {row key: (owner, host)}), to post through its
-    kind's raise; but a batch's row, batch/<n>, whose owner runs here and whose owner's newest card under its key this
-    host's sign-in can't reach, one posted from another host and not closed, or one lost to its owner on any host
-    (cards.stranded, over the whole record read), to post again through the batch's raise, the older copy named, and
-    not as a row with no card. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is
-    left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
+    kind's raise; but each row whose owner runs here and whose owner's newest card under its key this host's sign-in
+    can't reach, one posted from another host and not closed, or one lost to its owner on any host (cards.stranded,
+    over the whole record read), to post again through its kind's raise, the older copy named, and not as a row with no
+    card. And, where the partition's design agent runs (design, its <label>-design and host), each decision record's
+    key in record 0031's form under which the design agent posted a card, whose record crew record last recorded
+    proposed (record_proposed) and not settled in the pane, and whose card this host's sign-in can't reach so, to post
+    again through the record's raise as a row of the group records, with whether its card offered alternatives (the
+    Form its last record.proposed records). A card or a row whose last close or post was refused under CARD_RETRY
+    seconds ago is left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
     batch), each batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why,
     once: none is under its key yet, and the user's answer has not closed it (batch_closed). And each row's card of a
     batch, batch/<n>, or a proposal, proposal/<n>, that the run record shows standing without its reading, last
@@ -8886,11 +8907,22 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     mine = [r for r in rows if cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
             and not refused_lately(entries, now, key=r["key"])]
     for r in mine:
-        older = cards.stranded(entries, r["key"], owners[r["key"]][0], here) if re.fullmatch(r"batch/\d+", r["key"]) else None
+        older = cards.stranded(entries, r["key"], owners[r["key"]][0], here)
         if older:
             out["again"].append((r, older))
     again = {r["key"] for r, _ in out["again"]}
     out["none"] = [r for r in mine if r["key"] not in carded | again]
+    if design[1] == here:
+        posted = (e.get("Key") for e in entries if e.get("Act") == "card.post" and e.get("By") == design[0])
+        for key in dict.fromkeys(k for k in posted if re.fullmatch(r"record/[a-z0-9][a-z0-9-]*/\d{4}", k or "")):
+            last = record_proposed(key, entries)
+            if (not last or record_settled(key, entries) or last.get("State") == "settled in the pane"
+                    or refused_lately(entries, now, key=key)):
+                continue
+            older = cards.stranded(entries, key, design[0], here)
+            if older:
+                out["again"].append((dict(label=design[0].removesuffix("-design"), key=key, group="records",
+                                          alternatives=last.get("Form") == "alternatives"), older))
     if planner[1] == here:
         done = {e.get("Key") for e in entries if e.get("Act") == "batch.close" and not e.get("Refused")} | batch_closed(entries)
         out["settled"] = [(k, why) for k, why in batch_settled(entries).items() if k not in done]
@@ -8898,7 +8930,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
 
 
 def stranded_said(entries, card, owner, new):
-    """What the sweep says of a batch's card this host could not reach once its raise posted it again as new
+    """What the sweep says of a row's card this host could not reach once its raise posted it again as new
     (cards.stranded), from the run record's entries, oldest first: lost to its owner when its last close says so, else
     held on the host its post names, which this host's sign-in does not reach."""
     state, host = None, None
@@ -11091,13 +11123,34 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     return {"kit": kit, "number": number, "title": title, "opening": opening, "quoted": quoted, "text": body, "alternatives": alt}
 
 
-def raise_record(fleet, label, facts, where, note, acts=None):
+def raise_record(fleet, label, facts, where, note, acts=None, dead=False):
     """A decision record's card raised in its design agent's name (record 0031 §1, briefs.15), record/<kit>/<number>,
     from the record's facts (record_facts), from where, the kit's checkout on this host and its remote: posted the
     first time, and while the design agent holds it open, changed in place with note, naming the new commit, or once the
-    user has answered it, closed with note and followed by a new card (row_card_change). A
-    refusal is said and recorded and refuses nothing of the status, already recorded. The card's id, or None."""
-    return row_card_change(fleet, label, f"{label}-design", cards.record_card, facts, note, where, acts)
+    user has answered it, closed with note and followed by a new card (row_card_change). With dead, an older copy this
+    host can't reach standing, the card is built saying first that it was lost (built_again). A refusal is said and
+    recorded and refuses nothing of the status, already recorded. The card's id, or None."""
+    build = built_again(cards.record_card) if dead else cards.record_card
+    return row_card_change(fleet, label, f"{label}-design", build, facts, note, where, acts)
+
+
+def raise_record_again(fleet, row, acts=None):
+    """The rail's sweep's raise of a decision record's card its design agent's host can't reach (sweep_judged's again,
+    record 0031 §1), for its row of the group records, of which it reads the label, the key record/<kit>/<number> and
+    whether its card offered alternatives: the record read with status proposed as crew record reads it on the kit's
+    main (record_read), and its card posted in the design agent's name saying first that an older copy was lost
+    (raise_record). A card that offered alternatives is refused, since crew keeps no copy of the file they were read
+    from (read.1), naming the crew record command that raises it again; a record whose file no longer holds proposed,
+    or that crew can't read, is refused in record_read's words. The card's id, or None."""
+    m = re.fullmatch(r"record/([a-z0-9][a-z0-9-]*)/(\d{4})", row.get("key") or "")
+    if not m:
+        return None
+    label, kit_, n = row["label"], m.group(1), int(m.group(2))
+    not row.get("alternatives") or fail(
+        f"crew keeps no copy of record {n:04d}'s alternatives, so {label}-design raises it again with "
+        f"crew record {kit_} {n} --proposed --alternatives <file>")
+    facts, where, sha, subject = record_read(fleet, label, kit_, n, "proposed")
+    return raise_record(fleet, label, facts, where, f"Raised again at {sha[:7]}: {subject}", acts, dead=True)
 
 
 def record_card_close(fleet, label, owner, obj, outcome, acts=None):
@@ -11109,25 +11162,61 @@ def record_card_close(fleet, label, owner, obj, outcome, acts=None):
     return [c for c in (row_card_close(fleet, label, owner, k, outcome=outcome, acts=acts) for k in keys) if c]
 
 
+def record_kit(fleet, label, name):
+    """The kit of a partition's teams named name, read from the teams file alone (code.5); refused naming the kits it
+    takes."""
+    kits = {k["name"]: k for t in crew.partition_of(fleet, label)["teams"] for k in crew.kits_of(fleet["teams"][t])}
+    name in kits or fail(f"crew record takes a kit of {label}'s, " + (f"{either(sorted(kits))}, not {name}." if kits else
+                                                                     f"and no team of {label} builds one."))
+    return kits[name]
+
+
+def record_read(fleet, label, kit_, number, status, alternatives=None):
+    """A decision record as crew record reads it (briefs.15): the kit's docs/adr/<number>-*.md on its main now, GitHub's
+    after a fetch for a kit with an origin (kit.main_now, plan.18), read in this host's checkout of the kit, at the
+    last commit that changed it, and its facts with the status and alternatives text given (record_facts). (facts,
+    where, the commit, its subject), where as card_where gives it for the checkout; refused when the checkout, main,
+    the one file or the status it holds can't be read (read.1)."""
+    here, k, n = crew.this_host(), record_kit(fleet, label, kit_), f"{number:04d}"
+    checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
+
+    def git(*args):
+        r = subprocess.run(["git", "-C", checkout, *args], capture_output=True, text=True)
+        r.returncode == 0 or fail(f"git {args[0]} in {checkout} failed: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
+        return r.stdout
+    # The record as the kit's main holds it now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18).
+    r = subprocess.run(["bash", "-c", MAIN, "crew", checkout], capture_output=True, text=True, env=gitenv())
+    r.returncode == 0 or fail(f"{checkout} could not be read: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
+    _, now, why = kit.main_now(r.stdout, kit_, here)
+    not why or fail(why)
+    files = [f for f in git("ls-tree", "--name-only", now, "docs/adr/").splitlines() if re.fullmatch(rf"docs/adr/{n}-[^/]*\.md", f)]
+    len(files) == 1 or fail(f"{kit_}'s main holds " + (f"no record {n} in docs/adr/" if not files else
+                                                         f"{len(files)} records numbered {n}: {', '.join(files)}") + ", so crew records nothing.")
+    commits = [l.split("\t", 1) for l in git("log", "-2", "--format=%H\t%s", now, "--", files[0]).splitlines()]
+    sha, subject = commits[0]
+    facts = record_facts(kit_, number, git("show", f"{sha}:{files[0]}"), status,
+                         git("show", f"{commits[1][0]}:{files[0]}") if len(commits) > 1 else None, alternatives)
+    return facts, card_where(dict(k, main=checkout)), sha, subject
+
+
 def record_status(fleet, a):
     """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"]
     [--alternatives <file>] [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031
-    §1). The kit is one of the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
-    its main now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18), read in this host's checkout
-    of the kit, at the last commit that changed it, read where the
-    partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
-    alternatives file crew can't read, with nothing recorded. Else record.<status> is recorded on
-    record/<kit>/<number> with that commit; then --proposed raises the record's card in the design agent's name, or
-    changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in the pane, in the
-    words --excerpt gives, which crew reads in the caller's own transcript on this host as the user's before it
-    reads the kit (settled_refusal), whoever the caller is (roles.2), and records naming the transcript record and the words' length, never the words
-    (record.3), raising nothing; --alternatives makes the card the choice a rule decided; and --accepted or
-    --rejected closes the card with the commit, under either key form (record_card_close)."""
+    §1). The kit is one of the partition's teams', read from the teams file alone (code.5); the record is read as
+    record_read reads it, where the partition's main level runs. A status its file does not hold there is refused,
+    naming what it holds, and so is an alternatives file crew can't read, with nothing recorded. Else record.<status>
+    is recorded on record/<kit>/<number> with that commit; then --proposed raises the record's card in the design
+    agent's name, or changes the one it holds, naming the commit, unless --settled-in-pane says the user said yes in
+    the pane, in the words --excerpt gives, which crew reads in the caller's own transcript on this host as the user's
+    before it reads the kit (settled_refusal), whoever the caller is (roles.2), and records naming the transcript
+    record and the words' length, never the words (record.3), raising nothing; --alternatives makes the card the
+    choice a rule decided, recorded as the proposed status's Form, none of the file's words (record.3); and --accepted
+    or --rejected closes the card with the commit, under either key form (record_card_close). A card the design agent
+    holds where this host's sign-in can't reach it, posted from another host or lost to it (record_stranded), is
+    posted again saying first that the older copy was lost."""
     label = default_label(fleet, a) or fail("crew record runs as the record's partition: run it as the design agent, or add --label")
     p = crew.partition_of(fleet, label)
-    kits = {k["name"]: k for t in p["teams"] for k in crew.kits_of(fleet["teams"][t])}
-    a.kit in kits or fail(f"crew record takes a kit of {label}'s, " + (f"{either(sorted(kits))}, not {a.kit}." if kits else
-                                                                      f"and no team of {label} builds one."))
+    k = record_kit(fleet, label, a.kit)
     0 < a.number < 10000 or fail(f"a record's number is its one to four digits, not {a.number}")
     a.status == "proposed" or not (a.settled_in_pane or a.alternatives) or fail(
         f"--settled-in-pane and --alternatives go with --proposed: a record {a.status} closes its card")
@@ -11137,46 +11226,43 @@ def record_status(fleet, a):
         "--settled-in-pane needs --excerpt \"<the user's yes, as they wrote it in your pane>\": crew reads it in your transcript")
     a.excerpt is None or a.settled_in_pane or fail(
         "--excerpt goes with --settled-in-pane: the words are the user's yes, given in your pane")
-    here, k, n = crew.this_host(), kits[a.kit], f"{a.number:04d}"
+    here, n = crew.this_host(), f"{a.number:04d}"
     p["machine"] == here or fail(f"crew record runs on {p['machine']}, where {label}'s design agent holds its records' cards")
     v = sid = None
     if a.settled_in_pane:
         v, sid = CardActs(fleet).heard(a.excerpt)
         why = settled_refusal(a.number, a.kit, v)
         not why or fail(why)
-    checkout = crew.kept_on(fleet, here, k["repo"]) or fail(f"no session of {here} keeps {k['repo']}, so crew can't read its records")
     alternatives = None
     if a.alternatives:
         try:
             alternatives = pathlib.Path(a.alternatives).read_text()
         except (OSError, UnicodeDecodeError) as e:
             fail(f"crew can't read the alternatives file {a.alternatives}: {getattr(e, 'strerror', None) or e}. Nothing is raised.")
-
-    def git(*args):
-        r = subprocess.run(["git", "-C", checkout, *args], capture_output=True, text=True)
-        r.returncode == 0 or fail(f"git {args[0]} in {checkout} failed: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
-        return r.stdout
-    # The record as the kit's main holds it now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18).
-    r = subprocess.run(["bash", "-c", MAIN, "crew", checkout], capture_output=True, text=True, env=gitenv())
-    r.returncode == 0 or fail(f"{checkout} could not be read: {(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}")
-    _, now, why = kit.main_now(r.stdout, a.kit, here)
-    not why or fail(why)
-    files = [f for f in git("ls-tree", "--name-only", now, "docs/adr/").splitlines() if re.fullmatch(rf"docs/adr/{n}-[^/]*\.md", f)]
-    len(files) == 1 or fail(f"{a.kit}'s main holds " + (f"no record {n} in docs/adr/" if not files else
-                                                           f"{len(files)} records numbered {n}: {', '.join(files)}") + ", so crew records nothing.")
-    commits = [l.split("\t", 1) for l in git("log", "-2", "--format=%H\t%s", now, "--", files[0]).splitlines()]
-    sha, subject = commits[0]
-    facts = record_facts(a.kit, a.number, git("show", f"{sha}:{files[0]}"), a.status,
-                         git("show", f"{commits[1][0]}:{files[0]}") if len(commits) > 1 else None, alternatives)
+    facts, where, sha, subject = record_read(fleet, label, a.kit, a.number, a.status, alternatives)
     key, settled = f"record/{a.kit}/{n}", a.status == "proposed" and a.settled_in_pane
     frm = [f"session/{sid}/{v.uuid or f'line-{v.line_hash()[:16]}'}"] if settled else []
     record.emit(label, f"record.{a.status}", [key], frm=frm, commit=[f"{k['repo']}@{sha}"],
-                State="settled in the pane" if settled else None, Chars=len(a.excerpt) if settled else None)
+                State="settled in the pane" if settled else None, Chars=len(a.excerpt) if settled else None,
+                Form="alternatives" if alternatives is not None else None)
     print(f"record {n} in {a.kit}: {a.status} at {sha[:7]}" + (", the user's yes given in the pane; no card is raised" if settled else ""))
     if a.status != "proposed":
         record_card_close(fleet, label, f"{label}-design", key, f"{a.status.capitalize()} at {sha[:7]}")
     elif not settled:
-        raise_record(fleet, label, facts, card_where(dict(k, main=checkout)), f"Revised at {sha[:7]}: {subject}")
+        raise_record(fleet, label, facts, where, f"Revised at {sha[:7]}: {subject}", dead=record_stranded(fleet, label, key))
+
+
+def record_stranded(fleet, label, key):
+    """Whether the design agent's newest card under a record's key is one this host's sign-in can't reach, posted from
+    another host and not closed, or lost to it (cards.stranded), from the partition's run record of the last cards.DAYS
+    days (record.gather); False, said, when that record did not answer whole, so the card is posted as it would be."""
+    since = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=cards.DAYS)).isoformat()
+    entries, missing = record.gather(fleet, [label], since)
+    if missing:
+        print(f"card {key}: whether an older copy of it is held where this host's sign-in can't reach could not be looked for: "
+              + "; ".join(f"{h}: {v}" for h, v in sorted(missing.items())), file=sys.stderr)
+        return False
+    return cards.stranded(entries, key, f"{label}-design", crew.this_host()) is not None
 
 
 # ------------------------------------------------------------------------------- the rail's sweep of the cards
@@ -11189,7 +11275,7 @@ SWEEPER = "crew"
 # Each kind's raise, the function its change of the series gives it, handed a rail row (record 0031 §1): by the row
 # key's first part, a name in this module or, as ops.<name>, in ops.py. A kind whose function is not there has none yet.
 RAISES = {"proposal": "raise_proposal", "batch": "raise_batch", "land": "raise_land", "deploy": "ops.raise_deploy",
-          "op": "ops.raise_step"}
+          "op": "ops.raise_step", "record": "raise_record_again"}
 SWEEP_LATER = "The rail's sweep changes nothing on this read."
 
 
@@ -11264,10 +11350,10 @@ def sweep_cards(fleet, read, acts=None):
     name with its card key and why (briefs.12), so a host not signed in still records it; a card open under its key is
     withdrawn with the same words, as a card whose row is gone. It asks Pending You in crew's own name
     (SWEEPER) whether it finds each card, which Pending You answers for another assistant's card by refusing it as
-    that assistant's, and for a card this host's sign-in no longer reaches with "not found". A batch's card this
-    host's sign-in can't reach, posted from another host or lost to the planner, while the batch's owner runs here, is
-    posted again through the batch's raise, its summary saying the older copy is dead, the older copy reported lost
-    and never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again,
+    that assistant's, and for a card this host's sign-in no longer reaches with "not found". Every row's card this
+    host's sign-in can't reach, posted from another host or lost to its owner, while the row's owner runs here, is
+    posted again through its kind's raise, its summary saying the older copy is dead, the older copy reported lost and
+    never asked after nor closed from here, and a raise that posts none reported left (sweep_judged's again, briefs.11,
     briefs.12, read.1). A host not signed in,
     or a bridge that fails, changes nothing more, and is said, as is a partition whose record did not answer there,
     which records no close either (read.1). crew board sweeps nothing (state.4). Returns {done: [{label, key,
@@ -11289,7 +11375,9 @@ def sweep_cards(fleet, read, acts=None):
         owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
         blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
         planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner)
+        design = (f"{l}-design", fleet["partitions"][l]["machine"])
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner,
+                         design)
         for key, why in j.pop("settled"):
             got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
                             Key=key, Outcome=why)
@@ -11298,7 +11386,7 @@ def sweep_cards(fleet, read, acts=None):
         j["none"] = [r for r in j["none"] if acts.raise_of(r["key"].split("/")[0])]
         j["again"] = [(r, c) for r, c in j["again"] if acts.raise_of(r["key"].split("/")[0])]
         if any(j.values()):
-            judged.append((l, owners, j))
+            judged.append((l, dict(owners, **{r["key"]: design for r, _ in j["again"] if r["group"] == "records"}), j))
     if not judged:
         return out
     asked = [c["card"] for _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]]
@@ -11363,7 +11451,8 @@ def sweep_cards(fleet, read, acts=None):
             if new:
                 did(l, row["key"], older, owner, "lost", stranded_said(read["logs"].get(l, []), older, owner, new), new)
             elif kind_raises:
-                did(l, row["key"], older, owner, "left", "its batch no longer waits to be read")
+                did(l, row["key"], older, owner, "left",
+                    "its batch no longer waits to be read" if row["key"].startswith("batch/") else "its raise posted none")
         for c, row in j["unread"]:
             if cards.lost(found[c["card"]][1]):
                 continue
