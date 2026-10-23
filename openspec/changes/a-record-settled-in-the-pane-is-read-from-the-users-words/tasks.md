@@ -8,5 +8,5 @@
 
 ## 2. The brief and the docs say it
 
-- [ ] 2.1 The design agent's brief says to pass the user's yes as they wrote it and to raise the card when crew refuses it, and the usage, README and SKILL.md name `--excerpt` (design, Decision 4; Task notes 2.1). Verify `tests/suite t-briefs t-docs` ends with "0 failed".
+- [x] 2.1 The design agent's brief says to pass the user's yes as they wrote it and to raise the card when crew refuses it, and the usage, README and SKILL.md name `--excerpt` (design, Decision 4; Task notes 2.1). Verify `tests/suite t-briefs t-docs` ends with "0 failed".
 - [ ] 2.2 The tests this change affects pass. Verify `tests/suite --affected` ends with "0 failed".
