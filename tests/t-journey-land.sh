@@ -484,6 +484,8 @@ expect_ok on_box _land-card wldn switchboard-kit
 has "$out" "card land/switchboard-kit: $kit changed"
 has "$(calls | grep "^$box pendingyou update_request ")" "\"changeNote\": \"east reads proven and joins the card\""
 echo '{"answer": {"choiceIds": ["land:north", "land:south", "land:east"]}}' > "$(home_of $box)/.stub-pendingyou/answered/$kit.json"
+out=$(export CREW_AGENT=wldn-ops; HOST=$box crew card read land/switchboard-kit 2>&1) || fail "ops could not read its card:"$'\n'"$out"
+has "$out" "lands them: crew bolt submit north south east --label wldn"
 south=$(git -C "$k" rev-parse bolt/south)
 : > "$CREW_TEST_LOG"
 expect_fail "south did not land, as said above; north and east landed" crew bolt submit north south east

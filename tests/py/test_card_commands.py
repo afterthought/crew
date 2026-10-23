@@ -657,3 +657,23 @@ class TestLandWait:
     def test_a_wait_on_the_kits_own_card_is_refused(self, monkeypatch, tmp_path):
         with pytest.raises(crew.Refusal, match="^land/switchboard-kit is switchboard-kit's landings card, wldn-ops's"):
             self.wait(monkeypatch, tmp_path, None, key="land/switchboard-kit")
+
+
+# ------------------------------------------------------------------------- crew card read of a kit's landings card
+
+def test_a_sent_landings_card_reads_the_ticked_bolts_in_its_order_and_the_submit_that_lands_them():
+    """rail-cards "Landing approved": a and c ticked, b cleared."""
+    heads = plan.card_heads("a@abc1234 b@abc1234 c@def5678")
+    got = {"status": "answered", "turn": "agent", "answer": {"choiceIds": ["land:c", "land:a"], "note": {"text": "c first"}}}
+    assert plan.landing_lines("swancloud", got, heads) == [
+        "  to land, in the card's order: a and c", "  lands them: crew bolt submit a c --label swancloud"]
+    assert "  note: c first" in cards.answer_lines("land/crew", "req_k1", got)
+
+
+def test_a_lone_row_approved_lands_it_and_a_send_ticking_none_lands_nothing():
+    one = plan.card_heads("y@abc1234")
+    approved = {"status": "answered", "turn": "agent", "answer": {"approved": True}}
+    assert plan.landing_lines("wldn", approved, one)[-1] == "  lands them: crew bolt submit y --label wldn"
+    none = {"status": "answered", "turn": "agent", "answer": {"choiceIds": []}}
+    assert plan.landing_lines("wldn", none, one) == ["  no bolt ticked: nothing lands"]
+    assert plan.landing_lines("wldn", {"status": "pending", "turn": "you"}, one) == []

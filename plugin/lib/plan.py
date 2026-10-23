@@ -11253,10 +11253,25 @@ def card_held(label, who, key):
         f"{who} holds no open card under {key} on {crew.this_host()}")
 
 
+def landing_lines(label, got, heads):
+    """What crew card read land/<kit> prints beside the answer once the user sent the kit's landings card (rail-cards
+    "An answer wakes the owner"): the bolts they ticked in the card's order (ticked_of, heads its rows as card_heads
+    gives them), and the one crew bolt submit that lands them in that order, or that none was ticked, so nothing lands;
+    nothing while it waits on them."""
+    ticked = ticked_of(got, heads)
+    if ticked is None:
+        return []
+    if not ticked:
+        return ["  no bolt ticked: nothing lands"]
+    return [f"  to land, in the card's order: {joined(ticked)}", f"  lands them: crew bolt submit {' '.join(ticked)} --label {label}"]
+
+
 def card_read(fleet, a):
     """crew card read <key> [--label L] [--json]: where the card the asker holds under the key stands, read from
-    Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words. An approval the
-    user declined is then closed with their words, and the close recorded (record 0031 §1); nothing else is."""
+    Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words; for a kit's
+    landings card, land/<kit>, the bolts they ticked in the card's order and the crew bolt submit that lands them
+    (landing_lines). An approval the user declined is then closed with their words, and the close recorded (record
+    0031 §1); nothing else is."""
     import cards
     label, who = card_asker(fleet, a)
     card = card_held(label, who, a.key)
@@ -11266,10 +11281,14 @@ def card_read(fleet, a):
         if words is not None:
             tool, args, _ = cards.close_call(got, card, who, cards.declined_outcome(words))
             py.call(tool, args)
+    kind = land_key(a.key, partition_kits(fleet, label))
     if a.json:
         print(json.dumps(got, indent=1, ensure_ascii=False))
     else:
-        print("\n".join(cards.answer_lines(a.key, card, got)))
+        entries = cards.host_entries(record, label, crew.this_host()) if kind and kind[0] == "kit" else []
+        heads = card_heads(next((e.get("Heads") for e in reversed(entries) if e.get("Card") == card and e.get("Heads")
+                                 and not e.get("Refused")), None))
+        print("\n".join(cards.answer_lines(a.key, card, got) + (landing_lines(label, got, heads) if kind and kind[0] == "kit" else [])))
     if words is not None:
         record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
