@@ -48,6 +48,8 @@ tests/contract/test_gather.py
 tests/contract/test_git.py
 tests/t-journey-units.sh
 tests/t-journey-plan.sh
+tests/t-journey-merge.sh
+tests/t-journey-prompts.sh
 tests/moon.yml
 README.md
 plugin/skills/crew/SKILL.md
