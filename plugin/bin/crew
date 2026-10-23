@@ -252,6 +252,10 @@
 #                                      again where a restart left its pane a shell; down closes them
 #   crew tell     <agent> "<text>"     prompt an agent crew started, wherever it runs, marked with who sent it;
 #                                      refused, with nothing typed, while the agent waits on a question in its pane
+#   crew tell     --board < word.json  a word from a dock of the board, as its listener pipes it ({label, key, to,
+#                                      text}): checked against the agent its item's kind goes to, one line of at most
+#                                      1000 characters, and told it as the user's from the board, naming the item;
+#                                      prints `sent to <agent>`, and answers no card
 #   crew send     <team or partition> "<text>"
 #                                      send anything for another team or partition to that partition's operator, its
 #                                      one door, wherever it runs: a team by its partition, a partition by its label;
@@ -385,7 +389,8 @@ case $cmd in
   ops) exec python3 "$here/../lib/ops.py" "${args[@]:1}" ;;
   board | _views | _board) exec python3 "$here/../lib/board.py" "${args[@]}" ;;
   hold | go | update | _hold | _go | _update | _renew) exec python3 "$here/../lib/hold.py" "${args[@]}" ;;
-  tell) py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
+  tell) [[ ${2:-} == --board && $# == 2 ]] && { py tell --board; exit; }
+    py tell "${2:?usage: crew tell <agent> \"<text>\"}" "${3:?usage: crew tell <agent> \"<text>\"}" ;;
   send) py send "${2:?usage: crew send <team or partition> \"<text>\"}" "${3:?usage: crew send <team or partition> \"<text>\"}" ;;
   status)
     if [[ -n ${2:-} ]]; then one _status "$2" ${forced[@]+"${forced[@]}"}

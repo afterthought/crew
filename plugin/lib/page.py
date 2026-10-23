@@ -448,7 +448,8 @@ def docks(d, fleet, label):
     proposal, a planned or held bolt and each of its units, a held bolt's fixes, a queued unit, a landing, a deploy and
     an operation waiting on an environment; a team, from the strip; and the Claude account of each team's session, a
     subscription, from the team's dock. Each page is made from the page's data, its lineage and the fleet crew already
-    loaded, and nothing else; an item it names is a link only where it has a dock (record 0038, S27, S28)."""
+    loaded, and nothing else; an item it names is a link only where it has a dock (record 0038, S27, S28). Every page
+    names, as its `to`, the agent a word from its dock goes to (word_to)."""
     B, p = d["board"], crew.partition_of(fleet, label)
     nodes = {n["id"]: n for n in d["nodes"]}
     read_at = plan.utc(B["read_at"])
@@ -589,7 +590,24 @@ def docks(d, fleet, label):
         rows += [{"text": f"{label}-{role} · {p['machine']} session {s}"} for role, s in p["sessions"].items()
                  if fleet["hosts"].get(p["machine"], {}).get("sessions", {}).get(s, {}).get("account") == account]
         out[f"subscription:{account}"] = dock("subscription", account, ("Claude account",), parts=[("sessions on it", rows)])
+    for key, pg in out.items():
+        pg["to"] = word_to(key, d, label)
     return out
+
+
+def word_to(key, d, label):
+    """The agent a dock's word goes to, by its item's kind (crew.ROLE_OF, record 0038 §3): for a bolt, a unit or a fix,
+    the conductor of the team holding the bolt it is or belongs to as the board gives it, else the partition's operator;
+    for any other kind, its role's agent of the partition."""
+    kind, _, name = key.partition(":")
+    role = crew.ROLE_OF.get(kind, "operator")
+    if role != "conductor":
+        return f"{label}-{role}"
+    B = d["board"]
+    team = next((b.get("team") for b in B["bolt_plan"]["planned"] + B["construction"]
+                 if (kind == "bolt" and b["bolt"] == name) or (kind == "fix" and b["bolt"] == name.partition("/")[0])
+                 or (kind == "unit" and any(u["unit"] == name for u in b["units"]))), None)
+    return f"{team}-conductor" if team else f"{label}-operator"
 
 
 def walk(B, deploys):

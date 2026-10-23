@@ -3,9 +3,10 @@
      the file whole. It opens on the partition's board, narrowed to the team last chosen; its lineage is the flow
      view, and its deploys, by environment, the deploys view, each one switch away. A click or Enter on any item of the
      board, a team of the strip or a deploy of the deploys view opens its dock over the board, the page page.py made
-     for it (D.docks); the dock answers nothing. Everything it draws is in this file: no font, script or style is loaded
-     from anywhere, and the only links are to the fleet page and the other partitions' pages beside it. Every label is
-     set as text, never as markup. -->
+     for it (D.docks); the dock answers nothing, and its last section takes a word to the item's agent, posted to the
+     page's own address on Send, the one request the page makes. Everything it draws is in this file: no font, script or
+     style is loaded from anywhere, and the only links are to the fleet page and the other partitions' pages beside it.
+     Every label, and every answer to a word, is set as text, never as markup. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -19,7 +20,8 @@
    to 535), .ledger (574 to 599), .record (614 to 626), .quote (627 to 633), .marks and .mark (666 to 669), and the
    phone's .lanes and .lane (from 1016: 1035, 1044); and its dock, borrowed and not its file: .scrim, .dock, .dk-h with
    its forms, .dk-b, .sec, .rows, .row, .kv and .tl (772 to 826, its --dock and --shadow from 238), and the phone's dock
-   (1052), with no foot, since the dock answers nothing. Its web fonts give way to their system fallbacks, and the
+   (1052), with no foot, since the dock answers nothing; its last section, the word to the item's agent, is the page's
+   own. Its web fonts give way to their system fallbacks, and the
    sheet's minimum height is dropped. Every item that opens a dock takes the pointer. A restyle starts there. */
 :root{
   --bg:#EEF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --ink:#16202A; --ink2:#4A5763; --ink3:#7A8794;
@@ -183,11 +185,20 @@ body.docked .dock{transform:none;visibility:visible;transition:transform .2s cub
 .dk-b{flex:1;overflow:auto;padding:6px 16px 20px}
 .dock .sec{padding:12px 0;border-bottom:1px solid var(--line2)}
 .dock .sec:last-child{border-bottom:0}
-.dock .sec h3{display:flex;align-items:baseline;gap:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700;margin-bottom:8px}
+.dock .sec h3,.dock .word h3{display:flex;align-items:baseline;gap:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700;margin-bottom:8px}
 .dock .rows{display:flex;flex-direction:column;gap:4px}
 .dock .rows .row,.dock .rows .lk{display:block;font-size:12.5px;padding:4px 0;text-align:left;overflow-wrap:anywhere}
 .dock .lk{color:var(--accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 40%,transparent);text-underline-offset:2px;text-align:left;overflow-wrap:anywhere}
 .dock .lk:hover{text-decoration-color:var(--accent)}
+/* a dock's word to its item's agent, its last section: whom it goes to, a field and Send, and what came back */
+.dock .word{padding:12px 0}
+.dock .word .to{font-size:12px;color:var(--ink2);margin-bottom:6px;overflow-wrap:anywhere}
+.dock .word form{display:flex;gap:6px}
+.dock .word input{flex:1;min-width:0;font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.dock .word button{font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:6px;background:var(--accent);color:var(--accent-ink)}
+.dock .word input:disabled,.dock .word button:disabled{opacity:.5;cursor:default}
+.dock .word .said{font-size:12px;color:var(--ink2);margin-top:6px;overflow-wrap:anywhere}
+.dock .word .said:empty{display:none}
 .kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0;font-size:12.5px}
 .kv dt{font:500 11.5px var(--mono);color:var(--ink3)} .kv dd{margin:0;overflow-wrap:anywhere}
 .tl{list-style:none;margin:0;padding:0}
@@ -332,7 +343,14 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   <div class="scrim" id="scrim"></div>
   <aside class="dock" id="dock" role="dialog" aria-modal="false" aria-labelledby="dk-title" tabindex="-1">
     <div class="dk-h" id="dk-h"></div>
-    <div class="dk-b" id="dk-b"></div>
+    <div class="dk-b" id="dk-b">
+      <section class="word" id="dk-word" aria-label="A word to the item's agent">
+        <h3>a word</h3>
+        <p class="to" id="dk-to"></p>
+        <form id="dk-form"><input type="text" id="dk-text" maxlength="1000" autocomplete="off" aria-label="Your word"><button type="submit" id="dk-send">Send</button></form>
+        <p class="said" id="dk-said" role="status" aria-live="polite"></p>
+      </section>
+    </div>
   </aside>
 </main>
 <main id="view-deploys" aria-label="Deploys" hidden>
@@ -990,7 +1008,8 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
   // trail. Esc, × or a click outside closes it, and the focus goes back to the item it was opened from. A deploy opened
   // from the deploys view opens over the board, and closing it shows the deploys view again. Under 760 px it fills the
   // screen, its back control always shown, closing it with the trail empty. It holds no control that answers or
-  // moves anything: it has no foot, and its markers are the board's.
+  // moves anything: it has no foot, its markers are the board's, and its last section, a word to the item's agent,
+  // answers no card.
   var dock = $("dock"), dkH = $("dk-h"), dkB = $("dk-b"), trail = [], shown = null, opener = null, openedIn = "board";
   // A time in a dock's words, as page.py writes it in UTC, said in the viewer's own zone as the lanes say theirs.
   var STAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?Z/g;
@@ -1051,7 +1070,55 @@ body.selecting #lines line:not(.marked) { opacity: .2; }
       tl.append(li);
     });
     if (tl.childNodes.length) sec("history").append(tl);
+    wordFor(p);
   }
+
+  // A dock's last section, a word to its item's agent (record 0038 §3): the agent page.py named for it (to), and that a
+  // card is answered on the rail, since a word from the board answers nothing. Send posts it to the page's own address,
+  // `word` beside it, where swancloud's listener hands it to crew tell --board, which tells the agent as the user's from
+  // the board, naming the item, or refuses; the listener's answer, 200 or 422 with crew's words, is said as text, and
+  // anything else, or nothing, is the listener not answering. Send waits while a word is on its way; an answer that
+  // comes once another dock is shown is said naming its item. That post is the one request the page makes, and a page
+  // opened from disk sends nothing.
+  var wordSec = $("dk-word"), wordText = $("dk-text"), wordSend = $("dk-send"), wordSaid = $("dk-said"), sending = null;
+  var LOCAL = location.protocol === "file:", NO_LISTENER = "the board's listener did not answer: nothing was sent";
+  function wordFor(p) {
+    var off = LOCAL || !p.to;
+    $("dk-to").textContent = p.to ? "to " + p.to + "; a card is answered on the rail" : "this page names no agent for a word on it";
+    wordText.value = "";
+    wordText.disabled = off;
+    wordSend.disabled = off || sending !== null;
+    wordSaid.textContent = LOCAL ? "a word is sent only from the served board" : "";
+    dkB.append(wordSec);
+  }
+  function sendWord(key, page) {
+    var text = wordText.value;
+    if (LOCAL || !page.to || sending !== null || !text.trim()) return;
+    sending = key;
+    wordSend.disabled = true;
+    wordSaid.textContent = "sending to " + page.to + "…";
+    function told(ok, words) {
+      sending = null;
+      wordSend.disabled = false;
+      if (shown !== key) { wordSaid.textContent = page.kind + " " + page.title + ": " + words; return; }
+      wordSaid.textContent = words;
+      if (ok) wordText.value = "";
+    }
+    fetch(new URL("word", location.href), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: D.label, key: key, to: page.to, text: text })
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        t = t.trim();
+        if (t && (r.status === 200 || r.status === 422)) told(r.status === 200, t);
+        else told(false, NO_LISTENER);
+      });
+    }).catch(function () { told(false, NO_LISTENER); });
+  }
+  $("dk-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    if (shown) sendWord(shown, DOCKS[shown]);
+  });
   function showDock(key) {
     shown = key;
     drawDock(DOCKS[key]);
