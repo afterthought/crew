@@ -14,4 +14,4 @@
 
 ## 3. Docs
 
-- [ ] 3.1 README, the crew skill and `plugin/bin/crew`'s usage header say the rail's sweep raises every card left on another host again and what `crew record --proposed` does with one, proved by `tests/t-docs.sh` and `tests/suite --affected` (design, *Task notes* 3.1).
+- [x] 3.1 README, the crew skill and `plugin/bin/crew`'s usage header say the rail's sweep raises every card left on another host again and what `crew record --proposed` does with one, proved by `tests/t-docs.sh` and `tests/suite --affected` (design, *Task notes* 3.1).
