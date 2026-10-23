@@ -5044,6 +5044,23 @@ def landing_refusal(kind, name, stage, bolt, path, standing, alive):
             f"has landed or been refused, since what merges into bolt/{bolt} meanwhile is left out of main's landing")
 
 
+def split_refusal(kind, name, bolt, host, remote, f):
+    """Why a unit's, chore's or fix's merge is refused while its bolt is split (plan.19), or None: the host's tip names
+    remote for the bolt and that remote's bolt/<bolt> lacks it (f, kit.bolt_split), so sluice would form the merge
+    there and drop what the host holds; the landing, whose push makes the two one, is the way on. A copy that holds the
+    host's tip, or none at all, which sluice refuses itself, lets it through; one crew could not read refuses (read.1)."""
+    if f["read"]:
+        return f"crew can't tell whether bolt/{bolt} is split, so {kind} {name}'s merge waits: {f['read']}"
+    if f["there"] == "-" or f["held"] == "yes":
+        return None
+    n = f["merges"]
+    lacks = f"{host}'s tip" if not n else f"{n} merge{'' if n == 1 else 's'} {host} holds"
+    return (f"bolt/{bolt} is split: its tip on {host}, {f['local'][:7]}, names {remote} for it, so sluice would form "
+            f"{kind} {name}'s merge on {remote}'s bolt/{bolt} at {f['there'][:7]}, which lacks {lacks}, and drop "
+            f"{'them' if n > 1 else 'it'}. The bolt takes no merge until it lands: its landing (crew bolt submit {bolt}, "
+            f"main-level ops's on the user's word) pushes {host}'s tip to {remote} and makes the two one")
+
+
 def chore_check(fleet, a, label, plan, c):
     """Whether a chore's stage may start (chore_refusal), its place (made at its first code, on chore/<name> from the
     bolt, tracking it, and taking the head of each unmerged unit or chore it comes after, as a unit's construct's place
