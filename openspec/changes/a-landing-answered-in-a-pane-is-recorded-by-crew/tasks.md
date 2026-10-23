@@ -13,7 +13,7 @@
 ## 3. The landing card closes naming the words
 
 - [x] 3.1 The close of a landing on the user's words sends the word and the words first, and records the outcome without them, or names the pane and time when the words can't be read back (design, Decision 5; Task notes 3.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_landing.py`.
-- [ ] 3.2 A waiting card closed as answered in a conversation is cancelled with Pending You's `answeredHere` and recorded closed (design, Decision 5; Task notes 3.2). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_cards.py`.
+- [x] 3.2 A waiting card closed as answered in a conversation is cancelled with Pending You's `answeredHere` and recorded closed (design, Decision 5; Task notes 3.2). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_cards.py`.
 - [ ] 3.3 `crew bolt land` of a bolt landed on the user's words closes its card on the team's host with those words, answered here, and removes the kept words (design, Decision 5; Task notes 3.3). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_card_commands.py`, and `tests/suite t-journey-land` ends with "0 failed".
 
 ## 4. The brief and the docs say it
