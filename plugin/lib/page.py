@@ -223,18 +223,10 @@ def where(fleet, label, asked):
     standing roles, then its dispatcher there, and the account the hosts file gives the session, said when it names
     none (read.2). A session no agent of the partition runs in is left out."""
     p = fleet["partitions"][label]
-    ran = crew.partition_hosts(fleet, label)
+    placed = agents_in(fleet, label)
     out = []
     for h in sorted(set(asked) | {p["machine"]}):
-        agents = {}
-        for t in p["teams"]:
-            if fleet["teams"][t]["machine"] == h:
-                agents.setdefault(fleet["teams"][t]["session"], []).append(t)
-        if p["machine"] == h:
-            for r in crew.MAIN_STANDING:
-                agents.setdefault(p["sessions"][r], []).append(f"{label}-{r}")
-        if h in ran:
-            agents.setdefault(crew.dispatch_place(fleet, label, h), []).append(f"{label}-dispatch-{h}")
+        agents = {s: v for (x, s), v in placed.items() if x == h}
         known = fleet["hosts"].get(h, {}).get("sessions", {})
         v = asked.get(h)
         answered = None if h not in asked else v is True
@@ -243,6 +235,21 @@ def where(fleet, label, asked):
                     "sessions": [{"session": s, "agents": agents[s], "account": known.get(s, {}).get("account") or None,
                                   "account_said": account_said(known.get(s, {}).get("account"))}
                                  for s in dict.fromkeys(list(known) + list(agents)) if s in agents]})
+    return out
+
+
+def agents_in(fleet, label):
+    """Which of a partition's agents crew starts in which session, {(host, session): [agent]}: its teams, each in its
+    host's session, then its main level's standing roles in theirs on its host, then its dispatcher on each host its
+    teams run on (crew.dispatch_place)."""
+    p = fleet["partitions"][label]
+    out = {}
+    for t in p["teams"]:
+        out.setdefault((fleet["teams"][t]["machine"], fleet["teams"][t]["session"]), []).append(t)
+    for r in crew.MAIN_STANDING:
+        out.setdefault((p["machine"], p["sessions"][r]), []).append(f"{label}-{r}")
+    for h in crew.partition_hosts(fleet, label):
+        out.setdefault((h, crew.dispatch_place(fleet, label, h)), []).append(f"{label}-dispatch-{h}")
     return out
 
 
@@ -539,8 +546,34 @@ def subscriptions(fleet, readings, teams, now):
             state, said = ("unread", "its use could not be read") if mine else ("none", "no host has published its use")
         out.append(dict({"account": a, "state": state, "said": said, "host": shown and shown["host"], "at": shown and shown["at"]},
                         **(figures(shown, now) if shown else {"windows": [], "models": []}),
-                        others=[{"host": r["host"], "at": r["at"], "unread": r["unread"], "said": reading_said(r, now)} for r in mine if r is not shown]))
+                        others=[{"host": r["host"], "at": r["at"], "unread": r["unread"], "said": reading_said(r, now)} for r in mine if r is not shown],
+                        **on_subscription(fleet, a, teams)))
     return out
+
+
+def on_subscription(fleet, account, teams):
+    """The sessions and partitions on a subscription, beside its use and computed from nothing of it: each session the
+    hosts file gives account, by host and on each in the file's order, with crew's agents in it across every partition
+    (agents_in), teams first, then main levels' roles, then dispatchers, and each team's slots at work and its
+    conductor's wait as its partition's block says them (teams, by name, as fleet_team gives them); and the partitions
+    with an agent in one of them, in the teams file's order, each linked as its block is (linked)."""
+    labels = list(fleet["partitions"])
+    placed = {l: agents_in(fleet, l) for l in labels}
+    sessions, on = [], set()
+    for h in sorted(fleet["hosts"]):
+        for s, v in fleet["hosts"][h].get("sessions", {}).items():
+            if v.get("account") != account:
+                continue
+            here = [(l, a) for l in labels for a in placed[l].get((h, s), [])]
+            here.sort(key=lambda x: 0 if x[1] in fleet["teams"] else 2 if x[1] == f"{x[0]}-dispatch-{h}" else 1)
+            agents = [a for _, a in here]
+            on |= {l for l, _ in here}
+            sessions.append({"host": h, "session": s, "agents": agents, "said": ", ".join(agents) or "runs no crew agent",
+                             "teams": [{"team": t, "at_work_said": teams[t]["at_work_said"], "waits_said": teams[t]["waits"]["said"]}
+                                       for t in agents if t in teams]})
+    return {"sessions": sessions, "sessions_said": None if sessions else "no session of herdr-hosts is on it",
+            "partitions": [{"label": l, "link": None} for l in labels if l in on],
+            "partitions_said": None if on else "no partition's agents run on it"}
 
 
 # ------------------------------------------------------------------------------------------------- the docks

@@ -360,9 +360,9 @@ class TestPublishedUse:
         assert [r["account"] for r in readings] == ["madswan"] and [u["host"] for u in unread] == ["mac-studio"]
 
 
-def subs(*readings, now=NOW):
+def subs(*readings, now=NOW, logs=LOGS):
     rs, _ = page.usage_checked({h: published(h, *[r for x, r in readings if x == h]) for h in dict.fromkeys(x for x, _ in readings)})
-    teams = {t["team"]: t for p in fleet()["partitions"] for t in p["teams"]}
+    teams = {t["team"]: t for p in fleet(logs=logs)["partitions"] for t in p["teams"]}
     return {s["account"]: s for s in page.subscriptions(FLEET, rs, teams, now)}
 
 
@@ -426,6 +426,47 @@ class TestSubscriptions:
     def test_ages_in_whole_minutes_and_hours_past_sixty(self):
         assert [page.age_said(ago(m), NOW) for m in (0, 0.9, 2, 59, 60, 65, -3)] == [
             "under a minute ago", "under a minute ago", "2 min ago", "59 min ago", "1 h ago", "1 h 5 min ago", "under a minute ago"]
+
+
+
+class TestOnASubscription:
+    def test_two_partitions_on_one_subscription_each_session_with_its_agents_and_its_teams_work(self):
+        """fleet-page "Two partitions on one subscription" and "A session crew runs nothing in": mad-1 with 1 of 4 slots
+        at work in deneb's madswan, swancloud's main level in its swancloud, and swancloud-3 and agentplot-2 running none."""
+        logs = dict(LOGS, madswan=[entry("stage.start", ["stage/k/code", "unit/k", "agent/mad-1-unit-1"], "2026-10-23T11:30:00Z")])
+        m = subs(logs=logs)["madswan"]
+        assert [(s["host"], s["session"], s["agents"], s["said"]) for s in m["sessions"]] == [
+            ("deneb", "madswan", ["mad-1", "madswan-design", "madswan-planner", "madswan-ops", "madswan-operator", "madswan-dispatch-deneb"],
+             "mad-1, madswan-design, madswan-planner, madswan-ops, madswan-operator, madswan-dispatch-deneb"),
+            ("deneb", "swancloud", ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"],
+             "swancloud-design, swancloud-planner, swancloud-ops, swancloud-operator, swancloud-dispatch-deneb"),
+            ("deneb", "swancloud-3", [], "runs no crew agent"), ("deneb", "agentplot-2", [], "runs no crew agent")]
+        assert m["sessions"][0]["teams"] == [{"team": "mad-1", "at_work_said": "1 of 4 slots at work", "waits_said": "waits on 1 stage: code of k"}]
+        assert [s["teams"] for s in m["sessions"][1:]] == [[], [], []]
+        assert (m["partitions"], m["sessions_said"], m["partitions_said"]) == ([{"label": "madswan", "link": None}, {"label": "swancloud", "link": None}], None, None)
+
+    def test_a_teams_work_is_its_partitions_block_word_for_word(self):
+        m2 = subs()["madswan-2"]
+        crw6 = team_of(of(fleet(), "swancloud"), "crw-6")
+        assert [(s["host"], s["session"], s["agents"]) for s in m2["sessions"]] == [("deneb", "swancloud-2", ["crw-6"])]
+        assert m2["sessions"][0]["teams"] == [{"team": "crw-6", "at_work_said": crw6["at_work_said"], "waits_said": crw6["waits"]["said"]}]
+        assert m2["partitions"] == [{"label": "swancloud", "link": None}]
+
+    def test_a_dispatcher_away_from_its_main_level_and_a_session_with_no_account_on_no_subscription(self):
+        s = subs()
+        assert [(x["host"], x["session"], x["agents"]) for x in s["ia"]["sessions"]] == [("chuck-herdr-alpha", "wldn-1", ["swb-1", "wldn-dispatch-chuck-herdr-alpha"])]
+        assert [(x["host"], x["session"]) for x in s["willdan-alex"]["sessions"]] == [("mac-studio", "wldn")]
+        assert all(x["session"] != "swancloud-4" for v in s.values() for x in v["sessions"])
+
+    def test_a_subscription_no_session_runs_on_says_so(self):
+        f = subs(("deneb", made("fable-test", ago(3))))["fable-test"]
+        assert (f["sessions"], f["sessions_said"], f["partitions"], f["partitions_said"]) == (
+            [], "no session of herdr-hosts is on it", [], "no partition's agents run on it")
+
+    def test_where_a_partition_runs_reads_the_same_placement(self):
+        assert page.agents_in(FLEET, "swancloud") == {
+            ("deneb", "swancloud-2"): ["crw-6"], ("mac-studio", "swancloud-4"): ["crw-7", "swancloud-dispatch-mac-studio"],
+            ("deneb", "swancloud"): ["swancloud-design", "swancloud-planner", "swancloud-ops", "swancloud-operator", "swancloud-dispatch-deneb"]}
 
 
 def tokens(text):
