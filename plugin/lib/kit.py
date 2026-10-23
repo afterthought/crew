@@ -134,13 +134,21 @@ def unready_said(place, why, lines=15):
 VERDICT = "Sluice-Result"
 
 
+def branch_table(branches, branch):
+    """The [branches."<pattern>"] table of a policy's branches whose pattern matches the branch, the most specific
+    first, as sluice matches it; None when none does."""
+    import fnmatch
+    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
+                      key=lambda p: (p.count("*"), -len(p)))
+    return branches[matching[0]] if matching and isinstance(branches[matching[0]], dict) else None
+
+
 def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
     """The checks a kit's policy requires of its bolt branches (teams.5, record 0026): the `required` list of the
     [branches."<pattern>"] table whose pattern matches a bolt's branch, the most specific first, as sluice matches it,
     in the policy as the kit's main holds it now (ref, origin/main for a kit on GitHub, plan.18). Refused, naming the
     file and the ref, when the kit has none, it is not TOML, or no table names bolt branches with a check: a kit merges
     and lands only through sluice, so crew gives it no bolt until its policy says what gates one."""
-    import fnmatch
     if text is None:
         crew.fail(f"{kit} merges only through sluice, and has no {where} on {ref}: write one whose "
                   f"[branches.\"bolt/*\"] names the checks a bolt's merges must pass, then give the bolt again")
@@ -148,13 +156,28 @@ def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
         branches = tomllib.loads(text).get("branches", {})
     except tomllib.TOMLDecodeError as e:
         crew.fail(f"{kit}'s {where} is not TOML, so crew can't read what gates its bolt branches: {e}")
-    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
-                      key=lambda p: (p.count("*"), -len(p)))
-    required = branches[matching[0]].get("required") if matching and isinstance(branches[matching[0]], dict) else None
+    table = branch_table(branches, branch)
+    required = table.get("required") if table else None
     if not (isinstance(required, list) and required and all(isinstance(r, str) and r for r in required)):
         crew.fail(f"{kit} merges only through sluice, and its {where} names no checks for its bolt branches: give "
                   f"[branches.\"bolt/*\"] a `required` list of the checks a bolt's merges must pass, then give the bolt again")
     return required
+
+
+def bolt_remote(text, branch="bolt/a-bolt", where=DECLARATION):
+    """The remote a kit's policy names for a branch, as sluice routes it (plan.19, its rule core.15): the `remote` of the
+    [branches."<pattern>"] table that matches the branch, the most specific first, as bolt_checks matches it, when it is
+    a non-empty string; None for no policy (text None), no matching table or no remote, which sluice reads as a branch
+    kept in the host's own refs. Refused, naming the file, when it is not TOML (read.1)."""
+    if text is None:
+        return None
+    try:
+        branches = tomllib.loads(text).get("branches", {})
+    except tomllib.TOMLDecodeError as e:
+        crew.fail(f"{where} is not TOML, so crew can't read where sluice keeps {branch}: {e}")
+    table = branch_table(branches, branch)
+    remote = table.get("remote") if table else None
+    return remote if isinstance(remote, str) and remote else None
 
 
 def verification(head, result):

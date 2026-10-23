@@ -81,7 +81,7 @@ signal's id takes its full id, <capture>/<NN>-<slug>, or its short one, <capture
 
 A command that names no partition reads them all, or the agent's own (CREW_LABEL); --label names one.
 """
-import argparse, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
+import argparse, base64, contextlib, datetime, fcntl, io, json, os, pathlib, re, shlex, subprocess, sys, time
 # getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
 # module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
@@ -6217,7 +6217,10 @@ def reach(fleet, t):
         k, _ = st.kit(b)
         if not k:
             continue  # said above
-        doc, why = bolt_forecast_read(*sluice_check(k["team"]["kit"]["main"], b.name()))
+        checked, kept = bolt_check(k["team"]["kit"], b.name())
+        if kept:
+            say(kept)
+        doc, why = bolt_forecast_read(*checked)
         if why:
             said = unread_said(b.name(), k["bolts"].get(b.name(), {}).get("head"), why, done)
             if said:
@@ -6251,6 +6254,127 @@ def sluice_check(main, bolt):
     except OSError as e:
         return None, "", str(e)
     return r.returncode, r.stdout, r.stderr
+
+
+# What a conductor's wait reads of a bolt before sluice forecasts it (plan.19), in its kit's main checkout with no fetch
+# (plan.18), $bolt and $file its arguments: TIP, the commit of the host's own bolt/<bolt>, or - when it has none; AT_TIP,
+# the policy ($file) at that commit, base64, or - when it holds none, as sluice reads a branch's policy; and TRACKED, the
+# remotes this host holds a tracking ref of the branch from, as it last fetched them.
+BOLT_TIP = r"""cd "$1" || exit 1
+bolt=$2 file=$3
+tip=$(git rev-parse --verify -q "refs/heads/bolt/$bolt^{commit}") || tip=-
+echo "TIP=$tip"
+if [ "$tip" != - ] && text=$(git show "$tip:$file" 2>/dev/null); then
+  echo "AT_TIP=$(printf '%s\n' "$text" | base64 | tr -d '\n')"
+else echo "AT_TIP=-"; fi
+echo "TRACKED=$(git for-each-ref --format='%(refname)' "refs/remotes/*/bolt/$bolt" | sed -n "s|^refs/remotes/\([^/]*\)/bolt/$bolt\$|\1|p" | tr '\n' ' ')"
+"""
+
+# A legacy bolt's forecast from a place on it (plan.19, forecast_way), in its kit's main checkout: a worktree already on
+# bolt/<bolt> is a place on it, the landing's while its submission is with sluice (bolt_submit) or a bolt's own from
+# before record 0026 the tidy kept on its branch, and is read as it stands; else crew makes its own at the path given,
+# on the branch with no checkout, since sluice reads only its head, and removes it once sluice has answered, as it does
+# one a forecast that was stopped left there. Nothing moves the branch. Prints NOSLUICE when the host has no sluice,
+# making nothing; PLACE, the worktree sluice forecast from, or - with WHY, git's words, when none could be made; RC and
+# SAID, sluice's exit and its answer, base64; and KEPT, crew's own place when git could not remove it, with WHY.
+FORECAST_PLACE = r"""main=$1 path=$2 bolt=$3
+cd "$main" || exit 1
+command -v sluice >/dev/null || { echo "NOSLUICE=yes"; exit 0; }
+on=$(git worktree list --porcelain | awk -v want="branch refs/heads/bolt/$bolt" '/^worktree /{w = substr($0, 10)} $0 == want {print w; exit}')
+made=
+if [ -z "$on" ]; then
+  if ! why=$(git worktree add -q --no-checkout "$path" "bolt/$bolt" 2>&1); then
+    printf 'PLACE=-\nWHY=%s\n' "$(printf '%s' "$why" | tr '\n' ' ')"; exit 0
+  fi
+  on=$path made=yes
+elif [ -d "$path" ] && [ "$(cd "$on" && pwd -P)" = "$(cd "$path" && pwd -P)" ]; then made=yes; fi
+said=$(sluice submit main --check --worktree "$on" --json); rc=$?
+echo "PLACE=$on"; echo "RC=$rc"; echo "SAID=$(printf '%s' "$said" | base64 | tr -d '\n')"
+if [ -n "$made" ] && ! why=$(git worktree remove --force "$path" 2>&1); then
+  printf 'KEPT=%s\nWHY=%s\n' "$path" "$(printf '%s' "$why" | tr '\n' ' ')"
+fi
+"""
+
+
+def script_here(script, *args):
+    """A bash script run on this host with its arguments: (its exit, its output, its standard error), the exit None when
+    it could not be run or did not answer within POLL seconds, the error then its why."""
+    try:
+        r = subprocess.run(["bash", "-c", script, "crew", *args], capture_output=True, text=True, timeout=POLL, env=gitenv())
+    except subprocess.TimeoutExpired:
+        return None, "", f"it did not answer within {POLL} seconds"
+    except OSError as e:
+        return None, "", str(e)
+    return r.returncode, r.stdout, r.stderr
+
+
+def forecast_way(bolt, said):
+    """How sluice forecasts a bolt against its kit's main on a conductor's wait (plan.19, teams.21), from what BOLT_TIP
+    printed: ("place", None) for a legacy bolt, kept in the host's own refs (TIP), whose tip's policy (AT_TIP) names a
+    remote for its branch (kit.bolt_remote) that this host holds no tracking ref of it from (TRACKED), since sluice
+    reads a branch by its name where that policy routes it and finds such a bolt absent there until its landing pushes
+    it; ("branch", None) for any other, read by its branch name; (None, why) when what was printed can't be read, or
+    the policy at the tip is not TOML (read.1, read.2)."""
+    f = kit.said_of(said)
+    if not {"TIP", "AT_TIP", "TRACKED"} <= set(f):
+        return None, f"crew can't read where bolt/{bolt}'s tip routes it from: {(said or '').strip()[:200] or 'nothing'}"
+    if f["TIP"] == "-":
+        return "branch", None
+    try:
+        text = None if f["AT_TIP"] == "-" else base64.b64decode(f["AT_TIP"], validate=True).decode()
+        remote = kit.bolt_remote(text, f"bolt/{bolt}", f"{kit.DECLARATION} at bolt/{bolt}")
+    except ValueError as e:  # binascii.Error and UnicodeDecodeError are both
+        return None, f"crew can't read bolt/{bolt}'s {kit.DECLARATION} as it was sent: {e}"
+    except Refusal as e:
+        return None, str(e)
+    return ("place" if remote and remote not in f["TRACKED"].split() else "branch"), None
+
+
+def place_checked(bolt, said, err):
+    """What FORECAST_PLACE came to, as sluice_check gives a forecast by name: ((sluice's exit, its answer, the standard
+    error), the line naming crew's own place when git could not remove it, or None), the exit None with its why when the
+    host has no sluice, no place on the bolt could be made, or what was printed is not FORECAST_PLACE's (read.1,
+    read.2). A place left on the bolt's branch would refuse its landing's worktree, so it is named every wait until the
+    next forecast removes it."""
+    f = kit.said_of(said)
+    if "NOSLUICE" in f:
+        return (None, "", "this host has no sluice on its path"), None
+    if f.get("PLACE") == "-":
+        return (None, "", f"no place on bolt/{bolt} could be made to forecast it from: "
+                          f"{' '.join(f.get('WHY', '').split()) or 'git said nothing'}"), None
+    try:
+        code, out = int(f["RC"]), base64.b64decode(f["SAID"], validate=True).decode()
+    except (KeyError, ValueError):
+        return (None, "", f"crew can't read what the forecast from a place on bolt/{bolt} came to: "
+                          f"{(said or '').strip()[-200:] or 'nothing'}"), None
+    kept = (f"{f['KEPT']} is kept on bolt/{bolt}, git refusing to remove it: {' '.join(f.get('WHY', '').split()) or 'git said nothing'}. "
+            "crew removes it at the next forecast; while it stands, the bolt's landing cannot make its worktree"
+            if f.get("KEPT") else None)
+    return (code, out, err), kept
+
+
+def bolt_check(team_kit, bolt):
+    """sluice's forecast of a bolt against its kit's main, on this host, the team's (teams.21): read by its branch name
+    (sluice_check), or from a place on it (FORECAST_PLACE, <kit>/places/forecast-<bolt>) for a legacy bolt whose tip
+    names a remote that holds no branch of it (forecast_way, plan.19). (sluice's exit, its answer, its standard error),
+    as sluice_check gives them, and the line naming crew's own place when git could not remove it, or None."""
+    main = team_kit["main"]
+    code, out, err = script_here(BOLT_TIP, main, bolt, kit.DECLARATION)
+    if code is None:
+        return (None, "", err), None
+    way, why = forecast_way(bolt, out) if code == 0 else (None, f"crew can't read where bolt/{bolt}'s tip routes it: "
+                                                               f"{(err or out).strip()[-200:] or f'exit {code}'}")
+    if why:
+        return (None, "", why), None
+    if way == "branch":
+        return sluice_check(main, bolt), None
+    code, out, err = script_here(FORECAST_PLACE, main, f"{team_kit['dir']}/places/forecast-{bolt}", bolt)
+    if code is None:
+        return (None, "", err), None
+    if code:
+        return (None, "", f"crew could not read {main} to forecast bolt/{bolt} from a place on it: "
+                          f"{(err or out).strip()[-200:] or f'exit {code}'}"), None
+    return place_checked(bolt, out, err)
 
 
 def bolt_forecast_read(code, out, err):
