@@ -2946,9 +2946,12 @@ def bolt_submit(fleet, a):
     are on one host, else once it has ended (submit_order); each then waited on in order, whether it landed read from
     main now, GitHub's after a fetch for a kit with an origin (landing_said, plan.18), and a landed bolt closed as it
     lands (landing_ended). Nothing is refused for a host's own main lagging GitHub's: sluice forms the landing on
-    GitHub's main and pushes it with a lease (plan.8). A bolt that did not land is said in sluice's words, and the rest
-    go on; it exits non-zero naming each that did not land. It moves no branch itself, and is run in the background and
-    waited on to its end (code.9)."""
+    GitHub's main and pushes it with a lease (plan.8). Each bolt's landing pull request is live only on the user's word,
+    which this command is (bolt-teams): a draft one is readied before its submission, nothing of that bolt submitted
+    when it can't be, and one a landing leaves open is drafted before the command says the bolt did not land
+    (landing_unheld). A bolt that did not land is said in sluice's words, and the rest go on; it exits non-zero naming
+    each that did not land. It moves no branch itself, and is run in the background and waited on to its end
+    (code.9)."""
     bolts = list(a.bolt) if isinstance(a.bolt, list) else [a.bolt]
     label, _, _, plan = locate(fleet, "Bolt", bolts[0], default_label(fleet, a))
     CONTEXT["label"] = label
