@@ -859,7 +859,8 @@ def gathered(fleet, host, req):
                 f.write(f"{host} gather\n")
         try:
             running = gather.routes() if req.get("sites") else None
-            return json.loads(json.dumps({k["main"]: gather.kit(k, req.get("sites"), running, req.get("board")) for k in req["kits"]})), None
+            return json.loads(json.dumps({k["main"]: gather.kit(k, req.get("sites"), running, req.get("board"), req.get("fetch"))
+                                          for k in req["kits"]})), None
         except Exception as e:
             import traceback
             return None, traceback.format_exception_only(e)[-1].strip()
@@ -869,14 +870,16 @@ def gathered(fleet, host, req):
     return json.loads(r.stdout), None
 
 
-def survey(fleet, held, sites=False, board=False):
+def survey(fleet, held, sites=False, board=False, fetch=False):
     """Read the kits of every host holding active bolts, one call per host. held is [(team, bolt)] or [(team, bolt, kit)], the kit the bolt's
     as the plan's Repo names it. The answer is
     per host: its kits by main checkout, or why it did not answer. With sites, each worktree's devurl names and
     the host's running portless routes too; board implies sites and adds each team's slots and the explorations on
     each kit's main, for the board. With board, each kit is asked for the slots of every team that builds it on that
-    host. A kit the command has already read is not asked again, and what a host answers is
-    kept for the command's later steps; a sites survey is neither served nor kept."""
+    host. With fetch, each kit's GitHub is fetched on its host before it is read, for a read a decision of the moment
+    rests on (plan.18, plan.19), and a fetch that fails reads that kit unread with git's words. A kit the command has
+    already read is not asked again, but by a survey that fetches, which must read after its own fetch; what a host
+    answers is kept for the command's later steps; a sites survey is neither served nor kept."""
     sites = sites or board
     hosts = {}
     for team, bolt, *repo in held:
@@ -897,10 +900,10 @@ def survey(fleet, held, sites=False, board=False):
                 k["bolts"].append(bolt)
     out = {}
     for host, kits in sorted(hosts.items()):
-        have = {} if sites else {m: k for m, k in READ.kits(host).items() if m in kits}
+        have = {} if sites or fetch else {m: k for m, k in READ.kits(host).items() if m in kits}
         ask = [k for m, k in kits.items() if m not in have]
         if ask:
-            req = {"kits": ask, "sites": sites, **({"board": True} if board else {})}
+            req = {"kits": ask, "sites": sites, **({"board": True} if board else {}), **({"fetch": True} if fetch else {})}
             got, error = gathered(fleet, host, req)
             if error:
                 out[host] = {"ok": False, "error": error}
@@ -981,7 +984,8 @@ class Stages:
     by whether its After is met (after_met); a chore's is chore_stage's, then ready or waiting the same way. A unit
     whose change its bolt holds open, carried there inside another unit's merge, is marked carried and reads its stage
     from its place, or with none from the change on the bolt, its merge owed (carried_place). Work with no bolt is
-    queued, and work whose host does not answer is unknown."""
+    queued, and work whose host does not answer, or whose bolt crew can't tell where to read, is unknown, unless main
+    holds it landed."""
 
     def __init__(self, fleet, plan, survey):
         self.fleet, self.plan, self.survey, self.memo = fleet, plan, survey, {}
@@ -1019,6 +1023,10 @@ class Stages:
                 return res
             pl = k.get("chore_places", {}).get(name) if is_chore(u) else k["places"].get(name)
             res["worktree"], res["head"], res["place"] = (pl["path"], pl.get("head"), pl) if pl else (None, None, None)
+            unread = k["bolts"].get(b, {}).get("error")  # a bolt crew can't tell where to read (gather.bolt_read)
+            if unread and name not in (k.get("chores", []) if is_chore(u) else k["main"]):
+                res["why"] = unread
+                return res
             if is_chore(u):
                 stage, why = chore_stage(name, b, k, pl)
                 if stage:
@@ -1044,8 +1052,8 @@ class Stages:
 
     def bolt_state(self, b):
         """A bolt's state: planned while no team holds it; unknown when its kit can't be read; landed once every unit
-        and chore has landed; waits, to land, once every one has merged and sluice is green at its head (teams.16);
-        else active."""
+        and chore has landed; else unknown when crew can't tell where the bolt is read (gather.bolt_read); waits, to
+        land, once every one has merged and sluice is green at its head (teams.16); else active."""
         if not b.get("Team"):
             return "planned"
         k, _ = self.kit(b)
@@ -1056,15 +1064,18 @@ class Stages:
         if units and all(x == "landed" for x in stages):
             return "landed"
         facts = k["bolts"].get(b.name(), {})
+        if facts.get("error"):
+            return "unknown"
         if units and all(x in ("merged", "landed") for x in stages) and kit.verification(facts.get("head"), facts.get("verdict"))[0] == "green":
             return "waits"
         return "active"
 
 
-def stages_for(fleet, plan, bolts):
-    """Stages for the units of the given bolts, reading only the hosts that hold them."""
+def stages_for(fleet, plan, bolts, fetch=False):
+    """Stages for the units of the given bolts, reading only the hosts that hold them, each kit's GitHub fetched first
+    with fetch (survey)."""
     held = [(b.get("Team"), b.name(), b.get("Repo")) for b in bolts if b.get("Team")]
-    return Stages(fleet, plan, survey(fleet, held))
+    return Stages(fleet, plan, survey(fleet, held, fetch=fetch))
 
 
 # ------------------------------------------------------------------------------------------- finding the plans
@@ -1257,10 +1268,16 @@ GIVE_READ = POLICY + r"""echo "SLUICE=$(sluice --version 2>&1 | tr '\n' ' ')"
 # origin for its bolts (plan.19), run in the kit's main checkout on the team's host, with no worktree (record 0026):
 # sluice's document on standard output and its exit (kit.branch_said). Once sluice made it, which sets the host's own
 # branch too, crew marks that branch in the kit's git config, branch.bolt/<bolt>.crew, so the tidy knows it as crew's
-# (read.4); a mark git refused is said on standard error.
+# (read.4), and fetches GitHub's copy, origin/bolt/<bolt>, where the bolt is read from then (gather.bolt_read), before
+# the give's plan write; a mark git refused, or a fetch that failed, is said on standard error, and the give goes on,
+# since the branch is made and the team's next read fetches it again.
 BOLT_CREATE = r"""cd "$1" || exit 3
 sluice branch create "bolt/$2" --from main --json; rc=$?
-if [ "$rc" = 0 ]; then git config "branch.bolt/$2.crew" given || echo "git could not mark bolt/$2 as crew's" >&2; fi
+if [ "$rc" = 0 ]; then
+  git config "branch.bolt/$2.crew" given || echo "git could not mark bolt/$2 as crew's" >&2
+  git fetch -q origin "+refs/heads/bolt/$2:refs/remotes/origin/bolt/$2" >&2 \
+    || echo "git could not fetch bolt/$2 from GitHub; the team's next read fetches it again" >&2
+fi
 exit $rc
 """
 
@@ -1386,7 +1403,8 @@ def bolt_give(fleet, a):
         built = team_building(fleet, plan, t)
         held = sorted(held, key=lambda b: b.name() == built)
     if held:
-        why = give_refusal(t["name"], proven_facts(stages_for(fleet, plan, held), plan, held))
+        # Read after a fetch, since a merge sluice landed on GitHub may be what proves the bolt (plan.19).
+        why = give_refusal(t["name"], proven_facts(stages_for(fleet, plan, held, fetch=True), plan, held))
         not why or fail(why)
     checked = {b.name() for b in held}
     # The bolt's kit, one of the team's (record 0035), decides the policy read and the branch made; the write gives
@@ -2021,9 +2039,10 @@ def tree_paths(rc, out):
 
 def forecast_rows(fleet, label, kit, bolts):
     """The forecasts of a kit's landings card's rows (row_forecasts), made where the kit's first building team
-    (builder) has its main checkout: GitHub's main fetched there, a kit with no origin reading its own; each bolt's
-    branch read as origin's, else the host's when GitHub does not hold it, a bolt made before gives went through sluice;
-    and git merge-tree of each onto main and onto each bolt above it. Returns ({bolt: [(with, paths)]}, {bolt: why}),
+    (builder) has its main checkout: GitHub's main fetched there, a kit with no origin reading its own; each bolt read
+    where it lives (gather.bolt_at, plan.19), GitHub's copy when the policy in it names a remote for the bolt, else the
+    host's, a bolt made before gives went through sluice; and git merge-tree of each onto main and onto each bolt above
+    it. Returns ({bolt: [(with, paths)]}, {bolt: why}),
     why for each bolt whose forecast crew could not make, or that has one not made against another it could not read:
     a branch on no ref it can read, a fetch or a git that failed, or no team building the kit, said and holding nothing
     (read.1)."""
@@ -2039,11 +2058,22 @@ def forecast_rows(fleet, label, kit, bolts):
         return {b: [("main", None)] for b in bolts}, {b: str(e) for b in bolts}
     refs, why = {"main": "refs/remotes/origin/main" if origin else "refs/heads/main"}, {}
     for b in bolts:
-        for ref in ([f"refs/remotes/origin/bolt/{b}"] if origin else []) + [f"refs/heads/bolt/{b}"]:
-            rc, out = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}", ok=(0, 1))
-            if rc == 0 and out:
-                refs[b] = out
-                break
+        github, own, at = f"refs/remotes/origin/bolt/{b}", f"refs/heads/bolt/{b}", {}
+        try:
+            for ref in ([github] if origin else []) + [own]:
+                rc, out = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}", ok=(0, 1))
+                if rc == 0 and out:
+                    at[ref] = out
+            rc, text = kit_git(fleet, t, main, "show", f"{github}:{gather.POLICY}", ok=(0, 128)) if github in at else (1, None)
+            ref = gather.bolt_at(b, github in at, own in at, gather.policy_remote(text if rc == 0 else None, f"bolt/{b}"))
+        except Refusal as e:
+            why[b] = str(e)
+            continue
+        except ValueError as e:
+            why[b] = f"{gather.POLICY} at origin/bolt/{b} is not TOML, so crew can't read bolt {b}: {e}"
+            continue
+        if ref:
+            refs[b] = at[ref]
         else:
             why[b] = f"bolt/{b} is on no branch crew can read in {main} on {host}, GitHub's or the host's"
 
@@ -2108,7 +2138,7 @@ def land_facts(fleet, label, plan, b, t, fixes_hold=True):
             read_in[u] = n
     main, head = t["kit"]["main"], facts["head"]
     now = gather.now_ref(gather.has_origin(main))  # the kit's main now, as its stages read it (plan.18)
-    _, base = kit_git(fleet, t, main, "merge-base", f"refs/heads/bolt/{bolt}", now)
+    _, base = kit_git(fleet, t, main, "merge-base", facts["at"], now)  # the bolt where it is read (gather.bolt_read)
     _, moved = kit_git(fleet, t, main, "rev-list", "--count", "--first-parent", f"{base}..{now}")
     _, came = kit_git(fleet, t, main, "log", "-1", "--format=%(trailers:key=Sluice-From,valueonly)", head)
     due, unanswered = {u for u, *_ in due_changes(plan, entries)}, awaiting_answer(entries)
@@ -5334,15 +5364,16 @@ def in_bolt(fleet, t, unit):
 
 HEAD = r"""cd "$1" && git rev-parse HEAD"""
 # A dependent's place takes the head of each unmerged unit or chore it comes after, each given by its branch (unit/<name>
-# or chore/<name>), as it stands, while it holds nothing of its own beyond the bolt and their work: printed as "<name>
+# or chore/<name>), as it stands, while it holds nothing of its own beyond the bolt, given by the ref it is read at
+# (gather.bolt_read), and their work: printed as "<name>
 # <head>" for each it holds. A merge that conflicts is undone, the place put back where it was, and printed as "conflict
 # <name> <paths...>", exit 3. Each taking is a merge commit of its own, never a fast-forward, so the place's own work is
 # its first-parent line with no merges (a chore's, plan.11). Never a push, never a write to their branches.
 TAKE = r"""cd "$1" || exit 1
-unit=$2 bolt=$3; shift 3
+unit=$2 at=$3; shift 3
 start=$(git rev-parse HEAD)
 refs=(); for b; do refs+=("refs/heads/$b"); done
-[ -z "$(git rev-list -n1 --no-merges HEAD --not "refs/heads/bolt/$bolt" "${refs[@]}")" ] || exit 0
+[ -z "$(git rev-list -n1 --no-merges HEAD --not "$at" "${refs[@]}")" ] || exit 0
 for b; do
   a=${b#*/}
   if ! git merge-base --is-ancestor "refs/heads/$b" HEAD; then
@@ -5481,16 +5512,17 @@ def overlapping(plan, st_all, k, unit, mine):
     return out
 
 
-def undeclared(fleet, t, bolt, unit, entries, deps=()):
-    """The paths a unit changed against its bolt that no Touches entry matches, its own change's folder aside. Only
+def undeclared(fleet, t, at, unit, entries, deps=()):
+    """The paths a unit changed against its bolt, read at its ref (at, bolt_at_of), that no Touches entry matches, its
+    own change's folder aside. Only
     the unit's own commits count: a dependent's place holds its After units' work as it stood, and a place that took a
     sibling unit's work by a merge, to settle a forecast, holds that unit's commits behind the merge's second parent;
     a path only their commits changed is theirs."""
     main = t["kit"]["main"]
-    _, out = kit_git(fleet, t, main, "diff", "--name-only", f"bolt/{bolt}...unit/{unit}")
+    _, out = kit_git(fleet, t, main, "diff", "--name-only", f"{at}...unit/{unit}")
     held = [f"refs/heads/unit/{d}" for d in deps if head_of(fleet, t, main, f"unit/{d}")]
     _, mine = kit_git(fleet, t, main, "log", "--format=", "--name-only", "--no-merges", "--first-parent", f"unit/{unit}",
-                      "--not", f"refs/heads/bolt/{bolt}", *held)
+                      "--not", at, *held)
     return not_declared(out.splitlines(), set(mine.splitlines()), unit, entries)
 
 
@@ -5508,14 +5540,27 @@ def took_from(st_all, k, u):
     return [f"{st_all.of(d)['kind']}/{d}" for d in u.all("After") if st_all.of(d)["stage"] not in ("merged", "landed") and places(d).get(d)]
 
 
-def take(fleet, t, place, unit, bolt, deps, kind="unit"):
+def read_at(k, bolt):
+    """The ref a bolt is read at in its kit as gathered (gather.kit's at, gather.bolt_read): origin/bolt/<bolt> for a
+    bolt on GitHub, else the host's bolt/<bolt>; None when crew can't tell or the host has neither."""
+    return ((k or {}).get("bolts", {}).get(bolt) or {}).get("at")
+
+
+def bolt_at_of(k, bolt):
+    """read_at, refused when there is none, naming why (read.1): nothing is read from the host's copy in its place."""
+    f = (k or {}).get("bolts", {}).get(bolt) or {}
+    return f.get("at") or fail(f"crew can't read bolt/{bolt}: " + (f.get("error") or f"its kit holds neither bolt/{bolt} nor origin/bolt/{bolt}"))
+
+
+def take(fleet, t, place, unit, at, deps, kind="unit"):
     """A dependent's place takes the head of each unmerged unit or chore it comes after with a place (deps, their
-    branches, took_from), as it stands, while it holds nothing of its own (TAKE): the heads it holds, as "<name>@<head>"
+    branches, took_from), as it stands, while it holds nothing of its own beyond its bolt, read at its ref (at,
+    bolt_at_of) (TAKE): the heads it holds, as "<name>@<head>"
     words for the start of its construct, or of a chore's code. Refused, with the place as it was, when two of them
     conflict."""
     if not deps:
         return ""
-    r = crew.on_machine(fleet, t["machine"], ["bash", "-c", TAKE, "crew", place, unit, bolt, *deps])
+    r = crew.on_machine(fleet, t["machine"], ["bash", "-c", TAKE, "crew", place, unit, at, *deps])
     READ.drop_kit(t["machine"], t["kit"]["main"])
     if r.returncode == 3:
         _, other, *paths = r.stdout.strip().splitlines()[-1].split()
@@ -5578,7 +5623,9 @@ def run_check(fleet, a):
         _, kept = make_place(fleet, t, place, f"unit/{a.unit}", bolt)
         if kept:  # a branch an earlier drop kept, which this unit builds on (record 0003)
             print(f"{place} starts from the kept unit/{a.unit}, at {kept}")
-        took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], u))
+        k, _ = st_all.kit(plan.bolt(bolt))
+        deps = took_from(st_all, k, u)
+        took = take(fleet, t, place, a.unit, bolt_at_of(k, bolt) if deps else None, deps)
         if marking:
             head = s.get("head") or host_run(fleet, t["machine"], HEAD, place)
             if head != mark:
@@ -5590,7 +5637,7 @@ def run_check(fleet, a):
     elif a.stage == "verify":
         k, _ = st_all.kit(plan.bolt(bolt))
         got = (k["places"].get(a.unit) or {}).get("touches") or {}
-        facts = dict(loose=undeclared(fleet, t, bolt, a.unit, got.get("entries", []), u.all("After")), touches=got)
+        facts = dict(loose=undeclared(fleet, t, bolt_at_of(k, bolt), a.unit, got.get("entries", []), u.all("After")), touches=got)
     elif a.stage == "merge":
         split = bolt_split_check(fleet, t, bolt)
         why = split and split_refusal("unit", a.unit, bolt, t["machine"], *split)
@@ -5786,12 +5833,14 @@ def chore_check(fleet, a, label, plan, c):
         _, kept = make_place(fleet, t, place, f"chore/{a.unit}", bolt)
         if kept:  # a branch an earlier drop kept, which this chore builds on (record 0003)
             print(f"{place} starts from the kept chore/{a.unit}, at {kept}")
-        took = take(fleet, t, place, a.unit, bolt, took_from(st_all, st_all.kit(plan.bolt(bolt))[0], c), "chore")
+        k, _ = st_all.kit(plan.bolt(bolt))
+        deps = took_from(st_all, k, c)
+        took = take(fleet, t, place, a.unit, bolt_at_of(k, bolt) if deps else None, deps, "chore")
     elif a.stage == "merge":
         split = bolt_split_check(fleet, t, bolt)
         why = split and split_refusal("chore", a.unit, bolt, t["machine"], *split)
         not why or fail(why)
-        loose = untrailed(chore_commits(fleet, t, bolt, a.unit), a.unit)
+        loose = untrailed(chore_commits(fleet, t, bolt_at_of(st_all.kit(plan.bolt(bolt))[0], bolt), a.unit), a.unit)
         not loose or fail(f"chore {a.unit} merges only once every commit of its own beyond bolt/{bolt} carries `Chore: {a.unit}`, and "
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
                           + f" not: run its code again to add the trailer (crew chore run {a.unit} code)")
@@ -5851,9 +5900,10 @@ CHORE_LOG = ("log", "--reverse", "--first-parent", "--no-merges", "-z", "--abbre
              "--format=%h%x01%s%x01%(trailers:key=Chore,valueonly,separator=%x2c)")
 
 
-def chore_commits(fleet, t, bolt, chore):
-    """Each commit of the chore's own on chore/<chore> beyond its bolt, oldest first, read on the team's host (chore_log)."""
-    return chore_log(kit_git(fleet, t, t["kit"]["main"], *CHORE_LOG, f"refs/heads/bolt/{bolt}..refs/heads/chore/{chore}")[1])
+def chore_commits(fleet, t, at, chore):
+    """Each commit of the chore's own on chore/<chore> beyond its bolt, read at its ref (at, bolt_at_of), oldest first,
+    read on the team's host (chore_log)."""
+    return chore_log(kit_git(fleet, t, t["kit"]["main"], *CHORE_LOG, f"{at}..refs/heads/chore/{chore}")[1])
 
 
 def chore_log(out):
@@ -6947,8 +6997,9 @@ def deliverable(fleet, t, o, place=None):
 def deliverable_facts(fleet, t, o, place=None):
     """What delivered judges an owed stage by, read on the team's host, only what its stage asks: the newest verify
     report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it, a unit's change
-    archived too, and its head; for a chore's code, its own newest commit and when it was committed; else the branch's
-    head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since it
+    archived too, and its head, read where the bolt is read (gather.bolt_read) once its GitHub is fetched, or why it
+    could not be fetched (fetch) or read (unread); for a chore's code, its own newest commit and when it was
+    committed; else the branch's head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since it
     began, whether its planning is complete. The head is read once and the rest read at that commit, never at the branch
     again: an agent that commits between the reads would pair one commit's time or ticks with another's sha."""
     main, f = t["kit"]["main"], {}
@@ -6960,12 +7011,21 @@ def deliverable_facts(fleet, t, o, place=None):
     if o.stage == "merge":
         f["bolt"] = o.obj.split("/")[1] if o.fix and o.obj.count("/") == 2 else None if o.fix else bolt_of_unit(fleet, t, main, o.name, o.kind)
         if f["bolt"]:
-            f["holds"] = (gather.fix_merged(main, o.name, f["bolt"]) if o.fix else
-                          o.name in gather.chores(main, f"refs/heads/bolt/{f['bolt']}") if o.chore else
-                          o.name in gather.changes(main, f"bolt/{f['bolt']}"))
+            # Each look fetches GitHub first: sluice lands the merge there, and moves neither the host's copy nor its
+            # tracking ref when it pushes as its app (plan.19).
+            why = gather.fetched(main)
+            if why:
+                f["fetch"] = why
+                return f
+            ref, why = gather.bolt_read(main, f["bolt"])
+            if not ref:
+                f["unread"] = why or f"this host has neither bolt/{f['bolt']} nor origin/bolt/{f['bolt']}"
+                return f
+            f["holds"] = (gather.fix_merged(main, o.name, f["bolt"], ref) if o.fix else
+                          o.name in gather.chores(main, ref) if o.chore else o.name in gather.changes(main, ref))
             if not (o.fix or o.chore):
-                f["archived"] = o.name in gather.archived(main, f"bolt/{f['bolt']}")
-            f["bolt_head"] = short_head(main, f"refs/heads/bolt/{f['bolt']}")
+                f["archived"] = o.name in gather.archived(main, ref)
+            f["bolt_head"] = short_head(main, ref)
         return f
     if o.chore:  # its own newest commit: what its place took of what it comes after is not its code (plan.13)
         bolt = bolt_of_unit(fleet, t, main, o.name, "chore")
@@ -7012,6 +7072,10 @@ def delivered(o, f):
         bolt, head = f.get("bolt"), f.get("bolt_head")
         if not bolt:
             return None, "no bolt crew can read for it"
+        if f.get("fetch"):
+            return None, f"can't fetch bolt/{bolt} from GitHub: {f['fetch']}"
+        if f.get("unread"):
+            return None, f"can't read bolt/{bolt}: {f['unread']}"
         if f.get("holds") and f.get("archived") is False:
             return None, f"bolt/{bolt} holds its change open: its merge did not archive it first"
         return (f"bolt/{bolt}@{head}", f"bolt/{bolt} holds it at {head}") if f.get("holds") and head else (None, f"bolt/{bolt} not yet holding it")
@@ -7172,7 +7236,7 @@ def case_of(text):
 
 def change_words(main, kdir, k, bolt, unit):
     """Where another unit's change is, and its Why and What Changes as its proposal words them: read in its place while
-    it has one, else on the bolt."""
+    it has one, else on the bolt, where it is read (gather.bolt_read)."""
     pl = k["places"].get(unit)
     if pl:
         path = f"{pl['path']}/openspec/changes/{unit}/"
@@ -7181,8 +7245,8 @@ def change_words(main, kdir, k, bolt, unit):
         except OSError:
             text = None
     else:
-        path = f"{kdir}/bolts/{bolt}/openspec/changes/{unit}/"
-        text = gather.run(["git", "show", f"bolt/{bolt}:openspec/changes/{unit}/proposal.md"], main)
+        path, at = f"{kdir}/bolts/{bolt}/openspec/changes/{unit}/", read_at(k, bolt)
+        text = gather.run(["git", "show", f"{at}:openspec/changes/{unit}/proposal.md"], main) if at else None
     why, items = case_of(text)
     return (f"{unit}'s change is {path}." + (f" Its Why: {why}" if why else "")
             + (" What it changes: " + " ".join(items) if items else ""))
@@ -7194,9 +7258,10 @@ def forecast_words(t, k, bolt, unit, other, paths, left_out=()):
     a dependent's rebase left out) and the change of each unit merged since the unit's place was made (teams.13)."""
     main, kdir, on = t["kit"]["main"], t["kit"]["dir"], ", ".join(paths)
     if other == f"bolt/{bolt}":
-        base = gather.run(["git", "merge-base", f"bolt/{bolt}", f"unit/{unit}"], main)
-        since = [c for c in gather.changes(main, f"bolt/{bolt}") if c not in (gather.changes(main, base.strip()) if base else [])]
-        return (f"Your branch is forecast to conflict with bolt/{bolt} on {on}. {rebase_words(bolt, left_out)}, resolve "
+        at = read_at(k, bolt)
+        base = gather.run(["git", "merge-base", at, f"unit/{unit}"], main) if at else None
+        since = [c for c in gather.changes(main, at) if c not in (gather.changes(main, base.strip()) if base else [])] if at else []
+        return (f"Your branch is forecast to conflict with bolt/{bolt} on {on}. {rebase_words(bolt, left_out, at)}, resolve "
                 "each conflict keeping both changes' intents, run the tests those paths affect, and commit."
                 + "".join(" Merged since your place was made: " + change_words(main, kdir, k, bolt, c) for c in since))
     return (f"Your merge after {other}, ahead of you in the bolt and not merged, is forecast to conflict on {on}. You merge "
@@ -7204,19 +7269,23 @@ def forecast_words(t, k, bolt, unit, other, paths, left_out=()):
             f"intents, run the tests those paths affect, and commit. " + change_words(main, kdir, k, bolt, other))
 
 
-def rebase_words(bolt, left_out=()):
-    """How a unit is told to rebase its place onto its bolt: onto the bolt alone; or, for a dependent whose rebase at
-    its After units' merge left their work out as its place took it (left_out, <unit>@<head> words), from the upstream
-    crew's own rebase used, a commit whose parents are the bolt and those heads (ONTO), so it meets no conflict on their
-    files. That commit has no ref, and nothing keeps it: the words give the command that makes it again, from the bolt
-    as it then stands and heads the place holds (plan.13)."""
+def rebase_words(bolt, left_out=(), at=None):
+    """How a unit is told to rebase its place onto its bolt, where the bolt is read (at, gather.bolt_read): a bolt on
+    GitHub, origin/bolt/<bolt>, fetched first, since the place's own copy of it is as the host last fetched it; else the
+    host's bolt/<bolt>. Onto the bolt alone; or, for a dependent whose rebase at its After units' merge left their work
+    out as its place took it (left_out, <unit>@<head> words), from the upstream crew's own rebase used, a commit whose
+    parents are the bolt and those heads (ONTO), so it meets no conflict on their files. That commit has no ref, and
+    nothing keeps it: the words give the command that makes it again, from the bolt as it then stands and heads the
+    place holds (plan.13)."""
+    ref = at or f"bolt/{bolt}"
+    fetch = "git fetch origin && " if ref.startswith("origin/") else ""
     if not left_out:
-        return f"Rebase your place onto the bolt (git rebase bolt/{bolt})"
+        return f"Rebase your place onto the bolt ({fetch}git rebase {ref})"
     names, heads = zip(*(w.split("@", 1) for w in left_out))
     work = f"{names[0]}'s work" if len(names) == 1 else f"the work of {', '.join(names[:-1])} and {names[-1]}"
-    parents = " ".join(f"-p {h}" for h in (f"bolt/{bolt}",) + heads)
+    parents = " ".join(f"-p {h}" for h in (ref,) + heads)
     return (f"Rebase your place onto the bolt, leaving out {work} as your place took it, which the bolt holds as merged "
-            f"(git rebase --onto bolt/{bolt} $(git commit-tree {parents} -m upstream 'bolt/{bolt}^{{tree}}'))")
+            f"({fetch}git rebase --onto {ref} $(git commit-tree {parents} -m upstream '{ref}^{{tree}}'))")
 
 
 def amendment_words(t, k, bolt, after):
@@ -7264,32 +7333,36 @@ def reach_way(owed, status, stage, verified):
     return "settle" if stage == "verify" and verified else "prompt"
 
 
-# A dependent's place rebased onto its bolt: printed "rebased" when it moved, nothing when it was already there; a
+# A dependent's place rebased onto its bolt, given by the ref it is read at (gather.bolt_read): printed "rebased" when
+# it moved, nothing when it was already there; a
 # rebase that conflicts is aborted, the place as it was, and printed "conflict <paths...>", exit 3. The heads given
 # after the bolt, of merged After units as the place took them, are left out with the bolt's commits: the rebase
 # replays what is beyond both, from a commit with no ref whose parents are the bolt and those heads.
 ONTO = r"""cd "$1" || exit 1
-bolt=$2; shift 2
-git merge-base --is-ancestor "refs/heads/bolt/$bolt" HEAD && exit 0
-upstream=refs/heads/bolt/$bolt
+at=$2; shift 2
+git merge-base --is-ancestor "$at" HEAD && exit 0
+upstream=$at
 if [ $# -gt 0 ]; then
   parents=(-p "$upstream"); for h; do parents+=(-p "$h"); done
   upstream=$(git commit-tree "${parents[@]}" -m "crew: the bolt and the heads taken" "$upstream^{tree}") || exit 1
 fi
-if git rebase -q --onto "refs/heads/bolt/$bolt" "$upstream" >/dev/null 2>&1; then echo rebased; exit 0; fi
+if git rebase -q --onto "$at" "$upstream" >/dev/null 2>&1; then echo rebased; exit 0; fi
 paths=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
 git rebase --abort >/dev/null 2>&1
 echo "conflict $paths"; exit 3
 """
 
 
-def landed_at(main, bolt, unit, kind="unit"):
+def landed_at(main, bolt, unit, kind="unit", at=None):
     """The commit on a bolt that brought a unit's change there, the first that holds its folder, or a chore's work, the
-    first carrying its trailer (plan.11); None when it holds none. A unit lands on its bolt in sluice's merge commit with
-    its change already archived (teams.17, record 0026), so the bolt's own side never held the folder: --full-history
-    follows the merge's other parent, which git's default simplification prunes."""
-    where = ([f"--grep=^Chore: {unit}$", f"refs/heads/bolt/{bolt}"] if kind == "chore" else
-             ["--full-history", f"refs/heads/bolt/{bolt}", "--", f"openspec/changes/{unit}"])
+    first carrying its trailer (plan.11), read where the bolt is read (at, else gather.bolt_read); None when it holds
+    none or the bolt can't be read. A unit lands on its bolt in sluice's merge commit with its change already archived
+    (teams.17, record 0026), so the bolt's own side never held the folder: --full-history follows the merge's other
+    parent, which git's default simplification prunes."""
+    at = at or gather.bolt_read(main, bolt)[0]
+    if not at:
+        return None
+    where = ([f"--grep=^Chore: {unit}$", at] if kind == "chore" else ["--full-history", at, "--", f"openspec/changes/{unit}"])
     out = gather.run(["git", "log", "--format=%H", "--reverse", *where], main)
     return (out or "").split("\n")[0].strip() or None
 
@@ -7319,7 +7392,8 @@ def rebase_dependents(fleet, t, plan, st, say):
     owed = owed_by_unit(t)
     for b in held_by(plan, t["name"]):
         k, _ = st.kit(b)
-        if not k:
+        at = read_at(k, b.name()) if k else None
+        if not at:
             continue
         for u in plan.work_of(b.name()):
             kind = kind_of(u)
@@ -7328,7 +7402,7 @@ def rebase_dependents(fleet, t, plan, st, say):
                 continue
             merged = [a for a in u.all("After") if st.of(a)["stage"] in ("merged", "landed")]
             due = [a for a in merged if (lambda c: c and subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", c, f"refs/heads/{kind}/{u.name()}"],
-                                                                       env=gitenv()).returncode != 0)(landed_at(main, b.name(), a, st.of(a)["kind"]))]
+                                                                       env=gitenv()).returncode != 0)(landed_at(main, b.name(), a, st.of(a)["kind"], at))]
             if not due:
                 continue
             o = owed.get(u.name())
@@ -7341,7 +7415,7 @@ def rebase_dependents(fleet, t, plan, st, say):
             holds = lambda head: subprocess.run(["git", "-C", main, "merge-base", "--is-ancestor", head, branch], env=gitenv(),
                                                 stderr=subprocess.DEVNULL).returncode == 0
             left_out = rebase_leaves_out(due, took_heads(u.name(), entries), holds)
-            r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], b.name(), *(w.split("@", 1)[1] for w in left_out)],
+            r = subprocess.run(["bash", "-c", ONTO, "crew", pl["path"], at, *(w.split("@", 1)[1] for w in left_out)],
                                capture_output=True, text=True, env=gitenv())
             READ.drop_kit(t["machine"], main)
             if r.returncode == 3 and kind == "chore":
@@ -9229,7 +9303,8 @@ def bolts_view(fleet, a):
     errors = {}
     found = plans(fleet, labels, errors)
     held = [(b.get("Team"), b.name(), b.get("Repo")) for _, _, _, p in found if p for b in p.bolts() if b.get("Team") and a.bolt in (None, b.name())]
-    data = bolts_data(fleet, labels, found, survey(fleet, held), errors, a.bolt)
+    # Each kit's GitHub fetched once on its host before it is read: what has merged into a bolt is on GitHub (plan.19).
+    data = bolts_data(fleet, labels, found, survey(fleet, held, fetch=True), errors, a.bolt)
     if a.bolt and not any(b for p in data["partitions"] for pl in p["plans"] for b in pl["bolts"]):
         fail(f"no bolt {a.bolt} in the plans of " + ", ".join(labels))
     if a.json:

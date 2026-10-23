@@ -26,7 +26,10 @@
 # local branch nor a tracking ref, or whose remote has none, as not found, one with a submission queued while
 # $CREW_TEST_ROOT/sluice-queued-<branch, its / as -> exists, holding the submission's number, and one whose tip <into>,
 # where it lives, does not hold, and deletes it from its remote, then the local branch and the tracking ref, leaving
-# the branch's git config section as sluice's ref edits do. Outside a git worktree it
+# the branch's git config section as sluice's ref edits do. While $CREW_TEST_ROOT/sluice-leaves-copy exists, it pushes
+# as sluice 0.36.4 does under its app's identity, to the remote's URL, so git moves no tracking ref: create's push
+# leaves origin/<branch> unmade until crew fetches it, and a submission's landing (wt-submit) leaves the host's copy
+# and its tracking ref behind. Outside a git worktree it
 # fails as sluice does, exiting 3, and anything else is refused, exiting 2. Every call is logged to $CREW_TEST_LOG as
 # `<host> sluice <args> in <the directory it ran in>`.
 set -uo pipefail
@@ -109,7 +112,8 @@ if act == "create":
         there = (git("ls-remote", r, f"refs/heads/{branch}").stdout.split() or [None])[0]
     not there or refused("refused", f"{branch} is already there, at {there}")
     if r:
-        p = git("push", "-q", r, f"{at}:refs/heads/{branch}")
+        to = git("remote", "get-url", r).stdout.strip() if os.path.exists(os.path.join(os.environ.get("CREW_TEST_ROOT", ""), "sluice-leaves-copy")) else r
+        p = git("push", "-q", to, f"{at}:refs/heads/{branch}")
         p.returncode == 0 or refused("internal", f"pushing {branch} to {r}: {p.stderr.strip()}")
     git("update-ref", f"refs/heads/{branch}", at)
     say({"branch": branch, "created": at, "from": other})
