@@ -141,6 +141,12 @@ def bolt_ref(up):
     return None, None
 
 
+def bolt_of(up):
+    """The bolt a place's branch was cut from, from its upstream (plan.19, bolt_ref): bolt/<bolt>, a bolt made before
+    gives went through sluice, or origin/bolt/<bolt>, a bolt on GitHub; None for any other upstream, or none."""
+    return bolt_ref(up or "")[0]
+
+
 def holds(main, ref, branch):
     """Whether ref holds a branch's tip."""
     return subprocess.run(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", ref], cwd=main, capture_output=True).returncode == 0
@@ -462,7 +468,7 @@ def kit(req, sites=False, running=None, board=False):
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
     # asked for, or tracked by a place, that has no branch is marked missing.
     have = [r[len("refs/heads/bolt/"):] for r in (run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/"], main) or "").split()]
-    tracked = [u[5:] for u in ups.values() if u.startswith("bolt/")]
+    tracked = [b for b in map(bolt_of, ups.values()) if b]
     for b in sorted(set(have + req.get("bolts", []) + tracked)):
         exists = b in have
         wt = os.path.join(kdir, "bolts", b)
@@ -482,10 +488,10 @@ def kit(req, sites=False, running=None, board=False):
             continue
         if branch.startswith("unit/"):
             unit = branch[5:]
-            bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
+            bolt = bolt_of(ups.get(branch))
             out["places"][unit] = dict(place(path, unit), branch=branch, bolt=bolt)
         elif branch.startswith("chore/") and os.path.basename(path) == f"chore-{branch[6:]}":
-            bolt = ups.get(branch, "")[5:] if ups.get(branch, "").startswith("bolt/") else None
+            bolt = bolt_of(ups.get(branch))
             out["chore_places"][branch[6:]] = dict(chore_place(path, bolt), branch=branch, bolt=bolt)
         elif branch.startswith("fix/"):
             dropped = fixes_dropped(main) if dropped is None else dropped  # read once, and only for a kit with a fix's place

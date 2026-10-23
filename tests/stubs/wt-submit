@@ -5,7 +5,9 @@
 # merge-tree, and commits the merge as sluice <sluice@localhost>, <branch>'s tip its first parent, with the subject
 # `chore(land): #<n> <the submitted branch>` and the trailers Sluice-Submission, Sluice-From (`$SLUICE_AGENT (<the
 # submitted branch>)`), Sluice-Tested and Sluice-Result; it moves <branch> there by git update-ref, which leaves a
-# checkout of <branch> behind its branch, as sluice's move does. <n> counts the kit's submissions, in its git common dir.
+# checkout of <branch> behind its branch, as sluice's move does. A <branch> the policy keeps on a remote (route.py), as
+# sluice 0.36.4 lands one: the merge is formed on the remote's tip after a fetch and pushed there, refused when the
+# remote moved meanwhile, and the local branch then set to it. <n> counts the kit's submissions, in its git common dir.
 # It exits as sluice does: 0 landed; 1 the checks failed, while $CREW_TEST_ROOT/sluice-fails exists, its words the
 # failure; 2 refused or in conflict; nothing moved but on 0. It removes no worktree: crew always passes --no-remove,
 # and a call without it is refused. Every call is logged to $CREW_TEST_LOG as `<host> wt submit <args> from <worktree>
@@ -18,7 +20,13 @@ for a in "$@"; do case $a in --no-remove) remove=no ;; -*) echo "wt-submit stub:
 [[ -n $target ]] || { echo "usage: wt submit <BRANCH> [--no-remove]" >&2; exit 2; }
 [[ $remove == no ]] || { echo "wt-submit stub: crew submits with --no-remove" >&2; exit 2; }
 from=$(git symbolic-ref -q --short HEAD) || { echo "sluice: $here is on a detached head; submit from a branch" >&2; exit 2; }
-old=$(git rev-parse --verify -q "refs/heads/$target") || { echo "sluice: no branch $target" >&2; exit 2; }
+remote=$(python3 "$(dirname "$0")/route.py" "$target")
+if [[ -n $remote ]]; then
+  git fetch -q "$remote" "+refs/heads/$target:refs/remotes/$remote/$target" 2>/dev/null || { echo "sluice: no branch $target on $remote" >&2; exit 2; }
+  old=$(git rev-parse --verify -q "refs/remotes/$remote/$target")
+else
+  old=$(git rev-parse --verify -q "refs/heads/$target") || { echo "sluice: no branch $target" >&2; exit 2; }
+fi
 head=$(git rev-parse HEAD)
 if [[ -e ${CREW_TEST_ROOT:?}/sluice-fails ]]; then echo "sluice: $from failed $target's checks: $(cat "$CREW_TEST_ROOT/sluice-fails")" >&2; exit 1; fi
 tree=$(git merge-tree --write-tree "$old" "$head" 2>/dev/null) || { echo "sluice: $from conflicts with $target" >&2; exit 2; }
@@ -30,5 +38,10 @@ new=$(GIT_AUTHOR_NAME=sluice GIT_AUTHOR_EMAIL=sluice@localhost GIT_COMMITTER_NAM
 Sluice-From: ${SLUICE_AGENT:-} ($from)
 Sluice-Tested: $head
 Sluice-Result: passed (stub)") || exit 2
-git update-ref "refs/heads/$target" "$new" "$old" || { echo "sluice: $target moved under the submission" >&2; exit 2; }
+if [[ -n $remote ]]; then
+  git push -q "$remote" "$new:refs/heads/$target" 2>/dev/null || { echo "sluice: $target moved on $remote under the submission" >&2; exit 2; }
+  git update-ref "refs/heads/$target" "$new"
+else
+  git update-ref "refs/heads/$target" "$new" "$old" || { echo "sluice: $target moved under the submission" >&2; exit 2; }
+fi
 echo "sluice: #$n $from landed on $target at ${new:0:7}"

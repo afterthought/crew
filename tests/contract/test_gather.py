@@ -126,6 +126,20 @@ def test_a_change_carried_onto_the_bolt_inside_another_units_merge_is_read_open_
     assert (bolt["archived"], bolt["open"]) == (["s"], {"d": [1, 2]})
 
 
+def test_places_cut_from_the_bolt_on_github_name_it_by_their_upstream(repo, tmp_path):
+    """Stages through gather.bolt_of (plan.19): a unit's, a chore's and a fix's place cut from origin/bolt/<bolt> name
+    that bolt, as one cut from the host's own bolt/<bolt> does, and the bolt is read from the host's own branch."""
+    import subprocess
+    k = Kit(repo, tmp_path)
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git")); repo.git("fetch", "-q", "origin")
+    for prefix, name, path in (("unit", "u", "u"), ("chore", "c", "chore-c"), ("fix", "te/f", "te--f")):
+        repo.git("worktree", "add", "-q", "--track", "-b", f"{prefix}/{name}", str(k.dir / "places" / path), "origin/bolt/te")
+    got = k.read()
+    assert (got["places"]["u"]["bolt"], got["chore_places"]["c"]["bolt"], got["fixes"][0]["bolt"]) == ("te", "te", "te")
+    assert got["bolts"]["te"]["head"] == repo.git("rev-parse", "bolt/te")
+
+
 def test_a_fix_is_listed_with_its_bolt_and_reads_merged_only_once_it_moved_and_the_bolt_holds_it(repo, tmp_path):
     """crew bolts and the board: a fix's line; carry and tidy: a fix born at the bolt's head has not merged."""
     k = Kit(repo, tmp_path)

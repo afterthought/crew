@@ -1,7 +1,7 @@
 """Whether a unit's stage may start (plan.6, plan.13, teams.5, teams.17): plan.stage_refusal, on the unit's stage, its
 Amended mark, its After units' stages and who asks; plan.carried_in and plan.carried_refusal for a merge whose branch
-carries another unit's open change. What a started stage is sent, and the place it runs in, are
-t-unit-run's."""
+carries another unit's open change; plan.archives_owed and plan.archives_refusal for a merge that stops short for
+archives it can make. What a started stage is sent, and the place it runs in, are t-unit-run's."""
 import pytest
 
 import plan
@@ -125,3 +125,45 @@ class TestCarried:
             "chore bump does not merge while chore/bump holds the changes of x and y open, which bolt/te does not hold "
             "archived: no unit's change reaches a bolt inside another's merge; merge x and y first, each one's own merge "
             "archiving its change (crew unit run <unit> merge)")
+
+
+class TestArchivesOwed:
+    """A unit's merge archives what its own archive needs first, so it never stops short for an archive it can make
+    (teams.17, roles.3): wldn, awb-1, 2026-10-19, the merge of the-production-class-account-is-seeded stopped short for
+    five changes the bolt held open with every task ticked, the conductor routed them to the plan as a chore, and the
+    chore could not start for the slot the waiting unit held (signal 2026-10-19-awb-1-conductor-5eafeeda/01)."""
+    UNITS = {"seeded", "sibling"}
+    SPECS = {"seeded": {"accounts"}, "left-1": {"accounts"}, "left-2": {"classes"}, "left-3": {"classes", "hosts"},
+             "left-4": {"pages"}, "sibling": {"accounts"}, "open-tasks": {"accounts"}}
+
+    def owed(self, opened, ticked=None, **specs):
+        return plan.archives_owed("seeded", self.UNITS, opened, ticked or {c: True for c in opened},
+                                  {**self.SPECS, **{c.replace("_", "-"): s for c, s in specs.items()}})
+
+    def test_a_ticked_change_no_unit_has_touching_its_specs_is_its_to_archive(self):
+        assert self.owed(["left-1", "seeded"]) == ["left-1"]
+
+    def test_and_each_one_those_touch_in_turn(self):
+        # left-1 shares accounts with seeded, and classes with left-2 and left-3, which share nothing with seeded
+        assert self.owed(["left-1", "left-2", "left-3", "left-4", "seeded"], left_1={"accounts", "classes"}) == [
+            "left-1", "left-2", "left-3"]
+
+    def test_not_one_with_a_task_open_another_units_or_one_touching_nothing_of_its(self):
+        # another unit's open change is carried_in's, refused before the merge starts; one with a task open is no
+        # archive a merge can make; one touching specs nothing of the unit's touches is main-level ops's
+        assert self.owed(["left-4", "open-tasks", "seeded", "sibling"], {"left-4": True, "open-tasks": False}) == []
+
+    def test_none_once_its_own_is_archived(self):
+        assert self.owed(["left-1"]) == []
+
+    def test_its_refusal_names_them_and_says_what_the_merge_does(self):
+        assert plan.archives_refusal("seeded", ["left-1"]) == (
+            "merge on seeded does not stop short for archives it can make: unit/seeded holds left-1 open, every task "
+            "ticked, no unit's of the plan, and touching specs its change does; a merge archives what its own archive "
+            "needs first: archive it with `openspec archive <change> --yes`, committed as `docs(openspec): archive "
+            "<change>`, then seeded's own, and submit. If openspec refuses one of them, say so again with its words, "
+            "and crew passes it on")
+        assert plan.archives_refusal("seeded", ["left-1", "left-2", "left-3"]).startswith(
+            "merge on seeded does not stop short for archives it can make: unit/seeded holds left-1, left-2 and left-3 "
+            "open, each with every task ticked, no unit's of the plan, and touching specs its change does; a merge "
+            "archives what its own archive needs first: archive each, oldest first, with `openspec archive")
