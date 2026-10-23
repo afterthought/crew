@@ -8,10 +8,10 @@
 # crew's own cards, as a raise of the series calls it: a landing card raised outside its owner's turn, asked in the
 # owner's name, told to the owner with the line that adopts it, and closed by the owner's crew card read once the user
 # declines it, with their words; raised again, a new card under the key's revision, changed in place while it waits,
-# and once the user answers it, acked with the change note and followed by its new version. Then crew record, as the
-# design agent runs it at each turn of a record's status: the record read on the kit's main, its status recorded with
-# its commit and its card raised in the design agent's name under record/<kit>/<number>; a status the file does not
-# hold, an alternatives file crew can't read and another host refused with nothing recorded; the card changed in place
+# and once the user answers it and its head moves, acked with the change note and followed by its new version. Then
+# crew record, as the design agent runs it at each turn of a record's status: the record read on the kit's main, its
+# status recorded with its commit and its card raised in the design agent's name under record/<kit>/<number>; a
+# status the file does not hold, an alternatives file crew can't read and another host refused with nothing recorded; the card changed in place
 # at a new commit, closed with the accepting commit, a choice when a rule decided, and none raised when the user
 # settled it in the pane. Then a batch's card, raised by crew in the planner's name once the reviewer's summary is
 # there, with its one reading session on the main level's host linked from it, and, lost to its owner, raised again by
@@ -261,9 +261,11 @@ eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/
 ok "a record settled with the user in the pane records their yes there, and no card is raised"
 
 # The act's change of crew's own card (record 0031 §3): b1's landing card raised again after the user declined it is a
-# new card under the key's revision, changed in place while it waits, and once the user answers it, acked with the
-# change note and followed by its new version, which crew card read then finds as the row's card.
-# land <change|post> <head>: b1's landing card raised by the act as a raise of the series calls it, on the box
+# new card under the key's revision, changed in place while it waits, and once the user answers it and its head moves
+# since, acked with the change note and followed by its new version saying the head moved since the approval, which
+# crew card read then finds as the row's card.
+# land <change|post> <head>: b1's landing card raised by the act as raise_land calls it, on the box, asked anew once
+# the head the run record holds for the card is another
 land() {
   as $box python3 - "$CREW/plugin/lib" "$wd" "$1" "$2" <<'PY'
 import sys
@@ -271,10 +273,14 @@ sys.path.insert(0, sys.argv[1])
 import cards, crew, plan
 facts = dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches={"v1": 1}, head=sys.argv[4], at=None, moved=0, pr=None)
 where = (sys.argv[2], "github.com/WilldanGroup/switchboard-kit")
+fleet = crew.load()
+acts = plan.CardActs(fleet)
 if sys.argv[3] == "post":
-    plan.row_card_post(crew.load(), "wldn", "swb-1-conductor", cards.landing_card, facts, where)
+    plan.row_card_post(fleet, "wldn", "swb-1-conductor", cards.landing_card, facts, where, acts)
 else:
-    plan.row_card_change(crew.load(), "wldn", "swb-1-conductor", cards.landing_card, facts, f"Head is now {sys.argv[4]}", where)
+    es = acts.entries("wldn")
+    anew = cards.head_anew(es, cards.card_under(es, "land/b1", "swb-1-conductor"), sys.argv[4])
+    plan.row_card_change(fleet, "wldn", "swb-1-conductor", cards.landing_card, facts, f"Head is now {sys.argv[4]}", where, acts, anew=anew)
 PY
 }
 : > "$CREW_TEST_LOG"
@@ -293,11 +299,12 @@ card land/b1: req_stub-9 https://www.pendingyou.com/app/r/req_stub-9"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Head is now abc1700"
 eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows]')" '["land/b1:3","req_stub-8"]'
+has "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -r .summary)" "Its head moved since your approval, from abc1600 to abc1700"
 eq "$(jq -r '.["req_stub-8"].status' "$stub/cards.json")" "resolved"
 eq "$(entries card.close | jq -r 'select(.Card == "req_stub-8") | [.Key, .State] | join(" ")')" "land/b1 closed"
 eq "$(entries card.post | jq -r 'select(.Card == "req_stub-9") | [(.On | join(" ")), .Key, .By] | join(" ")')" "bolt/b1 land/b1 swb-1-conductor"
 eq "$(card read land/b1 | head -1)" "card land/b1: req_stub-9, pending, waiting on the user"
-ok "a card waiting on the user is changed in place; once they answer it, it is acked with the change note and its new version posted following it, recorded under the row's key, and crew card read finds that one"
+ok "a card waiting on the user is changed in place; once they answer it and its head moves, it is acked with the change note and its new version, saying so, posted following it, recorded under the row's key, and crew card read finds that one"
 
 # A batch's card and its one reading session, raised by crew in the planner's name once the reviewer's summary is
 # there, on the main level's host, the box: v1's change read at its commit in switchboard-kit.

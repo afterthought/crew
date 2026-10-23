@@ -568,15 +568,18 @@ def raise_deploy(fleet, row, acts=None, note=None):
     """Raise the deploy's card of the rail row deploy/<env> of row["label"] (record 0031 §1, plan.14): posted in
     main-level ops's name, following the card follows_of names, or changed in place when the card ops holds asks for
     an older offer still unanswered, or for this one when it is offered again with other files, note naming what
-    changed; posted again when Pending You no longer finds it; built from the open offer, the files it was handed and
-    the partition's run record. None, saying why, when no offer waits on a card; the offer's own call and the rail's
-    sweep alike. A card not posted or changed is said and recorded, and the offer stands. The card's id, or None."""
+    changed; once the user answered it, left as it is unless a newer head is offered since the head it asked about,
+    when it is followed by a new card (cards.head_anew); posted again when Pending You no longer finds it; built from
+    the open offer, the files it was handed and the partition's run record. None, saying why, when no offer waits on a
+    card; the offer's own call and the rail's sweep alike. A card not posted or changed is said and recorded, and the
+    offer stands. The card's id, or None."""
     import cards, plan
     acts = acts or plan.CardActs(fleet)
     label, key = row["label"], row["key"]
     env, owner = key.split("/", 1)[1], f"{label}-ops"
-    es = entries(label)
-    move, said = deploy_move(es, env, cards.card_under(acts.entries(label), key, owner))
+    es, mine = entries(label), acts.entries(label)
+    held = cards.card_under(mine, key, owner)
+    move, said = deploy_move(es, env, held)
     said = note if move == "change" and note else said
     if not move:
         print(f"card {key}: {said}")
@@ -591,7 +594,9 @@ def raise_deploy(fleet, row, acts=None, note=None):
     steps, _ = handed_steps(kept_text(d / "steps.txt"), env, label)
     facts = deploy_facts(env, offer, lands, ranged, kept_text(d / "notes.md"), steps)
     facts["follows"] = cards.follows_of("deploy", {"env": env, "head": offer["Head"]}, gathered, owner)
-    return plan.row_card_change(fleet, label, owner, cards.deploy_card, facts, said or "Raised again", ops_where(fleet, label), acts)
+    anew = cards.head_anew(mine, held, offer["Head"])
+    return plan.row_card_change(fleet, label, owner, cards.deploy_card, facts, said or "Raised again", ops_where(fleet, label), acts,
+                                anew=anew)
 
 
 def stages_working(fleet, env):
