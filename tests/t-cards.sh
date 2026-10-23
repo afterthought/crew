@@ -8,10 +8,10 @@
 # crew's own cards, as a raise of the series calls it: a landing card raised outside its owner's turn, asked in the
 # owner's name, told to the owner with the line that adopts it, and closed by the owner's crew card read once the user
 # declines it, with their words; raised again, a new card under the key's revision, changed in place while it waits,
-# and once the user answers it, acked with the change note and followed by its new version. Then crew record, as the
-# design agent runs it at each turn of a record's status: the record read on the kit's main, its status recorded with
-# its commit and its card raised in the design agent's name under record/<kit>/<number>; a status the file does not
-# hold, an alternatives file crew can't read and another host refused with nothing recorded; the card changed in place
+# and once the user answers it and its head moves, acked with the change note and followed by its new version. Then
+# crew record, as the design agent runs it at each turn of a record's status: the record read on the kit's main, its
+# status recorded with its commit and its card raised in the design agent's name under record/<kit>/<number>; a
+# status the file does not hold, an alternatives file crew can't read and another host refused with nothing recorded; the card changed in place
 # at a new commit, closed with the accepting commit, a choice when a rule decided, and none raised when the user
 # settled it in the pane, in words crew reads in the design agent's transcript as theirs, the record refused with
 # nothing recorded when the words are another agent's tell of them; and posted saying an older copy was lost when one
@@ -155,6 +155,7 @@ ok "a question withdrawn by its asker is recorded closed; one lost after the hos
 # not in its conductor's turn. The conductor is up, so the line that adopts it can be told.
 c=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-1 stub agent "$c" swb-1-conductor
+mkdir -p "$(home_of $box)/.local/state/swb-1-team"; echo "conductor $c" > "$(home_of $box)/.local/state/swb-1-team/panes"
 : > "$CREW_TEST_LOG"
 raised=$(as $box python3 - "$CREW/plugin/lib" "$wd" <<'PY'
 import sys
@@ -299,9 +300,11 @@ eq "$(jq -r .idempotencyKey <<<"$posted")" "record/switchboard-kit/0034"
 ok "crew record --proposed, run where its record's card is held on a host this one's sign-in can't reach, posts it saying the older copy was lost"
 
 # The act's change of crew's own card (record 0031 §3): b1's landing card raised again after the user declined it is a
-# new card under the key's revision, changed in place while it waits, and once the user answers it, acked with the
-# change note and followed by its new version, which crew card read then finds as the row's card.
-# land <change|post> <head>: b1's landing card raised by the act as a raise of the series calls it, on the box
+# new card under the key's revision, changed in place while it waits, and once the user answers it and its head moves
+# since, acked with the change note and followed by its new version saying the head moved since the approval, which
+# crew card read then finds as the row's card.
+# land <change|post> <head>: b1's landing card raised by the act as raise_land calls it, on the box, asked anew once
+# the head the run record holds for the card is another
 land() {
   as $box python3 - "$CREW/plugin/lib" "$wd" "$1" "$2" <<'PY'
 import sys
@@ -309,10 +312,14 @@ sys.path.insert(0, sys.argv[1])
 import cards, crew, plan
 facts = dict(bolt="b1", kit="switchboard-kit", units=["v1"], chores=[], batches={"v1": 1}, head=sys.argv[4], at=None, moved=0, pr=None)
 where = (sys.argv[2], "github.com/WilldanGroup/switchboard-kit")
+fleet = crew.load()
+acts = plan.CardActs(fleet)
 if sys.argv[3] == "post":
-    plan.row_card_post(crew.load(), "wldn", "swb-1-conductor", cards.landing_card, facts, where)
+    plan.row_card_post(fleet, "wldn", "swb-1-conductor", cards.landing_card, facts, where, acts)
 else:
-    plan.row_card_change(crew.load(), "wldn", "swb-1-conductor", cards.landing_card, facts, f"Head is now {sys.argv[4]}", where)
+    es = acts.entries("wldn")
+    anew = cards.head_anew(es, cards.card_under(es, "land/b1", "swb-1-conductor"), sys.argv[4])
+    plan.row_card_change(fleet, "wldn", "swb-1-conductor", cards.landing_card, facts, f"Head is now {sys.argv[4]}", where, acts, anew=anew)
 PY
 }
 : > "$CREW_TEST_LOG"
@@ -331,11 +338,12 @@ card land/b1: req_stub-10 https://www.pendingyou.com/app/r/req_stub-10"
 eq "$(py_calls | cut -d' ' -f1 | tr '\n' ' ')" "whoami get_request ack_answer whoami match_area post_request "
 eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -r .outcome)" "Head is now abc1700"
 eq "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .follows]')" '["land/b1:3","req_stub-9"]'
+has "$(py_calls | sed -n 6p | cut -d' ' -f2- | jq -r .summary)" "Its head moved since your approval, from abc1600 to abc1700"
 eq "$(jq -r '.["req_stub-9"].status' "$stub/cards.json")" "resolved"
 eq "$(entries card.close | jq -r 'select(.Card == "req_stub-9") | [.Key, .State] | join(" ")')" "land/b1 closed"
 eq "$(entries card.post | jq -r 'select(.Card == "req_stub-10") | [(.On | join(" ")), .Key, .By] | join(" ")')" "bolt/b1 land/b1 swb-1-conductor"
 eq "$(card read land/b1 | head -1)" "card land/b1: req_stub-10, pending, waiting on the user"
-ok "a card waiting on the user is changed in place; once they answer it, it is acked with the change note and its new version posted following it, recorded under the row's key, and crew card read finds that one"
+ok "a card waiting on the user is changed in place; once they answer it and its head moves, it is acked with the change note and its new version, saying so, posted following it, recorded under the row's key, and crew card read finds that one"
 
 # A batch's card and its one reading session, raised by crew in the planner's name once the reviewer's summary is
 # there, on the main level's host, the box: v1's change read at its commit in switchboard-kit.
@@ -568,8 +576,8 @@ ok "the user's boxes, sent on the card, are applied as they stand, and crew clos
 # The rail read's sweep of the cards on the box, under its sign-in (record 0031 §1, §2, read.4). The landing cards
 # posted before the batch's sign-in were recorded lost by the planner's rail reads above, their row gone; a landing card
 # posted since, whose bolt has no row; and two questions asked through Pending You's own tools and recorded as crew's
-# card hook records them: swb-2-conductor's, whose session has ended, and swb-1-conductor's, which runs. crew board
-# reads them and acts on none.
+# card hook records them: swb-2-conductor's, whose pane herdr lists with no agent in it, and swb-1-conductor's, which
+# runs. crew board reads them and acts on none.
 question() {  # question <asker>: the question's id
   local id
   id=$(as $box python3 - "$CREW/plugin/lib" "$1" <<'PY'
@@ -586,6 +594,8 @@ PY
 }
 lc=$(land post abc1900 | sed -n '1s/^card [^:]*: \([^ ]*\).*/\1/p')
 q2=$(question swb-2-conductor); q1=$(question swb-1-conductor)
+p2=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-2 | jq -r .result.root_pane.pane_id)
+mkdir -p "$(home_of $box)/.local/state/swb-2-team"; echo "conductor $p2" > "$(home_of $box)/.local/state/swb-2-team/panes"
 closes=$(entries card.close | wc -l)
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew board --label wldn

@@ -1,11 +1,15 @@
 """What a wait on a stage says, look by look, until the stage ends (teams.4): plan.look on one look's facts,
 plan.ended_words for a stage whose end something else recorded, Owed.phrase for how a stage is named, and
-plan.owed_of for the stage crew needs ends short. That a wait records the end it sees, and that a stop-short reaches
-the waiting wait or the conductor, are the journey's (t-journey-units, t-journey-prompts)."""
+plan.owed_of for the stage crew needs ends short, and how the agent of that stage is then ended in fact (plan.short_end,
+plan.short_taken, crew.Agents.stop's over). That a wait records the end it sees, and that a stop-short reaches the
+waiting wait or the conductor and ends its agent, are the journey's (t-journey-slots, t-journey-prompts)."""
+import types
+
 import pytest
 
 from facts import owed
 
+import crew
 import plan
 
 WORKING, QUIET = (False, "is working", None), (False, "has been quiet for 3 minutes, under the limit of 15 minutes", None)
@@ -117,3 +121,105 @@ class TestNeeds:
     def test_an_agent_that_owes_no_stage_is_refused(self, slot, lines):
         with pytest.raises(plan.Refusal, match=f"swb-1-{slot} runs no stage crew is waiting on"):
             plan.owed_of(self.T, slot, lines, self.HELD)
+
+
+class TestShortEnd:
+    """The agent of a stage that stopped short, ended in fact (record 0007): signal 2026-10-23-crw-5-conductor-ff91959f/01,
+    crw-5-unit-4 going on working after its crew needs while its conductor's wait had read the stage ended."""
+
+    @pytest.mark.parametrize("up, status, session, looked, how", [
+        (False, None, None, 0, "gone"),
+        (True, "idle", "s1", 0, "end"), (True, "done", "s1", 0, "end"), (True, "blocked", "s1", 0, "end"),
+        (True, "working", "s1", 0, "wait"), (True, "working", "s1", plan.SHORT_GRACE - 1, "wait"),
+        (True, "working", "s1", plan.SHORT_GRACE, "end"),
+        (True, "idle", "s2", 0, "other"), (True, "working", "s2", plan.SHORT_GRACE, "other"),
+        (True, None, "s1", 0, "wait"), (True, "idle", None, 0, "wait"), (True, "idle", None, plan.SHORT_GRACE, "unread")])
+    def test_its_agent_is_ended_once_its_turn_ends_or_its_grace_is_spent_and_only_in_the_session_that_said_it(
+            self, up, status, session, looked, how):
+        assert plan.short_end("s1", up, status, session, looked) == how
+
+    def test_what_herdr_gives_of_an_agent_is_read_guarded(self):
+        assert plan.agent_facts(None) == (False, None, None)
+        assert plan.agent_facts({"agent_status": "working", "agent_session": {"value": "s1"}}) == (True, "working", "s1")
+        assert plan.agent_facts({"agent_status": 3, "agent_session": "s1"}) == (True, None, None)
+        assert plan.agent_facts({"agent_session": {"value": ""}}) == (True, None, None)
+
+    def test_each_end_is_said(self):
+        assert plan.short_said("swb-1-unit-2", "end") == "swb-1-unit-2 is ended: its stage stopped short"
+        assert plan.short_said("swb-1-unit-2", "other") == (
+            "swb-1-unit-2 runs another session than the one that stopped short: crew leaves it be")
+        assert plan.short_said("swb-1-unit-2", "unread") == "crew could not read which session swb-1-unit-2 runs, so it ends none"
+
+    def team(self, tmp_path, monkeypatch, info, stopped=None):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(crew, "agent_get", lambda fleet, name, fresh=True: info)
+        stops = []
+
+        def stop(slot, ending=None, waits=False, over=False):
+            stops.append((slot, over))
+            return stopped
+        return types.SimpleNamespace(t={"name": "swb-1"}, agent_of=lambda s: f"swb-1-{s}", stop=stop), stops
+
+    def mark(self, t, session):
+        f = plan.short_path(t, "unit-2")
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(f"20261023T014000Z-deneb-1-1\n{session}\n")
+        return f
+
+    def test_the_next_start_ends_the_working_agent_of_a_stage_that_stopped_short_with_no_force(self, tmp_path, monkeypatch):
+        team, stops = self.team(tmp_path, monkeypatch, {"agent_status": "working", "agent_session": {"value": "s1"}})
+        f = self.mark(team.t, "s1")
+        assert plan.short_taken(None, team, "unit-2") is None
+        assert stops == [("unit-2", True)] and not f.exists()
+
+    def test_the_next_start_leaves_another_session_be_and_takes_the_mark(self, tmp_path, monkeypatch):
+        team, stops = self.team(tmp_path, monkeypatch, {"agent_status": "working", "agent_session": {"value": "s2"}})
+        f = self.mark(team.t, "s1")
+        assert plan.short_taken(None, team, "unit-2") is None
+        assert stops == [] and not f.exists()
+
+    def test_with_no_mark_the_next_start_ends_nothing_of_its_own(self, tmp_path, monkeypatch):
+        team, stops = self.team(tmp_path, monkeypatch, {"agent_status": "working", "agent_session": {"value": "s1"}})
+        assert plan.short_taken(None, team, "unit-2") is None and stops == []
+
+    def test_an_agent_that_did_not_exit_keeps_its_mark_and_refuses_the_start(self, tmp_path, monkeypatch):
+        said = "swb-1-unit-2 did not exit (busy or waiting on the user); it was left running"
+        team, stops = self.team(tmp_path, monkeypatch, {"agent_status": "idle", "agent_session": {"value": "s1"}}, stopped=said)
+        f = self.mark(team.t, "s1")
+        assert plan.short_taken(None, team, "unit-2") == said and f.exists()
+
+    def test_a_stage_that_is_over_ends_its_working_agent_without_force_and_answers_its_exits_question(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(crew, "nap", lambda seconds: None)
+        for over in (True, False):
+            agents = crew.Agents(None, "team", "swb-1", "wldn", "wldn-1", tmp_path / str(over), None, "/w", None)
+            agents.herdr = Busy()
+            agents.ensure()
+            agents.put("panes", "unit-2", "w2:p2")
+            why = agents.stop("unit-2", over=over)
+            if over:
+                assert why is None and agents.ended == ["unit-2"]
+                assert ("agent", "send-keys", "w2:p2", "enter") in agents.herdr.acts
+            else:
+                assert why == crew.working_said("swb-1-unit-2") and agents.herdr.acts == []
+
+
+class Busy:
+    """herdr's side of a Claude Code session working after its stage stopped short, a background task of its own
+    running: told /exit it asks whether to stop the task and reads blocked, and Enter on the first option ends it."""
+
+    def __init__(self):
+        self.state, self.acts = "working", []
+
+    def status(self, pane, fresh=False):
+        return self.state
+
+    def run(self, *args):
+        self.acts.append(args)
+        out = ""
+        if args[:2] == ("agent", "prompt") and args[3] == "/exit":
+            self.state = "blocked"
+        elif args[:2] == ("pane", "read"):
+            out = " Background work is running\n ❯ 1. Exit and stop tasks\n" if self.state == "blocked" else ""
+        elif args[:2] == ("agent", "send-keys") and args[3:] == ("enter",) and self.state == "blocked":
+            self.state = None
+        return types.SimpleNamespace(returncode=0, stdout=out, stderr="")
