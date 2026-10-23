@@ -8,7 +8,7 @@
 
 ## 2. A record's card is raised again from its record
 
-- [ ] 2.1 The sweep on the main level's host judges a still-proposed record's stranded card, with whether it offered alternatives, proved by `TestSweepJudged` in `tests/py/test_rail.py` (design, *Task notes* 2.1).
+- [x] 2.1 The sweep on the main level's host judges a still-proposed record's stranded card, with whether it offered alternatives, proved by `TestSweepJudged` in `tests/py/test_rail.py` (design, *Task notes* 2.1).
 - [ ] 2.2 The record's raise posts its card again from the record on the kit's main, or refuses naming the `crew record` command when it offered alternatives, proved in `tests/py/test_rail.py` and `tests/py/test_cards.py` (design, *Task notes* 2.2).
 - [ ] 2.3 `crew record --proposed` records whether its card offered alternatives and posts saying the older copy is dead when one is stranded, proved in `tests/t-cards.sh` (design, *Task notes* 2.3).
 

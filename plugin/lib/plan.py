@@ -8797,6 +8797,15 @@ def record_settled(key, entries):
     return last["Act"].split(".")[1].capitalize() + (f" at {commit}" if commit else "")
 
 
+def record_proposed(key, entries):
+    """A decision record's last record.proposed entry, done, under its key in either form (cards.row_object), from the
+    run record's entries, oldest first: its State says whether the user settled it in the pane, its Form whether its
+    card offered alternatives; None when crew record recorded it proposed nowhere."""
+    obj = cards.row_object(key or "")
+    return next((e for e in reversed(entries) if obj and e.get("Act") == "record.proposed" and not e.get("Refused")
+                 and obj in (e.get("On") or [])), None)
+
+
 def refused_lately(entries, now, key=None, card=None):
     """Whether crew's last post under a row's key, or its last close of a card, was refused under CARD_RETRY seconds
     before now, so the sweep leaves it for a later read."""
@@ -8847,7 +8856,7 @@ def row_owner(fleet, plan, row):
     return f"{l}-{'ops' if row['group'] == 'operations' else 'planner'}", fleet["partitions"][l]["machine"]
 
 
-def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None)):
+def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None, None), design=(None, None)):
     """What the rail's read does with one partition's cards, of those posted on this host (here), the only ones its
     sign-in reaches: each row's card whose row is gone, to close with why (row_gone), but a land card whose row can't
     be told (blind, the bolts whose team's host did not answer); each question, whose asker herdr is asked for; and
@@ -8859,8 +8868,12 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     kind's raise; but each row whose owner runs here and whose owner's newest card under its key this host's sign-in
     can't reach, one posted from another host and not closed, or one lost to its owner on any host (cards.stranded,
     over the whole record read), to post again through its kind's raise, the older copy named, and not as a row with no
-    card. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is
-    left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
+    card. And, where the partition's design agent runs (design, its <label>-design and host), each decision record's
+    key in record 0031's form under which the design agent posted a card, whose record crew record last recorded
+    proposed (record_proposed) and not settled in the pane, and whose card this host's sign-in can't reach so, to post
+    again through the record's raise as a row of the group records, with whether its card offered alternatives (the
+    Form its last record.proposed records). A card or a row whose last close or post was refused under CARD_RETRY
+    seconds ago is left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
     batch), each batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why,
     once: none is under its key yet, and the user's answer has not closed it (batch_closed). And each row's card of a
     batch, batch/<n>, or a proposal, proposal/<n>, that the run record shows standing without its reading, last
@@ -8896,6 +8909,17 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
             out["again"].append((r, older))
     again = {r["key"] for r, _ in out["again"]}
     out["none"] = [r for r in mine if r["key"] not in carded | again]
+    if design[1] == here:
+        posted = (e.get("Key") for e in entries if e.get("Act") == "card.post" and e.get("By") == design[0])
+        for key in dict.fromkeys(k for k in posted if re.fullmatch(r"record/[a-z0-9][a-z0-9-]*/\d{4}", k or "")):
+            last = record_proposed(key, entries)
+            if (not last or record_settled(key, entries) or last.get("State") == "settled in the pane"
+                    or refused_lately(entries, now, key=key)):
+                continue
+            older = cards.stranded(entries, key, design[0], here)
+            if older:
+                out["again"].append((dict(label=design[0].removesuffix("-design"), key=key, group="records",
+                                          alternatives=last.get("Form") == "alternatives"), older))
     if planner[1] == here:
         done = {e.get("Key") for e in entries if e.get("Act") == "batch.close" and not e.get("Refused")} | batch_closed(entries)
         out["settled"] = [(k, why) for k, why in batch_settled(entries).items() if k not in done]
@@ -11194,7 +11218,7 @@ SWEEPER = "crew"
 # Each kind's raise, the function its change of the series gives it, handed a rail row (record 0031 §1): by the row
 # key's first part, a name in this module or, as ops.<name>, in ops.py. A kind whose function is not there has none yet.
 RAISES = {"proposal": "raise_proposal", "batch": "raise_batch", "land": "raise_land", "deploy": "ops.raise_deploy",
-          "op": "ops.raise_step"}
+          "op": "ops.raise_step", "record": "raise_record_again"}
 SWEEP_LATER = "The rail's sweep changes nothing on this read."
 
 
@@ -11294,7 +11318,9 @@ def sweep_cards(fleet, read, acts=None):
         owners = {r["key"]: row_owner(fleet, pl, r) for r in rows}
         blind = {b.name() for b in pl.bolts() if (fleet["teams"].get(b.get("Team")) or {}).get("machine") in down}
         planner = row_owner(fleet, pl, dict(label=l, group="batches", key=None))
-        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner)
+        design = (f"{l}-design", fleet["partitions"][l]["machine"])
+        j = sweep_judged(here, rows, [c for c in read["cards"] if c["label"] == l], read["logs"].get(l, []), owners, blind, now, planner,
+                         design)
         for key, why in j.pop("settled"):
             got = acts.emit(l, "batch.close", [key.partition("-")[0]], by=planner[0], why="batch: closed by crew, it waits on nothing",
                             Key=key, Outcome=why)
@@ -11303,7 +11329,7 @@ def sweep_cards(fleet, read, acts=None):
         j["none"] = [r for r in j["none"] if acts.raise_of(r["key"].split("/")[0])]
         j["again"] = [(r, c) for r, c in j["again"] if acts.raise_of(r["key"].split("/")[0])]
         if any(j.values()):
-            judged.append((l, owners, j))
+            judged.append((l, dict(owners, **{r["key"]: design for r, _ in j["again"] if r["group"] == "records"}), j))
     if not judged:
         return out
     asked = [c["card"] for _, _, j in judged for c in [c for c, *_ in j["gone"]] + [c for c, _ in j["held"]] + j["questions"]]

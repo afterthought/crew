@@ -615,6 +615,42 @@ class TestSweepJudged:
         assert self.moved(BOX, [self.B13, refused], [card("batch/13", "req_b13", "wldn-planner")])["again"] == []
         assert self.moved(BOX, [self.B13, dict(refused, At=iso(plan.CARD_RETRY // 60 + 1))])["again"] == [(row("batch/13", "batches"), "req_b13")]
 
+    # Record 21's card, posted from mac-studio in the design agent's name once crew record recorded it proposed there.
+    R21 = [did("record.proposed", 70, On=["record/atlas-kit/0021"], By="wldn-design", Commit=["WilldanGroup/atlas-kit@" + "a" * 40]),
+           did("card.post", 60, Card="req_r21", Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], By="wldn-design")]
+    RECORD = dict(label="wldn", key="record/atlas-kit/0021", group="records", alternatives=False)
+
+    def recorded(self, here, entries, cards_=()):
+        return plan.sweep_judged(here, [], list(cards_), list(entries), {}, set(), NOW, design=("wldn-design", BOX))["again"]
+
+    def test_a_still_proposed_records_card_held_on_another_host_is_posted_again_where_the_design_agent_runs(self):
+        """rail-cards, "A record's card left on the host the main level left"."""
+        assert self.recorded(BOX, self.R21, [card("record/atlas-kit/0021", "req_r21", "wldn-design")]) == [(self.RECORD, "req_r21")]
+        lost = did("card.close", 50, Card="req_r21", Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], State="lost", By="wldn-design")
+        assert self.recorded(BOX, self.R21 + [lost]) == [(self.RECORD, "req_r21")]
+
+    def test_a_record_raised_with_alternatives_is_judged_so(self):
+        """rail-cards, "A record raised with alternatives"."""
+        raised = [dict(self.R21[0], Form="alternatives"), self.R21[1]]
+        assert self.recorded(BOX, raised) == [(dict(self.RECORD, alternatives=True), "req_r21")]
+
+    @pytest.mark.parametrize("then", [
+        did("record.accepted", 40, On=["record/atlas-kit/0021"], By="wldn-design", Commit=["WilldanGroup/atlas-kit@" + "b" * 40]),
+        did("record.rejected", 40, On=["record/atlas-kit/0021"], By="wldn-design", Commit=[]),
+        did("record.proposed", 40, On=["record/atlas-kit/0021"], By="wldn-design", State="settled in the pane"),
+        did("card.post", 5, Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], By="wldn-design", Refused="Pending You refused post_request: x"),
+        dict(did("card.post", 40, Card="req_r22", Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], By="wldn-design"), Host=BOX)])
+    def test_a_record_settled_since_settled_in_the_pane_posted_lately_or_posted_here_is_not(self, then):
+        """rail-cards, "A record settled since"."""
+        assert self.recorded(BOX, self.R21 + [then]) == []
+
+    def test_a_record_with_no_status_recorded_under_another_key_or_read_on_another_host_is_not(self):
+        assert self.recorded(BOX, self.R21[1:]) == []
+        old = [dict(e, Key="record/atlas-kit/0021/5eba218") if e["Act"] == "card.post" else e for e in self.R21]
+        assert self.recorded(BOX, old) == []
+        assert self.recorded("mac-studio", self.R21) == []
+        assert plan.sweep_judged(BOX, [], [], self.R21, {}, set(), NOW)["again"] == []
+
     def test_a_rows_owner_and_its_host(self):
         pl = the_plan()
         assert plan.row_owner(FLEET, pl, row("proposal/4")) == ("wldn-planner", BOX)
