@@ -4,6 +4,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import time
 
 import pytest
 
@@ -311,7 +312,7 @@ def test_a_bolt_whose_remote_cannot_be_asked_is_found_with_gits_words(repo, tmp_
 
 
 def onto(place, bolt, *heads):
-    """plan.ONTO as rebase_dependents runs it in a dependent's place: <place> <bolt> [<head left out>...]."""
+    """plan.ONTO as rebase_dependents runs it in a dependent's place: <place> <the bolt's ref> [<head left out>...]."""
     import plan
     return subprocess.run(["bash", "-c", plan.ONTO, "crew", str(place), bolt, *heads], capture_output=True, text=True)
 
@@ -358,10 +359,10 @@ def test_a_dependents_rebase_replaying_its_settled_dependencys_old_commit_confli
     took left out, only its own commit is replayed, and the rebase is clean."""
     place, took = settled_and_merged(repo, tmp_path)
     tip = repo.git("rev-parse", "unit/b")
-    r = onto(place, "t")
+    r = onto(place, "refs/heads/bolt/t")
     assert r.returncode == 3 and r.stdout.startswith("conflict ") and "a/design.md" in r.stdout.split()
     assert repo.git("rev-parse", "unit/b") == tip
-    r = onto(place, "t", took[:7])
+    r = onto(place, "refs/heads/bolt/t", took[:7])
     assert (r.returncode, r.stdout.strip()) == (0, "rebased")
     assert repo.git("log", "--format=%s", "bolt/t..unit/b") == "feat(b): its own"
 
@@ -375,7 +376,7 @@ def test_a_dependents_rebase_leaves_out_the_bolts_commits_with_the_head_it_took(
     assert r.returncode != 0
     assert unmerged(place) == ["f"]
     subprocess.run(["git", "-C", str(place), "rebase", "--abort"], check=True)
-    r = onto(place, "t", took[:7])
+    r = onto(place, "refs/heads/bolt/t", took[:7])
     assert (r.returncode, r.stdout.strip()) == (0, "rebased")
     assert repo.git("log", "--format=%s", "--no-merges", "bolt/t..unit/b") == "feat(b): its own"
     assert repo.git("for-each-ref", "--format=%(refname)", "refs/heads").split() == [
@@ -393,7 +394,7 @@ def test_the_rebase_a_dependent_is_told_makes_crews_upstream_again_and_meets_onl
     has no ref, and run in its place by bash meets the same conflict and none on the dependency's own files."""
     import plan
     place, took = settled_and_merged(repo, tmp_path, moved=True, own={"shared.txt": "one\ntwo, as b has it\nthree\n"})
-    r = onto(place, "t", took[:7])
+    r = onto(place, "refs/heads/bolt/t", took[:7])
     assert r.returncode == 3 and r.stdout.split()[1:] == ["shared.txt"]
     words = plan.rebase_words("t", [f"a@{took[:7]}"])
     command = words[words.index("(git rebase ") + 1:-1]
@@ -608,6 +609,11 @@ def test_a_landings_verdict_is_its_trailer(repo):
         "passed (9 run, 0 replayed)")
 
 
+# sluice 0.36.4's answer to a submission to a main that takes pull requests, once intake has queued the one it opened
+# (lib.rs submit_pull under --no-wait --json).
+PULLED = '{"branch":"main","pull_request":113,"state":"queued: next on main"}'
+
+
 def landing(repo, tmp_path):
     """plan.SUBMIT and plan.LANDED as bolt_submit runs them on the team's host, for bolt b of the kit at repo, after
     plan.MAIN has read main now there, with a path holding wt and the tools they run but no wt-submit; and stand_in(),
@@ -616,11 +622,19 @@ def landing(repo, tmp_path):
     file git does not ignore in the landing's worktree; with on_github, it forms the merge on origin/main and pushes it
     there, leaving the host's own main where it was, then fails releasing a place, its outcome sluice's exit 3, as
     sluice 0.36.4 does on a release that fails after its push; with refused, it pushes nothing, its outcome a conflict,
-    exit 2; with at_once, sluice refuses the submission itself, saying why on standard error and exiting 2. It names no
-    submission, so SUBMIT leaves no `sluice wait` running; the outcome sluice's wait would give is handed to LANDED as
-    crew hands it, with sluice's last line, or, with none, SUBMIT's exit and the last line SUBMIT says the submission
-    said, as landing_ended hands them. Each run is LANDED's result, SUBMIT's said on its standard error before LANDED's,
-    or SUBMIT's own when it refused, and the commit main now was at before it."""
+    exit 2; with at_once, sluice refuses the submission itself, saying why on standard error and exiting 2; with
+    failing, it pushes nothing, its outcome sluice itself failing while the submission waits, exit 3; with pulled, it
+    lands nothing and answers as sluice 0.36.4 does on a main that takes pull requests once intake has queued the one it
+    opened, its number on standard output and no submission, exit 0. Otherwise it names no submission, so SUBMIT leaves
+    no `sluice wait` running; the outcome sluice's wait would give is handed to LANDED as crew hands it, with sluice's
+    last line, or, with none, SUBMIT's exit and the last line SUBMIT says the submission said, as landing_ended hands
+    them. A stand-in sluice beside it takes `sluice wait 7`, for SUBMIT run again with a submission and its tip (again):
+    the wait SUBMIT leaves running ends at once, and the one plan.WAIT runs, as landing_ended does, finds the landing's
+    place made again on bolt/b, lands from it as wt-submit does and exits 0, handed to LANDED with its last line; and
+    `sluice wait main`, which writes where it ran and what it was asked to the file followed, and ends once the file
+    release is there. Each run is
+    LANDED's result, SUBMIT's said on its standard error before LANDED's, or SUBMIT's own when it refused, and the
+    commit main now was at before it."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
@@ -632,44 +646,63 @@ def landing(repo, tmp_path):
             os.symlink(shutil.which(tool), bin_ / tool)
     outcome = tmp_path / "outcome"
 
-    def land_with(path):
+    def land_with(path, *again):
         _, (_, before, why) = main_at(repo)
         assert not why, why
         env = dict(os.environ, PATH=path)
-        r = subprocess.run(["bash", "-c", plan.SUBMIT, "crew", str(repo.path), str(land), "b", "wldn-ops"],
+        r = subprocess.run(["bash", "-c", plan.SUBMIT, "crew", str(repo.path), str(land), "b", "wldn-ops", *again],
                            capture_output=True, text=True, env=env)
         if r.returncode:
             return r, before
         f = dict(w.split("=", 1) for w in shlex.split(r.stdout.strip().splitlines()[-1]))
         told = base64.b64decode(f["SAID"], validate=True).decode().strip().splitlines()
-        rc, said = outcome.read_text().split("\n", 1) if outcome.exists() else (f["RC"], told[-1] if told else "")
+        if f["ID"]:  # a submission SUBMIT waits on: sluice's outcome of it, a call of plan.WAIT
+            w = subprocess.run(["bash", "-c", plan.WAIT, "crew", str(repo.path), f["ID"]], capture_output=True, text=True, env=env)
+            r.stderr += w.stderr
+            rc, said = str(w.returncode), (w.stderr.strip().splitlines() or [""])[-1]
+        else:
+            rc, said = outcome.read_text().split("\n", 1) if outcome.exists() else (f["RC"], told[-1] if told else "")
         outcome.unlink(missing_ok=True)
         e = subprocess.run(["bash", "-c", plan.LANDED, "crew", str(repo.path), str(land), "b", f["TIP"], f["OLD"], rc,
                             base64.b64encode(said.encode()).decode()], capture_output=True, text=True, env=env)
         return subprocess.CompletedProcess(e.args, e.returncode, e.stdout, r.stderr + e.stderr), before
 
-    def stand_in(stray=False, on_github=False, refused=False, at_once=False):
+    def stand_in(stray=False, on_github=False, refused=False, at_once=False, failing=False, pulled=False):
         onto = "refs/remotes/origin/main" if on_github else "main"
-        moved = ('git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
-                 'echo "sluice: releasing try/b: its command failed" >&2\n'
+        pushed = 'git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
+        moved = (pushed + 'echo "sluice: releasing try/b: its command failed" >&2\n'
                  f'printf "3\\nsluice: releasing try/b: its command failed" > "{outcome}"' if on_github else
                  f'git update-ref refs/heads/main "$new"\necho "landed #1"\nprintf "0\\n" > "{outcome}"')
-        (bin_ / "wt-submit").write_text(f'''#!/bin/sh
-[ "$1 $2 $3 $4" = "main --no-wait --json --no-remove" ] || exit 9
-[ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
-echo "$SLUICE_AGENT" > "{tmp_path}/agent"
-{f"echo 'sluice: bolt/b conflicts with main' >&2; printf '2\\nsluice: bolt/b conflicts with main' > '{outcome}'; exit 0" if refused else ""}
-{"echo 'sluice: main has no gate for bolt/b' >&2; exit 2" if at_once else ""}
-{"echo s > stray.txt" if stray else ""}
-{"git fetch -q origin" if on_github else ""}
+        lands = f'''{"git fetch -q origin" if on_github else ""}
 tree=$(printf 'x\\n' | git hash-object -w --stdin)
 idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree {onto}
 GIT_INDEX_FILE=$idx git update-index --add --cacheinfo 100644,$tree,landed.txt
 new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p {onto} -p HEAD -m "chore(land): #1 bolt/b")
-{moved}
+'''
+        failed = "sluice: a round of main failed: its lock could not be taken"
+        (bin_ / "wt-submit").write_text(f'''#!/bin/sh
+[ "$1 $2 $3 $4" = "main --no-wait --json --no-remove" ] || exit 9
+[ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
+echo "$SLUICE_AGENT" > "{tmp_path}/agent"
+git status --porcelain > "{tmp_path}/status"
+{f"echo 'sluice: bolt/b conflicts with main' >&2; printf '2\\nsluice: bolt/b conflicts with main' > '{outcome}'; exit 0" if refused else ""}
+{"echo 'sluice: main has no gate for bolt/b' >&2; exit 2" if at_once else ""}
+{f"echo '{failed}' >&2; printf '3\\n{failed}' > '{outcome}'; exit 0" if failing else ""}
+{f"echo '{PULLED}'; exit 0" if pulled else ""}
+{"echo s > stray.txt" if stray else ""}
+{lands}{moved}
 ''')
-        (bin_ / "wt-submit").chmod(0o755)
-        return lambda: land_with(f"{bin_}:{os.environ['PATH']}")
+        (bin_ / "sluice").write_text(f'''#!/bin/sh
+[ "$1 $2" = "wait main" ] && {{ echo "$PWD $*" > "{tmp_path}/followed"; n=0
+  while [ ! -e "{tmp_path}/release" ] && [ $n -lt 6000 ]; do sleep 0.1; n=$((n + 1)); done; exit 0; }}
+[ "$1 $2" = "wait 7" ] || exit 9
+[ "$3 $4" = "--timeout 9m" ] || exit 0
+cd "{land}" && [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
+{lands}{pushed if on_github else 'git update-ref refs/heads/main "$new"'}
+''')
+        for tool in ("wt-submit", "sluice"):
+            (bin_ / tool).chmod(0o755)
+        return lambda *again: land_with(f"{bin_}:{os.environ['PATH']}", *again)
     return land, lambda: land_with(str(bin_)), stand_in
 
 
@@ -799,6 +832,111 @@ def test_a_landing_sluice_pushed_to_github_and_then_failed_is_a_landing(repo, tm
     assert marked(repo) == "yes" and repo.git("config", "branch.bolt/b.crew") == "landed"
 
 
+def test_a_landings_worktree_is_cut_on_a_split_legacy_bolt_writing_no_bolt_ref(repo, tmp_path):
+    """plan.SUBMIT (plan.19, sluice clause 124): a legacy bolt whose host branch is ahead of its stale copy on GitHub,
+    under a stand-in for sluice's guard that refuses a write to refs/heads/bolt/b differing from origin's copy, as
+    sluice's reference-transaction hook judges one (swancloud-ops's signal 2026-10-23-swancloud-ops-7c7811ae/01: "is
+    protected by sluice"). A plain git worktree add's checkout writes the branch to the value it holds, which the guard
+    refuses; the landing's --no-checkout add writes only the worktree's HEAD and read-tree -m -u HEAD its files and
+    index, no transaction on the branch, so the worktree stands clean on bolt/b at the host's tip and the landing lands
+    the host's tip as any bolt does."""
+    import plan
+    kit_with_github(repo, tmp_path)
+    repo.git("branch", "bolt/b", "origin/main")
+    repo.git("push", "-q", "origin", "bolt/b")
+    repo.git("fetch", "-q", "origin")
+    repo.git("checkout", "-q", "bolt/b")
+    tip = repo.commit("feat: the bolt's, on the host alone", {"bolt.txt": "b\n"})
+    repo.git("checkout", "-q", "main")
+    assert repo.git("rev-parse", "origin/bolt/b") != tip
+    log = tmp_path / "guard.log"
+    guard = repo.path / ".git" / "hooks" / "reference-transaction"
+    guard.parent.mkdir(exist_ok=True)
+    guard.write_text(f'''#!/bin/sh
+while read -r old new ref; do
+  echo "$1 $ref" >> "{log}"
+  if [ "$1" = prepared ] && [ "$ref" = refs/heads/bolt/b ] && [ "$new" != "$(git rev-parse -q --verify refs/remotes/origin/bolt/b)" ]; then
+    echo "bolt/b is protected by sluice" >&2; exit 1
+  fi
+done
+''')
+    guard.chmod(0o755)
+    plain = subprocess.run(["git", "-C", str(repo.path), "worktree", "add", "-q", str(tmp_path / "plain"), "bolt/b"],
+                           capture_output=True, text=True)
+    assert plain.returncode != 0 and "bolt/b is protected by sluice" in plain.stderr, plain.stderr
+    log.write_text("")
+    _, _, stand_in = landing(repo, tmp_path)
+    r, before = stand_in(on_github=True)()
+    assert "RC=3 " in r.stdout and f"TIP={tip} " in r.stdout, r.stdout + r.stderr
+    assert "refs/heads/bolt/b" not in log.read_text(), log.read_text()
+    assert (tmp_path / "status").read_text() == ""
+    github = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "main"],
+                            capture_output=True, text=True).stdout.strip()
+    assert repo.git("rev-parse", f"{github}^2") == tip and repo.git("rev-parse", "bolt/b") == tip
+    assert plan.landing_said("b", "kit", "h", r.stdout, before)[0], r.stdout
+
+
+def test_a_submission_sluice_failed_on_is_waited_on_again_while_its_record_has_it_standing(repo, tmp_path):
+    """plan.SUBMIT, plan.WAIT, plan.LANDED, plan.sluice_failed, plan.landing_said and plan.wait_again (plan.16,
+    plan.18): sluice itself fails while the landing's submission waits, exiting 3 with nothing pushed, so GitHub's main
+    does not hold the bolt's tip and whether the bolt lands is sluice's own record's to say, never "did not land" on the
+    exit alone. With the record holding the submission queued, SUBMIT given its id and the tip it submitted makes the
+    landing's place again and submits nothing, sluice's wait on it (WAIT) lands it, and LANDED judges main now against
+    that tip; the place goes after."""
+    import plan
+    pushed = kit_with_github(repo, tmp_path)
+    pushed("from-a-mac")
+    repo.git("branch", "bolt/b", "origin/main")
+    tip = repo.git("commit-tree", "-p", "bolt/b", "-m", "feat: the bolt's", repo.git("rev-parse", "bolt/b^{tree}"))
+    repo.git("update-ref", "refs/heads/bolt/b", tip)
+    land, _, stand_in = landing(repo, tmp_path)
+    r, before = stand_in(on_github=True, failing=True)()
+    assert "RC=3 " in r.stdout and "sluice: a round of main failed" in r.stderr, r.stdout + r.stderr
+    assert plan.sluice_failed(r.stdout, before) == tip and not land.exists()
+    queued = {"id": 7, "state": "queued"}
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before, sub=queued)
+    assert not landed and "did not land" not in words and words.endswith("crew waits on it again (sluice wait 7)."), words
+    assert plan.wait_again(queued, 0) == 7
+    r, again = stand_in(on_github=True)("7", tip)
+    assert again == before and f"RC=0 TIP={tip} " in r.stdout, r.stdout + r.stderr
+    github = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "main"],
+                            capture_output=True, text=True).stdout.strip()
+    assert plan.landing_said("b", "kit", "h", r.stdout, before) == (True, f"bolt/b landed on kit's main at {github[:7]}: now crew bolt land b.")
+    assert plan.sluice_failed(r.stdout, before) is None
+    assert not land.exists() and "land-b" not in repo.git("worktree", "list")
+
+
+
+def test_a_landing_sluice_queued_as_a_pull_request_is_followed_from_its_place_while_it_stands(repo, tmp_path):
+    """plan.SUBMIT, plan.submitted_line and plan.landing_now (plan.16, plan.8): to a main that takes pull requests
+    sluice 0.36.4 answers a landing's submission with the pull request it opened, its number and no submission. SUBMIT
+    reads its number, PULL, beside no ID, hands crew the answer as sluice printed it, and leaves `sluice wait main`
+    running from the landing's place, which follows the pull request to its submission's outcome, its process held in
+    crew-landing, so no stage starts on the bolt while it stands; once that wait ends the mark is emptied."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/b")
+    land, _, stand_in = landing(repo, tmp_path)
+    stand_in(pulled=True)
+    env = dict(os.environ, PATH=f"{tmp_path / 'bin'}:{os.environ['PATH']}")
+    r = subprocess.run(["bash", "-c", plan.SUBMIT, "crew", str(repo.path), str(land), "b", "wldn-ops"], capture_output=True,
+                       text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    f = dict(w.split("=", 1) for w in shlex.split(r.stdout.strip().splitlines()[-1]))
+    assert (f["RC"], f["ID"], f["PULL"]) == ("0", "", "113") and base64.b64decode(f["ANSWER"]).decode().strip() == PULLED
+    assert plan.submitted_line("b", "kit", f) == "bolt/b submitted to kit's main as pull request #113"
+    t = {"kit": {"dir": str(tmp_path)}}
+    followed, release, end = tmp_path / "followed", tmp_path / "release", time.monotonic() + 600  # tests.8: a condition
+    while not followed.exists() and time.monotonic() < end:
+        time.sleep(0.1)
+    ran_in, *asked = followed.read_text().split()
+    assert os.path.realpath(ran_in) == os.path.realpath(land) and asked == ["wait", "main", "--timeout", "24h", "--json"]
+    assert plan.landing_now(t, "b") == (str(land), True, True)
+    release.write_text("")
+    while plan.landing_now(t, "b")[2] and time.monotonic() < end:
+        time.sleep(0.1)
+    assert plan.landing_now(t, "b") == (str(land), True, False)
+
 def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):
     """plan.landed_at (plan.13, teams.17, record 0026): the commit that brought a unit's change to its bolt, which
     rebase_dependents compares with what a dependent's place holds, is found when sluice landed the unit as a merge
@@ -918,3 +1056,51 @@ def test_a_place_made_on_a_kept_branch_takes_it_as_it_stands_tracks_the_new_bolt
     assert again.returncode == 0 and "GITDIR=" in again.stdout and "KEPT=" not in again.stdout
     assert "KEPT=" not in cut(repo, tmp_path, "v")
     assert repo.git("for-each-ref", "--format=%(upstream:short)", "refs/heads/unit/v") == "bolt/b"
+
+
+def test_a_dependent_rebases_onto_and_takes_beside_the_bolt_where_it_is_read_on_github(repo, tmp_path):
+    """plan.ONTO, plan.TAKE and plan.landed_at given GitHub's copy, refs/remotes/origin/bolt/<bolt> (plan.19,
+    gather.bolt_read): with the host's bolt/<bolt> left behind it, a dependent's place is rebased onto GitHub's bolt,
+    a place holding nothing of its own beyond GitHub's bolt takes what it comes after, and the commit that brought a
+    unit's change to the bolt is found on GitHub's."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    origin = tmp_path / "github.git"
+    repo.git("branch", "bolt/b")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(origin)], check=True)
+    repo.git("remote", "add", "origin", str(origin))
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "bolt/b", str(origin), str(other)], check=True)
+    o = lambda *a: subprocess.run(["git", "-C", str(other), *a], check=True, capture_output=True, text=True).stdout.strip()
+    (other / "openspec" / "changes" / "a").mkdir(parents=True)
+    (other / "openspec" / "changes" / "a" / "proposal.md").write_text("p\n")
+    o("add", "-A"); o("commit", "-qm", "docs(a): the change")
+    made = o("rev-parse", "HEAD")
+    (other / "x").write_text("x\n")
+    o("add", "x"); o("commit", "-qm", "feat: the bolt's own")
+    o("push", "-q", "origin", "HEAD:bolt/b")
+    repo.git("fetch", "-q", "origin")
+    github = "refs/remotes/origin/bolt/b"
+    assert repo.git("rev-parse", "bolt/b") != repo.git("rev-parse", github)
+    assert plan.landed_at(str(repo.path), "b", "a", at=github) == made
+    assert plan.landed_at(str(repo.path), "b", "a", at="refs/heads/bolt/b") is None
+    place = tmp_path / "place"
+    repo.git("worktree", "add", "-q", "-b", "unit/c", str(place), "bolt/b")
+    (place / "c").write_text("c\n")
+    subprocess.run(["git", "-C", str(place), "add", "c"], check=True)
+    subprocess.run(["git", "-C", str(place), "commit", "-qm", "feat(c): its own"], check=True)
+    r = onto(place, github)
+    assert (r.returncode, r.stdout.strip()) == (0, "rebased")
+    assert repo.git("merge-base", "--is-ancestor", github, "unit/c") == ""
+    assert repo.git("log", "--format=%s", f"{github}..unit/c") == "feat(c): its own"
+    d = tmp_path / "d"
+    repo.git("worktree", "add", "-q", "-b", "unit/d", str(d), made)
+    (d / "d").write_text("d\n")
+    subprocess.run(["git", "-C", str(d), "add", "d"], check=True)
+    subprocess.run(["git", "-C", str(d), "commit", "-qm", "feat(d): its own"], check=True)
+    fresh = tmp_path / "fresh"
+    repo.git("worktree", "add", "-q", "-b", "unit/e", str(fresh), github)
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", "refs/heads/bolt/b", "unit/d"], capture_output=True, text=True)
+    assert (took.returncode, took.stdout) == (0, ""), "read at the host's copy, GitHub's own commit counts as the place's"
+    took = subprocess.run(["bash", "-c", plan.TAKE, "crew", str(fresh), "e", github, "unit/d"], capture_output=True, text=True)
+    assert (took.returncode, took.stdout.split()) == (0, ["d", repo.git("rev-parse", "--short=7", "unit/d")])

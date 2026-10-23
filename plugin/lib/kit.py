@@ -18,6 +18,7 @@ import re
 import tomllib
 
 import crew
+import gather
 
 DECLARATION = ".config/sluice.toml"
 RUNNERS = ("moon", "command")
@@ -137,13 +138,9 @@ def unready_said(place, why, lines=15):
 VERDICT = "Sluice-Result"
 
 
-def branch_table(branches, branch):
-    """The [branches."<pattern>"] table of a policy's branches whose pattern matches the branch, the most specific
-    first, as sluice matches it; None when none does."""
-    import fnmatch
-    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
-                      key=lambda p: (p.count("*"), -len(p)))
-    return branches[matching[0]] if matching and isinstance(branches[matching[0]], dict) else None
+# How a policy's branches are matched, as sluice matches them: gather's, since gather.py is sent to hosts on its own
+# and reads where each bolt lives (gather.bolt_read).
+branch_table = gather.branch_table
 
 
 def bolt_checks(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="main"):
@@ -172,15 +169,10 @@ def bolt_remote(text, branch="bolt/a-bolt", where=DECLARATION):
     [branches."<pattern>"] table that matches the branch, the most specific first, as bolt_checks matches it, when it is
     a non-empty string; None for no policy (text None), no matching table or no remote, which sluice reads as a branch
     kept in the host's own refs. Refused, naming the file, when it is not TOML (read.1)."""
-    if text is None:
-        return None
     try:
-        branches = tomllib.loads(text).get("branches", {})
-    except tomllib.TOMLDecodeError as e:
+        return gather.policy_remote(text, branch)
+    except ValueError as e:
         crew.fail(f"{where} is not TOML, so crew can't read where sluice keeps {branch}: {e}")
-    table = branch_table(branches, branch)
-    remote = table.get("remote") if table else None
-    return remote if isinstance(remote, str) and remote else None
 
 
 def takes_pulls(text, where=DECLARATION):

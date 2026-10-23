@@ -6,10 +6,12 @@
 The request is JSON: {"kits": [{"main": <kit's main checkout>, "dir": <the kit's folder>, "bolts": [<bolt>, ...],
 "slots": {<team>: <its slots file, ~ allowed>}}],
 "sites": <true to also read each worktree's dev server names with devurl, and the host's running portless routes>,
-"board": <true to also read each team's slots file and the explorations on the kit's main>}.
+"board": <true to also read each team's slots file and the explorations on the kit's main>,
+"fetch": <true to fetch each kit's GitHub, its origin, before reading it>}.
 The answer, on stdout, is JSON keyed by each kit's main checkout: the changes main holds (open or archived) and the
 chores its history holds (each `Chore:` trailer's name), and for each local bolt/* branch, and each bolt asked for,
-whether bolt/<bolt> exists, the changes and chores it holds, those it holds archived, the tasks of each it holds open
+read where the bolt lives (bolt_read, at: GitHub's origin/bolt/<bolt> for a bolt on GitHub, else the host's bolt/<bolt>),
+whether it exists, the changes and chores it holds, those it holds archived, the tasks of each it holds open
 that main does not hold, its worktree, its head and the head's time; each place under
 <dir>/places with its branch, its head and the head's time, its change's tasks, whether its planning is complete and the
 paths its proposal declares it touches, read from the change archived there once its merge has archived it; each chore's place, <dir>/places/chore-<name> on chore/<name>, with its bolt,
@@ -21,7 +23,7 @@ portless routes; with board, each team's slots, one {slot, kind, name, place} pe
 folder under openspec/explorations/ on main with the first line of its first .md file. It reads with git, the file
 system, devurl and portless and, for a change whose workflow it does not read itself, openspec, and changes nothing.
 It needs nothing but python3's standard library, since it is sent to hosts whose crew may be older."""
-import json, os, re, subprocess, sys
+import fnmatch, json, os, re, subprocess, sys, tomllib
 
 
 def run(args, cwd):
@@ -88,11 +90,11 @@ def chores(main, ref):
     return sorted({l.strip() for l in out.splitlines() if CHORE.match(l.strip())})
 
 
-def chore_place(path, bolt):
-    """A chore's place: its head and the head's time, and how many commits of its own it holds beyond its bolt (ahead):
-    its first-parent line with no merges, so the work it took of what it comes after is not counted; None when it
-    tracks no bolt or git can't count them."""
-    ahead = (run(["git", "rev-list", "--count", "--first-parent", "--no-merges", f"refs/heads/bolt/{bolt}..HEAD"], path) or "").strip() if bolt else ""
+def chore_place(path, bolt, ref):
+    """A chore's place: its head and the head's time, and how many commits of its own it holds beyond its bolt (ahead),
+    read at the ref the bolt is read at (ref, bolt_at): its first-parent line with no merges, so the work it took of
+    what it comes after is not counted; None when it tracks no bolt crew can read or git can't count them."""
+    ahead = (run(["git", "rev-list", "--count", "--first-parent", "--no-merges", f"{ref}..HEAD"], path) or "").strip() if bolt and ref else ""
     return {"path": path, "head": (run(["git", "rev-parse", "HEAD"], path) or "").strip() or None, "head_at": head_at(path, "HEAD"),
             "ahead": int(ahead) if ahead.isdigit() else None}
 
@@ -147,6 +149,66 @@ def bolt_of(up):
     return bolt_ref(up or "")[0]
 
 
+# A kit's policy, where sluice reads how each branch is gated and routed (kit.DECLARATION).
+POLICY = ".config/sluice.toml"
+
+
+def branch_table(branches, branch):
+    """The [branches."<pattern>"] table of a policy's branches whose pattern matches the branch, the most specific
+    first, as sluice matches it; None when none does."""
+    matching = sorted((p for p in (branches if isinstance(branches, dict) else {}) if fnmatch.fnmatchcase(branch, p)),
+                      key=lambda p: (p.count("*"), -len(p)))
+    return branches[matching[0]] if matching and isinstance(branches[matching[0]], dict) else None
+
+
+def policy_remote(text, branch):
+    """The remote a policy's text names for a branch, as sluice routes it (plan.19): the `remote` of the matching
+    [branches."<pattern>"] table (branch_table) when it is a non-empty string; None for no policy (text None), no
+    matching table or no remote, which sluice reads as a branch kept in the host's own refs. Raises ValueError
+    (tomllib's TOMLDecodeError) on text that is not TOML."""
+    if text is None:
+        return None
+    table = branch_table(tomllib.loads(text).get("branches", {}), branch)
+    remote = table.get("remote") if table else None
+    return remote if isinstance(remote, str) and remote else None
+
+
+def bolt_at(bolt, tracked, local, remote_at_tracked):
+    """The ref a bolt is read at (plan.19): GitHub's copy, refs/remotes/origin/bolt/<bolt> as this host last fetched
+    it, when the host holds it (tracked) and the policy in it names a remote for the bolt's branch (remote_at_tracked);
+    else the host's own refs/heads/bolt/<bolt> when it is there (local), the bolt itself for a bolt kept on its host or
+    one this host has not fetched; None when the host has neither, the bolt missing. The host's copy of a bolt on
+    GitHub is sluice's, and nothing of the bolt is read from it."""
+    if tracked and remote_at_tracked is not None:
+        return f"refs/remotes/origin/bolt/{bolt}"
+    return f"refs/heads/bolt/{bolt}" if local else None
+
+
+def bolt_read(main, bolt, tracked=None, local=None):
+    """Where a bolt is read in a kit's main checkout (bolt_at), from what the host holds of it, asked of git unless the
+    caller has listed it (tracked, local): (ref, None), (None, None) when the host has no copy of it, or (None, why)
+    when the policy at GitHub's copy is not TOML, which reads nothing from the host's copy (read.1)."""
+    def there(ref):
+        return run(["git", "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], main) is not None
+    github = f"refs/remotes/origin/bolt/{bolt}"
+    tracked = there(github) if tracked is None else tracked
+    remote = None
+    if tracked:
+        try:
+            remote = policy_remote(run(["git", "show", f"{github}:{POLICY}"], main), f"bolt/{bolt}")
+        except ValueError as e:
+            return None, f"{POLICY} at origin/bolt/{bolt} is not TOML, so crew can't read bolt {bolt}: {e}"
+    return bolt_at(bolt, tracked, there(f"refs/heads/bolt/{bolt}") if local is None else local, remote), None
+
+
+def short(ref):
+    """A ref's short form, as git takes it and a person reads it: origin/bolt/<bolt> or bolt/<bolt>; None for None."""
+    for long in ("refs/remotes/", "refs/heads/"):
+        if ref and ref.startswith(long):
+            return ref[len(long):]
+    return ref
+
+
 def holds(main, ref, branch):
     """Whether ref holds a branch's tip."""
     return subprocess.run(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", ref], cwd=main, capture_output=True).returncode == 0
@@ -160,21 +222,19 @@ def moved(main, branch):
     return bool(born) and tip != born[-1]
 
 
-def fix_merged(main, branch, bolt):
-    """Whether a fix has merged into its bolt: the bolt, at the ref the fix tracks when that names it (bolt_ref), else
-    the host's refs/heads/bolt/<bolt>, holds the fix's tip, and the fix has moved since it was made (its reflog's first
-    entry)."""
-    if not bolt:
-        return False
-    named, ref = bolt_ref((run(["git", "for-each-ref", "--format=%(upstream:short)", f"refs/heads/{branch}"], main) or "").strip())
-    return holds(main, ref if named == bolt else f"refs/heads/bolt/{bolt}", branch) and moved(main, branch)
+def fix_merged(main, branch, bolt, ref=None):
+    """Whether a fix has merged into its bolt: the bolt, at the ref it is read at (ref, else bolt_read), holds the fix's
+    tip, and the fix has moved since it was made (its reflog's first entry)."""
+    ref = ref or (bolt_read(main, bolt)[0] if bolt else None)
+    return bool(ref) and holds(main, ref, branch) and moved(main, branch)
 
 
-def fix_facts(main, branches, ups, now):
+def fix_facts(main, branches, ups, now, at=None):
     """What a fix's stage is read from, of each fix branch named (branches), by branch, with its upstream from ups
-    (upstreams): its bolt (bolt_ref), whether it has merged into it at the ref it tracks (merged, as fix_merged reads
-    it), whether the kit's main now (now, now_ref) holds its tip (on_main), and whether it has moved since it was made
-    (moved; None when neither main nor its bolt holds its tip, so it decides nothing). Read with as few processes as
+    (upstreams): its bolt (bolt_ref), whether it has merged into it (merged, as fix_merged reads it), at the ref its
+    bolt is read at when at names it ({bolt: ref}, bolt_at; None for a bolt crew can't read), else at the ref it
+    tracks, whether the kit's main now (now, now_ref) holds its tip (on_main), and whether it has moved since it was
+    made (moved; None when neither main nor its bolt holds its tip, so it decides nothing). Read with as few processes as
     git allows: one listing of the fix branches main holds and one of the bolt refs; a branch's bolt is asked only when
     its ref exists, and its reflog only when main or its bolt holds its tip."""
     if not branches:
@@ -184,6 +244,7 @@ def fix_facts(main, branches, ups, now):
     out = {}
     for b in branches:
         bolt, ref = bolt_ref(ups.get(b, ""))
+        ref = at[bolt] if at is not None and bolt in at else ref
         in_bolt = ref in refs and holds(main, ref, b)
         went = moved(main, b) if in_bolt or b in landed else None
         out[b] = {"bolt": bolt, "merged": in_bolt and went, "on_main": b in landed, "moved": went}
@@ -191,10 +252,12 @@ def fix_facts(main, branches, ups, now):
 
 
 def own_head(cwd, branch, bolt):
-    """The newest commit of a chore's own on its branch beyond its bolt, its first-parent line with no merges, as
-    (short sha, committer time in ISO 8601); (None, None) when it has none."""
-    out = (run(["git", "log", "-1", "--first-parent", "--no-merges", "--format=%h %cI", f"refs/heads/bolt/{bolt}..refs/heads/{branch}"], cwd)
-           or "").split()
+    """The newest commit of a chore's own on its branch beyond its bolt, read at the ref the bolt is read at
+    (bolt_read), its first-parent line with no merges, as (short sha, committer time in ISO 8601); (None, None) when it
+    has none or the bolt can't be read."""
+    ref = bolt_read(cwd, bolt)[0]
+    out = (run(["git", "log", "-1", "--first-parent", "--no-merges", "--format=%h %cI", f"{ref}..refs/heads/{branch}"], cwd)
+           or "").split() if ref else []
     return (out[0], out[1]) if len(out) == 2 else (None, None)
 
 
@@ -427,6 +490,25 @@ def has_origin(main):
     return run(["git", "remote", "get-url", "origin"], main) is not None
 
 
+def ran(args, cwd):
+    """A command's exit and what it said, (exit, stdout, stderr); (None, "", why) when it can't be started."""
+    try:
+        r = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    except (FileNotFoundError, NotADirectoryError) as e:
+        return None, "", str(e)
+    return r.returncode, r.stdout, r.stderr
+
+
+def fetched(main):
+    """A kit's GitHub fetched into its main checkout, as a read a decision of the moment rests on fetches it (plan.18,
+    plan.19), `git fetch -q origin`: None once it fetched, or for a kit with no origin remote, which has no GitHub;
+    git's words when the fetch failed."""
+    if not has_origin(main):
+        return None
+    code, out, err = ran(["git", "fetch", "-q", "origin"], main)
+    return None if code == 0 else (err or out).strip() or f"git fetch exited {code}"
+
+
 def now_ref(origin):
     """The ref a kit's main is read at now (plan.18), from whether it has an origin remote: GitHub's,
     refs/remotes/origin/main as this host last fetched it, for a kit with one, since sluice lands there and the host's
@@ -450,10 +532,15 @@ def explorations(main, ref="main"):
     return out
 
 
-def kit(req, sites=False, running=None, board=False):
+def kit(req, sites=False, running=None, board=False, fetch=False):
     main, kdir = req["main"], os.path.realpath(req["dir"])
     if not os.path.isdir(main):
         return {"ok": False, "error": f"no checkout at {main}"}
+    # A read a decision of the moment rests on fetches GitHub first (fetch, fetched); every other reads it as this host
+    # last fetched it.
+    why = fetched(main) if fetch else None
+    if why:
+        return {"ok": False, "error": f"cannot fetch {main} from GitHub: {why}"}
     trees = worktrees(main)
     at = {t["path"]: t.get("branch") for t in trees}
     ups = upstreams(main)
@@ -466,22 +553,28 @@ def kit(req, sites=False, running=None, board=False):
     # The kit's policy, as its main holds it: what gates its bolt branches, which crew reads before it gives a bolt.
     out["policy"] = run(["git", "show", f"{now}:.config/sluice.toml"], main)
     # Every local bolt branch, so one answer serves every step of a command, whichever bolt it asks about; a bolt
-    # asked for, or tracked by a place, that has no branch is marked missing.
-    have = [r[len("refs/heads/bolt/"):] for r in (run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/"], main) or "").split()]
+    # asked for, or tracked by a place, that has no branch is marked missing. Each is read where it lives (bolt_read):
+    # GitHub's copy as this host last fetched it for a bolt on GitHub, never the host's copy, which is sluice's.
+    refs = (run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/bolt/", "refs/remotes/origin/bolt/"], main) or "").split()
+    have = [r[len("refs/heads/bolt/"):] for r in refs if r.startswith("refs/heads/bolt/")]
+    github = {r[len("refs/remotes/origin/bolt/"):] for r in refs if r.startswith("refs/remotes/origin/bolt/")}
     tracked = [b for b in map(bolt_of, ups.values()) if b]
+    reads = {}
     for b in sorted(set(have + req.get("bolts", []) + tracked)):
-        exists = b in have
+        ref, why = bolt_read(main, b, b in github, b in have)
+        reads[b] = ref
         wt = os.path.join(kdir, "bolts", b)
-        out["bolts"][b] = {"exists": exists, "changes": changes(main, f"bolt/{b}") if exists else [],
-                           "archived": archived(main, f"bolt/{b}") if exists else [],
-                           "open": carried(main, f"refs/heads/bolt/{b}", out["main"]) if exists else {},
-                           "chores": chores(main, f"refs/heads/bolt/{b}") if exists else [],
+        out["bolts"][b] = {"exists": ref is not None, "at": short(ref), "changes": changes(main, ref) if ref else [],
+                           "archived": archived(main, ref) if ref else [],
+                           "open": carried(main, ref, out["main"]) if ref else {},
+                           "chores": chores(main, ref) if ref else [],
                            "worktree": wt if at.get(wt) == f"bolt/{b}" else None,
-                           "head": (run(["git", "rev-parse", "--verify", "-q", f"refs/heads/bolt/{b}^{{commit}}"], main) or "").strip() or None if exists else None,
-                           "head_at": head_at(main, f"refs/heads/bolt/{b}") if exists else None,
+                           "head": (run(["git", "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], main) or "").strip() or None if ref else None,
+                           "head_at": head_at(main, ref) if ref else None,
                            # sluice's verdict on the bolt's last landing: its head's trailer, empty when it is no landing.
                            "verdict": (run(["git", "log", "-1", "--format=%(trailers:key=Sluice-Result,valueonly)",
-                                            f"refs/heads/bolt/{b}"], main) or "").strip() if exists else None}
+                                            ref], main) or "").strip() if ref else None,
+                           **({"error": why} if why else {})}
     places, dropped = os.path.join(kdir, "places"), None
     for path, branch in at.items():
         if os.path.dirname(path) != places or not branch:
@@ -492,14 +585,14 @@ def kit(req, sites=False, running=None, board=False):
             out["places"][unit] = dict(place(path, unit), branch=branch, bolt=bolt)
         elif branch.startswith("chore/") and os.path.basename(path) == f"chore-{branch[6:]}":
             bolt = bolt_of(ups.get(branch))
-            out["chore_places"][branch[6:]] = dict(chore_place(path, bolt), branch=branch, bolt=bolt)
+            out["chore_places"][branch[6:]] = dict(chore_place(path, bolt, reads.get(bolt)), branch=branch, bolt=bolt)
         elif branch.startswith("fix/"):
             dropped = fixes_dropped(main) if dropped is None else dropped  # read once, and only for a kit with a fix's place
             out["fixes"].append(dict(fix=branch, path=path, dropped=branch in dropped))
     # Each fix branch's facts, read together: a fix's place's, and, as fix_branches, those of each fix branch no
     # worktree holds, whose place is gone, so a slot holding one and the tidy still read it (teams.1, teams.3).
     worked = {b for b in at.values() if b}
-    facts = fix_facts(main, sorted({b for b in ups if b.startswith("fix/") and b not in worked} | {f["fix"] for f in out["fixes"]}), ups, now)
+    facts = fix_facts(main, sorted({b for b in ups if b.startswith("fix/") and b not in worked} | {f["fix"] for f in out["fixes"]}), ups, now, reads)
     for f in out["fixes"]:
         f.update(facts[f["fix"]])
     out["fix_branches"] = {b: f for b, f in facts.items() if b not in worked}
@@ -516,4 +609,4 @@ def kit(req, sites=False, running=None, board=False):
 if __name__ == "__main__":
     request = json.loads(sys.argv[1])
     running = routes() if request.get("sites") else None
-    print(json.dumps({k["main"]: kit(k, request.get("sites"), running, request.get("board")) for k in request["kits"]}))
+    print(json.dumps({k["main"]: kit(k, request.get("sites"), running, request.get("board"), request.get("fetch")) for k in request["kits"]}))

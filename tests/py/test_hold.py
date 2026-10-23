@@ -138,6 +138,38 @@ class TestRenew:
         assert hold.renew_ready(None, False, None, []) == (False, "it is not up")
         assert hold.renew_ready("idle", False, "no transcript", []) == (False, "crew can't tell what it is doing: no transcript")
 
+    def test_an_agent_not_up_is_started_with_no_stop_only_when_an_earlier_restarts_keys_ended_it(self):
+        # swancloud-operator and fwn-1-conductor exited within a minute of their restarts giving up on deneb, and their
+        # panes stood as shells for nine hours (signal 2026-10-23-chuck-mac-studio-8d53f475/01).
+        assert hold.renew_exited(False, None, "sid-1", "sid-1", False) == (True, None)
+
+    def test_an_agent_no_restart_gave_up_on_is_not_up_and_left_to_crew_revive(self):
+        assert hold.renew_exited(False, None, None, "sid-1", False) == (False, "it is not up")
+        assert hold.renew_exited(False, None, "", "sid-1", False) == (False, "it is not up")
+
+    def test_a_mark_of_another_session_is_stale_and_read_as_not_up(self):
+        assert hold.renew_exited(False, None, "sid-0", "sid-1", False) == (False, "it is not up")
+        assert hold.renew_exited(False, None, "sid-1", None, False) == (False, "it is not up")
+
+    def test_a_pane_herdr_lists_an_agent_in_is_not_started_over(self):
+        assert hold.renew_exited(True, None, "sid-1", "sid-1", False) == (False, "it is not up")
+
+    def test_a_restarts_mark_names_the_session_its_exit_was_typed_into_and_a_stale_one_goes_as_it_is_read(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(hold, "RENEW", tmp_path)
+        mark = tmp_path / "swb-1-ops.exiting"
+        assert hold.marked_exit("swb-1-ops", "sid-1") is None
+        mark.write_text("sid-1\n")
+        assert hold.marked_exit("swb-1-ops", "sid-1") == "sid-1" and mark.exists()
+        assert hold.marked_exit("swb-1-ops", "sid-2") == "sid-1" and not mark.exists()
+        assert hold.EXITING * 5 == 600
+
+    def test_an_agent_taken_down_stays_down(self):
+        assert hold.renew_exited(False, None, "sid-1", "sid-1", True) == (False, "it was taken down; it stays down")
+
+    def test_a_pane_crew_cannot_read_starts_nothing_and_says_why(self):
+        assert hold.renew_exited(None, "herdr lists no pane w1:p2, which crew keeps for swb-1-ops", "sid-1", "sid-1", False) == (
+            False, "crew can't tell whether its pane holds it: herdr lists no pane w1:p2, which crew keeps for swb-1-ops")
+
     def test_a_restarted_agent_is_told_the_crew_it_started_on_the_one_it_runs_now_and_what_changed(self):
         said = hold.renew_notice("v0.12.1", "v0.13.0", ["feat(teams): a host is held", "fix(board): x"])
         assert said.startswith("crew restarted you on crew v0.13.0 (you started on v0.12.1), so your brief and crew's plugin are as they now stand. "
@@ -168,6 +200,32 @@ class TestRenew:
             else:
                 assert why == "swc-4-conductor did not exit (busy or waiting on the user); it was left running"
                 assert enters == [] and agents.herdr.state == "blocked"
+
+    def lingering(self, tmp_path, monkeypatch, reads):
+        monkeypatch.setattr(crew, "nap", lambda seconds: None)
+        agents = crew.Agents(None, "main", "swancloud", "swancloud", "swancloud", tmp_path, None, "/w", None)
+        agents.herdr = Lingering(reads)
+        agents.ensure()
+        agents.put("panes", "operator", "w2:p3")
+        return agents
+
+    def test_an_agent_slow_to_exit_is_watched_after_its_stop_gives_up_and_ended_once_it_goes(self, tmp_path, monkeypatch):
+        # swancloud-operator exited within a minute of its restart giving up on deneb (signal 2026-10-23-chuck-mac-studio-8d53f475/01).
+        agents = self.lingering(tmp_path, monkeypatch, STOP_LOOKS + 3)
+        assert agents.stop("operator", waits=True) == "swancloud-operator did not exit (busy or waiting on the user); it was left running"
+        assert agents.ended == []
+        typed = list(agents.herdr.acts)
+        assert agents.exited("operator", 10) is True
+        assert agents.ended == ["operator"] and agents.herdr.reads == STOP_LOOKS + 3
+        assert agents.herdr.acts == typed
+
+    def test_an_agent_that_never_exits_is_left_running_with_nothing_more_typed_to_it(self, tmp_path, monkeypatch):
+        agents = self.lingering(tmp_path, monkeypatch, None)
+        assert agents.stop("operator", waits=True)
+        typed = list(agents.herdr.acts)
+        assert agents.exited("operator", 10) is False
+        assert agents.ended == [] and agents.herdr.state == "idle"
+        assert agents.herdr.acts == typed
 
 
 EXIT_SCREEN = """ Background work is running
@@ -200,6 +258,31 @@ class Exiting:
         elif args[:2] == ("agent", "send-keys") and args[3:] == ("enter",) and self.state == "blocked":
             self.state = None
         return types.SimpleNamespace(returncode=0, stdout=out, stderr="")
+
+
+# How many times a stop reads an agent afresh before it gives up: once a second for 30 seconds, and once after Ctrl+C.
+STOP_LOOKS = 31
+
+
+class Lingering:
+    """herdr's side of a Claude Code session slow to exit: told /exit and Ctrl+C it stays up and idle, and herdr reads it
+    gone only after `reads` fresh reads of it in all, never when reads is None."""
+
+    def __init__(self, reads):
+        self.state, self.acts, self.told, self.reads, self.gone_at = "idle", [], False, 0, reads
+
+    def status(self, pane, fresh=False):
+        if fresh and self.told:
+            self.reads += 1
+            if self.gone_at is not None and self.reads >= self.gone_at:
+                self.state = None
+        return self.state
+
+    def run(self, *args):
+        self.acts.append(args)
+        if args[:2] == ("agent", "prompt") and args[3] == "/exit":
+            self.told = True
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
 
 class TestHosts:

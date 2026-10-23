@@ -15,7 +15,8 @@
 # its starts fail, naming crew card session and keeping why in the run record, whose reading the conductor's wait then
 # starts, changing the card to carry its link, and waits on until the landing ends it; the bolt read proven, its team
 # is given its next bolt beside it and refused a third (teams.16); on the user's send the submission then readies the
-# bolt's pull request and lands it, taking up the place a stopped landing left on it and leaving the kit's detached main
+# bolt's pull request and lands it, sluice answering with the pull request and crew waiting on the submission it made
+# from it, taking up the place a stopped landing left on it and leaving the kit's detached main
 # checkout as it was, and closes it as it lands, recording the commit main holds, sluice deleting its branch from GitHub
 # (plan.19), the kit's landings card closed with where GitHub's main holds it, the row's reading ended and its preview
 # released, and its conductor told, the team still building its other bolt, whose branch its conductor carries; once
@@ -283,6 +284,11 @@ expect_ok crew bolt submit tenant-environments
 has "$out" "bolt/tenant-environments landed on switchboard-kit's main at $(short main): now crew bolt land tenant-environments."
 has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is ready for review again, so sluice takes it at the head bolt/tenant-environments has now."
 eq "$(drafted "$pr")" false
+# sluice answers with the pull request, as on a main that takes them: crew waits on the submission it made from it,
+# told from any made before by sluice's record of main read before the pull request is readied, and read again after.
+has "$out" "bolt/tenant-environments submitted to switchboard-kit's main, sluice's #"
+has "$out" " from pull request #$pr"
+eq "$(calls | grep -c "^$box sluice status main --all --json in ")" 2
 eq "$(calls | grep -E "^$box (gh pr ready|wt submit) " | cut -d' ' -f2-4)" $'gh pr ready\nwt submit main'
 eq "$(calls | grep -c "^$box gh pr ready .* --undo$")" 0
 grep -q level <<<"$out" && fail "the landing spoke of levelling a detached checkout:"$'\n'"$out"

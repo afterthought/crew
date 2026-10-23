@@ -335,6 +335,16 @@ class TestWords:
     def test_a_unit_in_conflict_with_the_bolt_is_told_to_rebase_onto_it(self):
         assert plan.rebase_words("t") == "Rebase your place onto the bolt (git rebase bolt/t)"
 
+    def test_a_unit_in_conflict_with_a_bolt_on_github_is_told_to_fetch_it_and_rebase_onto_githubs_copy(self):
+        """plan.19: a bolt on GitHub is read at origin/bolt/<bolt>, never at the host's copy, sluice's."""
+        assert plan.rebase_words("t", at="origin/bolt/t") == (
+            "Rebase your place onto the bolt (git fetch origin && git rebase origin/bolt/t)")
+        assert plan.rebase_words("t", ["a@1111111"], "origin/bolt/t") == (
+            "Rebase your place onto the bolt, leaving out a's work as your place took it, which the bolt holds as merged "
+            "(git fetch origin && git rebase --onto origin/bolt/t $(git commit-tree -p origin/bolt/t -p 1111111 -m upstream "
+            "'origin/bolt/t^{tree}'))")
+        assert plan.rebase_words("t", at="bolt/t") == plan.rebase_words("t") == "Rebase your place onto the bolt (git rebase bolt/t)"
+
     def test_a_dependent_whose_rebase_left_out_its_after_units_work_is_told_the_upstream_crew_used(self):
         assert plan.rebase_words("t", ["a@1111111"]) == (
             "Rebase your place onto the bolt, leaving out a's work as your place took it, which the bolt holds as merged "
