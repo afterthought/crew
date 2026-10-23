@@ -1596,15 +1596,22 @@ class TestRecordCommand:
         with pytest.raises(crew.Refusal, match=re.escape(said)):
             plan.record_status(FLEET, a)
 
-    def test_the_users_yes_in_the_design_agents_own_pane_settles_the_record(self):
-        assert plan.settled_refusal(32, "switchboard-kit", "design", heard()) is None
-        assert plan.settled_refusal(32, "switchboard-kit", "design", heard(uuid=None)) is None
+    def test_the_users_yes_in_the_callers_own_pane_settles_the_record(self):
+        assert plan.settled_refusal(32, "switchboard-kit", heard()) is None
+        assert plan.settled_refusal(32, "switchboard-kit", heard(uuid=None)) is None
 
-    @pytest.mark.parametrize("kind", ["planner", "operator", "conductor", "main-ops", "dispatcher", "team", "user", "other"])
-    def test_any_caller_but_the_design_agent_is_refused(self, kind):
-        assert plan.settled_refusal(32, "switchboard-kit", kind, heard()) == (
-            f"{SETTLED}: only the design agent records a record the user settled in its pane, in the user's own words; "
-            "run crew record without --settled-in-pane, and the user answers on its card")
+    @pytest.mark.parametrize("caller", ["wldn-design", "wldn-planner", "wldn-operator", "swb-1-conductor", "madswan-design", "chuck@mac-studio"])
+    def test_no_caller_is_refused_by_who_it_is_the_users_yes_read_in_its_own_transcript(self, monkeypatch, caller):
+        """roles.2: crew records who ran it and in which session, and refuses no caller; the words are still read."""
+        asked = []
+        monkeypatch.setattr(crew, "this_host", lambda: FLEET["partitions"]["wldn"]["machine"])
+        monkeypatch.setenv("CREW_AGENT", caller)
+        monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: asked.append(words) or (heard(), "s-9"))
+        a = argparse.Namespace(kit="switchboard-kit", number=32, status="proposed", settled_in_pane=True, excerpt="Yes, accept 32",
+                               alternatives=None, label="wldn")
+        with pytest.raises(crew.Refusal, match="no session of .* keeps WilldanGroup/switchboard-kit"):
+            plan.record_status(FLEET, a)
+        assert asked == ["Yes, accept 32"]
 
     @pytest.mark.parametrize("v, words", [
         (heard(grade="refused"), "the words are not in a record your session received; only the user's own words settle a "
@@ -1617,7 +1624,7 @@ class TestRecordCommand:
         (heard(grade="unverified", reason="session s-9 is on deneb, not mac-studio"),
          "crew can't read your session's transcript, so it can't tell the words are the user's: session s-9 is on deneb, not mac-studio")])
     def test_words_crew_does_not_read_as_the_users_are_refused_naming_who_said_them_and_sent_to_the_card(self, v, words):
-        assert plan.settled_refusal(32, "switchboard-kit", "design", v) == f"{SETTLED}: {words}; {TO_CARD}"
+        assert plan.settled_refusal(32, "switchboard-kit", v) == f"{SETTLED}: {words}; {TO_CARD}"
 
     def test_the_records_card_is_raised_in_the_design_agents_name_changed_at_a_new_commit_and_followed_once_answered(self, capsys):
         from test_card_commands import Acts, MATCHED, POSTED
