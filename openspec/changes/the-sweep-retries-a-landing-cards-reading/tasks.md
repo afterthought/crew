@@ -17,7 +17,7 @@
 
 ## 4. Briefs and docs
 
-- [ ] 4.1 The conductor's brief says the rail's read tries a landing card's missing reading too. `tests/suite t-briefs` passes (design, Decision 7; Task notes 4.1).
+- [x] 4.1 The conductor's brief says the rail's read tries a landing card's missing reading too. `tests/suite t-briefs` passes (design, Decision 7; Task notes 4.1).
 - [ ] 4.2 README, the crew skill, and the usage in `plugin/bin/crew` and `plan.py` say the same together. `tests/suite t-docs` passes (Task notes 4.2).
 
 ## 5. Checks
