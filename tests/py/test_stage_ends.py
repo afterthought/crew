@@ -5,7 +5,7 @@ import datetime
 
 import pytest
 
-from facts import AFTER, BEFORE, owed, saved
+from facts import AFTER, BEFORE, owed, plan_of, saved
 
 import plan
 
@@ -206,7 +206,7 @@ class TestMergeLookFetches:
     """bolt-plan "A wait on a merge sees it at once" (plan.19, design Decision 3): each look a wait takes at a merge
     fetches the kit's GitHub before it reads the bolt, and reads the bolt where it lives; a fetch that fails delivers
     nothing and says why, reading nothing from the host's copy."""
-    T = {"name": "swb-1", "kit": {"main": "/kit/main", "dir": "/kit"}}
+    T = {"name": "swb-1", "label": "wldn", "kit": {"main": "/kit/main", "dir": "/kit"}}
     POLICY = '[branches."bolt/*"]\nrequired = ["#check-full"]\nremote = "origin"\n'
 
     def look(self, monkeypatch, fetch=(0, "", "")):
@@ -214,8 +214,6 @@ class TestMergeLookFetches:
 
         def run(argv, cwd):
             calls.append(argv)
-            if argv[:2] == ["git", "for-each-ref"]:
-                return "chore/c origin/bolt/b\n"
             if argv[:3] == ["git", "remote", "get-url"]:
                 return "https://github.com/o/k.git\n"
             if argv[:2] == ["git", "rev-parse"] and argv[-1].endswith("^{commit}"):
@@ -233,13 +231,14 @@ class TestMergeLookFetches:
             return fetch
         monkeypatch.setattr(plan.gather, "run", run)
         monkeypatch.setattr(plan.gather, "ran", ran)
+        monkeypatch.setattr(plan, "plans", lambda fleet, labels, errors=None: [("wldn", "o/state", "tip", plan_of({"b": "swb-1"}, {"c": "b"}))])
         o = owed("merge", name="c", obj="chore/c")
         return calls, o, plan.deliverable_facts({}, self.T, o)
 
     def test_a_merge_look_fetches_before_it_reads_the_bolt_and_reads_it_on_github(self, monkeypatch):
         calls, o, f = self.look(monkeypatch)
         fetched = calls.index(["git", "fetch", "-q", "origin"])
-        assert not any("bolt/b" in " ".join(c) for c in calls[:fetched] if c[:2] != ["git", "for-each-ref"])
+        assert not any("bolt/b" in " ".join(c) for c in calls[:fetched])
         assert not any("refs/heads/bolt/b" in a for c in calls for a in c if not a.endswith("^{commit}"))
         assert plan.delivered(o, f) == ("bolt/b@def5678", "bolt/b holds it at def5678")
 

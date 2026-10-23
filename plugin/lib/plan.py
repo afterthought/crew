@@ -7112,6 +7112,21 @@ def bolt_of_unit(fleet, t, main, unit, kind="unit"):
     return team_building(fleet, plan, t) if plan else None
 
 
+def merge_bolt(plan, team, name):
+    """The bolt a unit's or chore's merge look reads, from the plan as it stands: the one the plan places it in now,
+    held by the team whose wait looks, and that bolt's kit, (bolt, repo, None); else (None, None, why). Never the bolt
+    its branch was cut from, which it may since have left, nor another team's, neither of which can hold its merge."""
+    u = plan.item(name)
+    if u is None:
+        return None, None, f"the plan holds no {name}"
+    b = plan.bolt(u.get("Bolt")) if u.get("Bolt") else None
+    if b is None:
+        return None, None, f"the plan places {name} in no bolt"
+    if b.get("Team") != team:
+        return None, None, f"the plan places {name} in bolt {b.name()}, which {team} does not hold"
+    return b.name(), b.get("Repo"), None
+
+
 def deliverable(fleet, t, o, place=None):
     """What an owed stage has delivered since it began, read on the team's host: (its object, what the wait says of
     it), or (None, what is missing), as delivered judges the facts deliverable_facts reads."""
@@ -7120,12 +7135,14 @@ def deliverable(fleet, t, o, place=None):
 
 def deliverable_facts(fleet, t, o, place=None):
     """What delivered judges an owed stage by, read on the team's host, only what its stage asks: the newest verify
-    report saved since it began; for a merge, the bolt it merges into, whether that bolt holds it, a unit's change
-    archived too, and its head, read where the bolt is read (gather.bolt_read) once its GitHub is fetched, or why it
-    could not be fetched (fetch) or read (unread); for a chore's code, its own newest commit and when it was
-    committed; else the branch's head and when it was committed, a code stage's ticks at that head, and, for a construct with a commit since it
-    began, whether its planning is complete. The head is read once and the rest read at that commit, never at the branch
-    again: an agent that commits between the reads would pair one commit's time or ticks with another's sha."""
+    report saved since it began; for a merge, the bolt it merges into, a fix's from its name and a unit's or chore's
+    from the plan as each look reads it (merge_bolt), or why there is none crew can read (unplaced), whether that bolt
+    holds it, a unit's change archived too, and its head, read in the bolt's kit where the bolt is read
+    (gather.bolt_read) once its GitHub is fetched, or why it could not be fetched (fetch) or read (unread); for a
+    chore's code, its own newest commit and when it was committed; else the branch's head and when it was committed, a
+    code stage's ticks at that head, and, for a construct with a commit since it began, whether its planning is
+    complete. The head is read once and the rest read at that commit, never at the branch again: an agent that commits
+    between the reads would pair one commit's time or ticks with another's sha."""
     main, f = t["kit"]["main"], {}
     if o.start is None:
         return f
@@ -7133,7 +7150,18 @@ def deliverable_facts(fleet, t, o, place=None):
         f["saved"], f["folder"] = newest_saved(t, gather.REPORT, o.name, o.start), team_state(t) / "reports"
         return f
     if o.stage == "merge":
-        f["bolt"] = o.obj.split("/")[1] if o.fix and o.obj.count("/") == 2 else None if o.fix else bolt_of_unit(fleet, t, main, o.name, o.kind)
+        if o.fix:
+            f["bolt"] = o.obj.split("/")[1] if o.obj.count("/") == 2 else None
+        else:
+            errors = {}
+            found = plans(fleet, [t["label"]], errors)
+            p = found[0][3] if found else None
+            f["bolt"], repo, f["unplaced"] = merge_bolt(p, t["name"], o.name) if p else (
+                None, None, "; ".join(f"{k} could not be read: {v}" for k, v in errors.items()) or f"{t['label']} has no plan yet")
+            try:
+                main = crew.with_kit(t, repo)["kit"]["main"] if repo else main
+            except Refusal as e:
+                f["bolt"], f["unplaced"] = None, str(e)
         if f["bolt"]:
             # Each look fetches GitHub first: sluice lands the merge there, and moves neither the host's copy nor its
             # tracking ref when it pushes as its app (plan.19).
@@ -7198,7 +7226,7 @@ def delivered(o, f):
     if o.stage == "merge":
         bolt, head = f.get("bolt"), f.get("bolt_head")
         if not bolt:
-            return None, "no bolt crew can read for it"
+            return None, "no bolt crew can read for it" + (f": {f['unplaced']}" if f.get("unplaced") else "")
         if f.get("fetch"):
             return None, f"can't fetch bolt/{bolt} from GitHub: {f['fetch']}"
         if f.get("unread"):
@@ -8941,7 +8969,8 @@ def unit_run(fleet, a):
 def unit_wait(fleet, a):
     """crew unit wait <unit> [--timeout <ms>] [--stuck <ms>], on the host of the team whose bolt holds the unit: first,
     while a construct an amendment handed there is starting, its start (handed_state), saying why when it did not
-    start; then the wait on the stage the slot holding it owes (stage_wait), within what is left of the timeout."""
+    start; then the wait on the stage the slot holding it owes (stage_wait), within what is left of the timeout, whose
+    merge look reads the bolt the plan places the unit in at each look (merge_bolt)."""
     t = team_of_unit(fleet, a)
     team = on_team_host(fleet, t)
     until = time.monotonic() + a.timeout / 1000
