@@ -2,10 +2,14 @@
 plan.tidy_over for which worktrees are crew's and whose work is over, plan.kept_why for one kept, plan.wt_refused and
 plan.wt_left_branch for what the kit's wt remove said, plan.branch_target and plan.branch_kept for whether a branch
 goes with its place (plan.10) and plan.branch_said for what is said of it, plan.bolt_branch_judged for a bolt's own
-branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing, and
-plan.overview_runs and plan.run_kept for a worktree sluice has a run in. The documents under sluice-0.36.4/ were
-recorded from sluice 0.36.4 on deneb, 2026-10-22, their scratch folder written /scratch: a kit whose place a ran
-`sluice exec main -- sleep 25` (overview-run.json) until it ended (overview-ended.json). How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
+branch and plan.kept_record for what a kept one's record says, plan.unread_plans for a tidy that removes nothing,
+plan.overview_runs and plan.run_kept for a worktree sluice has a run in, and plan.release_kept for one sluice did not
+release before its removal. The documents under sluice-0.36.4/ were recorded from sluice 0.36.4 on deneb, 2026-10-22,
+their scratch folder written /scratch: a kit whose place a ran `sluice exec main -- sleep 25` (overview-run.json) until
+it ended (overview-ended.json); and on mac-studio, 2026-10-23, the same way: a kit whose policy's release command,
+`sh -c 'echo tearing down; exit 1'`, failed after a `sluice exec main -- true` in places/unit-u, `sluice release
+--worktree <place> --json` exiting 3 (release-failed.json), then, the command's exit taken out and merged in, exiting 0
+once with it released (release.json) and once with nothing left to release (release-nothing.json). How worktrunk's remove behaves is a contract case (tests/contract/test_wt.py); the read that frees a slot once its agent
 settles, the journey's (t-journey-merge, t-journey-fix)."""
 import json
 import pathlib
@@ -236,6 +240,30 @@ class TestRun:
         assert plan.run_kept(None, None) is None
         assert plan.run_kept(None, "this host has no sluice on its path") == (
             "sluice's overview can't be read (this host has no sluice on its path), so crew can't tell whether a run is in it")
+
+
+class TestRelease:
+    """Whether sluice released a place the tidy would remove, before the kit's worktree tool removes it (plan.9, as
+    amended 2026-10-23; wldn's signal 2026-10-23-wldn-planner-e42b04cf/01): `sluice release --worktree <place> --json` as
+    sluice 0.36.4 answers it; one it did not release is kept, in sluice's words (read.1)."""
+
+    @pytest.mark.parametrize("name", ["release", "release-nothing"])
+    def test_a_place_released_or_holding_nothing_to_release_may_go(self, name):
+        assert plan.release_kept(recorded(name), None) is None
+
+    def test_a_release_command_that_failed_keeps_it_in_sluices_words(self):
+        # sluice_read's words for release-failed.json, which sluice printed exiting 3
+        why = f"it exited 3: {recorded('release-failed')['error']['message']}"
+        assert plan.release_kept(None, why) == (
+            "sluice's release of it failed: it exited 3: the release command of /scratch/places/unit-u ended exit "
+            "status: 1: tearing down")
+        assert plan.release_kept(None, "this host has no sluice on its path") == (
+            "sluice's release of it failed: this host has no sluice on its path")
+
+    @pytest.mark.parametrize("d", [None, [], {}, {"preview": "--worktree", "released": False},
+                                   dict(recorded("release"), released="yes")])
+    def test_a_document_sluice_0_36_4_would_not_print_keeps_it(self, d):
+        assert plan.release_kept(d, None) == "sluice's release of it printed no document crew reads"
 
 
 class TestWt:

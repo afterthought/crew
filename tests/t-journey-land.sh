@@ -185,7 +185,7 @@ has "$out" "ended land/tenant-environments's session, plannotator pid $pid"
 has "$out" "released land/tenant-environments's preview of ${h1:0:7}"
 gone "$pid"; eq "$(listed)" ""
 has "$(calls | grep "^$box pendingyou cancel_request ")" '"reason": "every bolt waiting to land is held: tenant-environments, held for a fix: The zone list misses one zone. (fix/tenant-environments/gap)"'
-eq "$(calls | grep -c "^$box sluice release ")" "1"
+eq "$(calls | grep "^$box sluice release " | grep -vc " --worktree ")" "1"
 gp=$kd/places/fix-tenant-environments--gap
 echo four >> "$gp/shared.txt"; commit_all "$gp" "fix(a): the zone list holds every zone"
 expect_ok crew fix swb-1 gap --wait

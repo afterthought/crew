@@ -6428,10 +6428,13 @@ def tidy(fleet, a):
     removed with its branch, saying the commit the branch was at, a unit's, chore's or fix's branch kept, named and
     recorded instead when git cherry finds work on it its bolt, or main once the bolt has landed or is gone, lacks
     (branch_gone, plan.10); or kept and named, with its branch, while it is locked or has uncommitted changes. The
-    removal goes through the kit's own `wt remove`, run from the kit's main checkout and leaving the branch to crew,
-    so the kit's remove hooks run; one wt refuses, a hook having failed or
-    waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is kept
-    and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
+    removal first releases the place through sluice, `sluice release --worktree <place>`, which runs the kit's policy's
+    release command, ends what its runs left running and frees its ports, so what sluice stood up for it goes too; one
+    sluice does not release, its release command having failed, is kept and named with its branch in sluice's words,
+    and the next read tries it again (release_kept, plan.9). Then it goes through the kit's own `wt remove`, run from
+    the kit's main checkout and leaving the branch to crew, so the kit's remove hooks run; one wt refuses, a hook having
+    failed or waiting for the user's approval on this host, one wt leaves standing, or with no wt on this host's path, is
+    kept and named with its branch, and the next read tries it again; when crew can't read from wt that it left the branch
     alone, the branch is kept and said. crew made it when it is directly in <kit>/bolts/ on bolt/<its folder>, or
     detached there, a bolt given before record 0026, or directly in <kit>/places/ on unit/<its folder>, on
     chore/<name> in chore-<name>, on bolt/<bolt> in land-<bolt>, or on a fix/ branch; nothing else is touched. While its
@@ -6528,6 +6531,11 @@ def tidy(fleet, a):
             print(f"{path} is kept{held_too}: {why}")
             continue
         kept = f"{path} is kept{held_too}: {over}, and "
+        # sluice holds the release to the time limit its policy gives a run, as the kit's remove hooks run to their end
+        unreleased = release_kept(*sluice_read(main, "release", "--worktree", path, timeout=None))
+        if unreleased:
+            print(kept + unreleased)
+            continue
         try:  # the clean check above is the guard, so --force; the branch is crew's, so --no-delete-branch
             r = subprocess.run(["wt", "-C", main, "remove", path, "--foreground", "--no-delete-branch", "--force", "--format", "json"],
                                capture_output=True, text=True, stdin=subprocess.DEVNULL,
@@ -6940,6 +6948,20 @@ def run_kept(run, unread):
     what = f"a run in it, `{command}`" if isinstance(command, str) and command else "a run of its checks in it"
     since = f", started {run['started']}" if isinstance(run.get("started"), str) else ""
     return f"sluice's overview lists {what}{since}"
+
+
+def release_kept(doc, unread):
+    """Why the tidy keeps a worktree it would remove once sluice was asked to release it, `sluice release --worktree
+    <place> --json`, which runs the kit's policy's release command, ends what the place's runs left running and frees
+    its ports, the worktree staying (plan.9; sluice 0.36.4, `exec::release`): sluice refused or failed it, a release
+    command that failed among them, in its words (unread, sluice_read's), and keeps the place to release at the next
+    read; or it answered with no document sluice 0.36.4 prints, {"released", "worktree"} (read.2). None once it
+    answered, whether the place held anything to release or not, so the kit's worktree tool may remove it."""
+    if unread:
+        return f"sluice's release of it failed: {unread}"
+    if not (isinstance(doc, dict) and isinstance(doc.get("released"), bool) and isinstance(doc.get("worktree"), str)):
+        return "sluice's release of it printed no document crew reads"
+    return None
 
 
 def wt_refused(code, stderr, host, main):
@@ -8298,14 +8320,15 @@ def sluice_said(o, agent, branch, r):
     return f"{o.phrase()}: sluice says of {agent}'s submission to {branch}: {sluice_words(r)}; the wait goes on until the stage ends"
 
 
-def sluice_read(main, *args):
-    """`sluice <args> --json` run in a kit on this host: (the document, None), or (None, why it can't be read)."""
+def sluice_read(main, *args, timeout=POLL):
+    """`sluice <args> --json` run in a kit on this host: (the document, None), or (None, why it can't be read). It waits
+    timeout seconds for sluice's answer, or for as long as sluice takes when None."""
     try:
-        r = subprocess.run(["sluice", *args, "--json"], cwd=main, capture_output=True, text=True, timeout=POLL)
+        r = subprocess.run(["sluice", *args, "--json"], cwd=main, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
         return None, "this host has no sluice on its path"
     except subprocess.TimeoutExpired:
-        return None, f"it did not answer within {POLL} seconds"
+        return None, f"it did not answer within {timeout} seconds"
     except OSError as e:
         return None, str(e)
     if r.returncode != 0:  # sluice says why as {"error": {"message": ...}} under --json, clap on standard error
