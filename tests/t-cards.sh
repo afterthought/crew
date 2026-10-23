@@ -429,15 +429,18 @@ plan.raise_batch(crew.load(), {"label": "wldn", "key": "batch/3", "group": "batc
 has "$out" "card batch/3: its reading could not be opened on the tailnet: plannotator gave batch/3's session the link http://localhost:"
 has "$out" "card batch/3: req_stub-13 https://www.pendingyou.com/app/r/req_stub-13"
 posted=$(py_calls | sed -n 3p | cut -d' ' -f2-)
-has "$(jq -r .summary <<<"$posted")" "Its reading could not be opened on the tailnet."
+has "$(jq -r .summary <<<"$posted")" "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and the planner starts it with crew card session batch/3; this card then carries its link."
 eq "$(jq -c '.context.links' <<<"$posted")" "[]"
 eq "$(listed)" ""
 echo '{"answer": {}}' > "$stub/answered/req_stub-13.json"
-expect_ok planner wait batch/3
-eq "$out" "batch/3: sent back on its card, with no note
+out=$(unset PLANNOTATOR_URL_HOST; planner wait batch/3 2>&1) || fail "the planner's wait on batch 3 failed: $out"
+has "$out" "batch/3's reading could not be opened: plannotator gave batch/3's session the link http://localhost:"
+has "$out" "; crew card session batch/3 starts it once that is mended, and the wait goes on for its card"
+eq "$(grep -v "^batch/3's reading could not be opened" <<<"$out")" "batch/3: sent back on its card, with no note
 card batch/3: req_stub-13 closed"
+eq "$(listed)" ""
 expect_fail "no card and no session of batch/5 is open on $box" planner wait batch/5
-ok "a session whose link only the host could open is ended and the card raised all the same, saying so, its wait on the card alone; a wait with neither is refused"
+ok "a session whose link only the host could open is ended and the card raised all the same, saying so; its wait tries the reading, says once why it could not open and waits on the card alone; a wait with neither is refused"
 
 # A batch's session sent with no card of it held on the main level's host, as when its card was posted from a host the
 # main level has left: the wait records crew's close of the batch, read, in the planner's name, and ends the session.

@@ -135,9 +135,11 @@
 #                                      posts again a row's card Pending You no longer finds and a row's card that
 #                                      has none, through its kind's raise, and on the main level's host a batch's
 #                                      card posted from another host or lost to the planner, saying the older copy
-#                                      is dead; and it ends, on every host of the
-#                                      partition, each card session crew started whose card is closed or whose row
-#                                      is gone. It says what each did, and each host it could not check
+#                                      is dead; tries again the reading of a batch's or a long proposal's card that
+#                                      stands without it, ten minutes on, changing the card to carry its link; and
+#                                      it ends, on every host of the partition, each card session crew started whose
+#                                      card is closed or whose row is gone. It says what each did, and each host it
+#                                      could not check
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
 #                                      no move has taken, explorations), Bolt plan (proposals, planned bolts, the
 #                                      queue), Construction (each held bolt as a ledger of its units, fixes, slots and
@@ -151,7 +153,8 @@
 #                                      browser), a batch card's one on the whole batch, on the main level's host, a
 #                                      landing's (land/<bolt>) one on what the bolt brings to main, on the host of the
 #                                      team holding it, changing its open card to carry a new link while it waits on
-#                                      the user, a proposal's only for one of more than fifteen new units, and an old
+#                                      the user, as a batch's and a long proposal's change the planner's, recording
+#                                      the start, a proposal's only for one of more than fifteen new units, and an old
 #                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
 #                                      waits for the user's decision in it and prints it with their words, for a batch
 #                                      card waits on the card too, printing its note and every annotation, and closes
@@ -159,8 +162,10 @@
 #                                      sent and no card of it closes there, and for a landing prints its annotations as notes on the landing card
 #                                      and its approval as landing nothing, leaving the card, starting the reading
 #                                      first when none runs while its conductor holds the card, refused naming crew
-#                                      card session land/<bolt> when it will not open; end ends it, as the card's
-#                                      close does
+#                                      card session land/<bolt> when it will not open, a batch's starting it first
+#                                      too, and when it will not open saying why once, naming crew card session
+#                                      batch/<n>, and waiting on the card alone; end ends it, as the card's close
+#                                      does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
 #                                      input: ends the sessions there whose card is closed or whose row is gone; not
 #                                      for hand use

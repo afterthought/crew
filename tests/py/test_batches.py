@@ -8,7 +8,7 @@ import datetime
 
 import pytest
 
-from facts import START, at, card_closed, constructed, plan_of, reviewed, told
+from facts import FLEET, START, at, card_closed, constructed, plan_of, reviewed, told
 
 import plan
 
@@ -295,6 +295,69 @@ class TestCards:
     def test_a_batch_posted_as_cards_of_five_before_keeps_a_card_for_each_posted(self):
         assert plan.batch_cards(5, self.UNITS, ["batch/5-2", "batch/5-1", "batch/6"]) == [
             ("batch/5-1", self.UNITS[:5]), ("batch/5-2", self.UNITS[5:])]
+
+
+class RaiseActs:
+    """A stand-in for the act's reach as a batch's raise uses it: each start of the batch's reading refused in turn with
+    the words of refusals, None for one that opens; Pending You's area matched and the card posted as req_b3."""
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+
+    def __init__(self, entries, refusals=()):
+        self.held, self.refusals = list(entries), list(refusals)
+        self.sessions, self.emitted, self.calls = [], [], []
+
+    def session(self, label, key, facts):
+        self.sessions.append(key)
+        why = self.refusals.pop(0) if self.refusals else None
+        if why:
+            raise plan.Refusal(why)
+        return self.LINK
+
+    def bridge(self, name, later, held=None):
+        acts = self
+
+        class Py:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+            def call(self, tool, args):
+                acts.calls.append((tool, args))
+                return {"match_area": {"decision": "use", "suggestions": [{"areaId": "prj_kit"}]},
+                        "post_request": {"requestId": "req_b3", "version": 1}}[tool]
+        return Py()
+
+    def emit(self, label, act, on, **fields):
+        self.emitted.append(dict(fields, Act=act))
+
+    def entries(self, label):
+        return self.held
+
+    def host(self):
+        return "mac-studio"
+
+    def caller(self):
+        return "wldn-planner"
+
+
+def test_a_batch_whose_first_start_fails_and_second_opens_is_posted_with_its_link(monkeypatch, tmp_path, capsys):
+    """card-sessions "The first start fails and the second opens": crew review --wait's raise posts the card with the
+    second start's link, and its card.post entry holds no reason."""
+    (tmp_path / "batch-wldn-3.md").write_text(SUMMARY)
+    monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+    kit = {"name": "switchboard-kit", "repo": "WilldanGroup/switchboard-kit", "main": "/kit/main", "dir": "/kit"}
+    fleet = dict(FLEET, teams={t: dict(v, kit=kit) for t, v in FLEET["teams"].items()})
+    acts = RaiseActs([reviewed(3, [("x1", "swb-1", "aaa1")])], refusals=["plannotator did not list batch/3's session within 10 seconds"])
+    assert plan.raise_batch(fleet, {"label": "wldn", "key": "batch/3", "group": "batches"}, acts) == "req_b3"
+    assert acts.sessions == ["batch/3", "batch/3"]
+    card = next(a for t, a in acts.calls if t == "post_request")
+    assert card["context"]["links"][0] == {"label": "Read batch 3", "url": RaiseActs.LINK}
+    post, = acts.emitted
+    assert (post["Act"], post["Card"], post["Key"], post.get("Unread")) == ("card.post", "req_b3", "batch/3", None)
+    assert "crew tries once more" in capsys.readouterr().err
 
 
 SUMMARY = """# Batch 3 of wldn

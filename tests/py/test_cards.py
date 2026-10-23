@@ -428,14 +428,57 @@ class TestSessions:
         assert capsys.readouterr().err == ""
 
     def test_a_card_whose_session_could_not_open_is_raised_all_the_same_saying_so(self, capsys):
+        """card-sessions "A batch whose reading could not open": tried twice, and named as the planner's to start."""
         why = "crew can't read z1's change: mac-studio, atl-1's host, did not answer (ssh: timed out)"
         acts = ReadingActs(refused=why)
         c = plan.card_built(acts, "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))["card"]
-        assert c["summary"].startswith("6 changes to read, nothing to approve, since batch 2.\n\nIts reading could not be opened on the tailnet.\n\n")
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "batch/3")]
+        assert c["summary"].startswith("6 changes to read, nothing to approve, since batch 2.\n\nIts reading could not be opened on the "
+                                       "tailnet: crew tries it again when the rail is read, and the planner starts it with crew card "
+                                       "session batch/3; this card then carries its link.\n\n")
         assert len(c["summary"]) <= 400
         assert c["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {why}\n\n")
         assert c["context"]["links"] == [] and not [a for a in c["artifacts"] if a["kind"] == "url"]
-        assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {why}\n"
+        assert capsys.readouterr().err == (f"card batch/3: its reading could not be opened on the tailnet: {why}; crew tries once more\n"
+                                           f"card batch/3: its reading could not be opened on the tailnet: {why}; crew card session "
+                                           "batch/3 starts it\n")
+
+    # A batch's or a long proposal's raise tries its reading twice (card-sessions).
+    SLOW = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+    ENDED = "plannotator ended before batch/3's session was ready: stub: refused to start"
+
+    def test_the_first_start_fails_and_the_second_opens(self, capsys):
+        acts = ReadingActs(refusals=[self.SLOW, None])
+        b = plan.card_built(acts, "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "batch/3")]
+        assert b["card"]["context"]["links"] == [{"label": "Read batch 3", "url": "http://mac-studio.ts.swancloud.net:19432"}]
+        assert "unread" not in b and "could not be opened" not in b["card"]["summary"]
+        assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {self.SLOW}; crew tries once more\n"
+
+    def test_the_second_start_is_made_with_nothing_read_kept(self):
+        """The second start writes the batch's files afresh: nothing the first read kept is served to it."""
+        fresh = []
+
+        class Acts(ReadingActs):
+            def reading(self, label, key, facts):
+                fresh.append(plan.READ.bypass > 0)
+                return super().reading(label, key, facts)
+        plan.card_built(Acts(refusals=[self.SLOW, None]), "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert fresh == [False, True]
+
+    def test_both_starts_fail_and_the_card_holds_the_second_reason(self, capsys):
+        b = plan.card_built(ReadingActs(refusals=[self.SLOW, self.ENDED]), "wldn", built.batch_card,
+                            dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert b["unread"] == self.ENDED and b["card"]["context"]["links"] == []
+        assert b["card"]["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
+        assert capsys.readouterr().err.splitlines()[-1] == (
+            f"card batch/3: its reading could not be opened on the tailnet: {self.ENDED}; crew card session batch/3 starts it")
+
+    def test_a_landings_facts_carry_its_raises_two_tries_so_its_card_tries_once(self):
+        """A landing's raise tries twice itself (landing_opened): card_built makes one start for facts with neither."""
+        acts = ReadingActs(refused="plannotator is not on this host's path, and a card's session is a plannotator session")
+        plan.card_built(acts, "wldn", built.landing_card, LANDING)
+        assert acts.sessions == [("wldn", "land/b1")]
 
     def test_a_landing_whose_reading_could_not_open_is_raised_all_the_same_an_approval_as_before(self, capsys):
         """card-sessions "A landing whose reading could not open"."""
@@ -519,6 +562,66 @@ class TestSessions:
             assert plan.batch_waited("batch/3", decided, None) is None
         assert plan.batch_waited("batch/3", None, {"status": "cancelled"}) == (
             "closed", "batch/3: its card was closed outside crew; Pending You shows it cancelled", "cancelled")
+
+    # A batch's wait starts its reading when none runs (card-sessions).
+    @pytest.mark.parametrize("recorded, held, refused, step", [
+        ({"pid": 42}, "req_b3", None, ("wait", None)), (None, None, None, ("wait", None)), ({"pid": 42}, None, None, ("wait", None)),
+        (None, "req_b3", None, ("start", None)),
+        (None, "req_b3", "plannotator is not on this host's path", ("card", "batch/3's reading could not be opened: plannotator is not "
+                                                                    "on this host's path; crew card session batch/3 starts it once that "
+                                                                    "is mended, and the wait goes on for its card"))])
+    def test_a_batch_wait_with_its_card_held_and_no_session_starts_its_reading_and_says_once_when_it_cannot(self, recorded, held, refused, step):
+        assert plan.batch_unstarted("batch/3", recorded, held, refused) == step
+
+    def test_a_batch_wait_starts_no_reading_for_a_batch_answered_in_a_pane(self):
+        """review-batches "A batch answered in a main-level pane": it waits on the user no more, and the wait ends on its
+        answer."""
+        assert plan.batch_unstarted("batch/3", None, "req_b3", answered=True) == ("wait", None)
+
+    def waited_on(self, monkeypatch, tmp_path, acts):
+        """crew card wait batch/3 on mac-studio, the main level's host, its card and its reading read as acts gives them."""
+        monkeypatch.setattr(plan, "batch_read", lambda fleet, label, n, acts: dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        monkeypatch.setattr(plan, "raise_batch", lambda fleet, row, acts=None, note=None: acts.emit("wldn", "card.update", ["batch/3"],
+                                                                                                   Card="req_b3", Key=row["key"], note=note))
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
+        plan.batch_wait(fleet, "wldn", "batch/3", tmp_path, acts)
+
+    def test_a_batch_wait_starts_the_missing_reading_and_changes_its_card_to_carry_it(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A card raised without its reading", for a batch's wait: the start is recorded and the card
+        changed before the wait reads it."""
+        reads = []
+
+        class Acts(ReadingActs):
+            def bridge(self, name, later, held=None):
+                py = super().bridge(name, later, held)
+                answer = py.answer
+
+                def answered(tool, args):
+                    if tool == "get_request":
+                        reads.append(args["requestId"])
+                        return ({"status": "pending", "turn": "you", "version": 3} if len(reads) == 1 else
+                                {"status": "answered", "turn": "agent", "answer": {}}), None
+                    return answer(tool, args)
+                py.answer = answered
+                return py
+        acts = Acts(entries=[{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}])
+        self.waited_on(monkeypatch, tmp_path, acts)
+        assert acts.sessions == [("wldn", "batch/3")]
+        assert [(e["Act"], e.get("note")) for e in acts.emitted][:2] == [("card.reading", None), ("card.update", plan.RELINKED)]
+        out = capsys.readouterr().out.splitlines()
+        assert out[:2] == ["http://mac-studio.ts.swancloud.net:19432", "batch/3: sent back on its card, with no note"]
+
+    def test_a_batch_wait_whose_reading_will_not_open_says_so_once_and_waits_on_its_card(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "The reading still will not open": the card is left as it is and returns the user's word."""
+        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
+        acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "version": 3, "answer": {"note": {"text": "Read."}}}, None)},
+                           [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}], refused=why)
+        self.waited_on(monkeypatch, tmp_path, acts)
+        assert not [t for t, _ in acts.calls if t == "update_request"]
+        assert (acts.emitted[0]["Act"], acts.emitted[0]["refused"]) == ("card.reading", why)
+        assert capsys.readouterr().err.splitlines() == [
+            f"batch/3's reading could not be opened: {why}; crew card session batch/3 starts it once that is mended, and the wait "
+            "goes on for its card"]
 
     def test_a_sessions_result_gives_its_count_of_annotations(self, tmp_path):
         (tmp_path / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "a", "annotationCount": 2}))
@@ -763,6 +866,88 @@ class TestLandingSession:
     def test_a_session_on_the_head_as_it_stands_is_given_again_and_nothing_is_ended(self, monkeypatch, tmp_path, capsys):
         assert self.opened(monkeypatch, tmp_path, "def5678") == []
         assert capsys.readouterr().out == ""
+
+
+class TestReadingAgain:
+    """crew card session batch/<n> or proposal/<n> (card-sessions "Starting a batch's or a proposal's reading changes
+    its card", "A later try of a reading is recorded"): its link printed, the planner's card changed in place to carry
+    it while it waits on the user when the session started anew or the card stands without its reading, and the try
+    recorded as card.reading when it started or refused."""
+    HELD = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
+    UNREAD = [dict(HELD[0], Unread="plannotator ended before batch/3's session was ready: stub: refused to start", At="2026-10-12T10:00:00Z")]
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+    WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 3}, None),
+               "match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None)}
+
+    def run(self, monkeypatch, tmp_path, acts, key="batch/3"):
+        """crew card session <key> on mac-studio, the main level's host, its rail row read as present."""
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "card_row", lambda fleet, label, k: (dict(key=k, doc=("batch", "wldn", 3)), []))
+        monkeypatch.setattr(plan, "batch_read", lambda fleet, label, n, acts: dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        (tmp_path / "batch-wldn-3.md").write_text("# Batch 3\n")
+        monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
+        plan.card_session(fleet, argparse.Namespace(key=key, unit=None, sub="session", label="wldn"), acts)
+
+    def test_a_start_anew_changes_the_waiting_card_to_carry_its_link_and_is_recorded(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A batch card raised without its reading"."""
+        acts = ReadingActs(dict(self.WAITING), self.UNREAD)
+        self.run(monkeypatch, tmp_path, acts)
+        sent = [a for t, a in acts.calls if t == "update_request"]
+        assert len(sent) == 1 and (sent[0]["requestId"], sent[0]["changeNote"]) == ("req_b3", plan.RELINKED)
+        assert sent[0]["context"]["links"][0] == {"label": "Read batch 3", "url": self.LINK}
+        assert [(e["Act"], e["Key"], e.get("Card"), e.get("refused"), e.get("Unread")) for e in acts.emitted] == [
+            ("card.reading", "batch/3", "req_b3", None, None), ("card.update", "batch/3", "req_b3", None, None)]
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card batch/3: req_b3 changed"]
+
+    def test_a_card_the_user_has_answered_is_left_and_no_card_follows_it(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A proposal card already answered", for a batch's: the start is recorded, the card left."""
+        acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "answer": {}}, None)}, self.HELD)
+        self.run(monkeypatch, tmp_path, acts)
+        assert [t for t, _ in acts.calls] == ["get_request"] and [e["Act"] for e in acts.emitted] == ["card.reading"]
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card batch/3: req_b3 is left as it is: the user has answered it"]
+
+    def test_a_session_given_again_on_a_card_with_its_link_changes_and_records_nothing(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A session that still runs" and "A link given again"."""
+        acts = ReadingActs(entries=self.HELD, started=False)
+        self.run(monkeypatch, tmp_path, acts)
+        assert acts.calls == [] and acts.emitted == [] and capsys.readouterr().out == f"{self.LINK}\n"
+
+    def test_a_session_given_again_on_a_card_standing_without_its_reading_changes_it(self, monkeypatch, tmp_path):
+        """A start whose card change did not go through: the link given again is put on the card."""
+        acts = ReadingActs(dict(self.WAITING), self.UNREAD, started=False)
+        self.run(monkeypatch, tmp_path, acts)
+        assert [t for t, _ in acts.calls if t == "update_request"] == ["update_request"]
+        assert [e["Act"] for e in acts.emitted] == ["card.update"]
+
+    def test_a_refusal_is_recorded_with_crews_words_and_raised(self, monkeypatch, tmp_path):
+        """card-sessions "A try that refuses": the card is not changed."""
+        why = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+        acts = ReadingActs(entries=self.HELD, refused=why)
+        with pytest.raises(plan.Refusal, match=f"^{re.escape(why)}$"):
+            self.run(monkeypatch, tmp_path, acts)
+        assert acts.calls == []
+        assert acts.emitted == [dict(Act="card.reading", by="wldn-planner", refused=why, Key="batch/3", Card="req_b3")]
+
+    def test_a_proposals_reading_is_opened_on_the_open_proposal_of_its_chain_and_its_card_changed_by_its_raise(self, monkeypatch, tmp_path):
+        seen = []
+        monkeypatch.setattr(plan, "chain_read", lambda fleet, label, first: ("w", 6))
+        monkeypatch.setattr(plan, "raise_proposal", lambda fleet, row, acts=None, event="sweep": seen.append((row["key"], event)))
+
+        class Acts(ReadingActs):
+            def reading(self, label, key, facts):
+                seen.append(facts)
+                return super().reading(label, key, facts)
+        held = [dict(self.HELD[0], Key="proposal/4", Card="req_p4", On=["proposal/4"])]
+        acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, held)
+        monkeypatch.setattr(plan, "card_row", lambda fleet, label, k: (dict(key=k, doc=("page", "wldn", 6)),
+                                                                       [{"proposal": 6, "changes": [{"do": f'unit add u{i} "U{i}." --bolt t'} for i in range(16)]}]))
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
+        plan.card_session(fleet, argparse.Namespace(key="proposal/4", unit=None, sub="session", label="wldn"), acts)
+        assert seen == [dict(n=6, first=4), ("proposal/4", "relink")]
+        assert [(e["Act"], e["Key"], e["Card"]) for e in acts.emitted] == [("card.reading", "proposal/4", "req_p4")]
 
 
 class TestLandingPreview:
