@@ -1,6 +1,8 @@
 # What reaches the user, through the crew command on the stubs (tests.11, record 0022): constructed changes make a
 # batch due, told to the planner once; crew review starts the reviewer and its summary ends the batch, raising its card
-# with its reading session in the planner's name; crew rail lists what waits, with each row's card; crew's card hook
+# with its reading session in the planner's name, tried twice when its first start fails, and raised without it,
+# naming crew card session, when both fail, the planner's wait then starting it and changing the card to carry its
+# link; crew rail lists what waits, with each row's card; crew's card hook
 # refuses an agent's card under crew's own key; a batch card's one reading session is written from every team's host
 # and started on the main level's, an old batch card's on its unit's team's host, and none for a verify report, which
 # no row has; a wait returns the user's words and closes the batch's card, ending its session, crew card end ends an
@@ -85,17 +87,20 @@ CREW_AGENT=wldn-planner expect_fail "wldn-reviewer is still reviewing a batch" c
 CREW_AGENT=wldn-planner expect_fail "batch 1's review is still running after the wait's 0 ms" crew review wldn --wait --timeout 0
 has "$(grep "agent prompt $rpane " "$CREW_TEST_LOG" | tail -1)" "z1 (atl-1, atlas-kit on mac-studio, at $(git -C "$ak" rev-parse --short unit/z1)): list its files with \`ssh -o BatchMode=yes mac-studio git -C $ak"
 mkdir -p "$(dirname "$summary")"; printf '# Batch 1\n' > "$summary"
+refusals=$(home_of $box)/.stub-plannotator/refuse-starts
+mkdir -p "${refusals%/*}"; echo 1 > "$refusals"  # the reading's first start fails, and its second opens
 CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
-eq "$out" "card batch/1: req_stub-1 https://www.pendingyou.com/app/r/req_stub-1
+has "$out" "card batch/1: its reading could not be opened on the tailnet: plannotator ended before batch/1's session was ready: stub: refused to start; crew tries once more"
+eq "$(grep -v '^card batch/1: its reading' <<<"$out")" "card batch/1: req_stub-1 https://www.pendingyou.com/app/r/req_stub-1
 call get_request (requestId req_stub-1, name wldn-planner)
 batch summary: $summary"
 eq "$(entries $box review.batch | jq -r '[.Batch, (.On | join(" "))] | join(" ")')" "1 batch/1 unit/x1 unit/z1"
-eq "$(entries $box card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By] | join(" ")')" "batch/1 req_stub-1 batch/1 wldn-planner"
+eq "$(entries $box card.post | jq -r '[(.On | join(" ")), .Card, .Key, .By, .Unread // "opened"] | join(" ")')" "batch/1 req_stub-1 batch/1 wldn-planner opened"
 CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
 eq "$out" "batch summary: $summary"
 eq "$(entries $box card.post | jq -r .Card)" "req_stub-1"
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator"
-ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name once, and closes its tab"
+ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name once, its reading tried twice, and closes its tab"
 
 # v1 is in verify, its report newer than its last commit, and waits on nobody (teams.17).
 pv=$(place "$k" b1 v1); change "$pv" v1 2 2; commit_at 60 "$pv" "feat(v1): done"
@@ -157,6 +162,42 @@ eq "$(stub mac-studio "$p3" '.argv | map(select(endswith(".md"))) | join(" ")')"
 HOST=$box CREW_AGENT=wldn-planner expect_ok crew card end batch/2-1 z1
 gone "$p3"
 ok "an old batch card's session of a unit is started on that unit's team's host, on its change's files, and crew card end ends it there"
+
+# A later batch whose reading will not open at either start: its card is raised without it, saying so and naming crew
+# card session, with why in the run record; the planner's wait then starts the reading and changes the card to carry
+# its link, and waits on both.
+for act in review.start review.batch; do
+  CREW_AGENT=wldn-planner as $box python3 "$CREW/plugin/lib/record.py" emit --label wldn --act $act --on batch/3 --field Batch=3 \
+    --field "Units=x1:swb-1@$(git -C "$k" rev-parse unit/x1)" >/dev/null
+done
+printf '# Batch 3\n\n## x1 (swb-1)\n\nx1 gives each tenant its own zone.\n' > "$(dirname "$summary")/batch-wldn-3.md"
+echo 2 > "$refusals"
+: > "$CREW_TEST_LOG"
+CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
+c3=$(grep -o "^card batch/3: req_stub-[0-9]*" <<<"$out" | cut -d' ' -f3)
+[[ -n $c3 ]] || fail "crew review --wait raised no card for batch 3:"$'\n'"$out"
+has "$out" "card batch/3: its reading could not be opened on the tailnet: plannotator ended before batch/3's session was ready: stub: refused to start; crew card session batch/3 starts it"
+posted=$(jq -r --arg c "$c3" '.[$c].posted' "$(home_of $box)/.stub-pendingyou/cards.json")
+has "$(jq -r .summary <<<"$posted")" "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and the planner starts it with crew card session batch/3; this card then carries its link."
+eq "$(jq -r '.context.links | length' <<<"$posted")" "0"
+eq "$(entries $box card.post | jq -r --arg c "$c3" 'select(.Card == $c) | .Unread')" "plannotator ended before batch/3's session was ready: stub: refused to start"
+[[ ! -e $(home_of $box)/$cards/batch/3/session.json ]] || fail "a session of batch/3 is recorded though neither start opened"
+ok "a batch's card whose reading will not open at either start is raised without it, saying so and naming crew card session as the planner's, with why in the run record"
+rm "$refusals"
+HOST=$box CREW_AGENT=wldn-planner crew card wait batch/3 > "$T/batch-wait.out" 2>&1 &
+waiting=$!
+until_ok test -s "$(home_of $box)/$cards/batch/3/session.json" || fail "the wait started no reading:"$'\n'"$(cat "$T/batch-wait.out")"
+p6=$(rec $box batch/3 .pid); u3=$(rec $box batch/3 .url)
+relinked() { calls | grep "^$box pendingyou update_request " | grep -q "$u3"; }
+until_ok relinked || fail "the card was not changed to carry the reading's link:"$'\n'"$(cat "$T/batch-wait.out")"
+changed=$(calls | grep "^$box pendingyou update_request " | tail -1)
+has "$changed" "\"requestId\": \"$c3\""; has "$changed" "\"changeNote\": \"Its reading is open again at a new link\""
+eq "$(entries $box card.reading | jq -r '[.Key, .Card, .Refused // "done"] | join(" ")')" "batch/3 $c3 done"
+kill -0 "$waiting" 2>/dev/null || fail "the wait returned rather than waiting:"$'\n'"$(cat "$T/batch-wait.out")"
+decide $box "$p6" '{"decision": "approved"}'
+wait "$waiting" || fail "the planner's wait failed:"$'\n'"$(cat "$T/batch-wait.out")"
+has "$(cat "$T/batch-wait.out")" "batch/3: approved"
+ok "the planner's wait on a batch card raised without its reading starts the reading, records the try, changes the card to carry its link and waits on both"
 
 # A verify report's card, whose row went with record 0027: crew refuses the conductor's post, and its key starts no session.
 deny=$(jq -nc --arg k "verify/v1/$stamp" '{session_id: "sid-1", hook_event_name: "PreToolUse", cwd: "/work", tool_name: "mcp__pendingyou__post_request",

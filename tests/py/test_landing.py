@@ -822,6 +822,22 @@ class TestTheCardsClose:
             assert plan.landed_words("c" * 40, n) == (
                 "landed on GitHub's main at ccccccc; every host's folder follows by swancloud's timer within minutes")
 
+    def test_a_landing_on_the_users_words_sends_the_word_and_the_words_first_and_records_neither(self):
+        """main-level spec, "The card closes with the user's words": the word comes first, since Pending You's close is
+        cut from its end, and the run record keeps the outcome without the user's words (record.3)."""
+        landed = plan.landed_words("c" * 40, "46")
+        recorded, sent = plan.pane_landed(landed, "swancloud-ops", "2026-10-22T21:04:09Z", "Land crw-5's bolt")
+        assert recorded == f"Landed on the user's word in swancloud-ops's pane; {landed}"
+        assert "Land crw-5's bolt" not in recorded
+        assert sent == f'Landed on the user\'s word in swancloud-ops\'s pane, "Land crw-5\'s bolt"; {landed}'
+
+    def test_words_not_read_back_close_naming_the_pane_and_the_time(self):
+        """main-level spec, "Closed on another host"."""
+        landed = plan.landed_words("c" * 40, "46")
+        recorded, sent = plan.pane_landed(landed, "swancloud-ops", "2026-10-22T21:04:09Z", None)
+        assert recorded == f"Landed on the user's word in swancloud-ops's pane; {landed}"
+        assert sent == f"Landed on the user's word in swancloud-ops's pane at 21:04Z; {landed}"
+
     def test_the_conductors_open_cards_under_the_bolts_landing_keys_old_and_new(self):
         post = lambda key, card, by="swb-1-conductor": {"Act": "card.post", "Key": key, "Card": card, "By": by}
         entries = [post("land/b/abc1234", "req_1"), post("land/b", "req_2"), post("land/b/abc9999", "req_3"),

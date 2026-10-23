@@ -12,6 +12,9 @@
 # logic cases (tests/py/test_signals.py, test_transcript.py, test_proposal_life.py); recfix's checks of a signal and a
 # move, contract cases (tests/contract/test_recfix.py); each step here checks a command's wiring once.
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
+# The date, read once: the run's zone puts this moment at local noon, so every date crew takes in local time, a move's
+# among them, falls on this day however long the run takes, across the host's own midnight (read.1).
+read -r h today <<<"$(date -u '+%H %F')"; export TZ=NOON$(printf %+d $((10#$h - 12)))
 team_world
 box=chuck-herdr-alpha
 export CREW_LABEL=wldn
@@ -97,7 +100,7 @@ expect_ok crew unit add templates-get-a-security-check "Templates get a security
 has "$out" "signal $id routed to unit/templates-get-a-security-check, in the same commit"
 eq "$(changed)" $'moves.rec\nplan.rec'
 HOST=laptop CREW_LABEL= expect_ok crew signal show "$id"
-has "$out" "Its move in wldn: route unit/templates-get-a-security-check, by $me@mac-studio on $(date +%F)"
+has "$out" "Its move in wldn: route unit/templates-get-a-security-check, by $me@mac-studio on $today"
 ok "curation's move and a route are written to moves.rec on the branch, the route in its unit's commit, and a second move is refused"
 
 w=$T/bp; clone WilldanGroup/willdan-blueprints "$w"; msig=2026-09-30-standup/01-tiles-load-slowly
@@ -108,7 +111,7 @@ commit_all "$w" "signals: a standup"; git -C "$w" push -q origin main; blueprint
 CREW_AGENT=wldn-design crew signal move "$msig" drop --reason "fixed by the tile cache" >/dev/null
 HOST=laptop expect_ok crew signal show "$msig"
 has "$out" "signals/$msig, on main of WilldanGroup/willdan-blueprints"
-has "$out" "Its move in wldn: drop, by wldn-design on $(date +%F): fixed by the tile cache"
+has "$out" "Its move in wldn: drop, by wldn-design on $today: fixed by the tile cache"
 eq "$(git --git-dir "$wb" for-each-ref)" "$blueprints_refs"
 ok "a meeting's signal in the blueprints is moved on the flywheel's branch and shown as it stands"
 

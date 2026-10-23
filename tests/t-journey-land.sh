@@ -204,7 +204,7 @@ h2=$(git -C "$k" rev-parse bolt/tenant-environments)
 posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
 lacks "$posted" '"follows"'
 refused="plannotator ended before land/tenant-environments's session was ready: stub: refused to start"
-has "$posted" "Its reading could not be opened on the tailnet: swb-1-conductor starts it with crew card session land/tenant-environments, and this card then carries its link."
+has "$posted" "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and swb-1-conductor starts it with crew card session land/tenant-environments; this card then carries its link."
 has "$posted" "The reading could not be opened on the tailnet: $refused"
 has "$out" "card land/tenant-environments: its reading could not be opened on the tailnet: $refused; crew card session land/tenant-environments starts it"
 [[ ! -e $reading/session.json ]] || fail "a reading is recorded though both its starts failed"
