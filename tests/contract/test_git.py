@@ -420,7 +420,10 @@ def landing(repo, tmp_path):
     checkout on main behind its HEAD, and, with stray, leaves a file git does not ignore in the landing's worktree; with
     on_github, it forms the merge on origin/main and pushes it there, leaving the host's own main where it was, then
     fails releasing a place and exits 3, as sluice 0.36.4 does on a release that fails after its push; with refused, it
-    pushes nothing and exits 2. Each run is LANDING's result and the commit main now was at before it."""
+    pushes nothing and exits 2; with failing, it pushes nothing and exits 3, sluice itself failing while the submission
+    waits. A stand-in sluice beside it takes `sluice wait 7` from the landing's worktree, lands as wt-submit does and
+    exits 0, for LANDING run again with a submission and its tip (again). Each run is LANDING's result and the commit
+    main now was at before it."""
     import plan
     land = tmp_path / "places" / "land-b"
     bin_ = tmp_path / "bin"
@@ -431,33 +434,41 @@ def landing(repo, tmp_path):
         if shutil.which(tool):
             os.symlink(shutil.which(tool), bin_ / tool)
 
-    def land_with(path):
+    def land_with(path, *again):
         _, (_, before, why) = main_at(repo)
         assert not why, why
-        return subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops"],
+        return subprocess.run(["bash", "-c", plan.LANDING, "crew", str(repo.path), str(land), "b", "wldn-ops", *again],
                               capture_output=True, text=True, env=dict(os.environ, PATH=path)), before
 
-    def stand_in(stray=False, on_github=False, refused=False):
+    def stand_in(stray=False, on_github=False, refused=False, failing=False):
         onto = "refs/remotes/origin/main" if on_github else "main"
-        moved = ('git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
-                 'echo "sluice: releasing try/b: its command failed" >&2\necho\nexit 3' if on_github else
+        pushed = 'git push -q origin "$new:refs/heads/main" || exit 2\necho "landed #1 on GitHub\'s main"\n'
+        moved = (pushed + 'echo "sluice: releasing try/b: its command failed" >&2\necho\nexit 3' if on_github else
                  'git update-ref refs/heads/main "$new"\necho "landed #1"')
+        lands = f'''{"git fetch -q origin" if on_github else ""}
+tree=$(printf 'x\\n' | git hash-object -w --stdin)
+idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree {onto}
+GIT_INDEX_FILE=$idx git update-index --add --cacheinfo 100644,$tree,landed.txt
+new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p {onto} -p HEAD -m "chore(land): #1 bolt/b")
+'''
         (bin_ / "wt-submit").write_text(f'''#!/bin/sh
 [ "$1 $2" = "main --no-remove" ] || exit 9
 [ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
 echo "$SLUICE_AGENT" > "{tmp_path}/agent"
 git status --porcelain > "{tmp_path}/status"
 {"echo 'sluice: bolt/b conflicts with main' >&2; exit 2" if refused else ""}
+{"echo 'sluice: a round of main failed: its lock could not be taken' >&2; exit 3" if failing else ""}
 {"echo s > stray.txt" if stray else ""}
-{"git fetch -q origin" if on_github else ""}
-tree=$(printf 'x\\n' | git hash-object -w --stdin)
-idx=$(mktemp); GIT_INDEX_FILE=$idx git read-tree {onto}
-GIT_INDEX_FILE=$idx git update-index --add --cacheinfo 100644,$tree,landed.txt
-new=$(GIT_INDEX_FILE=$idx git write-tree | xargs -I{{}} git commit-tree {{}} -p {onto} -p HEAD -m "chore(land): #1 bolt/b")
-{moved}
+{lands}{moved}
 ''')
-        (bin_ / "wt-submit").chmod(0o755)
-        return lambda: land_with(f"{bin_}:{os.environ['PATH']}")
+        (bin_ / "sluice").write_text(f'''#!/bin/sh
+[ "$1 $2 $#" = "wait 7 2" ] || exit 9
+[ "$(git symbolic-ref --short HEAD)" = bolt/b ] || exit 8
+{lands}{pushed if on_github else 'git update-ref refs/heads/main "$new"'}
+''')
+        for tool in ("wt-submit", "sluice"):
+            (bin_ / tool).chmod(0o755)
+        return lambda *again: land_with(f"{bin_}:{os.environ['PATH']}", *again)
     return land, lambda: land_with(str(bin_)), stand_in
 
 
@@ -623,6 +634,35 @@ done
                             capture_output=True, text=True).stdout.strip()
     assert repo.git("rev-parse", f"{github}^2") == tip and repo.git("rev-parse", "bolt/b") == tip
     assert plan.landing_said("b", "kit", "h", r.stdout, before)[0], r.stdout
+
+
+def test_a_submission_sluice_failed_on_is_waited_on_again_while_its_record_has_it_standing(repo, tmp_path):
+    """plan.LANDING, plan.sluice_failed, plan.landing_said and plan.wait_again (plan.16, plan.18): sluice itself fails
+    while the landing's submission waits, exiting 3 with nothing pushed, so GitHub's main does not hold the bolt's tip
+    and whether the bolt lands is sluice's own record's to say, never "did not land" on the exit alone. With the record
+    holding the submission queued, LANDING given its id and the tip it submitted makes the landing's place again, waits
+    on it there with `sluice wait <id>`, which lands it, and judges main now against that tip; the place goes after."""
+    import plan
+    pushed = kit_with_github(repo, tmp_path)
+    pushed("from-a-mac")
+    repo.git("branch", "bolt/b", "origin/main")
+    tip = repo.git("commit-tree", "-p", "bolt/b", "-m", "feat: the bolt's", repo.git("rev-parse", "bolt/b^{tree}"))
+    repo.git("update-ref", "refs/heads/bolt/b", tip)
+    land, _, stand_in = landing(repo, tmp_path)
+    r, before = stand_in(on_github=True, failing=True)()
+    assert "RC=3 " in r.stdout and "sluice: a round of main failed" in r.stderr, r.stdout + r.stderr
+    assert plan.sluice_failed(r.stdout, before) == tip and not land.exists()
+    queued = {"id": 7, "state": "queued"}
+    landed, words = plan.landing_said("b", "kit", "h", r.stdout, before, sub=queued)
+    assert not landed and "did not land" not in words and words.endswith("crew waits on it again (sluice wait 7)."), words
+    assert plan.wait_again(queued, 0) == 7
+    r, again = stand_in(on_github=True)("7", tip)
+    assert again == before and f"RC=0 TIP={tip} " in r.stdout, r.stdout + r.stderr
+    github = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "main"],
+                            capture_output=True, text=True).stdout.strip()
+    assert plan.landing_said("b", "kit", "h", r.stdout, before) == (True, f"bolt/b landed on kit's main at {github[:7]}: now crew bolt land b.")
+    assert plan.sluice_failed(r.stdout, before) is None
+    assert not land.exists() and "land-b" not in repo.git("worktree", "list")
 
 
 def test_a_units_change_is_found_on_its_bolt_through_sluices_merge_after_the_merge_archived_it(repo):

@@ -1,8 +1,10 @@
 """A bolt lands by main-level ops's submission of its branch to main through sluice (plan.16, record 0026): what
-plan.landing_said makes of what the landing's submission did on the team's host, read from main now (plan.18); what
+plan.landing_said makes of what the landing's submission did on the team's host, read from main now (plan.18), and of
+sluice's own record of the submission when sluice itself failed with the bolt not on main (plan.submission_of); what
 plan.deleted_said makes of sluice's delete of the bolt's branch at crew bolt land (plan.19); and its landing card,
 raised by crew once the bolt reads proven, held by a fix and closed at the landing (record 0031 §1)."""
 import base64
+import json
 import pathlib
 
 import pytest
@@ -13,7 +15,7 @@ OLD, NEW, TIP = "a" * 40, "b" * 40, "c" * 40
 SIGNAL = "sluice: releasing try/abc1234: its command failed"
 
 
-def said(rc, new=NEW, kept="''", why="''", level="yes", sluice="", github=None, fetched="ok", held="yes"):
+def said(rc, new=NEW, kept="''", why="''", level="yes", sluice="", github=None, fetched="ok", held="yes", tip=TIP):
     """What LANDING prints after sluice's outcome: the kit's mains after a fresh fetch (MAINS), whether each holds the
     tip that was submitted, then its assignments, sluice's last line base64. With github, a kit with an origin whose
     GitHub main is then at github, judged by HELD_GITHUB, the host's own main at new; else one with none, its own main at
@@ -21,11 +23,11 @@ def said(rc, new=NEW, kept="''", why="''", level="yes", sluice="", github=None, 
     mains = (f"ORIGIN=yes\nFETCHED={fetched}\nGITHUB={github}\nOWN={new}\nHELD_GITHUB={held}\nHELD_OWN=no\n" if github else
              f"ORIGIN=no\nGITHUB=-\nOWN={new}\nHELD_GITHUB=-\nHELD_OWN={held}\n")
     words = base64.b64encode(sluice.encode()).decode()
-    return mains + f"RC={rc} TIP={TIP} OLD={OLD} KEPT={kept} WHY={why} LEVEL={level} SAID={words}\n"
+    return mains + f"RC={rc} TIP={tip} OLD={OLD} KEPT={kept} WHY={why} LEVEL={level} SAID={words}\n"
 
 
-def landing(out, marked="", name="k"):
-    return plan.landing_said("b", name, "h", out, OLD, marked)
+def landing(out, marked="", name="k", sub=None, again=0):
+    return plan.landing_said("b", name, "h", out, OLD, marked, sub, again)
 
 
 def test_a_landing_says_where_main_is_and_what_comes_next():
@@ -120,10 +122,11 @@ class TestALandingIsReadFromGitHubsMain:
 
     @pytest.mark.parametrize("rc, why", [
         (0, "the submission exited 0"), (1, "main's checks failed on it"), (2, "sluice refused it or found a conflict"),
-        (3, "sluice itself failed"), (4, "it was withdrawn while it waited"), (64, "sluice could not read its command line"),
+        (4, "it was withdrawn while it waited"), (64, "sluice could not read its command line"),
         (130, "the submission was stopped"), (5, "the submission exited 5")])
     def test_githubs_main_did_not_move(self, rc, why):
-        """"GitHub's main did not move": the bolt did not land and main is where it was, whatever sluice exited."""
+        """"GitHub's main did not move": the bolt did not land and main is where it was, whatever sluice exited but 3,
+        sluice itself failing, which its record of the submission decides (TestSluiceItselfFailed)."""
         landed, words = landing(said(rc, new=OLD, github=OLD, held="no", level="''"))
         assert not landed and words.startswith(f"bolt/b did not land: {why}, and main is where it was. Tell the bolt's conductor")
 
@@ -154,6 +157,87 @@ class TestALandingIsReadFromGitHubsMain:
         assert landing(said(0, held="no"))[1].startswith("bolt/b did not land: the submission exited 0; k's main moved to bbbbbbb without it.")
 
 
+STATUS = json.loads((pathlib.Path(__file__).parent / "sluice-0.36.4" / "status-all.json").read_text())
+HEADS = {s["state"]: s["head"] for s in STATUS["submissions"]}  # one recorded submission in each state sluice held
+FAILED = "sluice: a round of main failed: its lock could not be taken"
+
+
+def listing(*subs):
+    """What SUBMISSIONS prints when sluice 0.36.4 lists main's submissions: the recorded listing, with subs added."""
+    return json.dumps(dict(STATUS, submissions=STATUS["submissions"] + list(subs)))
+
+
+class TestSluiceItselfFailed:
+    """A landing whose submission found sluice itself failing, exiting 3, with the bolt's tip not on main now, is read
+    from sluice's own record of the submission (plan.16, plan.18): while it stands queued or under test crew says so
+    and waits on it again, and it did not land only when the record has it out, blamed, in conflict or withdrawn."""
+    TESTING = said(3, new=OLD, github=OLD, held="no", level="''", sluice=FAILED, tip=HEADS["testing"])
+
+    def test_the_submission_is_read_from_sluices_record_only_when_sluice_failed_and_main_lacks_the_tip(self):
+        assert plan.sluice_failed(self.TESTING, OLD) == HEADS["testing"]
+        assert plan.sluice_failed(said(3, new=OLD, github=NEW, level="''", sluice=SIGNAL), OLD) is None  # landed all the same
+        assert plan.sluice_failed(said(2, new=OLD, github=OLD, held="no"), OLD) is None
+        assert plan.sluice_failed(said(3, new=OLD, github=OLD, held="no", fetched="fatal: no network"), OLD) is None
+        assert plan.sluice_failed("wt: command not found\n", OLD) is None
+
+    def test_sluices_record_of_the_submission_is_the_last_of_its_tip(self):
+        """read.2, against sluice 0.36.4's own listing (tests/py/sluice-0.36.4/status-all.json)."""
+        out = (pathlib.Path(__file__).parent / "sluice-0.36.4" / "status-all.json").read_text()
+        assert {state: plan.submission_of(head, 0, out, "") for state, head in HEADS.items()} == {
+            "conflict": {"id": 137, "state": "conflict"}, "withdrawn": {"id": 148, "state": "withdrawn"},
+            "landed": {"id": 153, "state": "landed"}, "testing": {"id": 160, "state": "testing"}}
+        again = dict(STATUS["submissions"][1], id=170, state="queued")
+        assert plan.submission_of(HEADS["withdrawn"], 0, listing(again), "") == {"id": 170, "state": "queued"}
+
+    def test_a_record_crew_has_none_of_is_said_why(self):
+        assert plan.submission_of(TIP, 0, listing(), "") == "sluice records no submission of ccccccc to main"
+        assert plan.submission_of(TIP, 3, json.dumps({"error": {"message": "its records are locked"}}), "") == (
+            "sluice status main --all exited 3: its records are locked")
+        assert plan.submission_of(TIP, 255, "", "ssh: connect to host box port 22: timed out\n") == (
+            "sluice status main --all exited 255: ssh: connect to host box port 22: timed out")
+        assert plan.submission_of(TIP, 0, "nope", "").startswith("sluice status main --all printed no listing of submissions crew reads: nope")
+        odd = dict(STATUS["submissions"][0], id=171, head=TIP, state="parked")
+        assert plan.submission_of(TIP, 0, listing(odd), "") == 'sluice records #171 in a state crew does not read: "parked"'
+
+    @pytest.mark.parametrize("state, words", [("queued", "queued"), ("waiting", "waiting on a submission it comes after"),
+                                              ("testing", "under test"), ("passed", "passed, to land next"), ("landing", "landing")])
+    def test_a_submission_its_record_has_standing_is_waited_on_again(self, state, words):
+        sub = {"id": 160, "state": state}
+        assert landing(self.TESTING, sub=sub) == (False, (
+            f"sluice itself failed ({FAILED}), but its record has bolt/b's submission, #160, {words} on k's main, which does "
+            "not hold it yet: crew waits on it again (sluice wait 160)."))
+        assert plan.wait_again(sub, 0) == 160 and plan.wait_again(sub, plan.AGAIN - 1) == 160
+
+    @pytest.mark.parametrize("state, words", [("failed", "blamed for a check that failed"), ("conflict", "in conflict"),
+                                              ("withdrawn", "withdrawn")])
+    def test_it_did_not_land_only_when_its_record_has_it_out(self, state, words):
+        sub = {"id": 160, "state": state}
+        landed, said_ = landing(self.TESTING, sub=sub)
+        assert not landed and said_.startswith(f"bolt/b did not land: sluice itself failed, and its record has #160 {words}, and "
+                                               "main is where it was. Tell the bolt's conductor sluice's words above")
+        assert plan.wait_again(sub, 0) is None
+
+    def test_crew_cant_tell_when_the_record_has_it_landed_has_none_or_cant_be_read(self):
+        tip = HEADS["testing"][:7]
+        assert landing(self.TESTING, sub={"id": 160, "state": "landed"}) == (False, (
+            f"crew can't tell whether bolt/b landed: sluice itself failed ({FAILED}), its record has #160 landed, and k's main "
+            f"now, aaaaaaa, does not hold bolt/b's tip {tip}."))
+        assert landing(self.TESTING, sub=f"sluice records no submission of {tip} to main") == (False, (
+            f"crew can't tell whether bolt/b will land on k's main: sluice itself failed ({FAILED}), k's main now, aaaaaaa, does "
+            f"not hold bolt/b's tip {tip}, and sluice records no submission of {tip} to main."))
+        assert landing(self.TESTING)[1].endswith("and crew has not read sluice's record of the submission.")
+        for sub in ({"id": 160, "state": "landed"}, "sluice status main --all exited 255", None):
+            assert "did not land" not in landing(self.TESTING, sub=sub)[1] and plan.wait_again(sub, 0) is None
+
+    def test_a_submission_still_standing_after_crew_waited_again_each_time_sluice_failed_is_said_so(self):
+        sub = {"id": 160, "state": "testing"}
+        assert plan.wait_again(sub, plan.AGAIN) is None
+        assert landing(self.TESTING, sub=sub, again=plan.AGAIN) == (False, (
+            f"crew can't tell whether bolt/b will land on k's main: sluice itself failed again each of the {plan.AGAIN} times "
+            f"crew waited on #160, which its record still has under test, and k's main now, aaaaaaa, does not hold bolt/b's tip "
+            f"{HEADS['testing'][:7]}. That is sluice's to report; crew bolt submit b submits it again."))
+
+
 class TestTheSubmission:
     """crew bolt submit (plan.16, plan.18): main now read before the submission, refusing when it can't be, the bolt
     decided by landing_said against it, its branch marked only once it landed, and the landing recorded at main now."""
@@ -162,15 +246,17 @@ class TestTheSubmission:
 
     def submit(self, monkeypatch, before, outs):
         """bolt_submit of bolt b on the team's host box, MAIN saying before there, and each script crew runs there
-        answering in turn from outs; what ran, and what was recorded, kept as self.ran and self.emitted when it refuses."""
-        ran, emitted = self.ran, self.emitted = [], []
+        answering in turn from outs; what ran, and what was recorded, kept as self.ran and self.emitted when it refuses,
+        and the words each script was given after its own, as self.words."""
+        ran, emitted, words = self.ran, self.emitted, self.words = [], [], []
         monkeypatch.setattr(plan, "CONTEXT", {})
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
         monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, type("P", (), {"bolt": lambda s, n: {"Bolt": n}})()))
         monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: self.T)
         monkeypatch.setattr(plan, "READ", type("R", (), {"drop_kit": lambda s, h, m: None})())
         monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: ran.append(("host_run", script, host)) or before)
-        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: ran.append(("on_machine", argv[2], host)) or outs.pop(0))
+        monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: ran.append(("on_machine", argv[2], host))
+                            or words.append(argv[4:]) or outs.pop(0))
         monkeypatch.setattr(plan.record, "emit", lambda label, act, on, why: emitted.append((label, act, on, why)))
         monkeypatch.setenv("CREW_AGENT", "wldn-ops")
         plan.bolt_submit({}, type("A", (), {"bolt": "b"})())
@@ -211,6 +297,36 @@ class TestTheSubmission:
         with pytest.raises(plan.Refusal, match="bolt/b did not land: sluice refused it or found a conflict, and main is where it was"):
             self.submit(monkeypatch, self.BEFORE, [done])
         assert [s for _, s, _ in self.ran] == [plan.MAIN, plan.LANDING] and self.emitted == []
+
+    def test_a_submission_sluice_failed_on_is_waited_on_again_and_lands(self, monkeypatch, capsys):
+        """sluice itself fails while the submission waits, GitHub's main not holding the bolt's tip: its record, read
+        on the team's host, has it under test, so crew says so and waits on it again by LANDING with its id and the tip
+        it submitted, and the bolt lands from that wait, marked and recorded as any landing."""
+        r = lambda o: type("R", (), {"returncode": 0, "stdout": o, "stderr": ""})()
+        failed = said(3, new=OLD, github=OLD, held="no", level="''", sluice=FAILED, tip=HEADS["testing"])
+        ran, emitted = self.submit(monkeypatch, self.BEFORE, [r(failed), r(listing()), r(said(0, github=NEW, tip=HEADS["testing"])),
+                                                              r("MARKED=yes\n")])
+        assert [s for _, s, _ in ran] == [plan.MAIN, plan.LANDING, plan.SUBMISSIONS, plan.LANDING, plan.LANDED_MARK]
+        assert self.words[:3] == [["/k/main", "/k/places/land-b", "b", "wldn-ops"], ["/k/main"],
+                                   ["/k/main", "/k/places/land-b", "b", "wldn-ops", "160", HEADS["testing"]]]
+        assert capsys.readouterr().out == (
+            f"sluice itself failed ({FAILED}), but its record has bolt/b's submission, #160, under test on k's main, which does "
+            "not hold it yet: crew waits on it again (sluice wait 160).\nbolt/b landed on k's main at bbbbbbb: now crew bolt land b.\n")
+        assert emitted == [("wldn", "bolt.submit", ["bolt/b"], "bolt(b): landed on main at bbbbbbb")]
+
+    def test_a_submission_sluice_failed_on_that_its_record_has_out_did_not_land(self, monkeypatch):
+        r = lambda o: type("R", (), {"returncode": 0, "stdout": o, "stderr": ""})()
+        failed = said(3, new=OLD, github=OLD, held="no", level="''", sluice=FAILED, tip=HEADS["conflict"])
+        with pytest.raises(plan.Refusal, match=r"bolt/b did not land: sluice itself failed, and its record has #137 in conflict, and main is where it was"):
+            self.submit(monkeypatch, self.BEFORE, [r(failed), r(listing())])
+        assert [s for _, s, _ in self.ran] == [plan.MAIN, plan.LANDING, plan.SUBMISSIONS] and self.emitted == []
+
+    def test_a_submission_sluice_fails_on_each_time_is_waited_on_again_as_many_times_as_crew_allows(self, monkeypatch):
+        r = lambda o: type("R", (), {"returncode": 0, "stdout": o, "stderr": ""})()
+        failed = said(3, new=OLD, github=OLD, held="no", level="''", sluice=FAILED, tip=HEADS["testing"])
+        with pytest.raises(plan.Refusal, match=f"sluice itself failed again each of the {plan.AGAIN} times crew waited on #160"):
+            self.submit(monkeypatch, self.BEFORE, [r(failed), r(listing())] * (plan.AGAIN + 1))
+        assert [s for _, s, _ in self.ran].count(plan.LANDING) == plan.AGAIN + 1 and self.emitted == []
 
 
 def test_what_the_mark_said_is_its_value_or_the_hosts_words():
