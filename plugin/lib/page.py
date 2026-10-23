@@ -175,22 +175,37 @@ def header(made):
             + (f" for the run record, {plan_tip[:7]} for the board and labels" if plan_tip and plan_tip != made["commit"] else ""))
 
 
-def nav(labels, label):
-    """The partitions in the teams file's order, this page's marked current and each other a link to its page beside
-    this one, as crew lays the pages out (../<label>/page.html), so pages served side by side are a step apart."""
-    return "".join(f'<span class="part" aria-current="page">{html.escape(l)}</span>' if l == label
-                   else f'<a class="part" href="../{html.escape(l)}/page.html">{html.escape(l)}</a>' for l in labels)
+def beside(path, label, other):
+    """Where other's page is from this one, written to path (a PurePath), in the layout of this page's own file: its
+    folder named label (crew's, <label>/page.html) puts other's in ../<other>/, its file named label (<label>.html, as
+    swancloud's board serves them) names other's <other> with the same suffix, and both swap both. None when neither
+    names label, since crew cannot tell where the other pages are (read.1)."""
+    folder, named = path.parent.name == label, path.stem == label
+    if not (folder or named):
+        return None
+    return (f"../{other}/" if folder else "") + (f"{other}{path.suffix}" if named else path.name)
 
 
-def render(d):
-    """The page: the template with the partitions' links in their placeholder, and the data in its own, as JSON a
-    script block can hold, every < escaped so nothing in it can end the block."""
+def nav(labels, label, path):
+    """The partitions in the teams file's order, this page's marked current and each other a link to its page in the
+    layout of this page's file, path (beside), or named without a link when that layout names no partition."""
+    def part(l):
+        if l == label:
+            return f'<span class="part" aria-current="page">{html.escape(l)}</span>'
+        link = beside(path, label, l)
+        return f'<a class="part" href="{html.escape(link)}">{html.escape(l)}</a>' if link else f'<span class="part">{html.escape(l)}</span>'
+    return "".join(part(l) for l in labels)
+
+
+def render(d, path):
+    """The page to be written to path: the template with the partitions' links in their placeholder, and the data in
+    its own, as JSON a script block can hold, every < escaped so nothing in it can end the block."""
     text = json.dumps(d, separators=(",", ":"), ensure_ascii=False)
     text = text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
     page = TEMPLATE.read_text()
     for mark in (DATA, PARTITIONS):
         page.count(mark) == 1 or fail(f"{TEMPLATE} must hold its placeholder {mark} once")
-    return page.replace(PARTITIONS, nav(d["partitions"], d["label"])).replace(DATA, text)
+    return page.replace(PARTITIONS, nav(d["partitions"], d["label"], path)).replace(DATA, text)
 
 
 def write(path, text):
@@ -240,7 +255,7 @@ def page(fleet, a):
         print(json.dumps(d, indent=1))
         return
     out = pathlib.Path(a.out).expanduser().absolute() if a.out else record.ROOT / label / "page.html"
-    write(out, render(d))
+    write(out, render(d, out))
     print(out)
     print(header(d["made"]))
     if not d["entries"]:
