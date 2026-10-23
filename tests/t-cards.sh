@@ -150,6 +150,7 @@ ok "a question withdrawn by its asker is recorded closed; one lost after the hos
 # not in its conductor's turn. The conductor is up, so the line that adopts it can be told.
 c=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-1 | jq -r .result.root_pane.pane_id)
 as $box herdr --session wldn-1 stub agent "$c" swb-1-conductor
+mkdir -p "$(home_of $box)/.local/state/swb-1-team"; echo "conductor $c" > "$(home_of $box)/.local/state/swb-1-team/panes"
 : > "$CREW_TEST_LOG"
 raised=$(as $box python3 - "$CREW/plugin/lib" "$wd" <<'PY'
 import sys
@@ -494,8 +495,8 @@ ok "the user's boxes, sent on the card, are applied as they stand, and crew clos
 # The rail read's sweep of the cards on the box, under its sign-in (record 0031 §1, §2, read.4). The landing cards
 # posted before the batch's sign-in were recorded lost by the planner's rail reads above, their row gone; a landing card
 # posted since, whose bolt has no row; and two questions asked through Pending You's own tools and recorded as crew's
-# card hook records them: swb-2-conductor's, whose session has ended, and swb-1-conductor's, which runs. crew board
-# reads them and acts on none.
+# card hook records them: swb-2-conductor's, whose pane herdr lists with no agent in it, and swb-1-conductor's, which
+# runs. crew board reads them and acts on none.
 question() {  # question <asker>: the question's id
   local id
   id=$(as $box python3 - "$CREW/plugin/lib" "$1" <<'PY'
@@ -512,6 +513,8 @@ PY
 }
 lc=$(land post abc1900 | sed -n '1s/^card [^:]*: \([^ ]*\).*/\1/p')
 q2=$(question swb-2-conductor); q1=$(question swb-1-conductor)
+p2=$(as $box herdr --session wldn-1 workspace create --cwd / --label swb-2 | jq -r .result.root_pane.pane_id)
+mkdir -p "$(home_of $box)/.local/state/swb-2-team"; echo "conductor $p2" > "$(home_of $box)/.local/state/swb-2-team/panes"
 closes=$(entries card.close | wc -l)
 : > "$CREW_TEST_LOG"
 HOST=$box expect_ok crew board --label wldn

@@ -9484,6 +9484,25 @@ def proposal_reads(argvs):
     return len(new_units(argvs)) > cards.CARD_NEW
 
 
+# What a card's session does not carry of the agent that starts it: herdr's reading of the agent's pane, which the
+# Claude plannotator starts to answer the user would report its own session to, so herdr took it for a new session in
+# the agent's pane and dropped the agent's name (swc-3-conductor on deneb, 2026-10-23: its landing card's session,
+# started by `crew card wait`, gave herdr the session of the Claude that answered the user's question on the page, and
+# crew read the conductor ended; signal 2026-10-23-swc-3-conductor-8556b697/01); and the identity crew-role gives
+# the agent (teams.6), which would record that Claude's start as the agent's own (hooks/session-start), and the
+# agent's Claude session a command carries to another host (record.session), so the session and what it starts act
+# under no agent's name (briefs.17).
+NOT_CARRIED = ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_AGENT", "HERDR_SESSION",
+               "HERDR_SOCKET_PATH", "CREW_AGENT", "CREW_LABEL", "CREW_ROLE", "CREW_LAUNCH", "CREW_SESSION", "SLUICE_AGENT",
+               "SLUICE_BRANCH")
+
+
+def session_env(environ):
+    """The environment a card's plannotator session runs in, from the one that starts it: everything but what it does
+    not carry of the agent (NOT_CARRIED), with no browser opened and its links for another host (session_open)."""
+    return {**{k: v for k, v in environ.items() if k not in NOT_CARRIED}, "PLANNOTATOR_SKIP_BROWSER_OPEN": "1", "PLANNOTATOR_REMOTE": "1"}
+
+
 def session_open(d, name, write):
     """The plannotator session of a card key on this host, kept in its folder d, called name in what is said: the one
     crew recorded given again while it serves its document, or kept for crew card wait when the user decided in it
@@ -9514,7 +9533,7 @@ def session_open(d, name, write):
         not gone or fail(f"{name}'s document {gone[0]} is not on {here}")
         doc = ", ".join(files)  # as plannotator lists a session of several files
         started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        env = dict(os.environ, PLANNOTATOR_SKIP_BROWSER_OPEN="1", PLANNOTATOR_REMOTE="1")
+        env = session_env(os.environ)
         with open(d / "out", "w") as out, open(d / "err", "w") as err:
             # Several files, each its own path, open as one review in that order with one decision (plannotator 0.28.6).
             # Its own session, so it outlives the command that started it, and the shell that ran that.
@@ -10986,13 +11005,10 @@ class SweepActs(CardActs):
     logic test hands the sweep a stand-in (code.7)."""
 
     def listed(self, name):
-        """Whether herdr lists the agent, from one listing of its session (read.2): (True or False, None), or (None,
-        why) when that can't be read, or the name is no agent's crew starts."""
-        try:
-            a, why = crew.read_agent(self.fleet, name, fresh=False)
-        except Refusal as e:
-            return None, str(e)
-        return (None, why) if why else (a is not None, None)
+        """Whether herdr lists an agent in the pane crew keeps for the asker, from one listing of its session (read.2,
+        crew.read_pane_agent): (True or False, None), or (None, why) when that can't be read; never by the agent's
+        name, which herdr drops when the pane's session changes."""
+        return crew.read_pane_agent(self.fleet, name)
 
     def raise_of(self, kind):
         name = RAISES.get(kind)
@@ -11042,7 +11058,8 @@ def sweep_cards(fleet, read, acts=None):
     (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"], proposals_held),
     at or past the commit its card was raised at (older_than_card), and each decision record's card, under either key
     form, at the record's status
-    (record_settled), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
+    (record_settled), withdraws each question whose asker's pane herdr lists with no agent in it, naming the asker,
+    and leaves one whose asker's pane it can't read, saying why (SweepActs.listed, read.1), posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
     card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
     command that raised it, and a row of one is left as it is. Before any of it, where the partition's planner runs,

@@ -654,6 +654,24 @@ class TestSweep:
             ("req_q2", "left", "whether wldn-ops still runs can't be told: herdr's agent list in session wldn-3 failed: x")]
         assert acts.emitted == [] and {n for n, *_ in acts.calls} == {"crew"}
 
+    def test_a_conductor_herdr_lists_by_no_name_is_kept(self):
+        """swc-3-conductor's question on deneb, 2026-10-23: herdr had dropped its name, its pane still holding it, and
+        its card was withdrawn within a minute as the conductor's ending (signal 2026-10-23-swc-3-conductor-8556b697/01)."""
+        q = card("ask/swc-3-conductor/q", "req_q1", "swc-3-conductor")
+        unnamed = {"pane_id": "w7:p1", "agent": "claude", "agent_status": "done"}
+        out, acts = swept(cards_=[q], listed={"swc-3-conductor": crew.pane_holds("swc-3-conductor", "w7:p1", {"pane_id": "w7:p1"}, unnamed)},
+                          answers={"get_request": (None, "This is swc-3-conductor's card; leave it.")})
+        assert (out["done"], acts.emitted) == ([], [])
+        assert {n for n, *_ in acts.calls} == {"crew"}
+
+    def test_a_question_whose_askers_pane_crew_cant_read_is_left_saying_why(self):
+        q = card("ask/swc-3-conductor/q", "req_q1", "swc-3-conductor")
+        out, acts = swept(cards_=[q], listed={"swc-3-conductor": crew.pane_holds("swc-3-conductor", "w7:p1", None, None)},
+                          answers={"get_request": (None, "This is swc-3-conductor's card; leave it.")})
+        assert [(d["did"], d["words"]) for d in out["done"]] == [
+            ("left", "whether swc-3-conductor still runs can't be told: herdr lists no pane w7:p1, which crew keeps for swc-3-conductor")]
+        assert acts.emitted == []
+
     def test_a_rows_card_pending_you_no_longer_finds_is_posted_again_through_its_kinds_raise_saying_the_older_copy_is_dead(self):
         """The rail-cards scenario of a lost operations card: deploy/dev's card reads not found while the offer waits;
         its raise posts through the act's change, which finds it lost and posts it again."""
@@ -735,6 +753,22 @@ class TestSweep:
 LANDED = [did("review.batch", 60, Batch="3", Units="x1:swb-1@aaa1 x2:swb-1@bbb1"), did("bolt.land", 40, On=["bolt/b", "unit/x1", "unit/x2"])]
 WORDS = "its batch waits on nothing: x1 and x2 have landed"
 CLOSE = dict(by="wldn-planner", why="batch: closed by crew, it waits on nothing", Key="batch/3", Outcome=WORDS, Act="batch.close", On=["batch/3"])
+
+
+class TestAskerPane:
+    """How the sweep reads whether a question's asker ended (briefs.11, read.1): from its pane, never its name."""
+
+    def test_an_agent_in_the_askers_pane_runs_named_or_not(self):
+        pane = {"pane_id": "w7:p1"}
+        assert crew.pane_holds("swc-3-conductor", "w7:p1", pane, {"pane_id": "w7:p1", "name": "swc-3-conductor"}) == (True, None)
+        assert crew.pane_holds("swc-3-conductor", "w7:p1", pane, {"pane_id": "w7:p1"}) == (True, None)
+
+    def test_the_askers_pane_with_no_agent_in_it_is_its_ending(self):
+        assert crew.pane_holds("crw-3-conductor", "w2:p1", {"pane_id": "w2:p1"}, None) == (False, None)
+
+    def test_a_pane_crew_keeps_none_of_or_herdr_lists_none_of_is_a_read_it_names(self):
+        assert crew.pane_holds("crw-3-conductor", "", None, None) == (None, "crew keeps no pane for crw-3-conductor")
+        assert crew.pane_holds("crw-3-conductor", "w2:p1", None, None) == (None, "herdr lists no pane w2:p1, which crew keeps for crw-3-conductor")
 
 
 class TestSettledSweep:

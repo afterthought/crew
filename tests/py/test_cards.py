@@ -333,6 +333,19 @@ class TestSessions:
     def args(self, k, unit=None, sub="session", label="wldn"):
         return argparse.Namespace(key=k, unit=unit, sub=sub, label=label)
 
+    def test_a_cards_session_carries_neither_the_agents_herdr_pane_nor_its_crew_identity(self):
+        """swc-3-conductor's landing card's session on deneb, 2026-10-23, carried its HERDR_PANE_ID, so the Claude that
+        answered the user on the page took the conductor's pane in herdr, which dropped its name."""
+        conductor = {"PATH": "/bin", "HOME": "/home/c", "CLAUDE_CONFIG_DIR": "/home/c/.claude-sub-madswan", "CREW_TEST_HOST": "box",
+                     "HERDR_ENV": "1", "HERDR_PANE_ID": "w7:p1", "HERDR_TAB_ID": "w7:t1", "HERDR_WORKSPACE_ID": "w7", "HERDR_AGENT": "claude",
+                     "HERDR_SESSION": "swancloud-1", "HERDR_SOCKET_PATH": "/s/herdr.sock", "HERDR_BIN_PATH": "/bin/herdr",
+                     "CREW_AGENT": "swc-3-conductor", "CREW_LABEL": "swancloud", "CREW_ROLE": "conductor", "CREW_LAUNCH": "73d5",
+                     "CREW_SESSION": "deneb:0b1c",
+                     "SLUICE_AGENT": "swc-3-conductor", "SLUICE_BRANCH": "bolt/builds-reach-the-phone", "PLANNOTATOR_URL_HOST": "auto"}
+        assert plan.session_env(conductor) == {"PATH": "/bin", "HOME": "/home/c", "CLAUDE_CONFIG_DIR": "/home/c/.claude-sub-madswan",
+                                               "CREW_TEST_HOST": "box", "HERDR_BIN_PATH": "/bin/herdr", "PLANNOTATOR_URL_HOST": "auto",
+                                               "PLANNOTATOR_SKIP_BROWSER_OPEN": "1", "PLANNOTATOR_REMOTE": "1"}
+
     def test_a_card_command_runs_on_a_rails_key_for_its_partition(self):
         label, d = plan.card_of(BASE, self.args("batch/1"))
         assert (label, d) == ("wldn", plan.CARDS / "wldn" / "batch/1")
