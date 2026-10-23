@@ -45,6 +45,7 @@ The command is `${CLAUDE_PLUGIN_ROOT}/bin/crew`. A command about a team runs on 
 | lift a hold: every standing agent brought back with its conversation and greeted, or told to carry on | `crew go <host>\|--all` |
 | restart now each standing agent an update of crew or of its brief made due, once it is idle | `crew update [<host>\|--all]` |
 | send an agent crew started a message, wherever it runs | `crew tell <agent> "<text>"` |
+| send something to another team or partition: it reaches that partition's operator, its one door, marked with who sent it and whom it was for | `crew send <team or partition> "<text>"` |
 | see what runs where, with the URL to open | `crew sites [<label>]` |
 | offer a `manual` environment a deploy, its card raised in main-level ops's name with the kit's changelog and after-deploy steps (the kit's deployer) | `crew ops offer <env> --to <sha> --from <sha\|none> [--notes <file>] [--steps <file>] --label L` |
 | record the user's word for a deploy the rail offers (main-level ops, on the user's yes) | `crew ops approve <env> --to <sha> --label L` |
