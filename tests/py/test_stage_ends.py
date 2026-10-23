@@ -1,7 +1,9 @@
 """A stage ends at its deliverable, never at a quiet pane (teams.4, teams.14): plan.delivered on the facts
-deliverable_facts reads; and when a quiet agent is stuck, plan.quiet_verdict. The wait's loop and the records it
-writes are t-stage-ends'."""
+deliverable_facts reads; when a quiet agent is stuck, plan.quiet_verdict; and when a verify's agent has ended its turn
+with nothing running, plan.ended_turn (record 0007). The wait's loop and the records it writes are t-stage-ends'."""
 import datetime
+
+import pytest
 
 from facts import AFTER, BEFORE, owed, plan_of, saved
 
@@ -49,8 +51,32 @@ class TestVerify:
         report = saved("verify-a-20261012-1001.md")
         assert plan.delivered(owed("verify"), {"saved": report}) == ("report/verify-a-20261012-1001.md", f"the report is {report}")
 
-    def test_no_report_saved_since_it_began(self):
+    def test_no_report_saved_since_it_began_is_named_with_the_folder_crew_reads(self):
+        assert plan.delivered(owed("verify"), {"saved": None, "folder": "/home/.local/state/swb-1-team/reports"}) == (
+            None, "no report verify-a-<YYYYMMDD-HHMM>.md saved in /home/.local/state/swb-1-team/reports since it began")
         assert plan.delivered(owed("verify"), {"saved": None}) == (None, "no report saved")
+
+
+class TestEndedTurn:
+    """plan.ended_turn: whether a verify's agent has ended its turn since the stage began with nothing of its own still
+    running, so that a verify with no report is said not to have ended then, never stuck by its clock (record 0007)."""
+
+    @pytest.mark.parametrize("status", ["idle", "done"])
+    def test_a_verify_agent_idle_or_done_its_turn_over_since_it_began_and_nothing_running_has_ended_its_turn(self, status):
+        assert plan.ended_turn(owed("verify"), status, [], AFTER)
+
+    @pytest.mark.parametrize("stage, status, pending, over", [
+        ("code", "idle", [], AFTER),  # only a verify: another stage's quiet agent goes by the clock
+        ("verify", "blocked", [], AFTER),  # a question in its pane
+        ("verify", "idle", ["b8y1gomwj"], AFTER),  # suites it started in the background still run
+        ("verify", "idle", None, AFTER),  # crew could not read whether it waits on work of its own
+        ("verify", "idle", [], None),  # its turn goes on, or crew can't read it
+        ("verify", "idle", [], BEFORE)])  # its turn ended before the stage began
+    def test_otherwise_it_has_not(self, stage, status, pending, over):
+        assert not plan.ended_turn(owed(stage), status, pending, over)
+
+    def test_a_start_crew_cannot_read_is_no_turn_ended_since(self):
+        assert not plan.ended_turn(owed("verify", start=None), "idle", [], AFTER)
 
 
 class TestMerge:

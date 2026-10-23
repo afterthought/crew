@@ -13,7 +13,12 @@
 # was none. `sluice submit main --check --head bolt/<bolt> --json`, a bolt's forecast against main, prints
 # $CREW_TEST_ROOT/sluice-check-<bolt, its / as ->.json while it exists, exiting 2 when its conflict is not null and 0
 # when it is, as sluice's forecast of a branch no worktree holds does (its ADR 0039); without that file it refuses
-# `--head` on standard error, exiting 64, as sluice 0.32.0, which has no such forecast, does. `sluice submit <branch>
+# `--head` on standard error, exiting 64, as sluice 0.32.0, which has no such forecast, does. As sluice 0.36.4 does, it
+# reads the branch where the policy at the host's own bolt/<bolt> routes it, the `remote` of its [branches."bolt/*"]
+# table, and refuses a branch that remote does not hold, `no branch bolt/<bolt> to forecast`, exiting 2: a legacy bolt
+# whose tip names origin before its landing pushes it there. `sluice submit main --check --worktree <path> --json`
+# forecasts that worktree's head, printing the same file for the branch it is on, or, without it, a forecast with no
+# conflict, and refuses a detached worktree as sluice does, exiting 2. `sluice submit <branch>
 # --no-wait --json` lands this worktree's head at once, as the stub wt-submit does, and prints {id, branch, ahead}; its
 # outcome waits for `sluice wait <id> --timeout <duration> --json`, which prints the submission's record, its state
 # landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; `sluice wait` of an id it never gave exits 1
@@ -45,6 +50,12 @@ common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
 case "$*" in
   submit\ main\ --check\ --head\ bolt/*\ --json)
     f=${CREW_TEST_ROOT:?}/sluice-check-${5//\//-}.json
+    remote=$(git show "refs/heads/$5:.config/sluice.toml" 2>/dev/null | awk '/^\[/ {on = ($0 == "[branches.\"bolt/*\"]")}
+      on && /^remote *= *"/ {sub(/^remote *= *"/, ""); sub(/".*/, ""); print; exit}')
+    if [[ -n $remote ]] && ! git ls-remote --exit-code "$remote" "refs/heads/$5" >/dev/null 2>&1; then
+      printf '{"error":{"kind":"refused","message":"no branch %s to forecast","next":["sluice overview"]}}\n' "$5"
+      exit 2
+    fi
     if [[ -e $f ]]; then
       cat "$f"
       [[ $(jq -r '.conflict == null' "$f") == true ]] && exit 0
@@ -52,6 +63,19 @@ case "$*" in
     fi
     printf "error: unexpected argument '--head' found\n\n  tip: to pass '--head' as a value, use '-- --head'\n\nUsage: sluice submit --check <BRANCH>\n\nFor more information, try '--help'.\n" >&2
     exit 64
+    ;;
+  submit\ main\ --check\ --worktree\ *\ --json)
+    branch=$(git -C "$5" symbolic-ref -q --short HEAD) || {
+      printf '{"error":{"kind":"refused","message":"submit from a branch: %s is detached","next":[]}}\n' "$5"
+      exit 2
+    }
+    f=${CREW_TEST_ROOT:?}/sluice-check-${branch//\//-}.json
+    if [[ -e $f ]]; then
+      cat "$f"
+      [[ $(jq -r '.conflict == null' "$f") == true ]] && exit 0
+      exit 2
+    fi
+    jq -nc --arg head "$(git -C "$5" rev-parse HEAD)" --arg onto "$(git rev-parse main)" '{conflict: null, head: $head, onto: $onto, ahead: []}'
     ;;
   submit\ *\ --no-wait\ --json)
     target=$2 here=$(git rev-parse --show-toplevel)

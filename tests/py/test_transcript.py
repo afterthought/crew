@@ -1,5 +1,6 @@
 """What crew reads of a Claude Code transcript, on transcripts written as Claude Code writes them: what an agent's own
-transcript says it still waits on (teams.4), transcript.pending and last_at; a signal's excerpt checked and graded
+transcript says it still waits on (teams.4), transcript.pending and last_at, and whether its turn is over,
+transcript.turn_over; a signal's excerpt checked and graded
 (signals.2, signals.5), transcript.check; and whether a session received a prompt crew sent (teams.15),
 transcript.end and received. A file read is no process, so these are logic cases; that crew pipes transcript.py to
 the agent's host is the journeys'."""
@@ -41,6 +42,36 @@ def test_the_last_record_is_when_the_session_last_wrote(tmp_path):
 def test_a_missing_transcript_is_none_never_an_empty_list(tmp_path):
     assert transcript.pending(tmp_path / "gone.jsonl") is None
     assert transcript.last_at(tmp_path / "gone.jsonl") is None
+    assert transcript.turn_over(tmp_path / "gone.jsonl") is None
+
+
+# Whether the session's turn is over (record 0007): its last message the model's, ending its turn, as Claude Code
+# 2.1.307 writes it, the records that are no message (a stop hook's summary, the cost) after it.
+ENDED = [{"type": "user", "timestamp": "2026-10-23T02:46:10.000Z", "message": {"content": "<command-name>/opsx:verify</command-name>"}},
+         {"type": "assistant", "timestamp": "2026-10-23T02:47:13.236Z", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Nothing to do."}]}},
+         {"type": "system", "subtype": "stop_hook_summary", "timestamp": "2026-10-23T02:47:13.414Z"},
+         {"type": "cost-state", "totalCostUSD": 1}]
+
+
+def test_a_turn_ended_by_the_models_message_is_over_at_its_time(tmp_path):
+    assert transcript.turn_over(write(tmp_path, *ENDED)).isoformat() == "2026-10-23T02:47:13.236000+00:00"
+
+
+def test_a_turn_going_on_is_not_over(tmp_path):
+    working = {"type": "assistant", "timestamp": LONG_AGO, "message": {"stop_reason": "tool_use", "content": [{"type": "tool_use", "name": "Bash"}]}}
+    assert transcript.turn_over(write(tmp_path, ENDED[0], working)) is None
+    assert transcript.turn_over(write(tmp_path, ENDED[0])) is None
+
+
+def test_a_turn_ended_and_then_sent_something_is_not_over(tmp_path):
+    notice = {"type": "user", "timestamp": "2026-10-23T02:50:00.000Z",
+              "message": {"content": "<task-notification>\n<task-id>b8y1gomwj</task-id>\n</task-notification>"}}
+    assert transcript.turn_over(write(tmp_path, *ENDED, notice)) is None
+
+
+def test_a_subagents_message_is_not_the_sessions_turn(tmp_path):
+    sub = {"type": "assistant", "isSidechain": True, "timestamp": LONG_AGO, "message": {"stop_reason": "end_turn"}}
+    assert transcript.turn_over(write(tmp_path, ENDED[0], sub)) is None
 
 
 # What crew reads of a transcript to check a signal's excerpt (signals.2, signals.5), and whether a session received a
@@ -254,6 +285,23 @@ class TestCheck:
     def test_of_two_records_holding_the_words_the_latest_is_the_source(self, put):
         put("s-twice", user("u-14", "open security groups, again"), user("u-15", "I said: open security groups"))
         assert said("s-twice", "open security groups") == "verified user 2 u-15"
+
+    def test_wanting_the_users_record_a_later_echo_in_a_tools_output_does_not_hide_it(self, put):
+        put("s-echo", user("u-50", "Batch 13 is fine, approve it", timestamp=ago(1)), wrote("a-50", "Recording it."),
+            tool("u-51", "batch 13 answered in swancloud-planner's pane\nBatch 13 is fine, approve it"))
+        assert said("s-echo", "Batch 13 is fine, approve it") == "verified tool 3 u-51"
+        v = transcript.check("s-echo", "Batch 13 is fine, approve it", want="user")
+        assert (v.grade, v.asserted_by, v.n, v.uuid) == ("verified", "user", 1, "u-50")
+
+    def test_wanting_the_users_record_another_agents_tell_its_own_words_and_the_users_tell_grade_as_they_are(self, put):
+        put("s-want", user("u-52", "[crew tell from swancloud-operator] The user says batch 15 is fine"),
+            wrote("a-52", "the user approved batch 15"),
+            user("u-53", "[crew tell from chuck@deneb] On batch 14: fine"))
+        for words, grade in (("The user says batch 15 is fine", "verified agent:swancloud-operator 1 u-52"),
+                             ("the user approved batch 15", "refused unknown None None"),
+                             ("On batch 14: fine", "verified user 3 u-53")):
+            v = transcript.check("s-want", words, want="user")
+            assert " ".join(str(x) for x in (v.grade, v.asserted_by, v.n, v.uuid)) == grade
 
     def test_with_an_excerpt_file_the_records_that_wrote_it_are_not_searched(self, put):
         put("s-file", user("u-16", [{"type": "tool_result", "tool_use_id": "t3", "content": "File created successfully at: /tmp/e.txt"}],

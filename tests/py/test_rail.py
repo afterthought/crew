@@ -358,6 +358,18 @@ class TestRecord:
         assert {"batch/1", "batch/2-2"} <= r["held"]["closed"]
         assert [x["key"] for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"] == ["batch/2-1", "batch/9"]
 
+    def test_a_batch_crew_recorded_read_in_its_session_has_no_row_and_its_card_held_elsewhere_is_left_as_a_stray(self):
+        """review-batches, "Sent with no card on the main level's host": batch 1's card is held on mac-studio, and crew
+        recorded it read on the box, so the rail no longer shows batch 1 nor raises its card; the older copy is open
+        with no row, for mac-studio's rail read."""
+        batch = {"Act": "review.batch", "Batch": "1", "Units": "zone-one:swb-2@abc1", "At": "2026-10-12T09:59:00Z", "On": []}
+        read = {"Act": "batch.close", "Key": "batch/1", "On": ["batch/1"], "By": "wldn-planner", "Host": BOX, "State": "read",
+                "Outcome": "Read; no notes", "At": "2026-10-12T10:05:00Z"}
+        r = self.read([batch, post("req_1", "batch/1"), read])
+        assert "batch/1" in r["held"]["closed"] and [c["card"] for c in r["cards"]] == ["req_1"]
+        assert not [x for x in rows(held={"wldn": r["held"]}) if x["group"] == "batches"]
+        assert plan.batch_facts(1, [batch, post("req_1", "batch/1"), read], "## zone-one (swb-2)\n\nIt zones.\n", {}) is None
+
     def test_a_card_its_owner_posts_again_under_a_key_replaces_the_older_but_another_agents_does_not(self):
         r = self.read([post("req_1", "proposal/1"), post("req_2", "proposal/1", minutes=1), post("req_9", "proposal/1", by="wldn-design", minutes=2)])
         assert [c["card"] for c in r["cards"]] == ["req_2", "req_9"]
@@ -391,6 +403,25 @@ class TestRecord:
         r = self.read([made, batch, post("req_8", "batch/8", minutes=11), post("req_8", "batch/8", act="card.close", minutes=12)])
         assert r["held"]["unanswered"] == {}
 
+    def test_a_batch_answered_in_a_pane_has_no_row_and_the_bolt_it_held_is_offered_for_landing_as_after_a_tap(self):
+        """review-batches, "The batch answered in a pane": batch 8 is apex-zones' only unanswered batch, and the user
+        answered it in the planner's pane, its card still open on another host."""
+        made = {"Act": "stage.end", "Ended": "delivered", "On": ["stage/zone-one/construct", "unit/zone-one"], "Delivered": "unit/zone-one@abc1",
+                "At": "2026-10-12T10:00:00Z"}
+        batch = {"Act": "review.batch", "Batch": "8", "Units": "zone-one:swb-2@abc1", "At": "2026-10-12T10:10:00Z", "On": []}
+        answer = {"Act": "batch.answer", "On": ["batch/8"], "Key": "batch/8", "Batch": "8", "Chars": "17", "By": "wldn-planner",
+                  "From": ["session/s-1/u-1"], "At": "2026-10-12T10:20:00Z"}
+        held = self.read([made, batch, post("req_8", "batch/8", minutes=11)])["held"]
+        land, = [x for x in rows(held={"wldn": held}) if x["group"] == "land"]
+        assert land["what"][1:] == ["apex-zones, swb-2 on chuck-herdr-alpha: lands once you have answered batch 8"] and land["cmds"] == []
+        r = self.read([made, batch, post("req_8", "batch/8", minutes=11), answer])
+        assert ([c["card"] for c in r["cards"]], r["held"]["unanswered"]) == (["req_8"], {})
+        rs = rows(held={"wldn": r["held"]})
+        assert not [x for x in rs if x["group"] == "batches"]
+        land, = [x for x in rs if x["group"] == "land"]
+        assert land["what"][1:] == ["apex-zones, swb-2 on chuck-herdr-alpha: can land"] and land["cmds"] == [
+            ("answer", 'crew tell wldn-ops "Land apex-zones."')]
+
 
 def card(key, cid, by, host="mac-studio", minutes=0):
     return dict(label="wldn", card=cid, key=key, on=cards.row_object(key or "") or f"agent/{by}", by=by, host=host,
@@ -410,8 +441,9 @@ OWNERS = {"proposal/4": ("wldn-planner", "mac-studio"), "deploy/dev": ("wldn-ops
 
 
 class TestSweepJudged:
-    def judged(self, rows=(), cards_=(), entries=(), blind=(), kits=(), kit_of=None):
-        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind), NOW, kits=kits, kit_of=kit_of)
+    def judged(self, rows=(), cards_=(), entries=(), blind=(), proposed=(4,), kits=(), kit_of=None):
+        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind),
+                                 None if proposed is None else set(proposed), NOW, kits=kits, kit_of=kit_of)
 
     def test_a_rows_card_whose_row_is_gone_is_closed_with_its_events_outcome_or_withdrawn_with_why(self):
         p4, y = card("proposal/4", "req_p4", "wldn-planner"), card("land/y", "req_l1", "swb-1-conductor")
@@ -433,6 +465,14 @@ class TestSweepJudged:
     def test_why_a_rows_card_has_no_row_is_read_from_the_run_record(self, key, entries, why):
         assert plan.row_gone(key, entries) == why
 
+    def test_a_batch_card_held_here_whose_batch_was_answered_in_a_pane_elsewhere_is_closed_answered(self):
+        """review-batches, "The card on a host the main level has left": batch 13's card was posted from mac-studio, and
+        the planner answered it in its pane on another host."""
+        c = card("batch/13", "req_13", "wldn-planner")
+        answer = did("batch.answer", On=["batch/13"], Key="batch/13", Batch="13", Chars="28", From=["session/s-1/u-1"])
+        j = self.judged(cards_=[c], entries=[did("review.batch", 60, Batch="13", Units="x1:swb-1@aaa1", On=[]), answer])
+        assert j["gone"] == [(c, f"Answered in wldn-planner's pane at {iso(30)[11:16]}Z", None)]
+
     def test_a_deploys_card_whose_word_stands_is_left_for_its_deploys_end_to_close_and_listed_as_no_stray(self):
         d = card("deploy/dev", "req_d1", "wldn-ops")
         word = [did("ops.offer", On=["env/dev"], Head="a" * 40, Base="none"), did("ops.approve", On=["env/dev"], Head="a" * 40)]
@@ -445,7 +485,8 @@ class TestSweepJudged:
     def test_only_the_cards_posted_on_this_host_are_judged_and_a_decision_records_only_once_it_is_settled(self):
         there = card("proposal/4", "req_p4", "wldn-planner", host=BOX)
         rec = card("record/atlas-kit/0021", "req_r1", "wldn-design")
-        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
+        assert self.judged(cards_=[there, rec]) == {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": [],
+                                                    "unread": []}
         proposed = [did("record.proposed", On=["record/atlas-kit/0021"], Commit=["WilldanGroup/atlas-kit@" + "a" * 40], By="wldn-design")]
         assert self.judged(cards_=[rec], entries=proposed)["gone"] == []
 
@@ -488,13 +529,173 @@ class TestSweepJudged:
         recent = [did("card.close", 5, Card="req_p4", Refused="Pending You refused the close: Too many requests."),
                   did("card.post", 5, Key="deploy/dev", Refused="Pending You refused post_request: x")]
         assert self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=recent) == {"gone": [], "questions": [], "held": [], "none": [],
-                                                                                                "settled": []}
+                                                                                                "again": [], "settled": [], "unread": []}
         old = [dict(e, At=iso(plan.CARD_RETRY // 60 + 1)) for e in recent]
         j = self.judged(rows=[row("deploy/dev", "operations")], cards_=[p4], entries=old)
         assert ([c for c, *_ in j["gone"]], j["none"]) == ([p4], [row("deploy/dev", "operations")])
 
+    # Whether a card stands without its reading, and was last tried ten minutes ago or more (card-sessions "The rail's
+    # read tries a reading its card stands without").
+    UNREAD = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+
+    def test_a_card_posted_without_its_reading_stands_so_and_is_due_a_try_ten_minutes_on(self):
+        posted = [did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD)]
+        assert plan.reading_unread(posted, "batch/3", "req_b3", NOW)
+        assert not plan.reading_unread([dict(posted[0], At=iso(5))], "batch/3", "req_b3", NOW)
+        assert plan.reading_unread([dict(posted[0], At=iso(5))], "batch/3", "req_b3")
+        assert not plan.reading_unread(posted, "batch/3", "req_b9", NOW)
+
+    def test_a_later_change_carrying_the_link_clears_it(self):
+        entries = [did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD), did("card.update", 15, Key="batch/3", Card="req_b3")]
+        assert not plan.reading_unread(entries, "batch/3", "req_b3", NOW) and not plan.reading_unread(entries, "batch/3", "req_b3")
+        assert plan.reading_unread(entries + [did("card.update", 12, Key="batch/3", Card="req_b3", Unread=self.UNREAD)], "batch/3", "req_b3", NOW)
+
+    def test_a_refused_try_restarts_the_ten_minutes_and_a_done_one_changes_nothing(self):
+        posted = did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD)
+        tried = did("card.reading", 5, Key="batch/3", Card="req_b3", Refused=self.UNREAD)
+        assert not plan.reading_unread([posted, tried], "batch/3", "req_b3", NOW)
+        assert plan.reading_unread([posted, dict(tried, At=iso(11))], "batch/3", "req_b3", NOW)
+        assert plan.reading_unread([posted, did("card.reading", 5, Key="batch/3", Card="req_b3")], "batch/3", "req_b3", NOW)
+        opened = did("card.post", 20, Key="batch/3", Card="req_b3")
+        assert plan.reading_unread([opened, dict(tried, At=iso(11))], "batch/3", "req_b3", NOW)
+
+    def test_a_refused_post_or_change_changes_nothing(self):
+        posted = did("card.post", 20, Key="batch/3", Card="req_b3", Unread=self.UNREAD)
+        refused = did("card.update", 5, Key="batch/3", Card="req_b3", Refused="Pending You refused update_request: x")
+        assert plan.reading_unread([posted, refused], "batch/3", "req_b3", NOW)
+        assert not plan.reading_unread([did("card.post", 20, Key="batch/3", Card="req_b3"), dict(refused, Unread=self.UNREAD)],
+                                       "batch/3", "req_b3")
+
+    def test_a_batchs_a_proposals_or_a_landings_card_standing_without_its_reading_ten_minutes_is_tried_and_no_other_card(self):
+        """card-sessions "A landing card raised without its reading" and "A landing card on another host"."""
+        b3, p4, y = card("batch/3", "req_b3", "wldn-planner"), card("proposal/4", "req_p4", "wldn-planner"), card("land/y", "req_l1", "swb-1-conductor")
+        d = card("deploy/dev", "req_d1", "wldn-ops")
+        unread = [did("card.post", 20, Key=c["key"], Card=c["card"], Unread=self.UNREAD) for c in (b3, p4, y, d)]
+        rows_ = [row("batch/3", "batches"), row("proposal/4"), row("land/y", "land"), row("deploy/dev", "operations")]
+        assert self.judged(rows=rows_, cards_=[b3, p4, y, d], entries=unread)["unread"] == [(b3, rows_[0]), (p4, rows_[1]), (y, rows_[2])]
+        assert self.judged(rows=rows_, cards_=[b3, p4, y, d], entries=[dict(e, At=iso(5)) for e in unread])["unread"] == []
+        assert self.judged(rows=rows_, cards_=[dict(b3, host=BOX), dict(y, host=BOX)], entries=unread)["unread"] == []
+        tried = did("card.reading", 5, Key="land/y", Card="req_l1", Refused=self.UNREAD)
+        assert self.judged(rows=rows_, cards_=[y], entries=unread + [tried])["unread"] == []
+
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
+
+    def test_a_proposals_card_is_withdrawn_only_on_a_plan_read_at_or_past_the_commit_it_was_raised_at(self):
+        """A rail read that fetched the plan before the planner's proposal 5 was written, and read the planner's
+        host's card.post for it after: the card has no row on that read, which holds no proposal 5, so it is left,
+        its proposal open; a read that holds proposal 5 with no row for it withdraws it."""
+        p5 = card("proposal/5", "req_p5", "wldn-planner")
+        assert self.judged(cards_=[p5], proposed={1, 2, 3, 4}) == {"gone": [], "questions": [], "held": [], "none": [], "again": [],
+                                                                    "settled": [], "unread": []}
+        assert self.judged(cards_=[p5], proposed=None)["gone"] == []
+        assert self.judged(cards_=[p5], proposed={4, 5})["gone"] == [(p5, None, "its proposal is closed")]
+        assert self.judged(rows=[row("proposal/5")], cards_=[p5], proposed={4, 5})["held"] == [(p5, row("proposal/5"))]
+
+    @pytest.mark.parametrize("key, proposed, older", [
+        ("proposal/5", {4}, True), ("proposal/5", None, True), ("proposal/5", {4, 5, 6}, False),
+        ("land/y", set(), False), ("batch/5", None, False), (None, None, False)])
+    def test_a_plan_read_is_older_than_a_proposals_card_when_it_holds_no_proposal_by_its_keys_number(self, key, proposed, older):
+        assert plan.older_than_card(key, proposed) is older
+
+    MOVED = {"batch/13": ("wldn-planner", BOX), "proposal/13": ("wldn-planner", BOX), f"land/{KIT}": ("wldn-ops", BOX),
+             "deploy/dev": ("wldn-ops", BOX), "op/dev/2": ("wldn-ops", BOX)}
+    B13 = did("card.post", 60, Card="req_b13", Key="batch/13", On=["batch/13"])
+    LOST = did("card.close", 50, Card="req_b13", Key="batch/13", On=["batch/13"], State="lost", Outcome="lost to its owner: Not found")
+
+    def moved(self, here, entries, cards_=(), rows_=(row("batch/13", "batches"),)):
+        """The sweep's judgment of batch 13, the partition's main level now on the box, read on here."""
+        return plan.sweep_judged(here, list(rows_), list(cards_), list(entries), self.MOVED, set(), {13}, NOW)
+
+    def test_a_batch_whose_card_is_held_on_another_host_is_posted_again_where_the_main_level_runs_and_nowhere_else(self):
+        """rail-cards, "The main level moved to another host" and "Read on another host": batch 13's card, posted on
+        mac-studio and never closed, is open there, and the main level runs on the box."""
+        b13, r = card("batch/13", "req_b13", "wldn-planner"), row("batch/13", "batches")
+        j = self.moved(BOX, [self.B13], [b13])
+        assert (j["again"], j["none"], j["held"], j["gone"]) == ([(r, "req_b13")], [], [], [])
+        j = self.moved("mac-studio", [self.B13], [b13])
+        assert (j["again"], j["none"]) == ([], [])
+
+    def test_a_batch_whose_card_was_lost_to_the_planner_on_another_host_is_posted_again_and_not_as_a_row_with_none(self):
+        """rail-cards, "Lost to the planner on the host it was posted from"."""
+        r = row("batch/13", "batches")
+        j = self.moved(BOX, [self.B13, self.LOST])
+        assert (j["again"], j["none"]) == ([(r, "req_b13")], [])
+        newer = dict(did("card.post", 40, Card="req_b14", Key="batch/13", On=["batch/13"]), Host=BOX)
+        j = self.moved(BOX, [self.B13, self.LOST, newer], [card("batch/13", "req_b14", "wldn-planner", host=BOX)])
+        assert (j["again"], j["none"], j["held"]) == ([], [], [(card("batch/13", "req_b14", "wldn-planner", host=BOX), r)])
+
+    # Every other row's card held or lost so, each in its owner's name (rail-cards, "A proposal's card left on the host
+    # the main level left", "A deploy's and a step's card left behind", "A landings card left on the host the main level
+    # left").
+    STRANDED = [("proposal/13", "proposals", "wldn-planner"), (f"land/{KIT}", "land", "wldn-ops"),
+                ("deploy/dev", "operations", "wldn-ops"), ("op/dev/2", "operations", "wldn-ops")]
+
+    @pytest.mark.parametrize("key, group, by", STRANDED)
+    def test_a_rows_card_held_on_another_host_is_posted_again_where_its_owner_runs(self, key, group, by):
+        r, cid = row(key, group), "req_" + key.replace("/", "_")
+        held = dict(self.B13, Card=cid, Key=key, On=[cards.row_object(key)], By=by)
+        j = self.moved(BOX, [held], [card(key, cid, by)], [r])
+        assert (j["again"], j["none"], j["held"], j["gone"]) == ([(r, cid)], [], [], [])
+
+    @pytest.mark.parametrize("key, group, by", STRANDED)
+    def test_a_rows_card_lost_to_its_owner_on_another_host_is_posted_again_and_not_as_a_row_with_none(self, key, group, by):
+        r, cid = row(key, group), "req_" + key.replace("/", "_")
+        held = dict(self.B13, Card=cid, Key=key, On=[cards.row_object(key)], By=by)
+        j = self.moved(BOX, [held, dict(self.LOST, Card=cid, Key=key, On=[cards.row_object(key)], By=by)], rows_=[r])
+        assert (j["again"], j["none"]) == ([(r, cid)], [])
+
+    def test_a_rows_card_held_on_its_owners_own_host_is_posted_again_by_no_read_on_another(self):
+        """rail-cards, "Read on another host": every row's owner runs on mac-studio, where each card was posted, and the
+        rail is read on the box."""
+        rows_ = [row(k, g) for k, g, _ in self.STRANDED] + [row("batch/13", "batches")]
+        entries = [dict(self.B13, Card="req_" + k.replace("/", "_"), Key=k, On=[cards.row_object(k)], By=by) for k, _, by in self.STRANDED]
+        lost = [dict(self.LOST, Card=e["Card"], Key=e["Key"], On=e["On"], By=e["By"]) for e in entries]
+        home = {k: (by, "mac-studio") for k, (by, _) in self.MOVED.items()}
+        for es in (entries + [self.B13], entries + lost + [self.B13, self.LOST]):
+            j = plan.sweep_judged(BOX, rows_, [], es, home, set(), {13}, NOW)
+            assert (j["again"], j["none"]) == ([], [])
+
+    def test_a_batch_whose_last_post_was_refused_lately_is_left_for_a_later_read(self):
+        refused = did("card.post", 5, Key="batch/13", On=["batch/13"], Refused="Pending You refused post_request: x")
+        assert self.moved(BOX, [self.B13, refused], [card("batch/13", "req_b13", "wldn-planner")])["again"] == []
+        assert self.moved(BOX, [self.B13, dict(refused, At=iso(plan.CARD_RETRY // 60 + 1))])["again"] == [(row("batch/13", "batches"), "req_b13")]
+
+    # Record 21's card, posted from mac-studio in the design agent's name once crew record recorded it proposed there.
+    R21 = [did("record.proposed", 70, On=["record/atlas-kit/0021"], By="wldn-design", Commit=["WilldanGroup/atlas-kit@" + "a" * 40]),
+           did("card.post", 60, Card="req_r21", Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], By="wldn-design")]
+    RECORD = dict(label="wldn", key="record/atlas-kit/0021", group="records", alternatives=False)
+
+    def recorded(self, here, entries, cards_=()):
+        return plan.sweep_judged(here, [], list(cards_), list(entries), {}, set(), set(), NOW, design=("wldn-design", BOX))["again"]
+
+    def test_a_still_proposed_records_card_held_on_another_host_is_posted_again_where_the_design_agent_runs(self):
+        """rail-cards, "A record's card left on the host the main level left"."""
+        assert self.recorded(BOX, self.R21, [card("record/atlas-kit/0021", "req_r21", "wldn-design")]) == [(self.RECORD, "req_r21")]
+        lost = did("card.close", 50, Card="req_r21", Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], State="lost", By="wldn-design")
+        assert self.recorded(BOX, self.R21 + [lost]) == [(self.RECORD, "req_r21")]
+
+    def test_a_record_raised_with_alternatives_is_judged_so(self):
+        """rail-cards, "A record raised with alternatives"."""
+        raised = [dict(self.R21[0], Form="alternatives"), self.R21[1]]
+        assert self.recorded(BOX, raised) == [(dict(self.RECORD, alternatives=True), "req_r21")]
+
+    @pytest.mark.parametrize("then", [
+        did("record.accepted", 40, On=["record/atlas-kit/0021"], By="wldn-design", Commit=["WilldanGroup/atlas-kit@" + "b" * 40]),
+        did("record.rejected", 40, On=["record/atlas-kit/0021"], By="wldn-design", Commit=[]),
+        did("record.proposed", 40, On=["record/atlas-kit/0021"], By="wldn-design", State="settled in the pane"),
+        did("card.post", 5, Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], By="wldn-design", Refused="Pending You refused post_request: x"),
+        dict(did("card.post", 40, Card="req_r22", Key="record/atlas-kit/0021", On=["record/atlas-kit/0021"], By="wldn-design"), Host=BOX)])
+    def test_a_record_settled_since_settled_in_the_pane_posted_lately_or_posted_here_is_not(self, then):
+        """rail-cards, "A record settled since"."""
+        assert self.recorded(BOX, self.R21 + [then]) == []
+
+    def test_a_record_with_no_status_recorded_under_another_key_or_read_on_another_host_is_not(self):
+        assert self.recorded(BOX, self.R21[1:]) == []
+        old = [dict(e, Key="record/atlas-kit/0021/5eba218") if e["Act"] == "card.post" else e for e in self.R21]
+        assert self.recorded(BOX, old) == []
+        assert self.recorded("mac-studio", self.R21) == []
+        assert plan.sweep_judged(BOX, [], [], self.R21, {}, set(), set(), NOW)["again"] == []
 
     def test_an_old_card_of_a_bolts_own_is_withdrawn_as_a_row_of_its_kits_card(self):
         """rail-cards "A card from before": the conductor's land/y, swept on its host, while y waits to land."""
@@ -549,9 +750,9 @@ class Py:
 class Acts:
     """A stand-in for what the sweep reaches: Pending You, this host's run record, herdr's listing and the raises."""
 
-    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None, here="mac-studio", writes=True):
+    def __init__(self, answers=None, entries=(), listed=None, raises=None, opening=None, here="mac-studio", writes=True, readings=None):
         self.answers, self.held, self.listing, self.raises, self.opening = dict(answers or {}), list(entries), listed or {}, raises or {}, opening
-        self.here, self.writes = here, writes
+        self.here, self.writes, self.readings = here, writes, readings or {}
         self.calls, self.emitted, self.raised = [], [], []
 
     def bridge(self, name, later, held=None):
@@ -589,6 +790,15 @@ class Acts:
     def raise_of(self, kind):
         return self.raises.get(kind)
 
+    def reading_again(self, label, key):
+        """The reading tried again, as readings gives it for the key: its link, None for a kit's landings card's, whose
+        links are its rows', or a refusal's words."""
+        self.raised.append(("reading", key))
+        got = self.readings[key]
+        if got is None or got.startswith("http"):
+            return got, None, True
+        raise crew.Refusal(got)
+
     def session(self, label, key, facts):
         return None
 
@@ -599,11 +809,12 @@ class Acts:
         return None
 
 
-def swept(rows_=(), cards_=(), entries=(), unread=None, **kw):
-    """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards."""
+def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), **kw):
+    """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards, its
+    plan holding the proposals numbered proposed."""
     fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
     read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=list(rows_), cards=list(cards_),
-                unread=unread or {}, logs={"wldn": list(entries)})
+                unread=unread or {}, logs={"wldn": list(entries)}, proposed={"wldn": set(proposed)})
     acts = Acts(entries=[{"Act": "card.post", "Key": c["key"], "By": c["by"], "Card": c["card"]} for c in cards_], **kw)
     return plan.sweep_cards(fleet, read, acts), acts
 
@@ -630,6 +841,15 @@ class TestSweep:
         assert acts.calls[2] == ("wldn-planner", "cancel_request", {"requestId": "req_p4", "name": "wldn-planner", "reason": "its proposal was applied"})
         assert [(e["Act"], e["Card"], e["State"], e["Outcome"]) for e in acts.emitted] == [("card.close", "req_p4", "withdrawn", "its proposal was applied")]
         assert out["done"] == [dict(label="wldn", key="proposal/4", card="req_p4", by="wldn-planner", did="closed", words="its proposal was applied", new=None)]
+
+    def test_a_fresh_proposals_card_on_a_plan_read_older_than_it_is_neither_asked_after_nor_withdrawn(self):
+        """The read's plan was fetched before proposal 6 was written, and the planner's card.post for it was read
+        from its host after: Pending You is asked nothing and the card stays open, for a read that holds it."""
+        p6 = card("proposal/6", "req_p6", "wldn-planner")
+        out, acts = swept(cards_=[p6], proposed=(4, 5))
+        assert (out, acts.calls, acts.emitted) == ({"done": [], "unswept": []}, [], [])
+        out, acts = swept(cards_=[p6], proposed=(4, 5, 6))
+        assert out["done"] == [dict(label="wldn", key="proposal/6", card="req_p6", by="wldn-planner", did="withdrawn", words="its proposal is closed", new=None)]
 
     def test_a_card_whose_bolt_was_dropped_is_withdrawn(self):
         y = card("land/y", "req_l1", "swb-1-conductor")
@@ -667,6 +887,24 @@ class TestSweep:
         assert [(d["card"], d["did"], d["words"]) for d in out["done"]] == [
             ("req_q2", "left", "whether wldn-ops still runs can't be told: herdr's agent list in session wldn-3 failed: x")]
         assert acts.emitted == [] and {n for n, *_ in acts.calls} == {"crew"}
+
+    def test_a_conductor_herdr_lists_by_no_name_is_kept(self):
+        """swc-3-conductor's question on deneb, 2026-10-23: herdr had dropped its name, its pane still holding it, and
+        its card was withdrawn within a minute as the conductor's ending (signal 2026-10-23-swc-3-conductor-8556b697/01)."""
+        q = card("ask/swc-3-conductor/q", "req_q1", "swc-3-conductor")
+        unnamed = {"pane_id": "w7:p1", "agent": "claude", "agent_status": "done"}
+        out, acts = swept(cards_=[q], listed={"swc-3-conductor": crew.pane_holds("swc-3-conductor", "w7:p1", {"pane_id": "w7:p1"}, unnamed)},
+                          answers={"get_request": (None, "This is swc-3-conductor's card; leave it.")})
+        assert (out["done"], acts.emitted) == ([], [])
+        assert {n for n, *_ in acts.calls} == {"crew"}
+
+    def test_a_question_whose_askers_pane_crew_cant_read_is_left_saying_why(self):
+        q = card("ask/swc-3-conductor/q", "req_q1", "swc-3-conductor")
+        out, acts = swept(cards_=[q], listed={"swc-3-conductor": crew.pane_holds("swc-3-conductor", "w7:p1", None, None)},
+                          answers={"get_request": (None, "This is swc-3-conductor's card; leave it.")})
+        assert [(d["did"], d["words"]) for d in out["done"]] == [
+            ("left", "whether swc-3-conductor still runs can't be told: herdr lists no pane w7:p1, which crew keeps for swc-3-conductor")]
+        assert acts.emitted == []
 
     def test_a_rows_card_pending_you_no_longer_finds_is_posted_again_through_its_kinds_raise_saying_the_older_copy_is_dead(self):
         """The rail-cards scenario of a lost operations card: deploy/dev's card reads not found while the offer waits;
@@ -733,10 +971,218 @@ class TestSweep:
         out, _ = swept(rows_=[row("proposal/5")], raises={"proposal": raise_proposal})
         assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("proposal/5", "left", "its raise refused: proposal 5's plan can't be read")]
 
+    # The rail's read tries a reading its card stands without (card-sessions).
+    UNREAD = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+    MINE = "This is wldn-planner's card; leave it."
+
+    def unread(self, *cs, minutes=20):
+        return [did("card.post", minutes, Key=c["key"], Card=c["card"], Unread=self.UNREAD) for c in cs]
+
+    def owners(self, status):
+        """Pending You's answer to get_request: crew's own name refused the planner's card, the planner shown it with
+        status."""
+        return lambda args: (None, self.MINE) if args["name"] == "crew" else ({"status": status, "version": 2}, None)
+
+    def test_a_waiting_batch_card_posted_without_its_reading_long_ago_is_tried_and_listed_opened(self):
+        """card-sessions "A batch card raised without its reading": its waiting is read in the planner's name."""
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3),
+                          answers={"get_request": self.owners("pending")}, readings={"batch/3": self.LINK})
+        assert acts.raised == [("reading", "batch/3")]
+        assert [(n, t) for n, t, _ in acts.calls] == [("crew", "get_request"), ("wldn-planner", "get_request")]
+        assert out["done"] == [dict(label="wldn", key="batch/3", card="req_b3", by="wldn-planner", did="opened",
+                                    words=f"its reading opened at {self.LINK}", new=None)]
+        assert f"  batch/3 (wldn), wldn-planner's req_b3: opened: its reading opened at {self.LINK}" in text(
+            [row("batch/3", "batches")], cards=[b3], swept=out)
+
+    def test_a_waiting_landings_card_posted_without_a_rows_reading_long_ago_is_tried_and_listed_opened(self):
+        """card-sessions "A landings card raised without a row's reading": its waiting is read in main-level ops's name."""
+        k = card(f"land/{KIT}", "req_k1", "wldn-ops")
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], cards_=[k], entries=self.unread(k),
+                          answers={"get_request": self.owners("pending")}, readings={f"land/{KIT}": None})
+        assert acts.raised == [("reading", f"land/{KIT}")]
+        assert [(n, t) for n, t, _ in acts.calls] == [("crew", "get_request"), ("wldn-ops", "get_request")]
+        assert out["done"] == [dict(label="wldn", key=f"land/{KIT}", card="req_k1", by="wldn-ops", did="opened",
+                                    words="its rows' readings opened", new=None)]
+
+    def test_a_landings_cards_try_that_refuses_is_listed_left_with_why(self):
+        """card-sessions "A landings card's try that fails is left for later"."""
+        k = card(f"land/{KIT}", "req_k1", "wldn-ops")
+        why = "y: plannotator is not on this host's path, and a card's session is a plannotator session"
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], cards_=[k], entries=self.unread(k),
+                          answers={"get_request": self.owners("pending")}, readings={f"land/{KIT}": why})
+        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [(f"land/{KIT}", "left", f"its reading could not be opened: {why}")]
+
+    def test_the_sweeps_try_of_a_landings_card_is_its_raise_and_refused_while_a_row_still_stands_unread(self, monkeypatch):
+        """A kit's landings card's key is tried by raising it again with RELINKED as its note, which tries each row's
+        reading on its team's host; refused in the words its card is left standing without one in; every other key as
+        before (reading_again)."""
+        seen, posted = [], []
+        monkeypatch.setattr(plan, "raise_landings", lambda fleet, label, kit, acts, note=None: seen.append(("land", kit, note)))
+        monkeypatch.setattr(plan, "reading_again", lambda fleet, label, key, acts: seen.append(("again", key)) or (self.LINK, False, True))
+        monkeypatch.setattr(plan.SweepActs, "entries", lambda self, label: posted)
+        acts = plan.SweepActs(FLEET)
+        posted[:] = [did("card.post", 5, Key=f"land/{KIT}", Card="req_k1", By="wldn-ops")]
+        assert acts.reading_again("wldn", f"land/{KIT}") == (None, False, True)
+        posted.append(did("card.update", 1, Key=f"land/{KIT}", Card="req_k1", By="wldn-ops", Unread="y: it still will not open"))
+        with pytest.raises(crew.Refusal, match="^y: it still will not open$"):
+            acts.reading_again("wldn", f"land/{KIT}")
+        acts.reading_again("wldn", "batch/3")
+        assert seen == [("land", KIT, plan.RELINKED), ("land", KIT, plan.RELINKED), ("again", "batch/3")]
+
+    def test_an_answered_landings_card_is_not_tried(self):
+        """card-sessions "A card the user has answered", for a kit's landings card."""
+        k = card(f"land/{KIT}", "req_k1", "wldn-ops")
+        out, acts = swept(rows_=[row(f"land/{KIT}", "land")], cards_=[k], entries=self.unread(k),
+                          answers={"get_request": self.owners("answered")}, readings={f"land/{KIT}": None})
+        assert acts.raised == [] and out["done"] == []
+
+    def test_a_try_that_refuses_is_listed_left_with_why(self):
+        """card-sessions "A try that fails is left for later": the next read's judgment waits on its refused entry."""
+        p4 = card("proposal/4", "req_p4", "wldn-planner")
+        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
+        out, acts = swept(rows_=[row("proposal/4")], cards_=[p4], entries=self.unread(p4),
+                          answers={"get_request": self.owners("pending")}, readings={"proposal/4": why})
+        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("proposal/4", "left", f"its reading could not be opened: {why}")]
+
+    def test_an_answered_card_is_not_tried(self):
+        """card-sessions "A card the user has answered"."""
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3),
+                          answers={"get_request": self.owners("answered")}, readings={"batch/3": self.LINK})
+        assert acts.raised == [] and out["done"] == []
+
+    def test_a_card_whose_waiting_cant_be_read_is_left_saying_why(self):
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3),
+                          answers={"get_request": lambda args: (None, self.MINE) if args["name"] == "crew" else (None, "Too many requests.")})
+        assert acts.raised == [] and [(d["did"], d["words"]) for d in out["done"]] == [
+            ("left", "whether it waits on the user can't be read: Pending You refused get_request: Too many requests.")]
+
+    def test_a_landing_card_on_another_host_and_a_card_tried_lately_are_not_tried(self):
+        """card-sessions "A landing card on another host" and "A try that fails is left for later"."""
+        y = card("land/y", "req_l1", "swb-1-conductor", host=BOX)
+        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
+                          answers={"get_request": (None, "This is swb-1-conductor's card; leave it.")}, readings={"land/y": self.LINK})
+        assert acts.raised == [] and out["done"] == []
+        b3 = card("batch/3", "req_b3", "wldn-planner")
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3, minutes=5),
+                          answers={"get_request": self.owners("pending")}, readings={"batch/3": self.LINK})
+        assert acts.raised == [] and out["done"] == []
+
+    def test_a_lost_card_standing_without_its_reading_is_posted_again_through_its_raise_and_not_tried(self):
+        """Its raise tries the reading twice itself (card_built)."""
+        b3, seen = card("batch/3", "req_b3", "wldn-planner"), []
+
+        def raise_batch(fleet, r, acts=None):
+            seen.append(r["key"])
+            return "req_b4"
+        out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3), raises={"batch": raise_batch},
+                          answers={"get_request": NOT_FOUND}, readings={"batch/3": self.LINK})
+        assert seen == ["batch/3"] and acts.raised == []
+        assert [(d["did"], d["words"]) for d in out["done"]] == [("lost", "posted again as req_b4")]
+
     def test_a_host_not_signed_in_changes_nothing_and_says_so(self):
         said = "this host can't ask through Pending You: it is not signed in. The user signs it in with pendingyou-signin. " + plan.SWEEP_LATER
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], entries=[did("plan.approve", On=["proposal/4"])], opening=said)
         assert out == {"done": [], "unswept": [dict(label="wldn", why=said)]} and acts.emitted == []
+
+    def test_a_batchs_card_held_on_another_host_is_posted_again_through_its_raise_and_never_asked_after_from_here(self):
+        """rail-cards, "The main level moved to another host": batch 13's card is open on the box, whose sign-in this
+        host's does not reach, and the partition's main level runs here; its raise, handed the older copy, posts it
+        again, and the rail takes the new card as the row's."""
+        seen = []
+
+        def raise_batch(fleet, r, acts=None):
+            seen.append(r)
+            return "req_b14"
+        b13 = card("batch/13", "req_b13", "wldn-planner", host=BOX)
+        held = [dict(did("card.post", 60, Card="req_b13", Key="batch/13", On=["batch/13"]), Host=BOX)]
+        out, acts = swept(rows_=[row("batch/13", "batches")], cards_=[b13], entries=held, raises={"batch": raise_batch})
+        assert [(r["key"], r.get("dead")) for r in seen] == [("batch/13", "req_b13")]
+        assert out == {"done": [dict(label="wldn", key="batch/13", card="req_b13", by="wldn-planner", did="lost",
+                                     words=f"held on {BOX}, which this host's sign-in does not reach: posted again as req_b14", new="req_b14")],
+                       "unswept": []}
+        assert acts.emitted == [] and acts.calls == []
+        assert [(c["card"], c["host"], c["key"]) for c in plan.swept_cards([b13], out, "mac-studio", NOW)] == [("req_b14", "mac-studio", "batch/13")]
+
+    def test_a_batchs_card_lost_to_the_planner_elsewhere_is_said_lost_once_posted_again_and_left_when_its_raise_posts_none(self):
+        lost = [dict(did("card.post", 60, Card="req_b13", Key="batch/13", On=["batch/13"]), Host=BOX),
+                dict(did("card.close", 50, Card="req_b13", Key="batch/13", On=["batch/13"], State="lost"), Host=BOX)]
+        out, _ = swept(rows_=[row("batch/13", "batches")], entries=lost, raises={"batch": lambda fleet, r, acts=None: "req_b14"})
+        assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [
+            ("req_b13", "lost", "lost to wldn-planner: posted again as req_b14", "req_b14")]
+        out, _ = swept(rows_=[row("batch/13", "batches")], entries=lost, raises={"batch": lambda fleet, r, acts=None: None})
+        assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [
+            ("req_b13", "left", "its batch no longer waits to be read", None)]
+
+    # Every other row's card held on a host its owner's sign-in does not reach: a proposal's, a deploy's and a step's
+    # where the main level runs, here mac-studio, and a landing's on its team's host, the box.
+    STRANDED = [("proposal/13", "proposals", "proposal", "wldn-planner", "mac-studio", BOX),
+                ("deploy/dev", "operations", "deploy", "wldn-ops", "mac-studio", BOX),
+                ("op/dev/2", "operations", "op", "wldn-ops", "mac-studio", BOX),
+                (f"land/{KIT}", "land", "land", "wldn-ops", "mac-studio", BOX)]
+
+    @pytest.mark.parametrize("key, group, kind, by, here, there", STRANDED)
+    def test_a_rows_card_held_on_another_host_is_posted_again_through_its_kinds_raise_handed_the_older_copy(self, key, group, kind, by, here, there):
+        """rail-cards, "A proposal's card left on the host the main level left", "A deploy's and a step's card left
+        behind" and "A landings card left on the host the main level left"."""
+        seen = []
+
+        def raise_(fleet, r, acts=None):
+            seen.append((r["key"], r.get("dead")))
+            return "req_new"
+        held = [dict(did("card.post", 60, Card="req_old", Key=key, On=[cards.row_object(key)], By=by), Host=there)]
+        out, acts = swept(rows_=[row(key, group)], cards_=[card(key, "req_old", by, host=there)], entries=held, raises={kind: raise_}, here=here)
+        assert seen == [(key, "req_old")]
+        assert out == {"done": [dict(label="wldn", key=key, card="req_old", by=by, did="lost",
+                                     words=f"held on {there}, which this host's sign-in does not reach: posted again as req_new", new="req_new")],
+                       "unswept": []}
+        assert acts.emitted == [] and acts.calls == []
+
+    @pytest.mark.parametrize("key, group, kind, by, here, there", STRANDED)
+    def test_a_rows_card_lost_to_its_owner_is_said_lost_once_posted_again_and_left_when_its_raise_posts_none(self, key, group, kind, by, here, there):
+        """rail-cards, "The proposal no longer waits": a raise that finds its row no longer waits posts nothing."""
+        lost = [dict(did("card.post", 60, Card="req_old", Key=key, On=[cards.row_object(key)], By=by), Host=there),
+                dict(did("card.close", 50, Card="req_old", Key=key, On=[cards.row_object(key)], State="lost", By=by), Host=there)]
+        out, _ = swept(rows_=[row(key, group)], entries=lost, raises={kind: lambda fleet, r, acts=None: "req_new" if r.get("dead") else None}, here=here)
+        assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [("req_old", "lost", f"lost to {by}: posted again as req_new", "req_new")]
+        out, _ = swept(rows_=[row(key, group)], entries=lost, raises={kind: lambda fleet, r, acts=None: None}, here=here)
+        assert [(d["card"], d["did"], d["words"], d["new"]) for d in out["done"]] == [("req_old", "left", "its raise posted none", None)]
+
+    def stranded_record(self, **proposed):
+        """Record 32's card, posted from the box in wldn-design's name once crew record recorded it proposed there."""
+        return [dict(did("record.proposed", 70, On=["record/switchboard-kit/0032"], By="wldn-design", **proposed), Host=BOX),
+                dict(did("card.post", 60, Card="req_r32", Key="record/switchboard-kit/0032", On=["record/switchboard-kit/0032"],
+                         By="wldn-design"), Host=BOX)]
+
+    def test_a_records_card_held_on_another_host_is_posted_again_through_the_records_raise_in_the_design_agents_name(self):
+        """rail-cards, "A record's card left on the host the main level left"."""
+        seen = []
+
+        def raise_record(fleet, r, acts=None):
+            seen.append(r)
+            return "req_r33"
+        out, acts = swept(entries=self.stranded_record(), raises={"record": raise_record})
+        assert seen == [dict(label="wldn", key="record/switchboard-kit/0032", group="records", alternatives=False, dead="req_r32")]
+        assert out == {"done": [dict(label="wldn", key="record/switchboard-kit/0032", card="req_r32", by="wldn-design", did="lost",
+                                     words=f"held on {BOX}, which this host's sign-in does not reach: posted again as req_r33", new="req_r33")],
+                       "unswept": []}
+        assert acts.emitted == [] and acts.calls == []
+
+    def test_a_records_card_raised_with_alternatives_is_left_naming_the_command_that_raises_it_again(self):
+        """rail-cards, "A record raised with alternatives": the record's raise refuses, as raise_record_again does."""
+        said = ("crew keeps no copy of record 0032's alternatives, so wldn-design raises it again with "
+                "crew record switchboard-kit 32 --proposed --alternatives <file>")
+
+        def raise_record(fleet, r, acts=None):
+            not r["alternatives"] or crew.fail(said)
+            return "req_r33"
+        out, acts = swept(entries=self.stranded_record(Form="alternatives"), raises={"record": raise_record})
+        assert out["done"] == [dict(label="wldn", key="record/switchboard-kit/0032", card=None, by="wldn-design", did="left",
+                                    words=f"its raise refused: {said}", new=None)]
+        assert acts.emitted == [] and acts.calls == []
 
     def test_a_partition_whose_record_did_not_answer_on_its_branch_here_or_its_main_host_is_not_swept(self):
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"mac-studio": "x"}})
@@ -749,6 +1195,22 @@ class TestSweep:
 LANDED = [did("review.batch", 60, Batch="3", Units="x1:swb-1@aaa1 x2:swb-1@bbb1"), did("bolt.land", 40, On=["bolt/b", "unit/x1", "unit/x2"])]
 WORDS = "its batch waits on nothing: x1 and x2 have landed"
 CLOSE = dict(by="wldn-planner", why="batch: closed by crew, it waits on nothing", Key="batch/3", Outcome=WORDS, Act="batch.close", On=["batch/3"])
+
+
+class TestAskerPane:
+    """How the sweep reads whether a question's asker ended (briefs.11, read.1): from its pane, never its name."""
+
+    def test_an_agent_in_the_askers_pane_runs_named_or_not(self):
+        pane = {"pane_id": "w7:p1"}
+        assert crew.pane_holds("swc-3-conductor", "w7:p1", pane, {"pane_id": "w7:p1", "name": "swc-3-conductor"}) == (True, None)
+        assert crew.pane_holds("swc-3-conductor", "w7:p1", pane, {"pane_id": "w7:p1"}) == (True, None)
+
+    def test_the_askers_pane_with_no_agent_in_it_is_its_ending(self):
+        assert crew.pane_holds("crw-3-conductor", "w2:p1", {"pane_id": "w2:p1"}, None) == (False, None)
+
+    def test_a_pane_crew_keeps_none_of_or_herdr_lists_none_of_is_a_read_it_names(self):
+        assert crew.pane_holds("crw-3-conductor", "", None, None) == (None, "crew keeps no pane for crw-3-conductor")
+        assert crew.pane_holds("crw-3-conductor", "w2:p1", None, None) == (None, "herdr lists no pane w2:p1, which crew keeps for crw-3-conductor")
 
 
 class TestSettledSweep:

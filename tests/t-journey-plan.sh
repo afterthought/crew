@@ -134,7 +134,8 @@ has "$out" "card proposal/4: req_stub-3 changed, now version 2"
 eq "$(props -t Proposal -e "Proposal = 4" -P State,Reason)" $'dropped\nreplaced by proposal 5'
 ok "a proposal is dropped with a reason, the planner told and its card withdrawn, or replaced by another, its card changed in place"
 
-# A refused proposal is recorded naming its command, never the words typed in it.
+# A refused proposal is recorded naming its command, never the words typed in it. Each day's file is read on its own,
+# as crew reads them: every one declares Entry, which one recsel over two days' files refuses as a duplicated set.
 expect_fail '`unit add y "Typed ZQXA." --bolt nowhere`: no bolt nowhere in wldn/main' \
   crew plan propose "$(proposal 'Case: x' 'Do: unit add y "Typed ZQXA." --bolt nowhere')"
 has "$(as mac-studio bash -c 'for f in "$HOME"/.local/state/crew/wldn/runs/*/*.rec; do recsel -t Entry -e "Act = '"'plan.propose'"'" -P Refused "$f"; done' | grep . | tail -1)" \

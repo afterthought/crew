@@ -59,9 +59,11 @@ CREW_AGENT=swb-1-unit-1 expect_fail "merge on a does not stop short for archives
   crew needs "openspec archive a refuses: its delta modifies a requirement left adds"
 eq "$(field $box stage.end Ended stage/a/merge)" ""
 # Told, it stops short again in the same stage only when openspec refuses one of them: that stop-short is passed on,
-# and the conductor runs the merge again.
-CREW_AGENT=swb-1-unit-1 expect_ok crew needs "openspec archive left refuses: a requirement it modifies is not in the specs ZQXP"
-eq "$out" "merge on a is ended, stopped short: swb-1-conductor is told what you need"
+# and the conductor runs the merge again, crew having ended the agent.
+HOST=$box CREW_AGENT=swb-1-unit-1 expect_ok crew needs "openspec archive left refuses: a requirement it modifies is not in the specs ZQXP"
+eq "$out" "merge on a is ended, stopped short: swb-1-conductor is told what you need. crew ends this session once your turn ends: end it now."
+until_ok grep -qF "swb-1-unit-1 is ended: its stage stopped short" "$(home_of $box)/.local/state/swb-1-team/short/unit-1.log" \
+  || fail "crew never ended the agent whose merge stopped short"
 grep -qF "agent prompt swb-1-conductor '[crew tell from swb-1-unit-1] swb-1-unit-1 stopped short in merge on a. It needs: openspec archive left refuses: a requirement it modifies is not in the specs ZQXP'" "$CREW_TEST_LOG" \
   || fail "the conductor was not told the merge's second stop-short"
 eq "$(field $box stage.end Ended stage/a/merge)" "short"
@@ -129,7 +131,9 @@ n=$(looks)
 crew unit wait e --stuck 3600000 --timeout 1800000 > "$T/wait.out" 2>&1 &
 waiting=$!
 until_ok eval '(( $(looks) > n ))' || fail "the wait never looked at e"
-CREW_AGENT=$e_agent expect_ok crew needs "nothing needs to change ZQXL"
+HOST=$box CREW_AGENT=$e_agent expect_ok crew needs "nothing needs to change ZQXL"
+until_ok grep -qF "$e_agent is ended: its stage stopped short" "$(home_of $box)/.local/state/swb-1-team/short/$(slot_of e).log" \
+  || fail "crew never ended the agent whose settle stopped short"
 wait $waiting || fail "the wait failed: $(cat "$T/wait.out")"
 eq "$(tail -1 "$T/wait.out")" "$e_agent stopped short in settle on e. It needs: nothing needs to change ZQXL. e no longer comes after d: its settle found nothing to change."
 has "$(cat "$T/wait.out")" "plan(tenant-environments): e no longer after d, its settle found nothing to change (swb-1-conductor)"

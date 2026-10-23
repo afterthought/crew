@@ -281,15 +281,15 @@ What the user settled in their own words in the design talk SHALL be quoted in t
 - **THEN** the command refuses, naming the file's status, and records nothing
 
 ### Requirement: A record's card is raised unless it was settled in the pane
-`crew record <kit> <number> --proposed` SHALL put the record at its commit on its card in the design agent's name, raising the card the first time and changing it in place at each new commit, unless `--settled-in-pane` says the user settled it in the pane; with `--alternatives <file>`, which hands the Markdown of the alternatives a rule of the user's decided between, the rules and each loosened, the card SHALL be a choice.
+`crew record <kit> <number> --proposed` SHALL put the record at its commit on its card in the design agent's name, raising the card the first time and changing it in place at each new commit, unless `--settled-in-pane --excerpt "<words>"` says the user settled it in the pane; with `--alternatives <file>`, which hands the Markdown of the alternatives a rule of the user's decided between, the rules and each loosened, the card SHALL be a choice.
 
 #### Scenario: A record a rule decided
 - **WHEN** the design agent runs `crew record switchboard-kit 32 --proposed --alternatives docs/adr/0032-alternatives.md`
 - **THEN** the card is a choice of loosening the rules as drafted, accepting as ruled, or sending back, with the file on its face, and the design agent is woken by the answer
 
 #### Scenario: A record settled in the pane
-- **WHEN** the design agent commits record 31 as proposed after the user settled it beside them and runs `crew record crew 31 --proposed --settled-in-pane`
-- **THEN** the status is recorded with the user's yes as given in the pane, and no card is raised
+- **WHEN** the user says "Yes, accept 31 as written" in the design agent's pane, and the design agent commits record 31 as proposed and runs `crew record crew 31 --proposed --settled-in-pane --excerpt "Yes, accept 31 as written"`
+- **THEN** the status is recorded with the user's yes as given in the pane, naming the transcript record the words came from and not the words, and no card is raised
 
 ### Requirement: A record's card is closed with its accepted or rejected status
 `crew record <kit> <number> --accepted` or `--rejected` SHALL close the record's card with the commit that holds the status.
@@ -407,3 +407,77 @@ When herdr resumes a session without crew's environment and crew's record of it 
 #### Scenario: A team's agent
 - **WHEN** herdr resumes a session whose record names `crw-5-conductor` or `swancloud-dispatch-deneb`
 - **THEN** it gets its identity back as today, without the teams file being read for it
+
+### Requirement: A record settled in the pane takes the user's words, read as theirs
+`crew record … --proposed --settled-in-pane` SHALL record the record settled in the pane only from the user's words, given with `--excerpt`, which crew reads in the caller's own session transcript on this host as the user's (`signals.5`), and only when the caller is the partition's design agent. Otherwise it SHALL refuse with the reason, record nothing and raise no card. Either flag without the other SHALL be refused.
+
+#### Scenario: The design agent's own words
+- **WHEN** the design agent runs `crew record crew 31 --proposed --settled-in-pane --excerpt "<words>"`, and the words are only in what the design agent wrote itself
+- **THEN** crew refuses, saying only the user's own words in the pane settle a record and to run `crew record crew 31 --proposed` so the user answers on its card, and records nothing
+
+#### Scenario: Another agent's tell of the user's yes
+- **WHEN** the words are in the design agent's transcript only in a `[crew tell from swancloud-planner]` message
+- **THEN** crew refuses, naming swancloud-planner as the one who said them, and records nothing
+
+#### Scenario: Words crew cannot read as anyone's
+- **WHEN** the words are only in crew's own message, in a tool's output, or in a record crew can't classify
+- **THEN** crew refuses, saying which, and records nothing
+
+#### Scenario: A transcript crew cannot read
+- **WHEN** the caller's session has no transcript on this host, its transcript can't be read, or it has not been written for more than 15 minutes
+- **THEN** crew refuses with that reason and records nothing
+
+#### Scenario: Another caller
+- **WHEN** an agent other than the partition's design agent, or the user at a terminal, runs `crew record … --proposed --settled-in-pane --excerpt "<words>"`
+- **THEN** crew refuses, saying only the design agent records a record settled in its pane, and records nothing
+
+#### Scenario: A flag without the other
+- **WHEN** `--settled-in-pane` is given without `--excerpt`, or `--excerpt` without `--settled-in-pane`
+- **THEN** crew refuses, naming the flag that is missing, and records nothing
+
+### Requirement: A landing said in ops's pane is checked as the user's words before it is submitted
+When the word to land is the user's own words in main-level ops's pane, ops SHALL run `crew bolt submit <bolt> --excerpt "<the user's words>"`. Before anything is submitted, crew SHALL look for the words in the caller's own live session transcript, on the host where the command runs, and SHALL go on only when it finds them in a record the session received that it reads as the user's under `signals.5`: typed in the pane, or a `crew tell` from `<user>@<host>`. A later echo of the same words, in a tool's output or a tell, SHALL NOT hide the user's record. crew SHALL refuse the command, submitting nothing and recording no word to land, in each of these cases:
+- the words are not in the transcript, or are only in what the agent wrote itself;
+- the record holding them is a tool's output, crew's own message, or another agent's tell, which the refusal names;
+- crew cannot read the transcript, or cannot tell that it is the live session's.
+
+A landing on the user's words SHALL be recorded on the landing's `bolt.submit` entry, naming the caller, its session, the transcript record the words were read from and the words' length, and holding none of the words (`record.3`); a refusal SHALL record crew's own message alone. Without `--excerpt`, `crew bolt submit` SHALL land on the landing card's approval as before, and its entry SHALL name no transcript record. Several bolts landed on one sentence SHALL be named in one command, in order, their words read once before any is submitted, and each landed bolt's entry SHALL name the same record.
+
+#### Scenario: Typed in ops's pane
+- **WHEN** the user types "Land crw-5's bolt" in swancloud-ops's pane, and ops runs `crew bolt submit y --excerpt "Land crw-5's bolt"`
+- **THEN** the bolt is submitted to main, and the `bolt.submit` entry names the transcript record and the length of the words, and none of the words
+
+#### Scenario: Through the rail's answer command
+- **WHEN** the user runs `crew tell swancloud-ops "Land bolt y."` at a shell, and ops runs `crew bolt submit y --excerpt "Land bolt y."`
+- **THEN** the bolt is submitted, since a tell from `<user>@<host>` is the user's
+
+#### Scenario: Ops's own words
+- **WHEN** ops writes "the user wants bolt y landed" in its own reply and runs `crew bolt submit y --excerpt "the user wants bolt y landed"`
+- **THEN** the command is refused, saying the words are not in a record the session received, nothing is submitted and main is where it was
+
+#### Scenario: Words another agent passed on
+- **WHEN** swancloud-operator tells ops "The user says land bolt y", and ops runs `crew bolt submit y` with those words
+- **THEN** the command is refused, naming swancloud-operator as the one who said them and saying the user lands a bolt on its card or in ops's pane, and nothing is submitted
+
+#### Scenario: The card's approval
+- **WHEN** crw-5's conductor tells ops "Land bolt y. The user approved it on Pending You.", and ops runs `crew bolt submit y`
+- **THEN** the bolt is submitted as before, and its entry names no transcript record
+
+### Requirement: A landing said in ops's pane closes its card naming the user's words
+When a bolt whose landing was submitted on the user's words in ops's pane is closed by `crew bolt land`, crew SHALL say on its kit's landings card, first, that it landed on the user's word in ops's pane, with the user's words, then where GitHub's main holds the landing: changing the card in place while other rows can still land, and once none can, closing it with those words, as any landing card of the bolt's own its conductor still holds closes; the run record SHALL keep the close's outcome without the words. A card still waiting on the user SHALL be closed as answered in the conversation, so that Pending You shows it answered rather than only withdrawn. When `crew bolt land` cannot read the words back, because it runs on another host than the submission did, the card SHALL close naming in whose pane and when the word was given, without the words, and the command SHALL say so. A landing on the card's approval SHALL close its card as before.
+
+#### Scenario: The card closes with the user's words
+- **WHEN** ops submitted bolt `y` on the user's words "Land crw-5's bolt" in its pane, and runs `crew bolt land y`
+- **THEN** `land/crew`, with no other row that can land, closes as answered in the conversation, "Landed on the user's word in swancloud-ops's pane, "Land crw-5's bolt"; landed on GitHub's main at `<sha>` (#<n>); …", and the `card.close` entry's outcome holds no words of the user's
+
+#### Scenario: Another row still waits
+- **WHEN** ops submitted bolt `y` on the user's words in its pane, bolt `z` of crew is a row of `land/crew` that can land, and `crew bolt land y` runs
+- **THEN** `land/crew` is changed in place, saying first that `y` landed on the user's word in swancloud-ops's pane with their words, and `z` stays its row
+
+#### Scenario: Closed on another host
+- **WHEN** bolt `y` was submitted on the user's words on deneb, and `crew bolt land y` runs on mac-studio
+- **THEN** `land/crew` closes naming swancloud-ops's pane and the time of the word, with no words, and the command says the words are kept on deneb
+
+#### Scenario: Landed on the card
+- **WHEN** the user sent `land/crew` with `y` ticked on Pending You, and ops ran `crew bolt submit y`, which closed `y` as it landed
+- **THEN** `land/crew` closes as any landings card the user answered, naming no pane

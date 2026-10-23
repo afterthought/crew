@@ -10,9 +10,14 @@ context: |
 
   Teams are data written by swancloud (lib/crew-teams.nix →
   ~/.config/crew/teams.json); hosts and sessions come from swancloud's
-  ~/.config/swancloud/herdr-hosts.json. crew never edits either file. A crew
-  commit is live in the next session without a deploy: swancloud loads the
-  plugin from this checkout.
+  ~/.config/swancloud/herdr-hosts.json. crew never edits either file. A host
+  loads crew in one of two modes swancloud sets for it (plan.19, record
+  0032): live, from crew/live/plugin, a detached worktree at GitHub's main
+  that swancloud's timer moves, so a landing is live there minutes after it
+  lands; or released, at the version swancloud pins from crew's release tags
+  (code.10), so a landing reaches the host only once swancloud's bump to
+  that tag is deployed. No host loads crew from a checkout on main: crew/main
+  is an anchor the same timer moves, never worked in (plan.18).
 
   Runs on the Macs (mac-studio, macbook-pro) and on NixOS workspace boxes
   Each role's model and effort are in its definition's frontmatter (plugin/roles/), overridden only in the teams file.
