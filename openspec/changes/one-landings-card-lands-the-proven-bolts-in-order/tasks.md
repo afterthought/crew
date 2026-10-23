@@ -14,7 +14,7 @@
 
 - [x] 3.1 A row's reading and preview are opened, kept or ended on its team's host by `crew _land-row`, and every event that changed a bolt's card hands the kit card's raise to the partition's main machine with `crew _land-card` (design, Decision 2; Task notes 3.1); passes `tests/py/test_landings.py` and `tests/py/test_card_commands.py`.
 - [x] 3.2 `raise_landings` on the main machine posts, changes, follows or closes `land/<kit>` in `<label>-ops`'s name, naming a host that does not answer and raising the rest (design, Decisions 2 and 8; Task notes 3.2); passes `tests/py/test_landings.py`, and `tests/suite t-journey-land` ends with "0 failed".
-- [ ] 3.3 The merge's end, a fix's start, a preview's end, `crew card session land/<bolt>`, `crew card wait land/<bolt>` and `crew bolt land` keep a bolt's reading and preview as its row's and change the kit's card, a session or wait on a bolt that is no row refused (design, Decisions 2 and 4; Task notes 3.3); passes `tests/py/test_card_commands.py`, and `tests/suite t-cards` ends with "0 failed".
+- [x] 3.3 The merge's end, a fix's start, a preview's end, `crew card session land/<bolt>`, `crew card wait land/<bolt>` and `crew bolt land` keep a bolt's reading and preview as its row's and change the kit's card, a session or wait on a bolt that is no row refused (design, Decisions 2 and 4; Task notes 3.3); passes `tests/py/test_card_commands.py`, and `tests/suite t-cards` ends with "0 failed".
 
 ## 4. Landing the ticked bolts in order
 
