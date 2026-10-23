@@ -14,4 +14,4 @@
 ## 3. Docs
 
 - [x] 3.1 README, the crew skill and the command's usage say what the subscriptions section shows, where its use is read from and what the command prints of it (design, Context; Task notes 3.1); verify `tests/suite t-docs` ends with "0 failed".
-- [ ] 3.2 The tests the change affects pass: verify `tests/suite --affected` ends with "0 failed".
+- [x] 3.2 The tests the change affects pass: verify `tests/suite --affected` ends with "0 failed".
