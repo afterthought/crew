@@ -7,7 +7,7 @@
 
 ## 2. The page and its links
 
-- [ ] 2.1 The fleet page links each partition's page and each team's dock in the layout of its own file, and a partition's page links back to the fleet page in its own, none where crew cannot tell (design, Decision 5; Task notes 2.1); passes `tests/py/test_fleet.py` and `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
+- [x] 2.1 The fleet page links each partition's page and each team's dock in the layout of its own file, and a partition's page links back to the fleet page in its own, none where crew cannot tell (design, Decision 5; Task notes 2.1); passes `tests/py/test_fleet.py` and `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
 - [ ] 2.2 The fleet page is one file that loads nothing, its tokens the partition page's, light and dark, stacked under 760 px, every text set as text, with no control but links (design, Decision 5; Task notes 2.2); passes `tests/py/test_fleet.py`, verify `tests/suite logic` ends with "0 failed".
 
 ## 3. The command and its docs

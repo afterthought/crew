@@ -120,18 +120,32 @@ class TestFile:
         assert '<body data-view="board">' in rest and "prefers-color-scheme" in rest
 
     def test_the_header_names_every_partition_its_own_current_and_each_other_linked_in_crews_layout(self):
-        """board-page "Three partitions": a page in crew's folder layout links each other partition's folder beside it."""
+        """board-page "Three partitions": a page in crew's folder layout links the fleet page beside the folders, then
+        each other partition's folder beside it."""
         assert page.nav(["wldn", "madswan"], "wldn", PurePath("/s/wldn/page.html")) == (
+            '<a class="part fleet" href="../page.html" title="every partition">fleet</a>'
             '<span class="part" aria-current="page">wldn</span><a class="part" href="../madswan/page.html">madswan</a>')
 
     def test_a_page_named_for_its_partition_links_the_others_beside_it_as_they_are_served(self):
-        """board-page "Pages written side by side as they are served": <label>.html links <other>.html."""
+        """board-page "Pages written side by side as they are served": <label>.html links <other>.html, and the fleet
+        page as index.html beside it."""
         assert page.beside(PurePath("/w/wldn.html"), "wldn", "madswan") == "madswan.html"
+        assert page.nav(["wldn", "madswan"], "wldn", PurePath("/w/wldn.html")).startswith(
+            '<a class="part fleet" href="index.html" title="every partition">fleet</a><span class="part" aria-current="page">wldn</span>')
         assert '<a class="part" href="madswan.html">madswan</a>' in page.nav(["wldn", "madswan"], "wldn", PurePath("/w/wldn.html"))
 
     def test_a_folder_and_a_file_both_named_for_the_partition_swap_both(self):
-        """board-page "A folder and a file both named for the partition"."""
+        """board-page "A folder and a file both named for the partition": no link to the fleet page."""
         assert page.beside(PurePath("/s/wldn/wldn.html"), "wldn", "madswan") == "../madswan/madswan.html"
+        assert "fleet" not in page.nav(["wldn", "madswan"], "wldn", PurePath("/s/wldn/wldn.html"))
+
+    @pytest.mark.parametrize("path, back", [("/f/swancloud.html", "index.html"), ("/h/.local/state/crew/swancloud/page.html", "../page.html"),
+                                            ("/f/swancloud/swancloud.html", None), ("/f/board.html", None), ("/f/x/page.html", None),
+                                            ("/f/swancloud/board.html", None)])
+    def test_the_fleet_page_is_linked_back_in_the_layout_of_the_pages_own_file_and_none_where_crew_cannot_tell(self, path, back):
+        """board-page: the header links to the fleet page beside a page served as <label>.html and from crew's
+        <label>/page.html, and to none in any other layout (read.1)."""
+        assert page.fleet_back(PurePath(path), "swancloud") == back
 
     def test_a_page_whose_file_and_folder_name_no_partition_names_the_others_unlinked(self):
         """board-page "A page written where its layout names no partition": crew cannot tell where the others are, so

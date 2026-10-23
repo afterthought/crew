@@ -2,6 +2,7 @@
 and each partition's run-record entries; page.fleet_links and page.linked for its links. That crew page --fleet makes
 it from one read of every partition and writes it whole is the board journey's (t-journey-board)."""
 import datetime
+from pathlib import PurePath
 
 import page
 
@@ -243,3 +244,27 @@ class TestAttention:
     def test_nothing_needing_attention_says_so(self):
         w = of(fleet(), "wldn")
         assert (w["attention"], w["attention_said"], w["cards_said"]) == ([], ["nothing needs attention"], "0 cards open")
+
+
+class TestLinks:
+    LABELS = ["madswan", "swancloud", "wldn"]
+
+    def test_served_as_index_html_each_partition_is_its_label_html_and_each_team_its_dock_there(self):
+        """fleet-page "Served beside the partitions' pages": wldn's name links to wldn.html, crw-6 to swancloud's page
+        with crw-6's dock open."""
+        links = page.fleet_links(PurePath("/srv/board/index.html"), self.LABELS)
+        assert links == {"madswan": "madswan.html", "swancloud": "swancloud.html", "wldn": "wldn.html"}
+        d = fleet()
+        page.linked(d, links)
+        assert of(d, "wldn")["link"] == "wldn.html" and team_of(of(d, "swancloud"), "crw-6")["link"] == "swancloud.html#dock=team:crw-6"
+
+    def test_written_as_page_html_each_partition_is_its_folders_page(self):
+        """fleet-page "Crew's own layout": wldn's name links to wldn/page.html."""
+        assert page.fleet_links(PurePath("/h/.local/state/crew/page.html"), self.LABELS)["wldn"] == "wldn/page.html"
+
+    def test_a_name_that_says_no_layout_links_no_partition_and_no_team(self):
+        """fleet-page "A name that says no layout": crew cannot tell where the pages are (read.1)."""
+        assert page.fleet_links(PurePath("/srv/fleet.html"), self.LABELS) is None
+        d = fleet()
+        page.linked(d, None)
+        assert {p["link"] for p in d["partitions"]} == {None} and {t["link"] for p in d["partitions"] for t in p["teams"]} == {None}

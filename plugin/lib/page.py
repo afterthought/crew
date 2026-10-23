@@ -383,15 +383,30 @@ def beside(path, label, other):
     return (f"../{other}/" if folder else "") + (f"{other}{path.suffix}" if named else path.name)
 
 
+def fleet_back(path, label):
+    """Where the fleet page is from this partition's page, written to path (a PurePath), in the layout of its own file:
+    index.html beside a page whose file alone is named label, as swancloud's board serves them; ../page.html from a
+    page.html in a folder named label, crew's own. None for any other layout, since crew cannot tell where the fleet
+    page is (read.1)."""
+    folder, named = path.parent.name == label, path.stem == label
+    if named and not folder:
+        return "index.html"
+    if folder and path.name == "page.html":
+        return "../page.html"
+    return None
+
+
 def nav(labels, label, path):
-    """The partitions in the teams file's order, this page's marked current and each other a link to its page in the
-    layout of this page's file, path (beside), or named without a link when that layout names no partition."""
+    """A link to the fleet page in the layout of this page's file, path (fleet_back), where it can be told; then the
+    partitions in the teams file's order, this page's marked current and each other a link to its page in that layout
+    (beside), or named without a link when that layout names no partition."""
     def part(l):
         if l == label:
             return f'<span class="part" aria-current="page">{html.escape(l)}</span>'
         link = beside(path, label, l)
         return f'<a class="part" href="{html.escape(link)}">{html.escape(l)}</a>' if link else f'<span class="part">{html.escape(l)}</span>'
-    return "".join(part(l) for l in labels)
+    back = fleet_back(path, label)
+    return (f'<a class="part fleet" href="{html.escape(back)}" title="every partition">fleet</a>' if back else "") + "".join(part(l) for l in labels)
 
 
 def render(d, path):
