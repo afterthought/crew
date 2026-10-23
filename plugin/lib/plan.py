@@ -9434,13 +9434,19 @@ def card_waiting(got):
     return isinstance(got, dict) and got.get("status") in OPEN
 
 
-def land_session(fleet, label, key, acts=None):
+def land_session(fleet, label, key, acts=None, say=None):
     """crew card session land/<bolt>: the landing's one reading session, on what the bolt brings to main at its head,
     on the host of the team holding the bolt and refused elsewhere, naming it, read from the same facts as its card
-    (land_facts) and opened as the card opens it (reading_open), its link printed. When it started the session anew,
-    none running, the landing card its conductor holds is changed in place to carry the new link while it waits on the
-    user (relinks, row_card_change), and left as it is once they answered it. Refused for a bolt the plan does not
-    hold, one no team holds, and one that does not read proven, saying why (card-sessions)."""
+    (land_facts) and opened as the card opens it (reading_open), its link printed, or said by say(link, decided) when
+    given, as the rail's sweep gives it. The try, from the landing's read on, is recorded as one card.reading entry on
+    the bolt in its conductor's name, with the card held under the key, done when the session started anew and refused
+    with crew's message when the bolt does not read proven or the reading could not open, a session given again
+    recording nothing (record.1), nor a refusal before the try. When it started the session anew, none running, or the
+    run record shows the card standing without its reading (reading_unread), the landing card its conductor holds is
+    changed in place to carry the link while it waits on the user (relinks, row_card_change), and left as it is once
+    they answered it. Refused for a bolt the plan does not hold, one no team holds, and one that does not read proven,
+    saying why (card-sessions). As reading_open returns it: its link, whether the user decided in it, and whether it
+    was started anew; a refusal of the try, recorded, is raised again."""
     acts = acts or CardActs(fleet)
     bolt = key.split("/", 1)[1]
     plan, b, t = land_held(fleet, label, bolt)
@@ -9448,19 +9454,31 @@ def land_session(fleet, label, key, acts=None):
     t or fail(f"bolt {bolt} is held by no team, so crew raises no landing card for it, and it has no reading")
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), t["machine"])
     not why or fail(why)
-    facts, why = land_facts(fleet, label, plan, b, t)
-    not why or fail(f"bolt {bolt} does not read proven, so its landing card is not raised and has no reading: {why}")
-    url, decided, started = acts.reading(label, key, facts)
-    print(url)
-    if decided:
-        print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
-    owner = f"{t['name']}-conductor"
+    owner, obj = f"{t['name']}-conductor", cards.row_object(key)
+    card = cards.card_under(acts.entries(label), key, owner)
+    held = {"Card": card} if card else {}
+    try:
+        facts, why = land_facts(fleet, label, plan, b, t)
+        not why or fail(f"bolt {bolt} does not read proven, so its landing card is not raised and has no reading: {why}")
+        url, decided, started = acts.reading(label, key, facts)
+    except Refusal as e:
+        acts.emit(label, "card.reading", [obj], by=owner, refused=str(e), Key=key, **held)
+        raise
+    if started:
+        acts.emit(label, "card.reading", [obj], by=owner, Key=key, **held)
+    if say:
+        say(url, decided)
+    else:
+        print(url)
+        if decided:
+            print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
 
     def change():
         f = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
         f["preview"] = landing_preview(fleet, t, label, bolt, f, acts)
         row_card_change(fleet, label, owner, cards.landing_card, f, RELINKED, card_where(t["kit"]), acts)
-    relink(acts, label, key, owner, started, change)
+    relink(acts, label, key, owner, started or reading_unread(acts.entries(label), key, card), change)
+    return url, decided, started
 
 
 def relink(acts, label, key, owner, due, change):

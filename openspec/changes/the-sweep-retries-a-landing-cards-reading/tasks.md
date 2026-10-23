@@ -2,8 +2,8 @@
 
 ## 1. A landing's later try is recorded and reaches its card
 
-- [ ] 1.1 `crew card session land/<bolt>` records each try of the reading as `card.reading` in the conductor's name, done or refused, records nothing for a link given again or a refusal before the try, changes a waiting card that stands without its reading even when its session runs, and takes a `say` the rail can silence (design, Decisions 1–3; Task notes 1.1).
-- [ ] 1.2 The landing session's cases pass in `tests/py/test_cards.py`'s `TestLandingSession` (Task notes 1.2).
+- [x] 1.1 `crew card session land/<bolt>` records each try of the reading as `card.reading` in the conductor's name, done or refused, records nothing for a link given again or a refusal before the try, changes a waiting card that stands without its reading even when its session runs, and takes a `say` the rail can silence (design, Decisions 1–3; Task notes 1.1).
+- [x] 1.2 The landing session's cases pass in `tests/py/test_cards.py`'s `TestLandingSession` (Task notes 1.2).
 
 ## 2. The rail's read tries a landing card's reading
 
