@@ -192,6 +192,32 @@ class TestRenew:
                 assert why == "swc-4-conductor did not exit (busy or waiting on the user); it was left running"
                 assert enters == [] and agents.herdr.state == "blocked"
 
+    def lingering(self, tmp_path, monkeypatch, reads):
+        monkeypatch.setattr(crew, "nap", lambda seconds: None)
+        agents = crew.Agents(None, "main", "swancloud", "swancloud", "swancloud", tmp_path, None, "/w", None)
+        agents.herdr = Lingering(reads)
+        agents.ensure()
+        agents.put("panes", "operator", "w2:p3")
+        return agents
+
+    def test_an_agent_slow_to_exit_is_watched_after_its_stop_gives_up_and_ended_once_it_goes(self, tmp_path, monkeypatch):
+        # swancloud-operator exited within a minute of its restart giving up on deneb (signal 2026-10-23-chuck-mac-studio-8d53f475/01).
+        agents = self.lingering(tmp_path, monkeypatch, STOP_LOOKS + 3)
+        assert agents.stop("operator", waits=True) == "swancloud-operator did not exit (busy or waiting on the user); it was left running"
+        assert agents.ended == []
+        typed = list(agents.herdr.acts)
+        assert agents.exited("operator", 10) is True
+        assert agents.ended == ["operator"] and agents.herdr.reads == STOP_LOOKS + 3
+        assert agents.herdr.acts == typed
+
+    def test_an_agent_that_never_exits_is_left_running_with_nothing_more_typed_to_it(self, tmp_path, monkeypatch):
+        agents = self.lingering(tmp_path, monkeypatch, None)
+        assert agents.stop("operator", waits=True)
+        typed = list(agents.herdr.acts)
+        assert agents.exited("operator", 10) is False
+        assert agents.ended == [] and agents.herdr.state == "idle"
+        assert agents.herdr.acts == typed
+
 
 EXIT_SCREEN = """ Background work is running
  The following will stop when you exit:
@@ -223,6 +249,31 @@ class Exiting:
         elif args[:2] == ("agent", "send-keys") and args[3:] == ("enter",) and self.state == "blocked":
             self.state = None
         return types.SimpleNamespace(returncode=0, stdout=out, stderr="")
+
+
+# How many times a stop reads an agent afresh before it gives up: once a second for 30 seconds, and once after Ctrl+C.
+STOP_LOOKS = 31
+
+
+class Lingering:
+    """herdr's side of a Claude Code session slow to exit: told /exit and Ctrl+C it stays up and idle, and herdr reads it
+    gone only after `reads` fresh reads of it in all, never when reads is None."""
+
+    def __init__(self, reads):
+        self.state, self.acts, self.told, self.reads, self.gone_at = "idle", [], False, 0, reads
+
+    def status(self, pane, fresh=False):
+        if fresh and self.told:
+            self.reads += 1
+            if self.gone_at is not None and self.reads >= self.gone_at:
+                self.state = None
+        return self.state
+
+    def run(self, *args):
+        self.acts.append(args)
+        if args[:2] == ("agent", "prompt") and args[3] == "/exit":
+            self.told = True
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
 
 class TestHosts:
