@@ -129,7 +129,7 @@ ok "crew card read prints where the question stands and the user's answer, recor
 # Crew's own cards are crew's: a conductor's post under its bolt's landing key is refused, naming the card as crew's.
 : > "$CREW_TEST_LOG"
 out=$(ask swb-2-conductor post_request '{"name": "swb-2-conductor", "idempotencyKey": "land/b2", "title": "Land b2"}')
-eq "$out" "denied: crew refuses swb-2-conductor's post of the card under land/b2: a landing card is crew's, raised when the bolt reads proven and closed when it lands. Ask a question of your own under a key of your own, ask/swb-2-conductor/<what it is about>."
+eq "$out" "denied: crew refuses swb-2-conductor's post of the card under land/b2: a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, and closed when nothing waits to land on the kit's main. Ask a question of your own under a key of your own, ask/swb-2-conductor/<what it is about>."
 eq "$(py_calls)" ""
 ok "a conductor's post under its bolt's landing key is refused before it reaches Pending You, naming the card as crew's"
 

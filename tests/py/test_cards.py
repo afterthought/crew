@@ -83,8 +83,8 @@ class TestKeys:
                 f"the user on a card. {words}")
 
     @pytest.mark.parametrize("name, k, said", [
-        ("swb-1-conductor", "land/tenant-environments", "a landing card is crew's, raised when the bolt reads proven and closed when it lands"),
-        ("swb-1-conductor", "land/tenant-environments/abc1234", "a landing card is crew's"),
+        ("swb-1-conductor", "land/tenant-environments", "a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, and closed when nothing waits to land on the kit's main"),
+        ("swb-1-conductor", "land/tenant-environments/abc1234", "a kit's landings card is crew's"),
         ("wldn-planner", "proposal/4", "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop"),
         ("wldn-planner", "proposal/4:2", "a proposal's card is crew's"),
         ("wldn-planner", "batch/3", "a batch's card is crew's"),
@@ -265,7 +265,7 @@ class TestNames:
         assert cards.refusal(hooked("post_request", {"idempotencyKey": "ask/swb-1-unit-1/x"})).startswith(
             "crew refuses a card from swb-1-unit-1: only a conductor, the planner, main-level ops and the design agent ask")
         monkeypatch.setenv("CREW_AGENT", "swb-1-conductor")
-        assert "a landing card is crew's, raised when the bolt reads proven" in cards.refusal(
+        assert "a kit's landings card is crew's, raised in main-level ops's name" in cards.refusal(
             hooked("post_request", {"idempotencyKey": "land/tenant-environments", "name": "swb-1-conductor"}))
         monkeypatch.setattr(cards, "posted", lambda record, label, card: "land/tenant-environments" if card == "req_l1" else None)
         assert "close of the card under land/tenant-environments" in cards.refusal(hooked("cancel_request", {"requestId": "req_l1", "reason": "x"}))
@@ -285,7 +285,7 @@ class TestNames:
             hooked("cancel_request", {"requestId": "req_v1", "reason": "x"}))
 
     @pytest.mark.parametrize("agent, row, said", [
-        ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a landing card is crew's"),
+        ("wldn-planner", "batch/7", "a batch's card is crew's"), ("swb-1-conductor", "land/b1", "a kit's landings card is crew's"),
         ("wldn-ops", "op/a/1", "a step's card is crew's")])
     def test_the_hook_refuses_an_agents_post_under_crews_key_as_crew_sends_it(self, monkeypatch, agent, row, said):
         """rail-cards: a conductor posts its landing card by hand, under the key as crew sends it: a row's key shorter
