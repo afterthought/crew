@@ -110,3 +110,47 @@ def test_a_refusal_at_an_older_head_holds_nothing_once_the_fix_moved_it():
 
 def test_a_landing_after_a_refusal_holds_nothing():
     assert plan.refusals([submitted("y", "c" * 40, "no"), submitted("y", "c" * 40)]) == {}
+
+
+# ---------------------------------------------------------------------------------------------- the forecasts
+
+def test_two_bolts_on_one_file_the_lower_row_names_the_one_above():
+    paths = {("z", "y"): ["plugin/lib/plan.py"]}
+    got = plan.row_forecasts(["y", "z"], lambda ours, theirs: paths.get((ours, theirs), []))
+    assert got == {"y": [], "z": [("y", ["plugin/lib/plan.py"])]}
+
+
+def test_a_bolt_behind_main_names_main_first():
+    paths = {("y", "main"): ["README.md"], ("z", "main"): ["a"], ("z", "y"): ["b"]}
+    got = plan.row_forecasts(["y", "z"], lambda ours, theirs: paths.get((ours, theirs), []))
+    assert got == {"y": [("main", ["README.md"])], "z": [("main", ["a"]), ("y", ["b"])]}
+
+
+def test_a_forecast_git_could_not_tell_is_kept_as_not_made():
+    got = plan.row_forecasts(["y", "z"], lambda ours, theirs: None if "y" in (ours, theirs) else [])
+    assert got == {"y": [("main", None)], "z": [("y", None)]}
+
+
+def test_merge_trees_words_are_read_as_its_paths():
+    assert plan.tree_paths(0, "abc\n") == []
+    assert plan.tree_paths(1, "abc\nREADME.md\nplan.py\nREADME.md\n") == ["README.md", "plan.py"]
+    assert plan.tree_paths(128, "fatal") is None
+
+
+def test_a_bolt_branch_crew_cannot_read_is_said_and_its_box_kept(monkeypatch):
+    """rail-cards "A bolt branch crew cannot read": the row's forecast is said as not made, with why, and holds
+    nothing, since the rows' boxes are landing_rows' alone."""
+    calls = []
+
+    def git(fleet, t, where, *args, ok=(0,)):
+        calls.append(args)
+        if args[:2] == ("rev-parse", "--verify"):
+            return (0, "f" * 40) if "bolt/z" in args[3] else (1, "")
+        return (0, "tree\n") if args[0] == "merge-tree" else (0, "")
+    monkeypatch.setattr(plan, "kit_git", git)
+    got, why = plan.forecast_rows(FLEET, "swancloud", "crew", ["y", "z"])
+    assert got == {"y": [("main", None)], "z": [("y", None)]}
+    assert why == {"y": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's",
+                   "z": "bolt/y is on no branch crew can read in /c/main on mac-studio, GitHub's or the host's"}
+    assert ("fetch", "-q", "origin") in calls
+    assert [r for r in plan.landing_rows(["y", "z"], {"y": facts("y"), "z": facts("z")}, {}) if r["box"]] != []

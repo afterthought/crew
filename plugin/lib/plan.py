@@ -1912,6 +1912,71 @@ def landing_rows(order, rows, held):
     return out
 
 
+def row_forecasts(order, pairs):
+    """Each row's forecast conflicts (rail-cards "The landings card forecasts each row's conflicts"), from facts alone
+    (code.7): order, the bolts of the card's rows that can land, in its order; pairs(ours, theirs), the paths git
+    forecasts in conflict when the bolt ours is merged onto theirs, "main" or a bolt above it on the card, from their
+    merge base: [] for none, None when git can't tell. {bolt: [(with, paths)]}, main first, then each bolt above it in
+    the card's order, a pair with no conflict left out and one git could not tell kept with paths None, a forecast not
+    made, which holds nothing; an empty list, no conflict forecast. Pairwise, as units are forecast (teams.12)."""
+    return {b: [(w, p) for w in ["main"] + list(order[:i]) for p in [pairs(b, w)] if p is None or p]
+            for i, b in enumerate(order)}
+
+
+def tree_paths(rc, out):
+    """The paths `git merge-tree --write-tree --name-only --no-messages` names in conflict, from its exit and output:
+    [] for a clean merge (0), the paths after the tree's id (1), each once; None for any other exit."""
+    if rc == 0:
+        return []
+    if rc != 1:
+        return None
+    return list(dict.fromkeys(l for l in out.split("\n")[1:] if l))
+
+
+def forecast_rows(fleet, label, kit, bolts):
+    """The forecasts of a kit's landings card's rows (row_forecasts), made where the kit's first building team
+    (builder) has its main checkout: GitHub's main fetched there, a kit with no origin reading its own; each bolt's
+    branch read as origin's, else the host's when GitHub does not hold it, a bolt made before gives went through sluice;
+    and git merge-tree of each onto main and onto each bolt above it. Returns ({bolt: [(with, paths)]}, {bolt: why}),
+    why for each bolt whose forecast crew could not make, or that has one not made against another it could not read:
+    a branch on no ref it can read, a fetch or a git that failed, or no team building the kit, said and holding nothing
+    (read.1)."""
+    t = builder(fleet, label, kit)
+    if not t:
+        return {b: [("main", None)] for b in bolts}, {b: f"no team of {label} builds {kit}, so crew reads no checkout of it" for b in bolts}
+    main, host = t["kit"]["main"], t["machine"]
+    try:
+        origin = kit_git(fleet, t, main, "remote", "get-url", "origin", ok=(0, 2))[0] == 0
+        if origin:
+            kit_git(fleet, t, main, "fetch", "-q", "origin")
+    except Refusal as e:
+        return {b: [("main", None)] for b in bolts}, {b: str(e) for b in bolts}
+    refs, why = {"main": "refs/remotes/origin/main" if origin else "refs/heads/main"}, {}
+    for b in bolts:
+        for ref in ([f"refs/remotes/origin/bolt/{b}"] if origin else []) + [f"refs/heads/bolt/{b}"]:
+            rc, out = kit_git(fleet, t, main, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}", ok=(0, 1))
+            if rc == 0 and out:
+                refs[b] = out
+                break
+        else:
+            why[b] = f"bolt/{b} is on no branch crew can read in {main} on {host}, GitHub's or the host's"
+
+    def pairs(ours, theirs):
+        if ours in why or theirs in why:
+            return None
+        try:
+            return tree_paths(*kit_git(fleet, t, main, "merge-tree", "--write-tree", "--name-only", "--no-messages",
+                                       refs[theirs], refs[ours], ok=(0, 1)))
+        except Refusal:
+            return None
+    got = row_forecasts(bolts, pairs)
+    for b, fs in got.items():
+        for w, paths in fs:
+            if paths is None and b not in why:
+                why[b] = why.get(w) or f"git merge-tree could not tell in {main} on {host}"
+    return got, why
+
+
 def batch_waits(units, due, unanswered):
     """Why a bolt that otherwise reads proven has no landing card yet (briefs.12), as landing_facts holds it: the units
     whose latest change no batch has held (due), then the batches holding a unit's latest change whose card the user
