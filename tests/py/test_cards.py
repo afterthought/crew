@@ -340,6 +340,7 @@ class TestSessions:
                      "HERDR_ENV": "1", "HERDR_PANE_ID": "w7:p1", "HERDR_TAB_ID": "w7:t1", "HERDR_WORKSPACE_ID": "w7", "HERDR_AGENT": "claude",
                      "HERDR_SESSION": "swancloud-1", "HERDR_SOCKET_PATH": "/s/herdr.sock", "HERDR_BIN_PATH": "/bin/herdr",
                      "CREW_AGENT": "swc-3-conductor", "CREW_LABEL": "swancloud", "CREW_ROLE": "conductor", "CREW_LAUNCH": "73d5",
+                     "CREW_SESSION": "deneb:0b1c",
                      "SLUICE_AGENT": "swc-3-conductor", "SLUICE_BRANCH": "bolt/builds-reach-the-phone", "PLANNOTATOR_URL_HOST": "auto"}
         assert plan.session_env(conductor) == {"PATH": "/bin", "HOME": "/home/c", "CLAUDE_CONFIG_DIR": "/home/c/.claude-sub-madswan",
                                                "CREW_TEST_HOST": "box", "HERDR_BIN_PATH": "/bin/herdr", "PLANNOTATOR_URL_HOST": "auto",

@@ -9482,9 +9482,12 @@ def proposal_reads(argvs):
 # the agent's pane and dropped the agent's name (swc-3-conductor on deneb, 2026-10-23: its landing card's session,
 # started by `crew card wait`, gave herdr the session of the Claude that answered the user's question on the page, and
 # crew read the conductor ended; signal 2026-10-23-swc-3-conductor-8556b697/01); and the identity crew-role gives
-# the agent (teams.6), which would record that Claude's start as the agent's own (hooks/session-start).
+# the agent (teams.6), which would record that Claude's start as the agent's own (hooks/session-start), and the
+# agent's Claude session a command carries to another host (record.session), so the session and what it starts act
+# under no agent's name (briefs.17).
 NOT_CARRIED = ("HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_AGENT", "HERDR_SESSION",
-               "HERDR_SOCKET_PATH", "CREW_AGENT", "CREW_LABEL", "CREW_ROLE", "CREW_LAUNCH", "SLUICE_AGENT", "SLUICE_BRANCH")
+               "HERDR_SOCKET_PATH", "CREW_AGENT", "CREW_LABEL", "CREW_ROLE", "CREW_LAUNCH", "CREW_SESSION", "SLUICE_AGENT",
+               "SLUICE_BRANCH")
 
 
 def session_env(environ):
