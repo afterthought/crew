@@ -632,3 +632,43 @@ class TestStepRecordedAgain:
     def test_a_card_whose_steps_entry_this_hosts_record_no_longer_reaches_is_changed_to_the_step_as_recorded(self):
         assert self.again(self.posted(), self.step(5, self.NOW), es=[self.step(1, self.WAS), self.step(5, self.NOW)]) == (
             self.KEY, "req_2a16", "Recorded again", False)
+
+
+class TestRaisedAgain:
+    """rail-cards, "A deploy's and a step's card left behind": the rail's sweep hands a deploy's or a step's raise the
+    older copy this host can't reach as the row's dead, and its card is built saying first that copy was lost; handed
+    none, as the offer's and the step's own calls are, it is built as it is."""
+
+    class Acts:
+        def entries(self, label):
+            return []
+
+    @pytest.fixture
+    def built(self, monkeypatch, tmp_path):
+        import plan
+        got = []
+
+        def change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False):
+            got.append((owner, build(facts)["card"]["summary"]))
+            return "req_new"
+        monkeypatch.setattr(plan, "row_card_change", change)
+        monkeypatch.setattr(ops, "ops_where", lambda fleet, label: ("/b/main", "github.com/o/b"))
+        monkeypatch.setattr(ops, "kept", lambda label, env, to: tmp_path)
+        monkeypatch.setattr(ops.record, "gather", lambda fleet, labels, since: ([], {}))
+        return got
+
+    def test_a_deploys_card_handed_an_older_copy_is_posted_saying_it_was_lost(self, monkeypatch, built):
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: [OFFER])
+        row = {"label": "swancloud", "key": "deploy/mac-studio", "group": "operations"}
+        assert ops.raise_deploy(FLEET, dict(row, dead="req_old"), self.Acts()) == "req_new"
+        assert ops.raise_deploy(FLEET, row, self.Acts()) == "req_new"
+        (owner, dead), (_, plain) = built
+        assert owner == "swancloud-ops" and dead.startswith(cards.DEAD) and not plain.startswith(cards.DEAD)
+
+    def test_a_steps_card_handed_an_older_copy_is_posted_saying_it_was_lost(self, monkeypatch, built):
+        monkeypatch.setattr(ops, "entries", lambda label, days=ops.DAYS: TestOneStepCardAtATime.STEPS)
+        row = {"label": "swancloud", "key": "op/mac-studio/2", "group": "operations"}
+        assert ops.raise_step(FLEET, dict(row, dead="req_old"), self.Acts()) == "req_new"
+        assert ops.raise_step(FLEET, row, self.Acts()) == "req_new"
+        (owner, dead), (_, plain) = built
+        assert owner == "swancloud-ops" and dead.startswith(cards.DEAD) and not plain.startswith(cards.DEAD)

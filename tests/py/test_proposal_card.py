@@ -161,6 +161,36 @@ def test_sixteen_new_units_are_a_hold_to_approve_that_links_its_reading_session_
     assert c["context"]["links"] == [{"label": "Read proposal 7", "url": "http://mac-studio:19500"}]
 
 
+class Unopened:
+    """A stand-in for the act's reach whose every start of a reading refuses with why, counting the starts."""
+
+    def __init__(self, why):
+        self.why, self.starts = why, 0
+
+    def session(self, label, key, facts):
+        self.starts += 1
+        raise plan.Refusal(self.why)
+
+
+def test_a_long_proposal_whose_reading_could_not_open_is_raised_naming_crew_card_session(capsys):
+    """card-sessions "Both starts fail": the card says so after its first paragraph, within Pending You's budget, and
+    names crew card session proposal/<n> as the planner's act, after two starts."""
+    why = "plannotator ended before proposal/7's session was ready: stub: refused to start"
+    argvs = [plan.do_args("wldn", d) for d in adds("x", 16)]
+    facts = dict(n=7, state="open", case="Sixteen units for the queue.", before=fresh().plan, after=apply(fresh(), *adds("x", 16)).plan,
+                 argvs=argvs, waiting=[], session=None)
+    acts = Unopened(why)
+    b = plan.card_built(acts, "wldn", cards.proposal_card, facts)
+    c = b["card"]
+    assert acts.starts == 2 and b["unread"] == why and c["context"]["links"] == []
+    assert ("Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and the planner starts it "
+            "with crew card session proposal/7; this card then carries its link.") in c["summary"]
+    assert len(c["summary"]) <= cards.SUMMARY
+    assert c["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {why}\n\n")
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        f"card proposal/7: its reading could not be opened on the tailnet: {why}; crew card session proposal/7 starts it")
+
+
 @pytest.mark.parametrize("dos, form", [
     (("unit order a-first --first",), "approve"), (adds("p", 1), "choice"), (adds("p", 5), "multi"), (adds("p", 6), "lists"),
     (adds("p", 16), "approve"), (('unit drop c-third "Not needed."', 'unit amend b-second "Better."'), "approve"),
@@ -184,3 +214,10 @@ def test_a_move_into_a_bolt_is_a_box_to_move_it_in():
 def test_a_closed_proposal_has_no_card_drawn_again():
     with pytest.raises(plan.Refusal, match="proposal 9 is dropped: it is closed, so it has no card"):
         built(9, "x", "unit order d-fourth --first", state="dropped")
+
+
+def test_a_reading_opened_after_the_card_was_raised_changes_the_planners_card_to_carry_its_link():
+    """card-sessions "Starting a batch's or a proposal's reading changes its card": proposal_act answers a relink with
+    a change noting the reading is open again, for the planner's own proposal alone."""
+    assert plan.proposal_act("relink", 4, mine=True) == ("change", plan.RELINKED)
+    assert plan.proposal_act("relink", 4, mine=False) is None
