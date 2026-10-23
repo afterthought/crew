@@ -1006,16 +1006,19 @@ def proposal_card(f):
 # ------------------------------------------------------------------------------------- what a card follows
 
 def posted_cards(entries):
-    """Each card the run record's entries show posted, oldest first: {key, card, by, state}, by the agent its post
-    names, its state None while it is open, else its close's, closed, withdrawn, declined or lost."""
+    """Each card the run record's entries show posted, oldest first: {key, card, by, state, rows}, by the agent its post
+    names, its state None while it is open, else its close's, closed, withdrawn, declined or lost, and rows, how many
+    rows a kit's landings card left that can land when it closed, as its close's Rows says (plan.landings_step), else
+    0."""
     out = []
     for e in entries:
         if e.get("Act") == "card.post" and e.get("Card") and not e.get("Refused"):
-            out.append({"key": e.get("Key") or "", "card": e["Card"], "by": e.get("By"), "state": None})
+            out.append({"key": e.get("Key") or "", "card": e["Card"], "by": e.get("By"), "state": None, "rows": 0})
         elif e.get("Act") == "card.close" and e.get("Card") and not e.get("Refused"):
             for c in out:
                 if c["card"] == e["Card"] and c["state"] is None:
                     c["state"] = e.get("State") or "closed"
+                    c["rows"] = int(e["Rows"]) if re.fullmatch(r"\d+", str(e.get("Rows") or "")) else 0
     return out
 
 
@@ -1027,9 +1030,14 @@ def follows_of(kind, thing, entries, by):
     card once that is closed, as a defect note holds it; a deploy follows its environment's last deploy card when the
     user declined it, else nothing, never a landing's card, whose landings its face names (briefs.13); a step follows
     the step card raised after its environment's last deploy card, else that card. A proposal, a batch and a record
-    follow nothing. A card lost to its owner is followed by none. thing: a landing's {bolt}, a deploy's {env, head}, a
-    step's {env, key}."""
+    follow nothing. A card lost to its owner is followed by none. A kit's landings card follows the kit's last one in
+    by's name only once the user answered it and it closed with rows left that can land (rail-cards "The landings card
+    closes when nothing waits"), else nothing. thing: a bolt's landing's {bolt}, a kit's landings card's {kit}, a
+    deploy's {env, head}, a step's {env, key}."""
     cards = [c for c in posted_cards(entries) if c["state"] != "lost" and c["by"] == by]
+    if kind == "land" and "kit" in thing:
+        mine = [c for c in cards if c["key"] == f"land/{thing['kit']}"]
+        return mine[-1]["card"] if mine and mine[-1]["state"] == "closed" and mine[-1]["rows"] else None
 
     def landing(bolt):  # a bolt's landing cards, keyed by the bolt, or by its head before record 0031
         return [c for c in cards if c["key"] == f"land/{bolt}" or c["key"].startswith(f"land/{bolt}/")]

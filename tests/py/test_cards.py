@@ -1372,6 +1372,18 @@ class TestFollows:
         assert built.follows_of("land", {"bolt": "b7"}, lost, self.CONDUCTOR) is None
         assert [built.follows_of(k, {}, self.E, self.OPS) for k in ("proposal", "batch", "record")] == [None, None, None]
 
+    def test_a_kits_landings_card_follows_its_last_only_once_answered_and_closed_with_rows_left(self):
+        """rail-cards "The landings card closes when nothing waits": a card the user answered, closed with a row left,
+        is followed by the next; one closed with nothing left, or withdrawn, is followed by none."""
+        post = dict(Act="card.post", Key="land/crew", By=self.OPS, Card="req_k1")
+        left = [post, dict(Act="card.close", Card="req_k1", State="closed", Rows="1")]
+        assert built.follows_of("land", {"kit": "crew"}, left, self.OPS) == "req_k1"
+        assert built.follows_of("land", {"kit": "crew"}, left[:1], self.OPS) is None
+        assert built.follows_of("land", {"kit": "crew"}, [post, dict(left[1], Rows="0")], self.OPS) is None
+        assert built.follows_of("land", {"kit": "crew"}, [post, dict(left[1], State="withdrawn")], self.OPS) is None
+        assert built.follows_of("land", {"kit": "crew"}, left, self.CONDUCTOR) is None
+        assert built.follows_of("land", {"kit": "swancloud"}, left, self.OPS) is None
+
     D1 = dict(Act="card.post", Key="deploy/srv", By="swancloud-ops", Card="req_d1")
 
     @pytest.mark.parametrize("entries, key", [

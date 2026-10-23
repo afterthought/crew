@@ -7,7 +7,7 @@
 ## 2. The card's form and its life
 
 - [x] 2.1 crew builds `land/<kit>` as an approve of risk high for one row, one ticked list with `highStakes` for two to five, lists of five for more, held rows on the face, each row carrying its bolt's facts, forecast, reading, preview and pull request (design, Decision 3; Task notes 2.1); passes `tests/py/test_cards.py`.
-- [ ] 2.2 A landings card follows only the kit's last one in ops's name, answered and closed with rows left (design, Decision 8; Task notes 2.2); passes `tests/py/test_cards.py`.
+- [x] 2.2 A landings card follows only the kit's last one in ops's name, answered and closed with rows left (design, Decision 8; Task notes 2.2); passes `tests/py/test_cards.py`.
 - [ ] 2.3 One decision says whether the kit's card is posted, changed, followed, left, withdrawn or closed with what landed, held and was left, a send ticking none closing it (design, Decision 8; Task notes 2.3); passes `tests/py/test_landings.py`.
 
 ## 3. Raising the card on the main host from each row's host

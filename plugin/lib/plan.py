@@ -9921,7 +9921,8 @@ ASKERS = ("conductor", "planner", "main-ops", "design")
 # which no row has had since teams.17. No agent's question takes one (crews_key).
 CREWS = {"proposal": "a proposal's card is crew's, raised by crew plan propose and closed at its approval or drop",
          "batch": "a batch's card is crew's, raised with its reading session once the reviewer's summary is delivered",
-         "land": "a landing card is crew's, raised when the bolt reads proven and closed when it lands",
+         "land": "a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, "
+                 "and closed when nothing waits to land on the kit's main",
          "deploy": "a deploy's card is crew's, raised by crew ops offer and closed at the deploy's end",
          "op": "a step's card is crew's, raised by crew ops step and closed with the step's state",
          "record": "a record's card is crew's, raised by crew record and closed at the record's status",
