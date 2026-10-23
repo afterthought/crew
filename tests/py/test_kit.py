@@ -1,6 +1,7 @@
 """A kit's declaration of its toolchain and tests, and the steps that make a worktree ready from it (kit-toolchain
 spec; plan.17; record 0023)."""
 import base64
+import pathlib
 
 import pytest
 
@@ -163,6 +164,87 @@ class TestBoltChecks:
             kit.policy_said(out, "k", "h")
 
 
+ON_GITHUB = POLICY.replace('required = ["#check-full"]\n', 'required = ["#check-full"]\nremote = "origin"\n')
+
+
+class TestBoltRemote:
+    """Where sluice keeps a branch, as the policy routes it (plan.19, sluice's core.15): the `remote` of the table that
+    matches the branch, which a give needs for a bolt's branch, since crew gives bolts only on GitHub."""
+
+    def test_the_bolt_branches_remote(self):
+        assert kit.bolt_remote(ON_GITHUB, "bolt/b") == "origin"
+
+    def test_the_most_specific_pattern_wins(self):
+        text = '[branches."*"]\nremote = "origin"\n[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+        assert kit.bolt_remote(text, "bolt/b") is None
+        assert kit.bolt_remote(text, "feature/x") == "origin"
+
+    @pytest.mark.parametrize("text", [None, "", POLICY, '[branches."bolt/*"]\nremote = ""\n', '[branches."bolt/*"]\nremote = 1\n'])
+    def test_no_remote_keeps_the_branch_in_the_hosts_own_refs(self, text):
+        assert kit.bolt_remote(text, "bolt/b") is None
+
+    def test_a_policy_crew_cannot_read_is_refused_naming_the_file(self):
+        with pytest.raises(Refusal, match=r"^\.config/sluice\.toml at bolt/b is not TOML"):
+            kit.bolt_remote("[branches\n", "bolt/b", ".config/sluice.toml at bolt/b")
+
+    def test_a_give_takes_the_remote_the_policy_at_main_now_names(self):
+        assert kit.give_remote(ON_GITHUB, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b") == "origin"
+
+    def test_a_give_in_a_kit_whose_bolts_have_no_remote_is_refused_naming_the_file_and_the_key(self):
+        """bolt-plan "A kit whose bolts have no remote"."""
+        with pytest.raises(Refusal) as e:
+            kit.give_remote(POLICY, "switchboard-kit", "/k/main/.config/sluice.toml", "bolt/b", ref="origin/main")
+        assert str(e.value) == (
+            "switchboard-kit gives bolts only on GitHub, and its /k/main/.config/sluice.toml on origin/main names no remote "
+            "for its bolt branches: its [branches.\"bolt/*\"] needs `remote = \"origin\"`, which is the kit's own change "
+            "(plan.17), then give the bolt again")
+
+
+def b64(text):
+    return base64.b64encode(text.encode()).decode()
+
+
+def at(local="-", tracked="-", at_local="-", at_tracked="-", main=None):
+    """What BOLT_AT prints, and BOLT_HOME's AT_MAIN after it when given."""
+    return (f"LOCAL={local}\nTRACKED={tracked}\nAT_LOCAL={at_local}\nAT_TRACKED={at_tracked}\n"
+            + (f"AT_MAIN={main}\n" if main is not None else ""))
+
+
+class TestWhereABoltLives:
+    """Where a bolt's branch lives, read as sluice routes it (plan.19, design Decision 1): by the policy at the host's
+    own branch, or at origin's tracking ref of it when the host has none."""
+    SHA = "c" * 40
+
+    def test_by_the_policy_at_the_hosts_own_branch(self):
+        assert kit.bolt_lives(at(self.SHA, self.SHA, b64(ON_GITHUB), b64(POLICY)), "b") == "origin"
+        assert kit.bolt_lives(at(self.SHA, self.SHA, b64(POLICY), b64(ON_GITHUB)), "b") is None
+        assert kit.bolt_lives(at(self.SHA, at_local="-"), "b") is None
+
+    def test_by_origins_when_the_host_has_none(self):
+        assert kit.bolt_lives(at(tracked=self.SHA, at_tracked=b64(ON_GITHUB)), "b") == "origin"
+
+    def test_a_place_is_cut_where_it_lives(self):
+        assert kit.place_base(at(self.SHA, at_local=b64(ON_GITHUB)), "b") == "origin/bolt/b"
+        assert kit.place_base(at(self.SHA, at_local=b64(POLICY)), "b") == "bolt/b"
+
+    @pytest.mark.parametrize("said, why", [
+        (at(), "crew can't tell where bolt/b lives: this host has neither bolt/b nor origin/bolt/b"),
+        ("fatal: bad\n", "crew can't read where bolt/b lives from: fatal: bad"),
+        (at("c" * 40, at_local="%%%"), "crew can't read bolt/b's .config/sluice.toml as it was sent"),
+    ])
+    def test_a_bolt_crew_cannot_place_is_refused(self, said, why):
+        with pytest.raises(Refusal) as e:
+            kit.bolt_lives(said, "b")
+        assert str(e.value).startswith(why)
+
+    def test_a_bolts_home_and_the_remote_main_names_for_bolts(self):
+        assert kit.bolt_home(at(self.SHA, at_local=b64(POLICY), main=b64(ON_GITHUB)), "b") == (None, "origin")
+        assert kit.bolt_home(at(self.SHA, at_local=b64(ON_GITHUB), main=b64(ON_GITHUB)), "b") == ("origin", "origin")
+        assert kit.bolt_home(at(self.SHA, at_local=b64(POLICY), main="-"), "b") == (None, None)
+        with pytest.raises(Refusal, match="crew can't read the policy at main"):
+            kit.bolt_home(at(self.SHA, at_local=b64(POLICY)), "b")
+
+
 GITHUB, OWN = "a" * 40, "b" * 40
 
 
@@ -209,3 +291,66 @@ class TestVerification:
     def test_nothing_else_reads_green(self):
         assert kit.verification(None, "passed (1 run, 0 replayed)")[0] == "unknown"
         assert kit.verification("abc1234", "failed (1 run, 0 replayed)")[0] == "unknown"
+
+
+RECORDED = pathlib.Path(__file__).parent / "sluice-0.36.4"
+
+
+def recorded(name):
+    """A document sluice 0.36.4 printed, and the exit it printed it with, as its README lists them."""
+    codes = dict(l.split("\t")[:2] for l in (RECORDED / "README").read_text().splitlines() if "\texit " in l)
+    return (RECORDED / name).read_text(), int(codes[name].split()[1])
+
+
+class TestSluiceVersion:
+    """A give needs sluice's `branch create`, first in sluice 0.20.0 (plan.19, sluice ADR 0026)."""
+
+    def test_the_version_sluice_prints(self):
+        assert kit.sluice_version(recorded("version.txt")[0]) == (0, 36, 4)
+
+    @pytest.mark.parametrize("out", ["sluice 0.36.4\n", "sluice 0.20.0", "sluice 1.0.0\n"])
+    def test_a_sluice_with_branch_create_gives(self, out):
+        assert kit.sluice_refusal(out, "chuck-herdr-alpha") is None
+
+    @pytest.mark.parametrize("out, said", [
+        ("sluice 0.19.9\n", "sluice 0.19.9"),
+        ("sluice 0.3.1", "sluice 0.3.1"),
+        ("bash: line 1: sluice: command not found\n", "bash: line 1: sluice: command not found"),
+        ("", "nothing"),
+        ("sluice version unknown", "sluice version unknown"),
+    ])
+    def test_an_older_sluice_or_one_crew_cannot_read_is_refused_naming_the_version_needed_and_the_hosts_words(self, out, said):
+        """bolt-plan "A host whose sluice cannot make a branch" (read.1)."""
+        assert kit.sluice_refusal(out, "chuck-herdr-alpha") == (
+            "a bolt is given through sluice 0.20.0 or later, which has `branch create`, and sluice --version on "
+            f"chuck-herdr-alpha said: {said}")
+
+
+class TestBranchSaid:
+    """What sluice's `branch create` and `branch delete` said with --json, read by facts recorded from sluice 0.36.4
+    (read.2)."""
+
+    def test_a_branch_made_is_its_commit(self):
+        assert kit.branch_said(*recorded("create.json")) == ("c0da39bae0a5d89da0febc3f46f58607c2ad08a7", None)
+
+    def test_a_branch_removed_is_the_commit_it_was_at(self):
+        assert kit.branch_said(*recorded("delete.json")) == ("22eef8585855b2ef8feb0e08177e34d15f131182", None)
+
+    @pytest.mark.parametrize("name, message", [
+        ("create-present.json", "bolt/b is already there, at c0da39bae0a5d89da0febc3f46f58607c2ad08a7"),
+        ("create-from-absent.json", "no branch nope"),
+        ("delete-queued.json", "#1 still queued on bolt/b; wait for them to land, or withdraw them"),
+        ("delete-not-landed.json", "bolt/b at 22eef8585855b2ef8feb0e08177e34d15f131182 has not landed into main; submit it there first"),
+        ("delete-not-found.json", "no branch bolt/b"),
+    ])
+    def test_a_refusal_is_sluices_message(self, name, message):
+        assert kit.branch_said(*recorded(name)) == (None, message)
+
+    @pytest.mark.parametrize("out, code", [
+        ("", 0), ("error: unexpected argument '--json' found\n", 2), ('{"branch": "bolt/b"}', 0),
+        ('{"branch": "bolt/b", "created": "not-a-sha"}', 0), (recorded("create.json")[0], 2),
+        ('{"error": {"kind": "refused", "message": ""}}', 2), (recorded("create-present.json")[0], 0),
+    ])
+    def test_anything_else_is_refused_naming_what_sluice_said(self, out, code):
+        with pytest.raises(Refusal, match=f"crew can't read what sluice's branch command said \\(exit {code}\\)"):
+            kit.branch_said(out, code)

@@ -12,11 +12,16 @@ runner = "moon"
 [executor]
 kind = "open"
 
-# A merge into a bolt and a landing each take every check-full task, run open and afresh: neither trusts a replay
-# (tests.5, tests.10). A run takes about two minutes and has taken seven on a loaded host, so one past twenty is stuck
-# and is ended rather than holding the queue for sluice's default hour; a task that both passes and fails on the same
-# tree fails.
+# A bolt lives on GitHub (plan.19): sluice makes it there at `crew bolt give` and deletes it at `crew bolt land`, every
+# round fetches it from origin and forms on it, and a landing is a push leased on where the round found it, so a
+# submission to a bolt GitHub lacks is refused. A bolt made before stays on its host until the merge that brings it this
+# line. A merge into a bolt and a landing each take the required check-full tasks the change affects, run open and
+# afresh: neither trusts a replay, and a change that affects none lands with nothing run (sluice ADR 0044; tests.5,
+# tests.10). A run takes about two minutes and has taken seven on a loaded host, so one past twenty is stuck and is
+# ended rather than holding the queue for sluice's default hour; a task that both passes and fails on the same tree
+# fails.
 [branches."bolt/*"]
+remote = "origin"
 required = ["#check-full"]
 flaky = "fail"
 timeout = "20m"
@@ -25,7 +30,7 @@ trust = ["open"]
 # main lives on GitHub (swancloud ADR 0027): every round fetches it from origin and forms on it, and a landing is a push
 # leased on where the round found it, as the host's [forge] app, the ruleset's only bypass. Ops's landing,
 # `crew bolt submit`, opens a pull request that joins the queue once out of draft: it waits on no review or check of
-# GitHub's, since the user's word on the bolt's landing card is the approval (plan.16). Bolts stay on the host.
+# GitHub's, since the user's word on the bolt's landing card is the approval (plan.16). Bolts live on GitHub beside it.
 [branches.main]
 remote = "origin"
 required = ["#check-full"]
