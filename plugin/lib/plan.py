@@ -1951,14 +1951,20 @@ def bolt_land(fleet, a):
     changes and chores, on the user's word (roles.2)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     b = plan.bolt(a.bolt)
-    t = bolt_team(fleet, b)
+    t = held = bolt_team(fleet, b)
     units = [u.name() for u in plan.work_of(a.bolt)]
-    if t:
-        stage_of = stages_for(fleet, plan, [b]).of
-    else:
+    if not held:
         t = builder(fleet, label, b.get("Repo"))
         why = unheld_refusal(a.bolt, units, b.get("Repo"), t, label)
         not why or fail(why)
+    # What main holds now, GitHub's after the command's one fetch (plan.18), read before which units landed, so a bolt
+    # sluice has just landed reads landed with no wait for the fleet's timer; the landing records it (plan.14).
+    said = host_run(fleet, t["machine"], MAIN, t["kit"]["main"])
+    ref, head, why = kit.main_now(said, t["kit"]["name"], t["machine"])
+    not why or fail(why)
+    if held:
+        stage_of = stages_for(fleet, plan, [b]).of
+    else:
         h = survey(fleet, [(t["name"], None)]).get(t["machine"]) or {"ok": False, "error": "it was not asked"}
         k = h["kits"].get(t["kit"]["main"]) if h["ok"] else None
         k = k if k and k.get("ok") else None
@@ -1967,10 +1973,6 @@ def bolt_land(fleet, a):
     landed = all(stage_of(u)["stage"] == "landed" for u in units)
     outside = [u for u, *_ in due_changes(plan, partition_entries(fleet, label)) if u in units] if landed else []
     why = land_refusal(a.bolt, units, stage_of, outside, label)
-    not why or fail(why)
-    # What main holds once the bolt has landed on it, GitHub's after a fetch, which the landing records (plan.14).
-    said = host_run(fleet, t["machine"], MAIN, t["kit"]["main"])
-    ref, head, why = kit.main_now(said, t["kit"]["name"], t["machine"])
     not why or fail(why)
     landed = landed_words(head, kit.said_of(said).get("SUBMISSION_GITHUB" if ref == "origin/main" else "SUBMISSION_OWN"))
 
