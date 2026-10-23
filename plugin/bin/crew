@@ -137,9 +137,10 @@
 #                                      posted from another host or lost to its owner, and a still-proposed decision
 #                                      record's, built again from the record on the kit's main, saying the older
 #                                      copy is dead, one raised with alternatives named with the crew record that
-#                                      raises it again; tries again the reading of a batch's or a long proposal's
-#                                      card that stands without it, ten minutes on, changing the card to carry its
-#                                      link; and it ends, on every host of the partition, each card session crew
+#                                      raises it again; tries again the reading of a batch's, a long proposal's or a
+#                                      landing's card that stands without it, ten minutes on, a landing's on the
+#                                      team's host as crew card session land/<bolt> does, changing the card to carry
+#                                      its link; and it ends, on every host of the partition, each card session crew
 #                                      started whose card is closed or whose row is gone. It says what each did, and
 #                                      each host it could not check
 #   crew board [--label L] [--json]    the flow, one partition at a time, as four lanes stacked: Inception (signals
@@ -154,9 +155,9 @@
 #                                      prints its link (the running one's, else one started on this host with no
 #                                      browser), a batch card's one on the whole batch, on the main level's host, a
 #                                      landing's (land/<bolt>) one on what the bolt brings to main, on the host of the
-#                                      team holding it, changing its open card to carry a new link while it waits on
-#                                      the user, as a batch's and a long proposal's change the planner's, recording
-#                                      the start, a proposal's only for one of more than fifteen new units, and an old
+#                                      team holding it, changing its open card to carry a new link, or one it stands
+#                                      without, while it waits on the user, as a batch's and a long proposal's change
+#                                      the planner's, recording the start, a proposal's only for one of more than fifteen new units, and an old
 #                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
 #                                      waits for the user's decision in it and prints it with their words, for a batch
 #                                      card waits on the card too, printing its note and every annotation, and closes

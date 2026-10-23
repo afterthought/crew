@@ -20,8 +20,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone; its sweep posts again, on its owner's host, each row's
                                              card and still-proposed record's another host holds or its owner lost,
-                                             saying the older copy is dead, and tries again the reading of a batch's
-                                             or a long proposal's card that stands without it, ten minutes on
+                                             saying the older copy is dead, and tries again the reading of a batch's, a
+                                             long proposal's or a landing's card that stands without it, ten minutes on,
+                                             a landing's on the team's host
   crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
                                              the design agent's record at each turn of its status, read on the kit's
                                              main, raising its card unless settled in the pane, the user's yes read in
@@ -33,8 +34,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              a batch card's one per unit on that unit's team's host; the user's decision
                                              in it, waited for, a landing's or a batch's reading started first when
                                              none runs while its owner holds the card, a batch's waiting on the card
-                                             alone when it will not open; a reading started anew changing its open
-                                             card to carry the link; and its end, which a card's close brings too
+                                             alone when it will not open; a reading started anew, or given again to
+                                             a card standing without it, changing its open card to carry the link,
+                                             each try recorded; and its end, which a card's close brings too
   crew card answer batch/<n> --excerpt "<words>"
                                              the user's answer to a batch in their own words in the planner's or the
                                              operator's pane, recorded once crew reads the words in that agent's own
