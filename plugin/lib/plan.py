@@ -18,13 +18,16 @@ five times. A write that changes several files is one commit, and it carries the
   crew rail [--label L]                      what waits on the user: open proposals, review batches and bolts to
                                              land, each with when it began to wait, what answers it and
                                              its card key, with whether a card is open for it; then the open cards
-                                             whose row is gone; its sweep tries again the reading of a batch's or a
-                                             long proposal's card that stands without it, ten minutes on
+                                             whose row is gone; its sweep posts again, on its owner's host, each row's
+                                             card and still-proposed record's another host holds or its owner lost,
+                                             saying the older copy is dead, and tries again the reading of a batch's
+                                             or a long proposal's card that stands without it, ten minutes on
   crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
                                              the design agent's record at each turn of its status, read on the kit's
                                              main, raising its card unless settled in the pane, the user's yes read in
                                              the design agent's transcript as theirs, a choice when a rule decided,
-                                             changing it on a revision and closing it on accepted or rejected
+                                             saying an older copy is dead when another host holds one, changing it on
+                                             a revision and closing it on accepted or rejected
   crew card session|wait|end <key> [<unit>]  a plannotator session on what the rail row with that card key asks the
                                              user to read, started on this host with no browser and its link printed,
                                              a batch card's one per unit on that unit's team's host; the user's decision
