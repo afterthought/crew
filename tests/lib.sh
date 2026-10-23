@@ -226,6 +226,17 @@ EOF
   echo "$r"
 }
 
+# pull <owner/name> <branch> <draft: true|false>: an open pull request from the branch into main on GitHub, as
+# sluice's landing opens one, in the stub gh's file; prints its number
+pull() {
+  local f=$T/gh-pulls.json; [[ -e $f ]] || echo '[]' > "$f"
+  jq --arg repo "$1" --arg head "$2" --argjson draft "$3" \
+    '. + [{repo: $repo, number: (length + 1), head: $head, base: "main", state: "open", isDraft: $draft}]' "$f" > "$f.new" &&
+    mv "$f.new" "$f" && jq 'length' "$f"
+}
+# drafted <number>: whether the stub gh holds that pull request a draft, true or false
+drafted() { jq -r --argjson n "$1" '.[] | select(.number == $n) | .isDraft' "$T/gh-pulls.json"; }
+
 # clone <owner/name> <dir>: a checkout of a bare remote, as a session's space keeps it
 clone() { git clone -q "$(remote "$1")" "$2"; }
 

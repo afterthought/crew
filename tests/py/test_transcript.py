@@ -86,6 +86,13 @@ def wrote(uuid, text):
     return {"type": "assistant", "uuid": uuid, "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}
 
 
+# Claude Code's copy of a message it sends the model, as Claude Code 2.1.303 writes it (read on deneb, session f965a6bb,
+# 2026-10-22): a line of its own type holding the message's role and content blocks as sent, with no uuid or timestamp.
+def copied(role, content):
+    return {"type": "api-request-blob", "sessionId": "s", "hash": "3f9a1c0e5b7d2468ace013579bdf2468ace013579bdf2468ace013579bdf2468",
+            "message": {"role": role, "content": content}}
+
+
 # A Bash call's result, a background task's notice and a Read's result, as Claude Code 2.1.303 writes them (read on
 # mac-studio, 2026-10-20): a call's output in its tool_result block and as toolUseResult's stdout, a background call's
 # stdout empty and its task named; the notice names the task's output file and not the output; a Read's tool_result
@@ -180,6 +187,31 @@ class TestCheck:
         put("s-own", user("u-7", "Have a look at the templates."), wrote("a-7", "The templates leave open security groups."), CMD)
         for words in ("The templates leave open security groups.", "the user wants every template locked down", "open security groups"):
             assert said("s-own", words) == "refused unknown None None"
+
+    def test_the_agents_own_reply_and_command_are_refused_though_claude_code_copied_them(self, put):
+        reply = "The sweep leaves cards open on a closed row."
+        sent = copied("assistant", [{"type": "thinking", "thinking": ""}, {"type": "text", "text": reply}])
+        put("s-copied", user("u-50", "Look at the sweep."), wrote("a-50", reply), sent)
+        put("s-copied-first", user("u-50", "Look at the sweep."), sent, wrote("a-50", reply))
+        assert said("s-copied", reply) == "refused unknown None None"
+        assert said("s-copied-first", reply) == "refused unknown None None"
+        call = [{"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": 'echo "cards stay open on a closed row"'}}]
+        put("s-ran", user("u-50", "Look at the sweep."), {"type": "assistant", "uuid": "a-51", "message": {"role": "assistant", "content": call}},
+            copied("assistant", call))
+        assert said("s-ran", "cards stay open on a closed row") == "refused unknown None None"
+
+    def test_words_only_in_claude_codes_copy_of_what_it_sent_the_model_are_refused(self, put):
+        put("s-reminder", user("u-50", "Look at the sweep."),
+            copied("system", [{"type": "text", "text": "The user hasn't heard from you in a while"}]))
+        assert said("s-reminder", "The user hasn't heard from you in a while") == "refused unknown None None"
+
+    def test_the_users_words_and_a_tools_output_with_their_copies_beside_them_are_verified_from_their_own_record(self, put):
+        put("s-asked", user("u-51", "Close the open cards on a dropped row."),
+            copied("user", [{"type": "text", "text": "Close the open cards on a dropped row."}]))
+        assert said("s-asked", "Close the open cards on a dropped row.") == "verified user 1 u-51"
+        put("s-printed-copy", tool("u-52", "3 cards left open"),
+            copied("user", [{"type": "tool_result", "tool_use_id": "t", "content": "3 cards left open"}]))
+        assert said("s-printed-copy", "3 cards left open") == "verified tool 1 u-52"
 
     def test_a_message_or_output_mentioning_crew_signal_is_searched_all_but_its_command_lines(self, put):
         put("s-mention", user("u-30", "[crew tell from swc-1-conductor] crew signal refused to record this: the deploy left open security groups behind."),
