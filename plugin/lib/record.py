@@ -239,6 +239,48 @@ def carry(label, at_branch):
     return out, newest
 
 
+def unpushed(label, at_branch):
+    """The host's entries of the label that its branch lacks, oldest first, each (its id, its lines, its day's path on
+    the branch, that file's text once it is added), and the newest id looked at. A day's file on the branch becomes the
+    union by Id of the branch's entries and the host's, in Id order (record.4), each entry's file holding the entries
+    before it in the chain, so each is a commit of its own on the one before. Days before the newest pushed one are not
+    looked at. at_branch(path) reads a file at the branch's tip, or None."""
+    host = crew.this_host()
+    d = ROOT / label / "runs" / host
+    try:
+        done = mark(label).read_text().strip()
+    except OSError:
+        done = ""
+    since = f"{done[0:4]}-{done[4:6]}-{done[6:8]}" if len(done) >= 8 else ""
+    chain, newest = [], None
+    for f in sorted(d.glob("*.rec")) if d.is_dir() else []:
+        if f.stem < since:
+            continue
+        mine = blocks(f.read_text())
+        if not mine:
+            continue
+        newest = max([newest or "", *mine])
+        path = f"runs/{host}/{f.name}"
+        have = blocks(at_branch(path) or "")
+        for eid in sorted(set(mine) - set(have)):
+            have[eid] = mine[eid]
+            chain.append((eid, mine[eid], path, DESCRIPTOR + "\n".join(have[k] for k in sorted(have))))
+    return sorted(chain, key=lambda c: c[0]), newest
+
+
+def entry_message(text, agent):
+    """The message of an entry's own commit on the branch, from its lines: runs(<host>): <act> <first On>, refused
+    when it records a refusal, then (<agent>), and the Crew-Entry trailer naming it (plan.2). A field the entry lacks
+    is left out."""
+    f = {}
+    for l in text.splitlines():
+        m = FIELD.match(l)
+        if m:
+            f.setdefault(m.group(1), m.group(2).strip())
+    words = " ".join(w for w in (f.get("Act"), f.get("On"), "refused" if f.get("Refused") else None, f"({agent})") if w)
+    return ("runs" + (f"({f['Host']})" if f.get("Host") else "") + f": {words}\n\nCrew-Entry: {f.get('Id')}\n")
+
+
 def mark_carried(label, newest):
     """After a push carried entries up to newest, start the next carry from that day."""
     if not newest:

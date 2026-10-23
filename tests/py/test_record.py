@@ -106,6 +106,50 @@ class TestCarry:
         assert len(record.parse(text)) == 4
 
 
+class TestUnpushed:
+    A, B, C = "20261012T100000Z-mac-studio-1-1", "20261012T100000Z-mac-studio-1-2", "20261012T100000Z-mac-studio-1-3"
+
+    def write(self, here, day, *ids):
+        here.mkdir(parents=True, exist_ok=True)
+        (here / f"{day}.rec").write_text(record.DESCRIPTOR + "".join(f"\nId: {i}\nAt: {day}T10:00:00Z\nAct: x\n" for i in ids))
+
+    def test_the_entries_the_branch_lacks_come_oldest_first_each_file_holding_those_before_it(self, here):
+        self.write(here, "2026-10-12", self.C, self.A, self.B)
+        branch = record.DESCRIPTOR + f"\nId: {self.A}\nAt: 2026-10-12T10:00:00Z\nAct: x\n"
+        chain, newest = record.unpushed("wldn", lambda path: branch if path == "runs/mac-studio/2026-10-12.rec" else None)
+        assert [(eid, path) for eid, _, path, _ in chain] == [(self.B, "runs/mac-studio/2026-10-12.rec"), (self.C, "runs/mac-studio/2026-10-12.rec")]
+        assert newest == self.C and chain[0][1].startswith(f"Id: {self.B}\n")
+        assert [[e["Id"] for e in record.parse(text)] for *_, text in chain] == [[self.A, self.B], [self.A, self.B, self.C]]
+        assert all(text.startswith(record.DESCRIPTOR) for *_, text in chain)
+
+    def test_nothing_is_left_when_the_branch_holds_every_entry(self, here):
+        self.write(here, "2026-10-12", self.A, self.B)
+        assert record.unpushed("wldn", lambda path: (here / "2026-10-12.rec").read_text())[0] == []
+
+    def test_days_before_the_newest_pushed_are_not_looked_at(self, here):
+        self.write(here, "2026-10-10", "20261010T100000Z-mac-studio-1-1")
+        self.write(here, "2026-10-12", self.A)
+        record.mark_carried("wldn", "20261011T000000Z-mac-studio-9-9")
+        assert [eid for eid, *_ in record.unpushed("wldn", lambda path: None)[0]] == [self.A]
+
+    def test_a_host_that_lost_its_record_keeps_the_branchs_entries_beside_its_new_ones(self, here):
+        branch = record.DESCRIPTOR + "".join(f"\nId: 20261012T09000{i}Z-mac-studio-1-1\nAt: 2026-10-12T09:00:00Z\nAct: x\n" for i in range(3))
+        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-2-1")
+        (_, _, _, text), = record.unpushed("wldn", lambda path: branch)[0]
+        assert len(record.parse(text)) == 4
+
+    def test_an_entrys_own_commit_names_it_its_act_and_what_it_acted_on(self):
+        text = f"Id: {self.A}\nAt: 2026-10-12T10:00:00Z\nHost: mac-studio\nBy: wldn-planner\nAct: tell\nOn: agent/wldn-planner\nOn: unit/a\nChars: 5\n"
+        assert record.entry_message(text, "wldn-planner") == f"runs(mac-studio): tell agent/wldn-planner (wldn-planner)\n\nCrew-Entry: {self.A}\n"
+        assert plan.message("runs(mac-studio): tell agent/wldn-planner (wldn-planner)", "", self.A) == record.entry_message(text, "wldn-planner")
+
+    def test_an_entry_with_no_object_and_a_refusal_say_so_in_their_subject(self):
+        bare = f"Id: {self.A}\nAt: 2026-10-12T10:00:00Z\nHost: mac-studio\nBy: chuck@mac-studio\nAct: state.init\n"
+        assert record.entry_message(bare, "chuck@mac-studio").split("\n")[0] == "runs(mac-studio): state.init (chuck@mac-studio)"
+        refused = bare.replace("Act: state.init\n", "Act: unit.drop\nOn: unit/a\nRefused: no unit a in the plans of wldn\n")
+        assert record.entry_message(refused, "x").split("\n")[0] == "runs(mac-studio): unit.drop unit/a refused (x)"
+
+
 E = [entry("20261005T100000Z-box-1-1", "2026-10-05T10:00:00Z", "capture", ["signals/s/01-c"], Session="chuck-herdr-alpha:sid-c2",
            Commit=["WilldanGroup/willdan-blueprints@aaaaaaaa11"], By="swb-2-conductor", Host=BOX),
      entry("20261005T100500Z-box-1-2", "2026-10-05T10:05:00Z", "capture", ["signals/s/02-other"]),
