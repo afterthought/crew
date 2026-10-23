@@ -1268,10 +1268,16 @@ GIVE_READ = POLICY + r"""echo "SLUICE=$(sluice --version 2>&1 | tr '\n' ' ')"
 # origin for its bolts (plan.19), run in the kit's main checkout on the team's host, with no worktree (record 0026):
 # sluice's document on standard output and its exit (kit.branch_said). Once sluice made it, which sets the host's own
 # branch too, crew marks that branch in the kit's git config, branch.bolt/<bolt>.crew, so the tidy knows it as crew's
-# (read.4); a mark git refused is said on standard error.
+# (read.4), and fetches GitHub's copy, origin/bolt/<bolt>, where the bolt is read from then (gather.bolt_read), before
+# the give's plan write; a mark git refused, or a fetch that failed, is said on standard error, and the give goes on,
+# since the branch is made and the team's next read fetches it again.
 BOLT_CREATE = r"""cd "$1" || exit 3
 sluice branch create "bolt/$2" --from main --json; rc=$?
-if [ "$rc" = 0 ]; then git config "branch.bolt/$2.crew" given || echo "git could not mark bolt/$2 as crew's" >&2; fi
+if [ "$rc" = 0 ]; then
+  git config "branch.bolt/$2.crew" given || echo "git could not mark bolt/$2 as crew's" >&2
+  git fetch -q origin "+refs/heads/bolt/$2:refs/remotes/origin/bolt/$2" >&2 \
+    || echo "git could not fetch bolt/$2 from GitHub; the team's next read fetches it again" >&2
+fi
 exit $rc
 """
 
