@@ -905,10 +905,15 @@ DEAD = "An older copy of this card was lost: dismiss it in the app."
 KEY_LEAST, FILL = 8, "_"
 
 
-def row_object(key):
-    """The run record's object of one of crew's six cards' keys, the row's: a proposal's, a batch's, a bolt's for its
-    landing, an environment's for its deploy and steps, a record's, under record 0031's key or the key with the commit
-    after it, record/<kit>/<number>/<commit>, as the design agent posted it before; None for any other key."""
+def row_object(key, kits=()):
+    """The run record's object of one of crew's six cards' keys, the row's: a proposal's, a batch's, a kit's for its
+    landings card, land/<kit> where kits, the names of the kits the partition's teams build, hold it, else a bolt's for
+    its reading or an old landing card of its own, an environment's for its deploy and steps, a record's, under record
+    0031's key or the key with the commit after it, record/<kit>/<number>/<commit>, as the design agent posted it
+    before; None for any other key."""
+    m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", key or "")
+    if m and m.group(1) in kits:
+        return f"kit/{m.group(1)}"
     for pattern, obj in ROWS:
         m = pattern.match(key)
         if m:
@@ -916,11 +921,12 @@ def row_object(key):
     return None
 
 
-def record_keys(entries, obj, by):
+def record_keys(entries, obj, by, kits=()):
     """The keys under which the agent `by` holds a decision record's card open, the record's object obj, in either
-    form (row_object), in the order of their first post; entries are in the order they were written."""
+    form (row_object, kits as it takes them), in the order of their first post; entries are in the order they were
+    written."""
     keys = dict.fromkeys(e["Key"] for e in entries if e.get("Act") == "card.post" and e.get("By") == by and e.get("Key")
-                         and row_object(e["Key"]) == obj)
+                         and row_object(e["Key"], kits) == obj)
     return [k for k in keys if card_under(entries, k, by)]
 
 

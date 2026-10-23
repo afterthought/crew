@@ -1,6 +1,6 @@
 ## 1. What a landings card holds, as decisions
 
-- [ ] 1.1 A `land/<x>` key is read as a kit's landings card when `x` is a kit a team of the partition builds and as a bolt's otherwise, its run-record object `kit/<kit>` or `bolt/<bolt>`, and a bolt named as a kit of its partition is refused at the plan write that adds it (design, Decision 1; Task notes 1.1); passes `tests/py/test_landings.py`.
+- [x] 1.1 A `land/<x>` key is read as a kit's landings card when `x` is a kit a team of the partition builds and as a bolt's otherwise, its run-record object `kit/<kit>` or `bolt/<bolt>`, and a bolt named as a kit of its partition is refused at the plan write that adds it (design, Decision 1; Task notes 1.1); passes `tests/py/test_landings.py`.
 - [ ] 1.2 The card's rows are the kit's proven bolts in the plan's order, a bolt with a fix in flight or a landing sluice refused at its present head held with no box (design, Decisions 7 and 9; Task notes 1.2); passes `tests/py/test_landings.py`.
 - [ ] 1.3 Each row carries the conflicts forecast against main and each row above it, by `git merge-tree` on the kit's building host after a fetch, a forecast crew cannot make said and holding nothing (design, Decision 5; Task notes 1.3); passes `tests/py/test_landings.py`.
 

@@ -539,6 +539,9 @@ class Acts:
     def caller(self):
         return "chuck@mac-studio"
 
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
     def now(self):
         return NOW
 

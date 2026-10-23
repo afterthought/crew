@@ -1671,6 +1671,33 @@ def builder(fleet, label, kit):
     return next((crew.with_kit(fleet["teams"][t], kit) for t in sorted(crew.partition_of(fleet, label)["teams"]) if crew.builds(fleet["teams"][t], kit)), None)
 
 
+def partition_kits(fleet, label):
+    """The names of the kits the partition's teams build, from the teams file alone (code.5), sorted."""
+    return sorted({k["name"] for t in crew.partition_of(fleet, label)["teams"] for k in crew.kits_of(fleet["teams"][t])})
+
+
+def land_key(key, kits):
+    """What a land/ card key names (rail-cards, record 0031 as amended 2026-10-23), from the names of the kits the
+    partition's teams build (kits): ("kit", <kit>) for land/<kit>, the kit's landings card, main-level ops's; ("bolt",
+    <bolt>) for any other land/<x>, a bolt's reading and preview on its team's host, and an old landing card of the
+    bolt's own, land/<bolt> or land/<bolt>/<head> as a conductor posted one before; None for a key that is no
+    landing's."""
+    m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)(/[0-9a-f]{7})?", key or "")
+    if not m:
+        return None
+    return ("kit", m.group(1)) if m.group(1) in kits and not m.group(2) else ("bolt", m.group(1))
+
+
+def kit_named(bolt, kits, label):
+    """Why a bolt may not be added under its name, or None (rail-cards "A bolt's own landing card gives way to its
+    kit's"): it is the name of a kit the partition's teams build (kits), whose landings card is land/<kit>, so land/
+    <bolt> would name the kit's card and not the bolt."""
+    if bolt in kits:
+        return (f"a bolt of {label} may not be named {bolt}: that is the name of a kit {label}'s teams build, whose "
+                f"landings card is land/{bolt}")
+    return None
+
+
 def unheld_stages(k, why, other, chores=()):
     """Each unit's and chore's stage for the landing of a bolt no team holds: landed when main holds it on its kit as
     read there (k), a unit's change open or archived and a chore's trailer (chores, the bolt's chores' names), unknown
@@ -2733,6 +2760,8 @@ def called(a):
 def op_bolt_new(ctx, a):
     label = ctx.kit(a.repo)
     crew.NAME.match(a.bolt) or fail(f"a bolt's name is lowercase words with dashes, not {a.bolt}")
+    why = kit_named(a.bolt, partition_kits(ctx.fleet, label), label)
+    not why or fail(why)
 
     def change(w):
         w.plan.bolt(a.bolt) is None or fail(f"{label}/main already has bolt {a.bolt}")
@@ -9474,12 +9503,13 @@ def row_gone(key, entries):
                   "verify": "a verify report has no card, its findings fixed in one round"}.get(kind, "its row is gone")
 
 
-def record_settled(key, entries):
-    """The outcome a decision record's card closes with, under its key in either form (cards.row_object), from the run
+def record_settled(key, entries, kits=()):
+    """The outcome a decision record's card closes with, under its key in either form (cards.row_object, kits as it
+    takes them), from the run
     record's entries, oldest first: the record's last status crew record recorded, "Accepted at <commit>" or "Rejected
     at <commit>" as crew record closes it, the commit left out when the entry names none; None while it is proposed,
     or none is recorded."""
-    obj = cards.row_object(key or "")
+    obj = cards.row_object(key or "", kits)
     last = next((e for e in reversed(entries) if obj and e.get("Act") in ("record.proposed", "record.accepted", "record.rejected")
                  and not e.get("Refused") and obj in (e.get("On") or [])), None)
     if not last or last["Act"] == "record.proposed":
@@ -9633,18 +9663,20 @@ def rail_read(fleet, labels, board=False, sweep=False):
                 gives=gives, ops=opses, logs=logs, rows=rail_rows(fleet, found, sv, props, times, batched) + deploys)
     if sweep:
         read["swept"] = sweep_cards(fleet, read)
-        read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc))
+        read["cards"] = swept_cards(read["cards"], read["swept"], crew.this_host(), datetime.datetime.now(datetime.timezone.utc),
+                                    {l: partition_kits(fleet, l) for l, *_ in found})
         read["ended"], read["unchecked"] = sweep_sessions(fleet, found, sv, read["rows"], read["cards"], unread, batched)
         reckon_batches(fleet, found)
     return read
 
 
-def swept_cards(cards_, swept, here, now):
+def swept_cards(cards_, swept, here, now, kits=()):
     """The open cards once the sweep acted (sweep_cards): each it closed, withdrew or recorded lost gone, and each it
-    posted, again or anew, there, posted on this host (here) at now under its row's key in its owner's name."""
+    posted, again or anew, there, posted on this host (here) at now under its row's key in its owner's name, on its
+    row's object (cards.row_object, the kits of its partition, {label: names}, as it takes them)."""
     gone = {d["card"] for d in swept["done"] if d["did"] in ("closed", "withdrawn", "lost") and d["card"]}
     return [c for c in cards_ if c["card"] not in gone] + [
-        dict(label=d["label"], card=d["new"], key=d["key"], on=cards.row_object(d["key"]), by=d["by"], host=here, at=now)
+        dict(label=d["label"], card=d["new"], key=d["key"], on=cards.row_object(d["key"], kits.get(d["label"], ()) if kits else ()), by=d["by"], host=here, at=now)
         for d in swept["done"] if d.get("new")]
 
 
@@ -10761,7 +10793,7 @@ def card_read(fleet, a):
     else:
         print("\n".join(cards.answer_lines(a.key, card, got)))
     if words is not None:
-        record.emit(label, "card.close", [cards.row_object(a.key) or f"agent/{who}"], Card=card,
+        record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
         print(f"card {a.key}: {card} closed, as the user declined it")
 
@@ -11105,6 +11137,11 @@ class CardActs:
     def caller(self):
         return agent()
 
+    def kits(self, label):
+        """The names of the kits the partition's teams build, which tell a kit's landings card's key from a bolt's
+        (cards.row_object)."""
+        return partition_kits(self.fleet, label)
+
 
 CARD_LATER = "The event stands, and its card is not posted."
 # A card the user answered before its thing changed, as its close is recorded: its note, the user's to read, is on the
@@ -11184,7 +11221,7 @@ def card_posted(acts, label, owner, b, where, entries=None):
     that follows a card of the owner's those entries still hold open reads that card once it is made, and records it
     closed when Pending You has ended it, as it picks up an answered card a new card follows (followed_closed); one
     given back as recorded already reads nothing, the command that recorded it having read it."""
-    key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
+    key, obj = b["key"], cards.row_object(b["key"], acts.kits(label)) or f"agent/{owner}"
     cwd, remote = where
     known = acts.entries(label) if entries is None else entries
     asked = cards.post_key(known, key, owner)
@@ -11237,7 +11274,7 @@ def followed_closed(acts, label, owner, key, card, by, got, why):
     if not state:
         return
     picked = got.get("status") == "resolved"
-    acts.emit(label, "card.close", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key, State=state,
+    acts.emit(label, "card.close", [cards.row_object(key, acts.kits(label)) or f"agent/{owner}"], by=owner, Card=card, Key=key, State=state,
               Outcome=FOLLOWED if picked else ENDED_ELSEWHERE)
     print(f"card {key}: {card} picked up in Pending You by {by}, which follows it" if picked else
           f"card {key}: {card} was {state} in Pending You already")
@@ -11311,7 +11348,7 @@ def row_card_post(fleet, label, owner, build, facts, where, acts=None):
 
 def card_lost(acts, label, owner, key, card, words):
     """A card Pending You no longer finds for its owner, recorded closed as lost so it is held no longer."""
-    acts.emit(label, "card.close", [cards.row_object(key) or f"agent/{owner}"], by=owner, Card=card, Key=key, State="lost",
+    acts.emit(label, "card.close", [cards.row_object(key, acts.kits(label)) or f"agent/{owner}"], by=owner, Card=card, Key=key, State="lost",
               Outcome=f"lost to its owner: {words}")
     print(f"card {key}: {card} is lost to {owner} (Pending You: \"{words}\")", file=sys.stderr)
 
@@ -11332,7 +11369,7 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     posted, or None."""
     acts = acts or CardActs(fleet)
     b = card_built(acts, label, build, facts)
-    key, obj = b["key"], cards.row_object(b["key"]) or f"agent/{owner}"
+    key, obj = b["key"], cards.row_object(b["key"], acts.kits(label)) or f"agent/{owner}"
     entries = acts.entries(label)
     card = cards.card_under(entries, key, owner)
     if not card:
@@ -11407,7 +11444,7 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
 def card_closed(acts, label, owner, key, outcome, reason):
     """row_card_close's close in Pending You: the card's id once closed, None when none was held or it was lost, and
     False when the close was refused, so the card stays open."""
-    obj = cards.row_object(key) or f"agent/{owner}"
+    obj = cards.row_object(key, acts.kits(label)) or f"agent/{owner}"
     card = cards.card_under(acts.entries(label), key, owner)
     if not card:
         print(f"card {key}: {owner} holds none open on this host, so none is closed")
@@ -11523,7 +11560,7 @@ def record_card_close(fleet, label, owner, obj, outcome, acts=None):
     this host under the record's key, obj, in either form, record 0031's or the one with the commit after it
     (cards.record_keys), closed as row_card_close closes a row's, and said when it holds none. The ids closed."""
     acts = acts or CardActs(fleet)
-    keys = cards.record_keys(acts.entries(label), obj, owner) or [obj]
+    keys = cards.record_keys(acts.entries(label), obj, owner, acts.kits(label)) or [obj]
     return [c for c in (row_card_close(fleet, label, owner, k, outcome=outcome, acts=acts) for k in keys) if c]
 
 

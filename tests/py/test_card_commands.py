@@ -278,6 +278,9 @@ class Acts:
     def caller(self):
         return self.who
 
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
 
 MATCHED = {"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}
 POSTED = {"requestId": "req_c1", "url": "https://www.pendingyou.com/app/r/req_c1", "version": 1}

@@ -610,6 +610,9 @@ class ReadingActs:
     def caller(self):
         return "wldn-planner"
 
+    def kits(self, label):  # the kits the partition's teams build, which tell land/<kit> from land/<bolt>
+        return ("switchboard-kit",)
+
 
 class TestLandingSession:
     """crew card session land/<bolt> (card-sessions "A landing's session follows the bolt's head"): its link printed,
