@@ -2,7 +2,7 @@
 
 ## 1. Every row's card is raised again where its owner runs
 
-- [ ] 1.1 The rail's sweep judges every row's card, not a batch's alone, stranded on its owner's host, proved by `TestSweepJudged` in `tests/py/test_rail.py` (design, *Task notes* 1.1).
+- [x] 1.1 The rail's sweep judges every row's card, not a batch's alone, stranded on its owner's host, proved by `TestSweepJudged` in `tests/py/test_rail.py` (design, *Task notes* 1.1).
 - [ ] 1.2 The sweep raises each such row through its kind's raise handed the older copy and reports what it did, proved by `TestSweep` in `tests/py/test_rail.py` (design, *Task notes* 1.2).
 - [ ] 1.3 A proposal's, landing's, deploy's and step's raise handed an older copy posts its card saying that copy is dead, proved in `tests/py/test_cards.py` and `tests/py/test_ops.py` (design, *Task notes* 1.3).
 

@@ -553,7 +553,8 @@ class TestSweepJudged:
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
 
-    MOVED = {"batch/13": ("wldn-planner", BOX), "proposal/13": ("wldn-planner", BOX)}
+    MOVED = {"batch/13": ("wldn-planner", BOX), "proposal/13": ("wldn-planner", BOX), "land/y": ("swb-1-conductor", BOX),
+             "deploy/dev": ("wldn-ops", BOX), "op/dev/2": ("wldn-ops", BOX)}
     B13 = did("card.post", 60, Card="req_b13", Key="batch/13", On=["batch/13"])
     LOST = did("card.close", 50, Card="req_b13", Key="batch/13", On=["batch/13"], State="lost", Outcome="lost to its owner: Not found")
 
@@ -579,12 +580,35 @@ class TestSweepJudged:
         j = self.moved(BOX, [self.B13, self.LOST, newer], [card("batch/13", "req_b14", "wldn-planner", host=BOX)])
         assert (j["again"], j["none"], j["held"]) == ([], [], [(card("batch/13", "req_b14", "wldn-planner", host=BOX), r)])
 
-    def test_a_proposals_card_held_or_lost_on_another_host_is_left_as_it_is(self):
-        p13 = row("proposal/13")
-        held = dict(self.B13, Card="req_p13", Key="proposal/13", On=["proposal/13"])
-        assert self.moved(BOX, [held], [card("proposal/13", "req_p13", "wldn-planner")], [p13])["again"] == []
-        j = self.moved(BOX, [held, dict(self.LOST, Card="req_p13", Key="proposal/13")], rows_=[p13])
-        assert (j["again"], j["none"]) == ([], [p13])
+    # Every other row's card held or lost so, each in its owner's name (rail-cards, "A proposal's card left on the host
+    # the main level left", "A deploy's and a step's card left behind", "A landing's card left on the host its team left").
+    STRANDED = [("proposal/13", "proposals", "wldn-planner"), ("land/y", "land", "swb-1-conductor"),
+                ("deploy/dev", "operations", "wldn-ops"), ("op/dev/2", "operations", "wldn-ops")]
+
+    @pytest.mark.parametrize("key, group, by", STRANDED)
+    def test_a_rows_card_held_on_another_host_is_posted_again_where_its_owner_runs(self, key, group, by):
+        r, cid = row(key, group), "req_" + key.replace("/", "_")
+        held = dict(self.B13, Card=cid, Key=key, On=[cards.row_object(key)], By=by)
+        j = self.moved(BOX, [held], [card(key, cid, by)], [r])
+        assert (j["again"], j["none"], j["held"], j["gone"]) == ([(r, cid)], [], [], [])
+
+    @pytest.mark.parametrize("key, group, by", STRANDED)
+    def test_a_rows_card_lost_to_its_owner_on_another_host_is_posted_again_and_not_as_a_row_with_none(self, key, group, by):
+        r, cid = row(key, group), "req_" + key.replace("/", "_")
+        held = dict(self.B13, Card=cid, Key=key, On=[cards.row_object(key)], By=by)
+        j = self.moved(BOX, [held, dict(self.LOST, Card=cid, Key=key, On=[cards.row_object(key)], By=by)], rows_=[r])
+        assert (j["again"], j["none"]) == ([(r, cid)], [])
+
+    def test_a_rows_card_held_on_its_owners_own_host_is_posted_again_by_no_read_on_another(self):
+        """rail-cards, "Read on another host": every row's owner runs on mac-studio, where each card was posted, and the
+        rail is read on the box."""
+        rows_ = [row(k, g) for k, g, _ in self.STRANDED] + [row("batch/13", "batches")]
+        entries = [dict(self.B13, Card="req_" + k.replace("/", "_"), Key=k, On=[cards.row_object(k)], By=by) for k, _, by in self.STRANDED]
+        lost = [dict(self.LOST, Card=e["Card"], Key=e["Key"], On=e["On"], By=e["By"]) for e in entries]
+        home = {k: (by, "mac-studio") for k, (by, _) in self.MOVED.items()}
+        for es in (entries + [self.B13], entries + lost + [self.B13, self.LOST]):
+            j = plan.sweep_judged(BOX, rows_, [], es, home, set(), NOW)
+            assert (j["again"], j["none"]) == ([], [])
 
     def test_a_batch_whose_last_post_was_refused_lately_is_left_for_a_later_read(self):
         refused = did("card.post", 5, Key="batch/13", On=["batch/13"], Refused="Pending You refused post_request: x")

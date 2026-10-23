@@ -8851,10 +8851,10 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     whose record crew record has recorded accepted or rejected since, to close with its status (record_settled). Then
     each row in record 0031's
     form with no card open on any host, whose owner runs here (owners, {row key: (owner, host)}), to post through its
-    kind's raise; but a batch's row, batch/<n>, whose owner runs here and whose owner's newest card under its key this
-    host's sign-in can't reach, one posted from another host and not closed, or one lost to its owner on any host
-    (cards.stranded, over the whole record read), to post again through the batch's raise, the older copy named, and
-    not as a row with no card. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is
+    kind's raise; but each row whose owner runs here and whose owner's newest card under its key this host's sign-in
+    can't reach, one posted from another host and not closed, or one lost to its owner on any host (cards.stranded,
+    over the whole record read), to post again through its kind's raise, the older copy named, and not as a row with no
+    card. A card or a row whose last close or post was refused under CARD_RETRY seconds ago is
     left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
     batch), each batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why,
     once: none is under its key yet, and the user's answer has not closed it (batch_closed). And each row's card of a
@@ -8886,7 +8886,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     mine = [r for r in rows if cards.row_object(r["key"]) and (owners.get(r["key"]) or (None, None))[1] == here
             and not refused_lately(entries, now, key=r["key"])]
     for r in mine:
-        older = cards.stranded(entries, r["key"], owners[r["key"]][0], here) if re.fullmatch(r"batch/\d+", r["key"]) else None
+        older = cards.stranded(entries, r["key"], owners[r["key"]][0], here)
         if older:
             out["again"].append((r, older))
     again = {r["key"] for r, _ in out["again"]}
