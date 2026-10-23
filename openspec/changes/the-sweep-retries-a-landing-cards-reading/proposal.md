@@ -40,4 +40,5 @@ README.md
 tests/py/test_rail.py
 tests/py/test_cards.py
 tests/t-briefs.sh
+tests/t-journey-land.sh
 ```
