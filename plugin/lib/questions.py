@@ -2,6 +2,7 @@
 """questions.py: whether a Claude session on this host is waiting on a question crew's own hook saw it open.
 
   python3 questions.py <session id>      or, sent over ssh:  python3 - <session id> < questions.py
+  python3 questions.py --pane <herdr session> <pane id> <agent>
 
 crew's PreToolUse hook (plugin/hooks/questions) leaves ~/.local/state/crew/questions/<session id> when a crew agent
 opens AskUserQuestion or ExitPlanMode: one JSON object holding the call's tool_use_id and its transcript_path. The
@@ -11,6 +12,15 @@ mark counts until that transcript holds the call's answer. The answer, on stdout
   {"question": "open", "id": <call>}       a mark whose call has no answer in the transcript yet
   {"question": "answered", "id": <call>}   a mark whose call the transcript holds the answer to
   {"unread": "<what>"}                     what crew could not read to know: the mark, or the transcript it names
+
+The second form asks for an agent herdr names no Claude session for, by the herdr session and pane it runs in. crew's
+SessionStart hook (plugin/hooks/session-start) records every crew agent's session in
+~/.local/state/crew/sessions/<session id>, lines of KEY=value, among them CREW_AGENT, the agent's name, and
+CREW_HERDR_SESSION and CREW_PANE, the herdr session and pane the session started in or herdr resumed it in. The
+session is the newest record, by its file's time, naming that agent, herdr session and pane, and the answer is the
+first form's for it with "session": <its id> added; with no such record it is {"session": null, "question": null}. A
+record written by a hook older than those keys names no pane and matches nothing. A record it cannot read is passed
+over, and a records folder it cannot list is unread.
 
 It leans on two facts of Claude Code, which it does not document as a format. A PreToolUse hook's input holds
 session_id, transcript_path and tool_use_id (Claude Code's hooks reference, "PreToolUse" and "Common input fields").
@@ -25,6 +35,10 @@ older."""
 import json, pathlib, re, sys
 
 MARKS = pathlib.Path.home() / ".local/state/crew/questions"
+RECORDS = pathlib.Path.home() / ".local/state/crew/sessions"
+NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
+PANE = re.compile(r"[A-Za-z0-9:]+")
+SESSION = re.compile(r"[A-Za-z0-9-]+")
 
 
 def answers(v, call):
@@ -39,7 +53,7 @@ def answers(v, call):
 
 
 def read(sid):
-    if not re.fullmatch(r"[A-Za-z0-9-]+", sid):
+    if not SESSION.fullmatch(sid):
         return {"unread": f"its session id {json.dumps(sid)} is not one crew reads"}
     mark = MARKS / sid
     try:
@@ -72,7 +86,59 @@ def read(sid):
     return {"question": "open", "id": call}
 
 
+def session_in(records, agent, session, pane):
+    """The session crew recorded of the agent starting in that herdr session and pane, from its records, each (its
+    file's time, its session id, its fields): the newest that names all three, or None."""
+    held = [(t, sid) for t, sid, fields in records
+            if (fields.get("CREW_AGENT"), fields.get("CREW_HERDR_SESSION"), fields.get("CREW_PANE")) == (agent, session, pane)]
+    return max(held)[1] if held else None
+
+
+def records():
+    """crew's records of the sessions on this host, as session_in takes them, passing over one it cannot read; or what
+    it could not list. No folder is no record."""
+    try:
+        names = [f for f in RECORDS.iterdir() if SESSION.fullmatch(f.name)]
+    except FileNotFoundError:
+        return []
+    except OSError as e:
+        return f"crew's session records {RECORDS} can't be listed ({e.strerror or e})"
+    held = []
+    for f in names:
+        try:
+            t, text = f.stat().st_mtime, f.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        held.append((t, f.name, dict(line.split("=", 1) for line in text.splitlines() if "=" in line)))
+    return held
+
+
+def by_pane(session, pane, agent):
+    """The second form's answer: the session crew recorded of the agent in that herdr session and pane, and its mark."""
+    for what, v, shape in (("herdr session", session, NAME), ("pane", pane, PANE), ("agent", agent, NAME)):
+        if not shape.fullmatch(v):
+            return {"unread": f"its {what} {json.dumps(v)} is not one crew reads"}
+    held = records()
+    if isinstance(held, str):
+        return {"unread": held}
+    sid = session_in(held, agent, session, pane)
+    if sid is None:
+        return {"session": None, "question": None}
+    got = read(sid)
+    return got if "unread" in got else {"session": sid, **got}
+
+
+def answer(args):
+    """What the command line's arguments ask, or None when they are not one of its forms."""
+    if len(args) == 1:
+        return read(args[0])
+    if len(args) == 4 and args[0] == "--pane":
+        return by_pane(*args[1:])
+    return None
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("usage: questions.py <session id>")
-    print(json.dumps(read(sys.argv[1])))
+    got = answer(sys.argv[1:])
+    if got is None:
+        sys.exit("usage: questions.py <session id> | --pane <herdr session> <pane id> <agent>")
+    print(json.dumps(got))

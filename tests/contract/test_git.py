@@ -193,6 +193,78 @@ def test_a_place_of_a_bolt_github_does_not_have_is_not_made_and_the_fetch_is_nam
     assert subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", "unit/x"], capture_output=True).returncode == 1
 
 
+def split_kit(repo, tmp_path, merges):
+    """A kit whose bolt/b is on a bare GitHub stand-in as the host's was when it was pushed there, then took the given
+    number of merges on the host alone, as a legacy bolt split by an older push stands."""
+    repo.commit("chore: start", {"README.md": "r\n"})
+    repo.git("branch", "bolt/b")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git"))
+    for n in range(merges):
+        repo.git("checkout", "-q", "-b", f"unit/u{n}", "bolt/b")
+        repo.commit(f"feat: u{n}", {f"u{n}": "u\n"})
+        repo.git("checkout", "-q", "bolt/b")
+        repo.git("merge", "-q", "--no-ff", "-m", f"chore(land): #{n} unit/u{n}", f"unit/u{n}")
+    repo.git("checkout", "-q", "main")
+    return repo.git("rev-parse", "bolt/b")
+
+
+def split_of(repo, remote="origin"):
+    """plan.BOLT_SPLIT in the kit's main checkout, as bolt_split_check runs it, and kit.bolt_split's reading of it."""
+    import kit
+    r = script("BOLT_SPLIT", str(repo.path), "b", remote)
+    assert r.returncode == 0, r.stderr
+    return r.stdout, kit.bolt_split(r.stdout, "b")
+
+
+def test_a_bolt_whose_host_tip_github_lacks_is_split_by_the_merges_it_lacks(repo, tmp_path):
+    """plan.split_refusal through BOLT_SPLIT (plan.19, bolt-teams "A merge into a split bolt"): the host's bolt/b two
+    merges ahead of GitHub's, fetched once into origin/bolt/b, is not held there, and the two merges are counted."""
+    tip = split_kit(repo, tmp_path, 2)
+    out, f = split_of(repo)
+    there = subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "rev-parse", "bolt/b"], capture_output=True, text=True).stdout.strip()
+    assert "HELD=no" in out and "MERGES=2" in out
+    assert f == dict(local=tip, there=there, held="no", merges=2, read=None)
+    assert repo.git("rev-parse", "origin/bolt/b") == there
+
+
+def test_a_bolt_github_holds_at_the_hosts_tip_or_beyond_is_not_split(repo, tmp_path):
+    """plan.split_refusal through BOLT_SPLIT (bolt-teams "GitHub's copy holds the host's tip"): GitHub's bolt/b at the
+    host's tip, or ahead of it with a merge sluice landed there from another host, holds the host's tip."""
+    tip = split_kit(repo, tmp_path, 1)
+    repo.git("push", "-q", "origin", "bolt/b")
+    out, f = split_of(repo)
+    assert "HELD=yes" in out and f["held"] == "yes" and f["there"] == tip
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", "-b", "bolt/b", str(tmp_path / "github.git"), str(other)], check=True)
+    subprocess.run(["git", "-C", str(other), "commit", "-q", "--allow-empty", "-m", "chore(land): #2 unit/x"], check=True)
+    subprocess.run(["git", "-C", str(other), "push", "-q", "origin", "bolt/b"], check=True)
+    out, f = split_of(repo)
+    assert "HELD=yes" in out and f["held"] == "yes" and f["there"] != tip and f["merges"] == 0
+
+
+def test_a_bolt_github_has_no_copy_of_says_so_and_fetches_nothing(repo, tmp_path):
+    """plan.split_refusal through BOLT_SPLIT (bolt-teams "GitHub has no copy"): `git ls-remote --exit-code` exits 2 for
+    a ref the remote lacks, which BOLT_SPLIT prints as THERE=-, fetching nothing."""
+    split_kit(repo, tmp_path, 1)
+    subprocess.run(["git", "--git-dir", str(tmp_path / "github.git"), "branch", "-q", "-D", "bolt/b"], check=True)
+    assert subprocess.run(["git", "-C", str(repo.path), "ls-remote", "--exit-code", "origin", "refs/heads/bolt/b"],
+                          capture_output=True).returncode == 2
+    out, f = split_of(repo)
+    assert out.strip() == "THERE=-" and f["there"] == "-" and f["read"] is None
+    assert subprocess.run(["git", "-C", str(repo.path), "rev-parse", "--verify", "-q", "origin/bolt/b"], capture_output=True).returncode == 1
+
+
+def test_a_bolt_whose_remote_cannot_be_read_gives_gits_words(repo, tmp_path):
+    """plan.split_refusal through BOLT_SPLIT (bolt-teams "GitHub's copy cannot be read", read.1): a remote whose URL does
+    not resolve exits neither 0 nor 2, and BOLT_SPLIT prints git's words on one line as READ."""
+    split_kit(repo, tmp_path, 1)
+    repo.git("remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    out, f = split_of(repo)
+    assert out.startswith("READ=") and len(out.strip().splitlines()) == 1
+    assert "gone.git" in f["read"] and f["there"] is None
+
+
 def onto(place, bolt, *heads):
     """plan.ONTO as rebase_dependents runs it in a dependent's place: <place> <bolt> [<head left out>...]."""
     import plan
