@@ -12,6 +12,6 @@
 
 ## 3. Wiring and docs
 
-- [ ] 3.1 A word piped to `crew tell --board` reaches the planner's pane marked from the board and naming the item, records its length and not its text, and a word for an agent its kind does not go to types nothing (design, Decision 2; Task notes 3.1); verify `tests/suite t-journey-main` ends with "0 failed".
+- [x] 3.1 A word piped to `crew tell --board` reaches the planner's pane marked from the board and naming the item, records its length and not its text, and a word for an agent its kind does not go to types nothing (design, Decision 2; Task notes 3.1); verify `tests/suite t-journey-main` ends with "0 failed".
 - [ ] 3.2 README and the crew skill say how a dock's word reaches the item's agent and what a tell from the board is and answers (design, Context; Task notes 3.2); verify `tests/suite t-docs` ends with "0 failed".
 - [ ] 3.3 The tests the change affects pass: verify `tests/suite --affected` ends with "0 failed".
