@@ -334,12 +334,7 @@ def hand(name):
 
 def holding(fleet, name):
     """The Agents an agent's standing role is kept in, and that role: a team's, a main level's or a dispatcher's."""
-    scope, role = crew.standing_role(fleet, name) or fail(f"{name} is no standing agent of crew's: only those are restarted for an update")
-    if scope in fleet["teams"]:
-        return crew.Team(fleet, crew.team_of(fleet, scope)), role
-    if role == "dispatcher":
-        return crew.standing(fleet, "dispatch", scope), role
-    return crew.main_holding(fleet, scope, role), role
+    return crew.holding_of(fleet, name) or fail(f"{name} is no standing agent of crew's: only those are restarted for an update")
 
 
 def renew(fleet, a):
@@ -380,7 +375,7 @@ def renew(fleet, a):
     agents, role = holding(fleet, name)
     agents.ensure()
     commit, version = crew.crew_version()
-    why = agents.stop(role)
+    why = agents.stop(role, waits=True)  # renew_ready: nothing runs in its background but crew's waits, which end here
     if why:
         print(why, file=sys.stderr)
         return

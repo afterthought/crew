@@ -648,7 +648,7 @@ class TestRaisedAgain:
         import plan
         got = []
 
-        def change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False):
+        def change(fleet, label, owner, build, facts, note, where, acts=None, kind_changed=False, anew=None):
             got.append((owner, build(facts)["card"]["summary"]))
             return "req_new"
         monkeypatch.setattr(plan, "row_card_change", change)
