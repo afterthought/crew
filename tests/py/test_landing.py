@@ -157,19 +157,22 @@ class TestALandingIsReadFromGitHubsMain:
 class TestTheSubmission:
     """crew bolt submit (plan.16, plan.18): main now read before the submission, refusing when it can't be, the bolt
     decided by landing_said against it, its branch marked only once it landed, and the landing recorded at main now."""
-    T = {"name": "swb-1", "machine": "box", "kit": {"name": "k", "main": "/k/main", "dir": "/k"}}
+    T = {"name": "swb-1", "machine": "box", "kit": {"name": "k", "main": "/k/main", "dir": "/k", "repo": "o/k"}}
     BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\nSUBMISSION_OWN=\n"
 
-    def submit(self, monkeypatch, before, outs):
-        """bolt_submit of bolt b on the team's host box, MAIN saying before there, and each script crew runs there
-        answering in turn from outs; what ran, and what was recorded, kept as self.ran and self.emitted when it refuses."""
+    def submit(self, monkeypatch, before, outs, said=None):
+        """bolt_submit of bolt b on the team's host box, MAIN saying before there and POLICY said, a policy at main
+        taking no pull requests unless given, and each script crew runs there answering in turn from outs; what ran,
+        and what was recorded, kept as self.ran and self.emitted when it refuses."""
         ran, emitted = self.ran, self.emitted = [], []
+        said = said or policy(TAKES_NONE)
         monkeypatch.setattr(plan, "CONTEXT", {})
         monkeypatch.setattr(plan, "default_label", lambda fleet, a: "wldn")
         monkeypatch.setattr(plan, "locate", lambda *a: ("wldn", None, None, type("P", (), {"bolt": lambda s, n: {"Bolt": n}})()))
         monkeypatch.setattr(plan, "bolt_team", lambda fleet, b: self.T)
         monkeypatch.setattr(plan, "READ", type("R", (), {"drop_kit": lambda s, h, m: None})())
-        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: ran.append(("host_run", script, host)) or before)
+        monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: ran.append(("host_run", script, host))
+                            or (before if script == plan.MAIN else said))
         monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: ran.append(("on_machine", argv[2], host)) or outs.pop(0))
         monkeypatch.setattr(plan.record, "emit", lambda label, act, on, why: emitted.append((label, act, on, why)))
         monkeypatch.setenv("CREW_AGENT", "wldn-ops")
@@ -193,7 +196,8 @@ class TestTheSubmission:
         out = said(3, new=OLD, github=NEW, level="''", sluice=SIGNAL)
         done = lambda o: type("R", (), {"returncode": 0, "stdout": o, "stderr": ""})()
         ran, emitted = self.submit(monkeypatch, self.BEFORE, [done(out), done("MARKED=yes\n")])
-        assert ran == [("host_run", plan.MAIN, "box"), ("on_machine", plan.LANDING, "box"), ("on_machine", plan.LANDED_MARK, "box")]
+        assert ran == [("host_run", plan.MAIN, "box"), ("host_run", plan.POLICY, "box"), ("on_machine", plan.LANDING, "box"),
+                       ("on_machine", plan.LANDED_MARK, "box")]
         assert emitted == [("wldn", "bolt.submit", ["bolt/b"], "bolt(b): landed on main at bbbbbbb")]
         assert capsys.readouterr().out.startswith("bolt/b landed on k's main at bbbbbbb: now crew bolt land b. sluice exited 3")
 
@@ -210,7 +214,63 @@ class TestTheSubmission:
         done = type("R", (), {"returncode": 0, "stdout": said(2, new=OLD, github=OLD, held="no", level="''"), "stderr": ""})()
         with pytest.raises(plan.Refusal, match="bolt/b did not land: sluice refused it or found a conflict, and main is where it was"):
             self.submit(monkeypatch, self.BEFORE, [done])
-        assert [s for _, s, _ in self.ran] == [plan.MAIN, plan.LANDING] and self.emitted == []
+        assert [s for _, s, _ in self.ran] == [plan.MAIN, plan.POLICY, plan.LANDING, plan.POLICY] and self.emitted == []
+
+    def test_a_refused_landing_leaves_its_pull_request_a_draft(self, monkeypatch):
+        """bolt-teams "A refused landing leaves its pull request a draft": the one sluice's submission left ready is
+        drafted before the command answers, its link named with what makes it live again."""
+        refused = ran(0, said(2, new=OLD, github=OLD, held="no", level="''"))
+        outs = [ran(0, gh_list()), refused, ran(0, gh_list(READY)), ran(0, gh_marked(0, "✓"))]
+        with pytest.raises(plan.Refusal) as e:
+            self.submit(monkeypatch, self.BEFORE, outs, policy(TAKES))
+        assert str(e.value).startswith("bolt/b did not land: sluice refused it or found a conflict, and main is where it was.")
+        assert str(e.value).endswith(" Its pull request https://github.com/o/k/pull/99 is a draft, so no merge into bolt/b "
+                                     "lands it; the next crew bolt submit b, on the user's word, makes it live again.")
+        assert [s for _, s, _ in self.ran] == [plan.MAIN, plan.POLICY, plan.PULL, plan.LANDING, plan.POLICY, plan.PULL,
+                                               plan.PULL_MARK] and self.emitted == []
+
+    def test_a_landing_whose_script_failed_leaves_it_a_draft_too(self, monkeypatch):
+        outs = [ran(0, gh_list(DRAFT)), ran(0, gh_marked(0, "✓")), ran(2, "", "wt submit needs sluice's wt-submit, which is not on box's path\n"),
+                ran(0, gh_list(READY)), ran(0, gh_marked(0, "✓"))]
+        with pytest.raises(plan.Refusal, match="^on box: wt submit needs sluice's wt-submit, which is not on box's path Its pull request "):
+            self.submit(monkeypatch, self.BEFORE, outs, policy(TAKES))
+
+    def test_the_next_landing_readies_its_draft_before_it_submits(self, monkeypatch, capsys):
+        """bolt-teams "The next landing readies the pull request": readied before LANDING runs, said, and the landing
+        goes on as any landing does."""
+        outs = [ran(0, gh_list(DRAFT)), ran(0, gh_marked(0, "✓")), ran(0, said(0, github=NEW)), ran(0, "MARKED=yes\n")]
+        _, emitted = self.submit(monkeypatch, self.BEFORE, outs, policy(TAKES))
+        assert [s for _, s, _ in self.ran] == [plan.MAIN, plan.POLICY, plan.PULL, plan.PULL_MARK, plan.LANDING, plan.LANDED_MARK]
+        assert capsys.readouterr().out.splitlines() == [
+            "Its pull request https://github.com/o/k/pull/99 is ready for review again, so sluice takes it at the head bolt/b has now.",
+            "bolt/b landed on k's main at bbbbbbb: now crew bolt land b."]
+        assert emitted
+
+    def test_a_pull_request_crew_cant_ready_submits_nothing(self, monkeypatch):
+        """bolt-teams "A pull request crew can't ready submits nothing"."""
+        with pytest.raises(plan.Refusal) as e:
+            self.submit(monkeypatch, self.BEFORE, [ran(0, gh_list(DRAFT)), ran(0, gh_marked(1, "HTTP 403: Resource not accessible"))], policy(TAKES))
+        assert str(e.value) == ("crew could not make bolt/b's pull request https://github.com/o/k/pull/99 ready for review: HTTP "
+                                "403: Resource not accessible; sluice takes no draft into main's queue, so nothing is submitted.")
+        assert plan.LANDING not in [s for _, s, _ in self.ran]
+
+    def test_one_crew_could_not_draft_is_named_first(self, monkeypatch):
+        """Decision 5: the next merge into the bolt would land it, so the refusal says so first, with the command."""
+        refused = ran(0, said(1, new=OLD, github=OLD, held="no", level="''"))
+        outs = [ran(0, gh_list()), refused, ran(0, gh_list(READY)), ran(0, gh_marked(1, "HTTP 502: Bad Gateway"))]
+        with pytest.raises(plan.Refusal) as e:
+            self.submit(monkeypatch, self.BEFORE, outs, policy(TAKES))
+        assert str(e.value).startswith(
+            "crew could not make bolt/b's pull request https://github.com/o/k/pull/99 a draft: HTTP 502: Bad Gateway; until "
+            "it is one, the next merge into bolt/b lands it: gh pr ready 99 -R o/k --undo makes it one. bolt/b did not land: "
+            "main's checks failed on it")
+
+    def test_a_landing_that_lands_marks_nothing(self, monkeypatch, capsys):
+        """bolt-teams "A landing that lands marks nothing": a landed pull request is merged, so it is never drafted."""
+        outs = [ran(0, gh_list()), ran(0, said(0, github=NEW)), ran(0, "MARKED=yes\n")]
+        self.submit(monkeypatch, self.BEFORE, outs, policy(TAKES))
+        assert plan.PULL_MARK not in [s for _, s, _ in self.ran]
+        assert capsys.readouterr().out == "bolt/b landed on k's main at bbbbbbb: now crew bolt land b.\n"
 
 
 def test_what_the_mark_said_is_its_value_or_the_hosts_words():

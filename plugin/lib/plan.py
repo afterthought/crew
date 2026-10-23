@@ -2365,6 +2365,18 @@ def pull_hold(fleet, t, bolt, want):
     return pull, act
 
 
+def landing_unheld(fleet, t, bolt, words):
+    """The refusal of a landing that did not land, landing_said's words, once its pull request is drafted (pull_hold,
+    "held"), so no merge into the bolt lands it with no word of the user's: the words, then what was drafted; or, when
+    crew could not draft it, why first, naming the pull request and the command that drafts it (bolt-teams)."""
+    try:
+        pull, act = pull_hold(fleet, t, bolt, "held")
+    except Refusal as e:
+        return f"{str(e).rstrip('.')}. {words}"
+    said = pull_said(bolt, pull, act, True, t["kit"]["repo"])
+    return f"{words} {said}" if said else words
+
+
 def bolt_submit(fleet, a):
     """crew bolt submit <bolt>: main-level ops's landing of a bolt, its branch submitted to its kit's main through
     sluice from a short-lived worktree on the team's host, waiting for sluice's outcome, then the kit's main checkout
@@ -2373,7 +2385,9 @@ def bolt_submit(fleet, a):
     plan.18), the bolt's branch marked landed only once it has (LANDED_MARK), and the landing recorded at the commit main
     now holds; a main now crew can't read before refuses, nothing submitted. Nothing is refused for the host's own main
     lagging GitHub's: sluice forms the landing on GitHub's main and pushes it with a lease (plan.8). It moves no branch
-    itself."""
+    itself. The bolt's landing pull request is live only on the user's word, which this command is (bolt-teams): a draft
+    one is readied before the submission, refusing with nothing submitted when it can't be, and one the landing leaves
+    open is drafted before the command answers that the bolt did not land (landing_unheld)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     CONTEXT["label"] = label
     b = plan.bolt(a.bolt)
@@ -2381,14 +2395,19 @@ def bolt_submit(fleet, a):
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
     not why or fail(why)
+    said = pull_said(a.bolt, *pull_hold(fleet, t, a.bolt, "live"), True, t["kit"]["repo"])
+    if said:
+        print(said)
     path = f"{t['kit']['dir']}/places/land-{a.bolt}"
     r = crew.on_machine(fleet, host, ["bash", "-c", LANDING, "crew", main, path, a.bolt, record.who()])
     READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.rstrip(), file=sys.stderr)
-    r.returncode == 0 or fail(f"on {host}: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
-    landed, words = landing_said(a.bolt, name, host, r.stdout, before)
-    landed or fail(words)
+    if r.returncode:
+        landed, words = False, f"on {host}: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
+    else:
+        landed, words = landing_said(a.bolt, name, host, r.stdout, before)
+    landed or fail(landing_unheld(fleet, t, a.bolt, words))
     m = crew.on_machine(fleet, host, ["bash", "-c", LANDED_MARK, "crew", main, a.bolt])
     _, words = landing_said(a.bolt, name, host, r.stdout, before, mark_said(m.returncode, m.stdout, m.stderr))
     now, _ = main_held(name, host, r.stdout)
