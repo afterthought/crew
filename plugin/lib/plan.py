@@ -10986,8 +10986,8 @@ def record_card_close(fleet, label, owner, obj, outcome, acts=None):
 
 def record_status(fleet, a):
     """crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"]
-    [--alternatives <file>] [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031 §1). The kit is one of
-    the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
+    [--alternatives <file>] [--label L]: the design agent's record at each turn of its status (briefs.15, record 0031
+    §1). The kit is one of the partition's teams', read from the teams file alone (code.5); the record is the kit's docs/adr/<number>-*.md on
     its main now, GitHub's after a fetch for a kit with an origin (kit.main_now, plan.18), read in this host's checkout
     of the kit, at the last commit that changed it, read where the
     partition's main level runs. A status its file does not hold there is refused, naming what it holds, and so is an
