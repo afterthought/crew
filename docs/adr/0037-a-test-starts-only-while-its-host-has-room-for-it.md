@@ -1,7 +1,7 @@
 ---
 number: 37
 title: A test starts only while its host has room for it
-status: proposed
+status: rejected
 date: 2026-10-23
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # A test starts only while its host has room for it
 
-Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes.
+Status: rejected by the user on 2026-10-23, on their card (req_5b3c18a5cdc547959225): "This is terrible. I don't like the decision". `tests.9` stands as record 0021 left it; no unit is queued from this record.
 
 Deciders: the user, who on 2026-10-23 asked the design agent to look at crew's test load again, through the operator: "Also I don't know. I know we did a lot of work to improve the performance of crews running their end-to-end tests but they are just spiking the CPU on this machine. I feel like the designer should look at that again" (signal 2026-10-23-swancloud-design-70084228/01); their words reopen what they held on 2026-10-11 (no new proposals for crew's test load) and settle nothing else here. The decision below is the design agent's, on the user's card.
 Amends: record 0021 §3 and its consequences; `tests.9`.
@@ -38,7 +38,7 @@ How the room is read is the coder's: a load average with the slots already held 
 - A run on a saturated host may reach sluice's twenty-minute timeout for crew's checks, whose premise, two minutes alone and seven loaded, is read again when the unit lands.
 - swancloud's rounds, 38 checks wide under `parallel = 4`, and sluice's per-branch parallelism size themselves as if alone in the same way; neither is crew's. A finding went to madswan's partition on 2026-10-23 for sluice's design (a bound across the rounds one host runs), and swancloud's policy is read on its own page.
 - Finder's seven days at nine tenths of a core on deneb is the user's machine, said to them.
-- One crew unit on the user's yes: `a-test-starts-only-while-its-host-has-room`.
+- No unit: the record was rejected.
 
 ## Considered options
 
