@@ -9,7 +9,8 @@
 # the address of a preview of its head, which the
 # kit's policy there declares, asked of sluice first; the preview's stack failing is said on the card, changed in
 # place by the process that waited on it; a fix started on the bolt withdraws the card, held for it, ending its
-# reading and releasing its preview, and once the fix merges and the bolt reads proven again, the dispatcher told its
+# reading and releasing its preview, its pull request, ready again, drafted, and once the fix merges and the bolt
+# reads proven again, the dispatcher told its
 # team is free for its next bolt, a new card follows it
 # with a preview of the new head, raised without its reading when both its starts fail, naming crew card session and
 # keeping why in the run record, whose reading the conductor's wait then starts, changing the card to carry its link,
@@ -165,9 +166,12 @@ ok "a preview whose stack fails is said on the card, changed in place while it w
 # A defect noted on the card: a fix started on the bolt withdraws it, held for the fix, ending its reading and releasing
 # its preview; once the fix merges and the bolt reads proven again, the merge's end raises the card again, following
 # the one the fix held, with a new reading and a preview of the new head.
+as $box gh pr ready "$pr" -R $gh_repo 2>/dev/null  # ready again, as a refused landing crew could not draft leaves it
 : > "$CREW_TEST_LOG"
 expect_ok crew fix swb-1 gap "The zone list misses one zone."
 has "$out" "card land/tenant-environments: $card withdrawn"
+has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is a draft, so no merge into bolt/tenant-environments lands it"
+eq "$(drafted "$pr")" true
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid"
 has "$out" "released land/tenant-environments's preview of ${h1:0:7}"
 gone "$pid"; eq "$(listed)" ""
@@ -201,7 +205,7 @@ eq "$(calls | grep "^$box sluice preview ")" "$box sluice preview bolt/tenant-en
 # The merge that makes the bolt proven frees its team for its next bolt, planned for it: the dispatcher is told (teams.16).
 has "$(grep "^$box wldn-3 agent prompt wldn-dispatch-chuck-herdr-alpha " "$CREW_TEST_LOG")" \
   "swb-1 can take its next bolt: bolt tenant-environments reads proven. Give a free team its next bolt."
-ok "a fix started on the bolt withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
+ok "a fix started on the bolt drafts its ready pull request and withdraws its landing card, held for the fix, ending its reading and releasing its preview, and once the fix merges a new card follows it with a preview of the new head, raised without its reading when both its starts fail, naming crew card session, and why is kept in the box's run record; the merge tells the dispatcher its team is free for its next bolt"
 
 # The conductor's wait finds no reading and starts it, changing the card to carry its link, then waits on it until the
 # landing's close ends it.

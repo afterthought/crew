@@ -8,7 +8,7 @@
 ## 2. The pull request follows the user's word
 
 - [x] 2.1 `crew bolt submit` readies the bolt's draft pull request before it submits, refusing with nothing submitted when it can't, and leaves it a draft, said with its link, when the bolt does not land (Decision 2 and 5; Task notes 2.1). Verify `tests/suite t-journey-land` ends with "0 failed" and passes `tests/py/test_landing.py`.
-- [ ] 2.2 A fix's start drafts the bolt's ready pull request as its landing card is held, and a unit's, chore's or fix's merge into the bolt drafts it before it starts or does not start, naming the pull request (Decision 2; Task notes 2.2). Verify `tests/suite t-journey-units` ends with "0 failed" and passes `tests/py/test_bolt_commands.py`.
+- [x] 2.2 A fix's start drafts the bolt's ready pull request as its landing card is held, and a unit's, chore's or fix's merge into the bolt drafts it before it starts or does not start, naming the pull request (Decision 2; Task notes 2.2). Verify `tests/suite t-journey-units` ends with "0 failed" and passes `tests/py/test_bolt_commands.py`.
 
 ## 3. Docs and stubs
 
