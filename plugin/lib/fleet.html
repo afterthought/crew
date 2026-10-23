@@ -1,0 +1,206 @@
+<!doctype html>
+<!-- crew's fleet page: page.py puts the fleet's data in the placeholder below and writes the file whole. It shows every
+     partition in the teams file at once, a block to each: where it runs, its kits and their mains, its teams and how
+     busy each is, and what needs attention. Everything it draws is in this file: no font, script or style is loaded
+     from anywhere, and the only links are to each partition's page and each team's dock there, beside it. Every text is
+     set as text, never as markup, and nothing on it answers anything. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crew fleet</title>
+<style>
+/* The colour tokens, light and dark, are page.html's own, copied whole, so the two pages read as one board; a logic
+   case holds the blocks equal (tests/py/test_fleet.py). The forms are page.html's too, its header, .host, .dot,
+   .sec-h, .empty and .mark, and a partition's teams are its ledgers' kin. */
+:root{
+  --bg:#EEF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --ink:#16202A; --ink2:#4A5763; --ink3:#7A8794;
+  --line:#D5DBE1; --line2:#E4E8EC; --accent:#0B6E79; --accent-ink:#FFFFFF; --accent-soft:#D9EEF0; --accent-hatch:rgba(11,110,121,.10);
+  --ok:#2E8B57; --warn:#B7791F; --crit:#B3362B; --lit:#FFF3C4; --lit-line:#E5C34A;
+  --shadow:0 10px 30px rgba(22,32,42,.16); --top:46px; --hosts:40px; --dock:600px;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#12171C; --surface:#1A2128; --surface2:#20282F; --ink:#E6EBEF; --ink2:#A9B4BE; --ink3:#74818C;
+  --line:#2A333C; --line2:#232C34; --accent:#4FB3BF; --accent-ink:#0E1A1C; --accent-soft:#173A3E; --accent-hatch:rgba(79,179,191,.10);
+  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#12171C; --surface:#1A2128; --surface2:#20282F; --ink:#E6EBEF; --ink2:#A9B4BE; --ink3:#74818C;
+  --line:#2A333C; --line2:#232C34; --accent:#4FB3BF; --accent-ink:#0E1A1C; --accent-soft:#173A3E; --accent-hatch:rgba(79,179,191,.10);
+  --ok:#5CB57F; --warn:#D9A24A; --crit:#E0675B; --lit:#3A3416; --lit-line:#B89B2D; --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark; }
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.45 var(--sans)}
+a{color:inherit}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+h1,h2,h3{margin:0;font-weight:800;text-wrap:balance}
+.mono{font-family:var(--mono)}
+
+/* ---------- the header ---------- */
+.top{min-height:var(--top);display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+.top h1{font-size:15px;letter-spacing:-.01em}
+.top .meta{margin-left:auto;color:var(--ink3);font-size:12px;overflow-wrap:anywhere}
+
+/* ---------- the partitions, side by side ---------- */
+.fleet{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;padding:14px;align-items:start}
+.pt{background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--ink2);border-radius:1px;padding:10px 12px 12px;box-shadow:3px 3px 0 var(--line2);min-width:0}
+.pt-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;border-bottom:1px solid var(--ink);padding-bottom:4px}
+.pt-h .pt-name{font-size:17px;font-weight:800;letter-spacing:-.01em;text-decoration:none}
+.pt-h a.pt-name:hover{color:var(--accent)}
+.pt-h .pt-of{color:var(--ink3);font-size:12px}
+.pt-h .pt-commit{font:11px var(--mono);color:var(--ink3)}
+.pt-h .pt-cards{margin-left:auto;font:600 11px var(--mono);color:var(--ink2)}
+.sec-h{margin:12px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700}
+.empty{color:var(--ink3);font-size:12.5px}
+.marks{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.mark{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 6px;background:var(--surface2)}
+.mark.attention{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+/* where it runs: a host as the board's pill, its sessions under it */
+.host{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface2);border-radius:999px;padding:2px 10px 2px 6px;font-size:12px;max-width:100%}
+.host .hn{font:600 12px var(--mono)}
+.host .hm{color:var(--ink3)}
+.host.gone{border-color:var(--warn)}
+.host.gone .hm{color:var(--warn);font-weight:600}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.dot.gone{background:var(--crit)}
+.dot.unasked{background:var(--ink3)}
+.sessions{list-style:none;margin:4px 0 10px;padding:0 0 0 16px;border-left:2px solid var(--line2);font-size:12px}
+.sessions li{margin:3px 0}
+.sessions .sn{font:600 12px var(--mono)}
+.sessions .sa{color:var(--ink2)}
+.sessions .acct{display:block;font:11px var(--mono);color:var(--ink3)}
+/* a kit and its main */
+.kit{padding:4px 0 6px;border-bottom:1px solid var(--line2);font-size:12px}
+.kit:last-child{border-bottom:0}
+.kit .kn{font:600 12px var(--mono)}
+.kit .kb{color:var(--ink3);margin-left:6px}
+.kit .kl{display:block;color:var(--ink2)}
+/* a team, the ledger's kin: flat, square, its slots under its bolt */
+.tm{background:var(--surface2);border:1px solid var(--ink3);margin-bottom:10px;font-size:12px}
+.tm-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:4px 9px;background:var(--surface);border-bottom:1px solid var(--ink3)}
+.tm-h .tn{font:700 12.5px var(--mono);text-decoration:none}
+.tm-h a.tn:hover{color:var(--accent)}
+.tm-h .tw{font:11px var(--mono);color:var(--ink3)}
+.tm-b{padding:5px 9px 7px}
+.tm-bolt{font:12px var(--mono);font-weight:600}
+.tm-bolt.none{font-weight:400;color:var(--ink3)}
+.slots{list-style:none;margin:4px 0;padding:0;font:11.5px var(--mono)}
+.slots li{margin:1px 0;color:var(--ink3)}
+.slots li.work{color:var(--ink)}
+.slots li.work::before{content:"● ";color:var(--accent)}
+.slots li.held{color:var(--ink2)}
+.slots li.held::before{content:"◐ ";color:var(--ink3)}
+.slots li.free::before{content:"○ "}
+.tm-f{display:flex;flex-wrap:wrap;gap:4px 12px;padding:4px 9px;border-top:1px dashed var(--ink3);font:11px var(--mono);color:var(--ink2)}
+.tm-f .wt{font-weight:600}
+.pt-h,.pt-name,.host,.sessions,.kit,.tm-h,.tm-bolt,.slots,.tm-f,.mark{overflow-wrap:anywhere}
+
+@media (max-width:759px){
+  .top{gap:6px 8px;padding:6px 10px}
+  .top .meta{margin-left:0;flex-basis:100%}
+  .fleet{grid-template-columns:1fr;padding:10px;gap:10px}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>crew fleet</h1>
+  <span class="meta mono" id="made"></span>
+</header>
+<main class="fleet" id="fleet" aria-label="Partitions"></main>
+<script type="application/json" id="data">/*{{DATA}}*/</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("data").textContent);
+
+  function el(tag, cls, text) {
+    var x = document.createElement(tag);
+    if (cls) x.className = cls;
+    if (text != null) x.textContent = text;
+    return x;
+  }
+  // A link where the data gives one, its text set as text; the same text unlinked where it gives none.
+  function link(href, cls, text) {
+    if (!href) return el("span", cls, text);
+    var a = el("a", cls, text);
+    a.setAttribute("href", href);
+    return a;
+  }
+  function line(parent, cls, texts) {
+    texts.forEach(function (t) { parent.append(el("span", cls, t)); });
+  }
+
+  document.getElementById("made").textContent = "as of " + D.made.at.slice(0, 10) + " " + D.made.at.slice(11, 16) + "Z · run record since "
+    + D.made.since.slice(0, 10);
+
+  var fleet = document.getElementById("fleet");
+  D.partitions.forEach(function (p) {
+    var pt = el("section", "pt");
+    pt.setAttribute("aria-label", p.label);
+
+    // Its name, a link to its page; its name in the teams file; its plan's commit; its cards open.
+    var h = el("div", "pt-h"), h2 = el("h2");
+    h2.append(link(p.link, "pt-name", p.label));
+    h.append(h2, el("span", "pt-of", p.partition), el("span", "pt-commit", p.commit), el("span", "pt-cards", p.cards_said));
+    pt.append(h);
+
+    // What needs attention, in the board's words.
+    var ms = el("div", "marks");
+    if (p.attention.length) {
+      p.attention.forEach(function (a) { ms.append(el("span", "mark attention", "! " + a)); });
+    } else {
+      p.attention_said.forEach(function (a) { ms.append(el("span", "empty", a)); });
+    }
+    pt.append(ms);
+
+    // Where it runs: each host, then the sessions its agents run in, with each one's account.
+    pt.append(el("h3", "sec-h", "where it runs"));
+    p.hosts.forEach(function (x) {
+      var gone = x.answered === false, unasked = x.answered === null;
+      var pill = el("span", "host" + (gone ? " gone" : ""));
+      pill.append(el("span", "dot" + (gone ? " gone" : unasked ? " unasked" : "")), el("span", "hn", x.host), el("span", "hm", x.said));
+      pt.append(pill);
+      var ul = el("ul", "sessions");
+      x.sessions.forEach(function (s) {
+        var li = el("li");
+        li.append(el("span", "sn", s.session), document.createTextNode(" "), el("span", "sa", s.agents.join(", ")), el("span", "acct", s.account_said));
+        ul.append(li);
+      });
+      pt.append(ul);
+    });
+
+    // Its kits: who builds each, its main's last landing and what is queued for it.
+    pt.append(el("h3", "sec-h", "kits"));
+    p.kits.forEach(function (k) {
+      var row = el("div", "kit");
+      row.append(el("span", "kn", k.kit), el("span", "kb", "built by " + k.teams.join(", ")));
+      line(row, "kl", k.said);
+      pt.append(row);
+    });
+
+    // Its teams: each one's bolt, its slots, how many are at work and what its conductor waits on.
+    pt.append(el("h3", "sec-h", "teams"));
+    p.teams.forEach(function (t) {
+      var tm = el("div", "tm"), th = el("div", "tm-h"), tb = el("div", "tm-b"), tf = el("div", "tm-f");
+      th.append(link(t.link, "tn", t.team), el("span", "tw", t.host + " · " + t.session + " · " + t.account_said));
+      if (t.bolts.length) {
+        t.bolts.forEach(function (b) { tb.append(el("div", "tm-bolt", b.said)); });
+      } else {
+        tb.append(el("div", "tm-bolt none", t.holds));
+      }
+      var slots = el("ul", "slots");
+      t.slots.forEach(function (s) { slots.append(el("li", s.state, s.said)); });
+      tb.append(slots);
+      tf.append(el("span", null, t.at_work_said), el("span", "wt", t.waits.said));
+      tm.append(th, tb, tf);
+      pt.append(tm);
+    });
+
+    fleet.append(pt);
+  });
+})();
+</script>
+</body>
+</html>
