@@ -1,6 +1,7 @@
 """A flywheel's lineage page and its dev sites (the crew-page and crew-sites specs): page.data on the run record's
-entries, page.labelled and page.from_entries for each node's label and status, page.render, page.header, page.nav and
-page.beside for the file; sites.url_of for where a worktree's dev server opens from here. That crew page writes the file
+entries, page.labelled and page.from_entries for each node's label and status, page.page's account of what it was made
+from, the branch's entries alone, page.render, page.header, page.nav and page.beside for the file; sites.url_of for
+where a worktree's dev server opens from here. That crew page writes the file
 whole from the branch and the board's read, and crew sites reads every host, are the board journey's (t-journey-board)."""
 import json
 import re
@@ -144,6 +145,38 @@ class TestFile:
     def test_it_says_as_of_when_and_which_commit_and_both_when_the_board_read_another(self):
         assert page.header(self.D["made"]) == "as of 2026-10-12 10:00Z · wldn/main aaaaaaa"
         assert page.header(dict(self.D["made"], plan="b" * 40)).endswith("for the run record, bbbbbbb for the board and labels")
+
+
+class TestMade:
+    """lineage-page, "A host was asleep": the page is drawn from the branch's entries alone, a Mac that wrote some of
+    them and does not answer among them, and names a host only for its kits."""
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "state": "WilldanGroup/crew-state", "teams": []}},
+             "teams": {}, "hosts": {"mac-studio": {"kind": "darwin"}, "macbook-pro": {"kind": "darwin"}}}
+
+    def made(self, monkeypatch, capsys, kits):
+        import argparse
+        import board
+        import crew
+        monkeypatch.setattr(crew, "on_machine", lambda *a, **k: pytest.fail(f"a host was asked for the run record: {a}"))
+
+        def branch(fleet, label, since, tips=None):
+            tips[label] = "a" * 40
+            return [dict(e, Host="macbook-pro") for e in FLOW]
+        monkeypatch.setattr(record, "on_branch", branch)
+        monkeypatch.setattr(board, "flow_read", lambda fleet, labels: {"found": [("wldn", "WilldanGroup/crew-state", "a" * 40, None)], "sv": {}})
+        monkeypatch.setattr(board, "board_data", lambda fleet, labels, read, now: {"partitions": [{"plan": "a" * 40}], "read_at": "x", "unread": {}})
+        monkeypatch.setattr(page, "describe", lambda *a, **k: kits)
+        page.page(self.FLEET, argparse.Namespace(label="wldn", since=None, json=True, out=None))
+        return json.loads(capsys.readouterr().out)
+
+    def test_a_page_made_from_the_branchs_entries_names_no_host_for_its_record(self, monkeypatch, capsys):
+        d = self.made(monkeypatch, capsys, {})
+        assert d["made"]["commit"] == "a" * 40 and d["made"]["unreachable"] == {}
+        assert sorted(d["entries"]) == sorted(e["Id"] for e in FLOW) and "macbook-pro" not in json.dumps(d["made"])
+
+    def test_a_host_whose_kits_did_not_answer_is_named_for_them_alone(self, monkeypatch, capsys):
+        d = self.made(monkeypatch, capsys, {"chuck-herdr-alpha": "its kits: ssh: timed out"})
+        assert d["made"]["unreachable"] == {"chuck-herdr-alpha": "its kits: ssh: timed out"}
 
 
 class TestSites:

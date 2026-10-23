@@ -157,7 +157,7 @@ class TestRows:
         assert land["what"][1] == f"apex-zones, swb-2 on {BOX}: lands once zone-one has been in a batch, which is due for them" and land["cmds"] == []
         held["wldn"]["due"] = None
         land, = [r for r in rows(held=held) if r["group"] == "land"]
-        assert land["what"][1].endswith("whether every unit's latest change has been in a batch can't be told: a host did not answer")
+        assert land["what"][1].endswith("whether every unit's latest change has been in a batch can't be told: wldn/main could not be read")
 
     def test_a_bolt_lands_only_once_the_user_has_answered_each_batch_holding_a_units_latest_change(self):
         """briefs.12: the user, 2026-10-19, on card req_5ff4d31d: "Wait for my answer on the batch card"."""
@@ -304,6 +304,32 @@ class TestText:
                    unchecked=[dict(label="wldn", host="mac-studio", why="did not answer (ssh: timed out)")])
         assert out.endswith(f"card sessions ended:\n  proposal/1 (wldn) on {BOX}: its row is gone; ended proposal/1's session, plannotator pid 42\n"
                             "card sessions not checked:\n  mac-studio (wldn): did not answer (ssh: timed out)")
+
+
+class TestTheBranchAlone:
+    """card-sessions, "The host that closed a card is asleep": the rail reads the partition's run record from its
+    branch alone, so a host that does not answer hides no card's post or close."""
+    SV = {"macbook-pro": {"ok": False, "error": "ssh: connect to host macbook-pro port 22: Operation timed out"}}
+
+    def read(self, monkeypatch, entries):
+        monkeypatch.setattr(crew, "on_machine", lambda *a, **k: pytest.fail(f"a host was asked for the run record: {a}"))
+        monkeypatch.setattr(plan.record, "on_branch", lambda fleet, label, since, tips=None: entries)
+        found = [("wldn", "WilldanGroup/crew-state", "tip", the_plan())]
+        times, cards_, unread, _, _, held, _, _, logs = plan.rail_record(FLEET, found, [])
+        return cards_, unread, held
+
+    def test_a_card_the_planner_closed_on_a_host_that_does_not_answer_is_read_closed(self, monkeypatch):
+        entries = [dict(post("req_1", "proposal/1"), Host="macbook-pro", Id="20261012T100000Z-000000-macbook-pro-1-1"),
+                   dict(post("req_1", "proposal/1", act="card.close", minutes=1), Host="macbook-pro", Id="20261012T100100Z-000000-macbook-pro-1-2")]
+        cards_, unread, held = self.read(monkeypatch, entries)
+        assert (cards_, unread) == ([], {"wldn": {}})
+        assert plan.sweep_judgment("wldn", {"proposal/1"}, cards_, unread["wldn"], held["wldn"]) == {"live": [], "blind": []}
+
+    def test_a_question_posted_on_a_host_that_does_not_answer_is_still_listed(self, monkeypatch):
+        entries = [dict(post("req_q1", None, by="swb-1-conductor"), Host="macbook-pro", Id="20261012T100000Z-000000-macbook-pro-1-1")]
+        cards_, unread, _ = self.read(monkeypatch, entries)
+        assert [c["card"] for c in plan.question_cards(cards_, unread)] == ["req_q1"]
+        assert [c["card"] for c in plan.question_cards(cards_, {"wldn": {"wldn/main": "could not fetch"}})] == []
 
 
 def post(card, key, by="wldn-planner", minutes=0, act="card.post"):
@@ -738,12 +764,11 @@ class TestSweep:
         out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], entries=[did("plan.approve", On=["proposal/4"])], opening=said)
         assert out == {"done": [], "unswept": [dict(label="wldn", why=said)]} and acts.emitted == []
 
-    def test_a_partition_whose_record_did_not_answer_on_its_branch_here_or_its_main_host_is_not_swept(self):
-        out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"mac-studio": "x"}})
-        assert out["unswept"] == [dict(label="wldn", why="its run record did not answer whole, so which cards are open can't be told: mac-studio: x")]
+    def test_a_partition_whose_record_could_not_be_read_from_its_branch_is_not_swept(self):
+        out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"wldn/main": "could not fetch wldn/main"}})
+        assert out["unswept"] == [dict(label="wldn", why="its run record could not be read from wldn/main, so which cards are open can't be told: "
+                                                         "could not fetch wldn/main")]
         assert acts.calls == []
-        out, acts = swept(cards_=[card("proposal/4", "req_p4", "wldn-planner")], unread={"wldn": {"macbook-pro": "x"}})
-        assert out["unswept"] == [] and acts.calls
 
 
 LANDED = [did("review.batch", 60, Batch="3", Units="x1:swb-1@aaa1 x2:swb-1@bbb1"), did("bolt.land", 40, On=["bolt/b", "unit/x1", "unit/x2"])]
@@ -803,7 +828,7 @@ class TestSettledSweep:
 
     def test_a_partition_whose_record_did_not_answer_whole_records_no_close(self):
         """review-batches, "The record did not answer whole"."""
-        out, acts = swept(entries=LANDED, unread={"wldn": {"mac-studio": "x"}})
+        out, acts = swept(entries=LANDED, unread={"wldn": {"wldn/main": "could not fetch wldn/main"}})
         assert acts.emitted == [] and out["done"] == [] and out["unswept"][0]["label"] == "wldn"
 
     def test_a_close_the_run_record_could_not_take_is_said_and_tried_again_on_the_next_read(self):

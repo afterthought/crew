@@ -266,10 +266,13 @@ has "$out" "never hand the user a deploy command"; has "$out" "deploys by hand o
 [[ $out =~ \{\{[A-Z_]+\}\} ]] && fail "roles/operator.md left ${BASH_REMATCH[0]} unfilled"
 for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
 for want in "/crew page wldn\`" "open the file it prints in terminal-browser beside your pane" \
-  "on a box, give the user the path and say it opens from a Mac" "say as of when the page is, and name any host it could not read"; do has "$out" "$want"; done
+  "on a box, give the user the path and say it opens from a Mac" "say as of when the page is, and name any host whose kits it could not read"; do has "$out" "$want"; done
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
 ok "the operator brief prints for wldn, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
+has "$out" "reads crew's run record on the partition's branch, where each entry is pushed as it is written"
+lacks "$out" "on every host the partition runs on"
+ok "the operator reads the run record on the partition's branch, asking no host for it (read.5)"
 
 # The operator carries what crew send brings it, and sends a teams change from a box to a Mac's partition with crew
 # send, never with a tell to another operator (briefs.10).

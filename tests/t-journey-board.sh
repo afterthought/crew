@@ -5,7 +5,7 @@
 # card session; the rail tab's refresh, in one fetch and one read of each host's kits, prints the rail, sweeps a dead
 # card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards; crew page writes the page whole, with the
 # deploys and its partition links in the layout of its file, saying so when that names no partition, and nothing when
-# the branch can't be read; every view names a host that does not answer and shows the
+# the branch can't be read; every view names a host that does not answer, for its kits alone, and shows the
 # rest; and a plan a hand edit broke is refused, named by its commit. What each lane,
 # line, URL and node says are logic cases (tests/py/test_board.py, test_page.py, test_rail.py), and what the kit
 # reader takes from git, contract cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
@@ -187,12 +187,12 @@ ok "a page written as <label>.html links the other partitions' pages beside it, 
 echo $box > "$T/down"
 expect_ok crew bolts; has "$out" "$box did not answer"; has "$out" "  map-one"
 expect_ok crew board --label wldn
-has "$(lane "$out" attention)" "! $box did not answer (its kits: "
+has "$(lane "$out" attention)" "! $box did not answer (its kits: "; lacks "$(lane "$out" attention)" "run record"
 eq "$(line_of "$(lane "$out" Construction)" "  a  ")" "    a  unknown"
 expect_ok crew sites wldn; has "$out" "$box  did not answer"; has "$out" "unit-map-one--atlas-kit.local"
 expect_ok crew page wldn; has "$(sed -n 3p <<<"$out")" "$box did not answer"
 rm "$T/down"
-ok "a host that does not answer is named by crew bolts, board, sites and page, and the rest is shown"
+ok "a host that does not answer is named by crew bolts, board, sites and page, for its kits alone, and the rest is shown"
 
 cp "$mine/page.html" "$T/earlier.html"
 mv "$ws" "$ws.away"
@@ -204,7 +204,7 @@ ok "when the branch cannot be read crew page writes nothing and names the branch
 # A hand edit that leaves a duplicated key: crew bolts refuses to read the plan, naming the commit and recfix's
 # message; crew board names it in the attention line and exits non-zero.
 h=$T/hand; git clone -q -b wldn/main "$ws" "$h"
-printf '\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n' >> "$h/plan.rec"; commit_all "$h" "plan: a hand edit"; git -C "$h" push -q origin wldn/main
+printf '\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n' >> "$h/plan.rec"; commit_all "$h" "plan: a hand edit"; push_state "$h"
 expect_fail "wldn/main of WilldanGroup/crew-state at $(git -C "$h" rev-parse --short HEAD): plan.rec fails recfix --check" crew bolts
 has "$out" "duplicated key"
 expect_fail "wldn/main of WilldanGroup/crew-state" crew board --label wldn

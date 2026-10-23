@@ -1,13 +1,14 @@
-# What reaches the user, through the crew command on the stubs (tests.11, record 0022): constructed changes make a
-# batch due, told to the planner once; crew review starts the reviewer and its summary ends the batch, raising its card
-# with its reading session in the planner's name; crew rail lists what waits, with each row's card; crew's card hook
-# refuses an agent's card under crew's own key; a batch card's one reading session is written from every team's host
-# and started on the main level's, an old batch card's on its unit's team's host, and none for a verify report, which
-# no row has; a wait returns the user's words and closes the batch's card, ending its session, crew card end ends an
-# old card's, and a rail read sweeps what is dead; and writes and tells reach the agents
-# they should, never one waiting on a question. Which changes are due, what each row and card says, whose key a card may
-# take and in what form, and what a session does are logic cases (tests/py/test_batches.py, test_rail.py,
-# test_cards.py, test_review.py); each step here checks a command's wiring once.
+# What reaches the user, through the crew command on the stubs (tests.11, record 0022): constructed changes make a batch
+# due, told to the planner once, and crew review starts the reviewer, while a host of the partition does not answer,
+# since both read the run record from the partition's branch (read.5); the reviewer's summary ends the batch, raising
+# its card with its reading session in the planner's name; crew rail lists what waits, with each row's card; crew's card
+# hook refuses an agent's card under crew's own key; a batch card's one reading session is written from every team's
+# host and started on the main level's, an old batch card's on its unit's team's host, and none for a verify report,
+# which no row has; a wait returns the user's words and closes the batch's card, ending its session, crew card end ends
+# an old card's, and a rail read sweeps what is dead; and writes and tells reach the agents they should, never one
+# waiting on a question. Which changes are due, what each row and card says, whose key a card may take and in what form,
+# and what a session does are logic cases (tests/py/test_batches.py, test_rail.py, test_cards.py, test_review.py); each
+# step here checks a command's wiring once.
 # Reads: plugin/hooks/
 . "${TESTS:?run crew tests through tests/run, which puts stub herdr, ssh and claude first}/lib.sh" || exit 2
 team_world
@@ -54,7 +55,7 @@ for u, b, kit in (("x1", "b1", "switchboard-kit"), ("v1", "b1", "switchboard-kit
     p.insert(plan.Rec("Unit", [("Unit", u), ("Repo", kit), ("Bolt", b), ("Intent", f"Unit {u}.")]))
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: by hand"; push_state "$w"
 crew bolt give swb-1 b1 >/dev/null 2>&1; crew bolt give atl-1 m1 >/dev/null 2>&1
 mkdir -p "$(space mac-studio willdan)/willdan-blueprints/main"
 crew main up wldn >/dev/null 2>&1
@@ -65,16 +66,21 @@ build() {  # build <team> <unit> <kit dir>: its construct run by its conductor, 
   CREW_AGENT=$1-conductor crew unit wait $2 >/dev/null
 }
 : > "$CREW_TEST_LOG"
-build swb-1 x1 "$kd"
-eq "$(planner_told)" "0"
 build atl-1 z1 "$akd"
+eq "$(planner_told)" "0"
+# mac-studio, which holds a wldn operator session and z1's entries, does not answer the box from here on: the batch is
+# reckoned from wldn/main, which holds them.
+echo mac-studio > "$T/down"
+build swb-1 x1 "$kd"
 eq "$(planner_told)" "1"
 has "$(grep "agent prompt wldn-planner" "$CREW_TEST_LOG")" "s changes is due: x1 (swb-1), z1 (atl-1); 2 changes are due, and a batch is every 2. Start its reviewer with crew review wldn"
-eq "$(entries mac-studio batch.due | jq -r '[.Count, (.On | join(" "))] | join(" ")')" "2 agent/wldn-planner unit/x1 unit/z1"
-ok "changes constructed by two teams make a batch due at the partition's setting, told to its planner once, on a conductor's wait"
+eq "$(entries $box batch.due | jq -r '[.Count, (.On | join(" "))] | join(" ")')" "2 agent/wldn-planner unit/x1 unit/z1"
+ok "changes constructed by two teams make a batch due at the partition's setting, told to its planner once, on a conductor's wait, while a host of the partition does not answer"
 
 : > "$CREW_TEST_CLAUDE_LOG"
 CREW_AGENT=wldn-planner expect_ok crew review wldn
+lacks "$(grep " ssh mac-studio " "$CREW_TEST_LOG")" "ssh mac-studio"
+rm "$T/down"
 summary=$(home_of $box)/.local/state/crew/wldn-main/reports/batch-wldn-1.md
 has "$out" "wldn-reviewer is reviewing batch 1 of wldn, into $summary"
 eq "$(jq -r '"\(.agent) \(.argv[3])"' "$CREW_TEST_CLAUDE_LOG")" "wldn-reviewer high"
@@ -95,7 +101,7 @@ CREW_AGENT=wldn-planner expect_ok crew review wldn --wait
 eq "$out" "batch summary: $summary"
 eq "$(entries $box card.post | jq -r .Card)" "req_stub-1"
 eq "$(herdr_state $box wldn-3 '[.tabs[] | select(.workspace == "w1") | .label] | join(",")')" "design,planner,ops,operator"
-ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name once, and closes its tab"
+ok "the planner starts the reviewer fresh in a review tab, not greeted, sent each change and how to read it on its team's host, while a host of the partition does not answer, and no second while it reviews; its summary ends the batch, recorded, raises its card in the planner's name once, and closes its tab"
 
 # v1 is in verify, its report newer than its last commit, and waits on nobody (teams.17).
 pv=$(place "$k" b1 v1); change "$pv" v1 2 2; commit_at 60 "$pv" "feat(v1): done"

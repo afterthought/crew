@@ -168,5 +168,28 @@ A batch SHALL wait on nothing once each of its units has landed, has been droppe
 - **THEN** `x1`'s bolt's landing row says it lands once you have answered batch 7, as before
 
 #### Scenario: The record did not answer whole
-- **WHEN** the partition's run record did not answer on the main-level host
-- **THEN** the sweep records no close for any batch, says the partition was not swept, and a batch is closed only as far as the entries read show it
+- **WHEN** the partition's branch cannot be read, so its run record cannot be
+- **THEN** the sweep records no close for any batch, says the partition was not swept, and names the branch
+
+#### Scenario: A host does not answer
+- **WHEN** macbook-pro, which holds a wldn operator session, does not answer a rail read
+- **THEN** each batch is closed as far as the entries on `wldn/main` show it, as when every host answers
+
+### Requirement: A batch is reckoned from the partition's branch alone
+Whether a batch is due, what a review holds, and whether every unit's latest change of a bolt has been in a batch, SHALL be read from the run record on the partition's branch alone, asking no host for it. A host that does not answer SHALL hold none of them. When the branch cannot be read, each SHALL be refused naming the branch, as crew can't tell then which changes have been in a batch.
+
+#### Scenario: The laptop asleep at a conductor's wait
+- **WHEN** a wldn conductor's wait on chuck-herdr-alpha runs while macbook-pro, which holds a wldn operator session, does not answer, and five changes are due
+- **THEN** the wait finds the batch due and the planner is told, and macbook-pro is not asked
+
+#### Scenario: A review while the laptop is asleep
+- **WHEN** the planner runs `crew review wldn` while macbook-pro does not answer and a batch is due
+- **THEN** the reviewer is started on the batch's due changes, and no earlier batch's summary is returned in its place
+
+#### Scenario: A landing while the laptop is off
+- **WHEN** `crew bolt land` runs on mac-studio for a bolt whose every unit's latest change has been in a batch the user answered, while macbook-pro is off the tailnet
+- **THEN** the bolt is closed as landed, and nothing names macbook-pro
+
+#### Scenario: The branch cannot be read
+- **WHEN** a conductor's wait runs while `wldn/main` cannot be fetched
+- **THEN** whether a batch is due is not reckoned, and the wait says crew can't tell which changes have been in a batch, naming `wldn/main` and why

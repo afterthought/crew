@@ -31,11 +31,11 @@ eq "$(prompt_to swb-1-unit-1)" "'Fix: The banner flickers ZQXS.'"
 eq "$(field $box fix.start On)" "$fb bolt/tenant-environments agent/swb-1-unit-1"
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' "refs/heads/$fb")" "origin/bolt/tenant-environments"
 eq "$(last_launch)" "--model claude-opus-5-5[1m] --effort xhigh | swb-1-unit-1 | $fp"
-plan_tip=$(git --git-dir "$ws" rev-parse wldn/main)
+plan_tip=$(act_tip)
 expect_ok crew fix swb-1 tidy "It flickers still."
 has "$out" "swb-1-unit-1 has $fb: code, in $fp"
 has "$(cat "$slots")" "unit-1 fix $fb $fp"
-eq "$(git --git-dir "$ws" rev-parse wldn/main)" "$plan_tip"
+eq "$(act_tip)" "$plan_tip"
 echo steady > "$fp/banner"; commit_all "$fp" "fix: the banner holds still"
 expect_ok crew fix swb-1 tidy --wait
 has "$out" "swb-1-unit-1 delivered fix $fb: its branch is at $(short $fb)"
