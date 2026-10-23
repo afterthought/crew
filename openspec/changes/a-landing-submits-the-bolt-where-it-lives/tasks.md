@@ -2,7 +2,7 @@
 
 ## 1. What the landing reads and decides
 
-- [ ] 1.1 A read on the team's host fetches the bolt's branch from origin and reports both copies, the policy at GitHub's, and which holds the other, and kit reads it or refuses naming what was printed (design, Decision 1; Task notes 1.1); passes `tests/py/test_kit.py`, verified by `tests/suite logic` ending with "0 failed".
+- [x] 1.1 A read on the team's host fetches the bolt's branch from origin and reports both copies, the policy at GitHub's, and which holds the other, and kit reads it or refuses naming what was printed (design, Decision 1; Task notes 1.1); passes `tests/py/test_kit.py`, verified by `tests/suite logic` ending with "0 failed".
 - [ ] 1.2 One pure decision names the head a landing submits, whether it levels the host's copy, and what it says, refusing a diverged bolt or a read that failed (design, Decision 2; Task notes 1.2); passes `tests/py/test_landing.py`, verified by `tests/suite logic` ending with "0 failed".
 
 ## 2. The landing levels the copy and submits GitHub's head

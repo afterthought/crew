@@ -1188,10 +1188,11 @@ def host_run(fleet, host, script, *args):
 # Where a bolt's branch lives, for kit.bolt_lives (plan.19), read in a checkout of its kit with $bolt and $file set:
 # LOCAL and TRACKED, the commit of the host's own bolt/<bolt> and of origin's tracking ref of it, as this host last
 # fetched it, or -; AT_LOCAL and AT_TRACKED, the policy ($file) at each, base64, or - when it holds none, read from the
-# commit as sluice reads a branch's policy.
-BOLT_AT = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
+# commit as sluice reads a branch's policy. Its two reads, ref and pol, are REFS, which LAND_COPIES reads with too.
+REFS = r"""ref() { git rev-parse --verify -q "$1^{commit}" || echo -; }
 pol() { if [ "$1" != - ] && text=$(git show "$1:$file" 2>/dev/null); then printf '%s\n' "$text" | base64 | tr -d '\n'; else printf -; fi; }
-l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
+"""
+BOLT_AT = REFS + r"""l=$(ref "refs/heads/bolt/$bolt") o=$(ref "refs/remotes/origin/bolt/$bolt")
 echo "LOCAL=$l"; echo "TRACKED=$o"; echo "AT_LOCAL=$(pol "$l")"; echo "AT_TRACKED=$(pol "$o")"
 """
 
@@ -3445,6 +3446,31 @@ there=$(git rev-parse --verify -q "refs/remotes/$remote/bolt/$bolt^{commit}")
 echo "LOCAL=$l"; echo "THERE=$there"
 git merge-base --is-ancestor "$l" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
 echo "MERGES=$(git rev-list --count --merges "$there..$l" 2>/dev/null)"
+"""
+
+# The bolt's two copies a landing reads (plan.19), in its kit's main checkout with $file the policy, with one fetch of
+# the bolt from origin (plan.18), for kit.land_copies: THERE=- when the kit has no origin or origin has no
+# bolt/<bolt>, fetching nothing; READ with git's words when origin can't be asked or fetched; else OWN, the host's own
+# bolt/<bolt>, or - when it has none; THERE, origin's after the fetch; AT_THERE, the policy at it, base64, or - when it
+# holds none, read as BOLT_AT reads one; HELD, yes when the host's copy is an ancestor of origin's or there is none;
+# AHEAD, yes when origin's is an ancestor of the host's; LACKS, the merges the host's copy holds beyond origin's, and
+# BEYOND, the merges origin's holds beyond the host's; AHEAD, LACKS and BEYOND each - when the host has no copy.
+LAND_COPIES = r"""cd "$1" || exit 1
+bolt=$2 file=$3
+git remote get-url origin >/dev/null 2>&1 || { echo "THERE=-"; exit 0; }
+err=$(git ls-remote --exit-code origin "refs/heads/bolt/$bolt" 2>&1); rc=$?
+if [ $rc = 2 ]; then echo "THERE=-"; exit 0; fi
+if [ $rc != 0 ]; then echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0; fi
+if ! err=$(git fetch -q origin "+refs/heads/bolt/$bolt:refs/remotes/origin/bolt/$bolt" 2>&1); then
+  echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+fi
+""" + REFS + r"""own=$(ref "refs/heads/bolt/$bolt") there=$(ref "refs/remotes/origin/bolt/$bolt")
+echo "OWN=$own"; echo "THERE=$there"; echo "AT_THERE=$(pol "$there")"
+if [ "$own" = - ]; then printf 'HELD=yes\nAHEAD=-\nLACKS=-\nBEYOND=-\n'; exit 0; fi
+git merge-base --is-ancestor "$own" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
+git merge-base --is-ancestor "$there" "$own" 2>/dev/null; case $? in 0) echo "AHEAD=yes" ;; 1) echo "AHEAD=no" ;; esac
+echo "LACKS=$(git rev-list --count --merges "$there..$own" 2>/dev/null)"
+echo "BEYOND=$(git rev-list --count --merges "$own..$there" 2>/dev/null)"
 """
 
 
