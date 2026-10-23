@@ -53,6 +53,7 @@ plugin/roles/conductor.md
 plugin/roles/planner.md
 plugin/skills/crew/SKILL.md
 tests/py/**
+tests/contract/test_git.py
 tests/t-journey-land.sh
 tests/t-cards.sh
 tests/t-briefs.sh
