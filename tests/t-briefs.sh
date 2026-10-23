@@ -14,7 +14,9 @@ expect_fail "no definition 'fable' for a team" crewpy brief swb-1 fable
 ok "every team brief prints with no unfilled token"
 
 # sluice's verdict can outlast an agent's ten-minute call (teams.5's details; sluice ADR 0041), so every brief that
-# submits by hand submits without waiting and waits a call at a time with sluice wait, never reading a listing.
+# submits by hand submits without waiting and waits a call at a time with sluice wait, never reading a listing; and
+# the wait runs from the harness's background, so a submission never holds the agent's session (teams.5, as amended
+# 2026-10-23), in the foreground only where the harness runs nothing in the background.
 expect_ok crewpy brief swb-1 coder
 has "$out" "sluice submit bolt/<bolt> --no-wait --json"; has "$out" "sluice wait <n> --timeout 9m --json"
 has "$out" "Without the number, \`sluice wait bolt/<bolt> --timeout 9m --json\` from this worktree waits on its last submission"
@@ -22,11 +24,15 @@ lacks "$out" "wt submit"; lacks "$out" "wt merge"; lacks "$out" "--no-hooks"
 for brief in "swb-1 coder" "wldn design" "wldn operator"; do
   expect_ok crewpy brief $brief
   for want in "sluice wait <n> --timeout 9m --json" "for as long as it exits 5, still waiting" "--no-wait --json" \
-    "submit again to move" "listing, which a decided submission leaves"; do
+    "submit again to move" "listing, which a decided submission leaves" \
+    "wait on it from your harness's background, a call at a time" "as a background command" \
+    "so the submission never holds your session and a tell or the user's message reaches you meanwhile" \
+    "where your harness runs nothing in the background, run it in the foreground instead"; do
     has "$out" "$want"
   done
+  lacks "$out" "wait on it a call at a time, giving the command its full ten minutes"
 done
-ok "the coder, the design agent and the operator submit without waiting and wait on the submission with sluice wait, never a listing"
+ok "the coder, the design agent and the operator submit without waiting and wait on the submission with sluice wait from the background, never a listing"
 expect_ok crewpy brief swb-1 coder; has "$out" "if the host was slow, submit the same head again"
 has "$out" "if the fail looks like the host's doing, a time limit or an overloaded host, stop and say so through crew"
 has "$out" "Never change what a test reads only to get it tested again."
@@ -490,7 +496,7 @@ for want in "Construct in waves" "Start code as soon as" "shows a unit \`planned
   "unit run <unit> settle \"<what reached it>\"" "## Forecasts and settling" "The earlier unit is never changed for it" \
   "your bolt waits for them: crew makes a batch due for them at once" \
   "every unit's latest change in a batch whose card the user has answered" \
-  "When it names a batch the user has not answered, your bolt waits for their answer on that batch's card" "submits the unit to the bolt, \`sluice submit bolt/<bolt>\`, and waits on it with \`sluice wait\`" "changed and did not declare in its Touches" \
+  "When it names a batch the user has not answered, your bolt waits for their answer on that batch's card" "submits the unit to the bolt, \`sluice submit bolt/<bolt>\`, and waits on it with \`sluice wait\` from its harness's background, so the submission never holds the agent's session" "changed and did not declare in its Touches" \
   "ahead of it in the bolt's merge order, which is \`After\` first" "so a unit's dependents are never ahead of it" \
   "crew also forecasts the bolt itself against the kit's main" "start the take-main fix it gives at once, as when \`wldn-ops\` tells you a landing conflicts" \
   "when it says the bolt would conflict with a submission queued on main, take nothing in"; do
