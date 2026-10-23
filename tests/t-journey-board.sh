@@ -190,10 +190,13 @@ ok "a page written as <label>.html links the other partitions' pages beside it, 
 
 # crew page --fleet: every partition of the teams file on one page, written beside the partitions' folders, its path
 # and each partition's header printed; its links follow its file as the partition page's do, and a partition's page
-# served as <label>.html links back to the fleet page as index.html.
+# served as <label>.html links back to the fleet page as index.html. With no use published yet, it says so and each
+# subscription says no host has published its use.
 fleet=$(home_of mac-studio)/.local/state/crew/page.html
+usage=$(home_of mac-studio)/.local/state/crew/usage
 expect_ok crew page --fleet
 eq "$(sed -n 1p <<<"$out")" "$fleet"
+eq "$(tail -n 1 <<<"$out")" "no subscription's use is published in $usage"
 eq "$(sed -n 2,4p <<<"$out" | sed -E 's/^as of [0-9-]{10} [0-9:]{5}Z · //' | tr '\n' '|')" \
   "wldn/main $(git --git-dir "$ws" rev-parse --short=7 wldn/main)|madswan/main not started|swancloud/main not started|"
 json=$(block "$fleet")
@@ -201,16 +204,38 @@ eq "$(j '[.partitions[].label] | join(" ")')" "wldn madswan swancloud"
 eq "$(j '.partitions[0].link') $(j '.partitions[0].teams[] | select(.team == "swb-1") | .link')" "wldn/page.html wldn/page.html#dock=team:swb-1"
 eq "$(block "$mine/page.html" | jq -r '.docks["team:swb-1"].title')" "swb-1"
 eq "$(j '.partitions[0].kits[] | select(.kit == "switchboard-kit") | .said[1]')" "tenant-environments in construction; 1 bolt planned; 1 unit queued"
+eq "$(j '[.subscriptions.items[] | .account + " " + .state] | join(", ")')" "credits none, ia none, madswan none, willdan-alex none"
 expect_ok crew page --fleet --out "$T/served/index.html"
 eq "$(block "$T/served/index.html" | jq -r '.partitions[0].link')" "wldn.html"
 lacks "$out" "not linked"
 expect_ok crew page --fleet --out "$T/served/fleet.html"
-eq "$(tail -n 1 <<<"$out")" "the partitions are not linked: $T/served/fleet.html is named neither index.html nor page.html"
+has "$out" "the partitions are not linked: $T/served/fleet.html is named neither index.html nor page.html"
 expect_ok crew page wldn --out "$T/served/wldn.html"
 has "$(parts "$T/served/wldn.html")" 'href="index.html"'
 expect_fail "crew page takes a partition's label or --fleet, not both" crew page wldn --fleet
 eq "$(records)" "$n"
 ok "crew page --fleet writes every partition on one page beside their folders, links each in the layout of its file and says when it can't, and a partition's page served beside it links back"
+
+# The use mac-studio's reader published beside the box's file, which is not JSON: ia's figures shown as read by
+# mac-studio, credits' reading marked as not made, and the box's file named by the command; the page still written.
+mkdir -p "$usage"
+at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cat > "$usage/mac-studio.json" <<JSON
+{"host": "mac-studio", "readings": [
+ {"account": "ia", "at": "$at", "five_hour": {"utilization": 34.0, "resets_at": null}, "seven_day": {"utilization": 61.0, "resets_at": null}},
+ {"account": "credits", "at": "$at", "unread": "the usage endpoint answered 401"}]}
+JSON
+echo "not json" > "$usage/$box.json"
+expect_ok crew page --fleet
+has "$out" "the use published in $usage/$box.json could not be read: it is not JSON: "
+lacks "$out" "no subscription's use is published"
+json=$(block "$fleet")
+eq "$(j '.subscriptions.items[] | select(.account == "ia") | .windows[0].said')" "five-hour 34%"
+has "$(j '.subscriptions.items[] | select(.account == "ia") | .said')" "read by mac-studio "
+eq "$(j '.subscriptions.items[] | select(.account == "credits") | .state')" "unread"
+eq "$(j '.unread_usage[0].file')" "$usage/$box.json"
+eq "$(records)" "$n"
+ok "crew page --fleet shows the use each host published by subscription, and names a published file it cannot read"
 
 # The box asleep: every view names it and shows the rest.
 echo $box > "$T/down"

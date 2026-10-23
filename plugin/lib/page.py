@@ -1019,14 +1019,18 @@ def page(fleet, a):
 
 def fleet_page(fleet, a):
     """crew page --fleet: one read of every partition in the teams file, the read crew board makes of all of them, made
-    into the fleet page and written whole to --out or beside the partitions' pages; its path printed, then as of when
-    and which commit of each plan, each host or plan of a partition that did not answer, and that the partitions are
-    not linked when the file's name gives no layout. Nothing is refused for a silent host (read.3)."""
+    into the fleet page with the use the hosts published in this host's ~/.local/state/crew/usage/, and written whole to
+    --out or beside the partitions' pages; its path printed, then as of when and which commit of each plan, each host or
+    plan of a partition that did not answer, that the partitions are not linked when the file's name gives no layout,
+    each published file that could not be read, and that no use is published when the folder holds none. Nothing is
+    refused for a silent host or an unreadable file (read.3)."""
     labels = list(fleet["partitions"])
     read = board.flow_read(fleet, labels)
     now = datetime.datetime.now(datetime.timezone.utc)
     bd = board.board_data(fleet, labels, read, now)
-    d = fleet_data(fleet, bd, read.get("logs", {}), usage_files(record.ROOT / "usage"), now)
+    folder = record.ROOT / "usage"
+    usage = usage_files(folder)
+    d = fleet_data(fleet, bd, read.get("logs", {}), usage, now)
     out = pathlib.Path(a.out).expanduser().absolute() if a.out else record.ROOT / "page.html"
     links = fleet_links(out, labels)
     linked(d, links)
@@ -1043,6 +1047,10 @@ def fleet_page(fleet, a):
                 print(f"{p['label']}: {board.attention_text(x)}")
     if links is None:
         print(f"the partitions are not linked: {out} is named neither index.html nor page.html")
+    for u in d["unread_usage"]:
+        print(f"the use published in {u['file']} could not be read: {u['why']}")
+    if not usage:
+        print(f"no subscription's use is published in {folder}")
 
 
 def main(argv):
