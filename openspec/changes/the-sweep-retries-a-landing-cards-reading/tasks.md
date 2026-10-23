@@ -22,4 +22,4 @@
 
 ## 5. Checks
 
-- [ ] 5.1 `tests/suite logic`, `tests/suite t-briefs t-docs`, then `tests/suite --affected` once, all report 0 failed (Task notes 5.1).
+- [x] 5.1 `tests/suite logic`, `tests/suite t-briefs t-docs`, then `tests/suite --affected` once, all report 0 failed (Task notes 5.1).
