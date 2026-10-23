@@ -2164,7 +2164,11 @@ def bolt_land(fleet, a):
 
 # A landing's submission (plan.16, record 0026), on the team's host, refused there when sluice's wt-submit, which
 # worktrunk runs as `wt submit`, is not on its path: a short-lived worktree on the bolt's branch, the one place sluice
-# takes a submission from, nothing moving the branch there; `wt submit main` from it, waiting for sluice's outcome,
+# takes a submission from, nothing moving the branch there, and cut with no write to the host's bolt/<bolt>: `git
+# worktree add --no-checkout` writes the worktree's HEAD alone and `read-tree -m -u HEAD` its files, where a plain add's
+# checkout writes the branch to the value it holds, a transaction sluice's guard judges against the branch's copy on
+# GitHub and refuses while the two differ, so sluice's push for the pull request is the one writer of both (plan.19,
+# sluice clause 124); `wt submit main` from it, waiting for sluice's outcome,
 # whatever sluice says passed through on standard error once its outcome is in and nothing of it stopping the landing;
 # the worktree removed; and, when the host's own main moved, the kit's main checkout brought level with it while it is
 # on branch main, since sluice moves the branch and not that checkout's files, and left as it is when it is detached,
@@ -2184,7 +2188,7 @@ cd "$main" || exit 2
 command -v wt-submit >/dev/null || { echo "wt submit needs sluice's wt-submit, which is not on $(hostname -s)'s path" >&2; exit 2; }
 old=$(git rev-parse --verify -q refs/heads/main) || old=
 git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main has no branch bolt/$bolt" >&2; exit 2; }
-[ -d "$path" ] || git worktree add -q "$path" "bolt/$bolt" >&2 || exit 2
+[ -d "$path" ] || { git worktree add -q --no-checkout "$path" "bolt/$bolt" >&2 && git -C "$path" read-tree -m -u HEAD >&2; } || exit 2
 tip=$(git -C "$path" rev-parse HEAD) || exit 2
 mark=$(git -C "$path" rev-parse --absolute-git-dir)/crew-landing && echo $$ > "$mark" || exit 2
 out=$(mktemp) || exit 2
