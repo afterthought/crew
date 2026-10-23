@@ -2,8 +2,8 @@
 
 ## 1. The dock pages
 
-- [ ] 1.1 Every item of the page's board and deploys, and every team, carries the key of a dock page `page.py` makes from the page's data and lineage alone, one key per item whichever lane or view draws it (design, Decisions 1 and 2; Task notes 1.1); passes `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
-- [ ] 1.2 Each kind's dock page holds what the data and lineage hold of it, links only to items the page draws, and says an account or stage it cannot read as not known, never blank (design, Decisions 3 and 4; Task notes 1.2); passes `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
+- [x] 1.1 Every item of the page's board and deploys, and every team, carries the key of a dock page `page.py` makes from the page's data and lineage alone, one key per item whichever lane or view draws it (design, Decisions 1 and 2; Task notes 1.1); passes `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
+- [x] 1.2 Each kind's dock page holds what the data and lineage hold of it, links only to items the page draws, and says an account or stage it cannot read as not known, never blank (design, Decisions 3 and 4; Task notes 1.2); passes `tests/py/test_page.py`, verify `tests/suite logic` ends with "0 failed".
 
 ## 2. The dock on the page
 
