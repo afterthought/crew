@@ -103,7 +103,7 @@ def test_a_clean_bolt_worktree_is_detached_at_its_tip_with_its_files_and_its_bra
     crew's so it goes with the bolt."""
     import plan
     tip = repo.git("rev-parse", "bolt/b")
-    assert plan.bolt_detach(str(legacy), "bolt/b", str(tmp_path), None, False, status(legacy)) == (True, None)
+    assert plan.bolt_detach(str(legacy), "bolt/b", str(tmp_path), None, False, status(legacy), lambda: None) == (True, None)
     said = plan.bolt_detached(str(repo.path), str(legacy), "bolt/b")
     assert said == f"{legacy} is detached at bolt/b's tip, {tip[:7]}, so no worktree holds the bolt's branch"
     assert subprocess.run(["git", "-C", str(legacy), "symbolic-ref", "-q", "HEAD"]).returncode != 0
@@ -117,7 +117,7 @@ def test_a_bolt_worktree_with_an_edit_or_whose_branch_a_merge_moved_reads_dirty_
     update-ref at a merge, its files at the old tree, which crew leaves on the branch rather than carry a revert along."""
     import plan
     (legacy / "README.md").write_text("edited\n")
-    assert plan.bolt_detach(str(legacy), "bolt/b", str(tmp_path), None, False, status(legacy))[0] is False
+    assert plan.bolt_detach(str(legacy), "bolt/b", str(tmp_path), None, False, status(legacy), lambda: None)[0] is False
     (legacy / "README.md").write_text("r\n")
     old = repo.git("rev-parse", "bolt/b")
     (repo.path / "unit.txt").write_text("u\n")
@@ -125,7 +125,7 @@ def test_a_bolt_worktree_with_an_edit_or_whose_branch_a_merge_moved_reads_dirty_
     landed = repo.git("commit-tree", repo.git("write-tree"), "-p", old, "-m", "chore(land): #1 unit/x")
     repo.git("update-ref", "refs/heads/bolt/b", landed, old)
     assert status(legacy)()[1].strip(), "a branch moved under its worktree reads clean"
-    assert plan.bolt_detach(str(legacy), "bolt/b", str(tmp_path), None, False, status(legacy))[0] is False
+    assert plan.bolt_detach(str(legacy), "bolt/b", str(tmp_path), None, False, status(legacy), lambda: None)[0] is False
     assert repo.git("worktree", "list", "--porcelain").count("branch refs/heads/bolt/b") == 1
 
 

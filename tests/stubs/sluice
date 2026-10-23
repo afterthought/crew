@@ -17,11 +17,24 @@
 # --no-wait --json` lands this worktree's head at once, as the stub wt-submit does, and prints {id, branch, ahead}; its
 # outcome waits for `sluice wait <id> --timeout <duration> --json`, which prints the submission's record, its state
 # landed, failed or conflict, and exits as sluice 0.36.0 does: 0, 1 or 2; `sluice wait` of an id it never gave exits 1
-# with sluice's not-found error. Outside a git worktree it
+# with sluice's not-found error. `sluice --version` prints `sluice 0.36.4`, or what $CREW_TEST_ROOT/sluice-version
+# holds while it exists. `sluice branch create <branch> --from <from> --json` and `sluice branch delete <branch> --into
+# <into> --json` answer as sluice 0.36.4 does (tests/py/sluice-0.36.4/), each branch routed where the policy keeps it
+# (route.py): create reads <from> where it lives, origin's after a fetch for one on a remote, refuses a branch already
+# there, locally or on its remote, or one the policy at <from> gives no gate, and makes it on its remote by a push of a
+# branch that is not there, then sets the local branch, or makes it locally; delete refuses a branch with neither a
+# local branch nor a tracking ref, or whose remote has none, as not found, one with a submission queued while
+# $CREW_TEST_ROOT/sluice-queued-<branch, its / as -> exists, holding the submission's number, and one whose tip <into>,
+# where it lives, does not hold, and deletes it from its remote, then the local branch and the tracking ref, leaving
+# the branch's git config section as sluice's ref edits do. Outside a git worktree it
 # fails as sluice does, exiting 3, and anything else is refused, exiting 2. Every call is logged to $CREW_TEST_LOG as
 # `<host> sluice <args> in <the directory it ran in>`.
 set -uo pipefail
 [[ -n ${CREW_TEST_LOG:-} ]] && printf '%s sluice %s in %s\n' "${CREW_TEST_HOST:-?}" "$*" "$(pwd -P)" >> "$CREW_TEST_LOG"
+if [[ $* == --version ]]; then
+  if [[ -e ${CREW_TEST_ROOT:-}/sluice-version ]]; then cat "$CREW_TEST_ROOT/sluice-version"; else echo "sluice 0.36.4"; fi
+  exit 0
+fi
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
   printf '{"error":{"kind":"internal","message":"opening the repository at %s: not a git repository","next":[]}}\n' "$(pwd -P)"
   exit 3
@@ -57,6 +70,67 @@ case "$*" in
     jq -r .said "$f" >&2
     jq -c 'del(.said, .rc)' "$f"
     exit "$(jq -r .rc "$f")"
+    ;;
+  branch\ create\ *\ --from\ *\ --json | branch\ delete\ *\ --into\ *\ --json)
+    exec python3 -c '
+import json, os, subprocess, sys
+sys.path.insert(0, sys.argv[1])
+import route
+act, branch, other = sys.argv[3], sys.argv[4], sys.argv[6]
+git = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True)
+
+
+def say(doc, code=0):
+    print(json.dumps(doc, indent=2) if code == 0 else json.dumps(doc, separators=(",", ":")))
+    sys.exit(code)
+
+
+def refused(kind, message):
+    say({"error": {"kind": kind, "message": message, "next": [f"sluice status {branch}"]}}, 1 if kind == "not_found" else 2)
+
+
+def where(name):
+    """The revision a branch is at where it lives: its remote after a fetch, else the local branch; and the remote."""
+    r = route.remote(name)
+    if r:
+        f = git("fetch", "-q", r, f"+refs/heads/{name}:refs/remotes/{r}/{name}")
+        return (route.rev(f"refs/remotes/{r}/{name}") if f.returncode == 0 else None), r
+    return route.rev(f"refs/heads/{name}"), None
+
+
+if act == "create":
+    at, _ = where(other)
+    at or refused("not_found", f"no branch {other}")
+    gate = route.table(at, branch)
+    gate.get("required") or refused("refused", f"{branch} has no gate in .config/sluice.toml at {at[:7]}")
+    r = gate.get("remote")
+    there = route.rev(f"refs/heads/{branch}")
+    if not there and r:
+        there = (git("ls-remote", r, f"refs/heads/{branch}").stdout.split() or [None])[0]
+    not there or refused("refused", f"{branch} is already there, at {there}")
+    if r:
+        p = git("push", "-q", r, f"{at}:refs/heads/{branch}")
+        p.returncode == 0 or refused("internal", f"pushing {branch} to {r}: {p.stderr.strip()}")
+    git("update-ref", f"refs/heads/{branch}", at)
+    say({"branch": branch, "created": at, "from": other})
+local, tracked = route.rev(f"refs/heads/{branch}"), route.rev(f"refs/remotes/origin/{branch}")
+(local or tracked) or refused("not_found", f"no branch {branch}")
+tip, r = where(branch)
+tip or refused("not_found", f"no branch {branch}")
+queued = os.path.join(os.environ["CREW_TEST_ROOT"], "sluice-queued-" + branch.replace("/", "-"))
+if os.path.exists(queued):
+    refused("refused", f"#{open(queued).read().strip()} still queued on {branch}; wait for them to land, or withdraw them")
+into, _ = where(other)
+into and git("merge-base", "--is-ancestor", tip, into).returncode == 0 or refused(
+    "refused", f"{branch} at {tip} has not landed into {other}; submit it there first")
+if r:
+    p = git("push", "-q", r, "--delete", branch)
+    p.returncode == 0 or refused("internal", f"deleting {branch} from {r}: {p.stderr.strip()}")
+    git("update-ref", "-d", f"refs/remotes/{r}/{branch}")
+if local:
+    git("update-ref", "-d", f"refs/heads/{branch}")
+say({"branch": branch, "deleted": tip, "into": other})
+' "$(dirname "$0")" "$@"
     ;;
   "overview --json")
     if [[ -e ${CREW_TEST_ROOT:?}/sluice-overview.json ]]; then cat "$CREW_TEST_ROOT/sluice-overview.json"; exit 0; fi

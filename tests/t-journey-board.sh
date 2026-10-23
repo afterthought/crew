@@ -4,7 +4,8 @@
 # environment's deploy among the Operation lane's, and the attention line from one read, writes nothing and ends no
 # card session; the rail tab's refresh, in one fetch and one read of each host's kits, prints the rail, sweeps a dead
 # card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards; crew page writes the page whole, with the
-# deploys, and nothing when the branch can't be read; every view names a host that does not answer and shows the
+# deploys and its partition links in the layout of its file, saying so when that names no partition, and nothing when
+# the branch can't be read; every view names a host that does not answer and shows the
 # rest; and a plan a hand edit broke is refused, named by its commit. What each lane,
 # line, URL and node says are logic cases (tests/py/test_board.py, test_page.py, test_rail.py), and what the kit
 # reader takes from git, contract cases (tests/contract/test_gather.py); each step here checks a command's wiring once.
@@ -36,7 +37,7 @@ printf -- '---\ncapture: %s\nsource: meeting\ncaptured_by: wldn-planner\nevent_d
 printf -- '---\nsignal: %s/01-zones\nkind: ask\n---\n\nEvery apex should be a zone of its own.\n' "$cap" > "$w/signals/$cap/01-zones.md"
 commit_all "$w" "signals: the planning meeting"; git -C "$w" push -q origin main
 mkdir -p "$k/openspec/explorations/command-cost"
-printf '\n> Reading: what each crew command costs.\n' > "$k/openspec/explorations/command-cost/reading.md"; commit_all "$k" "docs: a reading"
+printf '\n> Reading: what each crew command costs.\n' > "$k/openspec/explorations/command-cost/reading.md"; commit_all "$k" "docs: a reading"; push "$k"
 crew bolt new apex-zones "Apexes are zones." --repo switchboard-kit >/dev/null
 crew unit add zone-one "Zone one." --bolt apex-zones >/dev/null
 crew unit add later "Later." --repo switchboard-kit --source docs/zones.md >/dev/null
@@ -170,6 +171,17 @@ eq "$(records)" "$n"
 expect_ok crew trace unit/a
 eq "$(j '.histories["unit/a"][] as $i | .entries[$i] | "\(.At[5:10]) \(.At[11:19]) \(.Act)"')" "$(awk '{print $1, $2, $3}' <<<"$out")"
 ok "crew page writes the page whole, with the board as crew board reads it and the deploys, prints its path and as of which commit, and appends nothing"
+
+# The partition links follow the page's own file: written as <label>.html, as swancloud's board serves them side by
+# side, it links <other>.html; written where its file and folder name no partition, it links none and says so.
+parts() { grep -o '<nav class="parts"[^>]*>.*</nav>' "$1"; }
+expect_ok crew page wldn --out "$T/served/wldn.html"
+nav=$(parts "$T/served/wldn.html"); has "$nav" 'href="madswan.html"'; has "$nav" 'href="swancloud.html"'
+lacks "$out" "not linked"
+expect_ok crew page wldn --out "$T/served/board.html"
+lacks "$(parts "$T/served/board.html")" "<a "
+eq "$(sed -n 3p <<<"$out")" "the other partitions are not linked: $T/served/board.html is neither named wldn.html nor in a folder wldn"
+ok "a page written as <label>.html links the other partitions' pages beside it, and one whose file and folder name no partition links none and says so"
 
 # The box asleep: every view names it and shows the rest.
 echo $box > "$T/down"

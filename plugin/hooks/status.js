@@ -53,9 +53,10 @@ async function look($) {
   }
 }
 
-// The lines the band shows: the agent's open cards, its questions among them, then its view, with the stale line once
-// the views are old; one line while no views are written on this host; nothing for an agent crew gives no view, or a
-// session that is no crew agent.
+// The lines the band shows: the agent's open cards, its questions among them, then its view; once the views are old,
+// the stale line alone, since views the rail tab has stopped refreshing name the bolt and cards as they stood then, a
+// bolt landed since among them (read.1); one line while no views are written on this host; nothing for an agent crew
+// gives no view, or a session that is no crew agent.
 function lines() {
   if (!live.path) return undefined
   if (!live.frame) {
@@ -63,8 +64,7 @@ function lines() {
   }
   const view = live.frame.views[live.agent]
   if (!view) return undefined
-  const shown = [...((live.frame.cards || {})[live.agent] || []), ...view]
-  return live.stale ? [...shown, live.frame.stale] : shown
+  return live.stale ? [live.frame.stale] : [...((live.frame.cards || {})[live.agent] || []), ...view]
 }
 
 export function register(on) {
