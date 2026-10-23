@@ -11,8 +11,8 @@ import plan
 WORKING, QUIET = (False, "is working", None), (False, "has been quiet for 3 minutes, under the limit of 15 minutes", None)
 
 
-def look(o=None, words=None, owed_=True, gone=False, got=None, missing="", quiet=WORKING, out_of_time=False):
-    return plan.look(o or owed("construct"), "swb-1-unit-1", 0, words, owed_, gone, got, missing, quiet, out_of_time)
+def look(o=None, words=None, owed_=True, gone=False, got=None, missing="", quiet=WORKING, out_of_time=False, over=False):
+    return plan.look(o or owed("construct"), "swb-1-unit-1", 0, words, owed_, gone, got, missing, quiet, out_of_time, over)
 
 
 class TestLook:
@@ -36,6 +36,19 @@ class TestLook:
             "stuck", "swb-1-unit-1 is stuck in merge on a: quiet for 0 minutes, with bolt/b not yet holding it and nothing it needs said")
         assert look(o=owed("settle"), missing="nothing committed since it began", quiet=(True, "quiet for 0 minutes", None)) == (
             "stuck", "swb-1-unit-1 is stuck in settle on a: quiet for 0 minutes, with nothing committed since it began and nothing it needs said")
+
+    def test_a_verify_whose_agent_ended_its_turn_with_no_report_has_not_ended_and_is_never_called_stuck(self):
+        # crw-4, 2026-10-23: a verify whose agent ended its turn with no report saved where crew reads it was called
+        # stuck at the limit, and its unit's merge started (signal 2026-10-23-crw-4-conductor-8de4d1fb/01).
+        missing = "no report verify-a-<YYYYMMDD-HHMM>.md saved in /home/.local/state/swb-1-team/reports since it began"
+        for quiet in (QUIET, (True, "quiet for 15 minutes", None)):
+            assert look(o=owed("verify"), missing=missing, quiet=quiet, over=True) == (
+                "unended", f"swb-1-unit-1 ended its turn in verify on a with {missing}: the verify has not ended, since a "
+                           "verify ends only at its report; nothing is recorded")
+
+    def test_a_report_saved_ends_a_verify_however_its_agent_ended(self):
+        assert look(o=owed("verify"), got="report/verify-a-20261012-1001.md", missing="the report is /r/verify-a-20261012-1001.md", over=True)[0] == "delivered"
+        assert look(o=owed("verify"), got="report/verify-a-20261012-1001.md", missing="the report is /r/verify-a-20261012-1001.md", gone=True)[0] == "delivered"
 
     def test_stuck_names_what_crew_could_not_read_of_its_own_work(self):
         assert look(missing="nothing committed", quiet=(True, "quiet for 20 minutes", "no transcript for its session s1"))[1].endswith(

@@ -53,6 +53,7 @@ After starting a stage, run `{{TEAM_CMD}} unit wait <unit>` as a background comm
 - **Stopped short**, with what the agent needs, in its words. The stage is over. Get what it needs, as the building loop says, then run the stage again with the answer as its words.
 - **Stuck**: the agent has been quiet past crew's limit with nothing delivered, nothing said and nothing of its own still running. Tell the user which agent and stage, through the partition's operator as *Talking to the user* says, and run the stage again or wait again only on the user's word.
 - **No longer running**: the agent is gone with nothing delivered. Tell the user the same way.
+- **Not ended**: a verify's agent ended its turn with no report saved where crew reads it, which the answer names, so the verify has not ended, and the unit does not merge until it has. Tell the user the same way, and run the verify again only on the user's word.
 - **Still running** after the wait's hour, working or waiting on work of its own: wait again.
 
 Before its answer, a wait may also say what sluice recorded of the stage's submission: `<stage> on <unit>: sluice says of <agent>'s submission to <branch>: conflict #<n> on <its paths>; the wait goes on until the stage ends`, or `blamed #<n> on <combination>` when a run of the checks failed with it. It is no answer: the stage's agent has sluice's outcome too and takes it in the stage, as its brief says, so keep waiting for the answer.
