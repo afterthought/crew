@@ -154,6 +154,15 @@ class TestRenew:
     def test_a_pane_herdr_lists_an_agent_in_is_not_started_over(self):
         assert hold.renew_exited(True, None, "sid-1", "sid-1", False) == (False, "it is not up")
 
+    def test_a_restarts_mark_names_the_session_its_exit_was_typed_into_and_a_stale_one_goes_as_it_is_read(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(hold, "RENEW", tmp_path)
+        mark = tmp_path / "swb-1-ops.exiting"
+        assert hold.marked_exit("swb-1-ops", "sid-1") is None
+        mark.write_text("sid-1\n")
+        assert hold.marked_exit("swb-1-ops", "sid-1") == "sid-1" and mark.exists()
+        assert hold.marked_exit("swb-1-ops", "sid-2") == "sid-1" and not mark.exists()
+        assert hold.EXITING * 5 == 600
+
     def test_an_agent_taken_down_stays_down(self):
         assert hold.renew_exited(False, None, "sid-1", "sid-1", True) == (False, "it was taken down; it stays down")
 
