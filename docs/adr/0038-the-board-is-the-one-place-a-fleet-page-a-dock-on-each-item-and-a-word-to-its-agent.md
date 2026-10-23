@@ -1,7 +1,7 @@
 ---
 number: 38
 title: The board is the one place, with a fleet page, a dock on each item and a word from the dock to the item's agent
-status: proposed
+status: accepted
 date: 2026-10-23
 decision-makers:
 - Chuck Swanberg
@@ -9,7 +9,7 @@ decision-makers:
 
 # The board is the one place, with a fleet page, a dock on each item and a word from the dock to the item's agent
 
-Status: proposed to the user on 2026-10-23, as `briefs.15` has it; accepted only on their yes.
+Status: accepted by the user on 2026-10-23, on their card (req_5ca27717fb15475fa320, "Accept the record as ruled"): the listener is swancloud's and `state.4` stands.
 
 Deciders: the user, who asked for it on 2026-10-23 through the operator (signals 2026-10-23-swancloud-design-40a8b1a4/01 and /02): "I'd like it if we made that interactive so I could send feedback on items on the board to the appropriate agent (ops, design, planner, operation, etc.). One, I'll let you figure out how to do it." and "I want to be able to see, in one place, a nice overview of all of the crews", their list following: partitions, where they are, their repos and statuses, the bolts running, the teams and how busy, which Claude Code subscriptions are active in each, and each subscription's current session and weekly limits, Fable's among them; "a simple prototype to get us going", not Flywheel. Their words settle what is wanted; where it lives and how it works are the design agent's, below, put to them on this record's card.
 Extends: record 0010 (the page is the board the user looks at; the board answers nothing).
