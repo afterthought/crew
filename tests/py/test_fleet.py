@@ -274,6 +274,91 @@ class TestLinks:
         assert {p["link"] for p in d["partitions"]} == {None} and {t["link"] for p in d["partitions"] for t in p["teams"]} == {None}
 
 
+# Decision 1's file: deneb's readings of madswan, made, and of credits, not made.
+WINDOW_AT = "2026-10-27T09:00:00Z"
+
+
+def made(account, at, **w):
+    return {"account": account, "at": at, **w}
+
+
+MADSWAN = made("madswan", "2026-10-23T11:58:04Z",
+               five_hour={"utilization": 34.0, "resets_at": "2026-10-23T14:00:00Z"},
+               seven_day={"utilization": 61.0, "resets_at": WINDOW_AT},
+               seven_day_opus=None,
+               seven_day_sonnet={"utilization": 20.0, "resets_at": WINDOW_AT},
+               model_scoped=[{"display_name": "Fable", "utilization": 40.0, "resets_at": WINDOW_AT}])
+CREDITS = {"account": "credits", "at": "2026-10-23T11:58:06Z", "unread": "the usage endpoint answered 401"}
+
+
+def published(host, *readings):
+    return {"file": f"/u/{host}.json", "data": {"host": host, "readings": list(readings)}}
+
+
+class TestPublishedUse:
+    def test_a_file_of_two_readings_one_made_and_one_not(self):
+        readings, unread = page.usage_checked({"deneb": published("deneb", MADSWAN, CREDITS)})
+        assert unread == []
+        assert [(r["host"], r["account"], r["at"], r["unread"]) for r in readings] == [
+            ("deneb", "madswan", "2026-10-23T11:58:04Z", None), ("deneb", "credits", "2026-10-23T11:58:06Z", "the usage endpoint answered 401")]
+        assert readings[0]["windows"] == {"five_hour": MADSWAN["five_hour"], "seven_day": MADSWAN["seven_day"], "seven_day_opus": None,
+                                          "seven_day_sonnet": MADSWAN["seven_day_sonnet"], "model_scoped": MADSWAN["model_scoped"]}
+        assert readings[1]["windows"] == dict.fromkeys(("five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "model_scoped"))
+
+    def test_each_file_not_of_the_shape_is_named_with_what_is_wrong_and_the_good_files_readings_kept(self):
+        """fleet-page "A file that is not of the shape": each bad file unread as a whole (read.2), the rest read (read.3)."""
+        files = {"box": dict(published("deneb", MADSWAN), file="/u/box.json"),
+                 "capital": published("capital", made("Madswan", "2026-10-23T11:58:04Z")),
+                 "deneb": published("deneb", MADSWAN),
+                 "string": published("string", MADSWAN, made("ia", "2026-10-23T11:00:00Z", five_hour={"utilization": "34", "resets_at": None})),
+                 "scoped": published("scoped", made("ia", "2026-10-23T11:00:00Z", model_scoped={"display_name": "Fable"})),
+                 "nojson": {"file": "/u/nojson.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}}
+        readings, unread = page.usage_checked(files)
+        assert [(r["host"], r["account"]) for r in readings] == [("deneb", "madswan")]
+        assert unread == [
+            {"host": "box", "file": "/u/box.json", "why": 'its host is "deneb", not box, the file\'s name'},
+            {"host": "capital", "file": "/u/capital.json", "why": 'reading 1: its account is not a name crew takes: "Madswan"'},
+            {"host": "string", "file": "/u/string.json", "why": 'reading 2: its five_hour has a utilization that is not a number: "34"'},
+            {"host": "scoped", "file": "/u/scoped.json", "why": 'reading 1: its model_scoped is not a list: {"display_name": "Fable"}'},
+            {"host": "nojson", "file": "/u/nojson.json", "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}]
+
+    def test_a_reading_is_checked_for_its_at_its_unread_and_each_window(self):
+        def why(r):
+            return page.usage_checked({"deneb": published("deneb", r)})[1][0]["why"]
+        assert why(made("ia", "yesterday")) == 'reading 1: its at is not an ISO time: "yesterday"'
+        assert why(made("ia", "2026-10-23")) == 'reading 1: its at is not an ISO time: "2026-10-23"'
+        assert why(made("ia", "2026-10-23T11:00:00Z", unread=401)) == "reading 1: its unread is not the host's words: 401"
+        assert why(made("ia", "2026-10-23T11:00:00Z", seven_day=[61])) == "reading 1: its seven_day is not a window: [61]"
+        assert why(made("ia", "2026-10-23T11:00:00Z", seven_day_opus={"utilization": True})) == (
+            "reading 1: its seven_day_opus has a utilization that is not a number: true")
+        assert why(made("ia", "2026-10-23T11:00:00Z", five_hour={"utilization": 1, "resets_at": "soon"})) == (
+            'reading 1: its five_hour has a resets_at that is not an ISO time: "soon"')
+        assert why(made("ia", "2026-10-23T11:00:00Z", model_scoped=[{"utilization": 1}])) == (
+            'reading 1: its model_scoped holds a window with no display_name: {"utilization": 1}')
+        assert why(made("ia", "2026-10-23T11:00:00Z", model_scoped=[{"display_name": "Fable", "utilization": "x"}])) == (
+            'reading 1: its model_scoped window Fable has a utilization that is not a number: "x"')
+        assert page.usage_checked({"deneb": {"file": "/u/deneb.json", "data": [1]}})[1][0]["why"] == "it is not an object: [1]"
+        assert page.usage_checked({"deneb": {"file": "/u/deneb.json", "data": {"host": "deneb"}}})[1][0]["why"] == "its readings are not a list: null"
+
+    def test_a_window_may_be_absent_null_or_without_a_figure(self):
+        r = made("ia", "2026-10-23T11:00:00+02:00", five_hour={"resets_at": None}, seven_day={"utilization": None, "resets_at": WINDOW_AT},
+                 model_scoped=[{"display_name": "Fable", "utilization": None, "resets_at": None}], seven_day_oauth_apps={"x": 1})
+        readings, unread = page.usage_checked({"deneb": published("deneb", r)})
+        assert unread == [] and readings[0]["at"] == "2026-10-23T09:00:00Z" and "seven_day_oauth_apps" not in readings[0]["windows"]
+
+    def test_the_folder_is_read_one_file_per_host_a_file_not_json_named_and_a_missing_folder_holding_none(self, tmp_path):
+        assert page.usage_files(tmp_path / "usage") == {}
+        (tmp_path / "deneb.json").write_text(json.dumps({"host": "deneb", "readings": [MADSWAN]}))
+        (tmp_path / "mac-studio.json").write_text("not json")
+        (tmp_path / "notes.txt").write_text("not a host's")
+        files = page.usage_files(tmp_path)
+        assert list(files) == ["deneb", "mac-studio"]
+        assert files["deneb"] == {"file": str(tmp_path / "deneb.json"), "data": {"host": "deneb", "readings": [MADSWAN]}}
+        assert files["mac-studio"] == {"file": str(tmp_path / "mac-studio.json"), "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}
+        readings, unread = page.usage_checked(files)
+        assert [r["account"] for r in readings] == ["madswan"] and [u["host"] for u in unread] == ["mac-studio"]
+
+
 def tokens(text):
     """The colour tokens' blocks of a page's style, light, dark as preferred and dark as chosen, each as written; a
     block setting no colour, as the phone's layout tokens, is not one."""

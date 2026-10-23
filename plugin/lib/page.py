@@ -31,7 +31,7 @@ board of every partition from the one read crew board makes of them all, each sl
 ends the run record holds in the board's window (read.5), and each session's account from the hosts file (code.5).
 Each file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and making it
 appends no entry (state.4, record.1)."""
-import argparse, datetime, html, json, os, pathlib, sys, tempfile
+import argparse, datetime, html, json, math, os, pathlib, sys, tempfile
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -373,6 +373,115 @@ def linked(d, links):
         p["link"] = links[p["label"]] if links else None
         for t in p["teams"]:
             t["link"] = f"{p['link']}#dock=team:{t['team']}" if p["link"] else None
+
+
+# ------------------------------------------------------------------------------------------------- the subscriptions
+
+# A reading's windows, under Claude Code's own names for its /usage data (rate_limits), each with the page's name for it:
+# the two every reading shows, then the weekly ones by model, model_scoped's after them under the server's own names.
+USE = (("five_hour", "five-hour"), ("seven_day", "seven-day"))
+MODELS = (("seven_day_opus", "Opus"), ("seven_day_sonnet", "Sonnet"))
+
+
+def usage_files(folder):
+    """The use the hosts published, one *.json file in folder (a Path) for each host, named for it, by host: {host:
+    {file, data}} for a file parsed, {host: {file, why}} for one that could not be opened or is not JSON. A folder that
+    is not there holds no file."""
+    out = {}
+    for f in sorted(folder.glob("*.json")):
+        try:
+            out[f.stem] = {"file": str(f), "data": json.loads(f.read_text())}
+        except OSError as e:
+            out[f.stem] = {"file": str(f), "why": f"it could not be opened: {e.strerror or e}"}
+        except ValueError as e:
+            out[f.stem] = {"file": str(f), "why": f"it is not JSON: {e}"}
+    return out
+
+
+def shown(v):
+    """A value as a reason quotes it, cut short."""
+    text = json.dumps(v, ensure_ascii=False)
+    return text if len(text) <= 40 else text[:39] + "…"
+
+
+def is_time(at):
+    return isinstance(at, str) and "T" in at and board.when(at) is not None
+
+
+def window_wrong(w):
+    """What is wrong with a window, or None: absent or null, or an object whose utilization is a number or null and
+    whose resets_at is an ISO time or null."""
+    if w is None:
+        return None
+    if not isinstance(w, dict):
+        return f"is not a window: {shown(w)}"
+    u = w.get("utilization")
+    if u is not None and (isinstance(u, bool) or not isinstance(u, (int, float)) or not math.isfinite(u)):
+        return f"has a utilization that is not a number: {shown(u)}"
+    if w.get("resets_at") is not None and not is_time(w["resets_at"]):
+        return f"has a resets_at that is not an ISO time: {shown(w['resets_at'])}"
+    return None
+
+
+def reading_wrong(r):
+    """What is wrong with a reading, or None: an account crew takes as a name (code.4), an at that is an ISO time, and
+    either the host's words for why it could not read (unread) or its windows, each absent, null or a window, and
+    model_scoped a list of windows each with its display_name."""
+    if not isinstance(r, dict):
+        return f"it is not an object: {shown(r)}"
+    if not isinstance(r.get("account"), str) or not crew.NAME.fullmatch(r["account"]):
+        return f"its account is not a name crew takes: {shown(r.get('account'))}"
+    if not is_time(r.get("at")):
+        return f"its at is not an ISO time: {shown(r.get('at'))}"
+    if r.get("unread") is not None and not (isinstance(r["unread"], str) and r["unread"].strip()):
+        return f"its unread is not the host's words: {shown(r['unread'])}"
+    for k, _ in USE + MODELS:
+        why = window_wrong(r.get(k))
+        if why:
+            return f"its {k} {why}"
+    ms = r.get("model_scoped")
+    if ms is not None and not isinstance(ms, list):
+        return f"its model_scoped is not a list: {shown(ms)}"
+    for m in ms or []:
+        if not isinstance(m, dict) or not isinstance(m.get("display_name"), str) or not m["display_name"].strip():
+            return f"its model_scoped holds a window with no display_name: {shown(m)}"
+        why = window_wrong(m)
+        if why:
+            return f"its model_scoped window {m['display_name']} {why}"
+    return None
+
+
+def file_wrong(host, data):
+    """What is wrong with a host's published file, or None: an object whose host is the file's name and whose readings
+    are a list, each of the shape (reading_wrong)."""
+    if not isinstance(data, dict):
+        return f"it is not an object: {shown(data)}"
+    if data.get("host") != host:
+        return f"its host is {shown(data.get('host'))}, not {host}, the file's name"
+    if not isinstance(data.get("readings"), list):
+        return f"its readings are not a list: {shown(data.get('readings'))}"
+    for i, r in enumerate(data["readings"], 1):
+        why = reading_wrong(r)
+        if why:
+            return f"reading {i}: {why}"
+    return None
+
+
+def usage_checked(files):
+    """The published use checked against its shape before any of it is used (read.2), from the files read (usage_files):
+    a file that could not be read or is not of the shape is unread as a whole, named with what is wrong, and the other
+    files' readings kept (read.3). Returns (readings [{host, account, at, unread, windows}], unread [{host, file, why}]),
+    by host, each reading's at in UTC and its windows under their own names, None where the reading gives none."""
+    readings, unread = [], []
+    for host, f in files.items():
+        why = f.get("why") or file_wrong(host, f["data"])
+        if why:
+            unread.append({"host": host, "file": f["file"], "why": why})
+            continue
+        readings += [{"host": host, "account": r["account"], "at": board.iso(board.when(r["at"])), "unread": r.get("unread"),
+                      "windows": {k: r.get(k) for k in [k for k, _ in USE + MODELS] + ["model_scoped"]}}
+                     for r in f["data"]["readings"]]
+    return readings, unread
 
 
 # ------------------------------------------------------------------------------------------------- the docks
