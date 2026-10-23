@@ -5,8 +5,11 @@
 # agent in the unit's place and sends its prompt; the waits end each stage at its deliverable and record it; the
 # team's read records an end nobody waited on, fetching and gathering once; a verify whose agent ended its turn with no
 # report has not ended, and its unit's merge is refused naming the report (record 0007); verify's report ends it;
-# code's prompt names an unmerged unit's overlapping Touches; and a wait says a conflict sluice's overview shows for the
-# stage's submission, before its answer (record 0032). The units journey's other parts:
+# code's prompt names an unmerged unit's overlapping Touches; a wait says a conflict sluice's overview shows for the
+# stage's submission, before its answer (record 0032); a merge in a kit whose main takes no pull requests asks nothing
+# of GitHub, and, once main takes them, a merge drafts the bolt's ready landing pull request before its prompt is sent,
+# and one whose gh fails does not start, naming the repository in gh's words (bolt-teams). The units journey's other
+# parts:
 # t-journey-slots, t-journey-merge, t-journey-prompts, t-journey-fix, t-journey-land.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
@@ -156,7 +159,8 @@ expect_ok crew unit wait a --timeout 0
 eq "$(head -1 <<<"$out")" "merge on a: sluice says of swb-1-unit-1's submission to bolt/tenant-environments: conflict #7 on shared.txt; the wait goes on until the stage ends"
 has "$(tail -1 <<<"$out")" "merge on a is still running after the wait's 0 ms"
 eq "$(grep -c "^$box sluice status 7 --json in " "$CREW_TEST_LOG")" 1
-ok "a wait says the conflict sluice recorded for the stage's submission, placed by sluice status, before its answer"
+eq "$(grep -c "^$box gh " "$CREW_TEST_LOG")" 0
+ok "a wait says the conflict sluice recorded for the stage's submission, placed by sluice status, before its answer; a merge in a kit whose main takes no pull requests asks nothing of GitHub"
 
 # A merge sluice landed on the bolt from another host is on GitHub's bolt/tenant-environments, which this host's own
 # lags: a unit's place is cut from GitHub's after a fetch, tracking it, and holds that merge.
@@ -168,3 +172,23 @@ expect_ok crew unit run c construct
 eq "$(git -C "$k" for-each-ref --format='%(upstream:short)' refs/heads/unit/c)" "origin/bolt/tenant-environments"
 git -C "$k" merge-base --is-ancestor "$landed" unit/c || fail "c's place does not hold the merge landed on GitHub"
 ok "a unit's place is cut from the bolt on GitHub after a fetch, holding a merge landed there from another host"
+
+# Once main takes pull requests, a merge into the bolt holds its landing pull request first (bolt-teams): one whose gh
+# fails does not start, naming the repository in gh's words, and the next drafts the ready one before its prompt is sent.
+rewrite "$k/.config/sluice.toml" '/^\[branches.main\]$/,/^remote/ s/^remote = "origin"$/&\n\n[branches.main.pull_requests]\nreviews = 0/'
+commit_all "$k" "chore: main takes pull requests"; push "$k"
+gh_repo=WilldanGroup/switchboard-kit
+pr=$(pull $gh_repo bolt/tenant-environments false)
+merges=$(sent swb-1-unit-1 "'Merge a")
+echo "HTTP 401: Bad credentials (https://api.github.com/graphql)" > "$T/gh-fails"
+expect_fail "unit a's merge into bolt/tenant-environments does not start: crew can't read $gh_repo's open pull request from bolt/tenant-environments into main: gh exited 1: HTTP 401: Bad credentials (https://api.github.com/graphql)" \
+  crew unit run a merge
+eq "$(sent swb-1-unit-1 "'Merge a")" "$merges"
+has "$(field $box stage.start Refused stage/a/merge)" "does not start"
+rm "$T/gh-fails"
+: > "$CREW_TEST_LOG"
+expect_ok crew unit run a merge
+has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is a draft, so no merge into bolt/tenant-environments lands it"
+eq "$(drafted "$pr")" true
+eq "$(grep -E "^$box (gh pr ready $pr -R $gh_repo --undo|wldn-1 agent prompt swb-1-unit-1 'Merge a)" "$CREW_TEST_LOG" | cut -d' ' -f2-3)" $'gh pr\nwldn-1 agent'
+ok "once main takes pull requests, a merge whose gh fails does not start, naming the repository in gh's words, and a merge drafts the bolt's ready landing pull request before its prompt is sent"

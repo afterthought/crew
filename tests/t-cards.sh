@@ -16,7 +16,8 @@
 # settled it in the pane. Then a batch's card, raised by crew in the planner's name once the reviewer's summary is
 # there, with its one reading session on the main level's host linked from it, and, lost to its owner, raised again by
 # the sweep's entry under its key, saying its older copy is dead, on the same session; crew card session giving that
-# link again and refusing a unit, a landing's key while its bolt does not read proven and a short proposal's; crew card wait closing the card on the tap,
+# link again and refusing a unit, a bolt's key while it is no row of its kit's landings card, the kit's card, which
+# has no reading of its own, and a short proposal's; crew card wait refusing a bolt that is no row, and closing the card on the tap,
 # with its note, and on the session's send, with every annotation, each ending the session; a session whose link only
 # the host could open ended, and the card raised all the same, saying so; and a wait with neither card nor session
 # refused. Then the rail read's sweep of the box's cards: a card whose row is gone withdrawn, or recorded lost when
@@ -129,7 +130,7 @@ ok "crew card read prints where the question stands and the user's answer, recor
 # Crew's own cards are crew's: a conductor's post under its bolt's landing key is refused, naming the card as crew's.
 : > "$CREW_TEST_LOG"
 out=$(ask swb-2-conductor post_request '{"name": "swb-2-conductor", "idempotencyKey": "land/b2", "title": "Land b2"}')
-eq "$out" "denied: crew refuses swb-2-conductor's post of the card under land/b2: a landing card is crew's, raised when the bolt reads proven and closed when it lands. Ask a question of your own under a key of your own, ask/swb-2-conductor/<what it is about>."
+eq "$out" "denied: crew refuses swb-2-conductor's post of the card under land/b2: a kit's landings card is crew's, raised in main-level ops's name when a bolt of the kit reads proven, and closed when nothing waits to land on the kit's main. Ask a question of your own under a key of your own, ask/swb-2-conductor/<what it is about>."
 eq "$(py_calls)" ""
 ok "a conductor's post under its bolt's landing key is refused before it reaches Pending You, naming the card as crew's"
 
@@ -361,13 +362,18 @@ ok "a batch's card lost to the planner is raised again by the sweep's entry unde
 
 expect_ok planner session batch/1; eq "$out" "$u1"; eq "$(listed)" "$p1"
 expect_fail "a batch has one reading session, on the whole batch: crew card session batch/1" planner session batch/1 v1
-expect_fail "bolt b1 does not read proven, so its landing card is not raised and has no reading: every unit and chore of it has landed" \
+expect_fail "b1 is no row of switchboard-kit's landings card, so it has no reading: every unit and chore of it has landed" \
   planner session land/b1
+expect_fail "no session was started for card land/b1, and b1 is no row of its kit's landings card" planner wait land/b1
+expect_fail "land/switchboard-kit is switchboard-kit's landings card, wldn-ops's, which has no reading of its own" \
+  planner session land/switchboard-kit
+expect_fail "land/switchboard-kit is switchboard-kit's landings card, wldn-ops's, which has no reading of its own" \
+  planner wait land/switchboard-kit
 eq "$(listed)" "$p1"
 printf '%s\n' 'Case: The console gets a bolt of its own.' 'Do: bolt new console-pages "The console lists them." --repo switchboard-kit' > "$T/p.rec"
 crew plan propose "$T/p.rec" >/dev/null
 expect_fail "proposal/1's card has nothing to read: it holds the proposal whole" crew card session proposal/1
-ok "crew card session gives a running session's link again, and refuses a unit with a batch's key, a landing's key while its bolt does not read proven, saying why, and a short proposal's"
+ok "crew card session gives a running session's link again, and refuses a unit with a batch's key, a bolt's key while it is no row of its kit's landings card, saying why, the kit's card, which has no reading of its own, and a short proposal's; crew card wait refuses a bolt that is no row"
 
 echo '{"answer": {"note": {"text": "v1: say what the zone is."}}}' > "$stub/answered/req_stub-11.json"
 : > "$CREW_TEST_LOG"

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Stub gh for crew's tests, answering the two commands crew runs of GitHub's CLI as gh 2.102.0 does (read 2026-10-22
+# on afterthought/crew): `gh pr list -R <owner/name> --head <branch> --base <base> --state open --json <fields>` prints
+# the repository's open pull requests from that branch into that base as a JSON list on one line, with the fields
+# asked for, and `gh pr ready <number | url | branch> -R <owner/name> [--undo]` marks the open one ready for review, or
+# a draft with --undo, saying so on standard error, as gh does, and that it already is when it is. The pull requests
+# are $CREW_TEST_ROOT/gh-pulls.json, a list of {repo, number, head, base, state, isDraft}, which tests/lib.sh's
+# `pull` writes and `drafted` reads; each one's url is GitHub's for it, and its headRefOid the head branch's tip on the
+# test's bare remote for the repository, as GitHub's is the branch's on GitHub. A pull request crew asks to mark that
+# the file has no open one is gh's not-found error, exiting 1. While $CREW_TEST_ROOT/gh-fails exists, every call fails
+# in its words on standard error, exiting 1, as gh does when GitHub refuses it. Every call is logged to $CREW_TEST_LOG
+# as `<host> gh <args>`.
+set -uo pipefail
+[[ -n ${CREW_TEST_LOG:-} ]] && printf '%s gh %s\n' "${CREW_TEST_HOST:-?}" "$*" >> "$CREW_TEST_LOG"
+: "${CREW_TEST_ROOT:?the stub gh runs only in a test}"
+if [[ -e $CREW_TEST_ROOT/gh-fails ]]; then cat "$CREW_TEST_ROOT/gh-fails" >&2; exit 1; fi
+exec python3 -c '
+import json, os, re, subprocess, sys
+
+root, args = os.environ["CREW_TEST_ROOT"], sys.argv[1:]
+store = os.path.join(root, "gh-pulls.json")
+pulls = json.load(open(store)) if os.path.exists(store) else []
+
+
+def opt(name):
+    return args[args.index(name) + 1] if name in args and args.index(name) + 1 < len(args) else None
+
+
+def seen(p):
+    """A pull request as gh gives it: its url, and its head branch'\''s tip on the remote as GitHub holds it."""
+    remote = os.path.join(root, "remotes", p["repo"] + ".git")
+    tip = subprocess.run(["git", "--git-dir", remote, "rev-parse", "--verify", "-q", "refs/heads/" + p["head"]],
+                         capture_output=True, text=True).stdout.strip()
+    return dict(p, url=f"https://github.com/{p['\''repo'\'']}/pull/{p['\''number'\'']}", headRefOid=tip or "0" * 40, headRefName=p["head"])
+
+
+repo = opt("-R") or opt("--repo")
+if args[:2] == ["pr", "list"] and repo and opt("--state") == "open" and opt("--json"):
+    fields = opt("--json").split(",")
+    found = [seen(p) for p in pulls if p["repo"] == repo and p["state"] == "open"
+             and p["head"] == (opt("--head") or p["head"]) and p["base"] == (opt("--base") or p["base"])]
+    print(json.dumps([{f: p[f] for f in sorted(fields)} for p in found], separators=(",", ":")))
+    sys.exit(0)
+if args[:2] == ["pr", "ready"] and repo and len(args) > 2:
+    which, undo = args[2], "--undo" in args
+    m = re.fullmatch(r"(?:https://github\.com/[^/]+/[^/]+/pull/)?(\d+)", which)
+    match = (lambda p: p["number"] == int(m.group(1))) if m else (lambda p: p["head"] == which)
+    hit = [p for p in pulls if p["repo"] == repo and p["state"] == "open" and match(p)]
+    if not hit:
+        print(f"GraphQL: Could not resolve to a PullRequest with the number of {which}. (repository.pullRequest)" if m
+              else f"no pull requests found for branch \"{which}\"", file=sys.stderr)
+        sys.exit(1)
+    p = hit[0]
+    if p["isDraft"] == undo:
+        print(f"! Pull request {repo}#{p['\''number'\'']} is already " + ("\"in draft\"" if undo else "\"ready for review\""), file=sys.stderr)
+        sys.exit(0)
+    p["isDraft"] = undo
+    json.dump(pulls, open(store, "w"), indent=1)
+    print(f"✓ Pull request {repo}#{p['\''number'\'']} is " + ("converted to \"draft\"" if undo else "marked as \"ready for review\""), file=sys.stderr)
+    sys.exit(0)
+print("gh stub: gh " + " ".join(args) + " is not stubbed", file=sys.stderr)
+sys.exit(2)
+' "$@"
