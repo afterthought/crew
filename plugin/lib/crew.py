@@ -457,6 +457,51 @@ def agent_status(fleet, name, fresh=True):
     return a.get("agent_status") if a else None
 
 
+def pane_holds(name, pane, item, agent):
+    """Whether a standing agent's pane holds an agent, as the rail's sweep reads a question's asker (briefs.11, read.1),
+    from the pane crew keeps for it ("" when none), herdr's item for that pane in its pane list and the agent herdr lists
+    in it (each None when herdr lists none): (True, None) while herdr lists an agent there, named or not, since herdr
+    drops a name when the pane's session changes; (False, None) when herdr lists the pane with no agent in it, the one
+    reading that the agent ended; (None, why) when crew keeps no pane for it or herdr lists none by that id."""
+    if not pane:
+        return None, f"crew keeps no pane for {name}"
+    if item is None:
+        return None, f"herdr lists no pane {pane}, which crew keeps for {name}"
+    return agent is not None, None
+
+
+def holding_of(fleet, name):
+    """The Agents a standing agent's role is kept in and that role, from its name alone: a team's, a main level's or a
+    dispatcher's; None for a name that is no standing agent's (standing_role)."""
+    sr = standing_role(fleet, name)
+    if not sr:
+        return None
+    scope, role = sr
+    if scope in fleet["teams"]:
+        return Team(fleet, team_of(fleet, scope)), role
+    if role == "dispatcher":
+        return standing(fleet, "dispatch", scope), role
+    return main_holding(fleet, scope, role), role
+
+
+def read_pane_agent(fleet, name):
+    """pane_holds for a standing agent on this host, from its pane in crew's panes file and one listing of its
+    session's panes and agents (Herdr): an agent on another host, or one crew keeps no pane for, is a read it names,
+    never taken for ended (read.1)."""
+    try:
+        host, _ = place_of_agent(fleet, name)
+        if host != this_host():
+            return None, f"{name} runs on {host}, whose panes this host does not read"
+        held = holding_of(fleet, name)
+        if not held:
+            return None, f"{name} is no standing agent of crew's, so crew keeps no pane for it"
+        agents, role = held
+        pane = agents.pane(role)
+        return pane_holds(name, pane, agents.herdr.item(pane), agents.herdr.agent(pane))
+    except Refusal as e:
+        return None, str(e)
+
+
 # What each herdr command a crew command runs leaves to read again in its session: the agents (`agent list`), the panes
 # (`pane list`), both, or neither. A command not named here leaves both.
 STALE = {("agent", "list"): "", ("agent", "get"): "", ("agent", "read"): "", ("pane", "list"): "", ("pane", "get"): "",

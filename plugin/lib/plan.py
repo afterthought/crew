@@ -10965,13 +10965,10 @@ class SweepActs(CardActs):
     logic test hands the sweep a stand-in (code.7)."""
 
     def listed(self, name):
-        """Whether herdr lists the agent, from one listing of its session (read.2): (True or False, None), or (None,
-        why) when that can't be read, or the name is no agent's crew starts."""
-        try:
-            a, why = crew.read_agent(self.fleet, name, fresh=False)
-        except Refusal as e:
-            return None, str(e)
-        return (None, why) if why else (a is not None, None)
+        """Whether herdr lists an agent in the pane crew keeps for the asker, from one listing of its session (read.2,
+        crew.read_pane_agent): (True or False, None), or (None, why) when that can't be read; never by the agent's
+        name, which herdr drops when the pane's session changes."""
+        return crew.read_pane_agent(self.fleet, name)
 
     def raise_of(self, kind):
         name = RAISES.get(kind)
@@ -11021,7 +11018,8 @@ def sweep_cards(fleet, read, acts=None):
     (sweep_judged, row_gone), a proposal's only on the plan as this read holds it (read["proposed"], proposals_held),
     at or past the commit its card was raised at (older_than_card), and each decision record's card, under either key
     form, at the record's status
-    (record_settled), withdraws each question whose asker herdr no longer lists, naming the asker, posts again
+    (record_settled), withdraws each question whose asker's pane herdr lists with no agent in it, naming the asker,
+    and leaves one whose asker's pane it can't read, saying why (SweepActs.listed, read.1), posts again
     through its kind's raise each row's card Pending You no longer finds, and posts through its kind's raise each row's
     card that has none; a lost card of a kind with no raise is recorded lost, for its owner to raise again with the
     command that raised it, and a row of one is left as it is. Before any of it, where the partition's planner runs,
