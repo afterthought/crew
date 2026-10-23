@@ -1730,6 +1730,20 @@ def working_said(agent):
     return f"{agent} is working; add --force to end it anyway."
 
 
+# Claude Code's question at /exit while background work of the session runs: its title, and its first option, which it
+# focuses, so Enter takes it. Read in Claude Code 2.1.307's bundle on 2026-10-22: "Background work is running", "The
+# following will stop when you exit:", then Exit and stop tasks, Move to background and exit when the session can be
+# moved, and Stay (read.2); a give's restart of swc-3's and swc-4's conductors stopped there on their landing-card waits
+# (signal 2026-10-22-swancloud-dispatch-deneb-bddc208d/01).
+EXIT_ASKS = ("Background work is running", "Exit and stop tasks")
+
+
+def exit_asks(screen):
+    """Whether an agent's pane shows Claude Code's question at its exit while background work of its session runs
+    (EXIT_ASKS), from the lines herdr reads of the pane's screen."""
+    return bool(screen) and all(w in screen for w in EXIT_ASKS)
+
+
 def down_said(team):
     """What a stage refused on a team taken down says: it runs nothing until it is brought up."""
     return f"{team} is down; crew up {team} brings it back"
@@ -2040,10 +2054,12 @@ class Agents:
         else:
             self.first_tab(workspace, label, cwd, role)
 
-    def stop(self, role, ending=None):
+    def stop(self, role, ending=None, waits=False):
         """End a role's agent before anything else starts in its pane (teams.2): None once it is ended, or when none was
         up; else what crew says, refused while the agent works unless forced, or failed when it did not exit. A slot's
-        stage still owed an end ends with it first, by ending(role)."""
+        stage still owed an end ends with it first, by ending(role). waits says the agent's only background work is
+        crew's own waits (hold.renew_ready), which its exit then ends: Claude Code's question at the exit (exit_asks)
+        answered with its first option, Exit and stop tasks, so the exit never stops there (teams.19)."""
         pane = self.pane(role)
         st = self.herdr.status(pane)
         if st == "working" and not self.force:
@@ -2054,10 +2070,16 @@ class Agents:
             return None
         if self.herdr.run("agent", "prompt", pane, "/exit").returncode:
             self.herdr.run("pane", "send-keys", pane, "ctrl+c", "ctrl+c")
+        asked = False
         for _ in range(30):
             if not self.herdr.status(pane, fresh=True):
                 self.ended.append(role)
                 return None
+            if waits and not asked:
+                r = self.herdr.run("pane", "read", pane, "--source", "visible", "--lines", "30")
+                if r.returncode == 0 and exit_asks(r.stdout):
+                    self.herdr.run("agent", "send-keys", pane, "enter")
+                    asked = True
             nap(1)
         # Still running means anything started next would be typed into it as a message. Say so and leave it be.
         self.herdr.run("pane", "send-keys", pane, "ctrl+c", "ctrl+c")

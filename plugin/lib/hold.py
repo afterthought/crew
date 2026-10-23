@@ -380,7 +380,7 @@ def renew(fleet, a):
     agents, role = holding(fleet, name)
     agents.ensure()
     commit, version = crew.crew_version()
-    why = agents.stop(role)
+    why = agents.stop(role, waits=True)  # renew_ready: nothing runs in its background but crew's waits, which end here
     if why:
         print(why, file=sys.stderr)
         return
