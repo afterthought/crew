@@ -19,4 +19,4 @@
 ## 4. The brief and the docs say it
 
 - [x] 4.1 Main-level ops's brief says to pass the user's words with `--excerpt` when the word to land came in its pane, and that a refusal is no word to land; the usage, README and SKILL.md name the flag (design, Decision 6; Task notes 4.1). Verify `tests/suite t-briefs t-docs` ends with "0 failed".
-- [ ] 4.2 The tests this change affects pass. Verify `tests/suite --affected` ends with "0 failed".
+- [x] 4.2 The tests this change affects pass. Verify `tests/suite --affected` ends with "0 failed".
