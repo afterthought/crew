@@ -37,6 +37,13 @@ A wait on a stage reads the same transcript for the work the agent started in th
 <task-id><id></task-id> in it, recorded as a queue-operation and again as an attachment. When these stop holding, a
 quiet agent waiting on its own work reads as waiting on nothing, and is reported stuck sooner; never as finished.
 
+It reads there too whether the session's turn is over (turn_over), by two facts read from Claude Code 2.1.307's
+transcripts of 80 sessions on deneb of 2026-10-22 and 23: every record the model writes, of type assistant, carries
+message.stop_reason, tool_use while its turn goes on and end_turn on the message that ends it (237 turns ended so, no
+other value seen); and a record of type user follows it only once the session is sent something, its next prompt or a
+background task's notice. A record of a subagent's, isSidechain true, is neither. When these stop holding, no turn
+reads as over, and a verify whose agent has finished with no report is reported stuck at crew's limit instead.
+
 When crew sends an agent a prompt, a stage's or a greeting, it reads here whether Claude received
 it (teams.15). Run on the agent's host, sent there as questions.py is, it answers one JSON object and writes nothing:
 
@@ -204,14 +211,16 @@ def holds_tool_result(v):
     return False
 
 
-def check(session, excerpt, skip=(), stage_by=None):
+def check(session, excerpt, skip=(), stage_by=None, want=None):
     """Look for the excerpt in the session's transcript, whitespace aside, once it shows it is the live session's: its
     last record written within FRESH. The crew signal command lines that carry an excerpt are crew's commands and their
     echoes, lines of type assistant what the agent wrote and lines of type api-request-blob Claude Code's copies of
     what it sent the model, the agent's own among them, and lines that name a path in skip the writing of the excerpt's
     file: none of them is searched, and the rest of a string that holds such a command line is. stage_by is
     the conductor whose stage the session runs, None for a session that runs none, where a prompt of a stage's form is
-    the user's. Returns a Verdict; refused is one too."""
+    the user's. The source is the last received record that holds the excerpt; with want="user", the last one the user
+    asserted, so that a later echo of the user's words in a tool's output or a tell does not hide them, and the last
+    received record only when the user asserted none. Returns a Verdict; refused is one too."""
     if not session:
         return unverified("herdr names no session")
     path = find(session)
@@ -228,7 +237,7 @@ def check(session, excerpt, skip=(), stage_by=None):
         return unverified(f"session {session}'s transcript has not been written for {int(age.total_seconds() // 60)} "
                           "minutes: crew may be reading another session's")
     needle = collapse(excerpt)
-    received = other = args = None  # args: the words of the stage command just received, which its expansion ends with
+    received = received_user = other = args = None  # args: the words of the stage command just received, which its expansion ends with
     for n, raw, v in found:
         if kind(v) in WROTE:
             continue
@@ -244,8 +253,12 @@ def check(session, excerpt, skip=(), stage_by=None):
             continue
         if kind(v) == "user":
             received = (n, raw, v, hits, expansion)
+            if asserter(v, hits[-1], stage_by, expansion) == "user":
+                received_user = received
         else:
             other = (n, raw, v, hits)
+    if want == "user" and received_user:
+        received = received_user
     if received:
         n, raw, v, hits, expansion = received
         return Verdict("verified", raw=raw, n=n, value=v, asserted_by=asserter(v, hits[-1], stage_by, expansion))
@@ -305,6 +318,22 @@ def last_at(path):
         return None
     times = [t for t in (stamp(v.get("timestamp")) for _, _, v in found if isinstance(v, dict)) if t]
     return max(times) if times else None
+
+
+def turn_over(path):
+    """When the session's turn ended, with nothing sent to it since: the time of its last record of type user or
+    assistant, not a subagent's, when that record is the model's and ended its turn (message.stop_reason end_turn).
+    None while a turn goes on, or when the transcript is missing or can't be read, or that record carries no time crew
+    reads."""
+    found = lines(path) if path else None
+    if found is None or isinstance(found, str):
+        return None
+    said = [v for _, _, v in found if kind(v) in ("user", "assistant") and not v.get("isSidechain")]
+    last = said[-1] if said else None
+    message = last.get("message") if last and kind(last) == "assistant" else None
+    if not isinstance(message, dict) or message.get("stop_reason") != "end_turn":
+        return None
+    return stamp(last.get("timestamp"))
 
 
 def unnamed(session):
