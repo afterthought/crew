@@ -365,6 +365,21 @@ def bolt_split(said, bolt):
     return {**none, "local": f["LOCAL"], "there": f["THERE"], "held": f["HELD"], "merges": int(f["MERGES"])}
 
 
+def bolt_found(said, bolt):
+    """What BOLT_FOUND printed of a bolt's branch sluice refused to make (plan.19), as {"own", "there", "main", "read"}:
+    read, git's words when the remote could not be asked, the rest None; else own, the host's own bolt/<bolt>, and
+    there and main, the remote's bolt/<bolt> and main, each a commit or None where there is no such branch. Refused,
+    naming what was printed, on anything else (read.2)."""
+    f = said_of(said)
+    if "READ" in f:
+        return dict(own=None, there=None, main=None, read=f["READ"].strip() or "git said nothing")
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    keys = ("OWN", "THERE", "MAIN")
+    if not all(f.get(k) == "-" or sha.fullmatch(f.get(k) or "") for k in keys):
+        crew.fail(f"crew can't read bolt/{bolt} as sluice found it from: {(said or '').strip()[:200] or 'nothing'}")
+    return dict(read=None, **{k.lower(): None if f[k] == "-" else f[k] for k in keys})
+
+
 def delete_ran(said):
     """sluice's document and exit as BOLT_DELETE printed them, SAID, base64, and RC (read.2): (document, exit). Refused,
     naming what was printed, when they are not there."""

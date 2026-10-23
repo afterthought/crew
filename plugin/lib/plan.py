@@ -1289,6 +1289,20 @@ if [ "$rc" = 0 ]; then git config "branch.bolt/$2.crew" given || echo "git could
 exit $rc
 """
 
+# What a give reads of a bolt's branch sluice refused to make (plan.19, made_said), in the kit's main checkout on the
+# team's host: OWN, the commit of the host's own bolt/<bolt>, or -; then THERE and MAIN, the commits of bolt/<bolt> and
+# of main on the bolt's remote, by one ls-remote, each - when the remote lacks it, or READ, git's words on one line,
+# when the remote could not be asked (kit.bolt_found).
+BOLT_FOUND = r"""cd "$1" || exit 1
+bolt=$2 remote=$3
+echo "OWN=$(git rev-parse --verify -q "refs/heads/bolt/$bolt^{commit}" || echo -)"
+if ! heads=$(git ls-remote "$remote" "refs/heads/bolt/$bolt" refs/heads/main 2>&1); then
+  echo "READ=$(printf '%s' "$heads" | tr '\n' ' ')"; exit 0
+fi
+at() { printf '%s\n' "$heads" | awk -v r="$1" '$2 == r {s = $1} END {print (s != "" ? s : "-")}'; }
+echo "THERE=$(at "refs/heads/bolt/$bolt")"; echo "MAIN=$(at refs/heads/main)"
+"""
+
 # A bolt's branch deleted by sluice wherever the policy at its tip keeps it (plan.19), once its tip is in main, run in
 # the kit's main checkout: where it lives first (BOLT_AT), then RC, sluice's exit, and SAID, its document, base64.
 BOLT_DELETE = r"""main=$1 bolt=$2 file=$3
@@ -1395,8 +1409,10 @@ def bolt_give(fleet, a):
     agents again: at once for a team that held no bolt, and at their next stop beside a bolt that waits to land
     (team_handed); when the kit's policy at its main now names no checks or no remote for its bolt branches, since a
     bolt merges and lands only through sluice and lives on GitHub (teams.5, give_check); when the host's sluice has no
-    `branch create`; and in sluice's words when it makes no branch. A plan write refused after sluice made the branch
-    has sluice delete it again (ungiven_said)."""
+    `branch create`; and in sluice's words when it makes no branch, but for a branch already on its remote at main's
+    tip with no commit of its own, as a give that failed after sluice made it leaves it, which the give takes and goes
+    on with (made_said). A plan write refused after sluice made the branch, or the give took it, has sluice delete it
+    again (ungiven_said)."""
     t = crew.team_of(fleet, a.team)
     label, kits = t["label"], [k["name"] for k in crew.kits_of(t)]
     CONTEXT["label"] = label
@@ -1428,7 +1444,17 @@ def bolt_give(fleet, a):
     READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.strip(), file=sys.stderr)
-    made = made_said(chosen, kit_name, host, r.stdout, r.returncode)
+    found = None
+    if r.returncode == 2:
+        # sluice refused: a branch a give that did not finish left at main is taken as it stands (made_said).
+        try:
+            found = kit.bolt_found(host_run(fleet, host, BOLT_FOUND, main, chosen, remote), chosen)
+        except Refusal as e:
+            found = {"read": str(e)}
+    made, adopted = made_said(chosen, kit_name, host, r.stdout, r.returncode, found, remote)
+    if adopted and found["own"]:
+        m = crew.on_machine(fleet, host, ["git", "-C", main, "config", f"branch.bolt/{chosen}.crew", "given"])
+        m.returncode == 0 or print(f"git could not mark bolt/{chosen} as crew's", file=sys.stderr)
 
     def change(w):
         # The kit's proof was read only for the bolts held then.
@@ -1450,7 +1476,7 @@ def bolt_give(fleet, a):
         READ.drop_kit(host, main)
         fail(ungiven_said(chosen, str(e), r.stdout, r.returncode))
     b = seen["bolt"]
-    print(given_said(t["name"], b, kit_name, remote, made, host))
+    print(given_said(t["name"], b, kit_name, remote, made, host, adopted))
     record.emit(label, "bolt.give", [f"bolt/{b}", f"team/{t['name']}"], commit=[f"{repo}@{sha}"], why=f"plan({b}): give to {t['name']}",
                 eid=CONTEXT["eid"])
     up = [r for r in ("conductor", "ops") if crew.agent_status(fleet, f"{t['name']}-{r}")]
@@ -1486,18 +1512,42 @@ def give_check(kit_name, where, ref, text, bolt, version, host):
     return remote
 
 
-def made_said(bolt, kit_name, host, out, code):
-    """The commit sluice made a bolt's branch at, from what BOLT_CREATE printed (kit.branch_said); refused in sluice's
-    words when it made none, as when the branch is already there, the plan unchanged (plan.19)."""
+def made_said(bolt, kit_name, host, out, code, found=None, remote="origin"):
+    """The commit a give's bolt/<bolt> stands at, and whether crew took it as it found it rather than sluice made it
+    (plan.19), from what BOLT_CREATE printed (out, code; kit.branch_said) and, when sluice refused, what BOLT_FOUND read
+    of the branch (found, kit.bolt_found; None when crew read nothing): (the commit sluice made it at, False); or (the
+    commit, True) for a branch on its remote at its main's tip with no commit of its own, the host's own copy at that
+    commit or none, as a give that failed after sluice made the branch leaves it, so the give run again goes on: such
+    a branch is what sluice's create would make now and holds nothing for crew to take over (read.4). Else refused in
+    sluice's words, the plan unchanged, naming the branch and where it stands when it is not such a branch."""
     made, why = kit.branch_said(out, code)
-    return made or fail(f"sluice did not make bolt/{bolt} for {kit_name} on {host}: {why}")
+    if made:
+        return made, False
+    said = f"sluice did not make bolt/{bolt} for {kit_name} on {host}: {why}"
+    f = found or {}
+    not f.get("read") or fail(f"{said}; and crew could not read bolt/{bolt} on {remote}: {f['read']}")
+    there, main, own = f.get("there"), f.get("main"), f.get("own")
+    if there and there == main and own in (None, there):
+        return there, True
+    if there and there != main:
+        fail(f"{said}; bolt/{bolt} on {remote} is at {there[:7]} and {remote}'s main at {main[:7] if main else 'nothing'}, "
+             "so it is no branch a give left empty at main, and crew gives no bolt onto it")
+    if there:
+        fail(f"{said}; {host}'s own bolt/{bolt} is at {own[:7]}, not at {remote}'s {there[:7]}, and crew gives no bolt "
+             "onto it")
+    if own:
+        fail(f"{said}; {host}'s own bolt/{bolt} is at {own[:7]} and {remote} has none, and crew gives no bolt onto it")
+    fail(said)
 
 
-def given_said(team, bolt, kit_name, remote, made, host):
+def given_said(team, bolt, kit_name, remote, made, host, adopted=False):
     """What a give says once the plan gives the bolt (plan.19): where sluice made its branch, on GitHub by the kit's
-    remote, from main at the commit it made it at, and the team's host that builds it."""
-    return (f"{team} holds {bolt}: sluice made bolt/{bolt} on GitHub ({remote}) from {kit_name}'s main at {made[:7]}, "
-            f"built on {host} and merged into only through sluice")
+    remote, from main at the commit it made it at, or that crew took the branch an earlier give left there at main
+    (adopted, made_said), and the team's host that builds it."""
+    how = (f"crew took bolt/{bolt}, which sluice made on GitHub ({remote}) for a give that did not finish, at "
+           f"{kit_name}'s main {made[:7]}" if adopted else
+           f"sluice made bolt/{bolt} on GitHub ({remote}) from {kit_name}'s main at {made[:7]}")
+    return f"{team} holds {bolt}: {how}, built on {host} and merged into only through sluice"
 
 
 def ungiven_said(bolt, why, out, code):

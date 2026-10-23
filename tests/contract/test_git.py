@@ -267,6 +267,49 @@ def test_a_bolt_whose_remote_cannot_be_read_gives_gits_words(repo, tmp_path):
     assert "gone.git" in f["read"] and f["there"] is None
 
 
+def found_of(repo, remote="origin"):
+    """plan.BOLT_FOUND in the kit's main checkout, as bolt_give runs it once sluice refused to make bolt/b, and
+    kit.bolt_found's reading of it."""
+    import kit
+    r = script("BOLT_FOUND", str(repo.path), "b", remote)
+    assert r.returncode == 0, r.stderr
+    return r.stdout, kit.bolt_found(r.stdout, "b")
+
+
+def test_a_bolt_a_give_left_at_main_on_github_is_found_there_at_mains_commit(repo, tmp_path):
+    """plan.made_said through BOLT_FOUND (plan.19): bolt/b on a bare GitHub stand-in at its main's commit, and the
+    host's own at the same, as sluice's create leaves them when the give fails after it, read by one ls-remote for the
+    bolt and main beside the host's own ref; the host's own gone reads as None."""
+    head = repo.commit("chore: start", {"README.md": "r\n"})
+    repo.git("branch", "bolt/b")
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git"))
+    repo.commit("feat: the host's main moves on", {"x": "x\n"})
+    _, f = found_of(repo)
+    assert f == dict(own=head, there=head, main=head, read=None)
+    repo.git("branch", "-q", "-D", "bolt/b")
+    assert found_of(repo)[1]["own"] is None
+
+
+def test_a_bolt_github_has_no_copy_of_is_found_nowhere_there(repo, tmp_path):
+    """plan.made_said through BOLT_FOUND: a remote that lacks bolt/b gives THERE=-, read as None beside its main."""
+    head = repo.commit("chore: start", {"README.md": "r\n"})
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo.path), str(tmp_path / "github.git")], check=True)
+    repo.git("remote", "add", "origin", str(tmp_path / "github.git"))
+    out, f = found_of(repo)
+    assert "THERE=-" in out and f == dict(own=None, there=None, main=head, read=None)
+
+
+def test_a_bolt_whose_remote_cannot_be_asked_is_found_with_gits_words(repo, tmp_path):
+    """plan.made_said through BOLT_FOUND (read.1): a remote whose URL does not resolve gives git's words on one line as
+    READ, after the host's own ref."""
+    repo.commit("chore: start", {"README.md": "r\n"})
+    repo.git("remote", "add", "origin", str(tmp_path / "gone.git"))
+    out, f = found_of(repo)
+    assert out.splitlines()[1].startswith("READ=") and len(out.strip().splitlines()) == 2
+    assert "gone.git" in f["read"] and f["there"] is None
+
+
 def onto(place, bolt, *heads):
     """plan.ONTO as rebase_dependents runs it in a dependent's place: <place> <bolt> [<head left out>...]."""
     import plan

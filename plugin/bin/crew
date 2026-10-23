@@ -121,7 +121,9 @@
 #                                      in a kit whose .config/sluice.toml on origin/main names no checks or no remote
 #                                      for its bolt branches, on a host whose sluice is older than 0.20.0, in sluice's
 #                                      words when it makes none, and while a bolt the team holds is not proven (every
-#                                      unit and chore merged, sluice green at its head) or it holds two.
+#                                      unit and chore merged, sluice green at its head) or it holds two; a branch
+#                                      already on GitHub at main's tip with no commit of its own, as a give that
+#                                      failed after sluice made it leaves it, is taken and the give goes on.
 #                                      land and drop have sluice delete it (sluice branch delete) once its worktrees
 #                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
 #                                      while main lacks its tip, and deleted once main holds it. A bolt made before
