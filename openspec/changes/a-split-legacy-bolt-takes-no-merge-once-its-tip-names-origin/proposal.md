@@ -37,4 +37,5 @@ plugin/lib/kit.py
 tests/py/test_bolt_commands.py
 tests/py/test_kit.py
 tests/contract/test_git.py
+tests/t-journey-merge.sh
 ```
