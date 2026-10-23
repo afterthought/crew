@@ -11143,6 +11143,33 @@ def card_closed(acts, label, owner, key, outcome, reason):
 
 # ------------------------------------------------------------------------------------------------ crew record
 
+def record_split(md):
+    """A decision record's Markdown as crew reads it: its frontmatter's fields, its body and the body's paragraphs."""
+    m = re.match(r"---\n(.*?)\n---\n", md, re.S)
+    fields = dict(l.split(":", 1) for l in m.group(1).splitlines() if re.match(r"[a-z][\w-]*:", l)) if m else {}
+    body = (md[m.end():] if m else md).strip()
+    return {k: v.strip().strip("'\"") for k, v in fields.items()}, body, [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+
+
+def record_status_held(md):
+    """A decision record's status as its file holds it, the one reading crew record and a proposal's check share
+    (briefs.15): its frontmatter's status, and the paragraphs that mark an amendment proposed ("Status: proposed" past
+    the record's own status line)."""
+    fields, _, paras = record_split(md)
+    own = next((i for i, p in enumerate(paras) if p.startswith("Status:")), None)
+    return fields.get("status", "").lower(), [p for i, p in enumerate(paras) if i != own and "Status: proposed" in p]
+
+
+def record_says(status, marked):
+    """What a record's file holds, in crew's words, from its status and the amendments marked proposed."""
+    return "accepted, with an amendment still marked proposed" if marked and status == "accepted" else status or "no status in its frontmatter"
+
+
+def record_accepted(status, marked):
+    """Whether a record's file holds it accepted: its status accepted, with no amendment still marked proposed."""
+    return status == "accepted" and not marked
+
+
 def record_facts(kit, number, text, status, before=None, alternatives=None):
     """A decision record's facts as its card is built from them (cards.record_card), from its Markdown at a commit, and
     whether the file holds the status the design agent records (briefs.15): its title, its frontmatter's or else its
@@ -11156,22 +11183,11 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     the commit before) held is gone, the amendment taken in or out. Refused naming what the file holds when it holds no
     such status, and refused when what the card is built from can't be read (read.1)."""
     n = f"{number:04d}"
-
-    def split(md):  # its frontmatter's fields, its body and the body's paragraphs
-        m = re.match(r"---\n(.*?)\n---\n", md, re.S)
-        fields = dict(l.split(":", 1) for l in m.group(1).splitlines() if re.match(r"[a-z][\w-]*:", l)) if m else {}
-        body = (md[m.end():] if m else md).strip()
-        return {k: v.strip().strip("'\"") for k, v in fields.items()}, body, [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
-
-    def held(md):  # its status, and the paragraphs that mark an amendment proposed
-        fields, _, paras = split(md)
-        own = next((i for i, p in enumerate(paras) if p.startswith("Status:")), None)
-        return fields.get("status", "").lower(), [p for i, p in enumerate(paras) if i != own and "Status: proposed" in p]
-    fields, body, paras = split(text)
-    now, marked = held(text)
-    then, was = held(before) if before else ("", [])
+    fields, body, paras = record_split(text)
+    now, marked = record_status_held(text)
+    then, was = record_status_held(before) if before else ("", [])
     holds = ["proposed"] if now == "accepted" and marked else ["accepted", "rejected"] if now == "accepted" and then == "accepted" and was else [now]
-    says = "accepted, with an amendment still marked proposed" if marked and now == "accepted" else now or "no status in its frontmatter"
+    says = record_says(now, marked)
     status in holds or fail(f"crew refuses record {n} in {kit} as {status}: its file on main says {says}. Commit it {status} "
                             f"and land it on main, then run crew record again.")
     head = next((p for p in paras if p.startswith("# ")), "")
@@ -11186,7 +11202,7 @@ def record_facts(kit, number, text, status, before=None, alternatives=None):
     quoted = [a or b for a, b in re.findall(r"“([^”]+)”|\"([^\"]+)\"", deciders)]
     alt = None
     if alternatives is not None:
-        afields, abody, _ = split(alternatives)
+        afields, abody, _ = record_split(alternatives)
         rules = [r.strip() for r in afields.get("rules", "").split(",") if r.strip()]
         other, rec = afields.get("other", ""), afields.get("recommended", "accept")
         why = ("their frontmatter names no rules that decided, as rules: <rule ids, separated by commas>" if not rules else
