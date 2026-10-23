@@ -24,4 +24,4 @@
 
 ## 5. The affected tests
 
-- [ ] 5.1 After `tests/moon-tasks` is run and `tests/moon.yml` committed for any test whose reads changed, `tests/suite --affected` ends with "0 failed".
+- [x] 5.1 After `tests/moon-tasks` is run and `tests/moon.yml` committed for any test whose reads changed, `tests/suite --affected` ends with "0 failed".
