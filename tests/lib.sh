@@ -210,6 +210,17 @@ kit() {
 }
 # push <checkout>: its main pushed to its origin, as a landing on GitHub's main leaves it, so crew reads it as main now
 push() { git -C "$1" push -q origin main; }
+# push_state <clone>: a hand edit of the state branch pushed as crew pushes its own writes (state.1): a push refused
+# because the branch moved, an entry a crew command still running pushed at the same moment (read.5), is rebased onto
+# the new tip and pushed again
+push_state() {
+  local n
+  for n in 1 2 3 4 5 6 7 8 9; do
+    git -C "$1" push -q origin wldn/main 2>/dev/null && return
+    git -C "$1" pull -q --rebase origin wldn/main || return
+  done
+  git -C "$1" push -q origin wldn/main
+}
 
 # blueprints <owner/name>: a bare remote with signals/moves.rec and .gitattributes on main
 blueprints() {

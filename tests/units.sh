@@ -60,7 +60,7 @@ unit = lambda name, bolt, *after: p.insert(plan.Rec("Unit", [("Unit", name), ("R
 exec(sys.argv[3])
 open(f, "w").write(p.text())
 PY
-  commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+  commit_all "$w" "plan: by hand"; push_state "$w"
 }
 # touches <unit> <entries...>: the unit's proposal ends with a Touches block holding the entries, committed in its place
 touches() {

@@ -204,7 +204,7 @@ ok "when the branch cannot be read crew page writes nothing and names the branch
 # A hand edit that leaves a duplicated key: crew bolts refuses to read the plan, naming the commit and recfix's
 # message; crew board names it in the attention line and exits non-zero.
 h=$T/hand; git clone -q -b wldn/main "$ws" "$h"
-printf '\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n' >> "$h/plan.rec"; commit_all "$h" "plan: a hand edit"; git -C "$h" push -q origin wldn/main
+printf '\nUnit: a\nRepo: switchboard-kit\nIntent: twice\n' >> "$h/plan.rec"; commit_all "$h" "plan: a hand edit"; push_state "$h"
 expect_fail "wldn/main of WilldanGroup/crew-state at $(git -C "$h" rev-parse --short HEAD): plan.rec fails recfix --check" crew bolts
 has "$out" "duplicated key"
 expect_fail "wldn/main of WilldanGroup/crew-state" crew board --label wldn

@@ -55,7 +55,7 @@ for u, b, kit in (("x1", "b1", "switchboard-kit"), ("v1", "b1", "switchboard-kit
     p.insert(plan.Rec("Unit", [("Unit", u), ("Repo", kit), ("Bolt", b), ("Intent", f"Unit {u}.")]))
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: by hand"; push_state "$w"
 crew bolt give swb-1 b1 >/dev/null 2>&1; crew bolt give atl-1 m1 >/dev/null 2>&1
 mkdir -p "$(space mac-studio willdan)/willdan-blueprints/main"
 crew main up wldn >/dev/null 2>&1

@@ -65,7 +65,7 @@ p.insert(plan.Rec("Bolt", [("Bolt", "b2"), ("Repo", "switchboard-kit"), ("Goal",
 p.insert(plan.Rec("Unit", [("Unit", "w1"), ("Repo", "switchboard-kit"), ("Bolt", "b2"), ("Intent", "Unit w1.")]))
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: by hand"; push_state "$w"
 crew bolt give swb-1 b1 >/dev/null 2>&1
 crew bolt give swb-2 b2 >/dev/null 2>&1
 
@@ -557,7 +557,7 @@ aged() {
   for f in "$(home_of $box)/.local/state/crew/wldn/runs/$box"/*.rec; do rewrite "$f" "/^Id: $1\$/,/^\$/s/^At: .*/At: $2/"; done
   rm -rf "$w"; git clone -q -b wldn/main "$ws" "$w"
   for f in "$w/runs/$box"/*.rec; do rewrite "$f" "/^Id: $1\$/,/^\$/s/^At: .*/At: $2/"; done
-  commit_all "$w" "runs($box): an entry set back by hand"; git -C "$w" push -q origin wldn/main
+  commit_all "$w" "runs($box): an entry set back by hand"; push_state "$w"
 }
 
 # A proposal whose card Pending You refused at its raise: the row shows the refusal, and the rail read leaves it while

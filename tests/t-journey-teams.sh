@@ -165,7 +165,7 @@ f = sys.argv[2]; p = plan.Plan(open(f).read())
 p.unit("amended-one").set("Amended", "intent")
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: by hand"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: by hand"; push_state "$w"
 : > "$CREW_TEST_LOG"
 expect_ok crew up swb-2
 has "$(grep "agent prompt swb-2-conductor '" "$CREW_TEST_LOG")" "'[crew] Unit amended-one was amended and no construct runs on it: run construct on it now (crew unit run amended-one construct). Read where your bolt stands with"
@@ -196,7 +196,7 @@ p.insert(plan.Rec("Bolt", [("Bolt", "made-before"), ("Repo", "switchboard-kit"),
 p.insert(plan.Rec("Unit", [("Unit", "mb"), ("Repo", "switchboard-kit"), ("Bolt", "made-before"), ("Intent", "Unit mb.")]))
 open(f, "w").write(p.text())
 PY
-commit_all "$w" "plan: a bolt made before"; git -C "$w" push -q origin wldn/main
+commit_all "$w" "plan: a bolt made before"; push_state "$w"
 git -C "$k" branch -q --no-track bolt/made-before main; git -C "$k" config branch.bolt/made-before.crew given
 on_branch "$k" bolt/made-before "chore: bolts kept on the host" .config/sluice.toml $'[branches."bolt/*"]\nrequired = ["#check-full"]\n'
 : > "$CREW_TEST_LOG"
