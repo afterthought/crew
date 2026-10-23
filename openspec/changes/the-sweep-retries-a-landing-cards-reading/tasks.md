@@ -7,9 +7,9 @@
 
 ## 2. The rail's read tries a landing card's reading
 
-- [ ] 2.1 The sweep's reading try sends a `land/` key through the landing's session start, silenced, and every other key as before (design, Decision 4; Task notes 2.1).
-- [ ] 2.2 The sweep's judgment holds a landing card standing without its reading ten minutes or more among the cards to try. Its case passes in `tests/py/test_rail.py`'s `TestSweepJudged` (design, Decision 5; Task notes 2.2).
-- [ ] 2.3 A waiting landing card is tried and listed opened, one whose try refuses is listed left with why, and an answered one is not tried. The cases pass in `tests/py/test_rail.py`'s `TestSweep` (Task notes 2.3).
+- [x] 2.1 The sweep's reading try sends a `land/` key through the landing's session start, silenced, and every other key as before (design, Decision 4; Task notes 2.1).
+- [x] 2.2 The sweep's judgment holds a landing card standing without its reading ten minutes or more among the cards to try. Its case passes in `tests/py/test_rail.py`'s `TestSweepJudged` (design, Decision 5; Task notes 2.2).
+- [x] 2.3 A waiting landing card is tried and listed opened, one whose try refuses is listed left with why, and an answered one is not tried. The cases pass in `tests/py/test_rail.py`'s `TestSweep` (Task notes 2.3).
 
 ## 3. The landing card's words
 

@@ -8820,12 +8820,12 @@ def refused_lately(entries, now, key=None, card=None):
 
 
 def reading_unread(entries, key, card, now=None):
-    """Whether a batch's or a long proposal's card stands without its reading, from this host's run record, oldest
-    first (card-sessions "The rail's read tries a reading its card stands without"): a done post or change of the card
-    with Unread, or a refused try of the key's reading (card.reading), marks it so from that entry's time; a done post
-    or change of the card without Unread clears it; a refused post or change, and a done try, change nothing. With now,
-    whether it stands so and its last such entry is CARD_RETRY seconds old or more, so the rail's sweep tries it again
-    no sooner than it posts a refused card again."""
+    """Whether a batch's, a long proposal's or a landing's card stands without its reading, from this host's run
+    record, oldest first (card-sessions "The rail's read tries a reading its card stands without"): a done post or
+    change of the card with Unread, or a refused try of the key's reading (card.reading), marks it so from that entry's
+    time; a done post or change of the card without Unread clears it; a refused post or change, and a done try, change
+    nothing. With now, whether it stands so and its last such entry is CARD_RETRY seconds old or more, so the rail's
+    sweep tries it again no sooner than it posts a refused card again."""
     last = None
     for e in entries:
         if e.get("Act") in ("card.post", "card.update") and card and e.get("Card") == card and not e.get("Refused"):
@@ -8879,10 +8879,10 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     seconds ago is left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
     batch), each batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why,
     once: none is under its key yet, and the user's answer has not closed it (batch_closed). And each row's card of a
-    batch, batch/<n>, or a proposal, proposal/<n>, that the run record shows standing without its reading, last
-    posted, changed or tried CARD_RETRY seconds ago or more (reading_unread), to try its reading again. Returns {gone:
-    [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row], again: [(row, older card)],
-    settled: [(key, why)], unread: [(card, row)]}."""
+    batch, batch/<n>, a proposal, proposal/<n>, or a landing, land/<bolt>, that the run record shows standing without
+    its reading, last posted, changed or tried CARD_RETRY seconds ago or more (reading_unread), to try its reading
+    again. Returns {gone: [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row], again: [(row,
+    older card)], settled: [(key, why)], unread: [(card, row)]}."""
     import ops  # its decision of a deploy's card alone
     rowed = {r["key"]: r for r in rows}
     out = {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": [], "unread": []}
@@ -8898,7 +8898,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
             out["questions"].append(c)
         elif c["key"] in rowed:
             out["held"].append((c, rowed[c["key"]]))
-            if re.fullmatch(r"(batch|proposal)/\d+", c["key"]) and reading_unread(entries, c["key"], c["card"], now):
+            if re.fullmatch(r"(batch|proposal)/\d+|land/[a-z0-9][a-z0-9-]*", c["key"]) and reading_unread(entries, c["key"], c["card"], now):
                 out["unread"].append((c, rowed[c["key"]]))
         elif (not (c["key"].startswith("land/") and c["key"].split("/")[1] in blind) and not refused_lately(entries, now, card=c["card"])
               and not ops.word_stands(c["key"], entries)):
@@ -11321,7 +11321,11 @@ class SweepActs(CardActs):
         return datetime.datetime.now(datetime.timezone.utc)
 
     def reading_again(self, label, key):
-        """A card's reading opened again and its card changed to carry the link (reading_again)."""
+        """A card's reading opened again and its card changed to carry the link: a landing's, land/<bolt>, as crew card
+        session land/<bolt> opens it on the team's host with the bolt read afresh (land_session), its link printed by
+        nobody, since the rail lists it; a batch's or a proposal's as before (reading_again)."""
+        if key.startswith("land/"):
+            return land_session(self.fleet, label, key, self, say=lambda *_: None)
         return reading_again(self.fleet, label, key, self)
 
 
