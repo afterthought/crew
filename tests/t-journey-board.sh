@@ -36,7 +36,7 @@ printf -- '---\ncapture: %s\nsource: meeting\ncaptured_by: wldn-planner\nevent_d
 printf -- '---\nsignal: %s/01-zones\nkind: ask\n---\n\nEvery apex should be a zone of its own.\n' "$cap" > "$w/signals/$cap/01-zones.md"
 commit_all "$w" "signals: the planning meeting"; git -C "$w" push -q origin main
 mkdir -p "$k/openspec/explorations/command-cost"
-printf '\n> Reading: what each crew command costs.\n' > "$k/openspec/explorations/command-cost/reading.md"; commit_all "$k" "docs: a reading"
+printf '\n> Reading: what each crew command costs.\n' > "$k/openspec/explorations/command-cost/reading.md"; commit_all "$k" "docs: a reading"; push "$k"
 crew bolt new apex-zones "Apexes are zones." --repo switchboard-kit >/dev/null
 crew unit add zone-one "Zone one." --bolt apex-zones >/dev/null
 crew unit add later "Later." --repo switchboard-kit --source docs/zones.md >/dev/null

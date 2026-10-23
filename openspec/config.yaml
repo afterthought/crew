@@ -30,11 +30,20 @@ context: |
   simplicity over abstraction.
 
 rules:
+  specs:
+    - "Each scenario is one a check in crew's tiers proves. A scenario no existing check proves is a check this change adds, in its tasks; never a step done by hand."
   design:
     - "Cite by id the rules in docs/architecture/ that this design relies on, and name each page of docs/architecture/ whose area the change touches. Where the design departs from a rule, name the rule and say why."
+    - "A task's full brief goes under a closing *Task notes* section, each headed by its task's number in bold (**1.1**): the files, the functions, the cases."
+    - "The design holds no proof list of any name, no *Proof in dev*, no *Proof on real work*. What must be true after a deploy is code in this change. *After deploy* lists only the steps no check can be code, each saying why, with its environments and its doer, an agent with the condition it waits for, or the user; where there are none it says None and why (docs.6)."
+  tasks:
+    - "Each task is one sentence saying what must be true, a pointer to its reasoning (design, its Decision; Task notes n.n), and the check in crew's tiers that proves it: `Verify <command> ends with \"0 failed\"` or `passes <test file>`, the logic tier (`tests/suite logic`, tests/py/), the contract tier (`tests/suite contract`), an end-to-end test by name (`tests/suite <name>`) or the mod's cases (`tests/suite mod`)."
+    - "Every task is one the coder does and proves in its worktree. No task is a deploy, a step on a live host, a step only the user can do, or work done after the landing."
+    - "The last task runs the tests the change affects, `tests/suite --affected`, never the whole suite, which sluice runs at the merge."
 
 operations:
   apply:
     guidance:
+      - "Tick a task only once the check it names passes, run as the task names it."
       - "Where a task leaves a detail open, decide it the way a careful engineer would from docs/architecture, openspec/specs, README and the code, in that order, hold similar things to the same rule, and name each choice in your summary. An open detail is not a reason to pause."
       - "Pause only when the same test still fails after two attempts, or when passing would mean changing a rule in docs/architecture or a spec under openspec/specs that the task does not tell you to change."

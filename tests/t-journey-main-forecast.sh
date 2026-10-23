@@ -44,13 +44,15 @@ ok "a conflict with a submission queued on main is said as one to wait out, and 
 
 # A legacy bolt whose tip names origin for its branch while origin holds none of it, as crw-4's did once its policy
 # chore merged: sluice by its branch name says it has no branch, so crew forecasts it from a place it makes on it with
-# no checkout and removes once sluice has answered, nothing moving the branch (plan.19).
+# no checkout and removes once sluice has answered, nothing moving the branch (plan.19). The kit's policy names origin
+# for its bolts, at the bolt's tip too; the bolt is taken off origin, kept in the host's own refs as one given before
+# gives went through sluice is, and its policy chore's merge moves its head, so its forecast is said anew.
 tip=$T/tip
 git -C "$k" worktree add -q "$tip" bolt/tenant-environments
-{ printf '[branches."bolt/*"]\nremote = "origin"\n'; tail -n +2 "$tip/.config/sluice.toml"; } > "$tip/policy"
-mv "$tip/policy" "$tip/.config/sluice.toml"
-commit_all "$tip" "chore: the kit's bolts live on origin"
+git -C "$tip" commit -q --allow-empty -m "chore: the kit's bolts live on origin"
 git -C "$k" worktree remove "$tip"
+git -C "$k" push -q origin --delete bolt/tenant-environments
+git -C "$k" rev-parse --verify -q refs/remotes/origin/bolt/tenant-environments >/dev/null && fail "the host still tracks origin's bolt"
 bolt=$(git -C "$k" rev-parse bolt/tenant-environments)
 (cd "$k" && sluice submit main --check --head bolt/tenant-environments --json) > "$T/by-name.json" || true
 eq "$(jq -r .error.message "$T/by-name.json")" "no branch bolt/tenant-environments to forecast"
