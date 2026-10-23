@@ -3211,8 +3211,11 @@ def submit_order(bolts, hosts):
 
 
 def landing_submitted(fleet, t, bolt):
-    """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held) and its
-    landing pull request, a draft, readied, since the submission is the user's word (pull_hold, bolt-teams): {bolt, t,
+    """A bolt's landing submitted on its team's host (SUBMIT), after main now was read there (MAIN, main_held), the
+    bolt's two copies read there after one fetch (LAND_COPIES, kit.land_copies) and the head it submits decided
+    (landing_head, plan.19), and its landing pull request, a draft, readied, since the submission is the user's word
+    (pull_hold, bolt-teams). SUBMIT is given that head and the host's copy's value as read, and levels the copy to it
+    first; what the decision says of the copy is printed once SUBMIT has run, a level only when SUBMIT made it: {bolt, t,
     before, path, RC, TIP, OLD, ID, PULL, ANSWER, SAID, said, standing, last}, said the last line SUBMIT's submission
     said on standard error, sluice's words when it refused it at once, said as it is queued (submitted_line). Its ID is
     only ever a submission sluice made for this landing, newer than last, the last of main's submissions sluice had
@@ -3221,14 +3224,23 @@ def landing_submitted(fleet, t, bolt):
     is that one's and refuses nothing of this one, its ID is the submission sluice made for it, found in sluice's
     record on the team's host (SUBMISSIONS, submission_of with the pull request and last), and waited on as any other;
     standing, when crew finds none to wait on, its words (left_standing). Or {bolt, t, refused}, nothing submitted,
-    when main now or sluice's record of main could not be read, the pull request could not be readied, or the
-    submission could not be made, in crew's, sluice's, gh's or the host's words."""
+    when main now, the bolt's copies or sluice's record of main could not be read, the bolt's two copies have diverged,
+    the pull request could not be readied, or the submission could not be made, in crew's, sluice's, gh's, git's or the
+    host's words; refused before its submission ran, its pull request is left as it was."""
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     try:
         before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
         not why or fail(why)
+        r = crew.on_machine(fleet, host, ["bash", "-c", LAND_COPIES, "crew", main, bolt, kit.DECLARATION])
+        r.returncode == 0 or fail(f"crew can't read bolt/{bolt}'s copies on {host}: "
+                                  + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
+        copies = kit.land_copies(r.stdout, bolt)
     except Refusal as e:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted: {e}")
+    decided = landing_head(bolt, host, copies)
+    if isinstance(decided, str):  # the copy on GitHub unread, or the two diverged: nothing levelled or submitted
+        return dict(bolt=bolt, t=t, refused=decided)
+    head, own = (decided["head"], copies["own"]) if decided["head"] else ("", "")
     s = crew.on_machine(fleet, host, ["bash", "-c", SUBMISSIONS, "crew", main])
     subs = submissions_listed(s.returncode, s.stdout, s.stderr)
     if isinstance(subs, str):  # read.1: no submission sluice answers with could be told from one made before it
@@ -3242,9 +3254,11 @@ def landing_submitted(fleet, t, bolt):
     if said:
         print(said)
     path = f"{t['kit']['dir']}/places/land-{bolt}"
-    f, told = submit_ran(fleet, host, main, path, bolt)
+    f, told = submit_ran(fleet, host, main, path, bolt, head, own)
     if f is None:
         return dict(bolt=bolt, t=t, refused=f"bolt/{bolt} was not submitted on {host}: {told}", attempted=True)
+    if decided["said"] and (f["LEVEL"] or not decided["level"]):
+        print(decided["said"])
     standing, was = None, answered_before(f, last)
     if was:  # an earlier submission's record and exit: this landing's own is looked for as a pull request's is
         f = dict(f, RC="0", ID="", PULL=was["pull"] or "")
