@@ -5,7 +5,8 @@ a forecast or an amendment reaches the later unit, plan.verified for whether it 
 dependent took its head, plan.waiting_for for what the unit's next prompt carries, plan.rebase_waits for a dependent
 whose After unit merged and plan.rebase_leaves_out for what its rebase leaves out, and plan.forecast_words and
 amendment_words for what it is told; and a bolt against its kit's main (teams.21), plan.bolt_forecast_read for sluice's
-answer, plan.bolt_forecast for what it tells the conductor once and plan.unread_said for a forecast sluice can't give.
+answer, plan.bolt_forecast for what it tells the conductor once and plan.unread_said for a forecast sluice can't give,
+with plan.forecast_way for a legacy bolt forecast from a place on it (plan.19) and plan.place_checked for what that came to.
 That git merge-tree forecasts a conflict and moves no ref, and how a dependent's
 rebase replays its commits, are contract cases (tests/contract/test_git.py); the wait that tells, starts a settle or
 carries, and the rebase at a merge, the journey's."""
@@ -450,3 +451,68 @@ class TestBoltAgainstMain:
             f"bolt/t@{self.H[:7]}", "no forecast of bolt/t against main: it exited 1")
         assert plan.unread_said("t", self.H, "it exited 1", {f"bolt/t@{self.H[:7]}"}) is None
         assert plan.unread_said("t", None, "it exited 1", set()) == (None, "no forecast of bolt/t against main: it exited 1")
+
+
+class TestLegacyBolt:
+    """A legacy bolt, kept in the host's own refs, whose tip names a remote that holds no branch of it, is forecast from
+    a place on it, never by its branch name, until it lands (plan.19): sluice reads a branch by its name where the
+    policy at its tip routes it, and refuses such a bolt as having no branch."""
+    TIP, H, M = "9" * 40, "1" * 40, "2" * 40
+    ORIGIN = '[branches."bolt/*"]\nremote = "origin"\nrequired = ["#check-full"]\n'
+    LOCAL = '[branches."bolt/*"]\nrequired = ["#check-full"]\n'
+
+    def way(self, policy, tracked="", tip=TIP, bolt="t"):
+        import base64
+        at = "-" if policy is None else base64.b64encode(policy.encode()).decode()
+        return plan.forecast_way(bolt, f"TIP={tip}\nAT_TIP={at}\nTRACKED={tracked}\n")
+
+    def test_a_legacy_bolt_whose_tip_names_origin_is_forecast_from_a_place_on_it(self):
+        assert self.way(self.ORIGIN) == ("place", None)
+        assert self.way(self.ORIGIN, tracked="upstream ") == ("place", None)
+
+    def test_a_bolt_its_remote_holds_is_forecast_by_its_branch_name(self):
+        # Once its landing has pushed it there, or a bolt on GitHub the host also keeps a branch of.
+        assert self.way(self.ORIGIN, tracked="origin ") == ("branch", None)
+
+    def test_a_bolt_whose_tip_names_no_remote_is_forecast_by_its_branch_name(self):
+        assert self.way(self.LOCAL) == ("branch", None)
+        assert self.way(None) == ("branch", None)
+        exact = '[branches."bolt/t"]\nrequired = []\n\n' + self.ORIGIN  # the most specific table decides, as sluice's
+        assert self.way(exact) == ("branch", None)
+        assert self.way(exact, bolt="u")[0] == "place"
+
+    def test_a_bolt_with_no_branch_on_the_host_is_forecast_by_its_branch_name(self):
+        assert self.way(self.ORIGIN, tip="-") == ("branch", None)
+
+    def test_what_crew_cant_read_is_said_and_forecasts_nothing(self):
+        # read.1, read.2: no way is guessed.
+        assert plan.forecast_way("t", "TIP=-\n") == (None, "crew can't read where bolt/t's tip routes it from: TIP=-")
+        way, why = self.way("not = [toml")
+        assert way is None and why.startswith(".config/sluice.toml at bolt/t is not TOML, so crew can't read where sluice keeps bolt/t:"), why
+        way, why = plan.forecast_way("t", f"TIP={self.TIP}\nAT_TIP=*\nTRACKED=\n")
+        assert way is None and why.startswith("crew can't read bolt/t's .config/sluice.toml as it was sent:"), why
+
+    def placed(self, said, err=""):
+        return plan.place_checked("t", said, err)
+
+    def test_sluices_answer_from_the_place_is_read_as_its_answer_by_name(self):
+        import base64
+        doc = '{"conflict": {"paths": ["docs/builds.md"], "with": []}, "head": "%s", "onto": "%s", "ahead": []}' % (self.H, self.M)
+        said = f"PLACE=/k/places/forecast-t\nRC=2\nSAID={base64.b64encode(doc.encode()).decode()}\n"
+        checked, kept = self.placed(said, "sluice's own words\n")
+        assert checked == (2, doc, "sluice's own words\n") and kept is None
+        assert plan.bolt_forecast_read(*checked)[0]["conflict"]["paths"] == ["docs/builds.md"]
+
+    def test_crews_place_git_could_not_remove_is_named(self):
+        said = "PLACE=/k/places/forecast-t\nRC=0\nSAID=\nKEPT=/k/places/forecast-t\nWHY=fatal: it is locked\n"
+        checked, kept = self.placed(said)
+        assert checked == (0, "", "")
+        assert kept == ("/k/places/forecast-t is kept on bolt/t, git refusing to remove it: fatal: it is locked. crew removes "
+                        "it at the next forecast; while it stands, the bolt's landing cannot make its worktree")
+
+    def test_no_place_and_no_sluice_are_said_and_forecast_nothing(self):
+        assert self.placed("PLACE=-\nWHY=fatal: '/k/places/forecast-t' already exists\n") == (
+            (None, "", "no place on bolt/t could be made to forecast it from: fatal: '/k/places/forecast-t' already exists"), None)
+        assert self.placed("NOSLUICE=yes\n") == ((None, "", "this host has no sluice on its path"), None)
+        assert self.placed("PLACE=/k/places/forecast-t\n") == (
+            (None, "", "crew can't read what the forecast from a place on bolt/t came to: PLACE=/k/places/forecast-t"), None)

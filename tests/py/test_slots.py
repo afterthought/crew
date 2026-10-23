@@ -2,8 +2,9 @@
 crew unit wait, crew fix and crew status decide them in one process: crew.slot_for for the slot a unit or fix runs in,
 crew.reaped for what a team's read does with a slot, crew.held_object for how the run record names what a slot holds,
 crew.slot_pane_at for where a slot's pane opens, crew.listed for reading herdr's listings, crew.herdr_made for reading
-what herdr made, crew.context_of and crew.holds_said for what status shows, and the words crew says when a stage is
-refused. Taking a slot, starting its agent and sending its prompt through the command are the units journey's
+what herdr made, crew.name_back for when crew gives an agent its dropped name back and crew.found_answer for reading
+an agent on another host, crew.context_of and crew.holds_said for what status shows, and the words crew says when a
+stage is refused. Taking a slot, starting its agent and sending its prompt through the command are the units journey's
 (t-journey-units, t-journey-slots)."""
 import json
 import types
@@ -108,6 +109,64 @@ class TestListed:
         with pytest.raises(crew.Refusal) as e:
             crew.listed("agent", 0, '{"result": {"agents": null}}', "", "in session wldn-1 on mac-studio")
         assert str(e.value) == "herdr's agent list in session wldn-1 on mac-studio can't be read"
+
+
+class TestNameBack:
+    """An agent crew started is found under its name while its own session runs in its pane (briefs.17): swc-3-conductor
+    on deneb, 2026-10-23, nameless in its pane once the Claude its landing card's session started for the user reported
+    itself there (signal 2026-10-23-swc-3-conductor-8556b697/01)."""
+
+    def test_an_unnamed_agent_in_its_pane_whose_session_crew_started_as_it_is_given_its_name_back(self):
+        a = {"pane_id": "w7:p1", "agent_status": "idle", "agent_session": {"value": "0b1c"}}
+        assert crew.name_back("swc-3-conductor", "w7:p1", a, "0b1c") == (True, None)
+
+    def test_a_session_crew_did_not_start_as_it_is_never_given_its_name(self):
+        a = {"pane_id": "w7:p1", "agent_status": "working", "agent_session": {"value": "9f2e"}}
+        assert crew.name_back("swc-3-conductor", "w7:p1", a, "0b1c") == (False, (
+            "herdr lists the agent in its pane w7:p1 by no name, in session 9f2e, which crew did not start as swc-3-conductor"))
+        assert crew.name_back("swc-3-conductor", "w7:p1", a, None)[0] is False
+
+    def test_an_unnamed_agent_herdr_names_no_session_for_is_a_read_crew_names(self):
+        a = {"pane_id": "w7:p1", "agent_status": "idle"}
+        assert crew.name_back("swc-3-conductor", "w7:p1", a, "0b1c") == (False, (
+            "herdr lists the agent in its pane w7:p1 by no name and names no session for it, so crew can't tell it is swc-3-conductor"))
+
+    def test_another_agent_in_its_pane_keeps_its_own_name(self):
+        a = {"pane_id": "w7:p1", "name": "swc-3-ops", "agent_status": "idle", "agent_session": {"value": "0b1c"}}
+        assert crew.name_back("swc-3-conductor", "w7:p1", a, "0b1c") == (
+            False, "herdr lists no agent named swc-3-conductor, and its pane w7:p1 holds swc-3-ops")
+
+    def test_no_agent_in_its_pane_or_no_pane_kept_is_not_up(self):
+        assert crew.name_back("swc-3-conductor", "w7:p1", None, "0b1c") == (False, None)
+        assert crew.name_back("swc-3-conductor", "", None, None) == (False, None)
+
+
+class TestFoundAnswer:
+    """read_agent of an agent on another host: herdr's agent get there, or that host's crew.py found when herdr lists
+    none by its name (read.1)."""
+
+    def ran(self, code, out="", err=""):
+        return types.SimpleNamespace(returncode=code, stdout=out, stderr=err)
+
+    @pytest.fixture(autouse=True)
+    def here(self, monkeypatch):
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+
+    def test_herdrs_agent_or_founds_is_the_agent_and_a_null_one_is_not_up(self):
+        a = {"pane_id": "w7:p1", "name": "swc-3-conductor", "agent_status": "idle"}
+        assert crew.found_answer("deneb", self.ran(0, json.dumps({"result": {"agent": a}}))) == (a, None)
+        assert crew.found_answer("deneb", self.ran(0, json.dumps({"result": {"agent": None}}))) == (None, None)
+
+    def test_what_found_could_not_read_is_named(self):
+        why = "herdr lists the agent in its pane w7:p1 by no name, in session 9f2e, which crew did not start as swc-3-conductor"
+        assert crew.found_answer("deneb", self.ran(0, json.dumps({"unread": why}))) == (None, why)
+
+    def test_a_host_that_does_not_answer_a_found_that_fails_and_an_answer_crew_cant_read_are_each_named(self):
+        assert crew.found_answer("deneb", self.ran(255, err="ssh: connect to host deneb port 22: Operation timed out")) == (
+            None, "deneb did not answer (ssh: connect to host deneb port 22: Operation timed out)")
+        assert crew.found_answer("deneb", self.ran(1, err="usage: crew.py ...")) == (
+            None, "crew on deneb could not look for it in the pane it keeps for it: usage: crew.py ...")
+        assert crew.found_answer("deneb", self.ran(0, "{}")) == (None, "herdr's answer on deneb about it can't be read")
 
 
 # herdr's `workspace create` answer, as crew reads it and the stub herdr gives it.

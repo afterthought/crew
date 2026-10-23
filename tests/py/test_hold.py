@@ -1,10 +1,12 @@
 """A host's hold and crew's updates reaching its agents (teams.19): which standing agent an update makes due a restart,
-and why; what keeps a held host from being quiet; when a due agent may be restarted, and what it is told; which
+and why; what keeps a held host from being quiet; when a due agent may be restarted, how its exit ends crew's waits at
+Claude Code's question, and what it is told; which
 background work is one of crew's waits; the hold read from its file; which agents run on a host; and what the agents'
 bands say of the crew they run and of the hold. That crew hold, go and update run on each host they name, end and bring
 back the agents there, and that the hooks record a start's crew and hand a due agent its restart, is the hold journey's
 (t-hold)."""
 import json
+import types
 
 import pytest
 
@@ -142,6 +144,62 @@ class TestRenew:
                                "What changed: feat(teams): a host is held; fix(board): x.")
         assert "start again any wait you still need" in said
         assert hold.renew_notice(None, None, []).startswith("crew restarted you on crew as it now is, so")
+
+    def test_claude_codes_question_at_an_exit_with_background_work_is_read_from_the_panes_screen(self):
+        assert crew.exit_asks(EXIT_SCREEN)
+        assert not crew.exit_asks("❯ \n  ? for shortcuts")
+        assert not crew.exit_asks(" Exiting worktree session\n ❯ 1. Keep worktree")
+        assert not crew.exit_asks("") and not crew.exit_asks(None)
+
+    def test_a_restart_ends_crews_waits_at_the_exits_question_and_any_other_stop_leaves_it_asked(self, tmp_path, monkeypatch):
+        # swc-3's and swc-4's conductors, restarted at a give beside their bolts waiting to land, stopped at the question
+        # on their landing-card waits and read as blocked (signal 2026-10-22-swancloud-dispatch-deneb-bddc208d/01).
+        monkeypatch.setattr(crew, "nap", lambda seconds: None)
+        for waits in (True, False):
+            agents = crew.Agents(None, "team", "swc-4", "swancloud", "swancloud", tmp_path / str(waits), None, "/w", None)
+            agents.herdr = Exiting()
+            agents.ensure()
+            agents.put("panes", "conductor", "w8:p1")
+            why = agents.stop("conductor", waits=waits)
+            enters = [a for a in agents.herdr.acts if a[:2] == ("agent", "send-keys")]
+            if waits:
+                assert why is None and agents.ended == ["conductor"]
+                assert enters == [("agent", "send-keys", "w8:p1", "enter")]
+            else:
+                assert why == "swc-4-conductor did not exit (busy or waiting on the user); it was left running"
+                assert enters == [] and agents.herdr.state == "blocked"
+
+
+EXIT_SCREEN = """ Background work is running
+ The following will stop when you exit:
+
+ crew card wait land/the-bolt
+ ❯ 1. Exit and stop tasks
+   2. Move to background and exit
+   3. Stay
+"""
+
+
+class Exiting:
+    """herdr's side of a Claude Code session told /exit while a background task of its own runs: the question shows and
+    the agent reads blocked, Enter on the question's first option ends it, and Ctrl+C leaves it asked."""
+
+    def __init__(self):
+        self.state, self.acts = "idle", []
+
+    def status(self, pane, fresh=False):
+        return self.state
+
+    def run(self, *args):
+        self.acts.append(args)
+        out = ""
+        if args[:2] == ("agent", "prompt") and args[3] == "/exit":
+            self.state = "blocked"
+        elif args[:2] == ("pane", "read"):
+            out = EXIT_SCREEN if self.state == "blocked" else ""
+        elif args[:2] == ("agent", "send-keys") and args[3:] == ("enter",) and self.state == "blocked":
+            self.state = None
+        return types.SimpleNamespace(returncode=0, stdout=out, stderr="")
 
 
 class TestHosts:

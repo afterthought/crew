@@ -12,6 +12,7 @@ RUNS = [
     ["state", "init", "wldn"],
     ["_team", "restart", "swb-1", "ops", "--no-greet"],
     ["bolt", "submit", "b", "--label", "wldn"],
+    ["bolt", "submit", "b", "--excerpt", "Land crw-5's bolt"],
     ["_unit-run", "a", "construct", "--force", "--", "-x is the tenant"],
     ["_fix-run", "swb-1", "tidy", "wait", "--timeout", "0"],
 ]
@@ -23,6 +24,12 @@ def test_a_run_parses_as_the_whole_parser_parses_it(argv):
     ap = plan.parser(only=argv[0])
     assert argv[0] in ap.built
     assert vars(ap.parse_args(argv)) == vars(whole)
+
+
+def test_a_landing_takes_the_users_words_and_has_none_by_default():
+    """plan.16: the word to land given in ops's pane goes with the submission; without it, the word is the card's."""
+    assert plan.parser().parse_args(["bolt", "submit", "b", "--excerpt", "Land it"]).excerpt == "Land it"
+    assert plan.parser().parse_args(["bolt", "submit", "b"]).excerpt is None
 
 
 def test_a_name_that_is_no_command_is_not_built():

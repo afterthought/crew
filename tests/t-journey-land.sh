@@ -203,7 +203,7 @@ h2=$(git -C "$k" rev-parse bolt/tenant-environments)
 posted=$(calls | grep "^$box pendingyou post_request " | tail -1)
 lacks "$posted" '"follows"'
 refused="plannotator ended before land/tenant-environments's session was ready: stub: refused to start"
-has "$posted" "Its reading could not be opened on the tailnet: swb-1-conductor starts it with crew card session land/tenant-environments, and this card then carries its link."
+has "$posted" "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and swb-1-conductor starts it with crew card session land/tenant-environments; this card then carries its link."
 has "$posted" "The reading could not be opened on the tailnet: $refused"
 has "$out" "card land/tenant-environments: its reading could not be opened on the tailnet: $refused; crew card session land/tenant-environments starts it"
 [[ ! -e $reading/session.json ]] || fail "a reading is recorded though both its starts failed"
@@ -254,6 +254,7 @@ lacks "$given" "swb-1-conductor started"
 for a in swb-1-conductor swb-1-ops; do
   log=$(home_of $box)/.local/state/crew/renew/$a.log
   until_ok grep -q "$a is restarted on crew" "$log" || fail "$a was not restarted at its next stop: $(cat "$log" 2>/dev/null)"
+  eq "$(as $box herdr --session wldn-1 agent get "$a" | jq -r .result.agent.name)" "$a"  # found under its name at once, as crew restart leaves it
 done
 greeted=$(calls | grep "^$box wldn-1 agent prompt swb-1-conductor '\[crew\] crew restarted you")
 has "$greeted" "bolt is now bolt/ssh-fix, which sluice"
