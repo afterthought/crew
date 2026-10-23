@@ -418,6 +418,36 @@ class TestDocks:
         assert json.loads(block)["docks"][f"signal:{self.SIG}"]["parts"][0]["rows"] == [{"text": "Ends </script><b>here</b> & more."}]
 
 
+class TestWord:
+    """board-page "A word goes to the agent its item's kind names": every dock page names the agent its word goes to
+    (page.word_to), on TestDocks's board."""
+
+    @pytest.fixture(autouse=True)
+    def here(self, monkeypatch):
+        import crew
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+
+    def test_each_kinds_word_goes_to_its_agent(self):
+        """board-page "Each kind's agent"."""
+        d = TestDocks().paged()
+        to = {k: p["to"] for k, p in d["docks"].items()}
+        deploy = next(k for k in to if k.startswith("deploy:"))
+        assert [to[k] for k in ("bolt:tenant-environments", "unit:a", "fix:tenant-environments/edge")] == ["swb-1-conductor"] * 3
+        assert [to[k] for k in ("bolt:apex-zones", "unit:zone-one", "unit:zone-two")] == ["wldn-operator"] * 3
+        assert (to["proposal:2"], to[f"signal:{TestDocks.SIG}"]) == ("wldn-planner", "wldn-design")
+        assert [to[k] for k in ("landing:atlas-maps", deploy, "operation:mac-studio/rotate-key")] == ["wldn-ops"] * 3
+        assert [to[k] for k in ("team:swb-1", "subscription:madswan-2")] == ["wldn-operator"] * 2
+
+    def test_every_dock_page_names_its_agent(self):
+        d = TestDocks().paged()
+        assert d["docks"] and all(p["to"] for p in d["docks"].values())
+
+    def test_a_kind_with_no_dock_yet_goes_to_its_role_and_any_other_to_the_operator(self):
+        d = TestDocks().paged()
+        assert [page.word_to(k, d, "wldn") for k in ("batch:14", "record:0038", "partition:wldn", "unit:nosuch")] == [
+            "wldn-planner", "wldn-design", "wldn-operator", "wldn-operator"]
+
+
 def test_a_chore_stands_in_the_units_column_its_move_drawn_as_a_units_and_labelled_by_its_words():
     """page.data and page.labelled: a chore is work like a unit, so it is in the units' column, where it moved from is not
     what it came from, and its label and stage are read from the plan and its kit (plan.11)."""

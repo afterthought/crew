@@ -336,6 +336,13 @@ def send_door(fleet, name, caller):
     return label, door, team
 
 
+# Whom a word from the board goes to, by the role its item's kind names (record 0038 §3): a bolt's, a unit's or a fix's
+# conductor, of the team holding its bolt; a proposal's or a batch's planner; a signal's or a record's design agent; a
+# landing's, a deploy's or an operation's main-level ops; and any other kind's, the partition's operator.
+ROLE_OF = {"bolt": "conductor", "unit": "conductor", "fix": "conductor", "proposal": "planner", "batch": "planner",
+           "signal": "design", "record": "design", "landing": "ops", "deploy": "ops", "operation": "ops"}
+
+
 def tell(fleet, name, text, record=True, sender=None, taken=False, what="its prompt", again=""):
     """Send an agent a prompt wherever it runs, marked as crew's: `[crew tell from <sender>]` for what crew tell
     carries for someone, `[crew]` for crew's own greetings and notices, so the recipient, and crew reading its
