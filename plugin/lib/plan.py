@@ -1795,8 +1795,10 @@ def raise_land(fleet, row, acts=None, note=None):
     (landing_opened), a session on an older head ended (reading_open); a preview of its head, in a kit whose policy at
     the head declares one, is asked for before it and its addresses put on the card (landing_preview). Nothing, and
     nothing said, while the bolt does not read proven, at first or read afresh. The merge's end calls it, the rail's
-    sweep for a row whose card is missing or lost, and a preview's end with its change note (note). The card's id, or
-    None; what crew can't read is refused (read.1), refusing nothing of the bolt."""
+    sweep for a row whose card is missing or lost, and for one whose card this host can't reach, handed that older copy
+    as the row's dead, when the card is posted saying first that an older copy was lost (built_again), and a preview's
+    end with its change note (note). The card's id, or None; what crew can't read is refused (read.1), refusing nothing
+    of the bolt."""
     m = re.fullmatch(r"land/([a-z0-9][a-z0-9-]*)", row.get("key") or "")
     if not m:
         return None
@@ -1815,7 +1817,8 @@ def raise_land(fleet, row, acts=None, note=None):
     card["follows"] = cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner)
     card["preview"] = landing_preview(fleet, t, label, bolt, card, acts)
     note = note or landing_act("proven", head=card["head"])[1]
-    return row_card_change(fleet, label, owner, cards.landing_card, card, note, card_where(t["kit"]), acts)
+    build = built_again(cards.landing_card) if row.get("dead") else cards.landing_card
+    return row_card_change(fleet, label, owner, build, card, note, card_where(t["kit"]), acts)
 
 
 def head_previewed(fleet, t, head):
@@ -3654,23 +3657,24 @@ def raise_proposal(fleet, row, acts=None, event="sweep"):
     """The rail's sweep's raise of a proposal row's card (record 0031 §1), for a row whose card is missing or lost:
     the open proposal of the chain its key names, read at the branch's tip from the row's label and key (chain_read),
     raised through row_card_change, which posts it when none is held and posts it again, its summary saying the older
-    copy is dead, when Pending You no longer finds it; or, with event relink, its card changed to carry its reading's
-    link (reading_again). None, raising nothing, when the key is no proposal chain's or the chain has no proposal open.
-    The card's id, or None."""
+    copy is dead, when Pending You no longer finds it, and when the sweep hands it the older copy this host can't reach
+    as the row's dead; or, with event relink, its card changed to carry its reading's link (reading_again). None,
+    raising nothing, when the key is no proposal chain's or the chain has no proposal open. The card's id, or None."""
     label, m = row["label"], re.fullmatch(r"proposal/(\d+)", row.get("key") or "")
     got = chain_read(fleet, label, int(m.group(1))) if m else None
-    return raise_proposal_at(fleet, label, *got, event, acts) if got else None
+    return raise_proposal_at(fleet, label, *got, event, acts, dead=bool(row.get("dead"))) if got else None
 
 
-def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None):
+def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=None, reason=None, dead=False):
     """Proposal n's card at its event (record 0031 §1, briefs.11), once the event's write is made (code.9), from the
     write w as it left the branch: the act proposal_act decides; the card built by the proposal's builder from
     proposal_facts, and posted, changed or closed by the act in the planner's name under its chain's key,
     proposal/<first>, filed in the area of the kit of the first bolt or unit its commands name. A rewrite whose card
     takes another form than the replaced proposal's (cards.proposal_form: a hold-to-approve, a choice, one list or
-    lists), which update_request never changes, has the card followed as a card whose kind changed. A card crew cannot
-    build, or Pending You refuses, refuses nothing of the proposal: it is said, and the rail shows the row with no card.
-    The card's id, or None."""
+    lists), which update_request never changes, has the card followed as a card whose kind changed. With dead, an
+    older copy this host can't reach standing, the card is built saying first that it was lost (built_again). A card
+    crew cannot build, or Pending You refuses, refuses nothing of the proposal: it is said, and the rail shows the row
+    with no card. The card's id, or None."""
     acts = acts or CardActs(fleet)
     owner, part = f"{label}-planner", crew.partition_of(fleet, label)
     pl = proposals(w)
@@ -3693,11 +3697,12 @@ def raise_proposal_at(fleet, label, w, n, event, acts=None, agreed=(), outcome=N
         facts = proposal_facts(fleet, label, w, n)
         team = builder(fleet, label, named_kit(w.plan, facts["argvs"]))
         where = card_where(team["kit"] if team else {"main": part["checkout"], "repo": part["blueprints"][0]})
+        build = built_again(cards.proposal_card) if dead else cards.proposal_card
         if act[0] == "post":
-            return row_card_post(fleet, label, owner, cards.proposal_card, facts, where, acts)
+            return row_card_post(fleet, label, owner, build, facts, where, acts)
         moved = event == "replace" and replaced is not None and (
             cards.proposal_form([do_args(label, d) for d in replaced.all("Do")]) != cards.proposal_form(facts["argvs"]))
-        return row_card_change(fleet, label, owner, cards.proposal_card, facts, act[1], where, acts, kind_changed=moved)
+        return row_card_change(fleet, label, owner, build, facts, act[1], where, acts, kind_changed=moved)
     except Refusal as e:
         print(f"card {key} not raised: {e}", file=sys.stderr)
         return None

@@ -666,6 +666,45 @@ class TestSessions:
         assert plan.raise_batch(FLEET, row, acts) == "req_b4"
         assert next(a for t, a in acts.calls if t == "post_request")["summary"].startswith("1 change to read")
 
+    POSTED = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+              "post_request": ({"requestId": "req_n2", "version": 1}, None)}
+
+    def summaries(self, acts):
+        return [a["summary"] for t, a in acts.calls if t == "post_request"]
+
+    def test_the_sweeps_raise_of_a_proposal_handed_an_older_copy_posts_it_saying_that_copy_is_dead(self, monkeypatch):
+        """rail-cards, "A proposal's card left on the host the main level left": proposal 1's card is held under another
+        host's sign-in, so this host holds none, and its raise at the sweep, handed dead, posts one card saying the older
+        copy is dead; without it, the plain card."""
+        from test_proposal_life import CARDED, proposals_with, write
+        monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+        w = write()
+        w.files["proposals.rec"] = proposals_with(("Console first.", ['unit add a-new "A new unit." --bolt console-pages'])).text()
+        acts = ReadingActs(self.POSTED)
+        assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "sweep", acts, dead=True) == "req_n2"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_n2")]
+        plain = ReadingActs(self.POSTED)
+        assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "sweep", plain) == "req_n2"
+        (dead,), (bare,) = self.summaries(acts), self.summaries(plain)
+        assert dead == f"{built.DEAD}\n\n{bare}"
+
+    def test_the_sweeps_raise_of_a_landing_handed_an_older_copy_posts_it_saying_that_copy_is_dead(self, monkeypatch):
+        """rail-cards, "A landing's card left on the host its team left": an approval of risk high, saying an older copy
+        was lost."""
+        team = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+        monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
+        monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
+        monkeypatch.setattr(plan, "landing_opened", lambda fleet, label, p, b, t, card, acts: dict(card, link="http://mac-studio.ts.swancloud.net:19432"))
+        monkeypatch.setattr(plan, "landing_preview", lambda fleet, t, label, bolt, card, acts: None)
+        row = {"label": "wldn", "key": "land/b1", "group": "land"}
+        acts, plain = ReadingActs(self.POSTED), ReadingActs(self.POSTED)
+        assert plan.raise_land(FLEET, dict(row, dead="req_l1"), acts) == "req_n2"
+        assert plan.raise_land(FLEET, row, plain) == "req_n2"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_n2")]
+        (dead,), (bare,) = self.summaries(acts), self.summaries(plain)
+        assert dead == f"{built.DEAD}\n\n{bare}"
+        assert next(a for t, a in acts.calls if t == "post_request")["approve"]["risk"] == "high"
+
 LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="abc1234", at=None, moved=0, pr=None)
 
 
