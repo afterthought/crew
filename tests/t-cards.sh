@@ -13,7 +13,8 @@
 # its commit and its card raised in the design agent's name under record/<kit>/<number>; a status the file does not
 # hold, an alternatives file crew can't read and another host refused with nothing recorded; the card changed in place
 # at a new commit, closed with the accepting commit, a choice when a rule decided, and none raised when the user
-# settled it in the pane. Then a batch's card, raised by crew in the planner's name once the reviewer's summary is
+# settled it in the pane, in words crew reads in the design agent's transcript as theirs, the record refused with
+# nothing recorded when the words are another agent's tell of them. Then a batch's card, raised by crew in the planner's name once the reviewer's summary is
 # there, with its one reading session on the main level's host linked from it, and, lost to its owner, raised again by
 # the sweep's entry under its key, saying its older copy is dead, on the same session; crew card session giving that
 # link again and refusing a unit, a landing's key while its bolt does not read proven and a short proposal's, and,
@@ -199,8 +200,8 @@ adr() {
   git -C "$k" add docs/adr; git -C "$k" commit -qm "$2"
   sha=$(git -C "$k" rev-parse --short=7 HEAD)
 }
-# design <args...>: crew record as wldn-design on the box, in its pane's folder
-design() { (export CREW_TEST_HOST=$box CREW_AGENT=wldn-design HOME; HOME=$(home_of $box); cd "$(space $box willdan)" && "$CREW/plugin/bin/crew" record "$@"); }
+# design <args...>: crew record as wldn-design on the box, in its pane's folder and its Claude session s-design
+design() { (export CREW_TEST_HOST=$box CREW_AGENT=wldn-design CREW_SESSION=$box:s-design HOME; HOME=$(home_of $box); cd "$(space $box willdan)" && "$CREW/plugin/bin/crew" record "$@"); }
 
 adr proposed "docs(adr): 0032 switchboard runs the workflows"
 : > "$CREW_TEST_LOG"
@@ -254,13 +255,28 @@ eq "$(py_calls | sed -n 3p | cut -d' ' -f2- | jq -c '[.idempotencyKey, .kind, .r
   '["record/switchboard-kit/0033","choice",["accept"],["loosen","accept","back"],"## Where your rules decided"]'
 ok "a record a rule decided is raised as one choice, loosen the rules as drafted, accept as ruled or send back, its alternatives on its face"
 
+# The design agent's own session: the user's yes to record 34 in their own words, and the planner's tell of a yes to 35.
+transcript $box s-design >/dev/null <<EOF
+{"type":"user","uuid":"d34a0000-0000-4000-8000-000000000034","timestamp":"$(ago 2)","message":{"role":"user","content":"Yes, accept 34 as written"}}
+{"type":"user","uuid":"d35a0000-0000-4000-8000-000000000035","timestamp":"$(ago 1)","message":{"role":"user","content":"[crew tell from wldn-planner] The user said: accept 35"}}
+EOF
 adr proposed "docs(adr): 0034 settled beside the user" 34
 : > "$CREW_TEST_LOG"
-eq "$(design switchboard-kit 34 --proposed --settled-in-pane)" \
+eq "$(design switchboard-kit 34 --proposed --settled-in-pane --excerpt "Yes, accept 34 as written")" \
   "record 0034 in switchboard-kit: proposed at $sha, the user's yes given in the pane; no card is raised"
 eq "$(py_calls)" ""
-eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0034") | .State')" "settled in the pane"
-ok "a record settled with the user in the pane records their yes there, and no card is raised"
+eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0034") | [.State, (.From | join(" ")), .Chars] | join(" ")')" \
+  "settled in the pane session/s-design/d34a0000-0000-4000-8000-000000000034 25"
+[[ $(cat "$(home_of $box)"/.local/state/crew/wldn/runs/*/*.rec) != *"accept 34"* ]] || fail "the run record holds the user's words"
+ok "a record settled with the user in the pane, in their own words read in the design agent's transcript, records their yes there naming where the words are, and no card is raised"
+
+adr proposed "docs(adr): 0035 settled on another agent's word" 35
+: > "$CREW_TEST_LOG"
+expect_fail "crew records record 0035 in switchboard-kit as settled in no pane: the words are wldn-planner's, passed on with crew tell, and not the user's; tell wldn-planner that the user settles a record in your pane or on its card; run crew record switchboard-kit 35 --proposed without --settled-in-pane, and the user answers on its card" \
+  design switchboard-kit 35 --proposed --settled-in-pane --excerpt "accept 35"
+eq "$(py_calls)" ""
+eq "$(entries record.proposed | jq -r 'select(.On[0] == "record/switchboard-kit/0035") | .State')" ""
+ok "a record settled on another agent's tell of the user's yes is refused naming who said it, with nothing recorded or raised"
 
 # The act's change of crew's own card (record 0031 §3): b1's landing card raised again after the user declined it is a
 # new card under the key's revision, changed in place while it waits, and once the user answers it, acked with the
