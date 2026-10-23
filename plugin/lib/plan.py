@@ -20,8 +20,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              its card key, with whether a card is open for it; then the open cards
                                              whose row is gone; its sweep posts again, on its owner's host, each row's
                                              card and still-proposed record's another host holds or its owner lost,
-                                             saying the older copy is dead, and tries again the reading of a batch's
-                                             or a long proposal's card that stands without it, ten minutes on
+                                             saying the older copy is dead, and tries again the reading of a batch's, a
+                                             long proposal's or a landing's card that stands without it, ten minutes on,
+                                             a landing's on the team's host
   crew record <kit> <number> --proposed|--accepted|--rejected [--settled-in-pane --excerpt "<words>"] [--alternatives <file>]
                                              the design agent's record at each turn of its status, read on the kit's
                                              main, raising its card unless settled in the pane, the user's yes read in
@@ -33,8 +34,9 @@ five times. A write that changes several files is one commit, and it carries the
                                              a batch card's one per unit on that unit's team's host; the user's decision
                                              in it, waited for, a landing's or a batch's reading started first when
                                              none runs while its owner holds the card, a batch's waiting on the card
-                                             alone when it will not open; a reading started anew changing its open
-                                             card to carry the link; and its end, which a card's close brings too
+                                             alone when it will not open; a reading started anew, or given again to
+                                             a card standing without it, changing its open card to carry the link,
+                                             each try recorded; and its end, which a card's close brings too
   crew card answer batch/<n> --excerpt "<words>"
                                              the user's answer to a batch in their own words in the planner's or the
                                              operator's pane, recorded once crew reads the words in that agent's own
@@ -8820,12 +8822,12 @@ def refused_lately(entries, now, key=None, card=None):
 
 
 def reading_unread(entries, key, card, now=None):
-    """Whether a batch's or a long proposal's card stands without its reading, from this host's run record, oldest
-    first (card-sessions "The rail's read tries a reading its card stands without"): a done post or change of the card
-    with Unread, or a refused try of the key's reading (card.reading), marks it so from that entry's time; a done post
-    or change of the card without Unread clears it; a refused post or change, and a done try, change nothing. With now,
-    whether it stands so and its last such entry is CARD_RETRY seconds old or more, so the rail's sweep tries it again
-    no sooner than it posts a refused card again."""
+    """Whether a batch's, a long proposal's or a landing's card stands without its reading, from this host's run
+    record, oldest first (card-sessions "The rail's read tries a reading its card stands without"): a done post or
+    change of the card with Unread, or a refused try of the key's reading (card.reading), marks it so from that entry's
+    time; a done post or change of the card without Unread clears it; a refused post or change, and a done try, change
+    nothing. With now, whether it stands so and its last such entry is CARD_RETRY seconds old or more, so the rail's
+    sweep tries it again no sooner than it posts a refused card again."""
     last = None
     for e in entries:
         if e.get("Act") in ("card.post", "card.update") and card and e.get("Card") == card and not e.get("Refused"):
@@ -8879,10 +8881,10 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
     seconds ago is left for a later read. And, where the partition's batches' owner runs (planner, (owner, host), row_owner's for a
     batch), each batch card key whose batch waits on nothing (batch_settled), to record crew's close of, with why,
     once: none is under its key yet, and the user's answer has not closed it (batch_closed). And each row's card of a
-    batch, batch/<n>, or a proposal, proposal/<n>, that the run record shows standing without its reading, last
-    posted, changed or tried CARD_RETRY seconds ago or more (reading_unread), to try its reading again. Returns {gone:
-    [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row], again: [(row, older card)],
-    settled: [(key, why)], unread: [(card, row)]}."""
+    batch, batch/<n>, a proposal, proposal/<n>, or a landing, land/<bolt>, that the run record shows standing without
+    its reading, last posted, changed or tried CARD_RETRY seconds ago or more (reading_unread), to try its reading
+    again. Returns {gone: [(card, outcome, reason)], questions: [card], held: [(card, row)], none: [row], again: [(row,
+    older card)], settled: [(key, why)], unread: [(card, row)]}."""
     import ops  # its decision of a deploy's card alone
     rowed = {r["key"]: r for r in rows}
     out = {"gone": [], "questions": [], "held": [], "none": [], "again": [], "settled": [], "unread": []}
@@ -8898,7 +8900,7 @@ def sweep_judged(here, rows, cards_, entries, owners, blind, now, planner=(None,
             out["questions"].append(c)
         elif c["key"] in rowed:
             out["held"].append((c, rowed[c["key"]]))
-            if re.fullmatch(r"(batch|proposal)/\d+", c["key"]) and reading_unread(entries, c["key"], c["card"], now):
+            if re.fullmatch(r"(batch|proposal)/\d+|land/[a-z0-9][a-z0-9-]*", c["key"]) and reading_unread(entries, c["key"], c["card"], now):
                 out["unread"].append((c, rowed[c["key"]]))
         elif (not (c["key"].startswith("land/") and c["key"].split("/")[1] in blind) and not refused_lately(entries, now, card=c["card"])
               and not ops.word_stands(c["key"], entries)):
@@ -9434,13 +9436,19 @@ def card_waiting(got):
     return isinstance(got, dict) and got.get("status") in OPEN
 
 
-def land_session(fleet, label, key, acts=None):
+def land_session(fleet, label, key, acts=None, say=None):
     """crew card session land/<bolt>: the landing's one reading session, on what the bolt brings to main at its head,
     on the host of the team holding the bolt and refused elsewhere, naming it, read from the same facts as its card
-    (land_facts) and opened as the card opens it (reading_open), its link printed. When it started the session anew,
-    none running, the landing card its conductor holds is changed in place to carry the new link while it waits on the
-    user (relinks, row_card_change), and left as it is once they answered it. Refused for a bolt the plan does not
-    hold, one no team holds, and one that does not read proven, saying why (card-sessions)."""
+    (land_facts) and opened as the card opens it (reading_open), its link printed, or said by say(link, decided) when
+    given, as the rail's sweep gives it. The try, from the landing's read on, is recorded as one card.reading entry on
+    the bolt in its conductor's name, with the card held under the key, done when the session started anew and refused
+    with crew's message when the bolt does not read proven or the reading could not open, a session given again
+    recording nothing (record.1), nor a refusal before the try. When it started the session anew, none running, or the
+    run record shows the card standing without its reading (reading_unread), the landing card its conductor holds is
+    changed in place to carry the link while it waits on the user (relinks, row_card_change), and left as it is once
+    they answered it. Refused for a bolt the plan does not hold, one no team holds, and one that does not read proven,
+    saying why (card-sessions). As reading_open returns it: its link, whether the user decided in it, and whether it
+    was started anew; a refusal of the try, recorded, is raised again."""
     acts = acts or CardActs(fleet)
     bolt = key.split("/", 1)[1]
     plan, b, t = land_held(fleet, label, bolt)
@@ -9448,19 +9456,31 @@ def land_session(fleet, label, key, acts=None):
     t or fail(f"bolt {bolt} is held by no team, so crew raises no landing card for it, and it has no reading")
     why = session_refusal(key, label, fleet["partitions"][label]["machine"], acts.host(), t["machine"])
     not why or fail(why)
-    facts, why = land_facts(fleet, label, plan, b, t)
-    not why or fail(f"bolt {bolt} does not read proven, so its landing card is not raised and has no reading: {why}")
-    url, decided, started = acts.reading(label, key, facts)
-    print(url)
-    if decided:
-        print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
-    owner = f"{t['name']}-conductor"
+    owner, obj = f"{t['name']}-conductor", cards.row_object(key)
+    card = cards.card_under(acts.entries(label), key, owner)
+    held = {"Card": card} if card else {}
+    try:
+        facts, why = land_facts(fleet, label, plan, b, t)
+        not why or fail(f"bolt {bolt} does not read proven, so its landing card is not raised and has no reading: {why}")
+        url, decided, started = acts.reading(label, key, facts)
+    except Refusal as e:
+        acts.emit(label, "card.reading", [obj], by=owner, refused=str(e), Key=key, **held)
+        raise
+    if started:
+        acts.emit(label, "card.reading", [obj], by=owner, Key=key, **held)
+    if say:
+        say(url, decided)
+    else:
+        print(url)
+        if decided:
+            print(f"the user decided in {key}'s session before it ended: crew card wait {key} gives the decision", file=sys.stderr)
 
     def change():
         f = dict(facts, link=url, follows=cards.follows_of("land", {"bolt": bolt}, acts.entries(label), owner))
         f["preview"] = landing_preview(fleet, t, label, bolt, f, acts)
         row_card_change(fleet, label, owner, cards.landing_card, f, RELINKED, card_where(t["kit"]), acts)
-    relink(acts, label, key, owner, started, change)
+    relink(acts, label, key, owner, started or reading_unread(acts.entries(label), key, card), change)
+    return url, decided, started
 
 
 def relink(acts, label, key, owner, due, change):
@@ -10879,16 +10899,15 @@ def reading_of(b):
 
 def unopened(b, why):
     """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
-    its first paragraph, cut again to Pending You's budget, naming crew card session <key> as how its owner starts it,
-    the card then carrying its link (briefs.13: the owner's act, nothing for the user to run), a landing's the bolt's
-    conductor, a batch's and a long proposal's the planner, whose card says too that crew tries it again when the rail
-    is read (sweep_cards); its details opening with why, where the link would be; and why kept on the built card
+    its first paragraph, cut again to Pending You's budget, saying that crew tries it again when the rail is read
+    (sweep_cards) and naming crew card session <key> as how its owner starts it, the card then carrying its link
+    (briefs.13: the owner's act, nothing for the user to run), a landing's the bolt's conductor, a batch's and a long
+    proposal's the planner; its details opening with why, where the link would be; and why kept on the built card
     (unread), for its post's or change's entry in the run record."""
     key = b["key"]
-    said = (f"Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session {key}, "
-            "and this card then carries its link." if key.startswith("land/")
-            else "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and the planner "
-                 f"starts it with crew card session {key}; this card then carries its link.")
+    owner = "the bolt's conductor" if key.startswith("land/") else "the planner"
+    said = (f"Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and {owner} "
+            f"starts it with crew card session {key}; this card then carries its link.")
     first, _, rest = b["card"]["summary"].partition("\n\n")
     summary = cards.prose("\n\n".join(x for x in (first, said, rest) if x))
     context = dict(b["card"]["context"], background=f"The reading could not be opened on the tailnet: {why}\n\n"
@@ -11303,7 +11322,11 @@ class SweepActs(CardActs):
         return datetime.datetime.now(datetime.timezone.utc)
 
     def reading_again(self, label, key):
-        """A card's reading opened again and its card changed to carry the link (reading_again)."""
+        """A card's reading opened again and its card changed to carry the link: a landing's, land/<bolt>, as crew card
+        session land/<bolt> opens it on the team's host with the bolt read afresh (land_session), its link printed by
+        nobody, since the rail lists it; a batch's or a proposal's as before (reading_again)."""
+        if key.startswith("land/"):
+            return land_session(self.fleet, label, key, self, say=lambda *_: None)
         return reading_again(self.fleet, label, key, self)
 
 

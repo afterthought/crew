@@ -542,13 +542,17 @@ class TestSweepJudged:
         assert not plan.reading_unread([did("card.post", 20, Key="batch/3", Card="req_b3"), dict(refused, Unread=self.UNREAD)],
                                        "batch/3", "req_b3")
 
-    def test_a_batchs_or_a_proposals_card_standing_without_its_reading_ten_minutes_is_tried_and_no_other_card(self):
+    def test_a_batchs_a_proposals_or_a_landings_card_standing_without_its_reading_ten_minutes_is_tried_and_no_other_card(self):
+        """card-sessions "A landing card raised without its reading" and "A landing card on another host"."""
         b3, p4, y = card("batch/3", "req_b3", "wldn-planner"), card("proposal/4", "req_p4", "wldn-planner"), card("land/y", "req_l1", "swb-1-conductor")
-        unread = [did("card.post", 20, Key=c["key"], Card=c["card"], Unread=self.UNREAD) for c in (b3, p4, y)]
-        rows_ = [row("batch/3", "batches"), row("proposal/4"), row("land/y", "land")]
-        assert self.judged(rows=rows_, cards_=[b3, p4, y], entries=unread)["unread"] == [(b3, rows_[0]), (p4, rows_[1])]
-        assert self.judged(rows=rows_, cards_=[b3, p4, y], entries=[dict(e, At=iso(5)) for e in unread])["unread"] == []
-        assert self.judged(rows=rows_, cards_=[dict(b3, host=BOX)], entries=unread)["unread"] == []
+        d = card("deploy/dev", "req_d1", "wldn-ops")
+        unread = [did("card.post", 20, Key=c["key"], Card=c["card"], Unread=self.UNREAD) for c in (b3, p4, y, d)]
+        rows_ = [row("batch/3", "batches"), row("proposal/4"), row("land/y", "land"), row("deploy/dev", "operations")]
+        assert self.judged(rows=rows_, cards_=[b3, p4, y, d], entries=unread)["unread"] == [(b3, rows_[0]), (p4, rows_[1]), (y, rows_[2])]
+        assert self.judged(rows=rows_, cards_=[b3, p4, y, d], entries=[dict(e, At=iso(5)) for e in unread])["unread"] == []
+        assert self.judged(rows=rows_, cards_=[dict(b3, host=BOX), dict(y, host=BOX)], entries=unread)["unread"] == []
+        tried = did("card.reading", 5, Key="land/y", Card="req_l1", Refused=self.UNREAD)
+        assert self.judged(rows=rows_, cards_=[y], entries=unread + [tried])["unread"] == []
 
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
@@ -902,6 +906,43 @@ class TestSweep:
         assert f"  batch/3 (wldn), wldn-planner's req_b3: opened: its reading opened at {self.LINK}" in text(
             [row("batch/3", "batches")], cards=[b3], swept=out)
 
+    def test_a_waiting_landing_card_posted_without_its_reading_long_ago_is_tried_and_listed_opened(self):
+        """card-sessions "A landing card raised without its reading": its waiting is read in its conductor's name."""
+        y = card("land/y", "req_l1", "swb-1-conductor")
+        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
+                          answers={"get_request": self.owners("pending")}, readings={"land/y": self.LINK})
+        assert acts.raised == [("reading", "land/y")]
+        assert [(n, t) for n, t, _ in acts.calls] == [("crew", "get_request"), ("swb-1-conductor", "get_request")]
+        assert out["done"] == [dict(label="wldn", key="land/y", card="req_l1", by="swb-1-conductor", did="opened",
+                                    words=f"its reading opened at {self.LINK}", new=None)]
+
+    def test_a_landing_cards_try_that_refuses_is_listed_left_with_why(self):
+        """card-sessions "A landing's try that fails is left for later"."""
+        y = card("land/y", "req_l1", "swb-1-conductor")
+        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
+        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
+                          answers={"get_request": self.owners("pending")}, readings={"land/y": why})
+        assert [(d["key"], d["did"], d["words"]) for d in out["done"]] == [("land/y", "left", f"its reading could not be opened: {why}")]
+
+    def test_the_sweeps_try_of_a_landing_goes_the_landings_way_and_prints_no_link(self, monkeypatch):
+        """A landing's key is tried as crew card session land/<bolt> tries it, silenced, since the rail lists the link;
+        every other key as before."""
+        seen = []
+        monkeypatch.setattr(plan, "land_session", lambda fleet, label, key, acts, say=None: seen.append(("land", key, say(self.LINK, False)))
+                            or (self.LINK, False, True))
+        monkeypatch.setattr(plan, "reading_again", lambda fleet, label, key, acts: seen.append(("again", key)) or (self.LINK, False, True))
+        acts = plan.SweepActs(FLEET)
+        assert acts.reading_again("wldn", "land/y") == (self.LINK, False, True)
+        acts.reading_again("wldn", "batch/3")
+        assert seen == [("land", "land/y", None), ("again", "batch/3")]
+
+    def test_an_answered_landing_card_is_not_tried(self):
+        """card-sessions "A card the user has answered", for a landing's."""
+        y = card("land/y", "req_l1", "swb-1-conductor")
+        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
+                          answers={"get_request": self.owners("answered")}, readings={"land/y": self.LINK})
+        assert acts.raised == [] and out["done"] == []
+
     def test_a_try_that_refuses_is_listed_left_with_why(self):
         """card-sessions "A try that fails is left for later": the next read's judgment waits on its refused entry."""
         p4 = card("proposal/4", "req_p4", "wldn-planner")
@@ -924,10 +965,11 @@ class TestSweep:
         assert acts.raised == [] and [(d["did"], d["words"]) for d in out["done"]] == [
             ("left", "whether it waits on the user can't be read: Pending You refused get_request: Too many requests.")]
 
-    def test_a_landing_card_and_a_card_tried_lately_are_not_tried(self):
-        y = card("land/y", "req_l1", "swb-1-conductor")
-        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y), here=BOX,
-                          answers={"get_request": (None, "This is swb-1-conductor's card; leave it.")})
+    def test_a_landing_card_on_another_host_and_a_card_tried_lately_are_not_tried(self):
+        """card-sessions "A landing card on another host" and "A try that fails is left for later"."""
+        y = card("land/y", "req_l1", "swb-1-conductor", host=BOX)
+        out, acts = swept(rows_=[row("land/y", "land")], cards_=[y], entries=self.unread(y),
+                          answers={"get_request": (None, "This is swb-1-conductor's card; leave it.")}, readings={"land/y": self.LINK})
         assert acts.raised == [] and out["done"] == []
         b3 = card("batch/3", "req_b3", "wldn-planner")
         out, acts = swept(rows_=[row("batch/3", "batches")], cards_=[b3], entries=self.unread(b3, minutes=5),

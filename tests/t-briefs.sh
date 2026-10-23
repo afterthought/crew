@@ -71,6 +71,7 @@ for want in "The card links a reading of the bolt, first in its details" "crew s
   "the card also lists the addresses of a preview of that head, which crew asks sluice for, replaces when a merge moves the head and releases when the card closes" \
   "the preview lands nothing, and one that failed is said on the card and holds nothing" \
   "a card raised without its reading says so and why, and names" "crew card session land/<bolt>\` as your act, never the user's" \
+  "and crew's rail read on your host tries it again too, ten minutes after the last try, while the card waits on the user" \
   "When no reading runs, because the raise could not open it or an earlier wait returned, the wait starts one first" \
   "When the wait says the reading could not be opened, the card says so too:" \
   "crew card session land/<bolt>\` starts it once what the wait named is mended"; do

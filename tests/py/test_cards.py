@@ -485,8 +485,10 @@ class TestSessions:
         why = "plannotator is not on this host's path, and a card's session is a plannotator session"
         b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
         c, bare = b["card"], built.landing_card(LANDING)["card"]
-        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: the bolt's conductor starts "
-                                                  "it with crew card session land/b1, and this card then carries its link.")
+        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: crew tries it again when the "
+                                                  "rail is read, and the bolt's conductor starts it with crew card session "
+                                                  "land/b1; this card then carries its link.")
+        assert len(c["summary"]) <= 400
         assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
         assert (c["kind"], c["approve"], c["context"]["links"]) == ("approve", bare["approve"], [])
         assert b["unread"] == why
@@ -781,19 +783,23 @@ class ReadingActs:
 
 
 class TestLandingSession:
-    """crew card session land/<bolt> (card-sessions "A landing's session follows the bolt's head"): its link printed,
-    the open card changed in place to carry it when the session was started anew while the card waits on the user, and
-    left once the user answered it; refused for a bolt that does not read proven, and off its team's host."""
+    """crew card session land/<bolt> (card-sessions "A landing's session follows the bolt's head", "A later try of a
+    reading is recorded"): its link printed, the open card changed in place to carry it when the session was started
+    anew or the card stands without its reading, while the card waits on the user, and left once the user answered it;
+    the try recorded as card.reading in the conductor's name when it started or refused; refused for a bolt that does
+    not read proven, and off its team's host."""
     TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
     HELD = [{"Act": "card.post", "Key": "land/b1", "By": "swb-1-conductor", "Card": "req_l1", "On": ["bolt/b1"]}]
+    UNREAD = [dict(HELD[0], Unread="plannotator is not on this host's path", At="2026-10-12T10:00:00Z")]
     LINK = "http://mac-studio.ts.swancloud.net:19432"
+    DONE = dict(Act="card.reading", by="swb-1-conductor", Key="land/b1", Card="req_l1")
 
-    def run(self, monkeypatch, acts, why=None, team=TEAM, previewed=False):
+    def run(self, monkeypatch, acts, why=None, team=TEAM, previewed=False, say=None):
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
         monkeypatch.setattr(plan, "land_facts", lambda fleet, label, p, b, t: (None, why) if why else (
             dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"), None))
         monkeypatch.setattr(plan, "head_previewed", lambda fleet, t, head: (previewed, None))
-        plan.land_session(FLEET, "wldn", "land/b1", acts)
+        return plan.land_session(FLEET, "wldn", "land/b1", acts, say=say)
 
     @pytest.mark.parametrize("started, got, change", [
         (True, {"status": "pending", "turn": "you"}, True), (True, {"status": "snoozed"}, True), (False, {"status": "pending"}, False),
@@ -811,6 +817,13 @@ class TestLandingSession:
         assert not [t for t, _ in acts.calls if t == "post_request"]
         assert capsys.readouterr().out.splitlines() == [self.LINK, "card land/b1: req_l1 changed"]
 
+    def test_a_start_anew_is_recorded_in_the_conductors_name_beside_the_card_it_holds(self, monkeypatch):
+        """card-sessions "A landing's reading started by hand"."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, self.HELD)
+        assert self.run(monkeypatch, acts) == (self.LINK, False, True)
+        assert acts.emitted[0] == self.DONE
+        assert [e["Act"] for e in acts.emitted] == ["card.reading", "card.update"]
+
     def test_a_card_carrying_its_new_link_keeps_the_preview_it_lists(self, monkeypatch):
         """crew card session's change of the card lists the head's preview as the raise did, taken by keep."""
         p = dict(head=LANDING["head"], name="preview/0123456789ab", state="up", addresses={"web": "http://web.example"})
@@ -820,16 +833,43 @@ class TestLandingSession:
         assert acts.previews == [("wldn", "land/b1", LANDING["head"], True)]
         assert {"label": "Preview: web", "url": "http://web.example"} in sent["context"]["links"]
 
-    def test_a_running_session_given_again_changes_nothing(self, monkeypatch, capsys):
+    def test_a_running_session_given_again_changes_and_records_nothing(self, monkeypatch, capsys):
+        """card-sessions "A running session on a card that carries it" and "A link given again"."""
         acts = ReadingActs(entries=self.HELD, started=False)
         self.run(monkeypatch, acts)
-        assert acts.calls == [] and capsys.readouterr().out == f"{self.LINK}\n"
+        assert acts.calls == [] and acts.emitted == [] and capsys.readouterr().out == f"{self.LINK}\n"
+
+    def test_a_running_session_given_again_on_a_card_standing_without_its_reading_changes_it(self, monkeypatch, capsys):
+        """card-sessions "A running session whose card never got its link": no new session's try is recorded."""
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, self.UNREAD, started=False)
+        self.run(monkeypatch, acts)
+        sent = [a for t, a in acts.calls if t == "update_request"]
+        assert len(sent) == 1 and (sent[0]["requestId"], sent[0]["changeNote"]) == ("req_l1", plan.RELINKED)
+        assert sent[0]["context"]["links"][0] == {"label": "Read bolt b1", "url": self.LINK}
+        assert [e["Act"] for e in acts.emitted] == ["card.update"]
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card land/b1: req_l1 changed"]
+
+    def test_a_reading_that_refuses_is_recorded_with_crews_words_and_raised(self, monkeypatch):
+        """card-sessions "A landing's try that fails is left for later": the card is not changed."""
+        why = "plannotator did not list land/b1's session within 10 seconds, so crew ended it"
+        acts = ReadingActs(entries=self.HELD, refused=why)
+        with pytest.raises(plan.Refusal, match=f"^{re.escape(why)}$"):
+            self.run(monkeypatch, acts)
+        assert acts.calls == [] and acts.emitted == [dict(self.DONE, refused=why)]
+
+    def test_a_say_given_prints_nothing_and_is_handed_the_link(self, monkeypatch, capsys):
+        """The rail's sweep lists the link itself, so its try prints none."""
+        said = []
+        acts = ReadingActs({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, self.HELD)
+        self.run(monkeypatch, acts, say=lambda url, decided: said.append((url, decided)))
+        assert said == [(self.LINK, False)]
+        assert self.LINK not in capsys.readouterr().out
 
     def test_a_card_the_user_has_answered_is_left_and_no_card_follows_it(self, monkeypatch, capsys):
         """card-sessions "A card already approved"."""
         acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "answer": {"approved": True}}, None)}, self.HELD)
         self.run(monkeypatch, acts)
-        assert [t for t, _ in acts.calls] == ["get_request"] and acts.emitted == []
+        assert [t for t, _ in acts.calls] == ["get_request"] and acts.emitted == [self.DONE]
         assert capsys.readouterr().out.splitlines() == [self.LINK, "card land/b1: req_l1 is left as it is: the user has answered it"]
 
     def test_a_bolt_that_does_not_read_proven_is_refused_saying_why_and_nothing_is_started(self, monkeypatch):
@@ -839,12 +879,14 @@ class TestLandingSession:
                                                "reading: unit b has not merged: it is verify$"):
             self.run(monkeypatch, acts, why="unit b has not merged: it is verify")
         assert acts.sessions == []
+        assert acts.emitted == [dict(self.DONE, refused="bolt b1 does not read proven, so its landing card is not raised and has "
+                                                        "no reading: unit b has not merged: it is verify")]
 
     def test_off_its_teams_host_it_is_refused_naming_that_host(self, monkeypatch):
         acts = ReadingActs(entries=self.HELD)
         with pytest.raises(plan.Refusal, match="land/b1's reading session runs on chuck-herdr-alpha, the host of the team holding its bolt"):
             self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
-        assert acts.sessions == []
+        assert acts.sessions == [] and acts.emitted == []
 
     def started(self, monkeypatch, acts, team=TEAM):
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, object(), team))
@@ -868,7 +910,8 @@ class TestLandingSession:
                                                r"and a card's session is a plannotator session; crew card session land/b1 starts "
                                                r"it once that is mended$"):
             self.started(monkeypatch, acts)
-        assert acts.calls == [] and acts.emitted == []
+        assert acts.calls == [] and acts.emitted == [dict(self.DONE, refused="plannotator is not on this host's path, and a "
+                                                                               "card's session is a plannotator session")]
 
     def test_a_wait_with_no_card_held_is_refused_and_starts_nothing(self, monkeypatch):
         """card-sessions "No landing card held"."""
@@ -1111,7 +1154,8 @@ class TestLandingReading:
         acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW, self.ENDED])
         assert self.raised(monkeypatch, acts)[0] == "req_l2"
         card = self.sent(acts)
-        assert "the bolt's conductor starts it with crew card session land/b1, and this card then carries its link." in card["summary"]
+        assert ("crew tries it again when the rail is read, and the bolt's conductor starts it with crew card session land/b1; "
+                "this card then carries its link.") in card["summary"]
         assert card["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
         assert card["context"]["links"] == []
         assert capsys.readouterr().err.splitlines()[-1] == (
