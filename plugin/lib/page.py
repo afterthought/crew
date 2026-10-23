@@ -11,15 +11,21 @@ the fleet page, every partition at once.
                                      outcome, and the bolts it carried with their changes' proposals as its release
                                      notes; written whole to ~/.local/state/crew/<label>/page.html on this host, or to
                                      --out, and its path printed with what it was made from
-  crew page --fleet [--out <file>]   the fleet page: every partition of the teams file at once, a block to each, from
-                                     one read of all of them, the one crew board makes: where it runs, each host and
-                                     the herdr sessions its agents run in with each one's Claude account; its kits,
-                                     each main's last landing and what is queued for it; its teams, each one's bolt,
-                                     slots and what its conductor waits on; and what needs attention; each partition
-                                     a link to its page and each team to its dock there, in the layout of the file:
-                                     <label>.html beside index.html, <label>/page.html beside page.html, none, said
-                                     so, for any other name; written whole to ~/.local/state/crew/page.html, beside
-                                     the partitions' folders, or to --out
+  crew page --fleet [--out <file>]   the fleet page: first its Claude subscriptions, each account a session or a
+                                     reading names, with its five-hour, seven-day and per-model use as the host
+                                     holding its sign-in published it in ~/.local/state/crew/usage/<host>.json, which
+                                     host read it and how long ago, a reading not made marked, and the sessions and
+                                     partitions on it; then every partition of the teams file at once, a block to
+                                     each, from one read of all of them, the one crew board makes: where it runs,
+                                     each host and the herdr sessions its agents run in with each one's Claude
+                                     account; its kits, each main's last landing and what is queued for it; its
+                                     teams, each one's bolt, slots and what its conductor waits on; and what needs
+                                     attention; each partition a link to its page and each team to its dock there,
+                                     in the layout of the file: <label>.html beside index.html, <label>/page.html
+                                     beside page.html, none, said so, for any other name; written whole to
+                                     ~/.local/state/crew/page.html, beside the partitions' folders, or to --out, with
+                                     each published file it could not read printed, and that no use is published
+                                     when none is
 
 The board is the one read crew board makes (board.flow_read), of the one partition. Which objects the lineage holds,
 how they are linked and each one's history are read from the run record's entries alone, by the walk crew trace makes
@@ -28,7 +34,9 @@ the board read, at the commit the entries were read at, which a command fetches 
 (record.3). The deploys are the ops entries of the main level's host and the landings, as ops.environments reads them
 (plan.14), a deploy's release notes the proposals the lineage joins to each bolt it carried. The fleet page is the
 board of every partition from the one read crew board makes of them all, each slot's stage read from the starts and
-ends the run record holds in the board's window (read.5), and each session's account from the hosts file (code.5).
+ends the run record holds in the board's window (read.5), and each session's account from the hosts file (code.5);
+its subscriptions' use is what each host published in this host's ~/.local/state/crew/usage/, which swancloud's
+reader writes and crew only reads, by no ssh and no credential (read.5), beside the work of the sessions on each.
 Each file holds its data, style and script, and loads nothing. Nothing reads it, it is never committed, and making it
 appends no entry (state.4, record.1)."""
 import argparse, datetime, html, json, math, os, pathlib, sys, tempfile
