@@ -2002,12 +2002,35 @@ def landing_preview(fleet, t, label, bolt, card, acts):
 
 
 def landing_held(fleet, t, bolt, words):
-    """A fix started on the bolt holds its landing (record 0031 §1): each landing card its conductor holds, on this, the
-    team's host, withdrawn with "held for a fix: <the fix's words>", acked so when the user answered it; the card is
-    raised again, following it, once the bolt reads proven again (raise_land)."""
+    """A fix started on the bolt holds its landing (record 0031 §1): its landing pull request drafted first, so no merge
+    into the bolt lands it meanwhile (pull_hold, bolt-teams), what crew could not read or mark said on standard error
+    and the fix going on, since the fix is how the bolt is repaired and its merge drafts it before it starts
+    (merge_holds); then each landing card its conductor holds, on this, the team's host, withdrawn with "held for a fix:
+    <the fix's words>", acked so when the user answered it; the card is raised again, following it, once the bolt reads
+    proven again (raise_land)."""
+    try:
+        said = pull_said(bolt, *pull_hold(fleet, t, bolt, "held"), True, t["kit"]["repo"])
+        if said:
+            print(said)
+    except Refusal as e:
+        print(f"{str(e).rstrip('.')}; the fix goes on, and its merge drafts it before it starts", file=sys.stderr)
     owner, (_, outcome, reason) = f"{t['name']}-conductor", landing_act("fix", words=words)
     for key in landing_card_keys(cards.host_entries(record, t["label"], crew.this_host()), bolt, owner):
         row_card_close(fleet, t["label"], owner, key, outcome=outcome, reason=reason)
+
+
+def merge_holds(fleet, t, bolt, what):
+    """A merge into the bolt, a unit's, a chore's or a fix's (what, its name for the words), holds the bolt's landing
+    pull request before it starts (bolt-teams): a ready one drafted (pull_hold, "held") and said, so the merge's move of
+    bolt/<bolt> submits nothing to main; when crew can't read or mark it, the merge does not start, naming the pull
+    request, or the repository it could not list, in gh's words (read.1)."""
+    try:
+        pull, act = pull_hold(fleet, t, bolt, "held")
+    except Refusal as e:
+        fail(f"{what} does not start: {e}")
+    said = pull_said(bolt, pull, act, True, t["kit"]["repo"])
+    if said:
+        print(said)
 
 
 def landing_after_merge(fleet, t, bolt):
@@ -2275,6 +2298,108 @@ def mark_said(code, out, err):
     return ((err or out).strip().splitlines() or [f"exit {code}"])[-1].strip() or f"exit {code}"
 
 
+# A bolt's open pull requests into main on GitHub, on the team's host, listed by gh as sluice's landing opens them,
+# from the bolt's branch: RC, gh's exit, on the first line, then what gh printed; its errors on standard error. It
+# decides nothing (code.7): kit.pull_said reads it.
+PULL = r"""repo=$1 bolt=$2
+out=$(gh pr list -R "$repo" --head "bolt/$bolt" --base main --state open --json number,isDraft,headRefOid,url </dev/null); rc=$?
+echo "RC=$rc"
+printf '%s\n' "$out"
+"""
+
+# A pull request marked a draft (act "draft", gh's --undo) or ready for review (act "ready"), on the team's host: RC,
+# gh's exit, and SAID, gh's last line, base64, as LANDING passes sluice's (kit.pull_marked).
+PULL_MARK = r"""repo=$1 n=$2 act=$3
+undo=(); [ "$act" = draft ] && undo=(--undo)
+out=$(gh pr ready "$n" -R "$repo" "${undo[@]}" 2>&1 </dev/null); rc=$?
+echo "RC=$rc"
+echo "SAID=$(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n 1 | base64 | tr -d '\n')"
+"""
+
+
+def pull_act(pull, want):
+    """What crew does to a bolt's landing pull request (pull, kit.pull_said's, or None) for whether the user's word to
+    land stands for its head (want "live") or not (want "held"): "draft" for a ready one held, "ready" for a draft one
+    live, None when there is none or it is already as wanted. A draft is the one state sluice's intake never submits
+    to main, however the branch moves (bolt-teams)."""
+    if not pull:
+        return None
+    if want == "held":
+        return None if pull["draft"] else "draft"
+    return "ready" if pull["draft"] else None
+
+
+def pull_said(bolt, pull, act, done, repo):
+    """The words crew says of what it did to a bolt's landing pull request (pull_act): nothing when it marked nothing;
+    for one drafted, that no merge into the bolt lands it and the next crew bolt submit on the user's word makes it live
+    again; for one readied, that sluice takes it at the head the bolt has now; and, when gh did not mark it (done, gh's
+    words, in place of True), why, with the command that drafts it, since the next merge would land it, or that nothing
+    is submitted."""
+    if not act:
+        return ""
+    url, n = pull["url"], pull["number"]
+    if done is True:
+        if act == "draft":
+            return (f"Its pull request {url} is a draft, so no merge into bolt/{bolt} lands it; the next crew bolt submit "
+                    f"{bolt}, on the user's word, makes it live again.")
+        return f"Its pull request {url} is ready for review again, so sluice takes it at the head bolt/{bolt} has now."
+    if act == "draft":
+        return (f"crew could not make bolt/{bolt}'s pull request {url} a draft: {done}; until it is one, the next merge "
+                f"into bolt/{bolt} lands it: gh pr ready {n} -R {repo} --undo makes it one.")
+    return (f"crew could not make bolt/{bolt}'s pull request {url} ready for review: {done}; sluice takes no draft into "
+            "main's queue, so nothing is submitted.")
+
+
+def pull_unread(bolt, repo, want, why):
+    """A refusal for a bolt's landing pull request gh could not list (kit.pull_said's, why): with, when it is to be held,
+    the command that drafts it by its branch, since crew can't tell whether the next merge would land it."""
+    if want == "held":
+        return (f"{why}; until bolt/{bolt}'s pull request into main is a draft, the next merge into bolt/{bolt} may land "
+                f"it: gh pr ready bolt/{bolt} -R {repo} --undo makes it one")
+    return f"{why}; nothing is submitted"
+
+
+def pull_hold(fleet, t, bolt, want):
+    """A bolt's landing pull request made to follow the user's word (bolt-teams, plan.16), on the team's host: in a kit
+    whose policy at main now, origin/main after a fetch (POLICY, kit.policy_said, plan.18), takes pull requests
+    (kit.takes_pulls), the bolt's open pull request into main listed (PULL, kit.pull_said), what to do decided
+    (pull_act) and done (PULL_MARK); a kit that takes none, or has no origin, is asked nothing of GitHub. (the pull
+    request or None, the act done or None); refused, marking nothing, when the policy or the pull requests can't be
+    read (pull_unread), and when gh does not mark it (pull_said, read.1)."""
+    name, host, main, repo = t["kit"]["name"], t["machine"], t["kit"]["main"], t["kit"]["repo"]
+    text, ref, _ = kit.policy_said(host_run(fleet, host, POLICY, main, kit.DECLARATION), name, host)
+    if ref != "origin/main" or not kit.takes_pulls(text, f"{name}'s {kit.DECLARATION} on {ref}"):
+        return None, None
+    r = crew.on_machine(fleet, host, ["bash", "-c", PULL, "crew", repo, bolt])
+    first, _, out = r.stdout.partition("\n")
+    m = re.fullmatch(r"RC=(\d+)", first.strip())
+    if r.returncode or not m:
+        said = ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1].strip()
+        fail(pull_unread(bolt, repo, want, f"crew can't list {repo}'s pull requests on {host}: {said}"))
+    try:
+        pull = kit.pull_said(int(m.group(1)), out, r.stderr, repo, bolt)
+    except Refusal as e:
+        fail(pull_unread(bolt, repo, want, str(e)))
+    act = pull_act(pull, want)
+    if act:
+        r = crew.on_machine(fleet, host, ["bash", "-c", PULL_MARK, "crew", repo, str(pull["number"]), act])
+        code, said = kit.pull_marked(r.returncode, r.stdout, r.stderr)
+        code == 0 or fail(pull_said(bolt, pull, act, said or f"gh exited {code}", repo))
+    return pull, act
+
+
+def landing_unheld(fleet, t, bolt, words):
+    """The refusal of a landing that did not land, landing_said's words, once its pull request is drafted (pull_hold,
+    "held"), so no merge into the bolt lands it with no word of the user's: the words, then what was drafted; or, when
+    crew could not draft it, why first, naming the pull request and the command that drafts it (bolt-teams)."""
+    try:
+        pull, act = pull_hold(fleet, t, bolt, "held")
+    except Refusal as e:
+        return f"{str(e).rstrip('.')}. {words}"
+    said = pull_said(bolt, pull, act, True, t["kit"]["repo"])
+    return f"{words} {said}" if said else words
+
+
 def bolt_submit(fleet, a):
     """crew bolt submit <bolt>: main-level ops's landing of a bolt, its branch submitted to its kit's main through
     sluice from a short-lived worktree on the team's host, waiting for sluice's outcome, then the kit's main checkout
@@ -2283,7 +2408,9 @@ def bolt_submit(fleet, a):
     plan.18), the bolt's branch marked landed only once it has (LANDED_MARK), and the landing recorded at the commit main
     now holds; a main now crew can't read before refuses, nothing submitted. Nothing is refused for the host's own main
     lagging GitHub's: sluice forms the landing on GitHub's main and pushes it with a lease (plan.8). It moves no branch
-    itself."""
+    itself. The bolt's landing pull request is live only on the user's word, which this command is (bolt-teams): a draft
+    one is readied before the submission, refusing with nothing submitted when it can't be, and one the landing leaves
+    open is drafted before the command answers that the bolt did not land (landing_unheld)."""
     label, repo, tip, plan = locate(fleet, "Bolt", a.bolt, default_label(fleet, a))
     CONTEXT["label"] = label
     b = plan.bolt(a.bolt)
@@ -2291,14 +2418,19 @@ def bolt_submit(fleet, a):
     name, host, main = t["kit"]["name"], t["machine"], t["kit"]["main"]
     before, why = main_held(name, host, host_run(fleet, host, MAIN, main))
     not why or fail(why)
+    said = pull_said(a.bolt, *pull_hold(fleet, t, a.bolt, "live"), True, t["kit"]["repo"])
+    if said:
+        print(said)
     path = f"{t['kit']['dir']}/places/land-{a.bolt}"
     r = crew.on_machine(fleet, host, ["bash", "-c", LANDING, "crew", main, path, a.bolt, record.who()])
     READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.rstrip(), file=sys.stderr)
-    r.returncode == 0 or fail(f"on {host}: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1])
-    landed, words = landing_said(a.bolt, name, host, r.stdout, before)
-    landed or fail(words)
+    if r.returncode:
+        landed, words = False, f"on {host}: " + ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
+    else:
+        landed, words = landing_said(a.bolt, name, host, r.stdout, before)
+    landed or fail(landing_unheld(fleet, t, a.bolt, words))
     m = crew.on_machine(fleet, host, ["bash", "-c", LANDED_MARK, "crew", main, a.bolt])
     _, words = landing_said(a.bolt, name, host, r.stdout, before, mark_said(m.returncode, m.stdout, m.stderr))
     now, _ = main_held(name, host, r.stdout)
@@ -4728,7 +4860,8 @@ def run_check(fleet, a):
     the prompt carries the amendment's words, read from the mark. Code starts once the change is committed, with no
     review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits until each After
     unit has merged (teams.5), and a unit carried onto its bolt inside another's merge, whose place is gone, has its
-    place made again from the bolt for its merge (teams.17); settle runs only for a unit that has delivered its verify.
+    place made again from the bolt for its merge (teams.17), which holds the bolt's landing pull request first
+    (merge_holds); settle runs only for a unit that has delivered its verify.
     crew chore run asks with --chore, and a chore's stages are chore_check's; a stage asked of the other kind is refused
     naming it (plan.11)."""
     label, repo, tip, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a), "chore" if a.chore else "unit")
@@ -4778,6 +4911,7 @@ def run_check(fleet, a):
         if not s.get("worktree"):  # carried onto the bolt inside another's merge, its place gone: made again from the bolt
             make_place(fleet, t, place, f"unit/{a.unit}", bolt)
         merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "unit", a.unit)
+        merge_holds(fleet, t, bolt, f"unit {a.unit}'s merge into bolt/{bolt}")
         facts = dict(bolt=bolt, merge=merge_command(bolt))
     else:
         facts = {}
@@ -4930,7 +5064,7 @@ def chore_check(fleet, a, label, plan, c):
     bolt, tracking it, and taking the head of each unmerged unit or chore it comes after, as a unit's construct's place
     does, TOOK, plan.13), and the prompt the stage is sent (chore_prompt), as facts for the stage's start, as run_check
     gives a unit's. A merge is refused while a commit of its own lacks the chore's trailer, which is how its merge and
-    its landing are read (plan.11)."""
+    its landing are read (plan.11), and holds the bolt's landing pull request before it starts (merge_holds)."""
     bolt = c.get("Bolt") or fail(f"chore {a.unit} is queued: move it into a bolt first")
     t = bolt_team(fleet, plan.bolt(bolt))
     st_all = Stages(fleet, plan, survey(fleet, [(t["name"], bolt, t["kit"]["name"])]))
@@ -4954,6 +5088,7 @@ def chore_check(fleet, a, label, plan, c):
                           + ", ".join(f"{sha} ({subject})" for sha, subject in loose) + (" does" if len(loose) == 1 else " do")
                           + f" not: run its code again to add the trailer (crew chore run {a.unit} code)")
         merge_carries(fleet, t, plan, st_all.kit(plan.bolt(bolt))[0], bolt, "chore", a.unit)
+        merge_holds(fleet, t, bolt, f"chore {a.unit}'s merge into bolt/{bolt}")
         merge = merge_command(bolt)
     prompt = chore_prompt(a.stage, a.unit, c.get("Intent"), a.words, bolt, merge)
     return dict(PLACE=place, BOLT=bolt, PROMPT=prompt, AMENDED="", ENTRY="",
@@ -5282,9 +5417,9 @@ def place_branch(fleet, t, place):
 def fix_cmd(fleet, a):
     """What crew fix decides before its stage, a.mode start, merge, drop or wait: the fix's bolt (BOLT, fix_bolt, by
     a.bolt while the team holds two) and its kit (REPO), the fix (FIX), its place (PLACE) and the slot holding it, if
-    any (SLOT); for a merge, how it merges into the bolt
-    (MERGE), by a submission to sluice as a unit's does; for a drop, its branch when it is there (BRANCH). A name crew
-    does not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
+    any (SLOT); for a merge, how it merges into the bolt (MERGE), by a submission to sluice as a unit's does, the bolt's
+    landing pull request held first (merge_holds); for a drop, its branch when it is there (BRANCH). A name crew does
+    not mint, a team holding no bolt, and a fix not in flight are refused; a new fix whose branch or place is
     already there (fix.start), a merge from a place not the fix's own (fix.merge), and a drop of a merged fix, of one
     nothing holds or of a place not the fix's own (fix.drop) are refused and recorded (teams.3, teams.5, record
     0028)."""
@@ -5311,6 +5446,7 @@ def fix_cmd(fleet, a):
         elif a.mode == "merge":
             why = own_place(place, *place_branch(fleet, t, place), fix, bolt)
             not why or fail(why)
+            merge_holds(fleet, t, bolt, f"{fix}'s merge into bolt/{bolt}")
             said["MERGE"] = merge_command(bolt)
         elif a.mode == "drop":
             main, there = t["kit"]["main"], os.path.exists(place)

@@ -183,6 +183,67 @@ def bolt_remote(text, branch="bolt/a-bolt", where=DECLARATION):
     return remote if isinstance(remote, str) and remote else None
 
 
+def takes_pulls(text, where=DECLARATION):
+    """Whether a kit's policy takes pull requests into main, as sluice reads it: True when the [branches."<pattern>"]
+    table that matches main, the most specific first, holds a `pull_requests` table, so a landing opens a pull request
+    from the bolt's branch that sluice's intake submits while it is out of draft; False for no policy (text None) or no
+    such table. Refused, naming the file, when it is not TOML or `pull_requests` is not a table (read.1)."""
+    if text is None:
+        return False
+    try:
+        branches = tomllib.loads(text).get("branches", {})
+    except tomllib.TOMLDecodeError as e:
+        crew.fail(f"{where} is not TOML, so crew can't read whether its main takes pull requests: {e}")
+    table = branch_table(branches, "main")
+    pulls = table.get("pull_requests") if table else None
+    if pulls is not None and not isinstance(pulls, dict):
+        crew.fail(f"{where}: [branches.main.pull_requests] is a table, not {type(pulls).__name__}")
+    return pulls is not None
+
+
+# What crew reads of a pull request, as `gh pr list --json number,isDraft,headRefOid,url` prints each (gh 2.102.0,
+# read 2026-10-22 on afterthought/crew), and the key crew keeps it under.
+PULL_FIELDS = (("number", int, "number"), ("isDraft", bool, "draft"), ("headRefOid", str, "head"), ("url", str, "url"))
+
+
+def pull_said(code, out, err, repo, bolt):
+    """The one open pull request from bolt/<bolt> into main on GitHub's repo, from what `gh pr list` printed and its
+    exit: {number, draft, head, url}, or None when there is none. Refused, naming the repository and gh's words, when gh
+    exited non-zero; and when what it printed is not a list of pull requests with those fields, or lists more than one,
+    since crew can't tell which is the landing's (read.1, read.2)."""
+    import json
+    what = f"{repo}'s open pull request from bolt/{bolt} into main"
+    if code != 0:
+        said = ((err or "").strip() or (out or "").strip()).splitlines()
+        crew.fail(f"crew can't read {what}: gh exited {code}: {said[-1].strip() if said else 'gh said nothing'}")
+    try:
+        doc = json.loads(out or "")
+    except ValueError:
+        doc = None
+    sha = re.compile(r"[0-9a-f]{40,64}")
+    ok = lambda p: (isinstance(p, dict) and all(isinstance(p.get(k), t) and (t is bool or not isinstance(p.get(k), bool))
+                                                 for k, t, _ in PULL_FIELDS)
+                    and sha.fullmatch(p["headRefOid"]) and p["url"].startswith("https://"))
+    if not (isinstance(doc, list) and all(ok(p) for p in doc)):
+        crew.fail(f"crew can't read {what} from what gh printed: {(out or '').strip()[:200] or 'nothing'}")
+    if len(doc) > 1:
+        crew.fail(f"crew can't tell {what}: gh lists {len(doc)}, " + " and ".join(p["url"] for p in doc))
+    return {key: doc[0][k] for k, _, key in PULL_FIELDS} if doc else None
+
+
+def pull_marked(code, out, err):
+    """What PULL_MARK said of `gh pr ready`: (gh's exit, gh's last line), or, when it did not run there, (the host's
+    exit, its own words), so a non-zero exit is never read as marked (read.2)."""
+    f = said_of(out)
+    try:
+        if code == 0:
+            return int(f["RC"]), " ".join(base64.b64decode(f["SAID"], validate=True).decode(errors="replace").split())
+    except (KeyError, ValueError, binascii.Error):
+        pass
+    said = ((err or "").strip() or (out or "").strip()).splitlines()
+    return (code or 1), (said[-1].strip() if said else f"exit {code}")
+
+
 def give_remote(text, kit, where=DECLARATION, branch="bolt/a-bolt", ref="origin/main"):
     """The remote a give has sluice make a bolt's branch on (plan.19): the one the kit's policy at its main now names
     for its bolt branches (bolt_remote). Refused, naming the file and the key, when it names none, since crew gives
