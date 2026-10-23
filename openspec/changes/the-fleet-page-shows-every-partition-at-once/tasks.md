@@ -2,8 +2,8 @@
 
 ## 1. The fleet's data
 
-- [ ] 1.1 Every partition of the teams file is on the fleet's data in order, with its plan's commit, what could not be read, and each host it runs on with the sessions its agents run in and each session's Claude account, said so when the hosts file names none (design, Decisions 2; Task notes 1.1); passes `tests/py/test_fleet.py`, verify `tests/suite logic` ends with "0 failed".
-- [ ] 1.2 Each partition's kits carry their main's last landing and what is queued for it, and its teams their bolt, each slot at work, holding or free, how many are at work and what the conductor waits on, with its attention in the board's words (design, Decisions 3 and 4; Task notes 1.2); passes `tests/py/test_fleet.py`, verify `tests/suite logic` ends with "0 failed".
+- [x] 1.1 Every partition of the teams file is on the fleet's data in order, with its plan's commit, what could not be read, and each host it runs on with the sessions its agents run in and each session's Claude account, said so when the hosts file names none (design, Decisions 2; Task notes 1.1); passes `tests/py/test_fleet.py`, verify `tests/suite logic` ends with "0 failed".
+- [x] 1.2 Each partition's kits carry their main's last landing and what is queued for it, and its teams their bolt, each slot at work, holding or free, how many are at work and what the conductor waits on, with its attention in the board's words (design, Decisions 3 and 4; Task notes 1.2); passes `tests/py/test_fleet.py`, verify `tests/suite logic` ends with "0 failed".
 
 ## 2. The page and its links
 
