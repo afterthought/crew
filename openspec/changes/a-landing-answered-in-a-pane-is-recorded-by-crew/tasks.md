@@ -3,7 +3,7 @@
 ## 1. crew reads the word to land as the user's
 
 - [x] 1.1 A batch's and a landing's pane words are refused by one verdict check, `heard_refusal`, and every batch refusal reads as before (design, Decision 2; Task notes 1.1). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_batch_answer.py`.
-- [ ] 1.2 `submit_word_refusal` passes only words crew reads as the user's, and names who said any others, holding none of the words (design, Decision 2; Task notes 1.2). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_pane_landing.py`.
+- [x] 1.2 `submit_word_refusal` passes only words crew reads as the user's, and names who said any others, holding none of the words (design, Decision 2; Task notes 1.2). Verify `devenv shell -- moon run tests:logic` passes `tests/py/test_pane_landing.py`.
 
 ## 2. `crew bolt submit --excerpt` records the word
 

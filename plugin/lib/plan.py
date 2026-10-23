@@ -2086,6 +2086,15 @@ def landing_said(bolt, kit, said):
                    f"again.{kept}")
 
 
+def submit_word_refusal(bolt, v):
+    """Why crew bolt submit --excerpt submits nothing of the bolt (plan.16, briefs.12), or None: the verdict v on the
+    words in the caller's own transcript (transcript.check, want="user") does not read them as the user's (signals.5),
+    naming who said them (heard_refusal), and holding none of the words (record.3). A decision of facts alone
+    (code.7)."""
+    return heard_refusal(f"crew submits nothing of bolt {bolt}", v, "land a bolt",
+                         "lands a bolt on its landing card or in main-level ops's pane")
+
+
 def bolt_submit(fleet, a):
     """crew bolt submit <bolt>: main-level ops's landing of a bolt, its branch submitted to its kit's main through
     sluice from a short-lived worktree on the team's host, waiting for sluice's outcome, then the kit's main checkout
