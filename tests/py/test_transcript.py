@@ -1,5 +1,6 @@
 """What crew reads of a Claude Code transcript, on transcripts written as Claude Code writes them: what an agent's own
-transcript says it still waits on (teams.4), transcript.pending and last_at; a signal's excerpt checked and graded
+transcript says it still waits on (teams.4), transcript.pending and last_at, and whether its turn is over,
+transcript.turn_over; a signal's excerpt checked and graded
 (signals.2, signals.5), transcript.check; and whether a session received a prompt crew sent (teams.15),
 transcript.end and received. A file read is no process, so these are logic cases; that crew pipes transcript.py to
 the agent's host is the journeys'."""
@@ -41,6 +42,36 @@ def test_the_last_record_is_when_the_session_last_wrote(tmp_path):
 def test_a_missing_transcript_is_none_never_an_empty_list(tmp_path):
     assert transcript.pending(tmp_path / "gone.jsonl") is None
     assert transcript.last_at(tmp_path / "gone.jsonl") is None
+    assert transcript.turn_over(tmp_path / "gone.jsonl") is None
+
+
+# Whether the session's turn is over (record 0007): its last message the model's, ending its turn, as Claude Code
+# 2.1.307 writes it, the records that are no message (a stop hook's summary, the cost) after it.
+ENDED = [{"type": "user", "timestamp": "2026-10-23T02:46:10.000Z", "message": {"content": "<command-name>/opsx:verify</command-name>"}},
+         {"type": "assistant", "timestamp": "2026-10-23T02:47:13.236Z", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Nothing to do."}]}},
+         {"type": "system", "subtype": "stop_hook_summary", "timestamp": "2026-10-23T02:47:13.414Z"},
+         {"type": "cost-state", "totalCostUSD": 1}]
+
+
+def test_a_turn_ended_by_the_models_message_is_over_at_its_time(tmp_path):
+    assert transcript.turn_over(write(tmp_path, *ENDED)).isoformat() == "2026-10-23T02:47:13.236000+00:00"
+
+
+def test_a_turn_going_on_is_not_over(tmp_path):
+    working = {"type": "assistant", "timestamp": LONG_AGO, "message": {"stop_reason": "tool_use", "content": [{"type": "tool_use", "name": "Bash"}]}}
+    assert transcript.turn_over(write(tmp_path, ENDED[0], working)) is None
+    assert transcript.turn_over(write(tmp_path, ENDED[0])) is None
+
+
+def test_a_turn_ended_and_then_sent_something_is_not_over(tmp_path):
+    notice = {"type": "user", "timestamp": "2026-10-23T02:50:00.000Z",
+              "message": {"content": "<task-notification>\n<task-id>b8y1gomwj</task-id>\n</task-notification>"}}
+    assert transcript.turn_over(write(tmp_path, *ENDED, notice)) is None
+
+
+def test_a_subagents_message_is_not_the_sessions_turn(tmp_path):
+    sub = {"type": "assistant", "isSidechain": True, "timestamp": LONG_AGO, "message": {"stop_reason": "end_turn"}}
+    assert transcript.turn_over(write(tmp_path, ENDED[0], sub)) is None
 
 
 # What crew reads of a transcript to check a signal's excerpt (signals.2, signals.5), and whether a session received a
