@@ -323,10 +323,12 @@ class TestSlotsAndPlaces:
 
 
 class TestBolts:
-    def test_a_team_holds_its_bolt_until_its_chores_land_and_a_landing_waits_for_them(self):
+    def test_a_team_is_given_no_bolt_until_its_chores_merge_and_a_landing_waits_for_them_to_land(self):
         p = plan.Plan(plan_text(bolts=BOLTS, units=[("a", KIT, TE, []), ("bump", KIT, TE, [], "chore")]))
         stage = {"a": "landed", "bump": "merged"}
-        assert plan.holding("swb-1", p.bolt(TE), p, stage.get) == "swb-1 holds bolt tenant-environments, whose chore bump has not landed (merged)"
+        held = lambda st: [(TE, [(u.name(), plan.kind_of(u), st[u.name()]) for u in p.work_of(TE)], "abc1234", "passed", None)]
+        assert plan.give_refusal("swb-1", held({"a": "landed", "bump": "verify"})) == "bolt tenant-environments's chore bump has not merged (verify)"
+        assert plan.give_refusal("swb-1", held(stage)) is None
         of = lambda u: {"stage": stage[u], "kind": "chore" if u == "bump" else "unit"}
         assert plan.land_refusal(TE, ["a", "bump"], of, [], "wldn") == "chore bump has not landed on main: it is merged"
 

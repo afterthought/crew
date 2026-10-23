@@ -392,11 +392,7 @@ def renew(fleet, a):
     moved = crew.branch_due(started, branch)[1] if branch is not crew.UNREAD else None
     notice = renew_notice(started.get("version"), version, changes_for(started.get("commit"), commit) + ([moved] if moved else []))
     if isinstance(agents, crew.Team) and role == "conductor":
-        try:
-            amended = plan.amended_units(fleet, agents.t)
-        except Refusal:
-            amended = ""
-        crew.greet(fleet, agents.t["name"], first=f"{notice} {amended} ".replace("  ", " "))
+        plan.greeted(plan.greet_team(fleet, agents.t, ["conductor"], notice=notice))
     elif role in agents.fresh:  # it had no conversation to pick up, so it is greeted as any fresh start is
         plan.greeted(plan.greet_team(fleet, agents.t, [role]) if isinstance(agents, crew.Team) else plan.greeting(fleet, agents, [role]))
     else:

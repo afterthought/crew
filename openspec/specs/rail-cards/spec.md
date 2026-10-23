@@ -210,7 +210,7 @@ A card act Pending You refuses SHALL be refused in Pending You's own words and r
 - **THEN** the offer is recorded, no card posts, and the command says this computer is not signed in to Pending You
 
 ### Requirement: The landing card is posted once the bolt's verification is green
-crew SHALL raise a bolt's landing card once every unit and chore of the bolt has merged, every unit's latest change has been in a batch whose card the user has answered, sluice's verdict at its head is green and no fix of it is in flight, none whose place stands that has neither merged nor been dropped, keyed `land/<bolt>`, as an `approve` of risk high, not reversible, because irreversible, its summary giving the counts, the batches, the verdict and when, and how far main has moved, its face a text artifact "What lands: N units, M chores" naming each one a line, its rationale what follows, and, when sluice's submission at the head has a pull request on GitHub, that pull request as a `url` artifact and among its links; it SHALL ask only for the landing. A note naming a defect SHALL have the conductor start a fix on the bolt, which withdraws the card, and the card SHALL be raised again once the bolt reads proven again.
+crew SHALL raise a bolt's landing card once every unit and chore of the bolt has merged, every unit's latest change has been in a batch whose card the user has answered, sluice's verdict at its head is green and no fix of it is in flight, none whose place stands that has neither merged nor been dropped, keyed `land/<bolt>`, as an `approve` of risk high, not reversible, because irreversible, its summary giving the counts, the batches, the verdict and when, how far main has moved, and, when its team holds another bolt that is proven too, the team's next planned bolt that a yes frees it for, or that nothing is planned for it; its face a text artifact "What lands: N units, M chores" naming each one a line, its rationale what follows, and, when sluice's submission at the head has a pull request on GitHub, that pull request as a `url` artifact and among its links; it SHALL ask only for the landing. When a merge makes the team's other bolt proven while the card waits on the user, the card SHALL be changed to say what a yes frees. A note naming a defect SHALL have the conductor start a fix on the bolt, which withdraws the card, and the card SHALL be raised again once the bolt reads proven again.
 
 #### Scenario: Sluice's pull request
 - **WHEN** sluice's submission at `y`'s head has pull request #23 on the kit's GitHub
@@ -223,6 +223,10 @@ crew SHALL raise a bolt's landing card once every unit and chore of the bolt has
 #### Scenario: A green bolt
 - **WHEN** every unit and chore of bolt `y` has merged, each unit's latest change has been in a batch the user has answered and sluice is green at `abc1234`
 - **THEN** one card keyed `land/y` is open, an approve of risk high, naming the units and chores and the verdict
+
+#### Scenario: A yes frees the team for its next bolt
+- **WHEN** swc-1's card `land/y` waits on the user, and the last unit of swc-1's other bolt `z` merges with sluice green at its head, and `d` is the next planned bolt of swc-1's kit
+- **THEN** `land/y` is changed in place, its summary saying a yes frees swc-1 for `d`
 
 #### Scenario: A fix in flight holds the card
 - **WHEN** every unit and chore of bolt `y` has merged, each unit's latest change has been in a batch the user has answered and sluice is green at its head, but `fix/y/gap`, started on `y`, has neither merged nor been dropped

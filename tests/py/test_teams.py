@@ -6,6 +6,7 @@ crew.dispatch_place and crew.operator_session for where those run, crew.tab_hold
 crew.dead_said for a pane herdr lists with no terminal behind it and crew.opens_at for where a pane opens again,
 crew.last_conversation for where a role resumes,
 crew.brief_due and crew.brief_role for the brief a session herdr resumed is given back at a compaction,
+crew.main_named and crew.identity_withheld for whether a main level's agent herdr resumed gets its identity back on this host,
 plan.amended_said for what a conductor brought back is told, and what crew up, restart, resume, clear and needs decide
 before they act. Starting, greeting, reviving and taking them down through the command are the teams journey's
 (t-journey-teams, t-journey-main)."""
@@ -229,6 +230,32 @@ class TestTeamGreetings:
             "one line, then wait until your conductor or I tell you what is needed.")
         assert "your team holds no bolt. Nothing is asked of you now" in crew.ops_greeting("crw-2", None)
 
+    def test_a_conductor_of_a_team_holding_two_bolts_is_told_both_its_landing_card_and_each_fix_in_flight(self):
+        """A give beside a waiting bolt restarts the conductor fresh at its next stop (teams.16)."""
+        assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", ("land/doctor-rows", "req_7"), ["take-main"]) == (
+            "Your team now builds the bolt ssh-fix. Bolt doctor-rows waits to land; its landing card land/doctor-rows is "
+            "yours: call get_request (requestId req_7, name swc-1-conductor), then run crew card wait land/doctor-rows in "
+            "the background. Fix take-main is in flight on it: wait on it with crew fix swc-1 take-main --wait --bolt doctor-rows.")
+
+    def test_with_no_card_or_fix_it_names_both_bolts_and_a_kit_not_read_is_said(self):
+        assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", None, []) == "Your team now builds the bolt ssh-fix. Bolt doctor-rows waits to land."
+        assert plan.two_bolts_said("swc-1", "ssh-fix", "doctor-rows", None, None, "box did not answer").endswith(
+            "waits to land. crew could not read its fixes (box did not answer): read crew status swc-1.")
+
+    def test_status_names_the_bolt_a_team_builds_and_the_one_waiting_to_land(self):
+        assert plan.two_held_said("swc-1", "ssh-fix", "doctor-rows") == "swc-1 builds ssh-fix; doctor-rows waits to land"
+
+    def test_a_give_beside_a_waiting_bolt_says_its_roles_start_again_at_their_next_stop(self):
+        assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 0, "") == (
+            "swc-1-conductor and swc-1-ops start again on bolt/ssh-fix at their next stop")
+        assert plan.given_beside("swc-1", "ssh-fix", ["ops"], 0, "") == "swc-1-ops starts again on bolt/ssh-fix at its next stop"
+        assert plan.given_beside("swc-1", "ssh-fix", ["conductor", "ops"], 255, "") == (
+            "swc-1's host did not answer: swc-1-conductor and swc-1-ops carry bolt/ssh-fix once next started")
+
+    def test_ops_of_a_team_holding_two_bolts_is_told_the_one_it_builds_and_the_one_waiting(self):
+        assert crew.ops_greeting("swc-1", "ssh-fix", waiting="doctor-rows").startswith(
+            "You are swc-1's ops; your team builds the bolt ssh-fix. Bolt doctor-rows waits to land. Nothing is asked of you now")
+
     def test_a_plan_crew_could_not_read_is_said_rather_than_no_bolt(self):
         said = crew.ops_greeting("crw-2", None, "wldn/main of afterthought/crew-state could not be read:\nfatal: unable to access")
         assert "crew could not read which bolt your team holds (wldn/main of afterthought/crew-state could not be read: fatal: " \
@@ -422,6 +449,39 @@ class TestBriefBack:
         first, rest = said.split("\n\n", 1)
         assert first.startswith("[crew] This is your brief as swb-1-conductor") and "read that file whole now" in first
         assert rest == "You are swb-1's conductor.\n\nKeep the bolt moving."
+
+
+class TestIdentityOnItsHost:
+    """A main level's agent herdr resumed gets its identity back only on its main level's host (main-level)."""
+
+    @pytest.mark.parametrize("name, role", [("wldn-design", "design"), ("wldn-planner", "planner"), ("wldn-ops", "ops"),
+                                            ("wldn-operator", "operator"), ("wldn-reviewer", "reviewer")])
+    def test_a_main_levels_agent_is_told_from_its_record_alone(self, name, role):
+        assert crew.main_named(name, "wldn") == role
+
+    @pytest.mark.parametrize("name, label", [("swb-1-conductor", "wldn"), ("wldn-dispatch-chuck-herdr-alpha", "wldn"),
+                                             ("madswan-planner", "wldn"), ("wldn-planner", ""), ("wldn-planner", None),
+                                             ("", "wldn")])
+    def test_a_teams_agent_a_dispatcher_another_partitions_or_an_unlabelled_record_is_none(self, name, label):
+        assert crew.main_named(name, label) is None
+
+    def test_on_its_main_levels_host_nothing_is_withheld(self):
+        assert crew.identity_withheld("wldn-planner", "wldn", BOX, BOX) is None
+
+    def test_on_another_host_it_is_told_where_the_main_level_runs_and_that_it_is_no_agent_of_crews(self):
+        said = crew.identity_withheld("wldn-planner", "wldn", "mac-studio", BOX)
+        assert said.startswith("[crew] This session was wldn-planner, and crew gives it no identity here: ")
+        assert crew.main_elsewhere_said("wldn-planner", "wldn", BOX, "mac-studio") in said
+        assert "wldn's main level runs on chuck-herdr-alpha, not mac-studio, and crew starts wldn-planner only there" in said
+        assert "no agent of crew's" in said and "run no crew command" in said and "wait for the user" in said
+
+    def test_a_teams_file_crew_cant_read_withholds_it_and_says_why(self):
+        said = crew.identity_withheld("wldn-planner", "wldn", BOX, None, unread="/h/.config/crew/teams.json is missing; the machine's configuration writes it")
+        assert said.startswith("[crew] This session was wldn-planner, and crew gives it no identity here: it can't tell "
+                               "where wldn's main level runs, /h/.config/crew/teams.json is missing; the machine's configuration writes it. ")
+        assert "no agent of crew's" in said
+        said = crew.identity_withheld("wldn-planner", "wldn", BOX, BOX, unread="crew has done nothing.")
+        assert "runs, crew has done nothing. In this session" in said
 
 
 class TestAmended:
