@@ -51,5 +51,6 @@ tests/py/test_proposal_card.py
 tests/py/test_rail.py
 tests/t-journey-review.sh
 tests/t-briefs.sh
+tests/t-cards.sh
 tests/moon.yml
 ```
