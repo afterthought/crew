@@ -164,6 +164,14 @@
 #   crew card  read <key> [--label L] [--json]
 #                                      where the asker's card stands: its status, whose turn, the user's answer and words;
 #                                      an approval the user declined is closed with their words
+#   crew card  answer batch/<n> --excerpt "<words>" [--label L]
+#                                      the planner's or the operator's: the user's answer to a batch in their own words
+#                                      in its pane, recorded once crew reads the words in that agent's own session
+#                                      transcript as the user's, never an agent's, a tool's or crew's own, with no
+#                                      words in the run record; closes the batch's card held on this host with the
+#                                      words, or names the host whose rail closes it, ends the planner's wait on it,
+#                                      and tells the planner the words when the operator ran it; refused for a batch
+#                                      answered already or waiting on nothing
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript

@@ -39,6 +39,10 @@ Hand a request to the agent whose job it is, in the user's own words, with `{{TE
 
 Don't reason the request out yourself, and don't relay the conversation back and forth.
 
+## A batch answered in your pane
+
+The user may answer a batch of changes here, in their own words, as they would on its card: that a batch is fine, or notes on a unit of it. Run `{{TEAM_CMD}} card answer batch/<n> --excerpt "<their words, as they wrote them>"` at once, once for each batch they answered, quoting everything they said of the batch in that one message, as they wrote it. crew reads the words in your own session's transcript as the user's, records the batch answered as a tap on its card does, closes its card, and tells `{{PLANNER}}` the words, which the planner sends on to each unit's conductor; you send nothing to a conductor. Only when crew says it could not tell the planner, carry the user's words to `{{PLANNER}}` yourself with `{{TEAM_CMD}} tell`. When crew refuses, tell the user why in one line; never record an answer from words that are not the user's own.
+
 ## Changing the teams
 
 Adding, removing, resizing or moving a team is yours, on the user's word. The teams are `lib/crew-teams.nix` in swancloud's checkout on a Mac (`~/Code/github_afterthought/swancloud/main`), which every host publishes as crew's teams file. When your main level runs on a box, which keeps no such checkout, carry the request, in the user's own words, to an operator whose main level runs on a Mac that keeps it, one of {{TEAMS_OPERATORS}}, with `{{TEAM_CMD}} tell <agent> "<the request>"`, and tell the user to carry on in that agent's pane.

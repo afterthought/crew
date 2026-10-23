@@ -8,7 +8,7 @@ import datetime
 
 import pytest
 
-from facts import START, card_closed, constructed, plan_of, reviewed, told
+from facts import START, at, card_closed, constructed, plan_of, reviewed, told
 
 import plan
 
@@ -86,6 +86,47 @@ class TestAnswered:
             {"Act": "card.post", "Key": k, "Card": f"req_{k}", "At": "2026-10-12T10:11:00Z", "On": []} for k in ("batch/3-1", "batch/3-2")]
         entries.append(card_closed("batch/3-1", "req_batch/3-1", 20))
         assert plan.awaiting_answer(entries) == {"u5": 3, "u6": 3}
+
+
+def pane_answer(n, by="swancloud-planner", at="2026-10-22T20:17:04Z", refused=None):
+    """A run-record entry: batch n answered in the user's own words in by's pane, as crew card answer records it."""
+    return {"Act": "batch.answer", "On": [f"batch/{n}"], "Key": f"batch/{n}", "Batch": str(n), "Chars": "28", "By": by, "At": at,
+            "From": [f"session/s-1/u-{n}"], "Refused": refused}
+
+
+class TestPaneAnswer:
+    """A batch is answered by the user's own words in a main-level pane (review-batches; record 0031 as amended
+    2026-10-22): the answer closes every key of its batch for good, as a tap closes its card."""
+
+    HELD = [constructed("x1", "bbb1"), reviewed(13, [("x1", "swb-1", "bbb1")], 10),
+            {"Act": "card.post", "Key": "batch/13", "Card": "req_13", "At": at(11), "On": ["batch/13"]}]
+
+    def test_an_answer_in_a_pane_closes_its_batch(self):
+        assert plan.batch_closed(self.HELD + [pane_answer(13)]) == {"batch/13"}
+
+    def test_a_card_posted_under_its_key_after_the_answer_leaves_it_closed(self):
+        entries = self.HELD + [pane_answer(13), {"Act": "card.post", "Key": "batch/13", "Card": "req_14", "At": at(30), "On": ["batch/13"]}]
+        assert plan.batch_closed(entries) == {"batch/13"}
+
+    def test_an_answer_of_a_batch_posted_as_cards_of_five_before_closes_each_card(self):
+        posts = [{"Act": "card.post", "Key": k, "Card": f"req_{k}", "At": at(11), "On": []} for k in ("batch/6-1", "batch/6-2")]
+        assert plan.batch_closed(posts + [pane_answer(6)]) == {"batch/6", "batch/6-1", "batch/6-2"}
+
+    def test_a_refused_answer_closes_nothing(self):
+        assert plan.batch_closed(self.HELD + [pane_answer(13, refused="the words are the agent's own")]) == set()
+        assert plan.awaiting_answer(self.HELD + [pane_answer(13, refused="x")]) == {"x1": 13}
+
+    def test_the_units_of_a_batch_answered_in_a_pane_wait_on_nothing(self):
+        assert plan.awaiting_answer(self.HELD) == {"x1": 13}
+        assert plan.awaiting_answer(self.HELD + [pane_answer(13)]) == {}
+
+    def test_its_card_is_closed_answered_naming_whose_pane_and_when(self):
+        assert plan.row_gone("batch/13", self.HELD + [pane_answer(13)]) == ("Answered in swancloud-planner's pane at 20:17Z", None)
+        assert plan.pane_answered(self.HELD + [pane_answer(13), pane_answer(13, by="swancloud-operator", at="2026-10-22T20:19:00Z")]) == {
+            "batch/13": ("swancloud-planner", "2026-10-22T20:17:04Z")}
+
+    def test_no_card_is_raised_again_for_a_batch_answered_in_a_pane(self):
+        assert plan.batch_facts(13, self.HELD + [pane_answer(13)], "## x1\n\nIt works.", {}) is None
 
 
 def landed(bolt, units, minutes=0, refused=None):

@@ -253,9 +253,13 @@ has "$out" "never hand the user a deploy command"; has "$out" "deploys by hand o
 for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
 for want in "/crew page wldn\`" "open the file it prints in terminal-browser beside your pane" \
   "on a box, give the user the path and say it opens from a Mac" "say as of when the page is, and name any host it could not read"; do has "$out" "$want"; done
+for want in "## A batch answered in your pane" "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once" \
+  "records the batch answered as a tap on its card does, closes its card, and tells \`wldn-planner\` the words" \
+  "you send nothing to a conductor" "Only when crew says it could not tell the planner, carry the user's words to \`wldn-planner\` yourself" \
+  "never record an answer from words that are not the user's own"; do has "$out" "$want"; done
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
-ok "the operator brief prints for wldn, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
+ok "the operator brief prints for wldn, recording a batch answered in its pane, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
 
 # Every brief says who is speaking in the agent's pane; the six that record findings say how, with the excerpt, and
 # where crew writes the signal.
@@ -450,14 +454,20 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "You start no session for a batch, and post, change and close no batch card: crew does." \
   "at once, word for word, to the conductor of each unit it speaks of" \
   "go to every unit's conductor, saying they named no unit you could tell" \
-  "Never split, reword or summarize the user's words" "you never run a stage" "Never answer a batch card yourself" \
+  "Never split, reword or summarize the user's words" "you never run a stage" \
+  "Never answer a batch yourself: only the user's own words in your pane answer it, beside their card and its reading session." \
+  "When an agent tells you the user's answer, tell it the user answers on the card or in your pane, and record nothing" \
+  "It returns too once the batch is answered in your pane or the operator's (step 4), saying in whose, without the words." \
+  "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once, once for each batch they answered" \
+  "crew reads the words in your own session's transcript as the user's and records the batch answered, as a tap on its card does" \
+  "When crew tells you a batch was answered in the operator's pane, with the user's words, send those as step 3 does too." \
   "a bolt lands only once each of its changes has been in a batch whose card the user has answered" \
   "posted before crew raised one card per batch, is yours as it was" \
   "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back"; do
   has "$out" "$want"
 done
 for gone in "of at most five units" "which need notes?" "one in words for the notes" "A unit not picked is fine" \
-  "An unanswered batch card holds nothing" \
+  "An unanswered batch card holds nothing" "Never answer a batch card yourself" \
   "card session batch/<n> <unit>" "card session batch/<n>-<k> <unit>" "send each picked unit's notes" "once for each of its units" \
   "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
   "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \

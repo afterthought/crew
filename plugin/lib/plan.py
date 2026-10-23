@@ -28,6 +28,12 @@ five times. A write that changes several files is one commit, and it carries the
                                              a batch card's one per unit on that unit's team's host; the user's decision
                                              in it, waited for, a landing's reading started first when none runs while
                                              its conductor holds the card; and its end, which a card's close brings too
+  crew card answer batch/<n> --excerpt "<words>"
+                                             the user's answer to a batch in their own words in the planner's or the
+                                             operator's pane, recorded once crew reads the words in that agent's own
+                                             transcript as the user's, no words in the run record: the batch's card
+                                             closed with them, the planner's wait on it ended, and the planner told
+                                             them when the operator ran it
   crew bolt new <bolt> "<goal>" --repo <kit> [--source S]... [--before <bolt>]
   crew bolt give <team> [<bolt>]             the team takes the bolt (default: the first planned in its kit)
   crew bolt order <bolt> --before <bolt>|--first|--last
@@ -8067,7 +8073,8 @@ def batch_closed(entries):
     is a card.close, not refused and not lost to its owner, once the user sent the card back with a tap or sent its
     reading session, or closed it in Pending You. A card posted under the key after it, one followed or raised again,
     opens the key again, and a close as lost leaves it open for its card posted again; a refused post or close changes
-    nothing, since Pending You did neither."""
+    nothing, since Pending You did neither. A batch the user answered in a main-level pane (pane_answered) has every key
+    of it closed for good, whatever card is posted under one after, in whichever order the hosts' entries came."""
     closed = set()
     for e in entries:
         key = e.get("Key") or ""
@@ -8077,7 +8084,30 @@ def batch_closed(entries):
             closed.discard(key)
         elif e.get("Act") == "card.close":
             closed.add(key)
-    return closed
+    return closed | set(pane_answered(entries))
+
+
+def pane_answered(entries):
+    """Each batch card key of a batch the user answered in their own words in a main-level pane, a batch.answer not
+    refused (crew card answer), as {key: (who recorded it, when)}: batch/<n>, and every batch/<n>-<k> any entry is
+    under, a card of a batch posted as cards of five before. The first answer of a batch is its answer."""
+    answered = {}
+    for e in entries:
+        if e.get("Act") == "batch.answer" and not e.get("Refused") and (e.get("Batch") or "").isdigit():
+            answered.setdefault(int(e["Batch"]), (e.get("By"), e.get("At")))
+    keys = {e.get("Key") for e in entries if (e.get("Key") or "").startswith("batch/")}
+    out = {f"batch/{n}": by for n, by in answered.items()}
+    for k in keys:
+        m = re.fullmatch(r"batch/(\d+)-\d+", k)
+        if m and int(m.group(1)) in answered:
+            out[k] = answered[int(m.group(1))]
+    return out
+
+
+def pane_said(by, at):
+    """Where and when a batch was answered in a pane, as pane_answered gives it: "answered in <agent>'s pane at
+    <HH:MM>Z"."""
+    return f"answered in {by}'s pane at {(at or '')[11:16]}Z"
 
 
 def batch_settled(entries):
@@ -8679,9 +8709,10 @@ CARD_RETRY = 600
 
 def row_gone(key, entries):
     """Why a row's card has no row now, from the run record's entries, oldest first: (outcome, None) when the event
-    that ends its row was recorded, so its card is closed with what was done, a proposal applied or a bolt landed;
-    else (None, reason), its card withdrawn with why, a proposal or a bolt dropped among them, and a batch that waits on
-    nothing with the words of crew's close (batch_settled)."""
+    that ends its row was recorded, so its card is closed with what was done, a proposal applied, a bolt landed or a
+    batch answered in a main-level pane, in whose and when (pane_answered); else (None, reason), its card withdrawn
+    with why, a proposal or a bolt dropped among them, and a batch that waits on nothing with the words of crew's close
+    (batch_settled)."""
     kind, _, rest = (key or "").partition("/")
     thing, _, head = rest.partition("/")
 
@@ -8696,6 +8727,10 @@ def row_gone(key, entries):
         return (("its bolt landed", None) if act == "bolt.land" else
                 (None, "its bolt was dropped" if act == "bolt.drop" else
                  "its bolt no longer waits to land" + (f" at {head}" if head else "")))
+    answered = pane_answered(entries) if kind == "batch" else {}
+    if key in answered:
+        said = pane_said(*answered[key])
+        return said[0].upper() + said[1:], None
     settled = batch_settled(entries) if kind == "batch" else {}
     if key in settled:
         return None, settled[key]
@@ -9751,8 +9786,10 @@ def batch_wait(fleet, label, key, d, acts=None):
     seconds, the session's result every CARD_POLL. It prints what batch_waited gives, the card's note and every
     annotation as the user wrote them, and closes the card with the outcome, which ends the session (row_card_close); a
     word given while nobody waited is returned at once. A card closed outside crew is recorded closed as Pending You
-    shows it, and the session ended. A session closed or ended with no decision leaves the wait on the card, said
-    once; a card lost to its owner is recorded lost, leaving the wait on the session; a session crew ended, as its card
+    shows it, and the session ended. A batch answered in a main-level pane (pane_answered), read in this host's run
+    record each round before the card, ends the wait, saying in whose pane and when and never the words, which the
+    planner has from crew card answer: its card is closed answered and the session ended. A session closed or ended
+    with no decision leaves the wait on the card, said once; a card lost to its owner is recorded lost, leaving the wait on the session; a session crew ended, as its card
     closed, ends the wait. Refused with neither a card nor a session of the batch on this host."""
     acts = acts or CardActs(fleet)
     here = acts.host()
@@ -9769,6 +9806,15 @@ def batch_wait(fleet, label, key, d, acts=None):
             said.add(words)
             print(words, file=sys.stderr)
     while True:
+        answer = pane_answered(acts.entries(label)).get(key)
+        if answer:  # the user answered it in a main-level pane, whose agent sends the words on (crew card answer)
+            said = pane_said(*answer)
+            print(f"{key}: {said}")
+            row_card_close(fleet, label, owner, key, outcome=said[0].upper() + said[1:], acts=acts)
+            ended = acts.end(label, key)  # a close Pending You refused leaves the session to end here
+            if ended:
+                print(ended)
+            return
         s, decided = card_recorded(d), card_result(d)
         if card and time.monotonic() >= due:
             due = time.monotonic() + CARD_READ
@@ -10010,6 +10056,100 @@ def card_read(fleet, a):
         record.emit(label, "card.close", [cards.row_object(a.key) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
         print(f"card {a.key}: {card} closed, as the user declined it")
+
+
+# ------------------------------------------------------------------------------------- a batch answered in a pane
+
+ANSWERERS = ("planner", "operator")  # the main-level roles in whose pane the user answers a batch (briefs.12)
+
+
+def pane_answer_refusal(n, entries, v, kind):
+    """Why crew card answer records no answer of batch n (review-batches, briefs.12), or None: the caller is not the
+    partition's planner or operator, whose kind it is (role); the run record's entries, oldest first, hold no batch n;
+    a card key of it is closed (batch_closed), by a tap, its reading session's send or a pane, naming in whose pane and
+    when for a pane's (pane_answered); every card of it waits on nothing (batch_settled); or the verdict v on the words
+    in the caller's own transcript (transcript.check, want="user") does not read them as the user's (signals.5), naming
+    who said them. A decision of facts alone (code.7)."""
+    head = f"crew records no answer of batch {n}"
+    if kind not in ANSWERERS:
+        return (f"{head}: only the planner and the operator record a batch the user answered in their pane, in the "
+                "user's own words; the user answers a batch on its card or in one of those two panes")
+    made = [units for m, _, units in batches(entries) if m == n]
+    if not made:
+        return f"{head}: the run record holds no batch {n}"
+    keys = [k for k, _ in batch_cards(n, made[-1], batch_posts(entries))]
+    closed, answered = batch_closed(entries), pane_answered(entries)
+    done = [k for k in keys if k in closed]
+    if done:
+        how = pane_said(*answered[done[0]]) if done[0] in answered else "answered on its card or in its reading session"
+        return f"{head}: batch {n} was {how} already"
+    settled = batch_settled(entries)
+    if all(k in settled for k in keys):
+        return f"{head}: {settled[keys[0]]}"
+    if v.grade == "verified" and v.asserted_by == "user":
+        return None
+    if v.grade == "unverified":
+        return f"{head}: crew can't read your session's transcript, so it can't tell the words are the user's: {v.reason}"
+    if v.grade == "refused":
+        return (f"{head}: the words are not in a record your session received; only the user's own words answer a batch, "
+                "quoted as they wrote them in your pane, never your own")
+    if v.grade == "found":
+        return f"{head}: the words are in a record of your transcript crew can't read as anyone's, so it can't tell they are the user's"
+    if v.asserted_by.startswith("agent:"):
+        other = v.asserted_by[6:]
+        return (f"{head}: the words are {other}'s, passed on with crew tell, and not the user's; tell {other} that the user "
+                "answers a batch on its card or in your pane")
+    return f"{head}: the words are " + ("crew's own message" if v.asserted_by == "crew" else "a tool's output") + ", not the user's"
+
+
+def answer_said(n, by, words):
+    """What crew card answer tells the planner when the operator recorded the answer (review-batches, "Notes reach the
+    unit's conductor"): the batch, whose pane, and the user's words whole, to send on as a batch's notes."""
+    return (f'Batch {n} was answered in {by}\'s pane: "{words}". Send each unit\'s part to its conductor, as you send a '
+            "batch's notes.")
+
+
+def batch_answer(fleet, a, acts=None):
+    """crew card answer batch/<n> --excerpt "<words>" [--label L]: the user's answer to batch n in their own words in
+    the caller's pane, the planner's or the operator's, recorded once crew reads the words in the caller's own session
+    transcript on this host as the user's (pane_answer_refusal). Run on this host, never forwarded, since the
+    transcript is here. One batch.answer entry on batch/<n>, naming the batch, the transcript record the words were
+    read from and their length, never the words (record.3); then the planner's card of the batch held on this host
+    closed answered with the words, its reading session ended with it (row_card_close), or, with none held here, the
+    host the card was posted from named, whose rail's sweep closes it; and, when the operator ran it, the planner told
+    the words, crew's tell, to send on as the batch's notes. Refused for any key but batch/<n>."""
+    acts = acts or CardActs(fleet)
+    m = re.fullmatch(r"batch/(\d+)", a.key or "") or fail(
+        f"crew card answer records a batch's answer, under its key batch/<n>, not {a.key}")
+    n, key, words = int(m.group(1)), a.key, a.excerpt
+    words.strip() or fail("crew card answer needs the user's words: --excerpt \"<their words, as they wrote them>\"")
+    who = acts.caller()
+    kind, label = role(fleet, who)
+    entries, v, sid = [], None, None
+    if kind in ANSWERERS:
+        a.label in (None, label) or fail(f"{who} answers {label}'s batches, not {a.label}'s")
+        CONTEXT["label"] = label
+        v, sid = acts.heard(words)
+        entries = acts.partition(label)
+    why = pane_answer_refusal(n, entries, v, kind)
+    not why or fail(why)
+    rid = v.uuid or f"line-{v.line_hash()[:16]}"
+    acts.emit(label, "batch.answer", [key], frm=[f"session/{sid}/{rid}"], Key=key, Batch=str(n), Chars=len(words))
+    print(f"batch {n} answered in {who}'s pane" + (f":\n{words}" if kind == "planner" else ""))
+    owner, here = f"{label}-planner", acts.host()
+    held = cards.card_under(acts.entries(label), key, owner)
+    row_card_close(fleet, label, owner, key, outcome=f"Answered in {who}'s pane", said=f"Answered in {who}'s pane: {words}", acts=acts)
+    if not held:
+        posted = [e for e in entries if e.get("Act") == "card.post" and e.get("Key") == key and e.get("Card") and not e.get("Refused")]
+        there = posted[-1].get("Host") if posted else None
+        print(f"card {key}: its card was posted from {there}, whose rail's sweep closes it answered" if there and there != here
+              else f"card {key}: no card of it is held on any host")
+    if kind == "operator":
+        if acts.tell(owner, answer_said(n, who, words)):
+            print(f"{owner} was told the user's words, to send each unit's part to its conductor")
+        else:
+            print(f"crew could not tell {owner} the user's words, and batch {n} stands answered: tell {owner} them "
+                  "yourself with crew tell, as the user wrote them")
 
 
 # ----------------------------------------------------------------------------------------- a landing's preview
@@ -10351,6 +10491,16 @@ class CardActs:
     def caller(self):
         return agent()
 
+    def heard(self, words):
+        """The verdict on the words in the caller's own Claude session's transcript on this host, preferring the
+        user's record of them (transcript.check, want="user"), and the session's id."""
+        sid, elsewhere = session_here(record.session(), crew.this_host())
+        return (transcript.unverified(elsewhere) if elsewhere else transcript.check(sid, words, want="user")), sid
+
+    def partition(self, label):
+        """The partition's run record whole, from BATCH_DAYS back, refused naming what did not answer (read.1)."""
+        return partition_entries(self.fleet, label)
+
 
 CARD_LATER = "The event stands, and its card is not posted."
 # A card the user answered before its thing changed, as its close is recorded: its note, the user's to read, is on the
@@ -10628,17 +10778,18 @@ def row_card_change(fleet, label, owner, build, facts, note, where, acts=None, k
     return card
 
 
-def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None):
+def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=None, said=None):
     """The act that closes a card of crew's own at the event that ends it (record 0031 §1): the card the owner holds
     under the row's key on this host, acked with the outcome once the user answered it, else withdrawn with the
     reason, or the outcome; recorded with how it closed. A card Pending You no longer finds is recorded lost, and a
     refusal said and recorded as the close refused, neither refusing the event. The key's reading session on this
     host ends with the card, closed, lost or held by nobody, and stays while a refused close leaves the card open
     (card-sessions); a landing's preview crew asked for is released whatever became of the card, since the event that
-    closes it, the bolt landed or held for a fix, is over that head (rail-cards). The card's id, or None when none was
-    closed."""
+    closes it, the bolt landed or held for a fix, is over that head (rail-cards). said, when given, is what Pending You
+    is sent in place of the outcome, words the run record does not keep (record.3). The card's id, or None when none
+    was closed."""
     acts = acts or CardActs(fleet)
-    card = card_closed(acts, label, owner, key, outcome, reason)
+    card = card_closed(acts, label, owner, key, outcome, reason, said)
     if card is not False and key.split("/")[0] in READING:
         said = acts.end(label, key)
         if said:
@@ -10650,9 +10801,10 @@ def row_card_close(fleet, label, owner, key, outcome=None, reason=None, acts=Non
     return card or None
 
 
-def card_closed(acts, label, owner, key, outcome, reason):
+def card_closed(acts, label, owner, key, outcome, reason, said=None):
     """row_card_close's close in Pending You: the card's id once closed, None when none was held or it was lost, and
-    False when the close was refused, so the card stays open."""
+    False when the close was refused, so the card stays open. said is sent in place of the outcome, and the outcome
+    recorded."""
     obj = cards.row_object(key) or f"agent/{owner}"
     card = cards.card_under(acts.entries(label), key, owner)
     if not card:
@@ -10666,7 +10818,7 @@ def card_closed(acts, label, owner, key, outcome, reason):
             if state:
                 outcome, reason = ENDED_ELSEWHERE, None
             elif lost is None:
-                tool, args, state = cards.close_call(got, card, owner, outcome, reason)
+                tool, args, state = cards.close_call(got, card, owner, outcome if said is None else said, reason)
                 _, lost = py.answer(tool, args)
             if lost is not None and not cards.lost(lost):
                 fail(f"Pending You refused the close: {lost}")
@@ -11159,6 +11311,10 @@ def parser(cls=argparse.ArgumentParser, only=None):
     x.add_argument("key")
     x.add_argument("--label")
     x.add_argument("--json", action="store_true")
+    x = ca.add_parser("answer")
+    x.add_argument("key")
+    x.add_argument("--excerpt", required=True)
+    x.add_argument("--label")
     x = sub.add_parser("record")
     x.add_argument("kit")
     x.add_argument("number", type=int)
@@ -11401,7 +11557,7 @@ def parser(cls=argparse.ArgumentParser, only=None):
 COMMANDS = {
     ("state", "init"): state_init, ("bolts", None): bolts_view, ("rail", None): rail_view,
     ("card", "session"): card_session, ("card", "wait"): card_wait, ("card", "end"): card_end, ("card", "sweep"): card_sweep,
-    ("card", "read"): card_read,
+    ("card", "read"): card_read, ("card", "answer"): batch_answer,
     ("record", None): record_status,
     ("bolt", "new"): direct(("bolt", "new")), ("bolt", "give"): bolt_give, ("bolt", "order"): direct(("bolt", "order")), ("bolt", "drop"): direct(("bolt", "drop")),
     ("bolt", "land"): bolt_land, ("bolt", "submit"): bolt_submit,
