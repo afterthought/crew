@@ -335,6 +335,43 @@ def test_the_bolts_a_followed_send_still_lands_are_no_row_of_any_card_after_it_w
     assert plan.landings_sent([], "land/crew", "swancloud-ops") == {}
 
 
+def test_a_send_whose_card_followed_before_ops_read_it_is_read_beside_the_card_that_followed():
+    """The card ops reads under land/<kit> is the one that followed: the send it closed still lands its bolts first."""
+    waits = {"status": "pending", "turn": "you"}
+    heads = plan.card_heads("w@abc1234")
+    assert plan.landing_lines("swancloud", waits, heads, ["y"]) == [
+        "  to land on the user's send of an earlier card: y", "  lands them: crew bolt submit y --label swancloud"]
+    sent = {"status": "answered", "turn": "agent", "answer": {"approved": True}}
+    assert plan.landing_lines("swancloud", sent, heads, ["y", "z"]) == [
+        "  to land on the user's send of an earlier card: y and z", "  to land, in the card's order: w",
+        "  lands them: crew bolt submit y z w --label swancloud"]
+    none = {"status": "answered", "turn": "agent", "answer": {"choiceIds": []}}
+    assert plan.landing_lines("swancloud", none, plan.card_heads("w@abc1234 v@abc1234"), ["y"]) == [
+        "  to land on the user's send of an earlier card: y", "  no bolt ticked on this card: nothing of it lands",
+        "  lands them: crew bolt submit y --label swancloud"]
+
+
+def test_what_an_earlier_send_still_lands_leaves_out_the_landed_the_asked_again_and_the_refused_at_its_head():
+    sent = {"y": "abc1234", "z": "abc1234", "x": "abc1234", "v": "abc1234", "u": "abc1234"}
+    refused = {"x": ("abc1234" + "0" * 33, "sluice: conflict in a.py"), "u": ("def5678", "sluice: a check failed")}
+    # v landed and left the plan, z is a row of the card read now at its new head, x was refused at the head sent;
+    # u's refusal was at another head, which holds nothing
+    assert plan.sent_left(sent, plan.card_heads("z@def5678"), {"y", "z", "x", "u"}, refused) == ["y", "u"]
+    assert plan.sent_left({}, [], {"y"}, {}) == []
+
+
+def test_the_read_of_an_earlier_send_reads_the_plan_only_when_one_stands_and_refuses_when_it_cant(monkeypatch):
+    closes = [dict(Act="card.close", Key="land/crew", By="swancloud-ops", Card="req_k1", Heads="y@abc1234")]
+    read = []
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: read.append(label))
+    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", [], []) == [] and not read
+    with pytest.raises(crew.Refusal, match="^swancloud/main could not be read, so what an earlier send on land/crew still lands"):
+        plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, [])
+    bolts = [plan.Rec("Bolt", [("Bolt", "y"), ("Repo", "crew")]), plan.Rec("Bolt", [("Bolt", "q"), ("Repo", "swancloud")])]
+    monkeypatch.setattr(plan, "plan_of", lambda fleet, label: argparse.Namespace(bolts=lambda: bolts))
+    assert plan.landings_earlier(FLEET, "swancloud", "crew", "land/crew", "swancloud-ops", closes, []) == ["y"]
+
+
 def test_a_send_ticking_none_closes_it_at_once_landing_nothing():
     step = plan.landings_step([box("y"), box("z")], answered("y@abc1234", "z@abc1234"), [], {"y", "z"})
     assert step == ("close", "Sent with no bolt ticked, so nothing lands. Left: y and z.", ["y", "z"])

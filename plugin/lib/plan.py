@@ -2011,6 +2011,16 @@ def rows_unsent(rows, sent):
     return [r for r in rows if not landing(r)], [r["bolt"] for r in rows if landing(r)]
 
 
+def sent_left(sent, heads, in_plan, refused):
+    """The bolts an earlier send on a kit's landings card still lands (landings_sent's sent, {bolt: the head they
+    ticked}), in the order sent, which crew card read land/<kit> prints beside the card that followed it, so the send is
+    read though its card closed before ops read it: each the plan still holds (in_plan), on no row of the card read now
+    (heads, card_heads), which asks for one whose head moved, and not held by sluice's refusal of its landing at the head
+    sent (refused, refusals). A decision of facts alone (code.7)."""
+    on = {b for b, _, _ in heads}
+    return [b for b, h in sent.items() if b in in_plan and b not in on and not held_at(refused, b, h)]
+
+
 def ticked_of(got, heads):
     """The bolts the user ticked on a kit's landings card, in the card's order (heads, card_heads), from get_request's
     answer on their turn: the one row of an approval they approved, none of one they declined; each box of a list,
@@ -12526,24 +12536,40 @@ def card_held(label, who, key):
         f"{who} holds no open card under {key} on {crew.this_host()}")
 
 
-def landing_lines(label, got, heads):
+def landing_lines(label, got, heads, earlier=()):
     """What crew card read land/<kit> prints beside the answer once the user sent the kit's landings card (rail-cards
     "An answer wakes the owner"): the bolts they ticked in the card's order (ticked_of, heads its rows as card_heads
     gives them), and the one crew bolt submit that lands them in that order, or that none was ticked, so nothing lands;
-    nothing while it waits on them."""
-    ticked = ticked_of(got, heads)
-    if ticked is None:
+    nothing while it waits on them. The bolts an earlier send still lands (earlier, sent_left), its card closed as a new
+    one followed it, come first, said while this one waits too, and the submit lands them before this card's."""
+    ticked, earlier = ticked_of(got, heads), list(earlier)
+    lines = [f"  to land on the user's send of an earlier card: {joined(earlier)}"] if earlier else []
+    if ticked == []:
+        lines += ["  no bolt ticked on this card: nothing of it lands" if earlier else "  no bolt ticked: nothing lands"]
+    elif ticked:
+        lines += [f"  to land, in the card's order: {joined(ticked)}"]
+    both = earlier + (ticked or [])
+    return lines + ([f"  lands them: crew bolt submit {' '.join(both)} --label {label}"] if both else [])
+
+
+def landings_earlier(fleet, label, kit, key, who, entries, heads):
+    """The bolts an earlier send on a kit's landings card still lands beside the card who holds under key now (heads its
+    rows), from this host's run record (entries), where ops's closes and submissions are (landings_sent, refusals), and
+    the partition's plan, read only when such a send stands (sent_left); refused naming the plan when it can't be read,
+    since what the send still lands can't be told without it (read.1)."""
+    sent = landings_sent(entries, key, who)
+    if not sent:
         return []
-    if not ticked:
-        return ["  no bolt ticked: nothing lands"]
-    return [f"  to land, in the card's order: {joined(ticked)}", f"  lands them: crew bolt submit {' '.join(ticked)} --label {label}"]
+    plan = plan_of(fleet, label) or fail(f"{label}/main could not be read, so what an earlier send on {key} still lands can't be told")
+    return sent_left(sent, heads, {b.name() for b in plan.bolts() if b.get("Repo") == kit}, refusals(entries))
 
 
 def card_read(fleet, a):
     """crew card read <key> [--label L] [--json]: where the card the asker holds under the key stands, read from
     Pending You: its status, whose turn it is, and on the asker's turn the user's answer and words; for a kit's
-    landings card, land/<kit>, the bolts they ticked in the card's order and the crew bolt submit that lands them
-    (landing_lines). An approval the user declined is then closed with their words, and the close recorded (record
+    landings card, land/<kit>, the bolts they ticked in the card's order and the crew bolt submit that lands them,
+    those an earlier send still lands, whose card closed as this one followed it, first (landings_earlier,
+    landing_lines). An approval the user declined is then closed with their words, and the close recorded (record
     0031 §1); nothing else is."""
     import cards
     label, who = card_asker(fleet, a)
@@ -12561,7 +12587,8 @@ def card_read(fleet, a):
         entries = cards.host_entries(record, label, crew.this_host()) if kind and kind[0] == "kit" else []
         heads = card_heads(next((e.get("Heads") for e in reversed(entries) if e.get("Card") == card and e.get("Heads")
                                  and not e.get("Refused")), None))
-        print("\n".join(cards.answer_lines(a.key, card, got) + (landing_lines(label, got, heads) if kind and kind[0] == "kit" else [])))
+        earlier = landings_earlier(fleet, label, kind[1], a.key, who, entries, heads) if kind and kind[0] == "kit" else []
+        print("\n".join(cards.answer_lines(a.key, card, got) + (landing_lines(label, got, heads, earlier) if kind and kind[0] == "kit" else [])))
     if words is not None:
         record.emit(label, "card.close", [cards.row_object(a.key, partition_kits(fleet, label)) or f"agent/{who}"], Card=card,
                     Key=a.key, State="declined", Outcome=cards.declined_outcome(words))
