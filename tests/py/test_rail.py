@@ -388,8 +388,9 @@ OWNERS = {"proposal/4": ("wldn-planner", "mac-studio"), "deploy/dev": ("wldn-ops
 
 
 class TestSweepJudged:
-    def judged(self, rows=(), cards_=(), entries=(), blind=()):
-        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind), NOW)
+    def judged(self, rows=(), cards_=(), entries=(), blind=(), proposed=(4,)):
+        return plan.sweep_judged("mac-studio", list(rows), list(cards_), list(entries), OWNERS, set(blind),
+                                 None if proposed is None else set(proposed), NOW)
 
     def test_a_rows_card_whose_row_is_gone_is_closed_with_its_events_outcome_or_withdrawn_with_why(self):
         p4, y = card("proposal/4", "req_p4", "wldn-planner"), card("land/y", "req_l1", "swb-1-conductor")
@@ -473,6 +474,22 @@ class TestSweepJudged:
 
     def test_a_land_card_of_a_bolt_whose_teams_host_did_not_answer_is_left(self):
         assert self.judged(cards_=[card("land/y", "req_l1", "swb-1-conductor")], blind={"y"})["gone"] == []
+
+    def test_a_proposals_card_is_withdrawn_only_on_a_plan_read_at_or_past_the_commit_it_was_raised_at(self):
+        """A rail read that fetched the plan before the planner's proposal 5 was written, and read the planner's
+        host's card.post for it after: the card has no row on that read, which holds no proposal 5, so it is left,
+        its proposal open; a read that holds proposal 5 with no row for it withdraws it."""
+        p5 = card("proposal/5", "req_p5", "wldn-planner")
+        assert self.judged(cards_=[p5], proposed={1, 2, 3, 4}) == {"gone": [], "questions": [], "held": [], "none": [], "settled": []}
+        assert self.judged(cards_=[p5], proposed=None)["gone"] == []
+        assert self.judged(cards_=[p5], proposed={4, 5})["gone"] == [(p5, None, "its proposal is closed")]
+        assert self.judged(rows=[row("proposal/5")], cards_=[p5], proposed={4, 5})["held"] == [(p5, row("proposal/5"))]
+
+    @pytest.mark.parametrize("key, proposed, older", [
+        ("proposal/5", {4}, True), ("proposal/5", None, True), ("proposal/5", {4, 5, 6}, False),
+        ("land/y", set(), False), ("batch/5", None, False), (None, None, False)])
+    def test_a_plan_read_is_older_than_a_proposals_card_when_it_holds_no_proposal_by_its_keys_number(self, key, proposed, older):
+        assert plan.older_than_card(key, proposed) is older
 
     def test_a_rows_owner_and_its_host(self):
         pl = the_plan()
@@ -558,11 +575,12 @@ class Acts:
         return None
 
 
-def swept(rows_=(), cards_=(), entries=(), unread=None, **kw):
-    """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards."""
+def swept(rows_=(), cards_=(), entries=(), unread=None, proposed=(4, 5), **kw):
+    """The sweep of a read of wldn on mac-studio, the partition's main machine here, with these rows and cards, its
+    plan holding the proposals numbered proposed."""
     fleet = dict(FLEET, partitions={"wldn": dict(FLEET["partitions"]["wldn"], machine="mac-studio")})
     read = dict(found=[("wldn", "WilldanGroup/crew-state", "tip", the_plan())], sv=survey(), rows=list(rows_), cards=list(cards_),
-                unread=unread or {}, logs={"wldn": list(entries)})
+                unread=unread or {}, logs={"wldn": list(entries)}, proposed={"wldn": set(proposed)})
     acts = Acts(entries=[{"Act": "card.post", "Key": c["key"], "By": c["by"], "Card": c["card"]} for c in cards_], **kw)
     return plan.sweep_cards(fleet, read, acts), acts
 
@@ -589,6 +607,15 @@ class TestSweep:
         assert acts.calls[2] == ("wldn-planner", "cancel_request", {"requestId": "req_p4", "name": "wldn-planner", "reason": "its proposal was applied"})
         assert [(e["Act"], e["Card"], e["State"], e["Outcome"]) for e in acts.emitted] == [("card.close", "req_p4", "withdrawn", "its proposal was applied")]
         assert out["done"] == [dict(label="wldn", key="proposal/4", card="req_p4", by="wldn-planner", did="closed", words="its proposal was applied", new=None)]
+
+    def test_a_fresh_proposals_card_on_a_plan_read_older_than_it_is_neither_asked_after_nor_withdrawn(self):
+        """The read's plan was fetched before proposal 6 was written, and the planner's card.post for it was read
+        from its host after: Pending You is asked nothing and the card stays open, for a read that holds it."""
+        p6 = card("proposal/6", "req_p6", "wldn-planner")
+        out, acts = swept(cards_=[p6], proposed=(4, 5))
+        assert (out, acts.calls, acts.emitted) == ({"done": [], "unswept": []}, [], [])
+        out, acts = swept(cards_=[p6], proposed=(4, 5, 6))
+        assert out["done"] == [dict(label="wldn", key="proposal/6", card="req_p6", by="wldn-planner", did="withdrawn", words="its proposal is closed", new=None)]
 
     def test_a_card_whose_bolt_was_dropped_is_withdrawn(self):
         y = card("land/y", "req_l1", "swb-1-conductor")
