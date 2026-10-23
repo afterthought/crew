@@ -12,7 +12,7 @@ import pytest
 import transcript
 
 import plan
-from test_landing import QUEUED, TAKES_NONE, policy, ran_as, said
+from test_landing import NONE_YET, QUEUED, TAKES_NONE, policy, ran_as, said
 
 WORDS = "Land crw-5's bolt"
 HEAD = "crew submits nothing of bolt y"
@@ -66,9 +66,9 @@ BEFORE = f"ORIGIN=yes\nFETCHED=ok\nGITHUB={OLD}\nOWN={OLD}\nSUBMISSION_GITHUB=\n
 @pytest.fixture
 def submit(monkeypatch, tmp_path):
     """crew bolt submit on stand-ins for what it reaches: the plan, ops's transcript, the team's host, whose main is at
-    OLD before, whose policy takes no pull requests, and which queues, waits on and lands the bolt unless told
-    otherwise (outs, in turn), and this host's run record and kept words, under tmp_path; crew bolt land's close
-    stood in for."""
+    OLD before, whose policy takes no pull requests, whose sluice has recorded no submission to main, and which
+    queues, waits on and lands the bolt unless told otherwise (outs, in turn), and this host's run record and kept
+    words, under tmp_path; crew bolt land's close stood in for."""
     got = {"ran": [], "emitted": [], "closed": [], "verdict": heard(),
            "outs": [QUEUED, ran_as(0, "{}"), ran_as(0, said(0, github=NEW)), ran_as(0, "MARKED=yes\n")]}
     monkeypatch.setattr(plan, "CONTEXT", {})
@@ -78,8 +78,9 @@ def submit(monkeypatch, tmp_path):
     monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: (got["verdict"], "s-1"))
     monkeypatch.setattr(plan, "host_run", lambda fleet, host, script, *args: got["ran"].append(
         "MAIN" if script == plan.MAIN else "POLICY") or (BEFORE if script == plan.MAIN else policy(TAKES_NONE)))
-    names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK"}
-    monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: got["ran"].append(names[argv[2]]) or got["outs"].pop(0))
+    names = {plan.SUBMIT: "SUBMIT", plan.WAIT: "WAIT", plan.LANDED: "LANDED", plan.LANDED_MARK: "MARK", plan.SUBMISSIONS: "SUBMISSIONS"}
+    monkeypatch.setattr(plan.crew, "on_machine", lambda fleet, host, argv: got["ran"].append(names[argv[2]]) or (
+        ran_as(0, NONE_YET) if argv[2] == plan.SUBMISSIONS else got["outs"].pop(0)))
     monkeypatch.setattr(plan.READ, "drop_kit", lambda *a: None)
     monkeypatch.setattr(plan.record, "emit", lambda label, act, on, **f: got["emitted"].append(dict(f, Act=act, On=on)) or "eid")
     monkeypatch.setattr(plan.record, "who", lambda: "swancloud-ops")
@@ -102,7 +103,7 @@ class TestTheSubmission:
         monkeypatch.setattr(plan, "bolt_land", lambda fleet, a: kept.append(plan.landing_word_read("swancloud", a.bolt, "session/s-1/u-7")))
         got = submit["run"](WORDS)
         assert kept == [WORDS]
-        assert got["ran"] == ["MAIN", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
+        assert got["ran"] == ["MAIN", "SUBMISSIONS", "POLICY", "SUBMIT", "WAIT", "LANDED", "MARK"]
         [e] = got["emitted"]
         assert e["Act"] == "bolt.submit" and e["frm"] == ["session/s-1/u-7"] and e["Chars"] == len(WORDS)
         assert WORDS not in repr(e)
