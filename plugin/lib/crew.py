@@ -13,6 +13,8 @@
                                       prompt an agent wherever it runs, the text marked [crew tell from <sender>];
                                       refused, with nothing typed, while it waits on a question in its pane; with
                                       --taken, read back from its transcript and sent once more when not taken
+  crew.py tell --board < word.json    a word posted from a dock, {label, key, to, text}, checked and told its item's
+                                      agent, marked [crew tell from <user>@board] (on <kind> <name>)
   crew.py send <team|label> "<text>"  send the text to the partition's operator, the door of the team's partition or
                                       the label's, marked [crew tell from <sender>] (sent to <team|label>)
   crew.py found <agent>               an agent of this host as herdr lists it, one JSON object, its name given back in
@@ -25,7 +27,7 @@ Agents and Team here.
 Each role is an agent definition, roles/<role>.md: frontmatter naming its model and effort, which a team's or a
 partition's `roles` in the teams file may override, and its brief as the body, with its {{TOKENS}} filled. Every token is built here from the team's
 data; a token with no builder, or data a builder needs and the team lacks, is an error, never blank text."""
-import collections, functools, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
+import collections, functools, getpass, hashlib, itertools, json, os, pathlib, re, shlex, subprocess, sys, time
 
 LIB = pathlib.Path(__file__).resolve().parent
 HOME = LIB.parent.parent
@@ -383,6 +385,55 @@ def send(fleet, name, text):
     sent = tell(fleet, door, f"(sent to {name}) {text}", record=False, sender=rec.who())
     if sent:
         rec.emit(label, "send", on=[f"agent/{door}", f"team/{team}" if team else None], why=f"send {name}", Chars=len(text))
+    return sent
+
+
+# The kinds of item a word from the board is on: a dock's, and a batch, a record and the partition itself.
+KINDS = ("signal", "proposal", "bolt", "unit", "fix", "landing", "deploy", "operation", "team", "subscription", "batch", "record",
+         "partition")
+BOARD_KEY = re.compile(r"^([a-z]+):([A-Za-z0-9._:/+-]{1,200})$")
+WORD_MOST = 1000
+
+
+def board_word(fleet, raw):
+    """A word posted from a dock, as the board's listener pipes it (record 0038 §4): one JSON object holding the
+    partition, the item's key, the agent and the text, each a string, the agent the one its item's kind goes to in that
+    partition (ROLE_OF), for a bolt's, a unit's or a fix's any conductor of the partition's teams or its operator, since
+    which team holds a bolt is the page's read; the text one line of at most WORD_MOST characters. Returns the agent
+    and the text to tell it, `(on <kind> <name>) <text>`; anything else is refused (read.2)."""
+    try:
+        w = json.loads(raw)
+    except ValueError:
+        w = None
+    if not isinstance(w, dict) or not all(isinstance(w.get(f), str) for f in ("label", "key", "to", "text")):
+        fail("a word from the board is one JSON object holding label, key, to and text")
+    label, key, to, text = w["label"], w["key"], w["to"], w["text"]
+    partition_of(fleet, label)
+    m = BOARD_KEY.match(key) or fail(f"a word from the board is on an item's key, <kind>:<name>, not '{key}'")
+    kind, name = m.groups()
+    kind in KINDS or fail(f"a word from the board is on no item of the kind '{kind}': kinds " + " ".join(KINDS))
+    role = ROLE_OF.get(kind, "operator")
+    a = "an" if kind[0] in "aeio" else "a"
+    if role == "conductor":
+        to in {f"{t['name']}-conductor" for t in fleet["teams"].values() if t["label"] == label} | {f"{label}-operator"} or fail(
+            f"a word on {a} {kind} goes to the conductor of the {label} team holding its bolt, or to {label}-operator, not {to}")
+    else:
+        to == f"{label}-{role}" or fail(f"a word on {a} {kind} goes to {label}-{role}, not {to}")
+    if "\n" in text or "\r" in text:
+        fail("a word from the board is one line")
+    text.strip() or fail("a word from the board holds no text")
+    len(text) <= WORD_MOST or fail(f"a word from the board is at most {WORD_MOST} characters, not {len(text)}")
+    return to, f"(on {kind} {name}) {text}"
+
+
+def board_tell(fleet, raw):
+    """crew tell --board: the word checked (board_word) and told its agent as the user's from the board,
+    `[crew tell from <user>@board]`, the user being whom the listener runs as; `sent to <agent>` once it is typed, and
+    tell's own words on standard error when it is not."""
+    to, text = board_word(fleet, raw)
+    sent = tell(fleet, to, text, sender=f"{getpass.getuser()}@board")
+    if sent:
+        print(f"sent to {to}")
     return sent
 
 
@@ -1400,8 +1451,9 @@ def kits_named(kits):
 
 # Who is speaking in an agent's pane, beside every brief's roster.
 SENDERS = ("A message in your pane that begins `[crew tell from <name>]` was sent with crew tell by that agent, or by "
-           "the user when the name is `<user>@<host>`; one that begins `[crew]` is crew's own; anything else typed there "
-           "is the user.")
+           "the user when the name is `<user>@<host>`; one that begins `[crew tell from <user>@board]` is the user's word "
+           "sent from the board about the item it names, and answers no card; one that begins `[crew]` is crew's own; "
+           "anything else typed there is the user.")
 
 # How anything for another team or partition is sent, beside every brief's roster (briefs.10): to that partition's
 # operator, its one door, and to nobody else.
@@ -2509,6 +2561,8 @@ def main(a):
         print(launch_shell(fleet, a[1], a[2], a[3] if len(a) > 3 else None))
     elif a[:1] == ["hint"] and len(a) == 3:
         hint_agent(fleet, a[1], a[2])
+    elif a == ["tell", "--board"]:
+        sys.exit(0 if board_tell(fleet, sys.stdin.read()) else 1)
     elif a[:1] == ["tell"] and len(a) in (3, 4) and a[3:] in ([], ["--taken"]):
         import record as rec  # record imports this module
         sys.exit(0 if tell(fleet, a[1], a[2], sender=rec.who(), taken=a[3:] == ["--taken"]) else 1)
