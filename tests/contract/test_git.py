@@ -310,6 +310,84 @@ def test_a_kits_policy_is_read_from_githubs_main_ahead_of_the_hosts_own(repo, tm
     assert not (repo.path / ".config" / "sluice.toml").exists()
 
 
+def test_a_legacy_bolts_tip_is_read_with_the_remotes_that_hold_it(repo, tmp_path):
+    """plan.BOLT_TIP and plan.forecast_way (plan.19): the policy is read from the host's own bolt/<bolt>, not main's,
+    as sluice routes a branch by the policy at its tip, and a remote holds the bolt once this host has a tracking ref
+    of it from there, read with no fetch (plan.18); a bolt the host keeps no branch of has no tip."""
+    import plan
+    pushed = kit_with_github(repo, tmp_path)
+    pushed("later")
+    repo.git("branch", "bolt/t")
+    repo.git("switch", "-q", "bolt/t")
+    policy = '[branches."bolt/*"]\nremote = "origin"\nrequired = ["#check-full"]\n'
+    tip = repo.commit("chore: bolts on origin", {".config/sluice.toml": policy})
+    repo.git("switch", "-q", "--detach", "main")
+    r = script("BOLT_TIP", str(repo.path), "t", ".config/sluice.toml")
+    assert r.returncode == 0 and f"TIP={tip}\n" in r.stdout and "TRACKED=\n" in r.stdout, r.stdout + r.stderr
+    assert plan.forecast_way("t", r.stdout) == ("place", None)
+    repo.git("push", "-q", "origin", "bolt/t")
+    repo.git("fetch", "-q", "origin")
+    r = script("BOLT_TIP", str(repo.path), "t", ".config/sluice.toml")
+    assert "TRACKED=origin \n" in r.stdout and plan.forecast_way("t", r.stdout) == ("branch", None), r.stdout
+    assert "TIP=-\n" in script("BOLT_TIP", str(repo.path), "u", ".config/sluice.toml").stdout
+
+
+def forecast_from_place(repo, tmp_path, bolt="t"):
+    """plan.FORECAST_PLACE in the kit's main checkout, with a stand-in sluice that records the worktree it was asked
+    to forecast from, the branch that worktree is on and its head, and answers with no conflict."""
+    import plan
+    bin_ = tmp_path / "bin"
+    bin_.mkdir(exist_ok=True)
+    (bin_ / "sluice").write_text(
+        '#!/usr/bin/env bash\n'
+        f'[ "$*" = "submit main --check --worktree $5 --json" ] || exit 64\n'
+        f'echo "$5 $(git -C "$5" symbolic-ref --short HEAD) $(git -C "$5" rev-parse HEAD)" >> {tmp_path}/asked\n'
+        'printf \'{"conflict": null, "head": "%s", "onto": "o", "ahead": []}\' "$(git -C "$5" rev-parse HEAD)"\n')
+    (bin_ / "sluice").chmod(0o755)
+    path = repo.path.parent / "places" / f"forecast-{bolt}"
+    r = subprocess.run(["bash", "-c", plan.FORECAST_PLACE, "crew", str(repo.path), str(path), bolt], capture_output=True,
+                       text=True, env=dict(os.environ, PATH=f"{bin_}:{os.environ['PATH']}"))
+    assert r.returncode == 0, r.stderr
+    return path, plan.place_checked(bolt, r.stdout, r.stderr), r.stdout
+
+
+def test_a_legacy_bolt_is_forecast_from_a_place_crew_makes_on_it_with_no_checkout_and_removes(repo, tmp_path):
+    """plan.FORECAST_PLACE (plan.19): with no worktree on bolt/<bolt>, crew makes its own on the branch with no
+    checkout, which sluice reads as on the branch at the bolt's tip, and removes it once sluice has answered, its
+    staged deletions forced; the branch is where it was. One a stopped forecast left there is taken and removed."""
+    import plan
+    repo.commit("main", {"README": "r\n"})
+    tip = repo.commit("feat: bolt work", {"work.txt": "w\n"})
+    repo.git("branch", "bolt/t")
+    repo.git("switch", "-q", "--detach", "HEAD~1")
+    path, (checked, kept), out = forecast_from_place(repo, tmp_path)
+    assert (tmp_path / "asked").read_text() == f"{path} bolt/t {tip}\n"
+    assert plan.bolt_forecast_read(*checked) == ({"conflict": None, "head": tip, "onto": "o", "ahead": []}, None) and kept is None
+    assert not path.exists() and str(path) not in repo.git("worktree", "list")
+    assert repo.git("rev-parse", "bolt/t") == tip
+    repo.git("worktree", "add", "-q", "--no-checkout", str(path), "bolt/t")
+    forecast_from_place(repo, tmp_path)
+    assert not path.exists() and str(path) not in repo.git("worktree", "list")
+
+
+def test_a_worktree_already_on_the_bolt_is_the_place_its_forecast_is_read_from_and_is_kept(repo, tmp_path):
+    """plan.FORECAST_PLACE (plan.19): a worktree on bolt/<bolt> that is not crew's forecast place, the landing's while
+    its submission is with sluice, is forecast from as it stands and left there; a path git cannot make a worktree at
+    is said with git's words, nothing forecast."""
+    repo.commit("main", {"README": "r\n"})
+    repo.git("branch", "bolt/t")
+    land = repo.path.parent / "places" / "land-t"
+    repo.git("worktree", "add", "-q", str(land), "bolt/t")
+    path, (checked, kept), out = forecast_from_place(repo, tmp_path)
+    assert (tmp_path / "asked").read_text().split()[:2] == [str(land), "bolt/t"] and checked[0] == 0 and kept is None
+    assert land.exists() and not path.exists()
+    repo.git("worktree", "remove", str(land))
+    path.mkdir(parents=True)
+    (path / "theirs.txt").write_text("x\n")
+    _, (checked, kept), _ = forecast_from_place(repo, tmp_path)
+    assert checked[0] is None and checked[2].startswith(f"no place on bolt/t could be made to forecast it from: fatal: '{path}' already exists"), checked
+
+
 def test_a_units_change_is_read_from_mains_commit_into_a_folder(repo, tmp_path):
     """plan.change_folder through change_written (plan.18): a change that no place or bolt worktree holds is read as the
     kit's main holds it at a commit, open or else archived, its Markdown written into the session's folder, not read
