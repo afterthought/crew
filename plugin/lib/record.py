@@ -189,7 +189,7 @@ def emit(label, act, on=(), frm=(), commit=(), why=None, refused=None, eid=None,
     return eid
 
 
-# ------------------------------------------------------------------------------------- carried to the branch
+# ------------------------------------------------------------------------------------- pushed to the branch
 
 def blocks(text):
     """The entries of run-record text as written, {Id: the entry's lines}, descriptors and comments left out."""
@@ -207,37 +207,8 @@ def blocks(text):
 
 
 def mark(label):
-    """Where this host notes the newest entry it has carried for the label."""
+    """Where this host notes the newest entry of the label its branch holds from here."""
     return ROOT / label / "runs" / ".carried"
-
-
-def carry(label, at_branch):
-    """The host's run-record files of the label as its branch must hold them, {path on the branch: text}, and the
-    newest id among the entries looked at. A day's file on the branch becomes the union by Id of the branch's entries
-    and the host's, in Id order, and is left out when the branch already holds every entry the host has. Days before
-    the newest carried one are not looked at. at_branch(path) reads a file at the branch's tip, or None."""
-    host = crew.this_host()
-    d = ROOT / label / "runs" / host
-    try:
-        done = mark(label).read_text().strip()
-    except OSError:
-        done = ""
-    since = f"{done[0:4]}-{done[4:6]}-{done[6:8]}" if len(done) >= 8 else ""
-    out, newest = {}, None
-    for f in sorted(d.glob("*.rec")) if d.is_dir() else []:
-        if f.stem < since:
-            continue
-        mine = blocks(f.read_text())
-        if not mine:
-            continue
-        newest = max([newest or "", *mine])
-        path = f"runs/{host}/{f.name}"
-        have = blocks(at_branch(path) or "")
-        if set(mine) <= set(have):
-            continue
-        union = {**mine, **have}
-        out[path] = DESCRIPTOR + "\n".join(union[k] for k in sorted(union))
-    return out, newest
 
 
 def unpushed(label, at_branch):
@@ -313,14 +284,14 @@ def reach(label, eid=None):
 
 
 def mark_carried(label, newest):
-    """After a push carried entries up to newest, start the next carry from that day."""
+    """Once the branch holds every entry up to newest, start the next push from that day."""
     if not newest:
         return
     try:
         mark(label).parent.mkdir(parents=True, exist_ok=True)
         mark(label).write_text(newest + "\n")
     except OSError as e:
-        print(f"crew: could not note what was carried at {mark(label)}: {e.strerror or e}", file=sys.stderr)
+        print(f"crew: could not note what was pushed at {mark(label)}: {e.strerror or e}", file=sys.stderr)
 
 
 # ----------------------------------------------------------------------------------------------- reading
@@ -503,7 +474,7 @@ def events(fleet, a):
     if a.push:
         import plan
         for l in labels:
-            plan.carry_now(fleet, l)
+            plan.push_now(fleet, l)
         return
     if a.follow:
         return follow(fleet, labels, a.about)

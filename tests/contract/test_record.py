@@ -1,7 +1,7 @@
 """What crew assumes of recutils and git for its run record, each case naming what assumes it: a day's file a host began
 under an older descriptor, before a card's Card and Key were allowed, takes an entry with them that recsel reads, and
-record.carry writes that day to the branch under the descriptor that allows them, which recfix --check passes
-(record.emit, record.carry, the card hook's entries); and a chain of entries plan.land pushes to a bare repository
+record.unpushed writes that day to the branch under the descriptor that allows them, which recfix --check passes
+(record.emit, record.unpushed, the card hook's entries); and a chain of entries plan.land pushes to a bare repository
 standing for GitHub lands as one commit per entry, each changing its day's file alone, made again on top of another
 clone's push that moved the branch between its fetch and its push (plan.land, record.reach, state.1)."""
 import datetime
@@ -25,16 +25,15 @@ def runs(tmp_path, monkeypatch):
     return d
 
 
-def test_an_older_days_file_takes_a_cards_fields_and_is_carried_under_the_descriptor_that_allows_them(runs, tmp_path):
+def test_an_older_days_file_takes_a_cards_fields_and_is_pushed_under_the_descriptor_that_allows_them(runs, tmp_path):
     day = record.path_for("wldn", "mac-studio", datetime.datetime.now(datetime.timezone.utc).date().isoformat())
     day.write_text(re.sub(r" Card Key[^\n]*\n", "\n", record.DESCRIPTOR))
     assert "Card" not in day.read_text()
     assert record.emit("wldn", "card.post", ["unit/x"], Card="req_old-1", Key="verify/x/20261007-1400")
     got = subprocess.run(["recsel", "-t", "Entry", "-e", "Act = 'card.post'", "-P", "Card,Key", str(day)], capture_output=True, text=True)
     assert got.stdout.split() == ["req_old-1", "verify/x/20261007-1400"]
-    carried, _ = record.carry("wldn", lambda path: None)
-    text, = carried.values()
-    f = tmp_path / "carried.rec"
+    (*_, text), = record.unpushed("wldn", lambda path: None)[0]
+    f = tmp_path / "pushed.rec"
     f.write_text(text)
     assert subprocess.run(["recfix", "--check", str(f)], capture_output=True).returncode == 0
     assert subprocess.run(["recsel", "-t", "Entry", "-P", "Card", str(f)], capture_output=True, text=True).stdout.strip() == "req_old-1"

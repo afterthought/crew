@@ -8,7 +8,7 @@
 
 ## 2. A write carries nothing
 
-- [ ] 2.1 A plan write commits only its own files and its entry follows as its own commit; a missed entry goes with the host's next, and `crew events --push` pushes what is left or says nothing is (design, Decisions 4 and 5; Task notes 2.1); passes `tests/suite t-journey-state`.
+- [x] 2.1 A plan write commits only its own files and its entry follows as its own commit; a missed entry goes with the host's next, and `crew events --push` pushes what is left or says nothing is (design, Decisions 4 and 5; Task notes 2.1); passes `tests/suite t-journey-state`.
 
 ## 3. The record is read from the branch alone
 

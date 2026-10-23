@@ -10,7 +10,7 @@ by a proposal (proposals.rec) the user approves; who else writes it directly is 
 over https, applies itself to the tip, checks each file it changed with recfix (the plan with crew's own rules
 too), commits through a temporary index in crew's own bare cache of the repo (no working tree is touched), and
 pushes without force. A push that is refused because someone wrote first is applied again to the new tip, up to
-five times. A write that changes several files is one commit, and it carries the host's uncarried run record.
+five times. A write that changes several files is one commit; its run-record entry follows it as a commit of its own.
 
   crew state init <label>                    create <label>/main in the state repository, adopting plan/<label> and
                                              the moves where the partition's blueprints repos have them
@@ -629,19 +629,12 @@ def message(subject, body, eid):
     return subject + (f"\n\n{body}" if body else "") + (f"\n\nCrew-Entry: {eid}" if eid else "") + "\n"
 
 
-def carried(label, repo, tip, files):
-    """Add the host's uncarried run record of the label to a commit's files; the newest id it carries."""
-    runs, newest = record.carry(label, lambda path: show(repo, tip, path))
-    files.update(runs)
-    return newest
-
-
 def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), fields=None):
     """Apply change(Write) to the tip of the flywheel's branch, its plan's record descriptors first brought in step
-    with crew's, commit every file it changed with the host's uncarried run record, each file checked first, and push,
-    replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
+    with crew's, commit every file it changed, each checked first, and push, replaying on a refused push. change returns the bolts it touched; each one's conductor is told the subject, unless it wrote it.
     The commit names its run-record entry; with act, that entry is written once pushed, naming on and frm and whatever
-    the change added to them, with the act's own fields. Returns the commit."""
+    the change added to them, with the act's own fields, and reaches the branch as the commit after it (read.5).
+    Returns the commit."""
     repo, ref = state_of(fleet, label)
     seen = {"eid": record.new_id()}
     CONTEXT.update(label=label, eid=seen["eid"])
@@ -656,10 +649,8 @@ def write(fleet, label, change, subject, body="", act=None, on=(), frm=(), field
         files = {"plan.rec": w.plan.text(), **w.files}
         seen.update(before=before, after=w.plan.teams(), touched=touched, quiet=w.quiet, label=label,
                     subject=f"{w.subject or subject} ({agent()})", on=list(on) + w.on, frm=list(frm) + w.frm)
-        seen["newest"] = carried(label, repo, tip, files)
         return files, message(seen["subject"], body, seen["eid"])
     sha = land(repo, ref, None, make)
-    record.mark_carried(label, seen["newest"])
     print(f"{ref} {sha[:7]}: {seen['subject']}")
     if act:
         record.emit(label, act, seen["on"], seen["frm"], [f"{repo}@{sha}"], record.subject(seen["subject"]), eid=seen["eid"], **(fields or {}))
@@ -710,24 +701,12 @@ def notices(teams, seen, me, subject):
     return tells, shown, bool(added or freed)
 
 
-def carry_now(fleet, label):
-    """crew events --push: the host's uncarried run record of the label, carried to its branch in a commit of its
-    own; nothing at all when there is nothing to carry. Such a commit records no act, so it names no entry: an entry
-    of its own would be left uncarried by every push."""
-    repo, ref = state_of(fleet, label)
-    tip = fetch(repo, ref) or fail(f"{repo} has no {ref} yet: crew state init {label}")
-    if not record.carry(label, lambda path: show(repo, tip, path))[0]:
-        print(f"{ref}: nothing of {crew.this_host()}'s run record left to carry")
-        return
-    seen = {}
-
-    def make(tip):
-        files = {}
-        seen["newest"] = carried(label, repo, tip, files)
-        return files, message(f"runs({crew.this_host()}): carry the run record ({agent()})", "", None)
-    sha = land(repo, ref, None, make)
-    record.mark_carried(label, seen["newest"])
-    print(f"{ref} {sha[:7]}: carried {crew.this_host()}'s run record")
+def push_now(fleet, label):
+    """crew events --push: each entry of the host's run record of the label that its branch lacks, which a push that
+    was refused left in the host's file, pushed now, each as its own commit (record.reach); said when there is none."""
+    ref, host = state_of(fleet, label)[1], crew.this_host()
+    n = record.reach(label)
+    print(f"{ref}: pushed {n} of {host}'s entries" if n else f"{ref}: nothing of {host}'s run record left to push")
 
 
 # --------------------------------------------------------------------------------------------- crew state init

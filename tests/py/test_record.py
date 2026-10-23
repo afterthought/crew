@@ -1,9 +1,10 @@
 """The run record (record.1 to record.4, the run-record spec): record.emit appending an entry to the host's file of the
-day, record.carry making the branch's copy the union by Id, record.parse and line reading and printing entries, the
-events crew events shows, the history crew trace walks, the hosts a partition runs on, and the act and objects each
-plan command's entry names. That a write's commit names its entry and carries the host's record, that crew events
-reads the branch then each host, that a carried file failing recfix refuses its write, and that --follow tails every
-host are the state journey's (t-journey-state). A file written is no process, so these are logic cases."""
+day and asking for its push, record.reach saying a push that is refused, record.unpushed giving the entries the branch
+lacks with each day's file as the union by Id and record.entry_message each one's commit, record.parse and line reading
+and printing entries, the events crew events shows, the history crew trace walks, the hosts a partition runs on, and
+the act and objects each plan command's entry names. That a write's entry follows its commit, that a refused push goes
+with the host's next, that crew events reads the branch then each host, and that --follow tails every host are the
+state journey's (t-journey-state). A file written is no process, so these are logic cases."""
 import json
 
 import pytest
@@ -102,36 +103,6 @@ class TestEmit:
 
     def test_a_commits_subject_is_its_entrys_why_without_the_agent(self):
         assert record.subject("plan(b): add x (chuck@mac-studio)\n\nbody") == "plan(b): add x"
-
-
-class TestCarry:
-    def write(self, here, day, *ids):
-        here.mkdir(parents=True, exist_ok=True)
-        (here / f"{day}.rec").write_text(record.DESCRIPTOR + "".join(f"\nId: {i}\nAt: {day}T10:00:00Z\nAct: x\n" for i in ids))
-
-    def test_the_branchs_copy_of_a_day_is_the_union_by_id_in_id_order(self, here):
-        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-1-2", "20261012T100000Z-mac-studio-1-3")
-        branch = record.DESCRIPTOR + "\nId: 20261012T100000Z-mac-studio-1-1\nAt: 2026-10-12T10:00:00Z\nAct: x\n"
-        out, newest = record.carry("wldn", lambda path: branch)
-        text, = out.values()
-        assert list(out) == ["runs/mac-studio/2026-10-12.rec"] and newest == "20261012T100000Z-mac-studio-1-3"
-        assert [e["Id"][-1] for e in record.parse(text)] == ["1", "2", "3"]
-
-    def test_a_day_the_branch_already_holds_whole_is_left_out(self, here):
-        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-1-1")
-        assert record.carry("wldn", lambda path: (here / "2026-10-12.rec").read_text())[0] == {}
-
-    def test_days_before_the_newest_carried_are_not_looked_at(self, here):
-        self.write(here, "2026-10-10", "20261010T100000Z-mac-studio-1-1")
-        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-1-1")
-        record.mark_carried("wldn", "20261011T000000Z-mac-studio-9-9")
-        assert list(record.carry("wldn", lambda path: None)[0]) == ["runs/mac-studio/2026-10-12.rec"]
-
-    def test_a_host_that_lost_its_record_keeps_the_branchs_entries_beside_its_new_ones(self, here):
-        branch = record.DESCRIPTOR + "".join(f"\nId: 20261012T09000{i}Z-mac-studio-1-1\nAt: 2026-10-12T09:00:00Z\nAct: x\n" for i in range(3))
-        self.write(here, "2026-10-12", "20261012T100000Z-mac-studio-2-1")
-        text, = record.carry("wldn", lambda path: branch)[0].values()
-        assert len(record.parse(text)) == 4
 
 
 class TestUnpushed:
