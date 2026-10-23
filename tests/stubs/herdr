@@ -35,6 +35,9 @@ the text left typed in its input (`typed` in the state) and nothing is written t
 the agent then has that status, as one that went to work with no prompt received. A prompt taken while text is typed
 is received with that text before it, as Claude submits its whole input; `agent send-keys <agent> ctrl+c`, or
 `pane send-keys` of ctrl+c to its pane, clears the input, as Claude's first Ctrl+C on an idle input does.
+`herdr --session S stub linger <pane|name> <n>` makes that agent slow to exit: its next `/exit` prompt, and Ctrl+C,
+leave it up and idle, and it is gone, as `/exit` removes it, after the next n `agent get` of it, the one past them
+answering it is not there; n 0 ends an agent already lingering at its next `agent get`.
 
 It starts Python without its site packages and imports only what every call needs, since every test calls it often:
 not even the json package, whose import of re costs a call a third of its time, but json's own C parts, writing what
@@ -165,6 +168,11 @@ def cleared(p):
     """Ctrl+C on an agent's idle input: what was left typed in it goes."""
     if p in st["agents"]:
         st["agents"][p].pop("typed", None)
+
+
+def lingering(p):
+    """The key `stub linger` made the agent in a pane slow to exit by, its name or its pane, or None."""
+    return next((k for k in (st["agents"][p].get("name"), p) if k and k in st.get("linger", {})), None)
 
 
 def driven(p):
@@ -299,6 +307,12 @@ elif group == "pane" and cmd == "read":
     print(st["panes"][rest[0]]["output"])
 elif group == "agent" and cmd == "get":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
+    k = lingering(p)
+    if k and st["linger"][k]["told"]:  # slow to exit: gone once its reads are spent
+        if st["linger"][k]["n"] <= 0:
+            del st["agents"][p], st["linger"][k]
+            die(f"no agent {rest[0]}")
+        st["linger"][k]["n"] -= 1
     a = st["agents"][p]
     out({"agent": dict({"pane_id": p, "name": a["name"], "agent_status": a["status"]}, **sessioned(p))})
 elif group == "agent" and cmd == "list":  # as herdr 0.9.3 lists them: an agent with no name has none in its item
@@ -312,7 +326,10 @@ elif group == "agent" and cmd == "rename":
     out({})
 elif group == "agent" and cmd == "prompt":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
-    if rest[1] == "/exit":
+    if rest[1] == "/exit" and lingering(p):  # slow to exit: up and idle until its reads are spent
+        st["linger"][lingering(p)]["told"] = True
+        st["agents"][p]["status"] = "idle"
+    elif rest[1] == "/exit":
         del st["agents"][p]
     elif st["agents"][p]["status"] == "blocked":  # as herdr 0.9.3 refuses it, typing nothing
         die({"code": "agent_blocked", "message": f"agent {rest[0]} is blocked on an approval or question UI"})
@@ -343,6 +360,8 @@ elif group == "stub" and cmd == "status":
 elif group == "stub" and cmd == "nosession":
     p = agent_pane(rest[0]) or die(f"no agent {rest[0]}")
     st["nosession"] = [x for x in st.get("nosession", []) if x != p] + ([p] if rest[1] == "on" else [])
+elif group == "stub" and cmd == "linger":
+    st.setdefault("linger", {}).setdefault(rest[0], {"told": False})["n"] = int(rest[1])
 elif group == "stub" and cmd == "leave":
     st.setdefault("leave", {})[rest[0]] = {"n": int(rest[1]), "status": rest[2] if len(rest) > 2 else None}
 elif group == "stub" and cmd == "restore":

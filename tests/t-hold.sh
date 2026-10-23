@@ -64,6 +64,43 @@ grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on cre
 eq "$(field $box agent.renew On)" "team/swb-1 agent/swb-1-ops"
 ok "crew update hands an agent an update made due its restart, which resumes it on crew as it now is and tells it so"
 
+# Slow to exit: swb-1-ops is still up when its stop has looked for its exit and given up, and goes a few looks later.
+rewrite "$(rec swb-1-ops)" "s/^CREW_LAUNCH=.*/CREW_LAUNCH=stale/"
+as $box herdr --session wldn-1 stub linger swb-1-ops 40 >/dev/null
+: > "$log"; : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
+expect_ok crew update $box
+until_ok grep -q "swb-1-ops is restarted on crew" "$log" || fail "swb-1-ops was not restarted once it exited: $(cat "$log")"
+has "$(cat "$log")" "swb-1-ops did not exit at once; crew watches for its exit"
+eq "$(launched swb-1-ops | cut -d' ' -f2)" "resumed"
+grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on crew " "$CREW_TEST_LOG" || fail "swb-1-ops was not told its restart"
+[[ -e $(home_of $box)/.local/state/crew/renew/swb-1-ops.exiting ]] && fail "the restart left its mark once it started swb-1-ops"
+ok "a restart whose agent exits after its stop gave up watches for the exit and resumes it on crew as it now is, told so"
+
+# Never exits: swb-1-ops is still up when the restart has watched for its exit for ten minutes.
+rewrite "$(rec swb-1-ops)" "s/^CREW_LAUNCH=.*/CREW_LAUNCH=stale/"
+as $box herdr --session wldn-1 stub linger swb-1-ops 200 >/dev/null
+: > "$log"; : > "$CREW_TEST_CLAUDE_LOG"
+expect_ok crew update $box
+until_ok grep -q "runs on as it was" "$log" || fail "the restart did not say swb-1-ops runs on: $(cat "$log")"
+has "$(cat "$log")" "swb-1-ops did not exit (busy or waiting on the user); it was left running; it runs on as it was, still due: the end of its next turn hands it back"
+eq "$(herdr_state $box wldn-1 '[.agents[].name] | sort | join(",")')" "swb-1-conductor,swb-1-ops"
+eq "$(launches)" ""
+eq "$(cat "$(home_of $box)/.local/state/crew/renew/swb-1-ops.exiting")" "$(basename "$(rec swb-1-ops)")"
+ok "a restart whose agent never exits leaves it running as it was, starts nothing in its pane, and says so"
+
+# Exits after the restart gave up: the exit that restart typed ends swb-1-ops later, its pane kept, and its next turn's
+# end hands its restart back.
+as $box herdr --session wldn-1 stub linger swb-1-ops 0 >/dev/null
+eq "$(herdr_state $box wldn-1 '[.agents[].name] | sort | join(",")')" "swb-1-conductor,swb-1-ops"
+: > "$log"; : > "$CREW_TEST_LOG"; : > "$CREW_TEST_CLAUDE_LOG"
+as $box bash -c "echo '{\"session_id\":\"$(basename "$(rec swb-1-ops)")\"}' | python3 '$CREW/plugin/hooks/stop'"
+until_ok grep -q "swb-1-ops is restarted on crew" "$log" || fail "swb-1-ops was not restarted once it exited late: $(cat "$log")"
+has "$(cat "$log")" "swb-1-ops was ended by the exit an earlier restart typed; crew starts it"
+eq "$(launched swb-1-ops | cut -d' ' -f2)" "resumed"
+grep -q " agent prompt [^ ]* /exit$" "$CREW_TEST_LOG" && fail "the restart typed an exit to an agent that had exited"
+grep -q "^$box wldn-1 agent prompt swb-1-ops '\[crew\] crew restarted you on crew " "$CREW_TEST_LOG" || fail "swb-1-ops was not told its restart"
+ok "a later restart starts an agent the exit an earlier restart typed ended, with no stop, resumed and told so"
+
 # The Stop hook, at the end of the conductor's turn, once an update made it due.
 cond=$(rec swb-1-conductor); rewrite "$cond" "s/^CREW_LAUNCH=.*/CREW_LAUNCH=stale/"
 : > "$CREW_TEST_CLAUDE_LOG"
