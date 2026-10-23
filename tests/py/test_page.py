@@ -408,6 +408,30 @@ class TestDocks:
             + [{"text": f"wldn-{r} · mac-studio session wldn"} for r in ("design", "planner", "ops", "operator", "reviewer")]}]
         assert [r["text"] for r in d["docks"]["subscription:willdan"]["parts"][0]["rows"]] == ["atl-1 · mac-studio session atlas"]
 
+    def rest(self):
+        return re.sub(r'(<script type="application/json" id="data">).*?(</script>)', r"\1\2", page.render(TestFile.D, PurePath("/s/wldn/page.html")), flags=re.S)
+
+    def test_the_dock_is_drawn_over_the_board_in_the_mockups_forms_with_no_foot_and_loads_nothing(self):
+        """board-page "The dock opens over the board and the board does not move", "On a phone", "The dock answers
+        nothing": the dock slides over the board's right on its own layer, fills the screen under 760 px, and has no
+        foot; every item opens it by a click, Enter or space, and Esc, × or the scrim closes it."""
+        rest = self.rest()
+        for has in ('class="dock"', 'role="dialog"', 'aria-modal="false"', 'aria-labelledby="dk-title"', 'class="scrim"', ".dk-h.dk-sheet", ".dk-h.dk-ledger",
+                    ".dk-h.dk-record", ".dk-h.dk-slip", "transform:translateX(102%)", "body.docked .dock{transform:none",
+                    ".dock{width:100%;position:fixed;top:0;bottom:0;left:0;right:0}", ".dk-h .back.solo{display:inline-flex}",
+                    "D.docks", 'ev.key === "Escape"', 'ev.key === "Enter"', 'ev.key === " "', '$("scrim").addEventListener("click", closeDock)',
+                    'x.setAttribute("role", "button")', "x.tabIndex = 0", 'el("span", "host tm")', "preventScroll: true", "opener.focus"):
+            assert has in rest
+        for no in (".dk-f", "innerHTML", "fetch(", "XMLHttpRequest", "WebSocket", "<script src", "<link", "@import", "url("):
+            assert no not in rest
+
+    def test_the_open_dock_is_kept_in_the_address_and_a_key_the_page_no_longer_holds_is_dropped(self):
+        """board-page "The page is written again", "The item is gone"."""
+        rest = self.rest()
+        assert 'keep("dock", key)' in rest and 'keep("dock", "")' in rest
+        assert "if (f.dock && DOCKS[f.dock]) {" in rest and "if (f.dock) keep(\"dock\", \"\");" in rest
+        assert 'if (k !== "dock") store(k, v);' in rest
+
     def test_a_signals_typed_words_are_kept_as_they_are_in_the_dock_and_the_pages_block(self):
         """board-page "A dock of typed words"."""
         d = self.paged(label="Ends </script><b>here</b> & more.")

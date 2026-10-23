@@ -4,7 +4,8 @@
 # environment's deploy among the Operation lane's, and the attention line from one read, writes nothing and ends no
 # card session; the rail tab's refresh, in one fetch and one read of each host's kits, prints the rail, sweeps a dead
 # card session and writes the board's frame, which the board tab draws, and each agent's view with its open cards; crew page writes the page whole, with the
-# deploys and its partition links in the layout of its file, saying so when that names no partition, and nothing when
+# deploys, a dock for each item with its history as crew trace walks it, and its partition links in the layout of its
+# file, saying so when that names no partition, and nothing when
 # the branch can't be read; every view names a host that does not answer and shows the
 # rest; and a plan a hand edit broke is refused, named by its commit. What each lane,
 # line, URL and node says are logic cases (tests/py/test_board.py, test_page.py, test_rail.py), and what the kit
@@ -157,7 +158,7 @@ eq "$(tail -n +2 <<<"$out")" "$(crew board --label wldn | tail -n +2)"
 ok "the rail tab's refresh fetches once and reads each host's kits once, prints the rail, ends the dead session crew board left, and writes the frame the board tab draws as crew board does, with each agent's view and open cards beside it from the same read"
 
 # crew page: the page written whole under the partition's state folder, its path and header printed, nothing
-# appended; a node's history on it is what crew trace prints.
+# appended; a node's history on it, and its dock's, is what crew trace prints.
 mine=$(home_of mac-studio)/.local/state/crew/wldn
 block() { python3 -c 'import re, sys; t = open(sys.argv[1]).read(); m = re.findall(r"<script type=\"application/json\" id=\"data\">(.*?)</script>", t, re.S); print(m[0] if len(m) == 1 else "")' "$1"; }
 n=$(records)
@@ -170,7 +171,10 @@ eq "$(j '.deploys[] | select(.env == "mac-studio") | .deploys[0] | "\(.to[:7]) \
 eq "$(records)" "$n"
 expect_ok crew trace unit/a
 eq "$(j '.histories["unit/a"][] as $i | .entries[$i] | "\(.At[5:10]) \(.At[11:19]) \(.Act)"')" "$(awk '{print $1, $2, $3}' <<<"$out")"
-ok "crew page writes the page whole, with the board as crew board reads it and the deploys, prints its path and as of which commit, and appends nothing"
+eq "$(j '.board.construction[] | select(.bolt == "tenant-environments") | .dock') $(j '.docks["bolt:tenant-environments"].title')" \
+  "bolt:tenant-environments tenant-environments"
+eq "$(j '.docks["unit:a"].history[] as $i | .entries[$i] | "\(.At[5:10]) \(.At[11:19]) \(.Act)"')" "$(awk '{print $1, $2, $3}' <<<"$out")"
+ok "crew page writes the page whole, with the board as crew board reads it, the deploys and a dock for each item, prints its path and as of which commit, and appends nothing"
 
 # The partition links follow the page's own file: written as <label>.html, as swancloud's board serves them side by
 # side, it links <other>.html; written where its file and folder name no partition, it links none and says so.
