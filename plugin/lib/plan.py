@@ -1865,6 +1865,53 @@ def pull_of(sluice_from, repo):
     return dict(number=int(m.group(1)), url=f"https://github.com/{repo}/pull/{m.group(1)}") if m else None
 
 
+def refusals(entries):
+    """Each bolt whose last landing sluice did not land, from the run record's entries, oldest first: {bolt: (head,
+    words)}, the head that was submitted (its bolt.submit's Head) and crew's words for why, from each bolt's last
+    bolt.submit entry when it was refused; a bolt whose last one landed, or that has none, is not in it."""
+    last = {}
+    for e in entries:
+        if e.get("Act") != "bolt.submit":
+            continue
+        for o in e.get("On") or []:
+            if o.startswith("bolt/"):
+                last[o[5:]] = e
+    return {b: (e.get("Head") or "", e["Refused"]) for b, e in last.items() if e.get("Refused")}
+
+
+def refused_at(entries, bolt, head):
+    """sluice's refusal of the bolt's landing at head, in crew's words, or None (rail-cards "A refused landing is held
+    on its row"): its last bolt.submit was refused with head submitted; one refused at another head, the bolt's head
+    moved since by its team's fix, holds nothing."""
+    at, words = refusals(entries).get(bolt, (None, None))
+    return words if at and head and (at.startswith(head) or head.startswith(at)) else None
+
+
+def landing_rows(order, rows, held):
+    """The rows of a kit's landings card (rail-cards, record 0031 as amended 2026-10-23), from facts alone: order, the
+    plan's bolts of the kit by name, in its order; rows, {bolt: facts} for each that reads proven as a fix in flight on
+    it leaves it (land_row), its facts carrying its head and its fixes in flight, {fix: the words it started with or
+    None}; held, each bolt's last landing sluice did not land, {bolt: (head, words)} (refusals). In the plan's order,
+    each {bolt, box: True, facts}, a row the user ticks; or {bolt, box: False, why, facts}, held with no box: for a fix
+    in flight on it, in the fix's words, or for sluice's refusal of its landing at its present head, until its team's
+    fix moves the head. A bolt not in rows is no row."""
+    out = []
+    for b in [b for b in order if b in rows]:
+        f = rows[b]
+        fixes = f.get("fixes") or {}
+        at, words = held.get(b, (None, None))
+        if fixes:
+            why = "; ".join(f"held for a fix: {note} ({fix})" if note else f"held for {fix} until it merges or is dropped"
+                            for fix, note in sorted(fixes.items()))
+        elif at and (at.startswith(f["head"]) or f["head"].startswith(at)):
+            why = f"held: sluice refused its landing at {f['head'][:7]}, and it waits for its team's fix: {words}"
+        else:
+            out.append(dict(bolt=b, box=True, facts=f))
+            continue
+        out.append(dict(bolt=b, box=False, why=why, facts=f))
+    return out
+
+
 def batch_waits(units, due, unanswered):
     """Why a bolt that otherwise reads proven has no landing card yet (briefs.12), as landing_facts holds it: the units
     whose latest change no batch has held (due), then the batches holding a unit's latest change whose card the user

@@ -67,3 +67,46 @@ def test_the_plan_write_that_adds_a_bolt_named_as_a_kit_refuses_it_writing_nothi
     with pytest.raises(crew.Refusal, match="may not be named crew"):
         plan.op_bolt_new(Ctx(), a)
     assert plan.op_bolt_new(Ctx(), argparse.Namespace(**dict(vars(a), bolt="doctor-rows"))).act == "bolt.new"
+
+
+# ---------------------------------------------------------------------------------------------- the card's rows
+
+def facts(bolt, head="a" * 40, fixes=None):
+    return dict(bolt=bolt, kit="crew", head=head, fixes=fixes or {})
+
+
+def submitted(bolt, head, refused=None):
+    return dict(Act="bolt.submit", On=[f"bolt/{bolt}"], Head=head, **({"Refused": refused} if refused else {}))
+
+
+def test_the_rows_are_the_proven_bolts_in_the_plans_order_each_a_box():
+    rows = plan.landing_rows(["w", "y", "x", "z"], {"z": facts("z"), "y": facts("y"), "w": facts("w")}, {})
+    assert [(r["bolt"], r["box"]) for r in rows] == [("w", True), ("y", True), ("z", True)]
+
+
+def test_a_fix_in_flight_holds_its_row_in_its_words_with_no_box():
+    rows = plan.landing_rows(["y", "z"], {"y": facts("y", fixes={"fix/y/gap": "The zone list misses one zone."}),
+                                          "z": facts("z", fixes={"fix/z/old": None})}, {})
+    assert [(r["bolt"], r["box"], r["why"]) for r in rows] == [
+        ("y", False, "held for a fix: The zone list misses one zone. (fix/y/gap)"),
+        ("z", False, "held for fix/z/old until it merges or is dropped")]
+
+
+def test_a_landing_refused_at_the_bolts_present_head_holds_its_row():
+    head = "d" * 40
+    held = plan.refusals([submitted("y", "c" * 40), submitted("y", head, "bolt/y did not land: sluice found a conflict")])
+    row, = plan.landing_rows(["y"], {"y": facts("y", head)}, held)
+    assert (row["box"], row["why"]) == (False, "held: sluice refused its landing at ddddddd, and it waits for its team's "
+                                               "fix: bolt/y did not land: sluice found a conflict")
+    assert plan.refused_at([submitted("y", head, "no")], "y", head) == "no"
+
+
+def test_a_refusal_at_an_older_head_holds_nothing_once_the_fix_moved_it():
+    held = plan.refusals([submitted("y", "c" * 40, "bolt/y did not land")])
+    row, = plan.landing_rows(["y"], {"y": facts("y", "d" * 40)}, held)
+    assert row["box"]
+    assert plan.refused_at([submitted("y", "c" * 40, "no")], "y", "d" * 40) is None
+
+
+def test_a_landing_after_a_refusal_holds_nothing():
+    assert plan.refusals([submitted("y", "c" * 40, "no"), submitted("y", "c" * 40)]) == {}
