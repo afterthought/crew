@@ -174,14 +174,16 @@ expect_ok crew resume swb-2 conductor
 eq "$(grep "agent prompt swb-2-conductor '" "$CREW_TEST_LOG")" "$box wldn-1 agent prompt swb-2-conductor '[crew] Unit amended-one was amended and no construct runs on it: run construct on it now (crew unit run amended-one construct).'"
 ok "a conductor brought back is told the unit that waits amended: in its greeting by crew up, as crew's notice by crew resume"
 
-# A landing records GitHub's main, and refuses nothing for the host's own main lagging it: the unit lands on GitHub's
-# main from this host, as sluice's landing leaves the host's main, and another lands there after.
+# A landing reads what landed and records GitHub's main, refusing nothing for the host's own main lagging it: the unit
+# lands on GitHub's main from this host, as sluice's landing leaves the host's main and its origin/main where the host
+# last fetched them, and another lands there after.
 git -C "$k" pull -q --ff-only origin main
 change "$k" amended-one 3 3; commit_all "$k" "feat: amended-one"; git -C "$k" branch -q -f bolt/later main
-git -C "$k" push -q origin main; pushed later-from-a-mac
+git -C "$k" push -q "$r" main; pushed later-from-a-mac
+eq "$(git -C "$k" rev-parse origin/main)" "$(git -C "$k" rev-parse main~)"
 expect_ok crew bolt land later
 eq "$(field mac-studio bolt.land Head bolt/later)" "$(git -C "$other" rev-parse main)"
-ok "a landing records the commit GitHub's main holds after a fetch, and refuses nothing for the host's own main lagging it"
+ok "a landing fetches GitHub's main before it reads which units landed, records the commit it holds, and refuses nothing for the host's own main lagging it"
 
 # A bolt made before gives went through sluice: its branch made with git on the kit's host, at a commit whose policy
 # names no remote for bolts, while the kit's main now names origin. Each read of its team says once that it is local

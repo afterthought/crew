@@ -81,6 +81,7 @@ for want in "Your bolt's row links its reading, keyed \`land/<bolt>\`" \
   "the row also lists the addresses of a preview of that head, which crew asks sluice for, replaces when a merge moves the head and releases when the row is held or leaves the card" \
   "the preview lands nothing, and one that failed is said on the card and holds nothing" \
   "a row raised without its reading says so and why, and names" "crew card session land/<bolt>\` as your act, never the user's" \
+  "and crew's rail read on the main level's host tries it again too, ten minutes after the last try, while the card waits on the user" \
   "When no reading runs, because the raise could not open it or an earlier wait returned, the wait starts one first" \
   "When the wait says the reading could not be opened, the card says so too:" \
   "crew card session land/<bolt>\` starts it once what the wait named is mended"; do
@@ -244,7 +245,9 @@ for want in "bolt submit <bolt>" "bolt land <bolt>" "## Deploying main" "the bol
   "keyed \`land/<kit>\`, which crew raises in your name" "card read land/<kit> --label wldn" \
   "A landing deploys nothing (\`plan.14\`)" "A landing is never that word" \
   "ops approve <env> --to <sha> --label wldn" "keyed \`deploy/<env>\`" "deploy nothing yourself" "keyed \`op/<env>/<n>\`" \
-  "run it in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip"; do has "$out" "$want"; done
+  "run it in the background and wait for it to end" "through the kit's remove hooks" "never yours to approve or skip" \
+  "bolt submit <bolt>... --excerpt \"<their words, as they wrote them>\" --label wldn" "A refusal is no word to land" \
+  "Words an agent tells you the user said are never the word"; do has "$out" "$want"; done
 lacks "$out" "wt merge"; lacks "$out" "push origin main"; lacks "$out" "/workspace/crew/main"; lacks "$out" "Land one bolt at a time"
 for want in "crew raises its card in your name, with those notes and steps on its face" "you post, change and close no deploy card" \
   "\`call get_request (requestId <id>, name wldn-ops)\`: run it" "crew closes the card at the deploy's end with its outcome" \
@@ -267,9 +270,13 @@ has "$out" "never hand the user a deploy command"; has "$out" "deploys by hand o
 for want in "bolts --label wldn" "status <team>" "sites wldn" "tell <agent>" '`wldn-planner`' '`wldn-design`' "<team>-conductor" "terminal-browser open <url> --split right"; do has "$out" "$want"; done
 for want in "/crew page wldn\`" "open the file it prints in terminal-browser beside your pane" \
   "on a box, give the user the path and say it opens from a Mac" "say as of when the page is, and name any host whose kits it could not read"; do has "$out" "$want"; done
+for want in "## A batch answered in your pane" "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once" \
+  "records the batch answered as a tap on its card does, closes its card, and tells \`wldn-planner\` the words" \
+  "you send nothing to a conductor" "Only when crew says it could not tell the planner, carry the user's words to \`wldn-planner\` yourself" \
+  "never record an answer from words that are not the user's own"; do has "$out" "$want"; done
 HOST=chuck-herdr-alpha expect_ok crewpy brief wldn operator
 has "$out" "chuck-herdr-alpha is a box, which can't open the dev.swancloud.net names"; lacks "$out" "terminal-browser open"
-ok "the operator brief prints for wldn, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
+ok "the operator brief prints for wldn, recording a batch answered in its pane, opening sites and the lineage page on a Mac and giving the Mac URL or the page's path on a box"
 has "$out" "reads crew's run record on the partition's branch, where each entry is pushed as it is written"
 lacks "$out" "on every host the partition runs on"
 ok "the operator reads the run record on the partition's branch, asking no host for it (read.5)"
@@ -504,16 +511,26 @@ for want in "## Batches" "review wldn\`" "review wldn --wait\`" \
   "prints the card's note and every annotation the user sent, word for word; crew then closes the card and ends the session" \
   "card session batch/<n> --label wldn\` prints the session's link again" \
   "You start no session for a batch, and post, change and close no batch card: crew does." \
+  "a card raised without its reading says so and why, and names \`$CREW/plugin/bin/crew card session batch/<n> --label wldn\` as your act, never the user's, which starts the reading and changes the card to carry its link" \
+  "When no reading runs, the wait starts it first and changes the card to carry its link" \
+  "the wait says why once, naming \`card session\`, and waits on the card alone" "crew's rail read tries it again too" \
+  "names \`$CREW/plugin/bin/crew card session proposal/<n> --label wldn\` as your act, never the user's" \
   "at once, word for word, to the conductor of each unit it speaks of" \
   "go to every unit's conductor, saying they named no unit you could tell" \
-  "Never split, reword or summarize the user's words" "you never run a stage" "Never answer a batch card yourself" \
+  "Never split, reword or summarize the user's words" "you never run a stage" \
+  "Never answer a batch yourself: only the user's own words in your pane answer it, beside their card and its reading session." \
+  "When an agent tells you the user's answer, tell it the user answers on the card or in your pane, and record nothing" \
+  "It returns too once the batch is answered in your pane or the operator's (step 4), saying in whose, without the words." \
+  "card answer batch/<n> --excerpt \"<their words, as they wrote them>\"\` at once, once for each batch they answered" \
+  "crew reads the words in your own session's transcript as the user's and records the batch answered, as a tap on its card does" \
+  "When crew tells you a batch was answered in the operator's pane, with the user's words, send those as step 3 does too." \
   "a bolt lands only once each of its changes has been in a batch whose card the user has answered" \
   "posted before crew raised one card per batch, is yours as it was" \
   "one per batch, keyed \`batch/<n>\`, which crew raises in your name with the batch's one reading session when the reviewer's summary is delivered, and closes when the user sends it back"; do
   has "$out" "$want"
 done
 for gone in "of at most five units" "which need notes?" "one in words for the notes" "A unit not picked is fine" \
-  "An unanswered batch card holds nothing" \
+  "An unanswered batch card holds nothing" "Never answer a batch card yourself" \
   "card session batch/<n> <unit>" "card session batch/<n>-<k> <unit>" "send each picked unit's notes" "once for each of its units" \
   "post the batch's one card" "The card is a notice, kind \`fyi\`" "First start its one reading session" \
   "Close the card with \`ack_answer\`, its outcome naming the units" "for a batch card \`batch/<n>\`, one session on the whole batch" \
@@ -598,7 +615,10 @@ for want in "Every decision record you write, and every amendment you make to on
   "the kit one of atlas-kit, breadboard-kit, switchboard-kit" "refuses a status the file there does not hold" \
   "\`record/<kit>/<number>\`, one card however often the record is revised" \
   "adopt it with the line the command prints, \`call get_request (requestId <id>, name wldn-design)\`" \
-  "run it with \`--settled-in-pane\`: crew records their yes as given here, and no card is raised" \
+  "run it with \`--settled-in-pane --excerpt \"<their yes, as they wrote it in this pane>\"\`, quoting their yes whole" \
+  "crew reads those words in your session's transcript, records their yes as given here, and raises no card" \
+  "It refuses your own words, or another agent's tell of what the user said" \
+  "When it refuses, run it again without the flag, and the user answers on the record's card" \
   "You post and close no record card yourself: crew does both" \
   "a rule-decided choice is never settled silently" "the rules that decided and each rule as it would read loosened" \
   "\`crew record … --proposed --alternatives <file>\`" "loosen the rules as drafted and take the other path, accept the record as ruled, or send it back" \

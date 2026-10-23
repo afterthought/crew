@@ -61,6 +61,15 @@ grep -q "^$box wldn-3 agent prompt wldn-operator '\[crew tell from [^]]*@mac-stu
 eq "$(count mac-studio send) $(field mac-studio tell Chars)" "2 17"
 expect_fail "crew send takes a team or a partition, not 'nosuch': teams apk-1 atl-1 brd-1 swb-1 swb-2; partitions madswan swancloud wldn" crew send nosuch "x"
 eq "$(count mac-studio send)" "2"
+# herdr drops the planner's name in its pane, its session there the one crew started (briefs.17): a tell from another
+# host finds it in the pane crew keeps for it, and its host's crew gives the name back.
+p=$(as $box herdr --session wldn-3 agent get wldn-planner | jq -r .result.agent.pane_id)
+as $box herdr --session wldn-3 stub agent "$p"
+echo "CREW_AGENT=wldn-planner" > "$(home_of $box)/.local/state/crew/sessions/sid-${p/:/-}"
+expect_ok crew tell wldn-planner "Words after the drop"
+grep -q "^$box wldn-3 agent prompt wldn-planner '\[crew tell from [^]]*\] Words after the drop'" "$CREW_TEST_LOG" || fail "the tell did not reach the planner"
+eq "$(as $box herdr --session wldn-3 agent get "$p" | jq -r .result.agent.name)" "wldn-planner"
+ok "a tell reaches an agent whose name herdr dropped in its pane, its session the one crew started, and gives the name back"
 # The operator agent mac-studio ran before record 0035, in an operator workspace beside a tab of the user's own: the
 # console's up ends it and closes the panes crew recorded, leaving the user's tab.
 as mac-studio herdr --session wldn workspace create --cwd /tmp --label operator --no-focus >/dev/null

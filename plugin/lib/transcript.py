@@ -211,14 +211,16 @@ def holds_tool_result(v):
     return False
 
 
-def check(session, excerpt, skip=(), stage_by=None):
+def check(session, excerpt, skip=(), stage_by=None, want=None):
     """Look for the excerpt in the session's transcript, whitespace aside, once it shows it is the live session's: its
     last record written within FRESH. The crew signal command lines that carry an excerpt are crew's commands and their
     echoes, lines of type assistant what the agent wrote and lines of type api-request-blob Claude Code's copies of
     what it sent the model, the agent's own among them, and lines that name a path in skip the writing of the excerpt's
     file: none of them is searched, and the rest of a string that holds such a command line is. stage_by is
     the conductor whose stage the session runs, None for a session that runs none, where a prompt of a stage's form is
-    the user's. Returns a Verdict; refused is one too."""
+    the user's. The source is the last received record that holds the excerpt; with want="user", the last one the user
+    asserted, so that a later echo of the user's words in a tool's output or a tell does not hide them, and the last
+    received record only when the user asserted none. Returns a Verdict; refused is one too."""
     if not session:
         return unverified("herdr names no session")
     path = find(session)
@@ -235,7 +237,7 @@ def check(session, excerpt, skip=(), stage_by=None):
         return unverified(f"session {session}'s transcript has not been written for {int(age.total_seconds() // 60)} "
                           "minutes: crew may be reading another session's")
     needle = collapse(excerpt)
-    received = other = args = None  # args: the words of the stage command just received, which its expansion ends with
+    received = received_user = other = args = None  # args: the words of the stage command just received, which its expansion ends with
     for n, raw, v in found:
         if kind(v) in WROTE:
             continue
@@ -251,8 +253,12 @@ def check(session, excerpt, skip=(), stage_by=None):
             continue
         if kind(v) == "user":
             received = (n, raw, v, hits, expansion)
+            if asserter(v, hits[-1], stage_by, expansion) == "user":
+                received_user = received
         else:
             other = (n, raw, v, hits)
+    if want == "user" and received_user:
+        received = received_user
     if received:
         n, raw, v, hits, expansion = received
         return Verdict("verified", raw=raw, n=n, value=v, asserted_by=asserter(v, hits[-1], stage_by, expansion))
