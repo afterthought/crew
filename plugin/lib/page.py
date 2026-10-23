@@ -484,6 +484,65 @@ def usage_checked(files):
     return readings, unread
 
 
+def age_said(at, now):
+    """How long before now a reading was made, in whole minutes, hours and minutes past sixty."""
+    m = int((now - board.when(at)).total_seconds() // 60)
+    if m < 1:
+        return "under a minute ago"
+    h, m = divmod(m, 60)
+    return (f"{h} h " if h else "") + (f"{m} min " if m or not h else "") + "ago"
+
+
+def reset_said(at, now):
+    """When a window resets, in the page's own form: its time alone on the page's day, else with its date."""
+    t = board.when(at).astimezone(datetime.timezone.utc)
+    return t.strftime("%H:%MZ" if t.date() == now.astimezone(datetime.timezone.utc).date() else "%Y-%m-%d %H:%MZ")
+
+
+def window(key, name, w, now):
+    """A window as published: its percentage rounded to a whole number and when it resets, or that it is not given when
+    the reading leaves it out or gives no figure; pct, its number for the bar alone, clamped to 0 to 100."""
+    u, resets = (w or {}).get("utilization"), (w or {}).get("resets_at")
+    if u is None:
+        return {"window": key, "name": name, "utilization": None, "pct": None, "resets_at": resets, "said": f"{name} not given"}
+    return {"window": key, "name": name, "utilization": u, "pct": max(0, min(100, u)), "resets_at": resets,
+            "said": f"{name} {math.floor(u + 0.5)}%" + (f", resets {reset_said(resets, now)}" if resets else "")}
+
+
+def figures(r, now):
+    """A made reading's figures: the five-hour and seven-day windows, always; then by model Opus, Sonnet and each of
+    model_scoped in its order, each only where the reading gives it."""
+    w = r["windows"]
+    return {"windows": [window(k, n, w[k], now) for k, n in USE],
+            "models": [window(k, n, w[k], now) for k, n in MODELS if w[k] is not None]
+                      + [window("model_scoped", m["display_name"], m, now) for m in w["model_scoped"] or []]}
+
+
+def reading_said(r, now):
+    return (f"{r['host']} could not read {age_said(r['at'], now)}: {r['unread']}" if r["unread"]
+            else f"{r['host']} read {age_said(r['at'], now)}")
+
+
+def subscriptions(fleet, readings, teams, now):
+    """Every Claude subscription, by name: each account a session of the hosts file names and each a reading is of
+    (usage_checked). Each shows the figures of its newest reading made, which host read it and how long before now; each
+    other reading, its host's and how long ago, or the host's words for why it could not read; else that its use could
+    not be read, or that no host has published it. Nothing is made of the figures but their words (record 0038 §5)."""
+    named = {s["account"] for h in fleet["hosts"].values() for s in h.get("sessions", {}).values() if s.get("account")}
+    out = []
+    for a in sorted(named | {r["account"] for r in readings}):
+        mine = sorted((r for r in readings if r["account"] == a), key=lambda r: (-board.when(r["at"]).timestamp(), r["host"]))
+        shown = next((r for r in mine if not r["unread"]), None)
+        if shown:
+            state, said = "read", f"read by {shown['host']} {age_said(shown['at'], now)}"
+        else:
+            state, said = ("unread", "its use could not be read") if mine else ("none", "no host has published its use")
+        out.append(dict({"account": a, "state": state, "said": said, "host": shown and shown["host"], "at": shown and shown["at"]},
+                        **(figures(shown, now) if shown else {"windows": [], "models": []}),
+                        others=[{"host": r["host"], "at": r["at"], "unread": r["unread"], "said": reading_said(r, now)} for r in mine if r is not shown]))
+    return out
+
+
 # ------------------------------------------------------------------------------------------------- the docks
 
 # A lineage node's kind as a dock's key names it, a chore's a unit's (plan.11); an agenda item has no dock.

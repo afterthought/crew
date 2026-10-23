@@ -29,10 +29,11 @@ def main(label, partition, machine, session, teams, sessions=None):
 
 # madswan, swancloud and wldn, in the teams file's order. swancloud's main level runs on deneb in its session swancloud
 # and crw-6 beside it in swancloud-2, on another account; crw-7 runs on mac-studio, away from the main level, in a
-# session the hosts file names no account for; deneb's swancloud-3 is the partition's, and no agent of it runs there.
+# session the hosts file names no account for; deneb's swancloud-3 is the partition's, and no agent of it runs there;
+# deneb's agentplot-2 is on madswan, and no agent of any partition runs there.
 FLEET = {
     "hosts": {"deneb": {"sessions": {"madswan": sess("business"), "swancloud": sess("personal"), "swancloud-2": sess("personal", "madswan-2"),
-                                     "swancloud-3": sess("personal")}},
+                                     "swancloud-3": sess("personal"), "agentplot-2": sess("agentplot")}},
               "mac-studio": {"sessions": {"wldn": sess("clients/willdan", "willdan-alex"), "swancloud-4": sess("personal", None)}},
               "chuck-herdr-alpha": {"sessions": {"wldn-1": sess("clients/willdan", "ia")}}},
     "partitions": {"madswan": main("madswan", "business", "deneb", "madswan", ["mad-1"]),
@@ -357,6 +358,74 @@ class TestPublishedUse:
         assert files["mac-studio"] == {"file": str(tmp_path / "mac-studio.json"), "why": "it is not JSON: Expecting value: line 1 column 1 (char 0)"}
         readings, unread = page.usage_checked(files)
         assert [r["account"] for r in readings] == ["madswan"] and [u["host"] for u in unread] == ["mac-studio"]
+
+
+def subs(*readings, now=NOW):
+    rs, _ = page.usage_checked({h: published(h, *[r for x, r in readings if x == h]) for h in dict.fromkeys(x for x, _ in readings)})
+    teams = {t["team"]: t for p in fleet()["partitions"] for t in p["teams"]}
+    return {s["account"]: s for s in page.subscriptions(FLEET, rs, teams, now)}
+
+
+def ago(m):
+    return (NOW - datetime.timedelta(minutes=m)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class TestSubscriptions:
+    def test_every_account_of_the_sessions_and_of_the_readings_by_name(self):
+        """fleet-page "Accounts from sessions and from readings": fable-test is published for and no session names it."""
+        assert list(subs(("deneb", MADSWAN), ("deneb", made("fable-test", ago(3))))) == ["fable-test", "ia", "madswan", "madswan-2", "willdan-alex"]
+
+    def test_the_madswan_reading_as_published_with_a_model_the_server_names_and_no_opus_line(self):
+        """fleet-page "Use with a model the server names"."""
+        m = subs(("deneb", MADSWAN))["madswan"]
+        assert (m["state"], m["host"], m["at"], m["said"]) == ("read", "deneb", "2026-10-23T11:58:04Z", "read by deneb 1 min ago")
+        assert [w["said"] for w in m["windows"]] == ["five-hour 34%, resets 14:00Z", "seven-day 61%, resets 2026-10-27 09:00Z"]
+        assert [w["said"] for w in m["models"]] == ["Sonnet 20%, resets 2026-10-27 09:00Z", "Fable 40%, resets 2026-10-27 09:00Z"]
+        assert [(w["window"], w["name"], w["utilization"], w["pct"], w["resets_at"]) for w in m["windows"] + m["models"]] == [
+            ("five_hour", "five-hour", 34.0, 34.0, "2026-10-23T14:00:00Z"), ("seven_day", "seven-day", 61.0, 61.0, WINDOW_AT),
+            ("seven_day_sonnet", "Sonnet", 20.0, 20.0, WINDOW_AT), ("model_scoped", "Fable", 40.0, 40.0, WINDOW_AT)]
+
+    def test_a_window_with_no_figure_is_said_not_given_and_one_left_out_too(self):
+        """fleet-page "A window with no figure": never a blank or 0%."""
+        r = made("ia", ago(5), five_hour={"utilization": None, "resets_at": "2026-10-23T14:00:00Z"}, seven_day_opus={"utilization": 12.5},
+                 model_scoped=[{"display_name": "Fable", "utilization": None, "resets_at": None}])
+        ia = subs(("deneb", r))["ia"]
+        assert [w["said"] for w in ia["windows"]] == ["five-hour not given", "seven-day not given"]
+        assert [w["said"] for w in ia["models"]] == ["Opus 13%", "Fable not given"]
+        assert [w["pct"] for w in ia["windows"] + ia["models"]] == [None, None, 12.5, None]
+
+    def test_a_figure_past_a_hundred_is_said_as_published_and_clamped_for_the_bar_alone(self):
+        w = subs(("deneb", made("ia", ago(5), five_hour={"utilization": 104, "resets_at": None})))["ia"]["windows"][0]
+        assert (w["said"], w["utilization"], w["pct"]) == ("five-hour 104%", 104, 100)
+
+    def test_read_on_two_hosts_the_newest_is_shown_and_the_other_listed_with_its_age(self):
+        """fleet-page "Read on two hosts"."""
+        m = subs(("mac-studio", made("madswan", ago(9), seven_day={"utilization": 50})),
+                 ("deneb", made("madswan", ago(2), seven_day={"utilization": 61})))["madswan"]
+        assert (m["host"], m["said"], m["windows"][1]["said"]) == ("deneb", "read by deneb 2 min ago", "seven-day 61%")
+        assert m["others"] == [{"host": "mac-studio", "at": ago(9), "unread": None, "said": "mac-studio read 9 min ago"}]
+
+    def test_a_newer_reading_not_made_lists_its_failure_and_the_made_ones_figures_are_shown(self):
+        m = subs(("deneb", made("madswan", ago(65), five_hour={"utilization": 10})),
+                 ("mac-studio", made("madswan", ago(4), unread="the token had expired")))["madswan"]
+        assert (m["state"], m["said"], m["windows"][0]["said"]) == ("read", "read by deneb 1 h 5 min ago", "five-hour 10%")
+        assert [o["said"] for o in m["others"]] == ["mac-studio could not read 4 min ago: the token had expired"]
+
+    def test_only_a_failed_reading_shows_no_figures_and_names_the_host_with_its_words_and_when_it_tried(self):
+        """fleet-page "Only a failed reading"."""
+        c = subs(("deneb", dict(CREDITS, at=ago(4))))["credits"]
+        assert (c["state"], c["said"], c["host"], c["at"], c["windows"], c["models"]) == ("unread", "its use could not be read", None, None, [], [])
+        assert c["others"] == [{"host": "deneb", "at": ago(4), "unread": "the usage endpoint answered 401",
+                                "said": "deneb could not read 4 min ago: the usage endpoint answered 401"}]
+
+    def test_a_subscription_no_host_published_for_says_so(self):
+        """fleet-page "Nothing published"."""
+        ia = subs(("deneb", MADSWAN))["ia"]
+        assert (ia["state"], ia["said"], ia["windows"], ia["others"]) == ("none", "no host has published its use", [], [])
+
+    def test_ages_in_whole_minutes_and_hours_past_sixty(self):
+        assert [page.age_said(ago(m), NOW) for m in (0, 0.9, 2, 59, 60, 65, -3)] == [
+            "under a minute ago", "under a minute ago", "2 min ago", "59 min ago", "1 h ago", "1 h 5 min ago", "under a minute ago"]
 
 
 def tokens(text):
