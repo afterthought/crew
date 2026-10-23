@@ -21,6 +21,7 @@ from facts import FLEET as BASE, START
 
 import crew
 import plan
+import transcript
 
 HOOK = pathlib.Path(__file__).resolve().parents[2] / "plugin" / "hooks" / "cards"
 _loader = importlib.machinery.SourceFileLoader("cards_hook", str(HOOK))
@@ -427,22 +428,67 @@ class TestSessions:
         assert capsys.readouterr().err == ""
 
     def test_a_card_whose_session_could_not_open_is_raised_all_the_same_saying_so(self, capsys):
+        """card-sessions "A batch whose reading could not open": tried twice, and named as the planner's to start."""
         why = "crew can't read z1's change: mac-studio, atl-1's host, did not answer (ssh: timed out)"
         acts = ReadingActs(refused=why)
         c = plan.card_built(acts, "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))["card"]
-        assert c["summary"].startswith("6 changes to read, nothing to approve, since batch 2.\n\nIts reading could not be opened on the tailnet.\n\n")
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "batch/3")]
+        assert c["summary"].startswith("6 changes to read, nothing to approve, since batch 2.\n\nIts reading could not be opened on the "
+                                       "tailnet: crew tries it again when the rail is read, and the planner starts it with crew card "
+                                       "session batch/3; this card then carries its link.\n\n")
         assert len(c["summary"]) <= 400
         assert c["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {why}\n\n")
         assert c["context"]["links"] == [] and not [a for a in c["artifacts"] if a["kind"] == "url"]
-        assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {why}\n"
+        assert capsys.readouterr().err == (f"card batch/3: its reading could not be opened on the tailnet: {why}; crew tries once more\n"
+                                           f"card batch/3: its reading could not be opened on the tailnet: {why}; crew card session "
+                                           "batch/3 starts it\n")
+
+    # A batch's or a long proposal's raise tries its reading twice (card-sessions).
+    SLOW = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+    ENDED = "plannotator ended before batch/3's session was ready: stub: refused to start"
+
+    def test_the_first_start_fails_and_the_second_opens(self, capsys):
+        acts = ReadingActs(refusals=[self.SLOW, None])
+        b = plan.card_built(acts, "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert acts.sessions == [("wldn", "batch/3"), ("wldn", "batch/3")]
+        assert b["card"]["context"]["links"] == [{"label": "Read batch 3", "url": "http://mac-studio.ts.swancloud.net:19432"}]
+        assert "unread" not in b and "could not be opened" not in b["card"]["summary"]
+        assert capsys.readouterr().err == f"card batch/3: its reading could not be opened on the tailnet: {self.SLOW}; crew tries once more\n"
+
+    def test_the_second_start_is_made_with_nothing_read_kept(self):
+        """The second start writes the batch's files afresh: nothing the first read kept is served to it."""
+        fresh = []
+
+        class Acts(ReadingActs):
+            def reading(self, label, key, facts):
+                fresh.append(plan.READ.bypass > 0)
+                return super().reading(label, key, facts)
+        plan.card_built(Acts(refusals=[self.SLOW, None]), "wldn", built.batch_card, dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert fresh == [False, True]
+
+    def test_both_starts_fail_and_the_card_holds_the_second_reason(self, capsys):
+        b = plan.card_built(ReadingActs(refusals=[self.SLOW, self.ENDED]), "wldn", built.batch_card,
+                            dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        assert b["unread"] == self.ENDED and b["card"]["context"]["links"] == []
+        assert b["card"]["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
+        assert capsys.readouterr().err.splitlines()[-1] == (
+            f"card batch/3: its reading could not be opened on the tailnet: {self.ENDED}; crew card session batch/3 starts it")
+
+    def test_a_landings_facts_carry_its_raises_two_tries_so_its_card_tries_once(self):
+        """A landing's raise tries twice itself (landing_opened): card_built makes one start for facts with neither."""
+        acts = ReadingActs(refused="plannotator is not on this host's path, and a card's session is a plannotator session")
+        plan.card_built(acts, "wldn", built.landing_card, LANDING)
+        assert acts.sessions == [("wldn", "land/b1")]
 
     def test_a_landing_whose_reading_could_not_open_is_raised_all_the_same_an_approval_as_before(self, capsys):
         """card-sessions "A landing whose reading could not open"."""
         why = "plannotator is not on this host's path, and a card's session is a plannotator session"
         b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
         c, bare = b["card"], built.landing_card(LANDING)["card"]
-        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: the bolt's conductor starts "
-                                                  "it with crew card session land/b1, and this card then carries its link.")
+        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: crew tries it again when the "
+                                                  "rail is read, and the bolt's conductor starts it with crew card session "
+                                                  "land/b1; this card then carries its link.")
+        assert len(c["summary"]) <= 400
         assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
         assert (c["kind"], c["approve"], c["context"]["links"]) == ("approve", bare["approve"], [])
         assert b["unread"] == why
@@ -506,12 +552,78 @@ class TestSessions:
         assert plan.batch_waited("batch/3", ("annotated", notes, 2), tapped)[2] == "Read; 3 notes sent to their teams"
         assert plan.batch_waited("batch/3", ("annotated", notes, None), None)[2] == "Read; its notes sent to their teams"
 
+    def test_a_batch_whose_session_was_sent_is_recorded_read_by_crew_whenever_no_card_of_it_closed(self):
+        """review-batches, "A batch whose reading session is sent is read, with or without its card": a card closed is
+        the record; none held, or one lost or whose close was refused, which row_card_close gives as None, is not."""
+        assert plan.batch_read_close("req_b13") is False
+        assert plan.batch_read_close(None) is True
+
     def test_a_batch_wait_goes_on_while_neither_has_the_users_word_and_ends_on_a_card_closed_outside_crew(self):
         for decided in (None, ("dismissed", None, None)):
             assert plan.batch_waited("batch/3", decided, {"status": "pending", "turn": "you"}) is None
             assert plan.batch_waited("batch/3", decided, None) is None
         assert plan.batch_waited("batch/3", None, {"status": "cancelled"}) == (
             "closed", "batch/3: its card was closed outside crew; Pending You shows it cancelled", "cancelled")
+
+    # A batch's wait starts its reading when none runs (card-sessions).
+    @pytest.mark.parametrize("recorded, held, refused, step", [
+        ({"pid": 42}, "req_b3", None, ("wait", None)), (None, None, None, ("wait", None)), ({"pid": 42}, None, None, ("wait", None)),
+        (None, "req_b3", None, ("start", None)),
+        (None, "req_b3", "plannotator is not on this host's path", ("card", "batch/3's reading could not be opened: plannotator is not "
+                                                                    "on this host's path; crew card session batch/3 starts it once that "
+                                                                    "is mended, and the wait goes on for its card"))])
+    def test_a_batch_wait_with_its_card_held_and_no_session_starts_its_reading_and_says_once_when_it_cannot(self, recorded, held, refused, step):
+        assert plan.batch_unstarted("batch/3", recorded, held, refused) == step
+
+    def test_a_batch_wait_starts_no_reading_for_a_batch_answered_in_a_pane(self):
+        """review-batches "A batch answered in a main-level pane": it waits on the user no more, and the wait ends on its
+        answer."""
+        assert plan.batch_unstarted("batch/3", None, "req_b3", answered=True) == ("wait", None)
+
+    def waited_on(self, monkeypatch, tmp_path, acts):
+        """crew card wait batch/3 on mac-studio, the main level's host, its card and its reading read as acts gives them."""
+        monkeypatch.setattr(plan, "batch_read", lambda fleet, label, n, acts: dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        monkeypatch.setattr(plan, "raise_batch", lambda fleet, row, acts=None, note=None: acts.emit("wldn", "card.update", ["batch/3"],
+                                                                                                   Card="req_b3", Key=row["key"], note=note))
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
+        plan.batch_wait(fleet, "wldn", "batch/3", tmp_path, acts)
+
+    def test_a_batch_wait_starts_the_missing_reading_and_changes_its_card_to_carry_it(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A card raised without its reading", for a batch's wait: the start is recorded and the card
+        changed before the wait reads it."""
+        reads = []
+
+        class Acts(ReadingActs):
+            def bridge(self, name, later, held=None):
+                py = super().bridge(name, later, held)
+                answer = py.answer
+
+                def answered(tool, args):
+                    if tool == "get_request":
+                        reads.append(args["requestId"])
+                        return ({"status": "pending", "turn": "you", "version": 3} if len(reads) == 1 else
+                                {"status": "answered", "turn": "agent", "answer": {}}), None
+                    return answer(tool, args)
+                py.answer = answered
+                return py
+        acts = Acts(entries=[{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}])
+        self.waited_on(monkeypatch, tmp_path, acts)
+        assert acts.sessions == [("wldn", "batch/3")]
+        assert [(e["Act"], e.get("note")) for e in acts.emitted][:2] == [("card.reading", None), ("card.update", plan.RELINKED)]
+        out = capsys.readouterr().out.splitlines()
+        assert out[:2] == ["http://mac-studio.ts.swancloud.net:19432", "batch/3: sent back on its card, with no note"]
+
+    def test_a_batch_wait_whose_reading_will_not_open_says_so_once_and_waits_on_its_card(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "The reading still will not open": the card is left as it is and returns the user's word."""
+        why = "plannotator is not on this host's path, and a card's session is a plannotator session"
+        acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "version": 3, "answer": {"note": {"text": "Read."}}}, None)},
+                           [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}], refused=why)
+        self.waited_on(monkeypatch, tmp_path, acts)
+        assert not [t for t, _ in acts.calls if t == "update_request"]
+        assert (acts.emitted[0]["Act"], acts.emitted[0]["refused"]) == ("card.reading", why)
+        assert capsys.readouterr().err.splitlines() == [
+            f"batch/3's reading could not be opened: {why}; crew card session batch/3 starts it once that is mended, and the wait "
+            "goes on for its card"]
 
     def test_a_sessions_result_gives_its_count_of_annotations(self, tmp_path):
         (tmp_path / "result.json").write_text(json.dumps({"decision": "annotated", "feedback": "a", "annotationCount": 2}))
@@ -535,6 +647,49 @@ class TestSessions:
         assert acts.sessions == [("wldn", "batch/3")]
         assert plan.raise_batch(FLEET, dict(row, key="batch/3-1"), acts) is None
         assert plan.raise_batch(FLEET, dict(row, key="batch/4"), acts) is None
+
+    def test_the_sweeps_raise_of_a_batch_handed_an_older_copy_this_host_cant_reach_posts_it_saying_that_copy_is_dead(self, monkeypatch, tmp_path):
+        """rail-cards, "The main level moved to another host": batch 3's card is held under another host's sign-in, so
+        this host holds none and its raise, handed the older copy, posts one card saying it is dead and closes nothing;
+        a raise handed none posts the batch's card as it is."""
+        (tmp_path / "batch-wldn-3.md").write_text("## x1 (swb-1)\n\nx1 gives each tenant its own zone.\n")
+        monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        held = [{"Act": "review.batch", "Batch": "3", "Units": "x1:swb-1@aaa1", "On": ["batch/3"], "At": "2026-10-12T10:00:00Z"}]
+        answers = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+                   "post_request": ({"requestId": "req_b4", "version": 1}, None)}
+        row = {"label": "wldn", "key": "batch/3", "group": "batches"}
+        acts = ReadingActs(answers, held)
+        assert plan.raise_batch(FLEET, dict(row, dead="req_b3"), acts) == "req_b4"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_b4")]
+        assert [t for t, _ in acts.calls if t != "tell"] == ["match_area", "post_request"]
+        assert acts.calls[[t for t, _ in acts.calls].index("post_request")][1]["summary"].startswith(f"{built.DEAD}\n\n1 change to read")
+        acts = ReadingActs(answers, held)
+        assert plan.raise_batch(FLEET, row, acts) == "req_b4"
+        assert next(a for t, a in acts.calls if t == "post_request")["summary"].startswith("1 change to read")
+
+    POSTED = {"match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None),
+              "post_request": ({"requestId": "req_n2", "version": 1}, None)}
+
+    def summaries(self, acts):
+        return [a["summary"] for t, a in acts.calls if t == "post_request"]
+
+    def test_the_sweeps_raise_of_a_proposal_handed_an_older_copy_posts_it_saying_that_copy_is_dead(self, monkeypatch):
+        """rail-cards, "A proposal's card left on the host the main level left": proposal 1's card is held under another
+        host's sign-in, so this host holds none, and its raise at the sweep, handed dead, posts one card saying the older
+        copy is dead; without it, the plain card."""
+        from test_proposal_life import CARDED, proposals_with, write
+        monkeypatch.setattr(plan, "recfix", lambda text, what: None)
+        w = write()
+        w.files["proposals.rec"] = proposals_with(("Console first.", ['unit add a-new "A new unit." --bolt console-pages'])).text()
+        acts = ReadingActs(self.POSTED)
+        assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "sweep", acts, dead=True) == "req_n2"
+        assert [(e["Act"], e["Card"]) for e in acts.emitted] == [("card.post", "req_n2")]
+        plain = ReadingActs(self.POSTED)
+        assert plan.raise_proposal_at(CARDED, "wldn", w, 1, "sweep", plain) == "req_n2"
+        (dead,), (bare,) = self.summaries(acts), self.summaries(plain)
+        assert dead == f"{built.DEAD}\n\n{bare}"
+
 
 LANDING = dict(bolt="b1", kit="k", units=["v1"], chores=[], batches={}, head="abc1234", at=None, moved=0, pr=None)
 
@@ -565,6 +720,9 @@ class ReadingActs:
 
     def session(self, label, key, facts):
         return self.reading(label, key, facts)[0]
+
+    def partition(self, label):  # the partition's run record, which a session given again reads its kit's card in
+        return self.held
 
     def reading(self, label, key, facts):
         self.sessions.append((label, key))
@@ -618,31 +776,66 @@ BOLT = plan.Rec("Bolt", [("Bolt", "b1"), ("Repo", "switchboard-kit")])
 
 
 class TestLandingSession:
-    """crew card session land/<bolt> (card-sessions "A landing's session follows the bolt's head"): its link printed,
-    and the kit's landings card raised on the main machine with the new link's note when the session was started anew;
-    refused for a bolt that is no row that can land, for land/<kit>, which has no reading of its own, and off its
-    team's host."""
+    """crew card session land/<bolt> (card-sessions "A landing's session follows the bolt's head", "A later try of a
+    reading is recorded"): its link printed, and the kit's landings card raised on the main machine with the new link's
+    note when the session was started anew or the kit's card stands without a row's reading; the try recorded as
+    card.reading in the conductor's name when it started or refused; refused for a bolt that is no row that can land,
+    for land/<kit>, which has no reading of its own, and off its team's host."""
     TEAM = dict(FLEET["teams"]["swb-1"], machine="mac-studio")
+    KIT_UNREAD = [{"Act": "card.post", "Key": "land/switchboard-kit", "By": "wldn-ops", "Card": "req_k1", "On": ["kit/switchboard-kit"],
+                   "Unread": "b1: plannotator is not on this host's path", "At": "2026-10-12T10:00:00Z"}]
     LINK = "http://mac-studio.ts.swancloud.net:19432"
+    DONE = dict(Act="card.reading", by="swb-1-conductor", Key="land/b1")
     ROW = dict(bolt="b1", box=True, facts=dict(LANDING, team="swb-1", host="mac-studio", base="abc0000"))
 
-    def run(self, monkeypatch, acts, row=ROW, why=None, team=TEAM, key="land/b1"):
+    def run(self, monkeypatch, acts, row=ROW, why=None, team=TEAM, key="land/b1", say=None):
         handed = []
         monkeypatch.setattr(plan, "land_held", lambda fleet, label, bolt: (None, BOLT, team))
         monkeypatch.setattr(plan, "land_read", lambda fleet, label, p, b, t: (None, why) if why else (row, None))
         monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: handed.append((label, kit, note)))
-        plan.land_session(FLEET, "wldn", key, acts)
+        self.got = plan.land_session(FLEET, "wldn", key, acts, say=say)
         return handed
 
-    def test_a_session_started_anew_hands_the_kits_card_its_new_link(self, monkeypatch, capsys):
+    @pytest.mark.parametrize("started, got, change", [
+        (True, {"status": "pending", "turn": "you"}, True), (True, {"status": "snoozed"}, True), (False, {"status": "pending"}, False),
+        (True, {"status": "answered", "turn": "agent"}, False), (True, {"status": "resolved"}, False), (True, None, False)])
+    def test_a_card_is_changed_only_for_a_session_due_while_it_waits_on_the_user(self, started, got, change):
+        assert plan.relinks(started, got) is change
+
+    def test_a_session_started_anew_hands_the_kits_card_its_new_link_and_is_recorded(self, monkeypatch, capsys):
+        """card-sessions "Started again after a restart" and "A landing's reading started by hand"."""
         acts = ReadingActs()
         assert self.run(monkeypatch, acts) == [("wldn", "switchboard-kit", "b1: Its reading is open again at a new link")]
         assert acts.sessions == [("wldn", "land/b1")] and acts.calls == []
+        assert self.got == (self.LINK, False, True) and acts.emitted == [self.DONE]
         assert capsys.readouterr().out == f"{self.LINK}\n"
 
-    def test_a_running_session_given_again_hands_nothing(self, monkeypatch, capsys):
+    def test_a_running_session_given_again_hands_and_records_nothing(self, monkeypatch, capsys):
+        """card-sessions "A running session on a card that carries it" and "A link given again"."""
         acts = ReadingActs(started=False)
         assert self.run(monkeypatch, acts) == [] and capsys.readouterr().out == f"{self.LINK}\n"
+        assert acts.emitted == []
+
+    def test_a_running_session_given_again_while_the_kits_card_stands_without_a_rows_reading_hands_it(self, monkeypatch, capsys):
+        """card-sessions "A running session whose row never got its link": no new session's try is recorded."""
+        acts = ReadingActs(entries=self.KIT_UNREAD, started=False)
+        assert self.run(monkeypatch, acts) == [("wldn", "switchboard-kit", "b1: Its reading is open again at a new link")]
+        assert acts.emitted == [] and capsys.readouterr().out == f"{self.LINK}\n"
+
+    def test_a_reading_that_refuses_is_recorded_with_crews_words_and_raised(self, monkeypatch):
+        """card-sessions "A try that refuses", for a bolt's reading: the card is not raised."""
+        why = "plannotator did not list land/b1's session within 10 seconds, so crew ended it"
+        acts = ReadingActs(refused=why)
+        with pytest.raises(plan.Refusal, match=f"^{re.escape(why)}$"):
+            self.run(monkeypatch, acts)
+        assert acts.calls == [] and acts.emitted == [dict(self.DONE, refused=why)]
+
+    def test_a_say_given_prints_nothing_and_is_handed_the_link(self, monkeypatch, capsys):
+        said = []
+        acts = ReadingActs()
+        self.run(monkeypatch, acts, say=lambda url, decided: said.append((url, decided)))
+        assert said == [(self.LINK, False)]
+        assert self.LINK not in capsys.readouterr().out
 
     def test_a_bolt_that_is_no_row_is_refused_saying_what_it_waits_on_and_nothing_is_started(self, monkeypatch):
         """card-sessions "A bolt that is no row"."""
@@ -651,6 +844,8 @@ class TestLandingSession:
                                                "unit b has not merged: it is verify$"):
             self.run(monkeypatch, acts, why="unit b has not merged: it is verify")
         assert acts.sessions == []
+        assert acts.emitted == [dict(self.DONE, refused="b1 is no row of switchboard-kit's landings card, so it has no reading: "
+                                                        "unit b has not merged: it is verify")]
 
     def test_a_held_row_has_no_reading_until_it_can_land_again(self, monkeypatch):
         acts = ReadingActs()
@@ -662,7 +857,7 @@ class TestLandingSession:
         acts = ReadingActs()
         with pytest.raises(plan.Refusal, match="land/b1's reading session runs on chuck-herdr-alpha, the host of the team holding its bolt"):
             self.run(monkeypatch, acts, team=FLEET["teams"]["swb-1"])
-        assert acts.sessions == []
+        assert acts.sessions == [] and acts.emitted == []
 
     def test_a_kits_landings_card_has_no_reading_of_its_own(self, monkeypatch):
         acts = ReadingActs()
@@ -692,8 +887,9 @@ class TestLandingSession:
         with pytest.raises(plan.Refusal, match=r"^land/b1's reading could not be opened: plannotator is not on this host's path, "
                                                r"and a card's session is a plannotator session; crew card session land/b1 starts "
                                                r"it once that is mended$"):
-            assert self.started(monkeypatch, acts) == []
-        assert acts.calls == [] and acts.emitted == []
+            self.started(monkeypatch, acts)
+        assert acts.calls == [] and acts.emitted == [dict(self.DONE, refused="plannotator is not on this host's path, and a "
+                                                                               "card's session is a plannotator session")]
 
     def test_a_wait_on_a_bolt_that_is_no_row_is_refused_and_starts_nothing(self, monkeypatch):
         """card-sessions "No landing card held"."""
@@ -732,6 +928,88 @@ class TestLandingSession:
     def test_a_session_on_the_head_as_it_stands_is_given_again_and_nothing_is_ended(self, monkeypatch, tmp_path, capsys):
         assert self.opened(monkeypatch, tmp_path, "def5678") == []
         assert capsys.readouterr().out == ""
+
+
+class TestReadingAgain:
+    """crew card session batch/<n> or proposal/<n> (card-sessions "Starting a batch's or a proposal's reading changes
+    its card", "A later try of a reading is recorded"): its link printed, the planner's card changed in place to carry
+    it while it waits on the user when the session started anew or the card stands without its reading, and the try
+    recorded as card.reading when it started or refused."""
+    HELD = [{"Act": "card.post", "Key": "batch/3", "By": "wldn-planner", "Card": "req_b3", "On": ["batch/3"]}]
+    UNREAD = [dict(HELD[0], Unread="plannotator ended before batch/3's session was ready: stub: refused to start", At="2026-10-12T10:00:00Z")]
+    LINK = "http://mac-studio.ts.swancloud.net:19432"
+    WAITING = {"get_request": ({"status": "pending", "turn": "you", "version": 3}, None),
+               "match_area": ({"decision": "use", "suggestions": [{"areaId": "prj_kit"}]}, None)}
+
+    def run(self, monkeypatch, tmp_path, acts, key="batch/3"):
+        """crew card session <key> on mac-studio, the main level's host, its rail row read as present."""
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        monkeypatch.setattr(plan, "card_row", lambda fleet, label, k: (dict(key=k, doc=("batch", "wldn", 3)), []))
+        monkeypatch.setattr(plan, "batch_read", lambda fleet, label, n, acts: dict(n=3, previous=2, units=BATCH_UNITS, link=None))
+        monkeypatch.setattr(plan, "plan_of", lambda fleet, label: None)
+        (tmp_path / "batch-wldn-3.md").write_text("# Batch 3\n")
+        monkeypatch.setattr(plan, "batch_file", lambda label, n: tmp_path / f"batch-{label}-{n}.md")
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
+        plan.card_session(fleet, argparse.Namespace(key=key, unit=None, sub="session", label="wldn"), acts)
+
+    def test_a_start_anew_changes_the_waiting_card_to_carry_its_link_and_is_recorded(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A batch card raised without its reading"."""
+        acts = ReadingActs(dict(self.WAITING), self.UNREAD)
+        self.run(monkeypatch, tmp_path, acts)
+        sent = [a for t, a in acts.calls if t == "update_request"]
+        assert len(sent) == 1 and (sent[0]["requestId"], sent[0]["changeNote"]) == ("req_b3", plan.RELINKED)
+        assert sent[0]["context"]["links"][0] == {"label": "Read batch 3", "url": self.LINK}
+        assert [(e["Act"], e["Key"], e.get("Card"), e.get("refused"), e.get("Unread")) for e in acts.emitted] == [
+            ("card.reading", "batch/3", "req_b3", None, None), ("card.update", "batch/3", "req_b3", None, None)]
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card batch/3: req_b3 changed"]
+
+    def test_a_card_the_user_has_answered_is_left_and_no_card_follows_it(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A proposal card already answered", for a batch's: the start is recorded, the card left."""
+        acts = ReadingActs({"get_request": ({"status": "answered", "turn": "agent", "answer": {}}, None)}, self.HELD)
+        self.run(monkeypatch, tmp_path, acts)
+        assert [t for t, _ in acts.calls] == ["get_request"] and [e["Act"] for e in acts.emitted] == ["card.reading"]
+        assert capsys.readouterr().out.splitlines() == [self.LINK, "card batch/3: req_b3 is left as it is: the user has answered it"]
+
+    def test_a_session_given_again_on_a_card_with_its_link_changes_and_records_nothing(self, monkeypatch, tmp_path, capsys):
+        """card-sessions "A session that still runs" and "A link given again"."""
+        acts = ReadingActs(entries=self.HELD, started=False)
+        self.run(monkeypatch, tmp_path, acts)
+        assert acts.calls == [] and acts.emitted == [] and capsys.readouterr().out == f"{self.LINK}\n"
+
+    def test_a_session_given_again_on_a_card_standing_without_its_reading_changes_it(self, monkeypatch, tmp_path):
+        """A start whose card change did not go through: the link given again is put on the card."""
+        acts = ReadingActs(dict(self.WAITING), self.UNREAD, started=False)
+        self.run(monkeypatch, tmp_path, acts)
+        assert [t for t, _ in acts.calls if t == "update_request"] == ["update_request"]
+        assert [e["Act"] for e in acts.emitted] == ["card.update"]
+
+    def test_a_refusal_is_recorded_with_crews_words_and_raised(self, monkeypatch, tmp_path):
+        """card-sessions "A try that refuses": the card is not changed."""
+        why = "plannotator did not list batch/3's session within 10 seconds, so crew ended it"
+        acts = ReadingActs(entries=self.HELD, refused=why)
+        with pytest.raises(plan.Refusal, match=f"^{re.escape(why)}$"):
+            self.run(monkeypatch, tmp_path, acts)
+        assert acts.calls == []
+        assert acts.emitted == [dict(Act="card.reading", by="wldn-planner", refused=why, Key="batch/3", Card="req_b3")]
+
+    def test_a_proposals_reading_is_opened_on_the_open_proposal_of_its_chain_and_its_card_changed_by_its_raise(self, monkeypatch, tmp_path):
+        seen = []
+        monkeypatch.setattr(plan, "chain_read", lambda fleet, label, first: ("w", 6))
+        monkeypatch.setattr(plan, "raise_proposal", lambda fleet, row, acts=None, event="sweep": seen.append((row["key"], event)))
+
+        class Acts(ReadingActs):
+            def reading(self, label, key, facts):
+                seen.append(facts)
+                return super().reading(label, key, facts)
+        held = [dict(self.HELD[0], Key="proposal/4", Card="req_p4", On=["proposal/4"])]
+        acts = Acts({"get_request": ({"status": "pending", "turn": "you", "version": 3}, None)}, held)
+        monkeypatch.setattr(plan, "card_row", lambda fleet, label, k: (dict(key=k, doc=("page", "wldn", 6)),
+                                                                       [{"proposal": 6, "changes": [{"do": f'unit add u{i} "U{i}." --bolt t'} for i in range(16)]}]))
+        monkeypatch.setattr(crew, "this_host", lambda: "mac-studio")
+        fleet = dict(FLEET, partitions=dict(FLEET["partitions"], wldn=dict(FLEET["partitions"]["wldn"], machine="mac-studio")))
+        plan.card_session(fleet, argparse.Namespace(key="proposal/4", unit=None, sub="session", label="wldn"), acts)
+        assert seen == [dict(n=6, first=4), ("proposal/4", "relink")]
+        assert [(e["Act"], e["Key"], e["Card"]) for e in acts.emitted] == [("card.reading", "proposal/4", "req_p4")]
 
 
 class TestLandingPreview:
@@ -856,13 +1134,14 @@ class TestLandingReading:
                                            "fetches switchboard-kit's main and tries once more\n")
 
     def test_both_starts_fail(self, monkeypatch):
-        """card-sessions "Both starts fail": the row says so with the second start's reason, and the card names crew
-        card session and keeps why on its entry."""
+        """card-sessions "Both starts fail": the row says so with the second start's reason, and the card says crew
+        tries it again when the rail is read, names crew card session and keeps why on its entry."""
         acts = ReadingActs(refusals=[self.SLOW, self.ENDED])
         row, _, _ = self.read(monkeypatch, acts)
         assert row["facts"]["unread"] == self.ENDED and "link" not in row["facts"]
         b = built.landings_card(dict(kit="switchboard-kit", rows=[dict(row["facts"], conductor="swb-1-conductor")]))
-        assert "swb-1-conductor starts it with crew card session land/b1, and this card then carries its link." in b["card"]["summary"]
+        assert ("crew tries it again when the rail is read, and swb-1-conductor starts it with crew card session land/b1; "
+                "this card then carries its link.") in b["card"]["summary"]
         assert b["card"]["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
         assert plan.built_fields(b) == {"Unread": self.ENDED, "Heads": "b1@def5678"}
 
@@ -1246,7 +1525,8 @@ class TestLandings:
         face = "\n".join(b["card"]["artifacts"][0]["lines"])
         assert "[Read y](http://deneb.ts.swancloud.net:19432/y)" in face and "[Preview web](http://web-abc1234)" in face
         assert "[Pull request #23](https://github.com/afterthought/crew/pull/23)" in face
-        assert "Its reading could not be opened: plannotator is not on the path; swc-1-conductor starts it with crew card session land/z" in face
+        assert ("Its reading could not be opened: plannotator is not on the path; crew tries it again when the rail is read, and "
+                "swc-1-conductor starts it with crew card session land/z") in face
         assert "- a\n- b\n- c (chore)" in face
         assert [l["label"] for l in b["card"]["context"]["links"]][:2] == ["Read y", "Preview y: web"]
 
@@ -1378,6 +1658,32 @@ class TestFollows:
         ([dict(Act="card.post", Key="land/b1", By="swancloud-ops", Card="req_l1")], None)])
     def test_the_key_a_followed_card_is_still_open_under_is_read_from_the_record_alone(self, entries, key):
         assert built.followed_open(entries, "req_d1", "swancloud-ops") == key
+
+
+class TestStranded:
+    """rail-cards, "A batch's card the main level's host can't reach is raised again there": which of the planner's
+    cards under a batch's key the main level's host, deneb, can't reach (cards.stranded), from the run record alone."""
+    POST = dict(Act="card.post", Key="batch/13", By="swancloud-planner", Card="req_b13", Host="mac-studio")
+
+    def lost(self, host="mac-studio"):
+        return dict(Act="card.close", Key="batch/13", By="swancloud-planner", Card="req_b13", State="lost", Host=host)
+
+    @pytest.mark.parametrize("entries, card", [
+        ([POST], "req_b13"),
+        ([dict(POST, Host="deneb")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="closed")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="withdrawn", Host="mac-studio")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="lost", Host="mac-studio")], "req_b13"),
+        ([dict(POST, Host="deneb"), dict(Act="card.close", Card="req_b13", State="lost", Host="deneb")], "req_b13"),
+        ([POST, dict(Act="card.close", Card="req_b13", State="lost"), dict(POST, Card="req_b14", Host="deneb")], None),
+        ([POST, dict(Act="card.close", Card="req_b13", State="closed", Refused="Pending You refused the close: x")], "req_b13"),
+        ([dict(POST, Host="deneb"), dict(POST, Card=None, Refused="Pending You refused post_request: x")], None),
+        ([dict(POST, By="swancloud-design")], None),
+        ([dict(POST, Key="batch/12")], None),
+        ([dict(POST, Host=None)], None),
+        ([], None)])
+    def test_the_owners_newest_card_held_on_another_host_or_lost_is_the_one_this_host_cant_reach(self, entries, card):
+        assert built.stranded(entries, "batch/13", "swancloud-planner", "deneb") == card
 
 
 
@@ -1558,6 +1864,18 @@ def recorded(text, status, before=None, alternatives=None):
     return plan.record_facts("switchboard-kit", 32, text, status, before, alternatives)
 
 
+def heard(asserted_by="user", grade="verified", uuid="u-32", reason=None):
+    """A verdict on the user's yes in the design agent's transcript, as transcript.check gives it."""
+    if grade == "unverified":
+        return transcript.unverified(reason)
+    return transcript.Verdict(grade, raw=b'{"type": "user"}', n=4, value={"uuid": uuid} if uuid else {},
+                              asserted_by=asserted_by if grade == "verified" else "unknown")
+
+
+SETTLED = "crew records record 0032 in switchboard-kit as settled in no pane"
+TO_CARD = "run crew record switchboard-kit 32 --proposed without --settled-in-pane, and the user answers on its card"
+
+
 class TestRecordCommand:
     def test_a_record_proposed_is_put_on_its_card_in_its_own_words_with_the_users_own(self):
         f = recorded(MADR, "proposed")
@@ -1613,11 +1931,45 @@ class TestRecordCommand:
         ("atlas-kit", 0, "proposed", {}, "a record's number is its one to four digits, not 0"),
         ("atlas-kit", 21, "accepted", {"settled_in_pane": True}, "--settled-in-pane and --alternatives go with --proposed"),
         ("atlas-kit", 21, "rejected", {"alternatives": "a.md"}, "--settled-in-pane and --alternatives go with --proposed"),
-        ("atlas-kit", 21, "proposed", {"settled_in_pane": True, "alternatives": "a.md"}, "a record settled in the pane raises no card")])
+        ("atlas-kit", 21, "proposed", {"settled_in_pane": True, "alternatives": "a.md"}, "a record settled in the pane raises no card"),
+        ("atlas-kit", 21, "proposed", {"settled_in_pane": True}, "--settled-in-pane needs --excerpt"),
+        ("atlas-kit", 21, "proposed", {"settled_in_pane": True, "excerpt": " "}, "--settled-in-pane needs --excerpt"),
+        ("atlas-kit", 21, "proposed", {"excerpt": "Yes, accept 21"}, "--excerpt goes with --settled-in-pane")])
     def test_a_kit_not_the_partitions_or_flags_that_do_not_go_together_are_refused_on_the_teams_file_alone(self, kit, n, status, more, said):
-        a = argparse.Namespace(**dict(dict(kit=kit, number=n, status=status, settled_in_pane=False, alternatives=None, label="wldn"), **more))
+        a = argparse.Namespace(**dict(dict(kit=kit, number=n, status=status, settled_in_pane=False, excerpt=None, alternatives=None,
+                                           label="wldn"), **more))
         with pytest.raises(crew.Refusal, match=re.escape(said)):
             plan.record_status(FLEET, a)
+
+    def test_the_users_yes_in_the_callers_own_pane_settles_the_record(self):
+        assert plan.settled_refusal(32, "switchboard-kit", heard()) is None
+        assert plan.settled_refusal(32, "switchboard-kit", heard(uuid=None)) is None
+
+    @pytest.mark.parametrize("caller", ["wldn-design", "wldn-planner", "wldn-operator", "swb-1-conductor", "madswan-design", "chuck@mac-studio"])
+    def test_no_caller_is_refused_by_who_it_is_the_users_yes_read_in_its_own_transcript(self, monkeypatch, caller):
+        """roles.2: crew records who ran it and in which session, and refuses no caller; the words are still read."""
+        asked = []
+        monkeypatch.setattr(crew, "this_host", lambda: FLEET["partitions"]["wldn"]["machine"])
+        monkeypatch.setenv("CREW_AGENT", caller)
+        monkeypatch.setattr(plan.CardActs, "heard", lambda self, words: asked.append(words) or (heard(), "s-9"))
+        a = argparse.Namespace(kit="switchboard-kit", number=32, status="proposed", settled_in_pane=True, excerpt="Yes, accept 32",
+                               alternatives=None, label="wldn")
+        with pytest.raises(crew.Refusal, match="no session of .* keeps WilldanGroup/switchboard-kit"):
+            plan.record_status(FLEET, a)
+        assert asked == ["Yes, accept 32"]
+
+    @pytest.mark.parametrize("v, words", [
+        (heard(grade="refused"), "the words are not in a record your session received; only the user's own words settle a "
+                                 "record, quoted as they wrote them in your pane, never your own"),
+        (heard("agent:swancloud-planner"), "the words are swancloud-planner's, passed on with crew tell, and not the user's; "
+                                           "tell swancloud-planner that the user settles a record in your pane or on its card"),
+        (heard("crew"), "the words are crew's own message, not the user's"),
+        (heard("tool"), "the words are a tool's output, not the user's"),
+        (heard(grade="found"), "the words are in a record of your transcript crew can't read as anyone's, so it can't tell they are the user's"),
+        (heard(grade="unverified", reason="session s-9 is on deneb, not mac-studio"),
+         "crew can't read your session's transcript, so it can't tell the words are the user's: session s-9 is on deneb, not mac-studio")])
+    def test_words_crew_does_not_read_as_the_users_are_refused_naming_who_said_them_and_sent_to_the_card(self, v, words):
+        assert plan.settled_refusal(32, "switchboard-kit", v) == f"{SETTLED}: {words}; {TO_CARD}"
 
     def test_the_records_card_is_raised_in_the_design_agents_name_changed_at_a_new_commit_and_followed_once_answered(self, capsys):
         from test_card_commands import Acts, MATCHED, POSTED
@@ -1639,6 +1991,31 @@ class TestRecordCommand:
         assert acts.calls[1] == ("ack_answer", {"requestId": "req_c1", "name": "wldn-design", "expectedVersion": 3,
                                                 "outcome": "Revised at 9ab0123: ops.7 loosened"})
         assert (acts.calls[3][1]["idempotencyKey"], acts.calls[3][1]["follows"]) == ("record/switchboard-kit/0032:2", "req_c1")
+
+    def test_the_sweeps_raise_of_a_record_posts_it_again_from_its_record_saying_an_older_copy_was_lost(self, monkeypatch):
+        """rail-cards, "A record's card left on the host the main level left": the record read with status proposed on
+        the kit's main, as crew record reads it, and its card posted in the design agent's name; one raised with
+        alternatives refused naming the command that raises it again, nothing read or posted."""
+        from test_card_commands import Acts, MATCHED, POSTED
+        where, reads = ("/kit/main", "github.com/WilldanGroup/switchboard-kit"), []
+
+        def read(fleet, label, kit, number, status, alternatives=None):
+            reads.append((label, kit, number, status, alternatives))
+            return recorded(MADR, status), where, "abc1234" + "0" * 33, "switchboard runs GitHub's workflows itself"
+        monkeypatch.setattr(plan, "record_read", read)
+        row = dict(label="wldn", key="record/switchboard-kit/0032", group="records", alternatives=False, dead="req_c0")
+        acts = Acts({"match_area": (MATCHED, None), "post_request": (POSTED, None)}, caller="wldn-design")
+        assert plan.raise_record_again(None, row, acts) == "req_c1"
+        assert reads == [("wldn", "switchboard-kit", 32, "proposed", None)]
+        sent = next(a for t, a in acts.calls if t == "post_request")
+        assert (acts.names, sent["idempotencyKey"]) == (["wldn-design"], "record/switchboard-kit/0032")
+        assert sent["summary"] == f"{built.DEAD}\n\n" + built.record_card(recorded(MADR, "proposed"))["card"]["summary"]
+        acts = Acts({}, caller="wldn-design")
+        with pytest.raises(crew.Refusal) as e:
+            plan.raise_record_again(None, dict(row, alternatives=True), acts)
+        assert str(e.value) == ("crew keeps no copy of record 0032's alternatives, so wldn-design raises it again with "
+                                "crew record switchboard-kit 32 --proposed --alternatives <file>")
+        assert (acts.calls, len(reads)) == ([], 1)
 
     def test_a_card_pending_you_ended_already_is_recorded_closed_and_followed_never_changed_or_closed_again(self, capsys):
         from test_card_commands import Acts, MATCHED, POSTED
@@ -1815,6 +2192,15 @@ class TestActDecisions:
             "ack_answer", {"requestId": "req_a", "name": "wldn-ops", "expectedVersion": 3, "outcome": "Deployed at 14:20"}, "closed")
         assert built.close_call({"status": "pending", "version": 1}, "req_a", "wldn-ops", reason="A newer head") == (
             "cancel_request", {"requestId": "req_a", "name": "wldn-ops", "reason": "A newer head"}, "withdrawn")
+
+    def test_a_waiting_card_answered_in_a_conversation_is_cancelled_as_answered_there_and_closed(self):
+        """plan.16: a landing said in ops's pane closes its card as answered in the conversation (Pending You's
+        cancel_request answeredHere, read from its MCP schema on 2026-10-22); a card the user tapped is acked as before."""
+        assert built.close_call({"status": "pending", "version": 1}, "req_a", "crw-5-conductor", outcome="Landed", here=True) == (
+            "cancel_request", {"requestId": "req_a", "name": "crw-5-conductor", "reason": "Landed", "answeredHere": True}, "closed")
+        assert built.close_call({"status": "answered", "version": 3}, "req_a", "crw-5-conductor", outcome="Landed", here=True) == (
+            built.close_call({"status": "answered", "version": 3}, "req_a", "crw-5-conductor", outcome="Landed"))
+        assert "answeredHere" not in built.close_call({"status": "pending", "version": 1}, "req_a", "crw-5-conductor", outcome="Landed")[1]
 
     def test_a_close_given_an_outcome_and_a_reason_acks_an_answered_card_with_the_outcome_and_withdraws_a_waiting_one_with_the_reason(self):
         both = dict(outcome="Dropped on your note", reason="Why now?")
