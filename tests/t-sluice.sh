@@ -29,6 +29,9 @@ eq "$(held)" "swb-1"
 export CREW_AGENT=swb-1-conductor
 prompt_to() { grep "^$box wldn-1 agent prompt $1 " "$CREW_TEST_LOG" | grep -v "/exit" | tail -1 | sed "s/^$box wldn-1 agent prompt $1 //"; }
 crew unit run a construct >/dev/null; change "$kd/places/a" a 2 2; commit_all "$kd/places/a" "feat(a): done"
+crew unit wait a >/dev/null; crew unit run a verify >/dev/null  # verified, as a unit's merge needs (record 0007)
+reports=$(home_of $box)/.local/state/swb-1-team/reports; mkdir -p "$reports"; echo "the report" > "$reports/verify-a-20261008-1412.md"
+crew unit wait a >/dev/null
 expect_ok crew unit run a merge
 eq "$(prompt_to swb-1-unit-1)" "'Merge a into bolt/tenant-environments: sluice submit bolt/tenant-environments --no-wait --json'"
 crew fix swb-1 edge-sign-in "The edge sign-in answers an object." >/dev/null

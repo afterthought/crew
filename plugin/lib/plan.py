@@ -5547,11 +5547,11 @@ def run_check(fleet, a):
     the plan at its head. Where that write is what marks the unit, only the conductor of the team holding its bolt, or
     the user, makes it; on a unit whose intent was amended, which the user approved, anyone starts its construct, and
     the prompt carries the amendment's words, read from the mark. Code starts once the change is committed, with no
-    review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits until each After
-    unit has merged (teams.5), is refused while its bolt is split (split_refusal, plan.19), and a unit carried onto its
-    bolt inside another's merge, whose place is gone, has its place made again from the bolt for its merge (teams.17),
-    which holds the bolt's landing pull request first (merge_holds); settle runs only for a unit that has delivered its
-    verify.
+    review between; code, verify, settle and merge wait while the mark stands (plan.6). Merge waits until its verify
+    has delivered its report (record 0007) and each After unit has merged (teams.5), is refused while its bolt is split
+    (split_refusal, plan.19), and a unit carried onto its bolt inside another's merge, whose place is gone, has its
+    place made again from the bolt for its merge (teams.17), which holds the bolt's landing pull request first
+    (merge_holds); settle runs only for a unit that has delivered its verify.
     crew chore run asks with --chore, and a chore's stages are chore_check's; a stage asked of the other kind is refused
     naming it (plan.11)."""
     label, repo, tip, plan = locate(fleet, "Unit", a.unit, default_label(fleet, a), "chore" if a.chore else "unit")
@@ -5570,8 +5570,9 @@ def run_check(fleet, a):
     amended_at = entry = ""
     after = {d: st_all.of(d)["stage"] for d in u.all("After")}
     why = stage_refusal(a.unit, bolt, a.stage, st, mark, after, role(fleet, os.environ.get("CREW_AGENT")), t["name"],
-                        s.get("open") or [], a.stage == "settle" and st == "verify" and verified(label, a.unit), bool(a.words),
-                        chores={d for d in u.all("After") if is_chore(plan.item(d))})
+                        s.get("open") or [], a.stage in ("settle", "merge") and st == "verify" and verified(label, a.unit),
+                        bool(a.words), chores={d for d in u.all("After") if is_chore(plan.item(d))},
+                        reports=team_state(t) / "reports")
     if why:
         refuse(*why) if isinstance(why, tuple) else fail(why)
     why = landing_refusal("unit", a.unit, a.stage, bolt, *landing_now(t, bolt))
@@ -5909,16 +5910,19 @@ def stage_prompt(stage, unit, words="", intent="", sources=(), again="", overlap
     return prompt + "".join(" " + x for x in carried)
 
 
-def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, delivered_verify, has_words, chores=()):
+def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, delivered_verify, has_words, chores=(),
+                  reports="its team's reports folder"):
     """Why a unit's stage may not start, or None when it may (plan.6, plan.13, teams.5): stage is the one asked, st the
     unit's stage read from its place, mark its Amended mark, after each After unit's stage, caller the asker's (kind,
-    team), team the name of the team holding its bolt, open_tasks the titles of its tasks still open. A refusal that
+    team), team the name of the team holding its bolt, open_tasks the titles of its tasks still open, delivered_verify
+    whether its verify has delivered its report since its change was last written (verified). A refusal that
     quotes typed text is (what is said, what the run record holds), else one string. Construct waits on its After
     units' construct, is never run on merged or landed work, and on a committed or amended unit is run again only by
     its conductor or the user, unless the user's approved amendment asked for it; every other stage waits while the
     mark stands; code needs the change committed; verify every task ticked; settle a delivered verify and what reached
-    the unit; merge a verified unit whose After units have merged. chores names the After that are chores, whose code
-    a unit's construct waits on as it waits on a unit's change (plan.13)."""
+    the unit; merge a verified unit, one whose verify delivered its report, named with the folder it is saved in
+    (reports) when it did not (record 0007), whose After units have merged. chores names the After that are chores,
+    whose code a unit's construct waits on as it waits on a unit's change (plan.13)."""
     if stage == "construct":
         if st == "waiting":
             deps = [d for d, x in after.items() if d not in chores and not built_on("unit", x)]
@@ -5954,6 +5958,10 @@ def stage_refusal(unit, bolt, stage, st, mark, after, caller, team, open_tasks, 
         return None if has_words else f"settle {unit} with what reached it: crew unit run {unit} settle \"<the forecast or the amendment>\""
     if st != "verify":
         return f"unit {unit} is in {st}: it merges once every task is ticked and verify has run"
+    if not delivered_verify:
+        return (f"unit {unit} merges only once its verify has delivered its report, and no verify since its change was "
+                f"last written has: no report verify-{unit}-<YYYYMMDD-HHMM>.md was delivered from {reports} "
+                f"(crew unit run {unit} verify)")
     ahead = [d for d, x in after.items() if x not in ("merged", "landed")]
     return f"unit {unit} merges after " + ", ".join(ahead) + f", not yet merged into bolt/{bolt}" if ahead else None
 
@@ -6961,7 +6969,7 @@ def deliverable_facts(fleet, t, o, place=None):
     if o.start is None:
         return f
     if o.stage == "verify":
-        f["saved"] = newest_saved(t, gather.REPORT, o.name, o.start)
+        f["saved"], f["folder"] = newest_saved(t, gather.REPORT, o.name, o.start), team_state(t) / "reports"
         return f
     if o.stage == "merge":
         f["bolt"] = o.obj.split("/")[1] if o.fix and o.obj.count("/") == 2 else None if o.fix else bolt_of_unit(fleet, t, main, o.name, o.kind)
@@ -7006,14 +7014,17 @@ def delivered(o, f):
     """What an owed stage has delivered, judged from deliverable_facts (teams.4): (its object, what the wait says of
     it), or (None, what is missing). construct: a commit on the unit's branch since the start, with its planning
     complete; code: a commit since the start, every task ticked at the head; verify: a report for the unit saved since
-    the start; settle: a commit on the unit's branch since the start (teams.14); merge: the bolt holding the unit's
-    change archived, which its merge does first (teams.17), the chore's trailer or the fix's commits; a fix, and a
-    chore's code: a commit on its branch since the start (record 0007). A start crew can't read delivers nothing."""
+    the start, its lack named with the folder crew reads; settle: a commit on the unit's branch since the start
+    (teams.14); merge: the bolt holding the unit's change archived, which its merge does first (teams.17), the chore's
+    trailer or the fix's commits; a fix, and a chore's code: a commit on its branch since the start (record 0007). A
+    start crew can't read delivers nothing."""
     if o.start is None:
         return None, f"no start crew can read in its entry {o.eid}"
     if o.stage == "verify":
-        saved = f.get("saved")
-        return (f"report/{saved.name}", f"the report is {saved}") if saved else (None, "no report saved")
+        saved, folder = f.get("saved"), f.get("folder")
+        if saved:
+            return f"report/{saved.name}", f"the report is {saved}"
+        return None, f"no report verify-{o.name}-<YYYYMMDD-HHMM>.md saved in {folder} since it began" if folder else "no report saved"
     if o.stage == "merge":
         bolt, head = f.get("bolt"), f.get("bolt_head")
         if not bolt:
@@ -7985,6 +7996,24 @@ def background(info):
     return pending, transcript.last_at(path), None
 
 
+def turn_of(info):
+    """When the agent's own session says its turn ended, with nothing sent to it since (transcript.turn_over), or None
+    while a turn goes on or crew can't read it."""
+    sess = info.get("agent_session")
+    sid = sess.get("value") if isinstance(sess, dict) else None
+    path = transcript.find(sid) if isinstance(sid, str) and sid else None
+    return transcript.turn_over(path) if path else None
+
+
+def ended_turn(o, status, pending, over):
+    """Whether a verify's agent has ended its turn since the stage began with nothing of its own still running (record
+    0007, teams.4): herdr reads it idle or done, it waits on no background task of its own (pending, read and empty),
+    and its session's turn ended since the stage began (over, turn_of). A verify ends only at its report, so one whose
+    agent has ended so with none saved has not ended, and its wait says so then, never stuck by its clock."""
+    return o.stage == "verify" and status in ("idle", "done") and pending == [] and over is not None \
+        and o.start is not None and over >= o.start
+
+
 def quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working):
     """Whether a quiet agent is stuck (teams.4), and what it is doing as the wait says it: (True, "quiet for <n>
     minutes") or (False, what it does). One waiting on background tasks of its own is never stuck. Else its clock
@@ -8183,11 +8212,12 @@ def sluice_read(main, *args):
 
 def stage_wait(fleet, a):
     """Wait on the stage a slot's agent, or ops, owes, until it ends at its deliverable, stops short, is stuck, its agent
-    is gone, or the timeout passes, and print the one line that says which. A delivered end is recorded here; nothing
-    else is. The wait holds waits/<slot>.lock for its life, so crew needs knows a wait is there to hand its words to.
-    A unit's settle that ends delivered or short orders or lifts its unit's forecast orders, and its line says so
-    (settle_said). Each look also reads sluice's overview, and says at once, before that line, each conflict or blame
-    sluice records for a submission from the stage's place (overview_look)."""
+    is gone, a verify's agent has ended its turn with no report (ended_turn), or the timeout passes, and print the one
+    line that says which. A delivered end is recorded here; nothing else is. The wait holds waits/<slot>.lock for its
+    life, so crew needs knows a wait is there to hand its words to. A unit's settle that ends delivered or short orders
+    or lifts its unit's forecast orders, and its line says so (settle_said). Each look also reads sluice's overview,
+    and says at once, before that line, each conflict or blame sluice records for a submission from the stage's place
+    (overview_look)."""
     t = at_work(fleet, a.team)
     agent = f"{t['name']}-{a.slot}"
     (team_state(t) / "waits").mkdir(parents=True, exist_ok=True)
@@ -8233,15 +8263,16 @@ def stage_wait(fleet, a):
             status = info.get("agent_status") if info else None
             got, missing = deliverable(fleet, t, o, place) if words is None and owed and status != "working" else (None, None)
             now = datetime.datetime.now(datetime.timezone.utc)
-            quiet = (False, "is working", None)
+            quiet, over = (False, "is working", None), False
             if status == "working":
                 seen_working = now
             elif info is not None and not got:
                 seen_quiet = seen_quiet or now
                 pending, last, unread = background(info)
                 quiet = (*quiet_verdict(now, stuck, pending, last, unread, seen_quiet, seen_working), unread)
+                over = ended_turn(o, status, pending, turn_of(info) if o.stage == "verify" and pending == [] else None)
             remaining = deadline - time.monotonic()
-            how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0)
+            how, said = look(o, agent, a.timeout, words, owed, info is None, got, missing, quiet, remaining <= 0, over)
             if how == "ended":
                 print(ended_said(t, agent))
                 return
@@ -8309,12 +8340,14 @@ def settle_said(fleet, t, unit, said):
     return " ".join([said if said.endswith(".") else f"{said}."] + [f"{x}." for x in more])
 
 
-def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time):
+def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time, over=False):
     """One look of a wait at the stage o its agent owes, as facts (teams.4): the words a stop-short handed it, whether
     the stage is still owed, whether the agent is gone, what it delivered (got, and missing: what the wait says of the
-    deliverable, or of what it lacks), and quiet, (stuck, what the agent is doing, what crew could not read of it).
-    Returns how the wait ends and the line it prints, "ended" when something else recorded the end, or (None, what the
-    agent is doing) to look again."""
+    deliverable, or of what it lacks), quiet, (stuck, what the agent is doing, what crew could not read of it), and
+    over, whether a verify's agent has ended its turn with nothing of its own running (ended_turn): with no report, the
+    verify has not ended, and the wait says so then, never calling it stuck (record 0007). Returns how the wait ends
+    and the line it prints, "ended" when something else recorded the end, or (None, what the agent is doing) to look
+    again."""
     if words is not None:
         return "short", f"{agent} stopped short in {o.phrase()}. It needs: {words}"
     if not owed:
@@ -8323,6 +8356,9 @@ def look(o, agent, timeout, words, owed, gone, got, missing, quiet, out_of_time)
         return "delivered", f"{agent} delivered {o.phrase()}: {missing}"
     if gone:
         return "gone", f"{agent} is no longer running: {o.phrase()} delivered nothing and said nothing it needs"
+    if over:
+        return "unended", (f"{agent} ended its turn in {o.phrase()} with {missing}: the verify has not ended, since a "
+                           "verify ends only at its report; nothing is recorded")
     stuck, doing, unread = quiet
     if stuck:
         return "stuck", (f"{agent} is stuck in {o.phrase()}: {doing}, with {missing} and nothing it needs said"

@@ -3,11 +3,13 @@
 # GitHub after a fetch and made ready through the kit's declaration as every worktree crew makes is (plan.17), a setup
 # that fails refusing the stage until a second run sets the place up; each stage of a unit takes a slot, starts a fresh
 # agent in the unit's place and sends its prompt; the waits end each stage at its deliverable and record it; the
-# team's read records an end nobody waited on, fetching and gathering once; verify's report ends it; code's prompt
-# names an unmerged unit's overlapping Touches; a wait says a conflict sluice's overview shows for the stage's
-# submission, before its answer (record 0032); a merge in a kit whose main takes no pull requests asks nothing of
-# GitHub, and, once main takes them, a merge drafts the bolt's ready landing pull request before its prompt is sent,
-# and one whose gh fails does not start, naming the repository in gh's words (bolt-teams). The units journey's other parts:
+# team's read records an end nobody waited on, fetching and gathering once; a verify whose agent ended its turn with no
+# report has not ended, and its unit's merge is refused naming the report (record 0007); verify's report ends it;
+# code's prompt names an unmerged unit's overlapping Touches; a wait says a conflict sluice's overview shows for the
+# stage's submission, before its answer (record 0032); a merge in a kit whose main takes no pull requests asks nothing
+# of GitHub, and, once main takes them, a merge drafts the bolt's ready landing pull request before its prompt is sent,
+# and one whose gh fails does not start, naming the repository in gh's words (bolt-teams). The units journey's other
+# parts:
 # t-journey-slots, t-journey-merge, t-journey-prompts, t-journey-fix, t-journey-land.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/); how git and worktrunk behave for them, contract cases (tests/contract/). Each step checks the
@@ -107,12 +109,22 @@ ok "crew status lists the roles and each slot's stage, fetches and gathers once,
 
 expect_ok crew unit run a verify
 eq "$(prompt_to swb-1-unit-1)" "'/opsx:verify a Changed and not declared in its Touches: a-work.'"
+# Its agent ends its turn with nothing running and no report saved (record 0007): the wait says at once that the verify
+# has not ended, never stuck, and the unit's merge is refused, naming the report it lacks.
+said=$(ls "$(home_of $box)"/.claude*/projects/*/"sid-$(pane swb-1-unit-1 | tr : -).jsonl" | head -1)
+printf '{"type": "assistant", "timestamp": "%s", "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Nothing to do."}]}}\n' \
+  "$(ago 0)" >> "$said"
+expect_ok crew unit wait a --stuck 3600000
+eq "$out" "swb-1-unit-1 ended its turn in verify on a with no report verify-a-<YYYYMMDD-HHMM>.md saved in $reports since it began: the verify has not ended, since a verify ends only at its report; nothing is recorded"
+expect_fail "unit a merges only once its verify has delivered its report, and no verify since its change was last written has: no report verify-a-<YYYYMMDD-HHMM>.md was delivered from $reports (crew unit run a verify)" \
+  crew unit run a merge
+eq "$(field $box stage.end Ended stage/a/verify)" ""
 mkdir -p "$reports"; report=$reports/verify-a-20261008-1412.md; echo "the report" > "$report"
 expect_ok crew unit wait a
 eq "$out" "swb-1-unit-1 delivered verify on a: the report is $report"
 expect_ok crew trace report/verify-a-20261008-1412.md
 has "$out" "stage/a/verify unit/a agent/swb-1-unit-1 → verify 3/3, delivered report/verify-a-20261008-1412.md"
-ok "verify's prompt names what the unit changed and did not declare; the report it saves ends it, and crew trace finds it"
+ok "verify's prompt names what the unit changed and did not declare; a verify whose agent ended its turn with no report has not ended, said at once, and its unit does not merge; the report it saves ends it, and crew trace finds it"
 
 change "$kd/places/b" b 0 2; commit_all "$kd/places/b" "docs(b): the change"
 touches b 'src/b/**' src/a/x
