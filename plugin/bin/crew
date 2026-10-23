@@ -302,16 +302,28 @@
 #   crew page     <label> [--out <file>] [--since <time>]
 #                                      the partition's page, one HTML file that loads nothing: it opens on the board,
 #                                      its four lanes drawn as the flywheel mockup draws them, narrowed to one team
-#                                      when chosen, kept across reloads, and its header linking each other partition's
-#                                      page in the layout of its own file (../<label>/page.html in crew's,
-#                                      <label>.html beside one written as <label>.html, none, said so, when its
-#                                      file and folder are not the partition's); one switch away, the lineage: signals,
+#                                      when chosen, kept across reloads, and its header linking the fleet page and
+#                                      each other partition's page in the layout of its own file (../page.html and
+#                                      ../<label>/page.html in crew's; index.html and <label>.html beside one written
+#                                      as <label>.html; none, said so, when its file and folder are not the
+#                                      partition's); one switch away, the lineage: signals,
 #                                      agenda items, proposals, units and bolts as columns, a line from each to what
 #                                      it led to, and each one's history as crew trace prints it; and the deploys,
 #                                      each environment's as a timeline, with the word, steps, checks and outcome of
 #                                      each, and the bolts it carried with their proposals; written whole to
 #                                      ~/.local/state/crew/<label>/page.html on this host, or --out, and its path
 #                                      printed with as of when and which commit it was drawn from
+#   crew page     --fleet [--out <file>]
+#                                      the fleet page, every partition of the teams file at once from the one read
+#                                      crew board makes of them all, a block to each: each host it runs on and the
+#                                      herdr sessions its agents run in, with each session's Claude account; each kit
+#                                      its teams build, its main's last landing and what is queued for it; each team's
+#                                      bolt, its slots at work, holding or free, and what its conductor waits on; and
+#                                      what needs attention; each partition a link to its page and each team to its
+#                                      dock there (<label>.html beside one written as index.html, <label>/page.html
+#                                      beside page.html, none, said so, for any other name); written whole to
+#                                      ~/.local/state/crew/page.html, beside the partitions' folders, or --out, its
+#                                      path printed with each partition's commit and each host that did not answer
 #
 # A team is two herdr workspaces in its session: "<team>", with a "conductor" tab (the conductor and ops) and a
 # "git" tab (gitgui in the kit and the blueprints repo), and "<team> units", one pane per slot in flight, which

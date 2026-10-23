@@ -13,5 +13,5 @@
 ## 3. The command and its docs
 
 - [x] 3.1 `crew page --fleet` writes the fleet page whole from one read of every partition, by default beside the partitions' pages, prints its path, each partition's header and every host that did not answer, and refuses a label with it (design, Decisions 1 and 6; Task notes 3.1); verify `tests/suite t-journey-board` ends with "0 failed".
-- [ ] 3.2 README, the crew skill and the command's usage say what the fleet page shows and how it and the partitions' pages link (design, Context; Task notes 3.2); verify `tests/suite t-docs` ends with "0 failed".
+- [x] 3.2 README, the crew skill and the command's usage say what the fleet page shows and how it and the partitions' pages link (design, Context; Task notes 3.2); verify `tests/suite t-docs` ends with "0 failed".
 - [ ] 3.3 The tests the change affects pass: verify `tests/suite --affected` ends with "0 failed".
