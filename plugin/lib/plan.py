@@ -2709,23 +2709,45 @@ def bolt_land(fleet, a):
 # shell assignments, RC, the submission's exit; TIP, the bolt's tip that was submitted; OLD, the host's own main before,
 # empty when it has none; ID, the submission's number from sluice's JSON, and PULL, the pull request's, each empty when
 # it gave none; ANSWER, what sluice printed on standard output, base64, for crew to name an answer it can't read; and
-# SAID, what it said on standard error, base64, sluice's words when it refused the submission at once. Given a
-# submission (the fifth word) and the tip it submitted (the sixth), it waits on that submission again in place of
-# submitting: the place made again, the `sluice wait` on it holding crew-landing as for one sluice queued, ID that
-# submission and TIP that tip, as landing_ended asks once sluice itself failed and its record has the submission
+# SAID, what it said on standard error, base64, sluice's words when it refused the submission at once; and LEVEL, the
+# value the host's bolt/<bolt> had when it levelled it, - for none, or empty when it wrote nothing. The fifth word is
+# the head to submit (landing_head), empty for the host's copy as it stands, and the sixth the copy's value as
+# LAND_COPIES read it, - for none: given a head the copy is not at, it first sets the host's bolt/<bolt> to it with `git
+# update-ref` guarded by that value, before anything is cut (plan.19), the one write sluice's guard lets through, its
+# value the branch as sluice's route reads it on GitHub; git refuses it when the copy moved since the read, and the
+# guard when GitHub's branch did, either way in their words with nothing cut or submitted. A landing's worktree that
+# stands from an earlier attempt is brought along with `read-tree -m -u`, which writes no ref, git's words when it
+# cannot; and a worktree whose HEAD is not the head given submits nothing. Given a submission (the seventh word) and the
+# tip it submitted (the eighth), the head and value empty, it levels nothing and waits on that submission again in
+# place of submitting: the place made again, the `sluice wait` on it holding crew-landing as for one sluice queued, ID
+# that submission and TIP that tip, as landing_ended asks once sluice itself failed and its record has the submission
 # standing (submission_of).
-SUBMIT = r"""main=$1 path=$2 bolt=$3
+SUBMIT = r"""main=$1 path=$2 bolt=$3 head=$5 from=$6
 export SLUICE_AGENT=$4
 cd "$main" || exit 2
 command -v wt-submit >/dev/null || { echo "wt submit needs sluice's wt-submit, which is not on $(hostname -s)'s path" >&2; exit 2; }
 old=$(git rev-parse --verify -q refs/heads/main) || old=
+now=$(git rev-parse --verify -q "refs/heads/bolt/$bolt") || now=
+level=
+if [ -n "$head" ] && [ "$head" != "$now" ]; then
+  was=$from; [ "$was" != - ] || was=$(printf '%0*d' ${#head} 0)
+  err=$(git update-ref -m "crew: level to GitHub's bolt/$bolt for its landing" "refs/heads/bolt/$bolt" "$head" "$was" 2>&1) || {
+    echo "$(hostname -s)'s copy of bolt/$bolt was not levelled to GitHub's ${head:0:7}: $(printf '%s' "$err" | tr '\n' ' ')" >&2; exit 2; }
+  level=$from
+fi
 git rev-parse --verify -q "refs/heads/bolt/$bolt" >/dev/null || { echo "$main has no branch bolt/$bolt" >&2; exit 2; }
-[ -d "$path" ] || { git worktree add -q --no-checkout "$path" "bolt/$bolt" >&2 && git -C "$path" read-tree -m -u HEAD >&2; } || exit 2
+if [ ! -d "$path" ]; then
+  { git worktree add -q --no-checkout "$path" "bolt/$bolt" >&2 && git -C "$path" read-tree -m -u HEAD >&2; } || exit 2
+elif [ -n "$level" ] && [ "$level" != - ]; then
+  err=$(git -C "$path" read-tree -m -u "$level" HEAD 2>&1) || {
+    echo "the landing's worktree $path could not be brought to ${head:0:7}: $(printf '%s' "$err" | tr '\n' ' ')" >&2; exit 2; }
+fi
 tip=$(git -C "$path" rev-parse HEAD) || exit 2
-[ -z "$6" ] || tip=$6
+[ -z "$head" ] || [ "$tip" = "$head" ] || { echo "the landing's worktree $path is at ${tip:0:7}, not bolt/$bolt's head ${head:0:7}, so nothing was submitted" >&2; exit 2; }
+[ -z "$8" ] || tip=$8
 mark=$(git -C "$path" rev-parse --absolute-git-dir)/crew-landing && echo $$ > "$mark" || exit 2
 out=$(mktemp) || exit 2
-if [ -n "$5" ]; then printf '{"id":%s}\n' "$5" >"$out"; : >"$out.err"; rc=0
+if [ -n "$7" ]; then printf '{"id":%s}\n' "$7" >"$out"; : >"$out.err"; rc=0
 else (cd "$path" && wt submit main --no-wait --json --no-remove) >"$out" 2>"$out.err" </dev/null; rc=$?; fi
 cat "$out.err" >&2
 id=; [[ $(cat "$out") =~ \"id\":[[:space:]]*([0-9]+) ]] && id=${BASH_REMATCH[1]}
@@ -2742,7 +2764,7 @@ elif [ "$rc" = 0 ] && [ -n "$pull" ]; then
 else
   : > "$mark"
 fi
-printf 'RC=%s TIP=%s OLD=%s ID=%s PULL=%s ANSWER=%s SAID=%s\n' "$rc" "$tip" "$old" "$id" "$pull" "$answer" "$said"
+printf 'RC=%s TIP=%s OLD=%s ID=%s PULL=%s ANSWER=%s SAID=%s LEVEL=%s\n' "$rc" "$tip" "$old" "$id" "$pull" "$answer" "$said" "$level"
 """
 
 # sluice's outcome of a landing's submission, waited on in the kit's main checkout on the team's host, a call at a time
@@ -3237,11 +3259,13 @@ def landing_submitted(fleet, t, bolt):
     return dict(bolt=bolt, t=t, before=before, path=path, **f, said=told, standing=standing, last=last)
 
 
-def submit_ran(fleet, host, main, path, bolt, *again):
-    """SUBMIT run on the team's host, a landing's submission, or, given a submission and the tip it submitted (again),
-    a wait on it again: (its assignments, RC, TIP, OLD, ID, PULL, ANSWER and SAID, and the last line it says the
-    submission said on standard error), or (None, the host's last words) when they can't be read."""
-    r = crew.on_machine(fleet, host, ["bash", "-c", SUBMIT, "crew", main, path, bolt, record.who(), *again])
+def submit_ran(fleet, host, main, path, bolt, head="", own="", *again):
+    """SUBMIT run on the team's host, a landing's submission of head (landing_head), empty for the host's copy as it
+    stands, the copy levelled to it first from own, its value as read (LAND_COPIES); or, given a submission and the tip
+    it submitted (again), head and own empty, a wait on it again: (its assignments, RC, TIP, OLD, ID, PULL, ANSWER, SAID
+    and LEVEL, and the last line it says the submission said on standard error), or (None, the host's last words) when
+    they can't be read."""
+    r = crew.on_machine(fleet, host, ["bash", "-c", SUBMIT, "crew", main, path, bolt, record.who(), head, own, *again])
     READ.drop_kit(host, main)
     if r.stderr.strip():
         print(r.stderr.rstrip(), file=sys.stderr)
@@ -3251,7 +3275,7 @@ def submit_ran(fleet, host, main, path, bolt, *again):
         base64.b64decode(f.get("ANSWER", ""), validate=True)
     except (ValueError, IndexError):
         f = {}
-    if not {"RC", "TIP", "OLD", "ID", "PULL", "ANSWER", "SAID"} <= set(f):
+    if not {"RC", "TIP", "OLD", "ID", "PULL", "ANSWER", "SAID", "LEVEL"} <= set(f):
         return None, ((r.stderr or r.stdout).strip().splitlines() or [f"exit {r.returncode}"])[-1]
     return f, next((l.strip() for l in reversed(told.splitlines()) if l.strip()), "")
 
@@ -3319,7 +3343,7 @@ def landing_ended(fleet, label, p, a):
         if n is None:
             break
         print(words, flush=True)
-        f, told = submit_ran(fleet, host, main, p["path"], bolt, str(n), tip)
+        f, told = submit_ran(fleet, host, main, p["path"], bolt, "", "", str(n), tip)
         if f is None:
             words = refused = (f"crew can't tell whether bolt/{bolt} will land on {name}'s main: crew could not wait on #{n} "
                                f"again on {host}: {told}")

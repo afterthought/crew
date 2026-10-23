@@ -7,7 +7,7 @@
 
 ## 2. The landing levels the copy and submits GitHub's head
 
-- [ ] 2.1 `SUBMIT` levels the host's copy to the head given by a guarded `update-ref` before it cuts, brings a standing landing worktree's files along, refuses when its head is not the head given, and levels nothing when it waits on an earlier submission (design, Decision 3; Task notes 2.1); passes `tests/contract/test_git.py`, verified by `tests/suite contract` ending with "0 failed".
+- [x] 2.1 `SUBMIT` levels the host's copy to the head given by a guarded `update-ref` before it cuts, brings a standing landing worktree's files along, refuses when its head is not the head given, and levels nothing when it waits on an earlier submission (design, Decision 3; Task notes 2.1); passes `tests/contract/test_git.py`, verified by `tests/suite contract` ending with "0 failed".
 - [ ] 2.2 `crew bolt submit` reads and decides before it readies the pull request, submits nothing of a bolt it refuses, and says when it levelled a copy (design, Decision 4; Task notes 2.2); passes `tests/py/test_landing.py` and `tests/py/test_bolt_commands.py`, verified by `tests/suite logic` ending with "0 failed".
 
 ## 3. Proved end to end, and said
