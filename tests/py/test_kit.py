@@ -354,3 +354,99 @@ class TestBranchSaid:
     def test_anything_else_is_refused_naming_what_sluice_said(self, out, code):
         with pytest.raises(Refusal, match=f"crew can't read what sluice's branch command said \\(exit {code}\\)"):
             kit.branch_said(out, code)
+
+
+CREWS = (pathlib.Path(__file__).parents[2] / ".config" / "sluice.toml").read_text()
+
+
+class TestTakesPulls:
+    """Whether a kit's main takes pull requests (bolt-teams "A kit that takes no pull requests is asked nothing of
+    GitHub"): crew reads and marks a landing's pull request only where the policy at main has a pull_requests table."""
+
+    def test_crews_own_policy_takes_pull_requests_into_main(self):
+        assert kit.takes_pulls(CREWS) is True
+
+    def test_a_policy_with_no_table_or_none_at_all_takes_none(self):
+        assert kit.takes_pulls(POLICY) is False
+        assert kit.takes_pulls(ON_GITHUB) is False
+        assert kit.takes_pulls(None) is False
+
+    def test_the_table_of_the_pattern_that_matches_main_is_read(self):
+        assert kit.takes_pulls('[branches."*"]\nrequired = ["#check-full"]\n\n[branches."*".pull_requests]\nreviews = 0\n')
+        assert not kit.takes_pulls('[branches."bolt/*"]\nrequired = ["#check-full"]\n\n[branches."bolt/*".pull_requests]\nreviews = 0\n')
+
+    @pytest.mark.parametrize("text, said", [
+        ("[branches\n", "is not TOML, so crew can't read whether its main takes pull requests"),
+        ('[branches.main]\npull_requests = "yes"\n', "[branches.main.pull_requests] is a table, not str"),
+    ])
+    def test_a_policy_crew_cannot_read_is_refused_naming_the_file(self, text, said):
+        with pytest.raises(Refusal) as e:
+            kit.takes_pulls(text, ".config/sluice.toml on origin/main")
+        assert ".config/sluice.toml on origin/main" in str(e.value) and said in str(e.value)
+
+
+HEAD = "8079db303f0f815b256e10747aa8a3269f156cc1"
+
+
+def listed(*pulls):
+    """What `gh pr list --json number,isDraft,headRefOid,url` prints, as gh 2.102.0 printed it for afterthought/crew
+    on 2026-10-22: a JSON list on one line, each pull request's keys in order."""
+    import json
+    return json.dumps([{"headRefOid": HEAD, "isDraft": d, "number": n, "url": f"https://github.com/o/k/pull/{n}"}
+                       for n, d in pulls], separators=(",", ":")) + "\n"
+
+
+class TestPullSaid:
+    """What gh said of a bolt's open pull request into main (bolt-teams "A landing's pull request is a draft whenever
+    the user's word does not stand"), refused where crew can't read it (read.1, read.2)."""
+
+    def test_none_open(self):
+        assert kit.pull_said(0, "[]\n", "", "o/k", "b") is None
+
+    def test_one_draft_and_one_ready(self):
+        assert kit.pull_said(0, listed((99, True)), "", "o/k", "b") == dict(
+            number=99, draft=True, head=HEAD, url="https://github.com/o/k/pull/99")
+        assert kit.pull_said(0, listed((100, False)), "", "o/k", "b")["draft"] is False
+
+    def test_two_open_from_the_branch_are_refused_naming_both(self):
+        with pytest.raises(Refusal) as e:
+            kit.pull_said(0, listed((99, True), (100, False)), "", "o/k", "b")
+        assert str(e.value) == ("crew can't tell o/k's open pull request from bolt/b into main: gh lists 2, "
+                                "https://github.com/o/k/pull/99 and https://github.com/o/k/pull/100")
+
+    @pytest.mark.parametrize("out", [
+        "not json\n", "{}\n", "[1]\n",
+        listed((99, True)).replace('"isDraft":true,', ""),
+        listed((99, True)).replace('"number":99', '"number":"99"'),
+        listed((99, True)).replace('"number":99', '"number":true'),
+        listed((99, True)).replace(HEAD, "not-a-sha"),
+    ])
+    def test_what_is_not_a_list_of_pull_requests_is_refused(self, out):
+        with pytest.raises(Refusal, match="crew can't read o/k's open pull request from bolt/b into main from what gh printed: "):
+            kit.pull_said(0, out, "", "o/k", "b")
+
+    def test_a_gh_that_failed_is_refused_in_its_words(self):
+        with pytest.raises(Refusal) as e:
+            kit.pull_said(1, "", "GraphQL: Could not resolve to a Repository with the name 'o/k'. (repository)\n", "o/k", "b")
+        assert str(e.value) == ("crew can't read o/k's open pull request from bolt/b into main: gh exited 1: GraphQL: Could "
+                                "not resolve to a Repository with the name 'o/k'. (repository)")
+        with pytest.raises(Refusal, match="gh exited 127: bash: line 2: gh: command not found$"):
+            kit.pull_said(127, "", "bash: line 2: gh: command not found\n", "o/k", "b")
+
+
+class TestPullMarked:
+    """What PULL_MARK said of `gh pr ready`: gh's exit and last line, or the host's words when it did not run there."""
+
+    def test_gh_marked_it(self):
+        out = f"RC=0\nSAID={b64('✓ Pull request o/k#99 is converted to \"draft\"')}\n"
+        assert kit.pull_marked(0, out, "") == (0, '✓ Pull request o/k#99 is converted to "draft"')
+
+    def test_gh_refused_it(self):
+        assert kit.pull_marked(0, f"RC=1\nSAID={b64('HTTP 403: Resource not accessible by integration')}\n", "") == (
+            1, "HTTP 403: Resource not accessible by integration")
+
+    def test_a_host_that_did_not_answer_or_words_crew_cannot_read_are_no_mark(self):
+        assert kit.pull_marked(255, "", "ssh: connect to host box port 22: timed out\n") == (
+            255, "ssh: connect to host box port 22: timed out")
+        assert kit.pull_marked(0, "RC=0\n", "")[0] != 0
+        assert kit.pull_marked(0, "RC=0\nSAID=%%%\n", "")[0] != 0

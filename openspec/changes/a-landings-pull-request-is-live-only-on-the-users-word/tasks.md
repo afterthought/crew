@@ -2,7 +2,7 @@
 
 ## 1. crew reads and decides the pull request's state
 
-- [ ] 1.1 crew reads whether a kit's policy at main takes pull requests into main, and what `gh pr list` said of a bolt's open pull request into main, refusing what it can't read (design, Decision 3 and 4; Task notes 1.1). Passes `tests/py/test_kit.py`.
+- [x] 1.1 crew reads whether a kit's policy at main takes pull requests into main, and what `gh pr list` said of a bolt's open pull request into main, refusing what it can't read (design, Decision 3 and 4; Task notes 1.1). Passes `tests/py/test_kit.py`.
 - [ ] 1.2 crew decides from facts alone whether to draft, ready or leave a bolt's pull request, says what it did, and reads and marks it on the team's host only where the kit's main takes pull requests (Decision 4 and 5; Task notes 1.2). Passes `tests/py/test_landing.py`.
 
 ## 2. The pull request follows the user's word
