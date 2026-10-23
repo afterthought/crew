@@ -10,7 +10,7 @@
 
 ## 2. README says so
 
-- [ ] 2.1 README's `crew plan propose` bullet says a proposal is refused when its new bolts or units name a record its main does not hold accepted (Task notes 2.1); Verify `tests/suite t-docs` ends with "0 failed".
+- [x] 2.1 README's `crew plan propose` bullet says a proposal is refused when its new bolts or units name a record its main does not hold accepted (Task notes 2.1); Verify `tests/suite t-docs` ends with "0 failed".
 
 ## 3. The tests the change affects
 
