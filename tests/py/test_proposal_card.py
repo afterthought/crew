@@ -1,6 +1,7 @@
 """A proposal's Pending You card (plan-proposals spec, briefs.9, record 0031): cards.proposal_card, as crew raises it,
 on the plan at the tip and the plan its commands leave, with its picture. The logic tier starts no process, so drawing
 it here proves crew needs nothing installed to draw it. Raising the card is the proposals journey's (t-journey-plan)."""
+import json
 import struct
 import zlib
 
@@ -159,6 +160,31 @@ def test_sixteen_new_units_are_a_hold_to_approve_that_links_its_reading_session_
     assert (c["kind"], b["session"]) == ("approve", True)
     assert c["summary"].startswith("Read it all in one session: http://mac-studio:19500\n\nSixteen units for the queue.")
     assert c["context"]["links"] == [{"label": "Read proposal 7", "url": "http://mac-studio:19500"}]
+
+
+def test_a_proposal_of_many_changes_goes_up_without_its_picture_past_pending_yous_megapixels_saying_why_once():
+    """A picture past what Pending You takes for an image is never put, so no card says its picture "did not reach the
+    card: Payload Too Large": thirty new units draw 1560 by 5742 pixels, past 8 megapixels, and the card goes up with
+    the change in text alone, its background saying why, once."""
+    b = built(11, "Thirty units for the queue.", *adds("w", 30))
+    c = b["card"]
+    assert b["picture"] is None and [a["title"] for a in c["artifacts"]] == ["The new units", "The change, in text"]
+    assert c["context"]["background"] == ("Thirty units for the queue.\n\nIts picture is left off the card: at 1560 by 5742 "
+                                          "pixels it is past the 8 megapixels Pending You takes for an image.")
+    assert json.dumps(c).count("left off") == 1
+
+
+def test_a_picture_past_pending_yous_5_mb_is_left_off_its_card_and_one_that_fits_is_put():
+    head = b"\x89PNG\r\n\x1a\n" + struct.pack(">I4sII", 13, b"IHDR", 1560, 2000)
+    shown = [{"kind": "image", "title": "The change, once approved", "ref": "p.png", "upload": True},
+             {"kind": "code", "lang": "text", "title": "The change, in text", "ref": "p.txt", "lines": ["x"]}]
+    heavy = cards.built("proposal/12", "Plan change to deploys: 1 new", "Case.", "Case.", artifacts=shown,
+                        picture=head + bytes(cards.IMAGE_BYTES))
+    assert heavy["picture"] is None and [a["title"] for a in heavy["card"]["artifacts"]] == ["The change, in text"]
+    assert heavy["card"]["context"]["background"] == ("Case.\n\nIts picture is left off the card: at 5.0 MB it is past the "
+                                                      "5 MB Pending You takes for an image.")
+    light = cards.built("proposal/12", "Plan change to deploys: 1 new", "Case.", "Case.", artifacts=shown, picture=head)
+    assert light["picture"] == head and light["card"]["artifacts"] == shown and light["card"]["context"]["background"] == "Case."
 
 
 class Unopened:
