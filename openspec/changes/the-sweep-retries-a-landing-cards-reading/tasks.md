@@ -13,7 +13,7 @@
 
 ## 3. The landing card's words
 
-- [ ] 3.1 A landing card raised without its reading says crew tries it again when the rail is read, beside the conductor's command. Its case passes in `tests/py/test_cards.py` (design, Decision 6; Task notes 3.1).
+- [x] 3.1 A landing card raised without its reading says crew tries it again when the rail is read, beside the conductor's command. Its case passes in `tests/py/test_cards.py` (design, Decision 6; Task notes 3.1).
 
 ## 4. Briefs and docs
 

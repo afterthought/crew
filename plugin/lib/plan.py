@@ -10897,16 +10897,15 @@ def reading_of(b):
 
 def unopened(b, why):
     """A built card whose reading session could not open, raised all the same (briefs.9): its summary saying so after
-    its first paragraph, cut again to Pending You's budget, naming crew card session <key> as how its owner starts it,
-    the card then carrying its link (briefs.13: the owner's act, nothing for the user to run), a landing's the bolt's
-    conductor, a batch's and a long proposal's the planner, whose card says too that crew tries it again when the rail
-    is read (sweep_cards); its details opening with why, where the link would be; and why kept on the built card
+    its first paragraph, cut again to Pending You's budget, saying that crew tries it again when the rail is read
+    (sweep_cards) and naming crew card session <key> as how its owner starts it, the card then carrying its link
+    (briefs.13: the owner's act, nothing for the user to run), a landing's the bolt's conductor, a batch's and a long
+    proposal's the planner; its details opening with why, where the link would be; and why kept on the built card
     (unread), for its post's or change's entry in the run record."""
     key = b["key"]
-    said = (f"Its reading could not be opened on the tailnet: the bolt's conductor starts it with crew card session {key}, "
-            "and this card then carries its link." if key.startswith("land/")
-            else "Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and the planner "
-                 f"starts it with crew card session {key}; this card then carries its link.")
+    owner = "the bolt's conductor" if key.startswith("land/") else "the planner"
+    said = (f"Its reading could not be opened on the tailnet: crew tries it again when the rail is read, and {owner} "
+            f"starts it with crew card session {key}; this card then carries its link.")
     first, _, rest = b["card"]["summary"].partition("\n\n")
     summary = cards.prose("\n\n".join(x for x in (first, said, rest) if x))
     context = dict(b["card"]["context"], background=f"The reading could not be opened on the tailnet: {why}\n\n"

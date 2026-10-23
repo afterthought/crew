@@ -485,8 +485,10 @@ class TestSessions:
         why = "plannotator is not on this host's path, and a card's session is a plannotator session"
         b = plan.card_built(ReadingActs(refused=why), "wldn", built.landing_card, LANDING)
         c, bare = b["card"], built.landing_card(LANDING)["card"]
-        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: the bolt's conductor starts "
-                                                  "it with crew card session land/b1, and this card then carries its link.")
+        assert c["summary"] == bare["summary"] + ("\n\nIts reading could not be opened on the tailnet: crew tries it again when the "
+                                                  "rail is read, and the bolt's conductor starts it with crew card session "
+                                                  "land/b1; this card then carries its link.")
+        assert len(c["summary"]) <= 400
         assert c["context"]["background"] == f"The reading could not be opened on the tailnet: {why}\n\n" + bare["context"]["background"]
         assert (c["kind"], c["approve"], c["context"]["links"]) == ("approve", bare["approve"], [])
         assert b["unread"] == why
@@ -1152,7 +1154,8 @@ class TestLandingReading:
         acts = ReadingActs(dict(self.POSTED), refusals=[self.SLOW, self.ENDED])
         assert self.raised(monkeypatch, acts)[0] == "req_l2"
         card = self.sent(acts)
-        assert "the bolt's conductor starts it with crew card session land/b1, and this card then carries its link." in card["summary"]
+        assert ("crew tries it again when the rail is read, and the bolt's conductor starts it with crew card session land/b1; "
+                "this card then carries its link.") in card["summary"]
         assert card["context"]["background"].startswith(f"The reading could not be opened on the tailnet: {self.ENDED}\n\n")
         assert card["context"]["links"] == []
         assert capsys.readouterr().err.splitlines()[-1] == (
