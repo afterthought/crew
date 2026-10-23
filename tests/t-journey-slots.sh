@@ -1,7 +1,8 @@
 # Four units in swb-1's four slots, through the crew command on the stubs (tests.11, record 0022), a part of the units
 # journey (t-journey-units): a construct fetches and gathers once on each host; its wait forecasts a conflict with an
-# unmerged unit ahead of it and tells only it, ordering neither; an agent's stop-short ends its stage and tells its
-# conductor; and with --force a working agent is ended and a prompt left typed is sent again.
+# unmerged unit ahead of it and tells only it, ordering neither; an agent's stop-short ends its stage, tells its
+# conductor and ends the agent, though it works on, so the slot's next start needs no --force; and with --force a
+# working agent is ended and a prompt left typed is sent again.
 # Whether each stage may start, what it delivers, what its prompt says and every other decision on the way are logic
 # cases (tests/py/): a unit run refused with every slot in flight, on a working agent without --force, or for a prompt
 # never taken is tests/py/test_slots.py's (tests.12). How git and worktrunk behave for them, contract cases
@@ -30,13 +31,19 @@ eq "$(field $box forecast Reached unit/c)" "told"
 ok "a unit run fetches once on each host and reads the kit once; a wait forecasts a conflict between two unmerged units and tells only the later, giving it no After"
 
 expect_ok crew unit run d construct
-CREW_AGENT=swb-1-unit-4 expect_ok crew needs "a decision on which table holds tenants ZQXN"
-eq "$out" "construct on d is ended, stopped short: swb-1-conductor is told what you need"
+status swb-1-unit-4 working  # it goes on working after its needs, as crw-5-unit-4 did (signal 2026-10-23-crw-5-conductor-ff91959f/01)
+HOST=$box CREW_AGENT=swb-1-unit-4 expect_ok crew needs "a decision on which table holds tenants ZQXN"  # on its own host, as an agent runs it
+eq "$out" "construct on d is ended, stopped short: swb-1-conductor is told what you need. crew ends this session once your turn ends: end it now."
 grep -qF "agent prompt swb-1-conductor '[crew tell from swb-1-unit-4] swb-1-unit-4 stopped short in construct on d. It needs: a decision on which table holds tenants ZQXN'" "$CREW_TEST_LOG" \
   || fail "the conductor was not told the agent's words, marked as from it"
 eq "$(field $box stage.end Ended stage/d/construct)" "short"
 [[ $(record_of $box) != *ZQXN* ]] || fail "a stop-short's words are in the run record"
-ok "an agent's stop-short ends its stage and tells its conductor its words, which the run record never holds"
+until_ok grep -qF "swb-1-unit-4 is ended: its stage stopped short" "$(home_of $box)/.local/state/swb-1-team/short/unit-4.log" \
+  || fail "crew never ended the agent whose stage stopped short"
+eq "$(pane swb-1-unit-4)" ""
+expect_ok crew unit run d construct
+has "$out" "swb-1-unit-4 has d: construct"
+ok "an agent's stop-short ends its stage and tells its conductor its words, which the run record never holds; crew ends the agent, though it works on, and the slot's next start needs no --force"
 
 units_ws=$(herdr_state $box wldn-1 '.workspaces | to_entries[] | select(.value.label == "swb-1 units") | .key')
 eq "$(herdr_state $box wldn-1 "[.panes[] | select(.workspace == \"$units_ws\")] | length")" "4"

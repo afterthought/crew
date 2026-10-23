@@ -254,6 +254,7 @@ lacks "$given" "swb-1-conductor started"
 for a in swb-1-conductor swb-1-ops; do
   log=$(home_of $box)/.local/state/crew/renew/$a.log
   until_ok grep -q "$a is restarted on crew" "$log" || fail "$a was not restarted at its next stop: $(cat "$log" 2>/dev/null)"
+  eq "$(as $box herdr --session wldn-1 agent get "$a" | jq -r .result.agent.name)" "$a"  # found under its name at once, as crew restart leaves it
 done
 greeted=$(calls | grep "^$box wldn-1 agent prompt swb-1-conductor '\[crew\] crew restarted you")
 has "$greeted" "bolt is now bolt/ssh-fix, which sluice"

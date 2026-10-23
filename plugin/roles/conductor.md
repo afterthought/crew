@@ -50,7 +50,7 @@ Each one ends whatever ran in the unit's slot and starts a fresh agent for the s
 After starting a stage, run `{{TEAM_CMD}} unit wait <unit>` as a background command so you stay free for the user, and `{{TEAM_CMD}} chore wait <chore>` the same way for a chore's. A stage ends at what it delivers, not when its agent goes quiet, and the wait's answer is the stage's outcome: you never read a pane for one. It answers with one of these:
 
 - **Delivered**, with what: construct's commit, code's ticked tasks, verify's report path, settle's commit, the bolt's commit holding the merge, a unit's change archived in it. Go on with the next step.
-- **Stopped short**, with what the agent needs, in its words. The stage is over. Get what it needs, as the building loop says, then run the stage again with the answer as its words.
+- **Stopped short**, with what the agent needs, in its words. The stage is over, and crew ends its agent, so the slot is free for the stage's next start. Get what it needs, as the building loop says, then run the stage again with the answer as its words.
 - **Stuck**: the agent has been quiet past crew's limit with nothing delivered, nothing said and nothing of its own still running. Tell the user which agent and stage, through the partition's operator as *Talking to the user* says, and run the stage again or wait again only on the user's word.
 - **No longer running**: the agent is gone with nothing delivered. Tell the user the same way.
 - **Not ended**: a verify's agent ended its turn with no report saved where crew reads it, which the answer names, so the verify has not ended, and the unit does not merge until it has. Tell the user the same way, and run the verify again only on the user's word.
