@@ -2336,6 +2336,25 @@ BOLT_LIVES = r"""cd "$1" || exit 1
 bolt=$2 file=$3
 """ + BOLT_AT
 
+# Whether a bolt's branch on the remote its host's tip names holds that tip (plan.19), read in its kit's main checkout
+# with one fetch of it (plan.18), for kit.bolt_split: THERE=- when the remote has no bolt/<bolt>, READ with git's words
+# when it can't be asked or fetched, else LOCAL and THERE, the host's commit and the remote's, HELD, yes when the
+# host's tip is an ancestor of the remote's, and MERGES, the merges the host holds beyond it.
+BOLT_SPLIT = r"""cd "$1" || exit 1
+bolt=$2 remote=$3
+l=$(git rev-parse --verify -q "refs/heads/bolt/$bolt^{commit}")
+err=$(git ls-remote --exit-code "$remote" "refs/heads/bolt/$bolt" 2>&1); rc=$?
+if [ $rc = 2 ]; then echo "THERE=-"; exit 0; fi
+if [ $rc != 0 ]; then echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0; fi
+if ! err=$(git fetch -q "$remote" "+refs/heads/bolt/$bolt:refs/remotes/$remote/bolt/$bolt" 2>&1); then
+  echo "READ=$(printf '%s' "$err" | tr '\n' ' ')"; exit 0
+fi
+there=$(git rev-parse --verify -q "refs/remotes/$remote/bolt/$bolt^{commit}")
+echo "LOCAL=$l"; echo "THERE=$there"
+git merge-base --is-ancestor "$l" "$there" 2>/dev/null; case $? in 0) echo "HELD=yes" ;; 1) echo "HELD=no" ;; esac
+echo "MERGES=$(git rev-list --count --merges "$there..$l" 2>/dev/null)"
+"""
+
 
 # Where a bolt lives (BOLT_LIVES), and AT_MAIN, the policy at the kit's main now as this host last fetched it, with no
 # fetch (plan.18): origin/main for a kit with an origin, else its own main, base64, or - when it holds none.
