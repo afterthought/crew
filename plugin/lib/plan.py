@@ -85,6 +85,10 @@ import argparse, base64, contextlib, datetime, fcntl, io, json, os, pathlib, re,
 # getpass, hashlib, shutil, tempfile and urllib.parse are imported where they are used: every crew command starts this
 # module afresh, and those five (OpenSSL, the compression modules) were a third of its start.
 from signal import SIGTERM
+# Run as the command, this module is the plan the modules it imports import, so the command holds one reading of the
+# branch, its entries' pushes among its steps, and fetches it once (plan.12), rather than a second copy fetching anew.
+if __name__ == "__main__":
+    sys.modules.setdefault("plan", sys.modules[__name__])
 
 LIB = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(LIB))
@@ -99,6 +103,10 @@ from crew import Refusal, Stopped, fail  # noqa: E402
 from picture import cut  # noqa: E402
 
 REPLAYS = 5
+# How many times a fetch is made again when another command on this host moved crew's cache's ref of the branch while it
+# fetched, which git refuses as a ref that is at another commit than it read: every act pushes its entry (read.5), so
+# commands on one host fetch and push side by side.
+LOCK_TRIES = 5
 # What a command found out before it wrote or was refused: the partition whose run record its entry goes in.
 CONTEXT = {}
 CACHE = pathlib.Path.home() / ".cache/crew/git"
@@ -495,7 +503,11 @@ def fetch(repo, ref, fresh=False):
     held = None if fresh else READ.tip(repo, ref)
     if held:
         return held
-    r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
+    for n in range(LOCK_TRIES):
+        r = git(repo, "fetch", "--quiet", "--no-tags", url(repo), f"+refs/heads/{ref}:refs/crew/{ref}", check=False)
+        if not (r.returncode and "cannot lock ref" in r.stderr):
+            break
+        time.sleep(0.1 * (n + 1))
     if r.returncode:
         if "couldn't find remote ref" in r.stderr:
             return None
@@ -545,7 +557,9 @@ def land(repo, ref, path, make):
             sha = commit(repo, sha, files, message)
         r = git(repo, "push", "--quiet", url(repo), f"{sha}:refs/heads/{ref}", check=False)
         if r.returncode == 0:
-            git(repo, "update-ref", f"refs/crew/{ref}", sha)
+            # The cache's own mark of the tip: another command on this host moving it at the same moment refuses
+            # nothing the push made, and the next fetch sets it.
+            git(repo, "update-ref", f"refs/crew/{ref}", sha, check=False)
             READ.keep_tip(repo, ref, sha)
             return sha
         moved = fetch(repo, ref, fresh=True)

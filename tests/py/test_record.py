@@ -92,6 +92,33 @@ class TestEmit:
         with pytest.raises(crew.Refusal, match="^nothing reached wldn/main: /x/teams.json is missing"):
             record.reach("wldn")
 
+    def test_a_fetch_that_lost_the_caches_ref_to_another_command_on_this_host_is_made_again(self, monkeypatch):
+        """Every act pushes its entry, so two commands on one host fetch the branch into crew's cache side by side, and
+        git refuses the one whose ref the other moved meanwhile: it fetches again, and refuses only what is no race."""
+        import types
+        calls = []
+
+        def git(repo, *args, input=None, env=None, check=True):
+            calls.append(args[0])
+            if args[0] == "rev-parse":
+                return "c" * 40
+            lost = calls.count("fetch") < 3
+            return types.SimpleNamespace(returncode=1 if lost else 0, stdout="", stderr=(
+                "error: cannot lock ref 'refs/crew/wldn/main': is at aaaa but expected bbbb" if lost else ""))
+        monkeypatch.setattr(plan, "git", git)
+        monkeypatch.setattr(plan, "READ", plan.Reading())
+        monkeypatch.setattr(plan.time, "sleep", lambda s: None)
+        assert plan.fetch("WilldanGroup/crew-state", "wldn/main") == "c" * 40 and calls == ["fetch", "fetch", "fetch", "rev-parse"]
+
+        def refused(repo, *args, input=None, env=None, check=True):
+            calls.append(args[0])
+            return types.SimpleNamespace(returncode=128, stdout="", stderr="fatal: unable to access 'https://github.com/': timed out")
+        calls.clear()
+        monkeypatch.setattr(plan, "git", refused)
+        with pytest.raises(crew.Refusal, match="^could not fetch wldn/main of WilldanGroup/crew-state over https: fatal: unable"):
+            plan.fetch("WilldanGroup/crew-state", "wldn/main", fresh=True)
+        assert calls == ["fetch"]
+
     def test_the_entries_of_one_second_sort_as_they_were_made_whichever_process_made_each(self):
         import datetime
         t = datetime.datetime(2026, 10, 19, 1, 49, 46, 120000, tzinfo=datetime.timezone.utc)
