@@ -27,8 +27,10 @@ crew unit wait a >/dev/null
 crew unit run c construct >/dev/null; change "$kd/places/c" c 0 2
 printf 'one\ntwo, as c has it\nthree\n' > "$kd/places/c/shared.txt"; commit_all "$kd/places/c" "docs(c): the change"; crew unit wait c >/dev/null
 # The bolt takes a line of shared.txt that a, verified, fixed and waiting to merge, also changed: the next wait forecasts it,
-# and starts a's settle stage.
+# and starts a's settle stage. The line lands where the bolt lives, on GitHub as on the host, as sluice lands a merge,
+# so the bolt is not split (plan.19).
 on_branch "$k" bolt/tenant-environments "feat: the bolt's own line" shared.txt $'one\ntwo, as the bolt has it\nthree\n'
+git -C "$k" push -q origin bolt/tenant-environments
 : > "$CREW_TEST_LOG"
 expect_ok crew unit wait b --timeout 0
 eq "$(field $box forecast Reached unit/a bolt/tenant-environments)" "settle"

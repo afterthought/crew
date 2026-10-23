@@ -361,3 +361,47 @@ class TestQueuedLanding:
         # into a refused bolt starts, as does every unit.
         assert self.refusal(alive=False) is None
         assert self.refusal(standing=False, alive=False) is None
+
+
+class TestSplitBolt:
+    """bolt-teams "A split bolt takes no merge" (plan.19): a merge into a bolt whose host's tip names a remote for it,
+    while that remote's bolt/<bolt> lacks the tip, is refused naming both commits, what is lacked and the landing."""
+    LOCAL, THERE = "1" * 40, "2" * 40
+
+    def facts(self, there=THERE, held="no", merges=2, read=None):
+        return dict(local=None if read or there == "-" else self.LOCAL, there=None if read else there,
+                    held=None if read or there == "-" else held, merges=None if read or there == "-" else merges, read=read)
+
+    def refusal(self, kind="unit", name="u", **f):
+        return plan.split_refusal(kind, name, "b", "mac-studio", "origin", self.facts(**f))
+
+    def test_a_merge_into_a_split_bolt_is_refused_naming_the_merges_and_the_landing(self):
+        assert self.refusal() == (
+            "bolt/b is split: its tip on mac-studio, 1111111, names origin for it, so sluice would form unit u's merge "
+            "on origin's bolt/b at 2222222, which lacks 2 merges mac-studio holds, and drop them. The bolt takes no "
+            "merge until it lands: its landing (crew bolt submit b, main-level ops's on the user's word) pushes "
+            "mac-studio's tip to origin and makes the two one")
+
+    def test_one_merge_lacked_is_named_alone(self):
+        assert "which lacks 1 merge mac-studio holds, and drop it. " in self.refusal(merges=1)
+
+    def test_a_tip_lacked_with_no_merge_beyond_names_the_tip(self):
+        assert "at 2222222, which lacks mac-studio's tip, and drop it. The bolt takes no merge" in self.refusal(merges=0)
+
+    @pytest.mark.parametrize("kind, name", [("chore", "bump-moon"), ("fix", "the-tidy-keeps-a-run")])
+    def test_a_chores_or_a_fixs_merge_is_refused_naming_it(self, kind, name):
+        assert self.refusal(kind, name).startswith(
+            f"bolt/b is split: its tip on mac-studio, 1111111, names origin for it, so sluice would form {kind} {name}'s merge on")
+
+    def test_a_copy_that_holds_the_hosts_tip_lets_the_merge_through(self):
+        # Equal, or ahead with merges sluice landed there from another host: held either way, nothing dropped.
+        assert self.refusal(held="yes", merges=0) is None
+        assert self.refusal(there=self.LOCAL, held="yes", merges=0) is None
+
+    def test_a_bolt_github_has_no_copy_of_is_left_to_sluice(self):
+        assert self.refusal(there="-") is None
+
+    def test_a_copy_crew_cannot_read_refuses_naming_gits_words(self):
+        assert self.refusal("chore", "c", read="fatal: 'gone.git' does not appear to be a git repository") == (
+            "crew can't tell whether bolt/b is split, so chore c's merge waits: fatal: 'gone.git' does not appear to be "
+            "a git repository")
