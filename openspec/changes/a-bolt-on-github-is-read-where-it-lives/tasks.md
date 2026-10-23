@@ -16,4 +16,4 @@
 
 - [x] 3.1 The stub sluice can land a bolt's merge on GitHub leaving the host's copy and tracking ref behind, and with it a unit's wait returns delivered and `crew bolts` shows it merged (design, Decision 4; Task notes 3.1); verified by `tests/suite t-journey-units` ending with "0 failed".
 - [x] 3.2 README and the crew skill say where a bolt on GitHub is read and when crew fetches it (design, Decision 3; Task notes 3.2); verified by `tests/suite t-docs` ending with "0 failed".
-- [ ] 3.3 The tests the change affects pass; verified by `tests/suite --affected` ending with "0 failed".
+- [x] 3.3 The tests the change affects pass; verified by `tests/suite --affected` ending with "0 failed".
