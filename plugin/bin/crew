@@ -121,10 +121,17 @@
 #                                      are gone, a refusal named in sluice's words; a dropped bolt's is kept and named
 #                                      while main lacks its tip, and deleted once main holds it. A bolt made before
 #                                      gives went through sluice stays local until it lands
-#   crew bolt  submit <bolt> [--label L]
-#                                      main-level ops's landing: the bolt's branch submitted to its kit's main through
-#                                      sluice from a short-lived worktree on the team's host, waiting for the outcome;
-#                                      sluice pushes it to GitHub, and the landing pushes nothing and levels no host
+#   crew bolt  submit <bolt>... [--label L]
+#                                      main-level ops's landing of one kit's bolts, in the order the user's landings
+#                                      card gives: each bolt's branch submitted to its kit's main through sluice from a
+#                                      short-lived worktree on its team's host, queued behind the one before on one host,
+#                                      once it ended on another; each waited on in order and closed as it lands, one
+#                                      that did not land recorded at its head and held on its row while the rest go on,
+#                                      the command exiting non-zero naming it; sluice pushes to GitHub, and the landing
+#                                      pushes nothing and levels no host. In a kit whose main takes pull requests, it
+#                                      readies each bolt's draft pull request first, and a landing that does not land
+#                                      leaves it a draft, as a fix's start or a merge into the bolt keeps it, until the
+#                                      next submit readies it
 #   crew unit  add|split|amend|order|after|move|drop ...
 #   crew chore add|order|after|move|drop ...
 #                                      planned maintenance that changes nothing a spec says, written as a unit is, by the
@@ -155,15 +162,16 @@
 #                                      crew starts with a batch's card, a landing card and a long proposal's: session
 #                                      prints its link (the running one's, else one started on this host with no
 #                                      browser), a batch card's one on the whole batch, on the main level's host, a
-#                                      landing's (land/<bolt>) one on what the bolt brings to main, on the host of the
-#                                      team holding it, changing its open card to carry a new link while it waits on
-#                                      the user, a proposal's only for one of more than fifteen new units, and an old
+#                                      bolt's (land/<bolt>) one on what it brings to main, on the host of the team
+#                                      holding it while it is a row of its kit's landings card, the kit's card changed to
+#                                      carry a new link while it waits on the user, land/<kit> having none of its own,
+#                                      a proposal's only for one of more than fifteen new units, and an old
 #                                      batch card's (batch/<n>-<k>) one per <unit> on that unit's team's host; wait
 #                                      waits for the user's decision in it and prints it with their words, for a batch
 #                                      card waits on the card too, printing its note and every annotation, and closes
-#                                      the card, and for a landing prints its annotations as notes on the landing card
+#                                      the card, and for a bolt's reading prints its annotations as notes on its row
 #                                      and its approval as landing nothing, leaving the card, starting the reading
-#                                      first when none runs while its conductor holds the card, refused naming crew
+#                                      first when none runs while the bolt is a row that can land, refused naming crew
 #                                      card session land/<bolt> when it will not open; end ends it, as the card's
 #                                      close does
 #   crew card  sweep --label L         the rail's, run on each host of the partition with what it judged on standard
@@ -171,7 +179,9 @@
 #                                      for hand use
 #   crew card  read <key> [--label L] [--json]
 #                                      where the asker's card stands: its status, whose turn, the user's answer and words;
-#                                      an approval the user declined is closed with their words
+#                                      an approval the user declined is closed with their words; for a kit's landings
+#                                      card (land/<kit>), the bolts the user ticked in its order and the crew bolt
+#                                      submit that lands them
 #   crew signal <slug> "<what it asserts>" --excerpt "<the words, verbatim>" ...
 #                                      record a finding as a signal, quoting the words that show it, which are
 #                                      checked against the agent's own Claude transcript
@@ -388,6 +398,11 @@ case $cmd in
     need_team "${2:-}"; one _construct-again "${@:2}" ${forced[@]+"${forced[@]}"} ;;
   _preview)  # crew _preview <label> <bolt> <head>: a landing card's preview of the bolt's head, asked of sluice and
     # waited on to its end in a process of its own on the team's host, which the card's raise hands it to (code.9)
+    exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
+  _land-row | _land-card)  # crew _land-row <label> <bolt> --json, on the bolt's team's host: its row on its kit's
+    # landings card, its reading and preview opened or ended there; crew _land-card <label> <kit> [--note <words>], on
+    # the partition's main machine: the kit's landings card raised from each row, which every event that changes a row
+    # hands there (Decision 2 of one-landings-card-lands-the-proven-bolts-in-order, code.3)
     exec python3 "$here/../lib/plan.py" "${args[@]}" ;;
   main)
     need_label "${3:-}"
