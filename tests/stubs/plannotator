@@ -15,18 +15,20 @@ range, is held, it exits 1 before registering, its last line on stderr plannotat
 ready on stderr, and, unless the browser was skipped, records `<host> plannotator opened a browser on <url>` in
 $CREW_TEST_LOG. It then waits for the decision a test writes to $HOME/.stub-plannotator/<pid>.decision, one JSON
 object ({"decision": "approved", "feedback": ...}, "annotated", or "dismissed"), and writes it as plannotator does:
-atomically to the result file and to stdout, then exits. Killed first, it writes no result.
+atomically to the result file and to stdout, then exits. Sent SIGTERM first, it writes no result and exits 143. As
+plannotator 0.28.26 does, it removes its registry file whenever it exits, SIGTERM's exit among them.
 
 A test makes the next starts fail by writing a count to $HOME/.stub-plannotator/refuse-starts: each `annotate` while
 it is above zero takes one from it and exits 1 before registering, saying `stub: refused to start` on stderr, as a
 plannotator that ends before its session is ready does.
 
-`plannotator sessions --json` lists the registered sessions whose pid is alive, and, for the test alone, adds a line
-to $CREW_TEST_ROOT/plannotator-sessions.log, so a test knows a wait has looked.
+`plannotator sessions --json` lists the registered sessions whose pid is alive, removing the file of each whose pid is
+not, as plannotator 0.28.26 does, so a pid the host gives another process later never reads as a session; and, for the
+test alone, adds a line to $CREW_TEST_ROOT/plannotator-sessions.log, so a test knows a wait has looked.
 
 It ends by itself when its registry is gone, as when tests/run removes a passed test's scratch directory, or after
 five minutes, so no stub outlives its test for long."""
-import datetime, fcntl, json, os, pathlib, re, sys, time
+import atexit, datetime, fcntl, json, os, pathlib, re, signal, sys, time
 
 reg = pathlib.Path(os.environ["HOME"]) / ".stub-plannotator"
 LISTED = ("index", "mode", "target", "url", "port", "pid", "project", "label", "startedAt")
@@ -51,6 +53,8 @@ def live():
             continue
         if alive(s["pid"]):
             out.append(s)
+        else:
+            f.unlink(missing_ok=True)
     return sorted(out, key=lambda s: s["startedAt"], reverse=True)
 
 
@@ -129,6 +133,8 @@ url = f"http://{url_host}:{port}"
 skipped = os.environ.get("PLANNOTATOR_SKIP_BROWSER_OPEN") == "1"
 reg.mkdir(parents=True, exist_ok=True)
 me = reg / f"{os.getpid()}.json"
+atexit.register(me.unlink, missing_ok=True)
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
 me.write_text(json.dumps({
     "mode": "annotate", "target": target, "url": url, "port": port, "pid": os.getpid(), "project": os.path.basename(os.getcwd()),
     "label": label, "startedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -150,4 +156,3 @@ if result:
     tmp.write_text(out + "\n")
     tmp.replace(result)
 print(out)
-me.unlink()

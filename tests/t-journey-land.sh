@@ -107,6 +107,9 @@ try:
 except ProcessLookupError:
     sys.exit(0)
 sys.exit(1)' "$1"; }
+# ended: a reading crew sent SIGTERM is gone and took its session's file with it, as plannotator does, so no pid the
+# host gives another process later reads as its session
+ended() { gone "$1"; [[ ! -e $(home_of $box)/.stub-plannotator/$1.json ]] || fail "plannotator pid $1 ended and left its session's file"; }
 tm=fix/tenant-environments/take-main tmp=$kd/places/fix-tenant-environments--take-main
 export CREW_AGENT=swb-1-conductor
 expect_ok crew fix swb-1 take-main "Take main into the bolt: the landing conflicts on README.md."
@@ -183,7 +186,7 @@ has "$out" "Its pull request https://github.com/$gh_repo/pull/$pr is a draft, so
 eq "$(drafted "$pr")" true
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid"
 has "$out" "released land/tenant-environments's preview of ${h1:0:7}"
-gone "$pid"; eq "$(listed)" ""
+ended "$pid"; eq "$(listed)" ""
 has "$(calls | grep "^$box pendingyou cancel_request ")" '"reason": "every bolt waiting to land is held: tenant-environments, held for a fix: The zone list misses one zone. (fix/tenant-environments/gap)"'
 eq "$(calls | grep "^$box sluice release " | grep -vc " --worktree ")" "1"
 gp=$kd/places/fix-tenant-environments--gap
@@ -298,7 +301,7 @@ has "$out" "card land/switchboard-kit: $again closed"
 has "$out" "released land/tenant-environments's preview of ${h2:0:7}"
 eq "$(ls "$CREW_TEST_ROOT/sluice-previews")" ""
 has "$out" "ended land/tenant-environments's session, plannotator pid $pid2"
-gone "$pid2"; eq "$(listed)" ""
+ended "$pid2"; eq "$(listed)" ""
 wait "$waiting" || fail "the conductor's wait failed:"$'\n'"$(cat "$T/land-wait.out")"
 eq "$(head -1 "$T/land-wait.out")" "$url2"
 eq "$(tail -1 "$T/land-wait.out")" "land/tenant-environments: crew ended its reading, as its row was held or left its kit's landings card, or crew card end was run"
