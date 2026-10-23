@@ -102,3 +102,120 @@ class TestApplied:
     def test_a_unit_added_twice_is_refused(self):
         w = self.write()
         assert refused(apply, w, 'unit add q-queued "Again." --repo switchboard-kit')[0] == "wldn/main already has unit q-queued"
+
+
+class TestRecordSources:
+    """The decision records a source names (plan.record_refs): by their docs/adr/<number> path, of the kit's repository
+    or of the <owner>/<name> right before it, and none named only in words."""
+    KIT_REPO = "WilldanGroup/switchboard-kit"
+
+    def refs(self, source):
+        return plan.record_refs(source, self.KIT_REPO)
+
+    def test_a_path_with_its_file_name_names_a_record_of_the_kit(self):
+        assert self.refs("docs/adr/0033-a-unit-waiting-to-merge-yields-its-slot.md") == [(self.KIT_REPO, 33)]
+
+    def test_a_bare_path_names_it_too(self):
+        assert self.refs("docs/adr/0032") == [(self.KIT_REPO, 32)]
+
+    def test_only_the_record_of_a_source_holding_other_pages_is_named(self):
+        assert self.refs("docs/adr/0029 (accepted 2026-10-14); docs/architecture/core.md read.5") == [(self.KIT_REPO, 29)]
+
+    def test_a_page_before_a_record_is_no_repository(self):
+        assert self.refs("docs/architecture/core.md docs/adr/0001") == [(self.KIT_REPO, 1)]
+
+    def test_owner_and_name_before_it_name_the_repository(self):
+        assert self.refs("afterthought/crew:docs/adr/0010-the-plan.md") == [("afterthought/crew", 10)]
+        assert self.refs("agentplot/sluice docs/adr/0026 (branch create and delete)") == [("agentplot/sluice", 26)]
+
+    def test_words_other_pages_signals_and_another_folder_name_none(self):
+        for source in ("record 0026 point 4", "docs/architecture/plan.md plan.16", "signals/2026-10-19-swancloud-planner-e269e093/01",
+                       "other/docs/adr/0001", "docs/adr/00123"):
+            assert self.refs(source) == [], source
+
+    def test_a_source_may_name_several_each_once(self):
+        assert self.refs("docs/adr/0031 §1; agentplot/sluice:docs/adr/0017; docs/adr/0031 §2") == [
+            (self.KIT_REPO, 31), ("agentplot/sluice", 17)]
+
+
+class TestRestsOnAccepted:
+    """A proposal's new work and the records it rests on (plan.record_items, plan.unaccepted): each named record not
+    accepted on its main refuses the proposal with one line naming the work, the record and what main holds."""
+    FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio"}},
+             "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha",
+                                 "kit": {"name": KIT, "repo": "WilldanGroup/switchboard-kit", "main": "/kit"}}},
+             "hosts": {}}
+    REPO = "WilldanGroup/switchboard-kit"
+    FILE = "docs/adr/0033-a-record.md"
+
+    def said(self, status="proposed", marked=False, files=(FILE,), kit=KIT, repo=REPO):
+        return plan.unaccepted([("unit", "u", kit, repo, 33)], {(repo, 33): {"files": list(files), "status": status, "marked": marked}})
+
+    def test_a_proposed_record_is_refused_naming_the_unit_the_record_and_what_main_holds(self):
+        assert self.said() == (
+            "crew refuses the proposal: it rests on records the user has not accepted.\n"
+            f"  unit u names record 0033 of {KIT}: {KIT}'s main holds it proposed\n"
+            "Propose it once each record is accepted on its kit's main.")
+
+    def test_a_rejected_record_is_refused(self):
+        assert f"record 0033 of {KIT}: {KIT}'s main holds it rejected" in self.said("rejected")
+
+    def test_an_accepted_record_with_an_amendment_still_proposed_is_refused(self):
+        assert "holds it accepted, with an amendment still marked proposed" in self.said("accepted", True)
+
+    def test_a_record_with_no_status_is_refused(self):
+        assert "holds it with no status in its frontmatter" in self.said("")
+
+    def test_a_record_main_does_not_hold_is_refused(self):
+        assert f"{KIT}'s main holds no record 0033 in docs/adr/" in self.said(files=())
+
+    def test_two_files_by_one_number_are_refused(self):
+        assert f"{KIT}'s main holds 2 records numbered 0033: {self.FILE}, docs/adr/0033-another.md" in self.said(
+            files=(self.FILE, "docs/adr/0033-another.md"))
+
+    def test_a_record_crew_could_not_read_is_refused_with_why(self):
+        why = f"could not fetch main of {self.REPO} over https: fatal: unable to access"
+        said = plan.unaccepted([("unit", "u", KIT, self.REPO, 33)], {(self.REPO, 33): {"why": why}})
+        assert f"  unit u names record 0033 of {KIT}: {why}" in said
+
+    def test_every_record_accepted_refuses_nothing(self):
+        assert self.said("accepted") is None
+        assert plan.unaccepted([], {}) is None
+
+    def test_a_unit_and_a_bolt_naming_one_record_are_both_named(self):
+        held = {(self.REPO, 33): {"files": [self.FILE], "status": "proposed", "marked": False}}
+        said = plan.unaccepted([("bolt", "b", KIT, self.REPO, 33), ("unit", "u", KIT, self.REPO, 33)], held)
+        assert f"  bolt b names record 0033 of {KIT}" in said and f"  unit u names record 0033 of {KIT}" in said
+
+    def test_the_status_is_read_as_crew_record_reads_it(self):
+        md = "---\nstatus: accepted\n---\n# 33. A record\n\nStatus: accepted\n\nAn amendment. Status: proposed, on the card.\n"
+        status, marked = plan.record_status_held(md)
+        held = {(self.REPO, 33): {"files": [self.FILE], "status": status, "marked": bool(marked)}}
+        assert "with an amendment still marked proposed" in plan.unaccepted([("unit", "u", KIT, self.REPO, 33)], held)
+
+    def items(self, *dos, units=()):
+        w = apply(FactsWrite(plan_text(bolts=[("held", KIT, "swb-1")], units=list(units))), *dos)
+        return plan.record_items(self.FLEET, "wldn", w.plan, args(*dos))
+
+    def test_new_bolts_and_units_name_their_records_by_kit_or_by_repository(self):
+        assert self.items(f'bolt new fresh "Fresh." --repo {KIT} --source docs/adr/0034-x.md',
+                          f'unit add n "N." --bolt fresh --source docs/adr/0033 --source agentplot/sluice:docs/adr/0022') == [
+            ("bolt", "fresh", KIT, self.REPO, 34), ("unit", "n", KIT, self.REPO, 33), ("unit", "n", "agentplot/sluice", "agentplot/sluice", 22)]
+
+    def test_a_queued_unit_moved_into_a_bolt_is_read_from_the_plan(self):
+        text = plan_text(bolts=[("held", KIT, "swb-1")], units=[("q", KIT, None, [])]).replace(
+            "Intent: Unit q.\n", "Intent: Unit q.\nSource: docs/adr/0033\n")
+        w = apply(FactsWrite(text), "unit move q held")
+        assert plan.record_items(self.FLEET, "wldn", w.plan, args("unit move q held")) == [("unit", "q", KIT, self.REPO, 33)]
+
+    def test_work_the_proposal_does_not_make_new_is_not_read(self):
+        text = plan_text(bolts=[("held", KIT, "swb-1")], units=[("h1", KIT, "held", []), ("h2", KIT, "held", [])]).replace(
+            "Intent: Unit h1.\n", "Intent: Unit h1.\nSource: docs/adr/0033\n")
+        dos = ("unit order h2 --first", 'unit amend h1 "Amended."', "unit move h2 queue")
+        w = apply(FactsWrite(text), *dos)
+        assert plan.record_items(self.FLEET, "wldn", w.plan, args(*dos)) == []
+
+    def test_work_of_a_kit_no_team_builds_naming_a_record_is_refused(self):
+        said, _ = refused(self.items, 'unit add n "N." --repo breadboard-kit --source docs/adr/0001')
+        assert said == "unit n names a decision record, and no team of wldn builds breadboard-kit, so crew can't tell whose it is"
+        assert self.items('unit add m "M." --repo breadboard-kit --source docs/architecture/core.md') == []
