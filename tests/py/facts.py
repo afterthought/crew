@@ -73,7 +73,7 @@ def told(minutes=0):
     return {"Act": "batch.due", "At": at(minutes), "On": []}
 
 
-FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}}},
+FLEET = {"partitions": {"wldn": {"label": "wldn", "machine": "mac-studio", "review": {"every": 5, "hours": 4}, "teams": ["swb-1", "swb-2"]}},
          "teams": {"swb-1": {"name": "swb-1", "label": "wldn", "machine": "chuck-herdr-alpha"},
                    "swb-2": {"name": "swb-2", "label": "wldn", "machine": "chuck-herdr-alpha"}},
          "hosts": {}}

@@ -403,6 +403,14 @@ class TestMergesHoldThePullRequest:
             plan.merge_holds({}, self.T, "b", "fix/b/gap's merge into bolt/b")
         assert str(e.value) == f"fix/b/gap's merge into bolt/b does not start: {why}"
 
+    def row(self, monkeypatch):
+        """The bolt's row on its kit's landings card, held by the fix's start: its reading and preview ended on the
+        team's host (land_end) and the kit's card raised with the fix's words (land_hand), each kept as done."""
+        done = []
+        monkeypatch.setattr(plan, "land_end", lambda fleet, label, bolt: done.append(("end", bolt)))
+        monkeypatch.setattr(plan, "land_hand", lambda fleet, label, kit, note=None: done.append(("hand", note)))
+        return done
+
     def test_a_fixs_start_drafts_it_then_holds_the_card(self, monkeypatch, capsys):
         self.held(monkeypatch, (self.READY, "draft"))
         closed = []
@@ -410,9 +418,11 @@ class TestMergesHoldThePullRequest:
         monkeypatch.setattr(plan.cards, "host_entries", lambda *a: [])
         monkeypatch.setattr(plan.crew, "this_host", lambda: "box")
         monkeypatch.setattr(plan, "row_card_close", lambda fleet, label, owner, key, **kw: closed.append((owner, key, kw["reason"])))
+        handed = self.row(monkeypatch)
         plan.landing_held({}, self.T, "b", "The zone list misses one zone.")
         assert capsys.readouterr().out.startswith("Its pull request https://github.com/o/k/pull/99 is a draft")
         assert closed == [("swb-1-conductor", "land/b", "held for a fix: The zone list misses one zone.")]
+        assert handed == [("end", "b"), ("hand", "b is held for a fix: The zone list misses one zone.")]
 
     def test_a_fixs_start_that_cant_hold_it_says_so_and_the_fix_goes_on(self, monkeypatch, capsys):
         self.held(monkeypatch, "crew can't read o/k's open pull request from bolt/b into main: gh exited 1: HTTP 401: Bad credentials")
@@ -421,6 +431,7 @@ class TestMergesHoldThePullRequest:
         monkeypatch.setattr(plan.cards, "host_entries", lambda *a: [])
         monkeypatch.setattr(plan.crew, "this_host", lambda: "box")
         monkeypatch.setattr(plan, "row_card_close", lambda fleet, label, owner, key, **kw: closed.append(key))
+        handed = self.row(monkeypatch)
         plan.landing_held({}, self.T, "b", "The zone list misses one zone.")
         said = capsys.readouterr()
         assert said.out == "" and said.err == (
